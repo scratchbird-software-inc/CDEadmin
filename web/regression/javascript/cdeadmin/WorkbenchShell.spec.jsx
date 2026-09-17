@@ -55,6 +55,20 @@ describe('Zero-Grey workbench shell', () => {
       .toHaveTextContent('Problems');
     expect(screen.getByRole('status', {name: 'Surface status'}))
       .toHaveTextContent('Connected');
+    const activityNav = screen.getByRole('navigation', {
+      name: 'Application activities',
+    });
+    const explorer = screen.getByRole('complementary', {name: 'Data Explorer'});
+    const inspector = screen.getByRole('complementary', {name: 'Inspector'});
+    const main = screen.getByRole('main', {name: 'Main workbench'});
+    expect(activityNav.compareDocumentPosition(explorer)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(explorer.compareDocumentPosition(inspector)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(inspector.compareDocumentPosition(main)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('separator', {name: 'Resize explorer and Inspector'}))
+      .toHaveAttribute('aria-orientation', 'horizontal');
   });
 
   it('starts with no selected activity, navigator, inspector, or reveal buttons',
@@ -222,6 +236,11 @@ describe('Zero-Grey workbench shell', () => {
       {key: 'ArrowRight'});
     expect(JSON.parse(values.get('layout')).navigationWidth).toBe(292);
     expect(store.load().navigationWidth).toBe(292);
+    act(() => requestWorkbenchInspection(true));
+    fireEvent.keyDown(screen.getByRole('separator', {
+      name: 'Resize explorer and Inspector',
+    }), {key: 'ArrowUp'});
+    expect(JSON.parse(values.get('layout')).inspectorHeight).toBe(284);
     expect(store.reset()).toBe(DEFAULT_WORKBENCH_LAYOUT);
   });
 

@@ -1,0 +1,71 @@
+/////////////////////////////////////////////////////////////
+//
+// CDEadmin - Multi-engine Database Administration
+//
+// Copyright (C) 2013 - 2026, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
+// Custom web UI styles. gulp compiles this file to theme.css, which
+// style.css includes last via @import './theme.css'.
+.css-1aqhq9s .css-f3842r {
+    background: #EFF4FC;
+
+    .WelcomeDashboard-card {
+        background: none;
+        border: none;
+    }
+
+    .WelcomeDashboard-cardHeader {
+        display: none;
+    }
+
+    .WelcomeDashboard-launchGrid {
+        grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+    }
+    
+    .WelcomeDashboard-launchTile {
+        border: none;
+        border-radius: 20px;
+        color: #326690 !important;
+        box-shadow: 4px 4px 20px -15px;
+
+        svg {
+            color: #326690;
+        }
+    }
+}
+
+.dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"] > .dock > .dock-bar {
+    min-height: 34px !important;
+
+    .dock-nav-wrap {
+    }
+
+    .dock-tab {
+        padding: 4px 8px
+    }
+
+    .dock-tab-active {
+
+    }
+}
+
+.dock-nav {
+    padding: 4px 8px 0;
+}
+
+.css-823suj-MuiButtonBase-root-MuiButton-root.Buttons-iconButtonDefault {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #326690;
+
+    &:hover {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: #326690;
+    }
+}

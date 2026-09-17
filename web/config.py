@@ -257,7 +257,7 @@ LOGIN_BANNER = ""
 ##########################################################################
 
 # Debug mode?
-DEBUG = False
+DEBUG = True
 
 # Application log level - one of:
 #   CRITICAL 50
