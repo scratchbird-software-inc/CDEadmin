@@ -18,11 +18,13 @@ import {Drawer, Splitter, StatusBar, Toolbar} from '../layout/WorkbenchChrome';
 
 export const WORKBENCH_LAYOUT_SCHEMA = 'cdeadmin.workbench-layout.v1';
 export const WORKBENCH_INSPECT_EVENT = 'cdeadmin:workbench-inspect';
-export const ACTIVITY_RAIL_WIDTH = 56;
+export const ACTIVITY_RAIL_HEIGHT = 48;
+export const ACTIVITY_RAIL_WIDTH = ACTIVITY_RAIL_HEIGHT;
 export const DEFAULT_WORKBENCH_LAYOUT = Object.freeze({
   schema: WORKBENCH_LAYOUT_SCHEMA,
   navigationWidth: 288,
   inspectorWidth: 340,
+  inspectorHeight: 280,
   drawerHeight: 240,
   navigationVisible: false,
   inspectorVisible: false,
@@ -51,8 +53,9 @@ function bounded(value, minimum, maximum, fallback) {
 export function normalizeWorkbenchLayout(value={}) {
   return Object.freeze({
     ...DEFAULT_WORKBENCH_LAYOUT,
-    navigationWidth: bounded(value.navigationWidth, 220, 480, 288),
+    navigationWidth: bounded(value.navigationWidth, 220, 520, 288),
     inspectorWidth: bounded(value.inspectorWidth, 280, 520, 340),
+    inspectorHeight: bounded(value.inspectorHeight, 120, 720, 280),
     drawerHeight: bounded(value.drawerHeight, 120, 720, 240),
     navigationVisible: value.navigationVisible === true,
     inspectorVisible: value.inspectorVisible === true,
@@ -94,9 +97,10 @@ export class WorkbenchLayoutStore {
 
 function ActivityRail({activities, active, navigationVisible, onChange}) {
   return <Box component="nav" aria-label="Application activities"
-    sx={{width: ACTIVITY_RAIL_WIDTH, flex: `0 0 ${ACTIVITY_RAIL_WIDTH}px`,
-      borderRight: '1px solid', borderColor: 'divider',
-      bgcolor: 'background.navigation', overflowY: 'auto', overflowX: 'hidden'}}>
+    sx={{height: ACTIVITY_RAIL_HEIGHT, flex: `0 0 ${ACTIVITY_RAIL_HEIGHT}px`,
+      display: 'flex', alignItems: 'center', px: 0.5, borderBottom: '1px solid',
+      borderColor: 'divider', bgcolor: 'background.navigation',
+      overflowX: 'auto', overflowY: 'hidden'}}>
     {activities.map((activity) => {
       const ownsNavigation = activity.navigationVisible !== false;
       const selected = activity.id === active &&
@@ -111,16 +115,12 @@ function ActivityRail({activities, active, navigationVisible, onChange}) {
           if(activity.disabled) return;
           onChange(activity.id);
         }}
-        sx={{width: 48, height: 48, mx: '4px', my: '4px',
-          transform: selected ?
-            'scale(var(--cde-active-tab-scale, 1.15))' : 'scale(1)',
+        sx={{width: 40, height: 40, mx: '2px', flex: '0 0 auto',
           filter: selected ? 'brightness(1)' :
             'brightness(var(--cde-inactive-brightness, 0.85))',
-          transformOrigin: 'center', zIndex: selected ? 1 : 0,
-          transition: 'transform 120ms ease, filter 120ms ease',
-          '@media (prefers-reduced-motion: reduce)': {transition: 'none'},
-          borderLeft: selected ? '3px solid' : '3px solid transparent',
-          borderColor: selected ? 'primary.main' : 'transparent'}}>
+          borderBottom: selected ? '3px solid' : '3px solid transparent',
+          borderColor: selected ? 'primary.main' : 'transparent',
+          borderRadius: 0}}>
         <Icon iconKey={activity.iconKey || 'command.default'} decorative size="20px" />
       </IconButton>;
     })}
@@ -201,72 +201,80 @@ export function WorkbenchShell({activities, navigationViews, children,
     activities: Object.freeze([...knownActivities]),
     activate: (activityId) => activateActivity(activityId),
   }), [knownActivities, activateActivity]);
+  const sidebarOpen = layout.navigationVisible || layout.inspectorVisible;
+  const sidebarWidth = layout.inspectorVisible ?
+    bounded(layout.navigationWidth, 280, 520, layout.inspectorWidth) :
+    layout.navigationWidth;
+  const stacked = layout.navigationVisible && layout.inspectorVisible;
+  const resizeSidebar = (width) => update({
+    navigationWidth: width, inspectorWidth: width,
+  });
 
   return <WorkbenchActivityContext.Provider value={activityContext}>
     <Box data-cdeadmin-shell="zero-grey" sx={{height: '100%', minHeight: 0,
-      display: 'flex', bgcolor: 'background.default', color: 'text.primary'}}>
+      display: 'flex', flexDirection: 'column', bgcolor: 'background.default',
+      color: 'text.primary'}}>
       <ActivityRail activities={knownActivities} active={active}
         navigationVisible={layout.navigationVisible}
         onChange={(activityId) => activateActivity(activityId, {toggle: true})} />
-      <Box component="aside" aria-label={activity?.label || 'Explorer workspace'}
-        aria-hidden={!layout.navigationVisible}
-        data-cdeadmin-explorer-workspace="true"
-        data-cdeadmin-qa-key="explorer-workspace"
-        sx={{width: layout.navigationVisible ? layout.navigationWidth : 0,
-          flex: layout.navigationVisible ?
-            `0 0 ${layout.navigationWidth}px` : '0 0 0px',
-          minWidth: 0, overflow: 'hidden',
-          visibility: layout.navigationVisible ? 'visible' : 'hidden',
-          pointerEvents: layout.navigationVisible ? 'auto' : 'none',
-          bgcolor: 'background.navigation',
-          transition: layout.navigationVisible ?
-            'width 160ms ease, flex-basis 160ms ease' :
-            'width 160ms ease, flex-basis 160ms ease, visibility 0s linear 160ms',
-          '@media (prefers-reduced-motion: reduce)': {transition: 'none'}}}>
-        <Box sx={{width: layout.navigationWidth, height: '100%', minWidth: 0,
-          display: 'flex', flexDirection: 'column',
-          transform: layout.navigationVisible ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 160ms ease',
-          '@media (prefers-reduced-motion: reduce)': {transition: 'none'}}}>
-          <Toolbar label="Navigation controls" trailing={<IconButton
-            label="Hide navigation" onClick={() => update({navigationVisible: false})}>×</IconButton>}>
-            <Box component="strong">{navigationTitle || activity?.label}</Box>
-          </Toolbar>
-          <Box sx={{flex: 1, minHeight: 0}}>{navigation}</Box>
+      <Box sx={{flex: 1, minHeight: 0, display: 'flex', position: 'relative'}}>
+        <Box sx={{width: sidebarOpen ? sidebarWidth : 0,
+          flex: sidebarOpen ? `0 0 ${sidebarWidth}px` : '0 0 0px',
+          minWidth: 0, minHeight: 0, overflow: 'hidden', display: 'flex',
+          flexDirection: 'column', bgcolor: 'background.navigation'}}>
+          <Box component="aside" aria-label={activity?.label || 'Explorer workspace'}
+            aria-hidden={!layout.navigationVisible}
+            data-cdeadmin-explorer-workspace="true"
+            data-cdeadmin-qa-key="explorer-workspace"
+            sx={{flex: layout.navigationVisible ? 1 : '0 0 0px',
+              minHeight: layout.navigationVisible ? 120 : 0, minWidth: 0,
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+              visibility: layout.navigationVisible ? 'visible' : 'hidden',
+              pointerEvents: layout.navigationVisible ? 'auto' : 'none'}}>
+            <Toolbar label="Navigation controls" trailing={<IconButton
+              label="Hide navigation" onClick={() => update({navigationVisible: false})}>×</IconButton>}>
+              <Box component="strong">{navigationTitle || activity?.label}</Box>
+            </Toolbar>
+            <Box sx={{flex: 1, minHeight: 0}}>{navigation}</Box>
+          </Box>
+          {stacked && <Splitter orientation="horizontal" invert
+            value={layout.inspectorHeight} min={120} max={720}
+            onChange={(inspectorHeight) => update({inspectorHeight})}
+            label="Resize explorer and Inspector" />}
+          {layout.inspectorVisible && <Box component="aside" aria-label="Inspector"
+            sx={{flex: stacked ? `0 0 ${layout.inspectorHeight}px` : 1,
+              height: stacked ? layout.inspectorHeight : undefined,
+              minHeight: stacked ? 120 : 0, minWidth: 0, overflow: 'hidden',
+              display: 'flex', flexDirection: 'column',
+              bgcolor: 'background.elevated'}}>
+            <Toolbar label="Inspector controls" trailing={<IconButton
+              label="Hide Inspector" onClick={() => update({inspectorVisible: false})}>×</IconButton>}>
+              <Box component="strong">{inspectorTitle}</Box>
+            </Toolbar>
+            <Box sx={{flex: 1, minHeight: 0, overflow: 'auto'}}>{inspector}</Box>
+          </Box>}
         </Box>
+        {sidebarOpen && <Splitter value={sidebarWidth}
+          min={layout.inspectorVisible ? 280 : 220}
+          max={layout.inspectorVisible ? 520 : 480}
+          onChange={resizeSidebar}
+          label={layout.inspectorVisible ? 'Resize Inspector' : 'Resize navigation'} />}
+        <Box component="main" aria-label="Main workbench"
+          sx={{flex: 1, minWidth: 0, minHeight: 0, display: 'flex',
+            flexDirection: 'column', bgcolor: 'background.workspace'}}>
+          <Box sx={{flex: 1, minHeight: 0, position: 'relative'}}>{children}</Box>
+          <Drawer open={layout.drawerVisible} label={drawerTitle}
+            height={layout.drawerHeight}
+            onHeightChange={(drawerHeight) => update({drawerHeight})}>
+            {drawer}
+          </Drawer>
+          <StatusBar>{status}</StatusBar>
+        </Box>
+        <IconButton label={layout.drawerVisible ? 'Hide bottom drawer' : 'Show bottom drawer'}
+          onClick={() => update({drawerVisible: !layout.drawerVisible})}
+          sx={{position: 'absolute', right: 8, bottom: 'var(--cde-status-height)',
+            zIndex: 'popover'}}>▤</IconButton>
       </Box>
-      {layout.navigationVisible && <Splitter value={layout.navigationWidth}
-        min={220} max={480} onChange={(navigationWidth) => update({navigationWidth})}
-        label="Resize navigation" />}
-      <Box component="main" aria-label="Main workbench"
-        sx={{flex: 1, minWidth: 0, minHeight: 0, display: 'flex',
-          flexDirection: 'column', bgcolor: 'background.workspace'}}>
-        <Box sx={{flex: 1, minHeight: 0, position: 'relative'}}>{children}</Box>
-        <Drawer open={layout.drawerVisible} label={drawerTitle}
-          height={layout.drawerHeight}
-          onHeightChange={(drawerHeight) => update({drawerHeight})}>
-          {drawer}
-        </Drawer>
-        <StatusBar>{status}</StatusBar>
-      </Box>
-      {layout.inspectorVisible && <Splitter value={layout.inspectorWidth}
-        min={280} max={520} onChange={(inspectorWidth) => update({inspectorWidth})}
-        label="Resize Inspector" />}
-      {layout.inspectorVisible && <Box component="aside" aria-label="Inspector"
-        sx={{width: layout.inspectorWidth, flex: `0 0 ${layout.inspectorWidth}px`,
-          minWidth: 0, display: 'flex', flexDirection: 'column',
-          bgcolor: 'background.elevated'}}>
-        <Toolbar label="Inspector controls" trailing={<IconButton
-          label="Hide Inspector" onClick={() => update({inspectorVisible: false})}>×</IconButton>}>
-          <Box component="strong">{inspectorTitle}</Box>
-        </Toolbar>
-        <Box sx={{flex: 1, minHeight: 0, overflow: 'auto'}}>{inspector}</Box>
-      </Box>}
-      <IconButton label={layout.drawerVisible ? 'Hide bottom drawer' : 'Show bottom drawer'}
-        onClick={() => update({drawerVisible: !layout.drawerVisible})}
-        sx={{position: 'absolute', right: layout.inspectorVisible ?
-          layout.inspectorWidth + 8 : 8, bottom: 'var(--cde-status-height)',
-        zIndex: 'popover'}}>▤</IconButton>
     </Box>
   </WorkbenchActivityContext.Provider>;
 }

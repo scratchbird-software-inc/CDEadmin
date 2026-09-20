@@ -994,9 +994,18 @@ def create_app(app_name=None):
         Inject a reference to the current blueprint, if any.
         """
 
+        theme_css = os.path.join(
+            os.path.dirname(__file__), 'static', 'css', 'theme.css'
+        )
+        try:
+            theme_css_mtime = int(os.path.getmtime(theme_css))
+        except OSError:
+            theme_css_mtime = 0
+
         return {
             'current_app': current_app,
             'current_blueprint': current_blueprint,
+            'theme_css_mtime': theme_css_mtime,
         }
 
     @app.errorhandler(Exception)
