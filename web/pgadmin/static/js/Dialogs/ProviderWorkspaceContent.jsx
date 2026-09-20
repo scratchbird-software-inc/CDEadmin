@@ -24,6 +24,7 @@ import { ModalContent, ModalFooter } from '../components/ModalContent';
 import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
+import FirebirdSessionTraps from './FirebirdSessionTraps';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {providerConnectionFieldGridSx} from
@@ -1850,7 +1851,10 @@ function StructuredDataGrid({catalog, resources, post, setError,
     (item) => item.resource_kind === target?.resource_kind
   );
   const operations = targetDescriptor?.operations || [];
-  const admitted = (operationId) => target?.resource_kind === 'table' &&
+  const admitted = (operationId) =>
+    (target?.resource_kind === 'table' ||
+      (target?.resource_kind === 'view' && page?.editable &&
+        page?.row_operations?.includes(operationId))) &&
     operations.some((item) => item.operation_id === operationId &&
       item.execution_available);
   const selectedDatabaseTargetId = resourceDatabaseTargetId(target) ||
@@ -1924,7 +1928,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
   const mutate = async (operationId, draft, confirmed=false) => {
     const activeSession = await ensureSession();
     const request = {
-      resource_kind: 'table', operation_id: operationId,
+      resource_kind: target.resource_kind, operation_id: operationId,
       target_resource: target, draft, session_id: activeSession,
       database_target_id: selectedDatabaseTargetId,
     };
@@ -2122,7 +2126,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
             {gettext('Save')}</Button>
           <Button color="warning" disabled={working || !row.__identityToken ||
             !admitted('delete')} onClick={() => deleteRow(row.__providerRow)}>
-            {deleteCandidate === row.__identityToken ?
+            {deleteCandidate && deleteCandidate === row.__identityToken ?
               gettext('Confirm delete') : gettext('Delete')}</Button>
         </Box>,
     });
@@ -2168,7 +2172,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
         {page.editable ? gettext('Edits use provider-issued native row identities.') :
           target?.resource_kind === 'table' ?
             gettext('This table is read-only because the provider did not admit a stable row identity.') :
-            gettext('This view is read-only; CDEadmin does not infer that a provider view is updatable.')}
+            gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
       <ProviderDataGrid columns={gridColumns} rows={gridRows}
         contract={page.grid || {}}
@@ -6640,6 +6644,7 @@ export default function ProviderWorkspaceContent({
   const [languageProfile, setLanguageProfile] = useState('');
   const [parameterSource, setParameterSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
+  const [clientSqlDialect, setClientSqlDialect] = useState(3);
   const [fetchObservation, setFetchObservation] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
@@ -7011,8 +7016,9 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll]);
 
-  const execute = async (executionSource=source, presentation='native') => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false) => {
     if (querySessionBlocked) return;
+    if (sessionCommand && (languageProfile !== 'firebird-sql' || !sessionId || busy || occurrenceId)) return;
     setBusy(true);
     setError(null);
     setRendered(null);
@@ -7020,28 +7026,31 @@ export default function ProviderWorkspaceContent({
     setResultPresentation(presentation);
     try {
       let rowPolicy = {};
-      if (languageProfile === 'firebird-sql') {
+      if (languageProfile === 'firebird-sql' && !sessionCommand) {
         if (!/^\d+$/.test(maximumRows) || Number(maximumRows) > 1000000) {
           throw new Error(gettext('Maximum fetched rows must be an integer from 0 to 1000000.'));
         }
         rowPolicy = {max_rows: Number(maximumRows) || null};
       }
-      const parameters = JSON.parse(
+      const parameters = sessionCommand ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
-      const expectsArray = activeLanguage?.parameter_shape === 'array';
+      const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
       if(expectsArray ? !Array.isArray(parameters) :
         (!parameters || typeof parameters !== 'object' || Array.isArray(parameters))) {
         throw new Error(expectsArray ?
           gettext('This provider requires an ordered JSON parameter array.') :
           gettext('This provider requires a JSON parameter object.'));
       }
-      const activeSession = await ensureSession();
+      const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
       const occurrence = await post({
         action: 'execute', session_id: activeSession, source: executionSource,
         parameters,
         ...rowPolicy,
+        ...(languageProfile === 'firebird-sql' ? {
+          client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
+        } : {}),
         database_target_id: queryDatabaseTargetId,
       });
       setOccurrenceId(occurrence.occurrence_id);
@@ -7320,17 +7329,26 @@ export default function ProviderWorkspaceContent({
           helperText={activeLanguage?.parameter_hint ||
             gettext('Use a JSON object of parameter names and values.')}
           onChange={(event) => setParameterSource(event.target.value)} />
+        {languageProfile === 'firebird-sql' && <TextField select
+          size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
+          value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
+          onChange={(event) => setClientSqlDialect(Number(event.target.value))}
+          helperText={gettext('Applies to the next user-written statement only. Does not change the database dialect, attachment default, or pending transaction. Generated administration SQL keeps its own dialect.')}>
+          <MenuItem value={3}>{gettext('3 — modern SQL')}</MenuItem>
+          <MenuItem value={1}>{gettext('1 — legacy SQL')}</MenuItem>
+          <MenuItem value={2}>{gettext('2 — transition diagnostics')}</MenuItem>
+        </TextField>}
         {languageProfile === 'firebird-sql' && <TextField
           type="number" size="small" sx={{mt: 1}}
           label={gettext('Maximum fetched rows')} value={maximumRows}
           disabled={busy || !!occurrenceId}
           inputProps={{min: 0, max: 1000000, step: 1}}
           onChange={(event) => setMaximumRows(event.target.value)}
-          helperText={gettext('0 fetches all rows. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion.')} />}
+          helperText={gettext('0 fetches all rows. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
         {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
           sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
           {fetchObservation.limit_reached ?
-            gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback.') :
+            gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback. Driver prefetch may execute more procedure work than the displayed rows.') :
             gettext('The end of this result cursor was observed. No commit or rollback was requested.')}
           {' '}{gettext('Rows returned:')} {fetchObservation.rows_returned}
         </Alert>}
@@ -7356,6 +7374,10 @@ export default function ProviderWorkspaceContent({
             {gettext('Close query session')}</Button>
           {busy && <CircularProgress size={24} />}
         </Box>
+        {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
+          key={sessionId || 'no-session'} sessionId={sessionId}
+          disabled={busy || querySessionBlocked || !!occurrenceId}
+          onExecute={(command) => execute(command, 'native', true)} />}
         {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
           {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
         </Alert>}

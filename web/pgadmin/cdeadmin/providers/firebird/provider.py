@@ -6,6 +6,7 @@ import json
 import os
 import re
 import threading
+from contextlib import ExitStack, nullcontext
 from enum import Enum
 from importlib import resources as package_resources
 
@@ -23,9 +24,10 @@ from ..relational_admin import (
     RelationalAdminDialect,
 )
 from . import columns, mappings, character_metadata, external_functions
+from . import packages
 from . import (
     blob_filters, object_privileges, shadows, database_storage,
-    shadow_activation, limbo,
+    shadow_activation, limbo, views,
 )
 from .backup_guid import normalize_backup_guid
 from .backup_level import normalize_backup_level
@@ -127,11 +129,12 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
             'fixup_database', 'set_replica_mode', 'upgrade_database',
         }) | database_storage.OPERATIONS | limbo.ATTACHMENT_OPERATIONS,
         'table': frozenset({
-            'inspect', 'create', 'alter', 'drop',
+            'inspect', 'create', 'alter', 'drop', 'recreate',
             'insert', 'update', 'delete', 'grant', 'revoke',
         }),
         'view': frozenset({'inspect', 'create', 'alter', 'drop',
-                           'grant', 'revoke'}),
+                           'grant', 'revoke', 'create_or_alter', 'recreate',
+                           'update', 'delete'}),
         'column': frozenset({'inspect', 'create', 'alter', 'comment',
                              'rename', 'drop', 'grant', 'revoke'}),
         'constraint': frozenset({'inspect', 'create', 'drop'}),
@@ -145,12 +148,15 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
         }),
         'trigger': frozenset({
             'inspect', 'create', 'alter', 'drop',
+            'create_or_alter', 'recreate',
         }),
         'procedure': frozenset({
             'inspect', 'create', 'alter', 'drop', 'grant', 'revoke',
+            'create_or_alter', 'recreate',
         }),
         'function': frozenset({
             'inspect', 'create', 'alter', 'drop', 'grant', 'revoke',
+            'create_or_alter', 'recreate',
         }),
         'package': frozenset({
             'inspect', 'create', 'alter', 'drop', 'grant', 'revoke',
@@ -159,12 +165,14 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
         }),
         'exception': frozenset({
             'inspect', 'create', 'alter', 'drop', 'grant', 'revoke',
+            'create_or_alter', 'recreate',
         }),
         'role': frozenset({
             'inspect', 'create', 'alter', 'drop', 'grant', 'revoke',
             'configure_admin_mapping',
         }),
-        'user': frozenset({'inspect', 'create', 'alter', 'drop'}),
+        'user': frozenset({'inspect', 'create', 'alter', 'drop',
+                          'create_or_alter', 'recreate'}),
         'authentication-mapping': mappings.OPERATIONS,
         'global-authentication-mapping': mappings.OPERATIONS,
         'privilege': frozenset({'inspect', 'grant', 'revoke'}),
@@ -183,10 +191,66 @@ class FirebirdProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
+    def open_session(self, request):
+        if isinstance(self.client, FirebirdQueryClient):
+            # Initialization alone is not admission: identity verification,
+            # failed-open cleanup and publication must precede shutdown too.
+            with self.client._connecting():
+                return super().open_session(request)
+        return super().open_session(request)
+
+    def _grid_session_guard(self, request, *, closing=False):
+        context = self._visual_admin_session_context(_mapping(request))
+        if context and isinstance(self.client, FirebirdQueryClient):
+            return self.client._exclusive(
+                context['session_handle'], closing=closing)
+        return nullcontext()
+
+    def read_visual_admin_rows(self, request):
+        with self._grid_session_guard(request):
+            return super().read_visual_admin_rows(request)
+
+    def plan_visual_admin(self, request):
+        with self._grid_session_guard(request):
+            return super().plan_visual_admin(request)
+
+    def apply_visual_admin(self, request):
+        request = _mapping(request)
+        with self._grid_session_guard(request):
+            if request.get('session_id') is not None:
+                self._invalidate_grid_session(
+                    request['session_id'], keep_plan_id=request.get('plan_id'))
+            return super().apply_visual_admin(request)
+
+    def _invalidate_grid_session(self, session_id, *, keep_plan_id=None):
+        ADMINISTRATION.invalidate_row_session(session_id)
+        self._visual_admin.invalidate_session_plans(
+            session_id, keep_plan_id=keep_plan_id)
+
+    def close_session(self, request):
+        request = _mapping(request)
+        with self._grid_session_guard(request, closing=True):
+            session_id = request.get('session_id')
+            if session_id in self._sessions:
+                self._invalidate_grid_session(session_id)
+            return super().close_session(request)
+
     def _execute_query_token(self, handle, payload):
         if isinstance(self.client, FirebirdQueryClient):
-            return self.client.submit_query(handle, payload)
+            # Arbitrary native source may change data, metadata or transaction
+            # state. Do not classify it with a client-side SQL prefix parser.
+            # Claim query ownership before releasing the grid boundary lock.
+            with self.client._exclusive(handle):
+                for session_id, session in tuple(self._sessions.items()):
+                    if session.handle is handle:
+                        self._invalidate_grid_session(session_id)
+                return self.client.submit_query(handle, payload)
         return super()._execute_query_token(handle, payload)
+
+    def _discard_unverified_session(self, handle):
+        if isinstance(self.client, FirebirdQueryClient):
+            return self.client.discard_unverified_session(handle)
+        return super()._discard_unverified_session(handle)
 
     def release_for_profile_change(self):
         """Do not replace credentials or routing beneath an owned session."""
@@ -214,6 +278,8 @@ class FirebirdProvider(ActualEnginePilotProvider):
             # Keep the explicit action and following native observation in
             # one ownership interval; a new query must not slip between them.
             with self.client._exclusive(session.handle):
+                if request.get('action') in self.client.transaction_actions:
+                    self._invalidate_grid_session(request['session_id'])
                 return super().control_transaction(request)
         return super().control_transaction(request)
 
@@ -1113,6 +1179,7 @@ def _role_privileges(value):
 
 def _resources(connection, request):
     cursor = connection.cursor()
+    rendering = ExitStack()
     try:
         generation = str(request.get('capability_generation') or 'current')
         resources = {}
@@ -1141,17 +1208,6 @@ def _resources(connection, request):
         catalog_rows = catalog_reader.rows
 
         mapping_catalog = {}
-        for kind in mappings.KINDS:
-            try:
-                rows = list(mappings.catalog_rows(
-                    cursor, global_scope=kind == mappings.KINDS[1]))
-                for row in rows:
-                    add(kind, [], row[0], mappings.metadata(kind, row))
-                mapping_catalog[kind] = {'available': True, 'count': len(rows)}
-            except Exception as error:
-                mapping_catalog[kind] = {
-                    'available': False, 'error_type': type(error).__name__}
-
         info = connection.info
         information_observations = {}
 
@@ -1188,6 +1244,7 @@ def _resources(connection, request):
             **{
                 name: info_value(name) for name in (
                     'name', 'creation_date', 'ods', 'page_cache_size',
+                    'sql_dialect',
                     'size_in_pages', 'pages_allocated', 'pages_used',
                     'pages_free', 'current_memory', 'max_memory',
                     'cache_hit_ratio', 'oit', 'oat', 'ost',
@@ -1236,6 +1293,22 @@ def _resources(connection, request):
                 name: None if value is None else str(value).strip()
                 for name, value in zip(names, row)
             })
+        # Every generated metadata helper (not just table/view rendering)
+        # must use this catalog's observed stored dialect. The scope is local
+        # to this call and is released even on a failed read or interruption.
+        from .ddl_dialect import generated_dialect
+        rendering.enter_context(generated_dialect(
+            1 if str(database_native.get('sql_dialect')) == '1' else 3))
+        for kind in mappings.KINDS:
+            try:
+                rows = list(mappings.catalog_rows(
+                    cursor, global_scope=kind == mappings.KINDS[1]))
+                for row in rows:
+                    add(kind, [], row[0], mappings.metadata(kind, row))
+                mapping_catalog[kind] = {'available': True, 'count': len(rows)}
+            except Exception as error:
+                mapping_catalog[kind] = {
+                    'available': False, 'error_type': type(error).__name__}
         database_catalog_rows = catalog_rows(
             'SELECT TRIM(TRAILING FROM D.RDB$CHARACTER_SET_NAME), '
             'TRIM(TRAILING FROM C.RDB$DEFAULT_COLLATE_NAME), D.RDB$LINGER, '
@@ -1516,7 +1589,8 @@ def _resources(connection, request):
              'RDB$DESCRIPTION, RDB$PROCEDURE_TYPE, '
              'RDB$VALID_BLR, RDB$SQL_SECURITY, TRIM(TRAILING FROM '
              'RDB$ENTRYPOINT), '
-             'TRIM(TRAILING FROM RDB$ENGINE_NAME) FROM RDB$PROCEDURES WHERE '
+             'TRIM(TRAILING FROM RDB$ENGINE_NAME), RDB$PRIVATE_FLAG '
+             'FROM RDB$PROCEDURES WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 ORDER BY 1'),
             ('function', 'SELECT TRIM(TRAILING FROM RDB$FUNCTION_NAME), '
              'TRIM(TRAILING FROM RDB$PACKAGE_NAME), '
@@ -1525,7 +1599,8 @@ def _resources(connection, request):
              'RDB$VALID_BLR, RDB$SQL_SECURITY, TRIM(TRAILING FROM '
              'RDB$ENTRYPOINT), '
              'TRIM(TRAILING FROM RDB$ENGINE_NAME), RDB$DETERMINISTIC_FLAG, '
-             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG FROM RDB$FUNCTIONS WHERE '
+             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG, RDB$PRIVATE_FLAG '
+             'FROM RDB$FUNCTIONS WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND '
              'RDB$MODULE_NAME IS NULL ORDER BY 1'),
             ('external-function', 'SELECT TRIM(TRAILING FROM '
@@ -1604,13 +1679,13 @@ def _resources(connection, request):
             'procedure': (
                 'package', 'metadata_source', 'description',
                 'procedure_type', 'valid_blr', 'sql_security', 'entrypoint',
-                'engine_name',
+                'engine_name', 'private_flag',
             ),
             'function': (
                 'package', 'metadata_source', 'description',
                 'function_type', 'valid_blr', 'sql_security', 'entrypoint',
                 'engine_name', 'deterministic', 'return_argument',
-                'legacy',
+                'legacy', 'private_flag',
             ),
             'external-function': (
                 'module_name', 'entrypoint', 'engine_name', 'package',
@@ -1640,11 +1715,7 @@ def _resources(connection, request):
         }
 
         def detail_value(field, detail):
-            if detail is None:
-                return None
-            if field == 'description':
-                return _catalog_detail(field, detail)
-            return str(detail).rstrip(' ')
+            return _catalog_detail(field, detail)
 
         for kind, source in simple_queries:
             for row in catalog_rows(source, kind + ' objects',
@@ -1796,7 +1867,7 @@ def _resources(connection, request):
             'TRIM(TRAILING FROM CS.RDB$CHARACTER_SET_NAME), '
             'TRIM(TRAILING FROM CO.RDB$COLLATION_NAME), TRIM(TRAILING '
             'FROM A.RDB$RELATION_NAME), '
-            'TRIM(TRAILING FROM A.RDB$FIELD_NAME) FROM '
+            'TRIM(TRAILING FROM A.RDB$FIELD_NAME), A.RDB$DESCRIPTION FROM '
             'RDB$FUNCTION_ARGUMENTS A '
             'LEFT JOIN RDB$FIELDS F ON F.RDB$FIELD_NAME = '
             'A.RDB$FIELD_SOURCE LEFT JOIN RDB$CHARACTER_SETS CS ON '
@@ -1812,13 +1883,14 @@ def _resources(connection, request):
                 default_source, mechanism, argument_mechanism, field_type, \
                 field_sub_type, field_length, field_scale, field_precision, \
                 character_length, segment_length, character_set, collation, \
-                relation_name, field_name = row
+                relation_name, field_name, description = row
             argument = {
                 'name': str(name or '').rstrip(' ') or None,
                 'position': position,
                 'domain': str(domain or '').rstrip(' ') or None,
                 'not_null': not_null,
                 'default_source': default_source,
+                'description': description,
                 'mechanism': mechanism,
                 'argument_mechanism': argument_mechanism,
                 'field_type': field_type,
@@ -2170,12 +2242,58 @@ def _resources(connection, request):
                         'privileges', []
                     ).append(grant)
 
+        def routine_body(detail, *, trigger=False):
+            # Firebird parse.y external_body_clause_opt is AS utf_string,
+            # not a PSQL block. External clauses do not accept SQL SECURITY.
+            engine = str(detail.get('engine_name') or '').rstrip(' ')
+            entrypoint = str(detail.get('entrypoint') or '')
+            source = detail.get('metadata_source')
+            if engine:
+                body = '\nEXTERNAL'
+                if entrypoint:
+                    body += " NAME '" + entrypoint.replace("'", "''") + "'"
+                body += f' ENGINE {identifier(engine)}'
+                if source is not None:
+                    body += "\nAS '" + str(source).replace("'", "''") + "'"
+                return body + ';'
+            if entrypoint or not source:
+                return None
+            source = str(source).strip()
+            if not source:
+                return None
+            security = sql_security(detail.get('sql_security'))
+            body = f'\n{security}' if security else ''
+            return body + (
+                f'\n{source};' if trigger and source.upper().startswith('AS ')
+                else f'\nAS\n{source};')
+
+        def routine_comments(kind, detail, qualified_name):
+            statements = []
+            if detail.get('description') is not None:
+                comment = str(detail['description']).replace("'", "''")
+                statements.append(
+                    f'COMMENT ON {kind.upper()} {qualified_name} '
+                    f"IS '{comment}'")
+            for parameter in detail.get('parameters', []):
+                if (parameter.get('name') and
+                        parameter.get('description') is not None):
+                    comment = str(parameter['description']).replace("'", "''")
+                    statements.append(
+                        f'COMMENT ON {kind.upper()} PARAMETER '
+                        f'{qualified_name}.{identifier(parameter["name"])} '
+                        f"IS '{comment}'")
+            return statements
+
         for item in resources.values():
             native = item.setdefault('native', {})
             package = native.get('package')
             if item['resource_kind'] not in {'procedure', 'function'} or (
                     not package):
                 continue
+            flag = native.get('private_flag')
+            native['member_visibility'] = (
+                'private' if str(flag) == '1' else
+                'public' if str(flag) == '0' else 'unknown')
             owners = [value for value in objects_named(package)
                       if value['resource_kind'] == 'package']
             if len(owners) == 1:
@@ -2188,7 +2306,8 @@ def _resources(connection, request):
                 }
 
         def identifier(value):
-            return '"' + str(value).replace('"', '""') + '"'
+            from .ddl_dialect import identifier_sql
+            return identifier_sql(str(value))
 
         def numeric(value, default=None):
             try:
@@ -2322,7 +2441,10 @@ def _resources(connection, request):
             return value
 
         def sql_security(value):
-            flag = numeric(value)
+            # Native BOOLEAN catalog values become text in simple metadata.
+            # Do not discard True/False as unknown or treat "False" as truthy.
+            flag = (value.upper() == 'TRUE' if isinstance(value, str) and
+                    value.upper() in {'TRUE', 'FALSE'} else numeric(value))
             if flag is None:
                 return None
             return 'SQL SECURITY DEFINER' if flag else 'SQL SECURITY INVOKER'
@@ -2498,12 +2620,7 @@ def _resources(connection, request):
             kind = item['resource_kind']
             name = item['display_name']
             native = item.setdefault('native', {})
-            if kind == 'view' and native.get('definition'):
-                native['ddl'] = (
-                    f'CREATE VIEW {identifier(name)} AS\n'
-                    f'{str(native["definition"]).strip()};'
-                )
-            elif kind == 'role':
+            if kind == 'role':
                 if name == 'RDB$ADMIN':
                     native['auto_admin_mapping'] = _admin_mapping_state(cursor)
                 memberships = [grant for grant in native.get('privileges', [])
@@ -2574,14 +2691,16 @@ def _resources(connection, request):
                     clauses.append(f'START WITH {initial}')
                 if increment not in (None, ''):
                     clauses.append(f'INCREMENT BY {increment}')
-                native['ddl'] = ' '.join([
+                statements = [' '.join([
                     'CREATE SEQUENCE', identifier(name), *clauses,
-                ]) + ';'
+                ])]
                 if native.get('description') is not None:
                     comment = str(native['description']).replace("'", "''")
-                    native['ddl'] += (
-                        f'\nCOMMENT ON SEQUENCE {identifier(name)} '
-                        f"IS '{comment}';")
+                    statements.append(
+                        f'COMMENT ON SEQUENCE {identifier(name)} '
+                        f"IS '{comment}'")
+                native['recreation_statements'] = statements
+                native['ddl'] = ';\n'.join(statements) + ';'
                 # Only inspect the selected sequence, never consume a value
                 # or query every generator while expanding a catalog branch.
                 if request.get('resource_id') == item['resource_id']:
@@ -2592,10 +2711,13 @@ def _resources(connection, request):
                     f"CREATE EXCEPTION {identifier(name)} '{message}';"
                 )
             elif kind == 'package' and native.get('header_source'):
+                native['body_status'] = packages.body_metadata(native)
+                if native['body_status']['validity'] == 'invalid':
+                    native.setdefault('catalog_warnings', []).append(
+                        packages.INVALID_BODY_WARNING)
                 security = sql_security(native.get('sql_security'))
                 native['package_sql_security'] = (
-                    'INHERIT' if native.get('sql_security') is None else
-                    'DEFINER' if native['sql_security'] else 'INVOKER')
+                    security.rsplit(' ', 1)[-1] if security else 'INHERIT')
                 native['child_definition_tasks'] = {
                     member: {'operation_id': 'alter',
                              'label': f'New {member} in package header'}
@@ -2604,15 +2726,32 @@ def _resources(connection, request):
                 if security:
                     header += f' {security}'
                 header += (
-                    f' AS\n{str(native["header_source"]).strip()};'
+                    f' AS\n{str(native["header_source"]).strip()}'
                 )
+                statements = [header]
                 body = str(native.get('body_source') or '').strip()
                 if body:
-                    header += (
-                        f'\n\nCREATE PACKAGE BODY {identifier(name)} AS\n'
-                        f'{body};'
-                    )
-                native['ddl'] = header
+                    statements.append(
+                        f'CREATE PACKAGE BODY {identifier(name)} AS\n{body}')
+                if native.get('description') is not None:
+                    comment = str(native['description']).replace("'", "''")
+                    statements.append(
+                        f'COMMENT ON PACKAGE {identifier(name)} '
+                        f"IS '{comment}'")
+                members = sorted((member for member in resources.values()
+                                  if member['resource_kind'] in {
+                                      'function', 'procedure'} and
+                                  member.get('native', {}).get('package') ==
+                                  name), key=lambda member: (
+                                      member['resource_kind'],
+                                      member['display_name']))
+                for member in members:
+                    statements.extend(routine_comments(
+                        member['resource_kind'], member['native'],
+                        f'{identifier(name)}.'
+                        f'{identifier(member["display_name"])}'))
+                native['recreation_statements'] = statements
+                native['ddl'] = ';\n\n'.join(statements) + ';'
             elif kind == 'domain':
                 rendered_type = data_type(native, include_domain=False)
                 if rendered_type is not None:
@@ -2635,9 +2774,10 @@ def _resources(connection, request):
                     if collation:
                         definition += f' COLLATE {identifier(collation)}'
                     native['ddl'] = definition + ';'
-            elif kind == 'trigger' and native.get('metadata_source'):
+            elif kind == 'trigger':
                 action = trigger_action(native.get('trigger_type'))
-                if action:
+                body = routine_body(native, trigger=True)
+                if action and body:
                     definition = f'CREATE TRIGGER {identifier(name)}'
                     relation = str(native.get('relation') or '').rstrip(' ')
                     if relation:
@@ -2649,44 +2789,18 @@ def _resources(connection, request):
                         ) + f' {action} POSITION '
                         f'{numeric(native.get("position"), 0)}'
                     )
-                    security = sql_security(native.get('sql_security'))
-                    if security:
-                        definition += f'\n{security}'
-                    entrypoint = str(native.get('entrypoint') or '').strip()
-                    engine = str(native.get('engine_name') or '').rstrip(' ')
-                    if entrypoint:
-                        entrypoint = entrypoint.replace("'", "''")
-                        definition += f"\nEXTERNAL NAME '{entrypoint}'"
-                    if engine:
-                        definition += f'\nENGINE {identifier(engine)}'
-                    source = str(native['metadata_source']).strip()
-                    definition += (
-                        f'\n{source};' if source.upper().startswith('AS ') else
-                        f'\nAS\n{source};'
-                    )
-                    native['ddl'] = definition
+                    native['ddl'] = definition + body
             elif kind == 'procedure' and not native.get('package'):
                 inputs = routine_parts(native, 'input')
                 outputs = routine_parts(native, 'output')
-                source = str(native.get('metadata_source') or '').strip()
-                if inputs is not None and outputs is not None and source:
+                body = routine_body(native)
+                if inputs is not None and outputs is not None and body:
                     definition = f'CREATE PROCEDURE {identifier(name)}'
                     if inputs:
                         definition += ' (' + ', '.join(inputs) + ')'
                     if outputs:
                         definition += ' RETURNS (' + ', '.join(outputs) + ')'
-                    entrypoint = str(native.get('entrypoint') or '').strip()
-                    engine = str(native.get('engine_name') or '').rstrip(' ')
-                    if entrypoint:
-                        entrypoint = entrypoint.replace("'", "''")
-                        definition += f"\nEXTERNAL NAME '{entrypoint}'"
-                    security = sql_security(native.get('sql_security'))
-                    if security:
-                        definition += f'\n{security}'
-                    if engine:
-                        definition += f'\nENGINE {identifier(engine)}'
-                    definition += f'\nAS\n{source};'
-                    native['ddl'] = definition
+                    native['ddl'] = definition + body
             elif kind == 'function' and not native.get('package'):
                 parameters = sorted(
                     native.get('parameters', []),
@@ -2702,27 +2816,16 @@ def _resources(connection, request):
                     for parameter in parameters
                     if parameter.get('return_value')
                 ]
-                source = str(native.get('metadata_source') or '').strip()
+                body = routine_body(native)
                 if not any(value is None for value in inputs) and len(
-                        return_values) == 1 and return_values[0] and source:
+                        return_values) == 1 and return_values[0] and body:
                     definition = (
                         f'CREATE FUNCTION {identifier(name)} (' +
                         ', '.join(inputs) + ') RETURNS ' + return_values[0]
                     )
                     if str(native.get('deterministic')) == '1':
                         definition += '\nDETERMINISTIC'
-                    entrypoint = str(native.get('entrypoint') or '').strip()
-                    engine = str(native.get('engine_name') or '').rstrip(' ')
-                    if entrypoint:
-                        entrypoint = entrypoint.replace("'", "''")
-                        definition += f"\nEXTERNAL NAME '{entrypoint}'"
-                    security = sql_security(native.get('sql_security'))
-                    if security:
-                        definition += f'\n{security}'
-                    if engine:
-                        definition += f'\nENGINE {identifier(engine)}'
-                    definition += f'\nAS\n{source};'
-                    native['ddl'] = definition
+                    native['ddl'] = definition + body
             elif kind == 'external-function':
                 parameters = sorted(
                     native.get('parameters', []),
@@ -2829,6 +2932,22 @@ def _resources(connection, request):
                         f'ALTER TABLE {identifier(item["display_path"][-2])} '
                         f'ADD {clause};'
                     )
+            if (kind in {'domain', 'exception', 'procedure', 'function',
+                         'trigger'} and native.get('ddl') and
+                    not native.get('package')):
+                # These renderers append exactly one outer terminator. Keep
+                # PSQL bodies intact; never split a definition at semicolons.
+                statements = [native['ddl'][:-1]]
+                if kind in {'procedure', 'function'}:
+                    statements.extend(routine_comments(
+                        kind, native, identifier(name)))
+                elif native.get('description') is not None:
+                    comment = str(native['description']).replace("'", "''")
+                    statements.append(
+                        f'COMMENT ON {kind.upper()} {identifier(name)} '
+                        f"IS '{comment}'")
+                native['recreation_statements'] = statements
+                native['ddl'] = ';\n'.join(statements) + ';'
         primary_key_columns = {}
         for candidate in resources.values():
             detail = candidate.get('native', {})
@@ -3129,9 +3248,30 @@ def _resources(connection, request):
                     f'Firebird driver information lookup for {name} failed.'
                     for name, observed in information_observations.items()
                     if not observed['available'])
+            elif item['resource_kind'] == 'view':
+                native = item.setdefault('native', {})
+                native.setdefault('catalog_warnings', []).extend(
+                    views.metadata_warnings(native.get('columns')))
+                try:
+                    native['view_columns'] = [
+                        {'name': column['name']} for column in
+                        views.catalog_columns(native.get('columns'))]
+                except RelationalClientError as error:
+                    native['view_columns'] = []
+                    native['view_columns_unavailable_reason'] = str(error)
+                try:
+                    native['ddl'] = views.recreation_sql(
+                        item['display_name'], native.get('definition'),
+                        native.get('columns'))
+                except RelationalClientError as error:
+                    native.pop('ddl', None)
+                    native['ddl_unavailable_reason'] = str(error)
         return list(resources.values())
     finally:
-        cursor.close()
+        try:
+            cursor.close()
+        finally:
+            rendering.close()
 
 
 def _admin_mapping_state(cursor):

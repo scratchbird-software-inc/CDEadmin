@@ -533,6 +533,48 @@ def _preview_values(kind, operation, target, engine_id):
 
     name = _native_name(target)
     if engine_id == 'firebird':
+        if kind == 'user' and operation_id in {'create_or_alter', 'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_USER', 'confirmation': str(name),
+                'password': 'preview-only-not-a-live-password', 'plugin': 'Srp',
+                'admin_role': 'REVOKE', 'active_state': 'ACTIVE', 'tags': [],
+            })
+        if kind == 'table' and operation_id == 'recreate':
+            return rendered({
+                'confirmation': str(name), 'table_type': 'PERSISTENT',
+                'columns': [{'name': 'ID', 'column_mode': 'STORED',
+                             'data_type': 'INTEGER'}],
+                'constraints': [], 'sql_security': 'INHERIT',
+                'publication': 'DEFAULT',
+            })
+        if kind == 'trigger' and operation_id in {'create_or_alter', 'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_TRIGGER', 'confirmation': str(name),
+                'declaration': 'INACTIVE ON CONNECT AS BEGIN END',
+            })
+        if kind == 'function' and operation_id in {'create_or_alter', 'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_FUNCTION', 'confirmation': str(name),
+                'declaration': 'RETURNS INTEGER AS BEGIN RETURN 1; END',
+            })
+        if kind == 'procedure' and operation_id in {'create_or_alter',
+                                                   'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_PROCEDURE', 'confirmation': str(name),
+                'declaration': 'AS BEGIN END',
+            })
+        if kind == 'exception' and operation_id in {'create_or_alter',
+                                                   'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_EXCEPTION', 'confirmation': str(name),
+                'message': 'Exception preview message @1',
+            })
+        if kind == 'view' and operation_id in {'create_or_alter', 'recreate'}:
+            return rendered({
+                'name': 'CDE_UI_VIEW', 'confirmation': str(name),
+                'definition': 'SELECT 1 AS VALUE FROM RDB$DATABASE',
+                'columns': '[{"name": "VALUE"}]',
+            })
         if kind == 'shadow':
             return rendered({
                 'number': 7, 'mode': 'AUTO', 'conditional': False,

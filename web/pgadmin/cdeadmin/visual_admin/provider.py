@@ -117,6 +117,14 @@ class ProviderVisualAdministration:
         self._admin_operations: dict[str, _StoredAdminOperation] = {}
         self._lock = threading.RLock()
 
+    def invalidate_session_plans(self, session_id, *, keep_plan_id=None):
+        """Discard previews at a provider-owned session boundary."""
+        with self._lock:
+            self._plans = {
+                key: value for key, value in self._plans.items()
+                if value.presentation.get('session_id') != session_id or
+                key == keep_plan_id}
+
     def descriptor(self) -> dict[str, Any]:
         catalog = self._catalog()
         planner = self._planner_callback()
@@ -509,6 +517,7 @@ class ProviderVisualAdministration:
                 plan=copy.deepcopy(presentation),
             )
             operation = self._admin_operations[operation_id]
+        response_received = False
         try:
             executor_request = {
                 'plan': copy.deepcopy(presentation),
@@ -521,9 +530,12 @@ class ProviderVisualAdministration:
                     execution_context['session_handle']
                 )
             result = executor(executor_request)
-        except Exception as exc:
-            if getattr(
-                    exc, 'credential_required_before_dispatch', False):
+            response_received = True
+            provider_result = _mapping(result, 'provider mutation response')
+        except BaseException as exc:
+            if (not response_received and isinstance(exc, Exception) and
+                    getattr(exc, 'credential_required_before_dispatch',
+                            False)):
                 # Credential acquisition is part of connection setup and
                 # therefore precedes provider mutation dispatch. Restore the
                 # one-shot plan so the authenticated client may retry exactly
@@ -551,12 +563,13 @@ class ProviderVisualAdministration:
                     },
                 )
                 failed = copy.deepcopy(operation.public)
+            if not isinstance(exc, Exception):
+                raise
             raise VisualAdminExecutionError(
                 'provider mutation response is unavailable; the outcome is '
                 'unknown and the mutation will not be retried',
                 failed,
             ) from None
-        provider_result = copy.deepcopy(result)
         with self._lock:
             operation.provider_result = provider_result
             operation.public['provider_result'] = provider_result
@@ -571,7 +584,7 @@ class ProviderVisualAdministration:
             'engine_id': self.engine_id,
             'resource_kind': presentation['resource_kind'],
             'operation_id': presentation['operation_id'],
-            'provider_result': copy.deepcopy(result),
+            'provider_result': copy.deepcopy(provider_result),
             'transaction_finality_interpreted_by_common_code': False,
             'provider_finality_authority': True,
             'automatic_mutation_retry': False,
@@ -628,7 +641,7 @@ class ProviderVisualAdministration:
         try:
             observed = _mapping(
                 callback(callback_request), 'provider operation observation')
-        except Exception as exc:
+        except BaseException as exc:
             with self._lock:
                 stored.public['unknown_outcome'] = True
                 stored.public['stage'] = 'observation_response_unavailable'
@@ -642,6 +655,8 @@ class ProviderVisualAdministration:
                     },
                 )
                 failed = copy.deepcopy(stored.public)
+            if not isinstance(exc, Exception):
+                raise
             raise VisualAdminExecutionError(
                 'provider operation observation is unavailable; no action '
                 'was retried', failed,
@@ -687,7 +702,7 @@ class ProviderVisualAdministration:
         try:
             response = _mapping(
                 callback(callback_request), 'provider cancellation response')
-        except Exception as exc:
+        except BaseException as exc:
             with self._lock:
                 stored.public['unknown_outcome'] = True
                 stored.public['stage'] = 'cancel_response_unavailable'
@@ -701,6 +716,8 @@ class ProviderVisualAdministration:
                     },
                 )
                 failed = copy.deepcopy(stored.public)
+            if not isinstance(exc, Exception):
+                raise
             raise VisualAdminExecutionError(
                 'provider cancellation response is unavailable; the cancel '
                 'request will not be retried', failed,
@@ -731,8 +748,9 @@ class ProviderVisualAdministration:
                 observed = _mapping(
                     callback(callback_request),
                     'provider post-state observation')
-            except Exception as exc:
+            except BaseException as exc:
                 with self._lock:
+                    stored.public['unknown_outcome'] = True
                     stored.public['stage'] = (
                         'post_state_response_unavailable'
                     )
@@ -745,6 +763,8 @@ class ProviderVisualAdministration:
                         },
                     )
                     failed = copy.deepcopy(stored.public)
+                if not isinstance(exc, Exception):
+                    raise
                 raise VisualAdminExecutionError(
                     'provider post-state observation is unavailable; no '
                     'action was retried', failed,
@@ -840,8 +860,10 @@ class ProviderVisualAdministration:
             target.get('resource_kind'), 'target resource kind'
         )
         callback = self._callback('read_admin_rows')
-        if callback is None or not self._operation_supported(
-            resource_kind, 'insert'
+        if callback is None or not (
+            self._operation_supported(resource_kind, 'insert') or
+            (self.engine_id == 'firebird' and resource_kind == 'view' and
+             self._operation_supported(resource_kind, 'update'))
         ):
             raise VisualAdminAccessError(
                 'the target provider has no editable row-page contract'
@@ -876,6 +898,7 @@ class ProviderVisualAdministration:
             callback_request['_provider_session_handle'] = (
                 execution_context['session_handle']
             )
+            callback_request['session_id'] = session_id
         result = callback(callback_request)
         return normalize_admin_page(
             _mapping(result, 'provider row page'), self.context,
