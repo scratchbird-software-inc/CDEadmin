@@ -26,6 +26,17 @@ describe('Workbench splitter', () => {
     expect(change).toHaveBeenCalledWith(expected);
   });
 
+  it('inverts pointer and keyboard deltas when requested', () => {
+    const change = jest.fn();
+    const Component = withTheme(Splitter);
+    render(<Component value={320} min={280} max={520} invert
+      orientation="horizontal" onChange={change} />);
+    const splitter = screen.getByRole('separator');
+    fireEvent.keyDown(splitter, {key: 'ArrowDown'});
+    fireEvent.keyDown(splitter, {key: 'ArrowUp'});
+    expect(change.mock.calls).toEqual([[316], [324]]);
+  });
+
   it('clamps larger keyboard steps and ignores unrelated keys', () => {
     const change = jest.fn();
     const Component = withTheme(Splitter);

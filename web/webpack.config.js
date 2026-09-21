@@ -308,6 +308,28 @@ module.exports = [{
       exclude: /vendor/,
     },
     {
+      test: /\.s[ac]ss$/i,
+      use: [
+        {
+          loader: MiniCssExtractPlugin.loader,
+          options: {
+            publicPath: '',
+          },
+        },
+        'css-loader',
+        {
+          loader: 'postcss-loader',
+          options: {
+            postcssOptions: () =>({
+              plugins: [
+                require('autoprefixer')(),
+              ],
+            }),
+          },
+        },
+        'sass-loader',
+      ],
+    }, {
       test: /\.css$/,
       use: [
         {

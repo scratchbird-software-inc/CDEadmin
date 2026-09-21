@@ -1,0 +1,47 @@
+/* Generated from theme.scss by gulp. Do not edit. */
+
+.css-1aqhq9s .css-f3842r {
+  background: #EFF4FC;
+}
+.css-1aqhq9s .css-f3842r .WelcomeDashboard-card {
+  background: none;
+  border: none;
+}
+.css-1aqhq9s .css-f3842r .WelcomeDashboard-cardHeader {
+  display: none;
+}
+.css-1aqhq9s .css-f3842r .WelcomeDashboard-launchGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+}
+.css-1aqhq9s .css-f3842r .WelcomeDashboard-launchTile {
+  border: none;
+  border-radius: 20px;
+  color: #326690 !important;
+  box-shadow: 4px 4px 20px -15px;
+}
+.css-1aqhq9s .css-f3842r .WelcomeDashboard-launchTile svg {
+  color: #326690;
+}
+
+.dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar {
+  min-height: 34px !important;
+}
+.dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-tab {
+  padding: 4px 8px;
+}
+.dock-nav {
+  padding: 4px 8px 0;
+}
+
+.css-823suj-MuiButtonBase-root-MuiButton-root.Buttons-iconButtonDefault {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #326690;
+}
+.css-823suj-MuiButtonBase-root-MuiButton-root.Buttons-iconButtonDefault:hover {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #326690;
+}

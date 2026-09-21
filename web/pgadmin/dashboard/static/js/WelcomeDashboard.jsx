@@ -156,9 +156,6 @@ export default function WelcomeDashboard({pgBrowser: _pgBrowser}) {
           <div className="WelcomeDashboard-welcomeLogo" id="welcome-title">
             <CDEadminLogo />
           </div>
-          <p className="WelcomeDashboard-description">
-            {gettext('A data management and business intelligence tool. A part of the ScratchBird CDE family of products.')}
-          </p>
         </div>
       </section>
       <section className="WelcomeDashboard-card"

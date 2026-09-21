@@ -48,17 +48,19 @@ StatusBar.propTypes = {
 };
 
 export function Splitter({orientation='vertical', value, min=0, max=Infinity,
-  onChange, label='Resize panels'}) {
+  onChange, label='Resize panels', invert=false}) {
   const start = useRef(null);
   const coordinate = (event) => orientation === 'vertical' ? event.clientX : event.clientY;
   const clamp = (next) => Math.max(min, Math.min(max, next));
+  const delta = (next) => invert ? -next : next;
   const begin = (event) => {
     event.currentTarget.setPointerCapture?.(event.pointerId);
     start.current = {coordinate: coordinate(event), value};
   };
   const move = (event) => {
     if(!start.current) return;
-    onChange?.(clamp(start.current.value + coordinate(event) - start.current.coordinate));
+    onChange?.(clamp(start.current.value + delta(
+      coordinate(event) - start.current.coordinate)));
   };
   const end = (event) => {
     event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -75,7 +77,7 @@ export function Splitter({orientation='vertical', value, min=0, max=Infinity,
       if(!decrease && !increase) return;
       event.preventDefault();
       const step = event.shiftKey ? 16 : 4;
-      onChange?.(clamp(value + (increase ? step : -step)));
+      onChange?.(clamp(value + delta(increase ? step : -step)));
     }}
     sx={{position: 'relative', flex: '0 0 auto', cursor: vertical ?
       'col-resize' : 'row-resize', width: vertical ?
@@ -94,6 +96,7 @@ Splitter.propTypes = {
   max: PropTypes.number,
   onChange: PropTypes.func,
   label: PropTypes.string,
+  invert: PropTypes.bool,
 };
 
 export function Drawer({open=true, label='Drawer', children, height=240,
