@@ -2045,7 +2045,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
       Object.entries(newValues).forEach(([name, value]) => {
         if (value !== '') values[name] = nativeValue(value);
       });
-      await mutate('insert', {values, options: {}});
+      await mutate('insert', {values, options: target.resource_kind === 'view' ?
+        {identity_token: page.insert_identity_token} : {}});
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -2099,7 +2100,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
       value={row.__insert ? (newValues[column.name] || '') :
         (edits[row.__rowIndex]?.[column.name] ??
           editorValue(row[column.name]))}
-      disabled={working || column.editable === false ||
+      disabled={working || (row.__insert ?
+        (column.insertable ?? column.editable) === false : column.editable === false) ||
         (!row.__insert && !page.editable)}
       onChange={(event) => row.__insert ?
         setNewValues((current) => ({
@@ -2117,8 +2119,11 @@ function StructuredDataGrid({catalog, resources, post, setError,
       minWidth: 240,
       exportable: false, editable: false,
       renderCell: ({row}) => row.__insert ?
-        <Button disabled={working || Object.keys(newValues).length === 0}
-          onClick={insertRow}>{gettext('Insert row')}</Button> :
+        <Button disabled={working || (Object.keys(newValues).length === 0 &&
+          !page.insert_default_values)}
+        onClick={insertRow}>{page.insert_default_values &&
+          Object.keys(newValues).length === 0 ?
+            gettext('Insert default row') : gettext('Insert row')}</Button> :
         <Box sx={{display: 'flex', gap: 1, width: 'max-content'}}>
           <Button disabled={working || !row.__identityToken ||
             !admitted('update')}

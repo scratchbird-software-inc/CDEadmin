@@ -3369,7 +3369,8 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['view', 'update'], ['view', 'delete']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each([['table', 'update'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+    const mutation = operation === 'defaults' ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3395,14 +3396,16 @@ describe('ProviderWorkspaceContent', () => {
         open_session: {session_id: 'grid-session'},
         visual_admin_rows: {
           columns: [
-            {name: 'id', key: true, editable: operation !== 'delete'},
-            {name: 'name', key: false, editable: operation !== 'delete'},
+            {name: 'id', key: true, editable: operation === 'update', insertable: false},
+            {name: 'name', key: false, editable: operation === 'update', insertable: true},
           ],
           rows: [{
             values: {id: 1, name: 'first'}, identity_token: 'row-one',
           }],
           editable: true,
-          row_operations: [operation],
+          row_operations: [mutation],
+          insert_identity_token: 'insert-one',
+          insert_default_values: operation === 'defaults',
         },
         visual_admin_validate: {valid: true, errors: []},
         visual_admin_plan: {
@@ -3430,7 +3433,7 @@ describe('ProviderWorkspaceContent', () => {
     if (kind === 'table') {
       expect(screen.getByRole('textbox', {name: 'name new value'}))
         .toHaveAttribute('placeholder', 'New value');
-    } else {
+    } else if (mutation !== 'insert') {
       expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
       if (operation === 'update') {
         expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
@@ -3442,6 +3445,15 @@ describe('ProviderWorkspaceContent', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
       expect(api.post).toHaveBeenCalledTimes(2);
       fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
+    } else if (mutation === 'insert') {
+      expect(screen.getByRole('textbox', {name: 'id new value'})).toBeDisabled();
+      if (operation === 'defaults') {
+        fireEvent.click(screen.getByRole('button', {name: 'Insert default row'}));
+      } else {
+        fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+          {target: {value: 'new'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Insert row'}));
+      }
     } else {
       fireEvent.change(name, {target: {value: 'second'}});
       fireEvent.click(screen.getByText('Save'));
@@ -3451,14 +3463,17 @@ describe('ProviderWorkspaceContent', () => {
       'open_session', 'visual_admin_rows', 'visual_admin_validate',
       'visual_admin_plan', 'visual_admin_apply', 'visual_admin_rows',
     ]);
-    expect(api.post.mock.calls[2][1].request.draft).toEqual({
+    expect(api.post.mock.calls[2][1].request.draft).toEqual(mutation === 'insert' ? {
+      values: operation === 'defaults' ? {} : {name: 'new'},
+      options: {identity_token: 'insert-one'},
+    } : {
       selector: {identity_token: 'row-one'},
       ...(operation === 'delete' ? {confirmation: 'provider-row-delete'} :
         {changes: {name: 'second'}}),
       concurrency_token: 'row-one',
     });
     expect(api.post.mock.calls[2][1].request.resource_kind).toBe(kind);
-    expect(api.post.mock.calls[2][1].request.operation_id).toBe(operation);
+    expect(api.post.mock.calls[2][1].request.operation_id).toBe(mutation);
     expect(api.post.mock.calls[0][1]).toEqual({
       action: 'open_session', language_profile: 'mysql-sql',
       database_target_id: 'database-one',

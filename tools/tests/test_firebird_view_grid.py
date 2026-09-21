@@ -25,7 +25,7 @@ def connection():
 
 def test_prepare_only_and_release_statements():
     assert ADMINISTRATION.supports('view', 'update')
-    assert not ADMINISTRATION.supports('view', 'insert')
+    assert ADMINISTRATION.supports('view', 'insert')
     assert ADMINISTRATION.supports('view', 'delete')
     handle, cursor = connection()
     first, second = MagicMock(), MagicMock()
@@ -107,7 +107,7 @@ def test_unknown_view_operation_is_rejected():
     handle, cursor = connection()
     with pytest.raises(RelationalClientError,
                        match='view row operation is unavailable'):
-        grid_update_identity(handle, 'V', operation='insert')
+        grid_update_identity(handle, 'V', operation='upsert')
     cursor.execute.assert_not_called()
 
 

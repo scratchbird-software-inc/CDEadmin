@@ -30,7 +30,7 @@
       "session_settings": 9,
       "statements": 31
     },
-    "authoritative_task_count": 126,
+    "authoritative_task_count": 127,
     "authoritative_task_ids": [
       "visual_admin.authentication-mapping.alter",
       "visual_admin.authentication-mapping.comment",
@@ -155,11 +155,12 @@
       "visual_admin.view.delete",
       "visual_admin.view.drop",
       "visual_admin.view.grant",
+      "visual_admin.view.insert",
       "visual_admin.view.recreate",
       "visual_admin.view.revoke",
       "visual_admin.view.update"
     ],
-    "implemented_task_count": 126,
+    "implemented_task_count": 127,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -8938,6 +8939,7 @@
     "firebird-5.0.4-triggers-live",
     "firebird-5.0.4-user-replacement-live",
     "firebird-5.0.4-view-grid-delete-live",
+    "firebird-5.0.4-view-grid-insert-live",
     "firebird-5.0.4-view-grid-update-live",
     "firebird-5.0.4-views-live"
   ],
@@ -9383,6 +9385,24 @@
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
       "sha256": "74b56b7f42c3a57785cedf5f321dc25bd05a3b66fbe91b9a546e44bbb71c7ca1"
+    },
+    {
+      "artifact": "bootstrap-2.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-view-grid-insert-live",
+      "evidence_kind": "live_execution",
+      "format": "cdeadmin.firebird-views.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "2e500fb7abd9aa44acfa342efbb2304a142f962743292da5ea156a2be2165fed"
+    },
+    {
+      "artifact": "bootstrap-2.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-view-grid-insert-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "cdeadmin.firebird-views.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "2e500fb7abd9aa44acfa342efbb2304a142f962743292da5ea156a2be2165fed"
     }
   ],
   "provider_id": "org.cdeadmin.firebird",
@@ -11250,6 +11270,21 @@
         "GRANT SELECT ON TABLE \"VW\" TO USER \"CDE_OBJECT_READER\""
       ],
       "task_id": "visual_admin.view.grant"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "firebird-5.0.4-grammar",
+        "firebird-5.0.4-view-grid-insert-parser",
+        "firebird-5.0.4-view-grid-insert-live"
+      ],
+      "required_bindings": [],
+      "source": "INSERT INTO \"VI_VIEW\" (\"V\") VALUES (?)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSERT INTO \"VI_VIEW\" (\"V\") VALUES (?)"
+      ],
+      "task_id": "visual_admin.view.insert"
     },
     {
       "binding_style": "positional_question_mark",

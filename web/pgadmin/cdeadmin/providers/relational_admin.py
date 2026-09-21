@@ -165,6 +165,8 @@ class _RowIdentity:
     resource_kind: str = 'table'
     writable_columns: tuple[str, ...] | None = None
     delete_allowed: bool = True
+    purpose: str = 'row'
+    insert_defaults_allowed: bool = False
 
 
 @dataclass(frozen=True)
@@ -256,14 +258,15 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird' and kind == 'view':
                 resource['operations'] = [
                     item for item in resource.get('operations', [])
-                    if item['operation_id'] not in {'update', 'delete'}
+                    if item['operation_id'] not in {
+                        'insert', 'update', 'delete'}
                 ] + [{'operation_id': operation,
                       'title': operation.title() + ' view row',
                       'mutation_class': ('destructive' if operation ==
                                          'delete' else 'write'),
                       'target_required': True,
                       'confirmation_required': operation == 'delete'}
-                     for operation in ('update', 'delete')]
+                     for operation in ('insert', 'update', 'delete')]
             if self.dialect.engine_id == 'firebird' and kind == 'database':
                 additions = firebird_limbo.ATTACHMENT_OPERATIONS & (
                     self.dialect.supported.get(kind, frozenset()))
@@ -793,7 +796,7 @@ class RelationalAdministration:
             resource_kind != 'table'
             and not (self.dialect.engine_id == 'firebird' and
                      resource_kind == 'view' and operation_id in {
-                         'update', 'delete'})
+                         'insert', 'update', 'delete'})
         ):
             errors.append({
                 'field_id': None,
@@ -3170,7 +3173,7 @@ class RelationalAdministration:
         cursor = None
         try:
             # Views default to read-only. Firebird may admit a direct,
-            # PK-preserving view in a retained session using native preparation;
+            # PK-preserving view in a retained session with native preparation;
             # never infer row identities for other view shapes or engines.
             key_columns = (
                 tuple(self._primary_key(connection, path))
@@ -3178,6 +3181,9 @@ class RelationalAdministration:
             )
             writable_columns = None
             delete_allowed = resource_kind == 'table'
+            insert_columns = ()
+            insert_keys = ()
+            default_keys = ()
             if (self.dialect.engine_id == 'firebird' and
                     resource_kind == 'view' and session_id and
                     not owns_connection):
@@ -3186,7 +3192,13 @@ class RelationalAdministration:
                 delete_keys, _ = firebird_views.grid_update_identity(
                     connection, path[-1], operation='delete')
                 delete_allowed = bool(delete_keys)
-                key_columns = key_columns or delete_keys
+                insert_keys, insert_columns = (
+                    firebird_views.grid_update_identity(
+                        connection, path[-1], operation='insert'))
+                default_keys, _ = firebird_views.grid_update_identity(
+                    connection, path[-1], operation='insert-defaults')
+                key_columns = (key_columns or delete_keys or insert_keys or
+                               default_keys)
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
@@ -3244,6 +3256,20 @@ class RelationalAdministration:
                     'values': copy.deepcopy(values),
                     'identity_token': identity_token,
                 })
+            insert_token = None
+            if insert_keys or default_keys:
+                insert_token = str(uuid.uuid4())
+                identity = _RowIdentity(
+                    fingerprint, path, (), (), {}, time.monotonic(),
+                    session_id=session_id, resource_kind=resource_kind,
+                    writable_columns=insert_columns, delete_allowed=False,
+                    purpose='insert',
+                    insert_defaults_allowed=bool(default_keys))
+                with self._identity_lock:
+                    while len(self._row_identities) >= 5000:
+                        oldest = next(iter(self._row_identities))
+                        self._row_identities.pop(oldest)
+                    self._row_identities[insert_token] = identity
             next_continuation = None
             if has_more:
                 next_continuation = str(uuid.uuid4())
@@ -3263,6 +3289,8 @@ class RelationalAdministration:
                         'name': name,
                         'native_type': native_types[index],
                         'key': name in key_columns,
+                        **({'insertable': name in insert_columns}
+                           if resource_kind == 'view' else {}),
                         'editable': bool(key_columns) and (
                             writable_columns is None or
                             name in writable_columns),
@@ -3271,10 +3299,13 @@ class RelationalAdministration:
                 ],
                 'rows': result_rows,
                 'editable': bool(key_columns),
+                'insert_identity_token': insert_token,
+                'insert_default_values': bool(default_keys),
                 'row_operations': (
                     (['update'] if writable_columns is None or
                      writable_columns else []) +
-                    (['delete'] if delete_allowed else [])
+                    (['delete'] if delete_allowed else []) +
+                    (['insert'] if insert_token else [])
                 ) if key_columns else [],
                 'identity_policy': (
                     ('provider-view-primary-key-and-original-values'
@@ -5984,7 +6015,8 @@ class RelationalAdministration:
                 self._field('confirmation', 'Confirmation', 'text', True),
             ],
             'insert': [
-                self._field('values', 'Column values', 'json', True),
+                self._field('values', 'Column values', 'json', not (
+                    self.dialect.engine_id == 'firebird' and kind == 'view')),
                 self._field('options', 'Insert options', 'json', False,
                             default={}),
             ],
@@ -7124,10 +7156,44 @@ class RelationalAdministration:
         }
 
     def _compile_insert(self, request):
+        if request['target_resource'].get(
+                'resource_kind', request['resource_kind']) != request[
+                    'resource_kind']:
+            raise RelationalClientError('insert target kind does not match')
         target = self._qualified(self._target_path(request['target_resource']))
         values = request['draft'].get('values')
-        if not isinstance(values, Mapping) or not values:
+        is_view = request['resource_kind'] == 'view'
+        if not isinstance(values, Mapping) or (not values and not is_view):
             raise RelationalClientError('insert values must be an object')
+        if is_view:
+            options = request['draft'].get('options', {})
+            token = options.get('identity_token') if isinstance(
+                options, Mapping) else None
+            with self._identity_lock:
+                identity = self._row_identities.pop(token, None) if isinstance(
+                    token, str) else None
+            if (identity is None or identity.purpose != 'insert' or
+                    identity.resource_kind != 'view' or
+                    request['target_resource'].get('resource_kind') !=
+                    'view' or
+                    not identity.session_id or
+                    identity.session_id != request.get('session_id') or
+                    identity.route_fingerprint != self._route_fingerprint(
+                        request.get('_provider_route')) or
+                    identity.target_path != self._target_path(
+                        request['target_resource']) or
+                    time.monotonic() - identity.issued_at > 600):
+                raise RelationalClientError(
+                    'view insert identity is unavailable or mismatched')
+            if any(name not in identity.writable_columns for name in values):
+                raise RelationalClientError(
+                    'insert contains a column not admitted for insertion')
+            if not values:
+                if not identity.insert_defaults_allowed:
+                    raise RelationalClientError(
+                        'default insertion is unavailable')
+                return {'source': f'INSERT INTO {target} DEFAULT VALUES',
+                        'parameters': ()}
         columns = list(values)
         source = (
             f'INSERT INTO {target} '
@@ -7157,6 +7223,8 @@ class RelationalAdministration:
             raise RelationalClientError(
                 'row identity token is stale or invalid'
             )
+        if identity.purpose != 'row':
+            raise RelationalClientError('row identity has another purpose')
         if identity.session_id != request.get('session_id'):
             raise RelationalClientError(
                 'row identity belongs to another provider session')
