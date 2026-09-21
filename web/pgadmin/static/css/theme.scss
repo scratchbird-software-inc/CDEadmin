@@ -97,6 +97,21 @@
     }
 }
 
-.dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"]>.dock>.dock-bar .dock-tab>div {
+.dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"]>.dock>.dock-bar .dock-tab {
     padding: 0 !important;
+    margin: 0 12px 0 0 !important;
+
+    &.dock-tab-active {
+        background: #0077B6 !important;
+        color: white !important;
+        transform: none !important;
+
+        .MuiSvgIcon-root {
+            fill: white !important;
+        }
+    }
+
+    > div {
+        padding: 0 !important;
+    }
 }

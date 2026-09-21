@@ -71,6 +71,18 @@
   background: #0077B6 !important;
 }
 
+.dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-tab {
+  padding: 0 !important;
+  margin: 0 12px 0 0 !important;
+}
+.dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-tab.dock-tab-active {
+  background: #0077B6 !important;
+  color: white !important;
+  transform: none !important;
+}
+.dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-tab.dock-tab-active .MuiSvgIcon-root {
+  fill: white !important;
+}
 .dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-tab > div {
   padding: 0 !important;
 }
