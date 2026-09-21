@@ -870,6 +870,328 @@ def supplement_object_privileges(document, evidence, digest, artifact):
     return value
 
 
+def supplement_view_delete(document, evidence, digest, artifact):
+    """Admit DELETE only with transaction and stale/session identity proof."""
+    validate_dialect_contract(document, PROFILE)
+    expected = {f'{view}:{action}' for view in ('VM_SIMPLE', 'VM_CALCULATED')
+                for action in ('commit', 'rollback')}
+    expected |= {'VM_SIMPLE:stale', 'VM_SIMPLE:wrong-session'}
+    checks = evidence.get('view_delete_checks', [])
+    permissions = evidence.get('view_delete_permission_checks', [])
+    required_permissions = {'select-only': [], 'update-only': ['update'],
+                            'both': ['update', 'delete'],
+                            'delete-only': ['delete'], 'revoked': []}
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != len(expected) or
+            {item.get('case') for item in checks} != expected or
+            any(item.get('passed') is not True for item in checks)):
+        raise ValueError('View deletion evidence is incomplete')
+    if (len(permissions) != 5 or
+            {item.get('phase') for item in permissions} !=
+            set(required_permissions) or any(
+                item.get('passed') is not True or item.get('row_operations') !=
+                required_permissions[item['phase']] for item in permissions)):
+        raise ValueError('View deletion permission evidence is incomplete')
+    return _supplement_replacement(
+        document, evidence, digest, artifact,
+        {'visual_admin.view.delete'}, 'view-grid-delete')
+
+
+def supplement_view_grid(document, evidence, digest, artifact):
+    """Require native/provider and grid update transaction evidence."""
+    validate_dialect_contract(document, PROFILE)
+    expected = {f'{api}:{view}:{column}:{action}'
+                for view, column in (('VM_SIMPLE', 'V'),
+                                     ('VM_CALCULATED', 'V'),
+                                     ('VM_CALCULATED', 'DOUBLED'),
+                                     ('VM_AGGREGATE', 'V'),
+                                     ('VM_TRIGGERED', 'V'))
+                for api in ('native', 'provider')
+                for action in ('commit', 'rollback')}
+    expected |= {f'grid:{view}:{column}:{action}'
+                 for view, column in (('VM_SIMPLE', 'V'),
+                                      ('VM_CALCULATED', 'V'),
+                                      ('VM_CALCULATED', 'DOUBLED'))
+                 for action in ('commit', 'rollback')}
+    checks = evidence.get('view_mutability_checks', [])
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != len(expected) or
+            {item.get('case') for item in checks} != expected or
+            any(item.get('passed') is not True for item in checks)):
+        raise ValueError('View grid evidence is incomplete')
+    return _supplement_replacement(
+        document, evidence, digest, artifact,
+        {'visual_admin.view.update'}, 'view-grid-update')
+
+
+def supplement_views(document, evidence, digest, artifact):
+    """Require replacement, rollback, permission and dependency proof."""
+    validate_dialect_contract(document, PROFILE)
+    required = {
+        'lifecycle-V_BASE': ('rollback_commit_verified',
+                             'grant_semantics_verified',
+                             'catalog_columns_verified'),
+        'lifecycle-V"東京': ('rollback_commit_verified',
+                           'grant_semantics_verified',
+                           'catalog_columns_verified'),
+        'dependency-denial': ('original_and_dependent_preserved',),
+        'permission-denials': ('view_unchanged',),
+        'ordered-columns-cte': ('ordered_columns_verified', 'cte_verified'),
+        'invalid-query-pending-work': ('pending_work_preserved',
+                                       'rollback_verified'),
+    }
+    tasks = {'visual_admin.view.create_or_alter', 'visual_admin.view.recreate'}
+    checks = evidence.get('checks', [])
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != len(required) or
+            {item.get('case') for item in checks} != set(required) or
+            set(evidence.get('task_evidence', {})) != tasks):
+        raise ValueError('View native evidence is incomplete')
+    by_case = {item['case']: item for item in checks}
+    for case, fields in required.items():
+        if any(by_case[case].get(field) is not True for field in fields):
+            raise ValueError('View lifecycle proof missing')
+    for case, code in [('dependency-denial', 335544630),
+                       ('invalid-query-pending-work', 335544569)]:
+        if code not in by_case[case].get('native_status_codes', []):
+            raise ValueError('View native denial proof missing')
+    denials = by_case['permission-denials'].get('denials', [])
+    if (len(denials) != 2 or {item.get('operation') for item in denials} !=
+            {'create_or_alter', 'recreate'} or any(
+                335544352 not in item.get('native_status_codes', [])
+                for item in denials)):
+        raise ValueError('View permission proof missing')
+    return _supplement_replacement(
+        document, evidence, digest, artifact, tasks, 'views')
+
+
+def supplement_exceptions(document, evidence, digest, artifact):
+    return _supplement_named_replacement(
+        document, evidence, digest, artifact, 'exception',
+        ('EX_BASE', 'EX"東京'))
+
+
+def supplement_procedures(document, evidence, digest, artifact):
+    return _supplement_named_replacement(
+        document, evidence, digest, artifact, 'procedure',
+        ('P_BASE', 'P"東京'))
+
+
+def supplement_functions(document, evidence, digest, artifact):
+    return _supplement_named_replacement(
+        document, evidence, digest, artifact, 'function',
+        ('F_BASE', 'F"東京'))
+
+
+def supplement_user_replacement(document, evidence, digest, artifact):
+    validate_dialect_contract(document, PROFILE)
+    checks = evidence.get('user_replacement_checks', [])
+    tasks = {'visual_admin.user.' + op
+             for op in ('create_or_alter', 'recreate')}
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != 4 or
+            {item.get('case') for item in checks} != {
+                'creation', 'alteration', 'recreation',
+                'permission-denials'} or
+            set(evidence.get('user_replacement_task_evidence', {})) != tasks):
+        raise ValueError('user replacement native evidence is incomplete')
+    by_case = {item['case']: item for item in checks}
+    for case, field in (
+        ('creation', 'authentication_verified'),
+        ('alteration', 'rotation_state_admin_tags_verified'),
+        ('recreation', 'authentication_and_name_grants_verified'),
+    ):
+        if (by_case[case].get('rollback_commit_verified') is not True or
+                by_case[case].get(field) is not True):
+            raise ValueError('user replacement lifecycle proof missing')
+    permission = by_case['permission-denials']
+    denials = permission.get('denials', [])
+    if (permission.get('other_user_authentication_preserved') is not True or
+            len(denials) != 2 or
+            {item.get('operation') for item in denials} !=
+            {'create_or_alter', 'recreate'} or any(
+                335544352 not in item.get('native_status_codes', [])
+                for item in denials)):
+        raise ValueError('user replacement permission proof missing')
+    if any(record.get('credentials_redacted') is not True for record in
+           evidence['user_replacement_task_evidence'].values()):
+        raise ValueError('user replacement credential redaction proof missing')
+    return _supplement_replacement(
+        document, {**evidence, 'task_evidence':
+                   evidence['user_replacement_task_evidence']},
+        digest, artifact, tasks, 'user-replacement')
+
+
+def supplement_table_replacement(document, evidence, digest, artifact):
+    validate_dialect_contract(document, PROFILE)
+    checks = evidence.get('table_replacement_checks', [])
+    lifecycle = {'lifecycle-PERSISTENT-None',
+                 'lifecycle-GLOBAL TEMPORARY-DELETE ROWS',
+                 'lifecycle-GLOBAL TEMPORARY-PRESERVE ROWS'}
+    tasks = {'visual_admin.table.recreate'}
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != 5 or
+            {item.get('case') for item in checks} != lifecycle | {
+                'dependency-denial', 'permission-denial'} or
+            set(evidence.get('table_replacement_task_evidence', {})) != tasks):
+        raise ValueError('table recreation native evidence is incomplete')
+    by_case = {item['case']: item for item in checks}
+    for case in lifecycle:
+        if any(by_case[case].get(field) is not True for field in (
+                'rollback_commit_verified', 'data_and_retention_verified',
+                'metadata_and_grants_verified')):
+            raise ValueError('table recreation lifecycle proof missing')
+    for case, field, code in (
+        ('dependency-denial', 'original_and_dependent_preserved', 335544630),
+        ('permission-denial', 'table_unchanged', 335544352),
+    ):
+        if (by_case[case].get(field) is not True or
+                code not in by_case[case].get('native_status_codes', [])):
+            raise ValueError('table recreation denial proof missing')
+    return _supplement_replacement(
+        document, {**evidence, 'task_evidence':
+                   evidence['table_replacement_task_evidence']},
+        digest, artifact, tasks, 'table-replacement')
+
+
+def supplement_triggers(document, evidence, digest, artifact):
+    validate_dialect_contract(document, PROFILE)
+    checks = evidence.get('trigger_checks', [])
+    tasks = {'visual_admin.trigger.' + op
+             for op in ('create_or_alter', 'recreate')}
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != 4 or
+            {item.get('case') for item in checks} != {
+                'lifecycle-relation', 'lifecycle-database', 'lifecycle-ddl',
+                'permission-denials'} or
+            set(evidence.get('trigger_task_evidence', {})) != tasks):
+        raise ValueError('trigger native evidence is incomplete')
+    by_case = {item['case']: item for item in checks}
+    for kind in ('relation', 'database', 'ddl'):
+        if any(by_case['lifecycle-' + kind].get(field) is not True for field in
+               ('rollback_commit_verified', 'execution_and_security_verified',
+                'comment_semantics_verified', 'privilege_semantics_verified',
+                'inactive_verified')):
+            raise ValueError('trigger lifecycle proof missing')
+    permission = by_case['permission-denials']
+    denials = permission.get('denials', [])
+    if (permission.get('trigger_unchanged') is not True or
+            len(denials) != 2 or
+            {item.get('operation') for item in denials} !=
+            {'create_or_alter', 'recreate'} or any(
+                335544352 not in item.get('native_status_codes', [])
+                for item in denials)):
+        raise ValueError('trigger permission proof missing')
+    return _supplement_replacement(
+        document, {**evidence, 'task_evidence':
+                   evidence['trigger_task_evidence']},
+        digest, artifact, tasks, 'triggers')
+
+
+def _supplement_named_replacement(
+        document, evidence, digest, artifact, kind, names):
+    validate_dialect_contract(document, PROFILE)
+    checks = evidence.get(kind + '_checks', [])
+    required = {'lifecycle-' + names[0], 'lifecycle-' + names[1],
+                'dependency-denial', 'permission-denials'}
+    tasks = {'visual_admin.' + kind + '.' + operation
+             for operation in ('create_or_alter', 'recreate')}
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != 4 or
+            {item.get('case') for item in checks} != required or
+            set(evidence.get(kind + '_task_evidence', {})) != tasks):
+        raise ValueError(kind + ' native evidence is incomplete')
+    by_case = {item['case']: item for item in checks}
+    fields = ('rollback_commit_verified', 'grant_semantics_verified')
+    if kind in {'procedure', 'function'}:
+        fields += ('execution_and_security_verified',)
+    if kind == 'function':
+        fields += ('deterministic_verified',)
+    for name in names:
+        if any(by_case['lifecycle-' + name].get(field) is not True for field in
+               fields):
+            raise ValueError(kind + ' lifecycle proof missing')
+    dependency = by_case['dependency-denial']
+    if (dependency.get('original_and_dependent_preserved') is not True or
+            335544630 not in dependency.get('native_status_codes', [])):
+        raise ValueError(kind + ' dependency proof missing')
+    permission = by_case['permission-denials']
+    denials = permission.get('denials', [])
+    if (permission.get(kind + '_unchanged') is not True or
+            len(denials) != 2 or
+            {item.get('operation') for item in denials} !=
+            {'create_or_alter', 'recreate'} or any(
+                335544352 not in item.get('native_status_codes', [])
+                for item in denials)):
+        raise ValueError(kind + ' permission proof missing')
+    normalized = {**evidence,
+                  'task_evidence': evidence[kind + '_task_evidence']}
+    return _supplement_replacement(
+        document, normalized, digest, artifact, tasks, kind + 's')
+
+
+def _supplement_replacement(
+        document, evidence, digest, artifact, tasks, kind):
+    value = copy.deepcopy(document)
+    proof_id = 'firebird-5.0.4-' + kind + '-live'
+    parser_id = 'firebird-5.0.4-' + kind + '-parser'
+    value['proof_records'] = [item for item in value['proof_records']
+                              if item['evidence_id'] not in
+                              {proof_id, parser_id}]
+    for identity, kind in ((proof_id, 'live_execution'),
+                           (parser_id, 'parser_acceptance')):
+        value['proof_records'].append(_evidence(
+            identity, kind, 'Firebird 5.0.4 runtime', artifact, digest,
+            evidence['schema'], 'PostgreSQL'))
+    value['task_templates'] = [item for item in value['task_templates']
+                               if item['task_id'] not in tasks]
+    for task_id in sorted(tasks):
+        record = evidence['task_evidence'][task_id]
+        statements = record.get('statements')
+        if (record.get('live_execution') != 'passed' or
+                not isinstance(statements, list) or len(statements) != 1 or
+                not isinstance(statements[0], str) or not statements[0]):
+            raise ValueError(kind + ' task lacks a single native statement')
+        value['task_templates'].append({
+            'task_id': task_id, 'source': statements[0],
+            'source_format': 'ordered_native_statements',
+            'statements': statements, 'required_bindings': [],
+            'binding_style': 'positional_question_mark',
+            'proof_ids': ['firebird-5.0.4-grammar', parser_id, proof_id],
+        })
+    value['task_templates'].sort(key=lambda item: item['task_id'])
+    ids = [item['task_id'] for item in value['task_templates']]
+    value['coverage'].update(authoritative_task_ids=ids,
+                             authoritative_task_count=len(ids),
+                             implemented_task_count=len(ids))
+    value['live_evidence_ids'] = sorted(set(
+        value['live_evidence_ids'] + [proof_id]))
+    validate_dialect_contract(value, PROFILE,
+                              ADMINISTRATION.dialect_task_ids())
+    return value
+
+
 def supplement_packages(document, evidence, digest, artifact):
     """Require native header/body, transaction and dependency evidence."""
     from pgadmin.cdeadmin.providers.firebird import packages
@@ -1298,11 +1620,15 @@ def main(argv=None):
     parser.add_argument('--supplement', choices=(
         'roles', 'admin-mapping', 'mappings', 'columns', 'character-metadata',
         'external-functions', 'blob-filters', 'object-privileges', 'packages',
-        'sequences', 'shadows', 'database-storage'),
+        'sequences', 'shadows', 'database-storage', 'views', 'exceptions',
+        'procedures', 'functions', 'triggers', 'table-replacement',
+        'user-replacement', 'view-grid', 'view-delete'),
                         default='roles')
     options = parser.parse_args(argv)
     if options.existing_contract:
         supplement = {'admin-mapping': supplement_admin_mapping,
+                      'view-grid': supplement_view_grid,
+                      'view-delete': supplement_view_delete,
                       'roles': supplement_roles,
                       'mappings': supplement_mappings,
                       'character-metadata': supplement_character_metadata,
@@ -1310,6 +1636,13 @@ def main(argv=None):
                       'blob-filters': supplement_blob_filters,
                       'object-privileges': supplement_object_privileges,
                       'packages': supplement_packages,
+                      'views': supplement_views,
+                      'exceptions': supplement_exceptions,
+                      'procedures': supplement_procedures,
+                      'functions': supplement_functions,
+                      'triggers': supplement_triggers,
+                      'table-replacement': supplement_table_replacement,
+                      'user-replacement': supplement_user_replacement,
                       'sequences': supplement_sequences,
                       'shadows': supplement_shadows,
                       'database-storage': supplement_database_storage,

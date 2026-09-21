@@ -46,6 +46,13 @@ from .firebird import privileges as firebird_privileges
 from .firebird import object_privileges as firebird_object_privileges
 from .firebird import packages as firebird_packages
 from .firebird import sequences as firebird_sequences
+from .firebird import views as firebird_views
+from .firebird import exceptions as firebird_exceptions
+from .firebird import procedures as firebird_procedures
+from .firebird import functions as firebird_functions
+from .firebird import triggers as firebird_triggers
+from .firebird import users as firebird_users
+from .firebird import table_replacement as firebird_table_replacement
 from .firebird import shadows as firebird_shadows
 from .firebird import database_storage as firebird_database_storage
 from .firebird import limbo as firebird_limbo
@@ -154,6 +161,10 @@ class _RowIdentity:
     key_values: tuple[Any, ...]
     original: Mapping[str, Any]
     issued_at: float
+    session_id: str | None = None
+    resource_kind: str = 'table'
+    writable_columns: tuple[str, ...] | None = None
+    delete_allowed: bool = True
 
 
 @dataclass(frozen=True)
@@ -163,6 +174,7 @@ class _RowContinuation:
     offset: int
     limit: int
     issued_at: float
+    session_id: str | None = None
 
 
 class RelationalAdministration:
@@ -241,6 +253,17 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'firebird' and kind == 'view':
+                resource['operations'] = [
+                    item for item in resource.get('operations', [])
+                    if item['operation_id'] not in {'update', 'delete'}
+                ] + [{'operation_id': operation,
+                      'title': operation.title() + ' view row',
+                      'mutation_class': ('destructive' if operation ==
+                                         'delete' else 'write'),
+                      'target_required': True,
+                      'confirmation_required': operation == 'delete'}
+                     for operation in ('update', 'delete')]
             if self.dialect.engine_id == 'firebird' and kind == 'database':
                 additions = firebird_limbo.ATTACHMENT_OPERATIONS & (
                     self.dialect.supported.get(kind, frozenset()))
@@ -350,6 +373,34 @@ class RelationalAdministration:
                         'target_resource_names': ['RDB$ADMIN'],
                         'allow_system_target': True,
                     }]
+            if (self.dialect.engine_id == 'firebird' and
+                    kind in {'view', 'exception', 'procedure', 'function',
+                             'trigger', 'user'}):
+                module = {'view': firebird_views,
+                          'exception': firebird_exceptions,
+                          'procedure': firebird_procedures,
+                          'function': firebird_functions,
+                          'trigger': firebird_triggers,
+                          'user': firebird_users}[kind]
+                resource['operations'] = [
+                    item for item in resource.get('operations', [])
+                    if item['operation_id'] not in module.OPERATIONS
+                ] + [{
+                    'operation_id': operation,
+                    'title': module.form(
+                        operation, self._field)['title'],
+                    'mutation_class': ('destructive' if operation ==
+                                       'recreate' else 'admin'),
+                    'target_required': operation == 'recreate',
+                    'confirmation_required': True,
+                } for operation in sorted(module.OPERATIONS)]
+            if self.dialect.engine_id == 'firebird' and kind == 'table':
+                resource['operations'] = [
+                    item for item in resource.get('operations', [])
+                    if item['operation_id'] != 'recreate'
+                ] + [{'operation_id': 'recreate', 'title': 'Recreate table',
+                      'mutation_class': 'destructive', 'target_required': True,
+                      'confirmation_required': True}]
             if (self.dialect.engine_id == 'firebird' and
                     kind in {'package', 'sequence'}):
                 module = (firebird_packages if kind == 'package' else
@@ -527,6 +578,34 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'firebird' and
+                resource_kind == 'table' and operation_id == 'recreate'):
+            try:
+                firebird_table_replacement.compile_operation(
+                    draft, request.get('target_resource'),
+                    self._column_definition, self._constraint_definition)
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_table',
+                               'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'firebird' and
+                resource_kind in {
+                    'view', 'exception', 'procedure', 'function', 'trigger',
+                    'user'} and
+                operation_id in firebird_views.OPERATIONS):
+            module = {'view': firebird_views, 'exception': firebird_exceptions,
+                      'procedure': firebird_procedures,
+                      'function': firebird_functions,
+                      'trigger': firebird_triggers,
+                      'user': firebird_users}[resource_kind]
+            try:
+                module.compile_operation(
+                    operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None,
+                               'code': 'invalid_' + resource_kind,
+                               'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'firebird' and
                 resource_kind == 'database' and
                 operation_id in firebird_limbo.ATTACHMENT_OPERATIONS):
@@ -712,6 +791,9 @@ class RelationalAdministration:
             })
         if operation_id in {'insert', 'update', 'delete'} and (
             resource_kind != 'table'
+            and not (self.dialect.engine_id == 'firebird' and
+                     resource_kind == 'view' and operation_id in {
+                         'update', 'delete'})
         ):
             errors.append({
                 'field_id': None,
@@ -2877,6 +2959,10 @@ class RelationalAdministration:
         results = []
         identity_change = None
         try:
+            if (self.dialect.engine_id == 'firebird' and
+                    'firebird_dialect_binding' in payload):
+                from .firebird.ddl_dialect import verify_binding
+                verify_binding(connection, payload['firebird_dialect_binding'])
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
@@ -2958,11 +3044,12 @@ class RelationalAdministration:
                         'verified; the transaction remains caller-owned'
                     )
                     failure.gds_codes = firebird_status_codes(exc)
+                    failure.native_status_codes = failure.gds_codes
                     failure.task_rollback_unconfirmed = True
                     raise failure from None
             else:
                 rollback = getattr(connection, 'rollback', None)
-                if callable(rollback):
+                if callable(rollback) and cursor is not None:
                     rollback_requested = True
                     rollback()
             raise
@@ -2994,6 +3081,7 @@ class RelationalAdministration:
                 f'({type(exc).__name__}){detail}'
             )
             failure.gds_codes = codes
+            failure.native_status_codes = codes
             failure.task_rollback_unconfirmed = task_rollback_failed
             raise failure from None
         finally:
@@ -3038,6 +3126,10 @@ class RelationalAdministration:
     def read_rows(self, client, request, connection=None):
         route = request.get('_provider_route')
         target = request.get('target_resource')
+        session_id = request.get('session_id')
+        if session_id is not None and (
+                not isinstance(session_id, str) or not session_id.strip()):
+            raise RelationalClientError('provider session identity is invalid')
         if not isinstance(route, Mapping) or not isinstance(target, Mapping):
             raise RelationalClientError(
                 'row paging requires a trusted route and table resource'
@@ -3067,6 +3159,7 @@ class RelationalAdministration:
             if retained is None or (
                     retained.route_fingerprint != fingerprint or
                     retained.target_path != path or
+                    retained.session_id != session_id or
                     retained.limit != limit):
                 raise RelationalClientError(
                     'row continuation token is unavailable or mismatched'
@@ -3076,14 +3169,24 @@ class RelationalAdministration:
         connection = connection or client._connect({'route': route})
         cursor = None
         try:
-            # Views are browsable relations, but CDEadmin must not infer that
-            # they are updatable or manufacture row identities for them.
-            # Provider-native view mutation belongs to a separate admitted
-            # operation contract.
+            # Views default to read-only. Firebird may admit a direct,
+            # PK-preserving view in a retained session using native preparation;
+            # never infer row identities for other view shapes or engines.
             key_columns = (
                 tuple(self._primary_key(connection, path))
                 if resource_kind == 'table' else ()
             )
+            writable_columns = None
+            delete_allowed = resource_kind == 'table'
+            if (self.dialect.engine_id == 'firebird' and
+                    resource_kind == 'view' and session_id and
+                    not owns_connection):
+                key_columns, writable_columns = (
+                    firebird_views.grid_update_identity(connection, path[-1]))
+                delete_keys, _ = firebird_views.grid_update_identity(
+                    connection, path[-1], operation='delete')
+                delete_allowed = bool(delete_keys)
+                key_columns = key_columns or delete_keys
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
@@ -3127,6 +3230,10 @@ class RelationalAdministration:
                         tuple(values[key] for key in key_columns),
                         copy.deepcopy(values),
                         time.monotonic(),
+                        session_id=session_id,
+                        resource_kind=resource_kind,
+                        writable_columns=writable_columns,
+                        delete_allowed=delete_allowed,
                     )
                     with self._identity_lock:
                         while len(self._row_identities) >= 5000:
@@ -3142,7 +3249,7 @@ class RelationalAdministration:
                 next_continuation = str(uuid.uuid4())
                 retained = _RowContinuation(
                     fingerprint, path, offset + limit, limit,
-                    time.monotonic(),
+                    time.monotonic(), session_id=session_id,
                 )
                 with self._identity_lock:
                     while len(self._row_continuations) >= 1000:
@@ -3156,14 +3263,23 @@ class RelationalAdministration:
                         'name': name,
                         'native_type': native_types[index],
                         'key': name in key_columns,
-                        'editable': bool(key_columns),
+                        'editable': bool(key_columns) and (
+                            writable_columns is None or
+                            name in writable_columns),
                     }
                     for index, name in enumerate(columns)
                 ],
                 'rows': result_rows,
                 'editable': bool(key_columns),
+                'row_operations': (
+                    (['update'] if writable_columns is None or
+                     writable_columns else []) +
+                    (['delete'] if delete_allowed else [])
+                ) if key_columns else [],
                 'identity_policy': (
-                    'provider-primary-key-and-original-values'
+                    ('provider-view-primary-key-and-original-values'
+                     if resource_kind == 'view' else
+                     'provider-primary-key-and-original-values')
                     if key_columns else
                     'read-only-view' if resource_kind != 'table' else
                     'read-only-no-primary-key'
@@ -3184,6 +3300,18 @@ class RelationalAdministration:
                 client._safe_close(cursor)
             if owns_connection:
                 client._forget_and_close(connection)
+
+    def invalidate_row_session(self, session_id):
+        """Forget transaction-bound grid state without inferring finality."""
+        if not isinstance(session_id, str) or not session_id:
+            raise RelationalClientError('provider session identity is invalid')
+        with self._identity_lock:
+            self._row_identities = {
+                token: value for token, value in self._row_identities.items()
+                if value.session_id != session_id}
+            self._row_continuations = {
+                token: value for token, value in self._row_continuations.items()
+                if value.session_id != session_id}
 
     def cancel_rows(self, request):
         """Release one provider-issued relational row continuation."""
@@ -3274,6 +3402,32 @@ class RelationalAdministration:
                         'File creation or deletion takes effect through '
                         'native transaction completion; files preserved '
                         'by DROP remain on the server.']}
+        if (self.dialect.engine_id == 'firebird' and
+                request['resource_kind'] == 'table' and operation == 'recreate'):
+            statement = firebird_table_replacement.compile_operation(
+                request['draft'], request.get('target_resource'),
+                self._column_definition, self._constraint_definition)
+            return {'statements': [{'source': statement, 'parameters': ()}],
+                    'warnings': [firebird_table_replacement.WARNING]}
+        if (self.dialect.engine_id == 'firebird' and
+                request['resource_kind'] in {
+                    'view', 'exception', 'procedure', 'function', 'trigger',
+                    'user'} and
+                operation in firebird_views.OPERATIONS):
+            module = {'view': firebird_views, 'exception': firebird_exceptions,
+                      'procedure': firebird_procedures,
+                      'function': firebird_functions,
+                      'trigger': firebird_triggers,
+                      'user': firebird_users}[
+                          request['resource_kind']]
+            statement = module.compile_operation(
+                operation, request['draft'], request.get('target_resource'))
+            return {'statements': [statement if module is firebird_users else
+                                   {'source': statement, 'parameters': ()}],
+                    'warnings': ([module.WARNING]
+                                 if operation == 'recreate' else []) + (
+                                     [module.NOTICE] if hasattr(module, 'NOTICE')
+                                     else [])}
         if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] == 'sequence' and
                 operation in firebird_sequences.OPERATIONS - {'inspect'}):
@@ -4664,6 +4818,19 @@ class RelationalAdministration:
 
     def _form(self, kind, operation):
         title = operation.replace('_', ' ').title()
+        if (self.dialect.engine_id == 'firebird' and kind == 'table' and
+                operation == 'recreate'):
+            return firebird_table_replacement.form(self._field)
+        if (self.dialect.engine_id == 'firebird' and
+                kind in {'view', 'exception', 'procedure', 'function',
+                         'trigger', 'user'} and
+                operation in firebird_views.OPERATIONS):
+            module = {'view': firebird_views, 'exception': firebird_exceptions,
+                      'procedure': firebird_procedures,
+                      'function': firebird_functions,
+                      'trigger': firebird_triggers,
+                      'user': firebird_users}[kind]
+            return module.form(operation, self._field)
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
             return firebird_limbo.form(operation, self._field)
@@ -6990,6 +7157,13 @@ class RelationalAdministration:
             raise RelationalClientError(
                 'row identity token is stale or invalid'
             )
+        if identity.session_id != request.get('session_id'):
+            raise RelationalClientError(
+                'row identity belongs to another provider session')
+        if (identity.resource_kind != request['resource_kind'] or
+                identity.resource_kind != request['target_resource'].get(
+                    'resource_kind', 'table')):
+            raise RelationalClientError('row identity belongs to another kind')
         if time.monotonic() - identity.issued_at > 600:
             raise RelationalClientError('row identity token has expired')
         route = request.get('_provider_route')
@@ -7005,6 +7179,9 @@ class RelationalAdministration:
         where, parameters = self._identity_predicate(identity)
         target = self._qualified(target_path)
         if request['operation_id'] == 'delete':
+            if not identity.delete_allowed:
+                raise RelationalClientError(
+                    'row deletion was not admitted by the provider')
             source = f'DELETE FROM {target} WHERE {where}'
             return {
                 'source': source, 'parameters': parameters,
@@ -7013,6 +7190,10 @@ class RelationalAdministration:
         changes = draft.get('changes')
         if not isinstance(changes, Mapping) or not changes:
             raise RelationalClientError('row update changes must be an object')
+        if identity.writable_columns is not None and any(
+                name not in identity.writable_columns for name in changes):
+            raise RelationalClientError(
+                'row update contains a column not admitted for editing')
         assignments = ', '.join(
             f'{self._quote(name)} = {self.dialect.parameter}'
             for name in changes
@@ -7953,6 +8134,9 @@ class RelationalAdministration:
 
     def _quote(self, value):
         value = self._identifier(value)
+        if self.dialect.engine_id == 'firebird':
+            from .firebird.ddl_dialect import identifier_sql
+            return identifier_sql(value)
         escaped = value.replace(
             self.dialect.quote_close, self.dialect.quote_close * 2
         )

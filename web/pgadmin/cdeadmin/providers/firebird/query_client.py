@@ -9,14 +9,25 @@ from dataclasses import dataclass, field
 from pgadmin.cdeadmin.sdk.relational import (
     RelationalClientError, RelationalDBAPIClient, _ResultToken,
 )
-from .error_diagnostics import diagnostic_flag, status_codes
+from .error_diagnostics import (
+    diagnostic_flag, execution_identity, status_codes,
+)
 from . import limbo
 from .query_parameters import normalize_parameters
 from .query_limits import query_row_limit
+from .query_dialect import DialectCursor, requested_dialect
 from .service_connection import effective_service_role
 from .transaction_sql import (
     start_native_transaction, starts_transaction, transaction_command,
 )
+
+COMMIT_FAILURE_NOTICE = (
+    'Commit was not confirmed. Inspect the transaction state before retrying; '
+    'earlier savepoints may no longer exist.')
+QUERY_FAILURE_NOTICE = (
+    'A failed result does not confirm rollback. Earlier work or procedure '
+    'writes may remain pending; inspect the transaction before committing '
+    'or retrying.')
 
 
 @dataclass(eq=False)
@@ -36,6 +47,8 @@ class _AttachmentState:
     cancellation_state_unknown: bool = False
     result_cleanup_failed: bool = False
     worker_interrupted: bool = False
+    visual_task_state_unknown: bool = False
+    failed_cursors: list = field(default_factory=list)
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
@@ -121,6 +134,13 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             # Preserve the initialization failure. Quarantined attachments
             # remain owned but cannot execute queries or catalog operations.
             pass
+
+    def discard_unverified_session(self, handle):
+        with self._exclusive(handle, closing=True):
+            self._discard_failed_session(handle)
+            if not any(item is handle for item in self._connections):
+                with self._admission:
+                    self._attachment_states.pop(id(handle), None)
 
     def _release_failed_initialization(self, connection):
         failure = None
@@ -225,6 +245,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird query worker was interrupted; close this '
                     'session and explicitly reconnect')
+            if state.visual_task_state_unknown and not closing:
+                raise RelationalClientError(
+                    'Firebird visual task state is unknown; close this '
+                    'session and explicitly reconnect')
             yield state
         finally:
             state.lock.release()
@@ -237,6 +261,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         payload = copy.deepcopy(dict(request))
         self.config.query_parameter_normalizer(payload.get('parameters', ()))
         query_row_limit(payload)
+        requested_dialect(payload)
         with self._exclusive(handle) as state:
             query = _Query(handle)
             query.worker = threading.Thread(
@@ -286,7 +311,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                                   'did not complete. Do not replay the '
                                   'statement; close this session.'
                                   if cleanup_failed
-                                  else 'Firebird query did not complete.')),
+                                  else 'Firebird query did not complete.')) +
+                        ' ' + QUERY_FAILURE_NOTICE,
                         'error_type': type(exc).__name__,
                         'native_status_codes': list(codes),
                         'native_execution_completed': execution_completed,
@@ -405,11 +431,14 @@ class FirebirdQueryClient(RelationalDBAPIClient):
 
     def _execute_sql(self, handle, request):
         limit = query_row_limit(request)
+        dialect = requested_dialect(request)
         if starts_transaction(request.get('source')):
             return self._start_transaction_sql(handle, request)
         command = transaction_command(request.get('source'))
         if command is None:
             token = super().execute(handle, request)
+            if dialect is not None:
+                token.firebird_statement_dialect = dialect
             if limit is not None and token.columns:
                 token.firebird_fetch_observation = {
                     'max_rows': limit,
@@ -429,8 +458,16 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         receipt = self._finish_transaction(handle, action, retaining)
         token = _ResultToken(None, handle, (), [], None, closed=True)
         token.firebird_transaction_receipt = receipt
+        if dialect is not None:
+            token.firebird_statement_dialect = dialect
         self._tokens.append(token)
         return token
+
+    def _query_cursor(self, handle, request):
+        dialect = requested_dialect(request)
+        if dialect is None or dialect == handle.sql_dialect:
+            return super()._query_cursor(handle, request)
+        return DialectCursor(handle, dialect)
 
     def _fetch_query_rows(self, cursor, request):
         limit = query_row_limit(request)
@@ -447,6 +484,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             state = self._state(handle)
             with state.lock:
                 state.result_cleanup_failed = True
+                state.failed_cursors.append(cursor)
             error = RelationalClientError(
                 'Firebird query failed and result cursor cleanup failed; '
                 'do not replay the statement. Close this session and '
@@ -469,7 +507,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             # Run its idle cleanup so a legacy API handle from the previous
             # transaction cannot be reused by array/event/native operations.
             handle.main_transaction._finish()
-            native = start_native_transaction(handle, request['source'])
+            dialect = requested_dialect(request)
+            native = (start_native_transaction(handle, request['source'])
+                      if dialect is None else start_native_transaction(
+                          handle, request['source'], dialect=dialect))
         except Exception as exc:
             error = RelationalClientError(
                 'Firebird SET TRANSACTION did not complete (' +
@@ -478,6 +519,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             raise error from None
         handle.main_transaction._tra = native
         token = _ResultToken(None, handle, (), [], None, closed=True)
+        if dialect is not None:
+            token.firebird_statement_dialect = dialect
         token.firebird_transaction_receipt = {
             'action': 'begin', 'native_call_made': True,
             'observation': 'Firebird returned a native transaction interface',
@@ -492,10 +535,18 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             if active:
                 getattr(handle, action)(retaining=retaining)
         except Exception as exc:
+            codes = status_codes(exc)
+            details = execution_identity(exc)
+            if codes:
+                details.append('Firebird status codes: ' +
+                               ', '.join(map(str, codes)))
+            suffix = '; ' + '; '.join(details) if details else ''
             error = RelationalClientError(
                 'Firebird transaction command outcome is unavailable (' +
-                type(exc).__name__ + ')')
-            error.gds_codes = status_codes(exc)
+                type(exc).__name__ + suffix + ')' +
+                (' ' + COMMIT_FAILURE_NOTICE if action == 'commit' else ''))
+            error.gds_codes = codes
+            error.native_status_codes = codes
             raise error from None
         return {
             'action': action, 'retaining_requested': retaining,
@@ -528,6 +579,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         observation = getattr(token, 'firebird_fetch_observation', None)
         if observation is not None:
             result['payload']['fetch_observation'] = copy.deepcopy(observation)
+        dialect = getattr(token, 'firebird_statement_dialect', None)
+        if dialect is not None:
+            result['payload']['statement_sql_dialect'] = dialect
         return result
 
     def runtime_identity(self, request, handle=None):
@@ -759,6 +813,26 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         with self._temporary_operation():
             plan = super().plan_admin_operation(request)
             payload = plan.get('provider_payload', {})
+            # Identity-backed row operations consume a one-use selector at
+            # compilation. DML does not have the stored/client DDL dialect
+            # ambiguity restriction and must never be compiled a second time.
+            if (request.get('operation_id') not in
+                    {'insert', 'update', 'delete'}
+                    and payload.get('compiled', {}).get('statements') and
+                    payload.get('route', {}).get('database')):
+                from .ddl_dialect import generated_dialect, observed_dialects
+                connection = self._connect({'route': payload['route']})
+                try:
+                    binding = observed_dialects(connection)
+                finally:
+                    self._forget_and_close(connection)
+                if binding['database_sql_dialect'] == 1:
+                    with generated_dialect(1):
+                        plan = super().plan_admin_operation(request)
+                payload = plan['provider_payload']
+                payload['firebird_dialect_binding'] = binding
+                plan['command_preview']['firebird_dialect_binding'] = dict(
+                    binding)
             if payload.get('compiled', {}).get('driver_operation') == (
                     'firebird-limbo'):
                 compiled = payload['compiled']
@@ -810,8 +884,16 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         if handle is None:
             with self._temporary_operation():
                 return super().apply_admin_operation(request)
-        with self._exclusive(handle):
-            return super().apply_admin_operation(request)
+        with self._exclusive(handle) as state:
+            try:
+                return super().apply_admin_operation(request)
+            except Exception as error:
+                if diagnostic_flag(error, 'task_rollback_unconfirmed'):
+                    state.visual_task_state_unknown = True
+                raise
+            except BaseException:
+                state.visual_task_state_unknown = True
+                raise
 
     def read_admin_rows(self, request):
         handle = request.get('_provider_session_handle')

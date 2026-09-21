@@ -818,15 +818,76 @@ describe('ProviderWorkspaceContent', () => {
     const input = await screen.findByLabelText('Query parameters (JSON array)');
     expect(input).toHaveValue('[]');
     expect(screen.getByText('Ordered ? placeholders')).toBeInTheDocument();
+    expect(screen.getByText(/Driver prefetch may execute more procedure work/)).toBeInTheDocument();
     fireEvent.change(input, {target: {value: '[42,"text",null]'}});
     fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'firebird-session',
       source: 'SELECT CAST(? AS INTEGER) FROM RDB$DATABASE',
       parameters: [42, 'text', null], database_target_id: 'firebird-target',
-      max_rows: 1000,
+      max_rows: 1000, client_sql_dialect: 3,
     }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+  });
+
+  it('runs confirmed trap control on the existing session without editor parameters or a new attachment', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'SELECT 1 FROM RDB$DATABASE', parameter_shape: 'array',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'firebird-session'},
+      transaction: {provider_payload: {state: 'idle'}},
+      execute: {occurrence_id: 'firebird-occurrence'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'firebird-target'}} />);
+    expect(await screen.findByRole('button', {name: 'Disable all DECFLOAT traps'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Provider transaction state'}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
+    fireEvent.change(screen.getByLabelText('Query parameters (JSON array)'), {target: {value: 'invalid json'}});
+    fireEvent.change(screen.getByLabelText('Maximum fetched rows'), {target: {value: '-1'}});
+    fireEvent.mouseDown(screen.getByLabelText('Statement SQL dialect'));
+    fireEvent.click(screen.getByRole('option', {name: '1 — legacy SQL'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Confirm disabling all DECFLOAT traps in this session'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Disable all DECFLOAT traps'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'execute', session_id: 'firebird-session', source: 'SET DECFLOAT TRAPS TO',
+      parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3,
+    }));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
+    expect(api.post.mock.calls.filter(([, value]) => value.action === 'open_session')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'Disable all DECFLOAT traps'})).toBeDisabled();
+    expect(screen.getByLabelText('Query parameters (JSON array)')).toHaveValue('invalid json');
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', session_id: 'firebird-session', parameters: [],
+      source: 'SELECT RDB$GET_CONTEXT(\'SYSTEM\', \'DECFLOAT_TRAPS\') AS DECFLOAT_TRAPS FROM RDB$DATABASE',
+    })));
+  });
+
+  it.each([[1, '1 — legacy SQL'], [2, '2 — transition diagnostics'], [3, '3 — modern SQL']])('selects statement dialect %s without changing the session-opening request', async (dialect, label) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'SELECT 1 FROM RDB$DATABASE', parameter_shape: 'array',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'fb'}, execute: {occurrence_id: 'query'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.mouseDown(await screen.findByLabelText('Statement SQL dialect'));
+    fireEvent.click(screen.getByRole('option', {name: label}));
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', client_sql_dialect: dialect, source: 'SELECT 1 FROM RDB$DATABASE',
+    })));
+    const opening = api.post.mock.calls.find(([, payload]) => payload.action === 'open_session')[1];
+    expect(opening).not.toHaveProperty('client_sql_dialect');
+    expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_control')).toBe(false);
   });
 
   it.each(['', '-1', '1.5', '1000001'])('rejects invalid Firebird row bound %s before opening a session', async (value) => {
@@ -864,6 +925,8 @@ describe('ProviderWorkspaceContent', () => {
     })));
     expect(await screen.findByLabelText('Firebird fetch observation'))
       .toHaveTextContent('Further rows may exist; the total was not counted.');
+    expect(screen.getByLabelText('Firebird fetch observation'))
+      .toHaveTextContent('Driver prefetch may execute more procedure work than the displayed rows.');
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_control')).toBe(false);
   });
 
@@ -1294,6 +1357,21 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Unresolved grant: <script>do not execute</script>');
     expect(screen.getByRole('alert').querySelector('script')).toBeNull();
+  });
+
+  it('refreshes Firebird view length warnings without executing an operation', () => {
+    const onOperation = jest.fn();
+    const view = (warnings) => ({display_name: 'V', resource_kind: 'view',
+      extensions: {firebird: {native: {catalog_warnings: warnings}}}});
+    const warning = 'View column B has inconsistent or missing native UTF8 CHAR length metadata. Firebird may reject result fetching with string truncation.';
+    const {rerender} = render(<ObjectInspectorSection tabbed
+      resource={view([warning])} onOperation={onOperation} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(warning);
+    expect(onOperation).not.toHaveBeenCalled();
+    rerender(<ObjectInspectorSection tabbed
+      resource={view([])} onOperation={onOperation} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onOperation).not.toHaveBeenCalled();
   });
 
   it('removes inapplicable multi-selection privileges after a target change', () => {
@@ -3291,11 +3369,11 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it('edits rows through provider-issued identity plans', async () => {
+  it.each([['table', 'update'], ['view', 'update'], ['view', 'delete']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
-        resource_id: 'table:example:widgets', resource_kind: 'table',
+        resource_id: `${kind}:example:widgets`, resource_kind: kind,
         display_name: 'widgets', display_path: ['example', 'widgets'],
         authority_path: ['example', 'table', 'widgets'],
         extensions: {cdeadmin: {database_target_id: 'database-one'}},
@@ -3303,7 +3381,7 @@ describe('ProviderWorkspaceContent', () => {
       visual_admin: {
         ...bootstrap.visual_admin,
         objects: [{
-          resource_kind: 'table', title: 'Table', operations: [
+          resource_kind: kind, title: 'Relation', operations: [
             {operation_id: 'insert', execution_available: true},
             {operation_id: 'update', execution_available: true},
             {operation_id: 'delete', execution_available: true},
@@ -3317,13 +3395,14 @@ describe('ProviderWorkspaceContent', () => {
         open_session: {session_id: 'grid-session'},
         visual_admin_rows: {
           columns: [
-            {name: 'id', key: true, editable: true},
-            {name: 'name', key: false, editable: true},
+            {name: 'id', key: true, editable: operation !== 'delete'},
+            {name: 'name', key: false, editable: operation !== 'delete'},
           ],
           rows: [{
             values: {id: 1, name: 'first'}, identity_token: 'row-one',
           }],
           editable: true,
+          row_operations: [operation],
         },
         visual_admin_validate: {valid: true, errors: []},
         visual_admin_plan: {
@@ -3348,10 +3427,25 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(await screen.findByText('Load rows'));
     const name = await screen.findByDisplayValue('first');
     expect(screen.getByRole('textbox', {name: 'name value'})).toBe(name);
-    expect(screen.getByRole('textbox', {name: 'name new value'}))
-      .toHaveAttribute('placeholder', 'New value');
-    fireEvent.change(name, {target: {value: 'second'}});
-    fireEvent.click(screen.getByText('Save'));
+    if (kind === 'table') {
+      expect(screen.getByRole('textbox', {name: 'name new value'}))
+        .toHaveAttribute('placeholder', 'New value');
+    } else {
+      expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
+      if (operation === 'update') {
+        expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
+      }
+    }
+    if (operation === 'delete') {
+      expect(name).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+      expect(api.post).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
+    } else {
+      fireEvent.change(name, {target: {value: 'second'}});
+      fireEvent.click(screen.getByText('Save'));
+    }
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(6));
     expect(api.post.mock.calls.map((call) => call[1].action)).toEqual([
       'open_session', 'visual_admin_rows', 'visual_admin_validate',
@@ -3359,9 +3453,12 @@ describe('ProviderWorkspaceContent', () => {
     ]);
     expect(api.post.mock.calls[2][1].request.draft).toEqual({
       selector: {identity_token: 'row-one'},
-      changes: {name: 'second'},
+      ...(operation === 'delete' ? {confirmation: 'provider-row-delete'} :
+        {changes: {name: 'second'}}),
       concurrency_token: 'row-one',
     });
+    expect(api.post.mock.calls[2][1].request.resource_kind).toBe(kind);
+    expect(api.post.mock.calls[2][1].request.operation_id).toBe(operation);
     expect(api.post.mock.calls[0][1]).toEqual({
       action: 'open_session', language_profile: 'mysql-sql',
       database_target_id: 'database-one',
@@ -3438,7 +3535,12 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls[1][1].request.target_resource).toEqual(view);
     expect(api.post.mock.calls[1][1].request.database_target_id)
       .toBe('firebird-database-one');
-    expect(screen.getByText(/This view is read-only/)).toBeInTheDocument();
+    expect(screen.getByText(/This grid is read-only because CDEadmin/)).toBeInTheDocument();
+    expect(screen.getByText(/The engine may support writes/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1001')).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
+    expect(screen.queryByRole('button', {name: 'Insert row'})).toBeNull();
   });
 
   it('loads and edits MongoDB documents through provider plans', async () => {
