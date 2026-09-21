@@ -3,7 +3,6 @@
 // CDEadmin - Multi-engine Database Administration
 //
 // Copyright (C) 2013 - 2026, The pgAdmin Development Team
-// This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
 
@@ -40,6 +39,10 @@
 .dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"] > .dock > .dock-bar {
     min-height: 34px !important;
 
+    .dock-ink-bar {
+        display: none !important;
+    }
+
     .dock-nav-wrap {
     }
 
@@ -68,4 +71,32 @@
         box-shadow: none !important;
         color: #326690;
     }
+}
+
+.css-dpwwek-MuiNotchedOutlined-root-MuiOutlinedInput-notchedOutline {
+    border: none !important;
+    box-shadow: 0px 2px 4px -4px ;
+}
+
+
+.Buttons-primaryButton {
+    border: none !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+
+.Buttons-defaultButton {
+    color: #0077B6 !important;
+    background: none !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+
+    &:hover {
+        color: white !important;
+        background: #0077B6 !important;
+    }
+}
+
+.dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"]>.dock>.dock-bar .dock-tab>div {
+    padding: 0 !important;
 }
