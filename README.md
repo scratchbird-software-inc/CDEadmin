@@ -11,6 +11,13 @@ pgAdmin Development Team. The upstream copyright, PostgreSQL Licence, source
 history, and applicable notices are retained. See [NOTICE](NOTICE),
 [LICENSE](LICENSE), and [Hard-fork status](docs/en_US/cdeadmin_hard_fork.rst).
 
+## Developer setup
+
+For a fresh development machine, see the
+[Windows/macOS/Linux development and demo setup guide](tools/development/README.md).
+It covers dependencies, frontend builds, account setup, Docker fixtures, sample
+credentials, and per-engine start/stop/verification commands.
+
 ## Why this is a hard fork
 
 The project is no longer a PostgreSQL-only administration tool with additional

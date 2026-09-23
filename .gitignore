@@ -55,6 +55,8 @@ web/commit_hash
 auditjs.html
 auditpy.txt
 /venv/
+/.venv/
+/.devstate/
 .scannerwork/
 web/coverage/
 web/.coverage
