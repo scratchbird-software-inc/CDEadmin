@@ -282,7 +282,10 @@ def register(args, app=None):
                     name=item["name"], host=(
                         None if registration["route_kind"] == "embedded_file"
                         else host
-                    ), port=port, maintenance_db=None,
+                    ), port=port, maintenance_db=(
+                        database if registration['workflow'] ==
+                        'legacy_preserved' else None
+                    ),
                     username=(
                         "embedded-process"
                         if registration["route_kind"] == "embedded_file"
@@ -314,7 +317,10 @@ def register(args, app=None):
                 existing.port = port
                 # A provider endpoint is a server/listener registration.
                 # Its databases are retained exclusively as child targets.
-                existing.maintenance_db = None
+                existing.maintenance_db = (
+                    database if registration['workflow'] ==
+                    'legacy_preserved' else None
+                )
                 existing.username = (
                     "embedded-process"
                     if registration["route_kind"] == "embedded_file"

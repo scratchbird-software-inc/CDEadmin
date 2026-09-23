@@ -9,6 +9,7 @@
 
 
 import pgAdmin from 'sources/pgadmin';
+import currentUser from 'pgadmin.user_management.current_user';
 import BaseUISchema from 'sources/SchemaView/base_schema.ui';
 import {
   validateSchema,
@@ -100,6 +101,34 @@ describe('ServerSchema', ()=>{
     expect(schemaObj.isEmbeddedEndpoint({
       cde_profile_id: 'embedded-native',
     })).toBe(true);
+  });
+
+  it('requires an initial database for the preserved PostgreSQL workflow', () => {
+    expect(schemaObj.requiresDatabase({cde_profile_id: 'postgresql-native'})).toBe(true);
+  });
+
+  it('preserves password-storage policy and authentication restrictions', () => {
+    const previous = currentUser.allow_save_password;
+    const field = schemaObj.baseFields.find((item) => item.id === 'save_password');
+    try {
+      currentUser.allow_save_password = false;
+      expect(field.disabled({kerberos_conn: false})).toBe(true);
+      currentUser.allow_save_password = true;
+      expect(field.disabled({kerberos_conn: false})).toBe(false);
+      expect(field.disabled({kerberos_conn: true})).toBe(true);
+      expect(field.readonly({connected: true})).toBe(true);
+    } finally {
+      currentUser.allow_save_password = previous;
+    }
+  });
+
+  it('hides internal grouping when registered from an engine context', () => {
+    const schema = new ServerSchema([], 0, {gid: '1',
+      cde_profile_id: 'postgresql-native'}, {engineId: 'postgresql'});
+    expect(schema.baseFields.find((field) => field.id === 'gid').visible()).toBe(false);
+    expect(schema.defaults.gid).toBe('1');
+    expect(schema.baseFields.find((field) => field.id === 'db').helpMessage)
+      .toContain('Initial database used to establish the PostgreSQL connection');
   });
 
   it('builds provider-declared select connection fields', ()=>{
