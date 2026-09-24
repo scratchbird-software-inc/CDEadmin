@@ -1,4 +1,4 @@
-"""Variable binary/text slices without C-string truncation."""
+"""Bounded character slices and lossless variable binary/text transport."""
 from ctypes import create_string_buffer
 from itertools import chain, product
 
@@ -80,6 +80,44 @@ def read_text(cursor, array_id, bounds, dimensions, characters, charset):
         bounds, dimensions, max(characters * width, bounds.array_desc_length),
         lambda part, shape: _read_text(
             cursor, array_id, part, shape, characters, charset))
+
+
+def read_fixed(cursor, array_id, bounds, dimensions, characters, charset):
+    """Preserve fixed-width bytes or characters using bounded native slices."""
+    def rectangle(part, shape):
+        count = 1
+        for size in shape:
+            count *= size
+        capacity = part.array_desc_length
+        data = create_string_buffer(count * capacity)
+        received = cursor._connection._att.get_slice(
+            cursor._transaction._tra, array_id,
+            text_slice(part, 1 if charset == 1 else 127), b'', data)
+        if received != len(data):
+            raise RelationalClientError('Incomplete fixed array slice')
+        raw = data.raw
+
+        def values():
+            for offset in range(0, len(raw), capacity):
+                value = raw[offset:offset+capacity]
+                if charset != 1:
+                    value = value.decode(cursor._encoding)
+                    if (len(value) < characters or
+                            value[characters:].strip(' ')):
+                        raise RelationalClientError(
+                            'Character array padding invalid')
+                    value = value[:characters]
+                yield value
+
+        leaves = values()
+
+        def nest(depth):
+            return [next(leaves) if depth == len(shape)-1 else nest(depth+1)
+                    for _ in range(shape[depth])]
+
+        return nest(0)
+
+    return _chunked(bounds, dimensions, bounds.array_desc_length, rectangle)
 
 
 def _read_text(cursor, array_id, bounds, dimensions, characters, charset):

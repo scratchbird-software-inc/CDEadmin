@@ -71,6 +71,10 @@ def read(cursor, desc):
         cursor, desc.relation, desc.field, description)
     raw_id = cursor._stmt._out_buffer[desc.offset:desc.offset + desc.length]
     array_id = api.ISC_QUAD.from_buffer_copy(raw_id)
+    if code == 14:
+        from .varying_arrays import read_fixed
+        return True, read_fixed(cursor, array_id, bounds, dimensions,
+                                characters, charset)
     if code == 37 and charset == 1:
         from .varying_arrays import read as read_varying
         return True, read_varying(cursor, array_id, bounds, dimensions)
@@ -81,14 +85,10 @@ def read(cursor, desc):
     data = create_string_buffer(count * size)
     length = api.ISC_LONG(len(data))
     status = api.ISC_STATUS_ARRAY()
-    if charset == 1:
-        from .array_sdl import octets
-        cursor._connection._att.get_slice(
-            cursor._transaction._tra, array_id, octets(bounds), b'', data)
-    else:
-        api.get_api().isc_array_get_slice(
-            status, cursor._connection._get_handle(),
-            cursor._transaction._get_handle(), array_id, bounds, data, length)
+    # Unqualified VARCHAR charsets retain the legacy driver slice path.
+    api.get_api().isc_array_get_slice(
+        status, cursor._connection._get_handle(),
+        cursor._transaction._get_handle(), array_id, bounds, data, length)
     if api.db_api_error(status):
         raise api.exception_from_status(DatabaseError, status,
                                         'Character array read')
@@ -96,18 +96,8 @@ def read(cursor, desc):
     raw = data.raw
     for index in range(count):
         packed = raw[index * size:(index + 1) * size]
-        if charset == 1:
-            leaves.append(packed)
-            continue
-        if code == 37:
-            packed = packed.split(b'\0', 1)[0]
+        packed = packed.split(b'\0', 1)[0]
         value = packed.decode(cursor._encoding)
-        if code == 14:
-            # Slice padding is byte-sized; SQL CHAR is character-sized.
-            # Remove only the transport padding beyond the declared length.
-            if value[characters:].strip(' '):
-                raise RelationalClientError('Character array padding invalid')
-            value = value[:characters]
         leaves.append(value)
     iterator = iter(leaves)
 
