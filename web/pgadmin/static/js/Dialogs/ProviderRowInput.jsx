@@ -2,14 +2,30 @@
 import PropTypes from 'prop-types';
 import {Box, MenuItem, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
+import ProviderArrayInput, {arrayShape} from './ProviderArrayInput';
 
 export function rowInputDraft(value, kind) {
+  if (kind === 'array') return {text: value == null ? '' : JSON.stringify(value), isNull: value === null};
   return {text: kind === 'binary' && value?.encoding === 'base64' ? value.data :
     value == null ? '' : String(value), isNull: value === null};
 }
 
-export function rowInputValue(draft, kind) {
+export function rowInputValue(draft, kind, spec) {
   if (draft.isNull) return null;
+  if (kind === 'array') {
+    const lengths = arrayShape(spec);
+    const visit = (items, depth) => {
+      if (!Array.isArray(items) || items.length !== lengths[depth]) throw new Error(gettext('Array dimensions do not match native bounds.'));
+      return items.map((item) => {
+        if (depth < lengths.length - 1) return visit(item, depth + 1);
+        if (item == null) throw new Error(gettext('Array elements cannot be NULL.'));
+        if (typeof item === 'number' && !Number.isSafeInteger(item)) throw new Error(gettext('Exact array numbers must be transmitted as text.'));
+        const result = rowInputValue(rowInputDraft(item), spec.element_kind);
+        return ['float32', 'float64'].includes(spec.element_kind) ? result.data : result;
+      });
+    };
+    return visit(JSON.parse(draft.text), 0);
+  }
   if (kind === 'binary') {
     try {
       const decoded = atob(draft.text);
@@ -36,7 +52,8 @@ export function rowInputValue(draft, kind) {
   return draft.text;
 }
 
-export default function ProviderRowInput({kind, draft, label, disabled, onChange}) {
+export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec}) {
+  if (kind === 'array') return <ProviderArrayInput {...{draft, label, disabled, onChange, spec}} />;
   return <Box sx={{display: 'flex', gap: 0.5, minWidth: 220}}>
     <TextField size="small" select value={draft.isNull ? 'null' : 'value'}
       disabled={disabled} SelectProps={{inputProps: {'aria-label': `${label} mode`}}}
@@ -62,7 +79,8 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
 }
 
 ProviderRowInput.propTypes = {
-  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary']).isRequired,
+  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary', 'array']).isRequired,
+  spec: PropTypes.object,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,

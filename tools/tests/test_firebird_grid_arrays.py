@@ -116,3 +116,26 @@ def test_scalars_do_not_add_preparation_or_catalog_roundtrips():
     assert parameters(connection, cursor, 'unused', values) is values
     cursor.prepare.assert_not_called()
     connection.cursor.assert_not_called()
+
+
+@pytest.mark.parametrize('code,subtype,scale,kind', [
+    (7, 0, 0, 'integer'), (8, 1, -2, 'decimal'), (16, 0, 0, 'integer'),
+    (26, 2, -4, 'decimal'), (10, 0, 0, 'float32'),
+    (27, 0, 0, 'float64'), (23, 0, 0, 'boolean'), (12, 0, 0, None),
+    (14, 0, 0, None), (24, 0, 0, None),
+])
+def test_only_verified_element_types_advertise_editor(
+        code, subtype, scale, kind):
+    from unittest.mock import MagicMock
+    from pgadmin.cdeadmin.providers.firebird.grid_arrays import editor_specs
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [(code, subtype, scale, 0, -1, 2)]
+    result = editor_specs(connection, [{
+        'native_type': 'ARRAY', 'source_relation': 'T', 'source_field': 'A',
+        'native_name': 'ALIAS'}])
+    assert bool(result) == bool(kind)
+    if kind:
+        assert result['ALIAS']['element_kind'] == kind
+        assert result['ALIAS']['bounds'] == [(-1, 2)]
+        assert result['ALIAS']['scale'] == scale

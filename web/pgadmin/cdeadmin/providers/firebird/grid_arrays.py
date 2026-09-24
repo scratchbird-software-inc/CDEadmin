@@ -10,6 +10,44 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 from .grid_values import bind_value
 
 
+def descriptor(catalog, relation, field):
+    catalog.execute(
+        'SELECT F.RDB$FIELD_TYPE, F.RDB$FIELD_SUB_TYPE, '
+        'F.RDB$FIELD_SCALE, D.RDB$DIMENSION, '
+        'D.RDB$LOWER_BOUND, D.RDB$UPPER_BOUND '
+        'FROM RDB$RELATION_FIELDS R JOIN RDB$FIELDS F ON '
+        'F.RDB$FIELD_NAME = R.RDB$FIELD_SOURCE '
+        'JOIN RDB$FIELD_DIMENSIONS D ON '
+        'D.RDB$FIELD_NAME = F.RDB$FIELD_NAME '
+        'WHERE R.RDB$RELATION_NAME = ? AND R.RDB$FIELD_NAME = ? '
+        'ORDER BY D.RDB$DIMENSION', (relation, field))
+    rows = catalog.fetchall()
+    if not rows or [row[3] for row in rows] != list(range(len(rows))):
+        raise RelationalClientError(
+            'Firebird array destination metadata unavailable')
+    return {'type': rows[0][0], 'subtype': rows[0][1] or 0,
+            'scale': rows[0][2] or 0,
+            'bounds': [(row[4], row[5]) for row in rows]}
+
+
+def editor_specs(connection, columns):
+    result = {}
+    for column in columns:
+        if column.get('native_type') != 'ARRAY' or not column.get(
+                'source_relation') or not column.get('source_field'):
+            continue
+        with connection.cursor() as catalog:
+            spec = descriptor(catalog, column['source_relation'],
+                              column['source_field'])
+        kind = {7: 'integer', 8: 'integer', 16: 'integer', 26: 'integer',
+                10: 'float32', 27: 'float64', 23: 'boolean'}.get(spec['type'])
+        if kind == 'integer' and (spec['subtype'] or spec['scale']):
+            kind = 'decimal'
+        if kind:
+            result[column['native_name']] = {**spec, 'element_kind': kind}
+    return result
+
+
 def convert(value, spec):
     """Preserve native bounds and reject lossy fixed-width element input."""
     if value is None:
@@ -89,26 +127,8 @@ def parameters(connection, cursor, source, values):
             for index, value in enumerate(values):
                 if meta.get_type(index) != SQLDataType.ARRAY:
                     continue
-                catalog.execute(
-                    'SELECT F.RDB$FIELD_TYPE, F.RDB$FIELD_SUB_TYPE, '
-                    'F.RDB$FIELD_SCALE, D.RDB$DIMENSION, '
-                    'D.RDB$LOWER_BOUND, D.RDB$UPPER_BOUND '
-                    'FROM RDB$RELATION_FIELDS R JOIN RDB$FIELDS F ON '
-                    'F.RDB$FIELD_NAME = R.RDB$FIELD_SOURCE '
-                    'JOIN RDB$FIELD_DIMENSIONS D ON '
-                    'D.RDB$FIELD_NAME = F.RDB$FIELD_NAME '
-                    'WHERE R.RDB$RELATION_NAME = ? AND R.RDB$FIELD_NAME = ? '
-                    'ORDER BY D.RDB$DIMENSION',
-                    (meta.get_relation(index), meta.get_field(index)))
-                rows = catalog.fetchall()
-                if not rows or [row[3] for row in rows] != list(range(
-                        len(rows))):
-                    raise RelationalClientError(
-                        'Firebird array destination metadata unavailable')
-                result[index] = convert(value, {
-                    'type': rows[0][0], 'subtype': rows[0][1] or 0,
-                    'scale': rows[0][2] or 0,
-                    'bounds': [(row[4], row[5]) for row in rows]})
+                result[index] = convert(value, descriptor(
+                    catalog, meta.get_relation(index), meta.get_field(index)))
         return tuple(result)
     finally:
         statement.free()

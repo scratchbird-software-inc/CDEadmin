@@ -3247,6 +3247,11 @@ class RelationalAdministration:
             input_kinds = (firebird_grid_values.input_kinds(cursor)
                            if self.dialect.engine_id == 'firebird' else
                            (None,) * len(description))
+            array_specs = {}
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.grid_arrays import editor_specs
+                array_specs = editor_specs(
+                    connection, firebird_grid_values.describe_columns(cursor))
             table_operations = None
             if (self.dialect.engine_id == 'firebird' and
                     resource_kind == 'table'):
@@ -3355,6 +3360,9 @@ class RelationalAdministration:
                         'native_type': native_types[index],
                         **({'input_kind': input_kinds[index]}
                            if input_kinds[index] else {}),
+                        **({'input_kind': 'array',
+                            'array_spec': array_specs[name]}
+                           if name in array_specs else {}),
                         'key': name in key_columns,
                         **({'insertable': name in insert_columns}
                            if resource_kind == 'view' or table_operations

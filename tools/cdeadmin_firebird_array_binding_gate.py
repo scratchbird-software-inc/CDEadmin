@@ -58,6 +58,16 @@ def verify(connection, client, route, password, result):
                 page = base.ADMINISTRATION.read_rows(
                     client, request, connection=handle)
                 assert len(page['rows']) == 1
+                column = next(item for item in page['columns']
+                              if item['name'] == 'A')
+                assert column['input_kind'] == 'array'
+                assert column['array_spec']['bounds'] == [(0, 1)]
+                assert column['array_spec']['element_kind'] == (
+                    'boolean' if native == 'BOOLEAN' else
+                    'float32' if native == 'FLOAT' else
+                    'float64' if native == 'DOUBLE PRECISION' else
+                    'decimal' if native.startswith(('NUMERIC', 'DECIMAL'))
+                    else 'integer')
                 # Verify actual stored native values, not only wire rendering.
                 with handle.cursor() as cursor:
                     cursor.execute(f'SELECT A FROM {name}')

@@ -3369,6 +3369,41 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
+  it.each(['insert', 'update'])('submits coordinate array %s without numeric rounding', async (operation) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap,
+      resource_page: {items: [{resource_id: 'array-table', resource_kind: 'table',
+        display_name: 'arrays', display_path: ['arrays']}]},
+      visual_admin: {...bootstrap.visual_admin, objects: [{resource_kind: 'table',
+        title: 'Table', operations: ['insert', 'update'].map((operation_id) => ({operation_id, execution_available: true}))}]},
+    }}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'array-session'},
+      visual_admin_rows: {columns: [{name: 'A', input_kind: 'array', editable: true, insertable: true,
+        array_spec: {bounds: [[-1, 0]], element_kind: 'integer', scale: 0}}],
+      rows: [{values: {A: ['1', '2']}, identity_token: 'array-row'}],
+      editable: true, row_operations: ['insert', 'update']},
+      visual_admin_validate: {valid: true, errors: []},
+      visual_admin_plan: {state: 'ready', execution_available: true, plan_id: 'array-plan', plan_digest: 'array-digest'},
+      visual_admin_apply: {provider_result: {accepted: true, staged_in_provider_session: true}},
+      transaction_action: {provider_payload: {driver_observation_only: true}},
+      close_session: {provider_closed: true},
+    }[payload.action]}}));
+    const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="data" />);
+    fireEvent.click(await screen.findByText('Load rows'));
+    const label = operation === 'insert' ? 'A new value' : 'A value';
+    fireEvent.click(await screen.findByRole('button', {name: `${label} [-1:0]`}));
+    if (operation === 'insert') fireEvent.click(screen.getByRole('button', {name: 'Initialize array'}));
+    fireEvent.change(screen.getByRole('textbox', {name: `${label} [-1]`}), {target: {value: '9223372036854775807'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Close array editor'}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', {name: operation === 'insert' ? 'Insert row' : 'Save'}));
+    await waitFor(() => expect(api.post.mock.calls.some(([, payload]) => payload.action === 'visual_admin_apply')).toBe(true));
+    const planned = api.post.mock.calls.find(([, payload]) => payload.action === 'visual_admin_plan')[1];
+    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual(['9223372036854775807', operation === 'insert' ? '0' : '2']);
+    expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_action')).toBe(false);
+    unmount();
+  });
+
   it.each([
     ['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'],
     ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'],

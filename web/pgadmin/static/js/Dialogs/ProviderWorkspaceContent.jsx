@@ -2025,7 +2025,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
       Object.entries(edits[index] || {}).forEach(([name, value]) => {
         if (value !== editorValue(row.values[name])) {
           const kind = page.columns.find((column) => column.name === name)?.input_kind;
-          changes[name] = kind ? rowInputValue(value, kind) : nativeValue(value);
+          changes[name] = kind ? rowInputValue(value, kind, page.columns.find((column) => column.name === name)?.array_spec) : nativeValue(value);
         }
       });
       if (Object.keys(changes).length === 0) return;
@@ -2048,7 +2048,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
       const values = {};
       Object.entries(newValues).forEach(([name, value]) => {
         const kind = page.columns.find((column) => column.name === name)?.input_kind;
-        values[name] = kind ? rowInputValue(value, kind) : nativeValue(value);
+        values[name] = kind ? rowInputValue(value, kind, page.columns.find((column) => column.name === name)?.array_spec) : nativeValue(value);
       });
       await mutate('insert', {values, options: target.resource_kind === 'view' ?
         {identity_token: page.insert_identity_token} : {}});
@@ -2100,6 +2100,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
     editable: false,
     renderCell: ({row}) => <Box sx={{display: 'flex', alignItems: 'center'}}>
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
+        spec={column.array_spec}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
         draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
           (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name], column.input_kind))}
