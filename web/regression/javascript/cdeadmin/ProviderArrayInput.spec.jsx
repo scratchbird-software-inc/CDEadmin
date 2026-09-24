@@ -39,8 +39,8 @@ describe('Native coordinate array editor', () => {
     expect(rowInputValue(rowInputDraft(['🐦é'], 'array'), 'array', textSpec)).toEqual(['🐦é']);
     for (const value of ['🐦éx', 123, {}]) expect(() => rowInputValue(rowInputDraft([value], 'array'), 'array', textSpec)).toThrow();
   });
-  it('preserves binary envelopes, edits Base64 and validates native byte length', () => {
-    const binarySpec = {...spec, bounds: [[1, 2]], element_kind: 'binary', length: 2, charset: 'OCTETS'};
+  it.each([14, 37])('preserves binary envelopes, edits Base64 and validates native byte length for type %s', (type) => {
+    const binarySpec = {...spec, type, bounds: [[1, 2]], element_kind: 'binary', length: 2, charset: 'OCTETS'};
     const original = [{encoding: 'base64', data: 'AP8=', byte_length: 2}, {encoding: 'base64', data: '', byte_length: 0}];
     expect(rowInputValue(rowInputDraft(original, 'array'), 'array', binarySpec)).toEqual(original);
     for (const bad of ['!!!!', 'YWJj']) expect(() => rowInputValue(rowInputDraft([bad, ''], 'array'), 'array', binarySpec)).toThrow();
@@ -51,6 +51,10 @@ describe('Native coordinate array editor', () => {
     fireEvent.change(screen.getByRole('textbox', {name: 'A [1]'}), {target: {value: '/wA='}});
     const draft = JSON.parse(screen.getByTestId('draft').textContent);
     expect(rowInputValue(draft, 'array', binarySpec)).toEqual([{encoding: 'base64', data: '/wA=', byte_length: 2}, original[1]]);
+    fireEvent.change(screen.getByRole('textbox', {name: 'A [1]'}), {target: {value: 'AA=='}});
+    expect(rowInputValue(JSON.parse(screen.getByTestId('draft').textContent), 'array', binarySpec)[0]).toEqual({encoding: 'base64', data: 'AA==', byte_length: 1});
+    fireEvent.change(screen.getByRole('textbox', {name: 'A [1]'}), {target: {value: ''}});
+    expect(rowInputValue(JSON.parse(screen.getByTestId('draft').textContent), 'array', binarySpec)[0]).toEqual(original[1]);
   });
   let originalHeight;
   beforeEach(() => { originalHeight = window.innerHeight; window.innerHeight = 1200; });

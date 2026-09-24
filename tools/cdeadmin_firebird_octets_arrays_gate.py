@@ -65,12 +65,12 @@ def verify(connection, client, route, password, result, *, binary_only=False):
                     initial = page()
                     column = next(c for c in initial['columns']
                                   if c['name'] == 'A')
-                    if native == 'CHAR':
-                        assert column['array_spec']['element_kind'] == 'binary'
-                        assert column['array_spec']['length'] == width
-                        assert column['array_spec']['charset'] == 'OCTETS'
-                    else:
-                        assert column.get('input_kind') != 'array'
+                    assert column['input_kind'] == 'array'
+                    assert column['array_spec']['element_kind'] == 'binary'
+                    assert column['array_spec']['length'] == width
+                    assert column['array_spec']['charset'] == 'OCTETS'
+                    assert column['array_spec']['type'] == (
+                        14 if native == 'CHAR' else 37)
                     apply('insert', {'values': {
                         'ID': 1, 'A': normalize_value(original)},
                                      'options': {'identity_token': initial[

@@ -32,7 +32,7 @@ def descriptor(catalog, relation, field):
     result = {'type': rows[0][0], 'subtype': rows[0][1] or 0,
               'scale': rows[0][2] or 0,
               'bounds': [(row[4], row[5]) for row in rows]}
-    if result['type'] == 14:
+    if result['type'] in (14, 37):
         result.update(length=rows[0][6], charset=rows[0][7])
     return result
 
@@ -56,6 +56,9 @@ def editor_specs(connection, columns):
                 spec.get('charset') in {
                     'ASCII', 'UTF8', 'ISO8859_1', 'WIN1252', 'OCTETS'}):
             kind = 'binary' if spec['charset'] == 'OCTETS' else 'text'
+        if (spec['type'] == 37 and spec.get('length') and
+                spec.get('charset') == 'OCTETS'):
+            kind = 'binary'
         if kind:
             result[column['native_name']] = {**spec, 'element_kind': kind}
             if kind == 'decfloat':
@@ -74,13 +77,13 @@ def convert(value, spec):
 
     def leaf(item):
         code = spec['type']
-        if code == 14:
+        if code == 14 or (code == 37 and spec.get('charset') == 'OCTETS'):
             binary = spec.get('charset') == 'OCTETS'
             item = bind_value(item) if binary else item
             if (not isinstance(item, (bytes, bytearray) if binary else str) or
                     not spec.get('length') or len(item) > spec['length']):
                 raise RelationalClientError(
-                    'Firebird CHAR array requires values within '
+                    'Firebird character array requires values within '
                     'its declared character or byte length')
             return item
         if code in (12, 13, 35):

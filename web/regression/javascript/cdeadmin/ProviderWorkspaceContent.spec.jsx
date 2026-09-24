@@ -3369,7 +3369,9 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, elementKind) => {
+  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary', 'varying-binary'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, kind) => {
+    const elementKind = kind === 'varying-binary' ? 'binary' : kind;
+    const nativeSpec = kind === 'varying-binary' ? {type: 37, length: 8, charset: 'OCTETS'} : {};
     const temporalDefault = {text: '', binary: '', date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[elementKind];
     const editedValue = {text: 'line1\né', binary: 'AP8=', decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
     api.get.mockResolvedValue({data: {data: {...bootstrap,
@@ -3381,7 +3383,7 @@ describe('ProviderWorkspaceContent', () => {
     api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
       open_session: {session_id: 'array-session'},
       visual_admin_rows: {columns: [{name: 'A', input_kind: 'array', editable: true, insertable: true,
-        array_spec: {bounds: [[-1, 0]], element_kind: elementKind, scale: 0}}],
+        array_spec: {bounds: [[-1, 0]], element_kind: elementKind, scale: 0, ...nativeSpec}}],
       rows: [{values: {A: [temporalDefault ?? '1', temporalDefault ?? '2']}, identity_token: 'array-row'}],
       editable: true, row_operations: ['insert', 'update']},
       visual_admin_validate: {valid: true, errors: []},
