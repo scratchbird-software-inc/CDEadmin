@@ -20,6 +20,33 @@ CASES = (
     ('Sequences', 'sequence', 'INSPECTION_NUMBER'),
 )
 
+RELATIONSHIP_SECTIONS = {
+    'dependencies': 'Depends on',
+    'dependents': 'Depended on by',
+    'privileges': 'Privileges and grants',
+}
+
+
+def rendered_values(value):
+    """Expected scalar text in the English native-property renderer."""
+    if value is None:
+        return ['Not set']
+    if isinstance(value, (list, dict)):
+        if not value:
+            return ['None']
+        items = value.values() if isinstance(value, dict) else value
+        return [leaf for item in items for leaf in rendered_values(item)]
+    if isinstance(value, bool):
+        return ['Yes' if value else 'No']
+    return [str(value)]
+
+
+def assert_relationship_coverage(results):
+    for key in RELATIONSHIP_SECTIONS:
+        if not any(item['relationships'][key].get('populated')
+                   for item in results):
+            raise RuntimeError(f'No populated {key} page was verified')
+
 
 def native_expectations(profiles):
     import firebird.driver as driver
@@ -49,7 +76,11 @@ def native_expectations(profiles):
                 cursor.close()
                 if not columns:
                     raise RuntimeError(f'Native columns are absent for {name}')
-            result[name] = {'ddl': ddl, 'columns': columns}
+            result[name] = {
+                'ddl': ddl, 'columns': columns,
+                'relationships': {key: resource['native'].get(key, [])
+                                  for key in RELATIONSHIP_SECTIONS},
+            }
         return result
     finally:
         try:
@@ -144,15 +175,40 @@ def verify(driver, wait, options, capture):
                 columns_layout = {'passed': False, 'applicable': True,
                                   'error': str(error)}
             capture(f'object-{name}-columns-keyboard-bottom')
+        relationships = {}
+        for key, title in RELATIONSHIP_SECTIONS.items():
+            payload = expected[name]['relationships'][key]
+            try:
+                panel = section(title, key)
+                wait.until(lambda _browser: [
+                    item.get_attribute('textContent') for item in
+                    panel.find_elements(By.CSS_SELECTOR, 'span')
+                ] == rendered_values(payload))
+                capture(f'object-{name}-{key}')
+                layout = (column_layout_evidence(driver, panel)
+                          if payload else {})
+                relationships[key] = {
+                    'passed': True, 'populated': bool(payload),
+                    'scalar_count': len(rendered_values(payload)),
+                    'layout': layout,
+                    'keyboard': ddl_keyboard_evidence(driver, wait, panel),
+                }
+            except Exception as error:
+                relationships[key] = {'passed': False, 'error': str(error)}
+            capture(f'object-{name}-{key}-keyboard-bottom')
         results.append({'name': name, 'kind': kind,
                         'exact_provider_ddl_rendered': True,
                         'ddl_keyboard': keyboard,
                         'columns_layout': columns_layout,
+                        'relationships': relationships,
                         'native_column_names': expected[name]['columns']})
     (options.output_root / 'populated-inspector.json').write_text(
         json.dumps(results, indent=2) + '\n', encoding='utf-8')
+    assert_relationship_coverage(results)
     if any(not item['ddl_keyboard']['passed'] or
-           not item['columns_layout']['passed'] for item in results):
+           not item['columns_layout']['passed'] or
+           any(not check['passed'] for check in
+               item['relationships'].values()) for item in results):
         raise RuntimeError('Populated inspector keyboard checks failed; '
                            'see populated-inspector.json')
     return results

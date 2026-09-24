@@ -7,6 +7,28 @@ import pytest
 from tools import cdeadmin_firebird_populated_inspector as gate
 
 
+@pytest.mark.parametrize('value,expected', [
+    (None, ['Not set']), ([], ['None']), ({}, ['None']),
+    (True, ['Yes']), (False, ['No']), (0, ['0']),
+    ('', ['']), ({'name': 'A', 'items': [None, False, {'n': 2}]},
+                 ['A', 'Not set', 'No', '2']),
+])
+def test_rendered_values_match_native_property_renderer(value, expected):
+    assert gate.rendered_values(value) == expected
+
+
+@pytest.mark.parametrize('missing', [None, *gate.RELATIONSHIP_SECTIONS])
+def test_empty_relationship_pages_cannot_satisfy_populated_coverage(missing):
+    results = [{'relationships': {
+        key: {'populated': key != missing}
+        for key in gate.RELATIONSHIP_SECTIONS}}]
+    if missing:
+        with pytest.raises(RuntimeError, match=f'No populated {missing}'):
+            gate.assert_relationship_coverage(results)
+    else:
+        gate.assert_relationship_coverage(results)
+
+
 @pytest.mark.parametrize('cells,overflowing', [(0, 0), (12, 1), (12, 12)])
 def test_column_layout_rejects_missing_or_clipped_cells(cells, overflowing):
     driver = Mock()
@@ -45,6 +67,8 @@ def test_snapshot_is_read_only_and_does_not_export_credentials(native):
     assert set(result) == {case[2] for case in gate.CASES}
     assert result['CUSTOMERS']['columns'] == ['ID', 'NAME']
     assert result['INSPECTION_NUMBER']['columns'] == []
+    assert result['CUSTOMERS']['relationships'] == {
+        'dependencies': [], 'dependents': [], 'privileges': []}
     assert 'private-test-password' not in repr(result)
     native.commit.assert_not_called()
     native.rollback.assert_called_once()
