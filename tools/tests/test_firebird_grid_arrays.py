@@ -189,8 +189,6 @@ def test_character_editor_admission(charset, kind, code):
     connection = MagicMock()
     catalog = connection.cursor.return_value.__enter__.return_value
     catalog.fetchall.return_value = [(code, 0, 0, 0, -1, 0, 8, charset)]
-    if code == 37 and charset != 'OCTETS':
-        kind = None
     result = editor_specs(connection, [{
         'native_type': 'ARRAY', 'source_relation': 'T', 'source_field': 'A',
         'native_name': 'A'}])
@@ -204,7 +202,7 @@ def test_character_editor_admission(charset, kind, code):
 @pytest.mark.parametrize('code', [14, 37])
 def test_character_binding_uses_declared_length_and_native_kind(code):
     from pgadmin.cdeadmin.providers.firebird.grid_values import normalize_value
-    text = dict(spec(14), charset='UTF8', length=2)
+    text = dict(spec(code), charset='UTF8', length=2)
     binary = dict(spec(code), charset='OCTETS', length=2)
     assert convert(['🐦é'], text) == ['🐦é']
     assert convert([normalize_value(b'\0\xff')], binary) == [b'\0\xff']

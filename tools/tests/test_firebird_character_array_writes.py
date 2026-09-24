@@ -18,13 +18,16 @@ def test_character_width_is_not_stored_byte_width(code):
     expected = b''.join(value.encode('utf8').ljust(
         34 if code == 37 else 32, b'\0' if code == 37 else b' ')
         for value in ('é' * 8, '€' * 8, '', 'x'))
+    if code == 37:
+        expected = [value.encode('utf8')
+                    for value in ('é' * 8, '€' * 8, '', 'x')]
     assert encode([['é' * 8, '€' * 8], ['', 'x']], [2, 2],
                   (code, 8, 21, 4), 'utf8') == expected
 
 
 @pytest.mark.parametrize('value', [
     ['123456789', ''], ['é' * 9, ''], [None, ''], [True, ''],
-    [b'bytes', ''], ['', 'a\0b'], ['x'], [['x'], ['y']],
+    [b'bytes', ''], ['x'], [['x'], ['y']],
 ])
 def test_reject_lossy_or_misshaped_varying_values(value):
     with pytest.raises(RelationalClientError):
@@ -76,7 +79,7 @@ def test_invalid_character_rejected_before_delegated_packing():
     with patch(prefix + 'metadata', return_value=(37, 8, 4, 4)), \
             patch(prefix + 'layout', return_value=(None, [1], 34, 1)):
         with pytest.raises(RelationalClientError):
-            pack(cursor, meta, None, [['a\0b']], native)
+            pack(cursor, meta, None, [['x' * 9]], native)
     native.assert_not_called()
 
 

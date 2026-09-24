@@ -4,6 +4,7 @@ from ctypes import addressof, create_string_buffer, memmove, pointer
 from firebird.driver import fbapi as api
 from firebird.driver.types import DatabaseError, SQLDataType
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+from .varying_arrays import TEXT_CHARSETS
 
 
 def metadata(cursor, relation, field):
@@ -73,6 +74,10 @@ def read(cursor, desc):
     if code == 37 and charset == 1:
         from .varying_arrays import read as read_varying
         return True, read_varying(cursor, array_id, bounds, dimensions)
+    if code == 37 and charset in TEXT_CHARSETS:
+        from .varying_arrays import read_text
+        return True, read_text(cursor, array_id, bounds, dimensions,
+                               characters, charset)
     data = create_string_buffer(count * size)
     length = api.ISC_LONG(len(data))
     status = api.ISC_STATUS_ARRAY()
@@ -147,14 +152,21 @@ def encode(values, dimensions, description, encoding):
             except UnicodeError as exc:
                 raise RelationalClientError(
                     'Character array cannot use attachment encoding') from exc
-            if len(packed) > capacity or (code == 37 and b'\0' in packed):
+            if len(packed) > capacity or (
+                    code == 37 and charset not in TEXT_CHARSETS and
+                    b'\0' in packed):
                 raise RelationalClientError(
                     'Character array exceeds slice capacity or contains '
                     'NUL in a VARCHAR slice')
-            leaves.append(packed.ljust(size, b'\0' if code == 37 else b' '))
+            if code == 37 and charset in TEXT_CHARSETS:
+                leaves.append(packed)
+            else:
+                padding = b'\0' if code == 37 else b' '
+                leaves.append(packed.ljust(size, padding))
 
     visit(values, 0)
-    return leaves if code == 37 and charset == 1 else b''.join(leaves)
+    return (leaves if code == 37 and charset in (1, *TEXT_CHARSETS)
+            else b''.join(leaves))
 
 
 def pack(cursor, meta, buffer, parameters, native_pack):
@@ -179,9 +191,10 @@ def pack(cursor, meta, buffer, parameters, native_pack):
         for index, bounds, data, charset, code in pending:
             array_id = api.ISC_QUAD(0, 0)
             status = api.ISC_STATUS_ARRAY()
-            if charset == 1 and code == 37:
+            if code == 37 and charset in (1, *TEXT_CHARSETS):
                 from .varying_arrays import write as write_varying
-                write_varying(cursor, array_id, bounds, data)
+                write_varying(cursor, array_id, bounds, data,
+                              charset=1 if charset == 1 else 127)
             elif charset == 1:
                 packed = create_string_buffer(data, len(data))
                 from .array_sdl import octets

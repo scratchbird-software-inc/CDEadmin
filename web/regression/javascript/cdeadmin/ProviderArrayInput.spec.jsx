@@ -18,8 +18,8 @@ describe('Native coordinate array editor', () => {
     const values = [['🐦é', 'a\0b'], ['line1\nline2', ' ']];
     expect(rowInputValue(rowInputDraft(values, 'array'), 'array', {...spec, element_kind: 'text', length: 20})).toEqual(values);
   });
-  it('uses a multiline text control without losing unedited NUL or sibling values', () => {
-    render(<Editor initial={['a\0b', ' ']} specification={{...spec, bounds: [[1, 2]], element_kind: 'text', length: 20, charset: 'UTF8'}} />);
+  it.each([14, 37])('uses a multiline text control without losing unedited NUL or sibling values for type %s', (type) => {
+    render(<Editor initial={['a\0b', ' ']} specification={{...spec, type, bounds: [[1, 2]], element_kind: 'text', length: 20, charset: 'UTF8'}} />);
     fireEvent.click(screen.getByRole('button', {name: /A \[/}));
     const input = screen.getByRole('textbox', {name: 'A [1]'});
     expect(input.tagName).toBe('TEXTAREA');

@@ -3369,11 +3369,11 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary', 'varying-binary'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, kind) => {
-    const elementKind = kind === 'varying-binary' ? 'binary' : kind;
-    const nativeSpec = kind === 'varying-binary' ? {type: 37, length: 8, charset: 'OCTETS'} : {};
+  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary', 'varying-binary', 'varying-text'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, kind) => {
+    const elementKind = kind.replace('varying-', '');
+    const nativeSpec = kind.startsWith('varying-') ? {type: 37, length: 16, charset: elementKind === 'binary' ? 'OCTETS' : 'UTF8'} : {};
     const temporalDefault = {text: '', binary: '', date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[elementKind];
-    const editedValue = {text: 'line1\né', binary: 'AP8=', decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
+    const editedValue = {text: 'line1\né\0 ', binary: 'AP8=', decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
     api.get.mockResolvedValue({data: {data: {...bootstrap,
       resource_page: {items: [{resource_id: 'array-table', resource_kind: 'table',
         display_name: 'arrays', display_path: ['arrays']}]},

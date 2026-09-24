@@ -68,18 +68,18 @@ def verify(connection, client, route, password, result, *,
                     special = {'UTF8': 'é🐦', 'ASCII': 'xy',
                                'ISO8859_1': 'é' * 8,
                                'WIN1252': '€' * 8}[charset]
-                    original = [['abcdefgh', 'x'], ['', special]]
+                    original = [['abcdefgh', 'x\0 '], ['', special]]
                     expected = tuple(item.ljust(8) if kind == 'CHAR' else item
                                      for row in original for item in row)
                     initial = page()
                     column = next(c for c in initial['columns']
                                   if c['name'] == 'A')
-                    if kind == 'CHAR':
-                        assert column['array_spec']['element_kind'] == 'text'
-                        assert column['array_spec']['length'] == 8
-                        assert column['array_spec']['charset'] == charset
-                    else:
-                        assert column.get('input_kind') != 'array'
+                    assert column['input_kind'] == 'array'
+                    assert column['array_spec']['element_kind'] == 'text'
+                    assert column['array_spec']['length'] == 8
+                    assert column['array_spec']['charset'] == charset
+                    assert column['array_spec']['type'] == (
+                        14 if kind == 'CHAR' else 37)
                     apply('insert', {'values': {'ID': 1, 'A': original},
                                      'options': {'identity_token': initial[
                                          'insert_identity_token']}})
@@ -99,8 +99,7 @@ def verify(connection, client, route, password, result, *,
                                 expected[0], None)]
                         finally:
                             query.close()
-                    changed = [[special, 'a\0b' if kind == 'CHAR' else ''],
-                               ['x', 'abcdefgh']]
+                    changed = [[special, 'a\0b'], [' \0', 'abcdefgh']]
                     row = page()['rows'][0]
                     apply('update', {'selector': {'identity_token': row[
                         'identity_token']}, 'changes': {'A': changed}})
@@ -117,7 +116,6 @@ def verify(connection, client, route, password, result, *,
                     apply('update', {'selector': {'identity_token': row[
                         'identity_token']}, 'changes': {'A': changed}})
                     invalid = ('z' * 100, None) + (
-                        ('a\0b',) if kind == 'VARCHAR' else ()) + (
                         ('🐦',) if charset != 'UTF8' else ())
                     for bad in invalid:
                         row = page()['rows'][0]

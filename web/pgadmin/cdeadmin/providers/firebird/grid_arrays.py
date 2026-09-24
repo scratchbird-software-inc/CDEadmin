@@ -52,13 +52,10 @@ def editor_specs(connection, columns):
                 13: 'time', 35: 'timestamp'}.get(spec['type'])
         if kind == 'integer' and (spec['subtype'] or spec['scale']):
             kind = 'decimal'
-        if (spec['type'] == 14 and spec.get('length') and
+        if (spec['type'] in (14, 37) and spec.get('length') and
                 spec.get('charset') in {
                     'ASCII', 'UTF8', 'ISO8859_1', 'WIN1252', 'OCTETS'}):
             kind = 'binary' if spec['charset'] == 'OCTETS' else 'text'
-        if (spec['type'] == 37 and spec.get('length') and
-                spec.get('charset') == 'OCTETS'):
-            kind = 'binary'
         if kind:
             result[column['native_name']] = {**spec, 'element_kind': kind}
             if kind == 'decfloat':
@@ -77,7 +74,7 @@ def convert(value, spec):
 
     def leaf(item):
         code = spec['type']
-        if code == 14 or (code == 37 and spec.get('charset') == 'OCTETS'):
+        if code in (14, 37):
             binary = spec.get('charset') == 'OCTETS'
             item = bind_value(item) if binary else item
             if (not isinstance(item, (bytes, bytearray) if binary else str) or
