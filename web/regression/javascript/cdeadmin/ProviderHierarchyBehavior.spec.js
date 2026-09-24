@@ -130,4 +130,30 @@ describe('CDEadmin provider hierarchy behavior', () => {
       is_password_saved: true,
     })).toBe(true);
   });
+
+  it.each([[], [{id: 'table-group'}], null])(
+    'retries only a cached empty authenticated catalog %j', (children) => {
+      const item = {_children: children, get children() {
+        return this._children;
+      }};
+      const tree = {parent: () => ({}), itemData: () => ({
+        cde_endpoint: true, runtime_verification_state: 'verified',
+        cde_session_authenticated: true,
+      })};
+      expect(beforeOpenProviderDatabase(tree, {}, item)).toBe(true);
+      expect(item._children).toBe(children?.length === 0 ? null : children);
+    });
+
+  it('does not clear or load an unverified empty catalog', () => {
+    const children = [];
+    const item = {children, _children: children};
+    const verify = jest.fn();
+    const tree = {parent: () => ({}), itemData: () => ({
+      cde_endpoint: true, runtime_verification_state: 'stale',
+    })};
+    expect(beforeOpenProviderDatabase(tree, {
+      callbacks: {verify_cde_endpoint: verify}}, item)).toBe(false);
+    expect(item._children).toBe(children);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
 });

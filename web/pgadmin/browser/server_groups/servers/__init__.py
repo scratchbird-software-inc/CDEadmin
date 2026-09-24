@@ -34,6 +34,9 @@ from config import PG_DEFAULT_DRIVER
 from pgadmin.model import db, Server, ServerGroup, User, SharedServer
 from pgadmin.utils.driver import get_driver
 from pgadmin.utils.master_password import get_crypt_key
+from pgadmin.cdeadmin.providers.postgresql.connection_target import (
+    initial_database,
+)
 from pgadmin.utils.exception import CryptKeyMissing, ConnectionLost
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 from pgadmin.browser.server_groups.servers.utils import \
@@ -1765,7 +1768,8 @@ class ServerNode(PGChildNodeView):
             'user_id': server.user_id,
             'host': server.host,
             'port': server.port,
-            'db': server.maintenance_db,
+            'db': (server.maintenance_db if provider_endpoint else
+                   initial_database(server)),
             'password': None if provider_endpoint else server.password,
             'save_password': server.save_password,
             'shared': server.shared if config.SERVER_MODE else None,
@@ -2646,6 +2650,12 @@ class ServerNode(PGChildNodeView):
                         data.get('database_target_id'),
                         max_rows=data.get('max_rows'),
                         client_sql_dialect=data.get('client_sql_dialect'),
+                    )
+                elif action == 'query_stream':
+                    payload = service.query_stream(
+                        server, data.get('session_id'),
+                        data.get('request') or {},
+                        data.get('database_target_id'),
                     )
                 elif action == 'poll':
                     payload = service.poll(

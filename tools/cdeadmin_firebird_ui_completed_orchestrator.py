@@ -24,7 +24,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import socket
 import sqlite3
 import subprocess
@@ -33,6 +32,7 @@ import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 from types import ModuleType
 
@@ -113,6 +113,23 @@ def _wait_for_server(process, port, timeout=45.0):
         except OSError:
             time.sleep(0.1)
     raise RuntimeError('isolated CDEadmin server did not become ready')
+
+
+def _snapshot_config(source, destination):
+    """Copy committed SQLite state, including WAL, without writing source."""
+    descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                         0o600)
+    os.close(descriptor)
+    try:
+        uri = source.resolve().as_uri() + '?mode=ro'
+        with closing(sqlite3.connect(uri, uri=True)) as reader:
+            with closing(sqlite3.connect(destination)) as writer:
+                reader.backup(writer)
+                if writer.execute('PRAGMA quick_check').fetchone() != ('ok',):
+                    raise RuntimeError('QA configuration snapshot is invalid')
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
 
 
 def _retarget_config(database, desktop_user, target_database, target_label,
@@ -391,7 +408,7 @@ def run(options):
             data_dir = temporary_root / 'runtime'
             data_dir.mkdir()
             config_database = data_dir / 'cdeadmin.db'
-            shutil.copy2(options.source_config_db, config_database)
+            _snapshot_config(options.source_config_db, config_database)
             _retarget_config(
                 config_database, options.desktop_user, paths['primary'],
                 target_label, options.firebird_port,

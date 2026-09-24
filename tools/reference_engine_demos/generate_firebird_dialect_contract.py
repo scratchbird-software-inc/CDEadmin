@@ -870,6 +870,31 @@ def supplement_object_privileges(document, evidence, digest, artifact):
     return value
 
 
+def supplement_view_insert(document, evidence, digest, artifact):
+    """Require defaults, failure, identity and rights proof for insertion."""
+    validate_dialect_contract(document, PROFILE)
+    expected = {mode + ':' + action for mode in (
+        'explicit', 'defaults', 'null', 'computed', 'wrong-session', 'replay')
+        for action in ('commit', 'rollback')}
+    checks = evidence.get('view_insert_checks', [])
+    permissions = evidence.get('view_insert_permissions', [])
+    if (evidence.get('schema') != 'cdeadmin.firebird-views.v1' or
+            evidence.get('engine_version') != '5.0.4' or
+            evidence.get('complete') is not True or
+            evidence.get('owned_container_removed') is not True or
+            evidence.get('failures') != [] or len(checks) != 12 or
+            {c.get('case') for c in checks} != expected or
+            any(c.get('passed') is not True for c in checks) or
+            len(permissions) != 3 or
+            {c.get('phase') for c in permissions} != {
+                'select-only', 'insert-only', 'revoked'} or
+            any(c.get('passed') is not True for c in permissions)):
+        raise ValueError('View insertion evidence is incomplete')
+    return _supplement_replacement(
+        document, evidence, digest, artifact,
+        {'visual_admin.view.insert'}, 'view-grid-insert')
+
+
 def supplement_view_delete(document, evidence, digest, artifact):
     """Admit DELETE only with transaction and stale/session identity proof."""
     validate_dialect_contract(document, PROFILE)
@@ -1622,13 +1647,14 @@ def main(argv=None):
         'external-functions', 'blob-filters', 'object-privileges', 'packages',
         'sequences', 'shadows', 'database-storage', 'views', 'exceptions',
         'procedures', 'functions', 'triggers', 'table-replacement',
-        'user-replacement', 'view-grid', 'view-delete'),
+        'user-replacement', 'view-grid', 'view-delete', 'view-insert'),
                         default='roles')
     options = parser.parse_args(argv)
     if options.existing_contract:
         supplement = {'admin-mapping': supplement_admin_mapping,
                       'view-grid': supplement_view_grid,
                       'view-delete': supplement_view_delete,
+                      'view-insert': supplement_view_insert,
                       'roles': supplement_roles,
                       'mappings': supplement_mappings,
                       'character-metadata': supplement_character_metadata,

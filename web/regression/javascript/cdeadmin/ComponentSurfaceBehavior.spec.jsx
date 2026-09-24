@@ -359,4 +359,14 @@ describe('standard dialogs and surfaces', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Retry'}));
     expect(retry).toHaveBeenCalled();
   });
+
+  it('constrains empty-state messages to narrow panes and wraps long names', () => {
+    const Component = withTheme(EmptyState);
+    render(<Component message={'X'.repeat(200)} />);
+    const message = screen.getByText('X'.repeat(200));
+    expect(message).toHaveStyle({minWidth: '0', overflowWrap: 'anywhere'});
+    const style = getComputedStyle(message.closest('[data-cde-empty-state]'));
+    expect([style.width, style.maxWidth, style.minWidth])
+      .toEqual(['100%', '100%', '0']);
+  });
 });

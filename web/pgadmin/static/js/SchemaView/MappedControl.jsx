@@ -46,16 +46,16 @@ function MappedFormControlBase({
       val = e.target.value;
     }
     onChange?.(val);
-  }, []);
+  }, [onChange]);
   const value = state;
 
   const onSqlChange = useCallback((changedValue) => {
     onChange?.(changedValue);
-  }, []);
+  }, [onChange]);
 
   const onTreeSelection = useCallback((selectedValues)=> {
     onChange?.(selectedValues);
-  }, []);
+  }, [onChange]);
 
   if (!visible) {
     return <></>;
@@ -423,6 +423,8 @@ export const MappedFormControl = ({
   memDeps.push(key);
   memDeps.push(JSON.stringify(accessPath));
   memDeps.push(depVals);
+  memDeps.push(schemaState);
+  memDeps.push(origOnChange);
 
   // Filter out garbage props if any using ALLOWED_PROPS_FIELD.
   return useMemo(

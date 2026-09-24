@@ -11,6 +11,7 @@ import {
   Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import PropTypes from 'prop-types';
+import {useTheme} from '@mui/material/styles';
 import gettext from 'sources/gettext';
 import {
   Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel,
@@ -25,6 +26,8 @@ import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
+import FirebirdResultStream from './FirebirdResultStream';
+import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {providerConnectionFieldGridSx} from
@@ -830,7 +833,7 @@ export function inspectorSections(resource, descriptor) {
   return sections;
 }
 
-function NativePropertyValue({value, depth=0}) {
+function NativePropertyValue({value, depth=0, compact=false}) {
   if (value === null || value === undefined) {
     return <Box component="span" sx={{color: 'text.secondary'}}>
       {gettext('Not set')}
@@ -844,7 +847,7 @@ function NativePropertyValue({value, depth=0}) {
     }
     return <Box component="ol" sx={{m: 0, pl: 2.5}}>
       {value.map((item, index) => <li key={index}>
-        <NativePropertyValue value={item} depth={depth + 1} />
+        <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
       </li>)}
     </Box>;
   }
@@ -856,32 +859,35 @@ function NativePropertyValue({value, depth=0}) {
       </Box>;
     }
     return <Box role="table" aria-label={gettext('Native provider properties')}
-      sx={{display: 'grid', gridTemplateColumns: depth > 1 ?
-        'minmax(100px, 0.7fr) minmax(140px, 1fr)' :
-        'minmax(160px, 0.7fr) minmax(220px, 1fr)',
-      borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
+      sx={{display: 'grid', minWidth: 0,
+        gridTemplateColumns: compact ? 'minmax(0, 1fr)' : depth > 1 ?
+          'minmax(100px, 0.7fr) minmax(140px, 1fr)' :
+          'minmax(160px, 0.7fr) minmax(220px, 1fr)',
+        borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
       {entries.map(([name, item]) => <Fragment key={name}>
         <Box role="rowheader" sx={{p: 0.75, fontWeight: 600,
           overflowWrap: 'anywhere', borderRight: 1, borderBottom: 1,
           borderColor: 'divider'}}>{name.replaceAll('_', ' ')}</Box>
         <Box role="cell" sx={{p: 0.75, overflowWrap: 'anywhere',
           borderRight: 1, borderBottom: 1, borderColor: 'divider'}}>
-          <NativePropertyValue value={item} depth={depth + 1} />
+          <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
         </Box>
       </Fragment>)}
     </Box>;
   }
-  return <Box component="span" sx={{whiteSpace: 'pre-wrap'}}>{typeof value === 'boolean' ?
-    (value ? gettext('Yes') : gettext('No')) : String(value)}</Box>;
+  return <Box component="span" sx={{whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere'}}>{typeof value === 'boolean' ?
+      (value ? gettext('Yes') : gettext('No')) : String(value)}</Box>;
 }
 
 NativePropertyValue.propTypes = {
   value: PropTypes.any,
   depth: PropTypes.number,
+  compact: PropTypes.bool,
 };
 
 export function ObjectInspectorSection({resource, descriptor, loading,
-  tabbed=false, onRefresh, onOperation}) {
+  tabbed=false, containedScroll=true, onRefresh, onOperation}) {
   const sections = inspectorSections(resource, descriptor);
   const coverage = providerNative(resource)?.catalog_coverage;
   const [section, setSection] = useState(sections[0]);
@@ -896,7 +902,7 @@ export function ObjectInspectorSection({resource, descriptor, loading,
         <Alert key={index} severity="warning">{message}</Alert>)}
     {coverage?.state === 'partial' && <Alert severity="warning">
       {gettext('Catalog visibility is incomplete. Missing objects may reflect denied access or failed catalog queries, not an empty database.')}
-      <NativePropertyValue value={coverage} />
+      <NativePropertyValue value={coverage} compact={!containedScroll} />
     </Alert>}
     <Box sx={{p: 1}}>
       <Box component="strong">{resource.display_name}</Box>
@@ -912,13 +918,18 @@ export function ObjectInspectorSection({resource, descriptor, loading,
         label={INSPECTOR_SECTION_TITLES[item]} />)}
     </Tabs> : <TextField select fullWidth size="small" value={section}
       label={gettext('Object properties task')}
+      slotProps={{select: {SelectDisplayProps: {style: {
+        whiteSpace: 'normal', overflowWrap: 'anywhere', textOverflow: 'clip',
+      }}}}}
       onChange={(event) => setSection(event.target.value)}>
       {sections.map((item) => <MenuItem key={item} value={item}>
         {INSPECTOR_SECTION_TITLES[item] || item.replaceAll('-', ' ')}
       </MenuItem>)}
     </TextField>}
-    <Box role="tabpanel" aria-label={`${section} ${gettext('object section')}`}
-      sx={{m: 0, p: 1, overflow: 'auto', maxHeight: 320,
+    <Box role="tabpanel" tabIndex={0}
+      aria-label={`${section} ${gettext('object section')}`}
+      sx={{m: 0, p: 1, overflow: containedScroll ? 'auto' : 'visible',
+        maxHeight: containedScroll ? 320 : 'none',
         bgcolor: 'background.default'}}>
       {onOperation && ['privileges', 'security'].includes(section) &&
         <Box role="group" aria-label={gettext('Object permission tasks')}
@@ -933,7 +944,7 @@ export function ObjectInspectorSection({resource, descriptor, loading,
               {item.title}
             </Button>)}
         </Box>}
-      <NativePropertyValue value={sectionPayload(
+      <NativePropertyValue compact={!containedScroll} value={sectionPayload(
         section, resource, descriptor
       )} />
     </Box>
@@ -945,6 +956,7 @@ ObjectInspectorSection.propTypes = {
   descriptor: PropTypes.object,
   loading: PropTypes.bool,
   tabbed: PropTypes.bool,
+  containedScroll: PropTypes.bool,
   onRefresh: PropTypes.func,
   onOperation: PropTypes.func,
 };
@@ -1827,6 +1839,24 @@ KeyValueDataGrid.propTypes = {
 
 function StructuredDataGrid({catalog, resources, post, setError,
   languageProfile, databaseTargetId, initialResourceId}) {
+  const theme = useTheme();
+  const [rootFontSize, setRootFontSize] = useState(16);
+  const themeScale = theme.cdeadminPresentation?.scale ?? 100;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const measure = () => setRootFontSize(
+      Number.parseFloat(getComputedStyle(root).fontSize) || 16);
+    measure();
+    // Include runtime text overrides, not only the saved presentation profile.
+    const observer = new MutationObserver(measure);
+    observer.observe(root, {attributes: true, attributeFilter: ['style', 'class']});
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [themeScale]);
+  const editorScale = Math.max(themeScale / 100, rootFontSize / 16);
   const relations = (resources || []).filter(
     (item) => ['table', 'view', 'materialized-view'].includes(
       item.resource_kind
@@ -1852,7 +1882,9 @@ function StructuredDataGrid({catalog, resources, post, setError,
   );
   const operations = targetDescriptor?.operations || [];
   const admitted = (operationId) =>
-    (target?.resource_kind === 'table' ||
+    ((target?.resource_kind === 'table' &&
+      (page?.operation_authority !== 'firebird-native-preparation' ||
+       page.row_operations?.includes(operationId))) ||
       (target?.resource_kind === 'view' && page?.editable &&
         page?.row_operations?.includes(operationId))) &&
     operations.some((item) => item.operation_id === operationId &&
@@ -2021,7 +2053,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
       const changes = {};
       Object.entries(edits[index] || {}).forEach(([name, value]) => {
         if (value !== editorValue(row.values[name])) {
-          changes[name] = nativeValue(value);
+          const kind = page.columns.find((column) => column.name === name)?.input_kind;
+          changes[name] = kind ? rowInputValue(value, kind, page.columns.find((column) => column.name === name)?.array_spec) : nativeValue(value);
         }
       });
       if (Object.keys(changes).length === 0) return;
@@ -2043,9 +2076,11 @@ function StructuredDataGrid({catalog, resources, post, setError,
     try {
       const values = {};
       Object.entries(newValues).forEach(([name, value]) => {
-        if (value !== '') values[name] = nativeValue(value);
+        const kind = page.columns.find((column) => column.name === name)?.input_kind;
+        values[name] = kind ? rowInputValue(value, kind, page.columns.find((column) => column.name === name)?.array_spec) : nativeValue(value);
       });
-      await mutate('insert', {values, options: {}});
+      await mutate('insert', {values, options: target.resource_kind === 'view' ?
+        {identity_token: page.insert_identity_token} : {}});
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -2089,36 +2124,65 @@ function StructuredDataGrid({catalog, resources, post, setError,
   ] : [];
   const gridColumns = (page?.columns || []).map((column) => ({
     ...column,
-    key: column.key || column.name,
-    name: `${column.name}${column.identity_key ? ' 🔑' : ''}`,
+    // Inline editors contain a NULL/value selector as well as the value.
+    // Keep them usable at enlarged text sizes; scroll rather than compress.
+    minWidth: Math.max(column.minWidth || 0, Math.ceil(360 * editorScale)),
+    key: typeof column.key === 'string' ? column.key : column.name,
+    name: `${column.name}${(column.identity_key || column.key === true) ? ' 🔑' : ''}`,
     editable: false,
-    renderCell: ({row}) => <TextField size="small"
-      inputProps={{'aria-label': `${column.name} ${row.__insert ?
-        gettext('new value') : gettext('value')}`}}
-      placeholder={row.__insert ? gettext('New value') : undefined}
-      value={row.__insert ? (newValues[column.name] || '') :
-        (edits[row.__rowIndex]?.[column.name] ??
+    renderCell: ({row}) => <Box sx={{display: 'flex', alignItems: 'center'}}>
+      {column.input_kind ? <ProviderRowInput kind={column.input_kind}
+        spec={column.array_spec}
+        label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
+        draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
+          (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name], column.input_kind))}
+        disabled={working || (row.__insert ?
+          (column.insertable ?? column.editable) === false :
+          column.editable === false || !page.editable)}
+        onChange={(value) => row.__insert ?
+          setNewValues((current) => ({...current, [column.name]: value})) :
+          setEdits((current) => ({...current, [row.__rowIndex]: {
+            ...current[row.__rowIndex], [column.name]: value,
+          }}))} /> : <TextField size="small"
+        inputProps={{'aria-label': `${column.name} ${row.__insert ?
+          gettext('new value') : gettext('value')}`}}
+        placeholder={row.__insert ? gettext('New value') : undefined}
+        value={row.__insert ? (newValues[column.name] || '') :
+          (edits[row.__rowIndex]?.[column.name] ??
           editorValue(row[column.name]))}
-      disabled={working || column.editable === false ||
+        disabled={working || (row.__insert ?
+          (column.insertable ?? column.editable) === false : column.editable === false) ||
         (!row.__insert && !page.editable)}
-      onChange={(event) => row.__insert ?
-        setNewValues((current) => ({
-          ...current, [column.name]: event.target.value,
-        })) : setEdits((current) => ({
-          ...current,
-          [row.__rowIndex]: {
-            ...current[row.__rowIndex], [column.name]: event.target.value,
-          },
-        }))} />,
+        onChange={(event) => row.__insert ?
+          setNewValues((current) => ({
+            ...current, [column.name]: event.target.value,
+          })) : setEdits((current) => ({
+            ...current,
+            [row.__rowIndex]: {
+              ...current[row.__rowIndex], [column.name]: event.target.value,
+            },
+          }))} />}
+      {row.__insert && Object.hasOwn(newValues, column.name) &&
+      <Button size="small" disabled={working}
+        aria-label={gettext('Omit %s from insert', column.name)}
+        onClick={() => setNewValues((current) => {
+          const next = {...current};
+          delete next[column.name];
+          return next;
+        })}>{gettext('Omit')}</Button>}
+    </Box>,
   }));
   if (page) {
     gridColumns.push({
       key: '__actions', name: gettext('Actions'), width: '18rem',
-      minWidth: 240,
+      minWidth: Math.ceil(320 * editorScale),
       exportable: false, editable: false,
       renderCell: ({row}) => row.__insert ?
-        <Button disabled={working || Object.keys(newValues).length === 0}
-          onClick={insertRow}>{gettext('Insert row')}</Button> :
+        <Button disabled={working || (Object.keys(newValues).length === 0 &&
+          !page.insert_default_values)}
+        onClick={insertRow}>{page.insert_default_values &&
+          Object.keys(newValues).length === 0 ?
+            gettext('Insert default row') : gettext('Insert row')}</Button> :
         <Box sx={{display: 'flex', gap: 1, width: 'max-content'}}>
           <Button disabled={working || !row.__identityToken ||
             !admitted('update')}
@@ -2169,10 +2233,12 @@ function StructuredDataGrid({catalog, resources, post, setError,
         {gettext('%s grid change(s) are staged in the provider session. Commit or roll back before changing tables or closing this workspace.', stagedMutationCount)}
       </Alert>}
       <Alert severity={page.editable ? 'info' : 'warning'} sx={{mt: 2}}>
-        {page.editable ? gettext('Edits use provider-issued native row identities.') :
-          target?.resource_kind === 'table' ?
-            gettext('This table is read-only because the provider did not admit a stable row identity.') :
-            gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
+        {admitted('insert') && !page.editable ?
+          gettext('Insertion is available. Existing rows cannot be changed without an admitted row identity.') :
+          page.editable ? gettext('Edits use provider-issued native row identities.') :
+            target?.resource_kind === 'table' ?
+              gettext('This table is read-only because the provider did not admit a stable row identity.') :
+              gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
       <ProviderDataGrid columns={gridColumns} rows={gridRows}
         contract={page.grid || {}}
@@ -7345,6 +7411,12 @@ export default function ProviderWorkspaceContent({
           inputProps={{min: 0, max: 1000000, step: 1}}
           onChange={(event) => setMaximumRows(event.target.value)}
           helperText={gettext('0 fetches all rows. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
+        {languageProfile === 'firebird-sql' && <FirebirdResultStream
+          key={queryDatabaseTargetId}
+          post={post} ensureSession={ensureSession}
+          databaseTargetId={queryDatabaseTargetId} source={source}
+          parameters={parameterSource} dialect={clientSqlDialect}
+          disabled={busy || querySessionBlocked || !!occurrenceId} />}
         {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
           sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
           {fetchObservation.limit_reached ?

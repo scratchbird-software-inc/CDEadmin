@@ -16,6 +16,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,7 @@ from tools.cdeadmin_firebird_ui_form_gate import (  # noqa: E402
     screenshot,
 )
 from tools.cdeadmin_ui_evidence import (  # noqa: E402
+    _endpoint_prompt_controls,
     complete_endpoint_prompt,
     invoke_context_action,
     visible_named_control,
@@ -114,11 +116,67 @@ def _row_for_input(control):
     return control.find_element(By.XPATH, 'ancestor::*[@role="row"]')
 
 
+def _reveal_grid_column(driver, wait, index):
+    """Exercise horizontal scrolling without disabling grid virtualization."""
+    driver.execute_script("""
+        const grid = document.querySelector(
+          '[role="grid"][aria-label="Provider table or view rows"]');
+        if (!grid) throw new Error('Provider grid is missing');
+        const widths = getComputedStyle(grid).gridTemplateColumns
+          .split(' ').map(Number.parseFloat);
+        grid.scrollLeft = widths.slice(0, arguments[0] - 1)
+          .reduce((sum, width) => sum + width, 0);
+    """, index)
+    wait.until(lambda browser: browser.find_elements(
+        By.CSS_SELECTOR,
+        '[role="grid"][aria-label="Provider table or view rows"] '
+        f'[role="columnheader"][aria-colindex="{index}"]',
+    ))
+
+
 def _row_button(row, name):
     return next((
         item for item in row.find_elements(By.TAG_NAME, 'button')
         if item.is_displayed() and item.text.strip() == name
     ), None)
+
+
+def _layout_evidence(driver, scale):
+    observation = driver.execute_script("""
+        const grid = document.querySelector(
+          '[role="grid"][aria-label="Provider table or view rows"]');
+        const bar = grid.closest('.dock-panel')?.querySelector('.dock-bar');
+        const bounds = element => {
+          const r = element.getBoundingClientRect();
+          return {top: r.top, bottom: r.bottom, height: r.height};
+        };
+        return {
+          column_widths: getComputedStyle(grid).gridTemplateColumns
+            .split(' ').map(Number.parseFloat),
+          viewport_width: grid.clientWidth, content_width: grid.scrollWidth,
+          tab_bar: bar ? bounds(bar) : null,
+          tabs: bar ? [...bar.querySelectorAll('.dock-tab')].map(tab => ({
+            ...bounds(tab),
+            content: bounds(tab.querySelector('.dock-tab-btn') ||
+              tab.firstElementChild || tab)
+          })) : []
+        };
+    """)
+    widths = observation['column_widths']
+    if len(widths) != 5 or any(
+            not isinstance(width, (int, float)) or not math.isfinite(width) or
+            width < minimum * scale / 100 - 1
+            for width, minimum in zip(widths, [360, 360, 360, 360, 320])):
+        raise RuntimeError('Grid columns compressed below editor minimums')
+    bar = observation['tab_bar']
+    if not bar or not observation['tabs'] or any(
+            tab['top'] < bar['top'] - 1 or
+            tab['bottom'] > bar['bottom'] + 1 or
+            tab['content']['top'] < tab['top'] - 1 or
+            tab['content']['bottom'] > tab['bottom'] + 1
+            for tab in observation['tabs']):
+        raise RuntimeError('Workspace tabs extend outside their tab bar')
+    return observation
 
 
 def _grid_control_evidence(driver):
@@ -151,14 +209,157 @@ def _grid_control_evidence(driver):
     )
 
 
+def _shell_layout_evidence(driver, database):
+    """Separate recoverable tree scrolling from inaccessible pane overflow."""
+    observed = driver.execute_script("""
+      const rect = element => {
+        const r = element.getBoundingClientRect();
+        return {left: r.left, right: r.right, width: r.width};
+      };
+      const inspector = document.querySelector(
+        'aside[aria-label="Inspector"]');
+      const empty = inspector?.querySelector('[data-cde-empty-state]');
+      if (!empty) throw new Error('Inspector empty-state fixture is absent');
+      const panel = empty.closest('[role="tabpanel"]');
+      const label = [...document.querySelectorAll('.file-name')]
+        .find(item => item.textContent.trim() === arguments[0]);
+      if (!label) throw new Error('Registered database label is absent');
+      const explorer = label.closest('aside');
+      const scrolls = [];
+      for (let node = label.parentElement; node && node !== explorer;
+           node = node.parentElement) {
+        if (node.scrollWidth > node.clientWidth) {
+          const before = node.scrollLeft;
+          node.scrollLeft = 0;
+          scrolls.push({before, after: node.scrollLeft});
+        }
+      }
+      return {inspector: rect(inspector), empty: rect(empty),
+        message: rect(empty.querySelector('span')),
+        panel_width: panel.clientWidth, panel_content_width: panel.scrollWidth,
+        explorer: rect(explorer), database_label: rect(label), scrolls};
+    """, database)
+    pane = observed['inspector']
+    if any(observed[key]['left'] < pane['left'] - 1 or
+           observed[key]['right'] > pane['right'] + 1
+           for key in ('empty', 'message')) or (
+            observed['panel_content_width'] > observed['panel_width'] + 1):
+        raise RuntimeError('Inspector empty-state overflows its pane')
+    if not (observed['explorer']['left'] - 1 <=
+            observed['database_label']['left'] <
+            observed['explorer']['right']):
+        raise RuntimeError('Navigator label start is unreachable by scrolling')
+    return observed
+
+
 def _capture(driver, options, state, records):
     viewport = f'{options.width}x{options.height}'
     variant = evidence_variant(options)
     path = options.output_root / f'{state}-{viewport}-{variant}.png'
     records[state] = {
         'path': str(path),
-        'sha256': screenshot(driver, path),
+        'sha256': screenshot(driver, path,
+                             reset_scroll=not state.startswith('object-')),
     }
+
+
+def _wait_for_editor(driver, wait, options, password=None):
+    verified = False
+
+    def ready(browser):
+        nonlocal verified
+        if _endpoint_prompt_controls(browser):
+            if verified:
+                raise RuntimeError('Endpoint verification reappeared')
+            print('Editor opening: completing delayed endpoint verification',
+                  flush=True)
+            complete_endpoint_prompt(browser, password,
+                                     timeout=options.timeout)
+            verified = True
+            return False
+        return visible_named_control(browser, 'Load rows')
+
+    try:
+        return wait.until(ready)
+    except Exception:
+        # Hide all editable values before capturing a failed opening: a late
+        # credential prompt may still be visible. Never serialize its values.
+        try:
+            driver.execute_script('''
+                document.querySelectorAll('input, textarea, [contenteditable]')
+                  .forEach(node => node.style.visibility = 'hidden');
+            ''')
+            screenshot(driver, options.output_root / 'editor-open-failed.png',
+                       reset_scroll=False)
+        except Exception:
+            pass  # Preserve the original failure if evidence capture fails.
+        raise
+
+
+def _inspector_keyboard_evidence(driver, wait, capture):
+    inspector = driver.find_element(
+        By.CSS_SELECTOR, 'aside[aria-label="Inspector"]')
+    tabs = inspector.find_elements(By.CSS_SELECTOR, '[role="tab"]')
+    if len(tabs) < 2:
+        raise RuntimeError('Inspector tab fixture is incomplete')
+
+    def selected(index):
+        def ready(browser):
+            current = inspector.find_elements(By.CSS_SELECTOR, '[role="tab"]')
+            item = current[index]
+            panel = inspector.find_element(
+                By.CSS_SELECTOR, '[role="tabpanel"]')
+            return (item.get_attribute('aria-selected') == 'true' and
+                    browser.switch_to.active_element == item and
+                    panel.get_attribute('aria-labelledby') ==
+                    item.get_attribute('id'))
+        wait.until(ready)
+
+    tabs[0].send_keys(Keys.HOME)
+    selected(0)
+    pages = [tabs[0].text]
+    for index in range(1, len(tabs)):
+        driver.switch_to.active_element.send_keys(Keys.ARROW_RIGHT)
+        selected(index)
+        pages.append(driver.switch_to.active_element.text)
+        capture(f'inspector-keyboard-page-{index}')
+    driver.switch_to.active_element.send_keys(Keys.HOME)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.END)
+    selected(len(tabs) - 1)
+    driver.switch_to.active_element.send_keys(Keys.ARROW_RIGHT)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.ARROW_LEFT)
+    selected(len(tabs) - 1)
+    driver.switch_to.active_element.send_keys(Keys.HOME)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.TAB)
+    panel = inspector.find_element(By.CSS_SELECTOR, '[role="tabpanel"]')
+    wait.until(lambda browser: browser.switch_to.active_element == panel)
+    panel.send_keys(Keys.END)
+    wait.until(lambda browser: browser.execute_script(
+        'return arguments[0].scrollTop >= arguments[0].scrollHeight - '
+        'arguments[0].clientHeight - 1', panel))
+    bottom = driver.execute_script("""
+      const panel = arguments[0];
+      const message = panel.querySelector('[data-cde-empty-state] span');
+      if (!message) throw new Error('Properties empty-state is absent');
+      return {scroll_top: panel.scrollTop, scroll_height: panel.scrollHeight,
+        client_height: panel.clientHeight,
+        message_bottom: message.getBoundingClientRect().bottom,
+        panel_bottom: panel.getBoundingClientRect().bottom};
+    """, panel)
+    if bottom['message_bottom'] > bottom['panel_bottom'] + 1:
+        raise RuntimeError(
+            'Inspector message bottom is not keyboard reachable')
+    capture('inspector-keyboard-bottom')
+    panel.send_keys(Keys.HOME)
+    wait.until(lambda browser: browser.execute_script(
+        'return arguments[0].scrollTop <= 1', panel))
+    capture('inspector-keyboard-top')
+    return {'pages': pages, 'arrow_wrap_home_end': True,
+            'tab_enters_panel': True, 'home_returns_to_top': True,
+            'bottom': bottom}
 
 
 def _write_records(options, evidence):
@@ -175,6 +376,12 @@ def _write_records(options, evidence):
     rows = []
     viewport = f'{options.width}x{options.height}'
     for state, value in evidence['screenshots'].items():
+        subject = next((item for item in evidence.get(
+            'populated_inspector_checks', [])
+            if state.startswith('object-' + item['name'] + '-')), None)
+        command_id = '' if subject else 'database.firebird.data'
+        form_id = ('provider_object_properties' if subject else
+                   'firebird_structured_data_grid')
         screenshot_path = Path(value['path'])
         occurrence_path = screenshot_path.with_suffix('.json')
         occurrence = {
@@ -185,8 +392,8 @@ def _write_records(options, evidence):
             'reference_version': '5.0.4',
             'server_label': options.server,
             'database_label': options.database,
-            'command_id': 'database.firebird.data',
-            'form_id': 'firebird_structured_data_grid',
+            'command_id': command_id,
+            'form_id': form_id,
             'state': state,
             'viewport': viewport,
             'theme': options.theme,
@@ -209,10 +416,10 @@ def _write_records(options, evidence):
             'profile_id': 'firebird-native',
             'server_id': options.server,
             'database_target_id': options.database,
-            'command_id': 'database.firebird.data',
-            'form_id': 'firebird_structured_data_grid',
-            'resource_kind': 'table',
-            'resource_id': 'CUSTOMERS',
+            'command_id': command_id,
+            'form_id': form_id,
+            'resource_kind': subject['kind'] if subject else 'table',
+            'resource_id': subject['name'] if subject else 'CUSTOMERS',
             'state': state,
             'viewport': viewport,
             'device_scale': '1',
@@ -250,7 +457,12 @@ def _write_records(options, evidence):
 
 def run(options, password):
     driver = create_driver(options)
-    wait = WebDriverWait(driver, options.timeout)
+    # Commit/rollback replaces rendered row controls. Retry observations of
+    # detached elements, never the mutation button clicks themselves.
+    wait = WebDriverWait(
+        driver, options.timeout,
+        ignored_exceptions=(StaleElementReferenceException,),
+    )
     screenshots = {}
     controls = {}
 
@@ -268,7 +480,7 @@ def run(options, password):
             password, endpoint_prompt_timeout=1,
         )
         complete_endpoint_prompt(driver, password, timeout=1)
-        _button(wait, 'Load rows')
+        _wait_for_editor(driver, wait, options, password)
         _choose_table(driver, wait, 'CUSTOMERS')
         capture('initial')
         load_button = _button(wait, 'Load rows')
@@ -298,12 +510,20 @@ def run(options, password):
                 f'Visible inputs: {visible_input_labels}'
             )
         capture('loaded')
+        layout = _layout_evidence(driver, options.font_scale)
+        shell_layout = _shell_layout_evidence(driver, options.database)
+        capture('shell-layout')
+        inspector_keyboard = _inspector_keyboard_evidence(
+            driver, wait, capture)
 
+        _reveal_grid_column(driver, wait, 2)
         name = _visible_inputs(driver, 'NAME value')[0]
         original_name = name.get_attribute('value')
         name.send_keys(Keys.CONTROL, 'a')
         name.send_keys('CDEadmin rollback probe')
-        save = _row_button(_row_for_input(name), 'Save')
+        edited_row = _row_for_input(name)
+        _reveal_grid_column(driver, wait, 5)
+        save = wait.until(lambda _driver: _row_button(edited_row, 'Save'))
         if save is None:
             raise RuntimeError('Firebird row Save control is unavailable')
         save.click()
@@ -313,6 +533,7 @@ def run(options, password):
         )))
         capture('update-staged')
         _button(wait, 'Rollback changes').click()
+        _reveal_grid_column(driver, wait, 2)
         wait.until(expected.invisibility_of_element_located((
             By.CSS_SELECTOR,
             '[aria-label="Staged provider grid changes"]',
@@ -332,13 +553,18 @@ def run(options, password):
             'REGION new value': 'QA',
         }
         new_control = None
-        for label, value in new_values.items():
-            candidates = _visible_inputs(driver, label)
+        for index, (label, value) in enumerate(new_values.items(), 1):
+            _reveal_grid_column(driver, wait, index)
+            candidates = wait.until(lambda browser: _visible_inputs(
+                browser, label))
             if len(candidates) != 1:
                 raise RuntimeError(f'Firebird grid field {label} is missing')
             candidates[0].send_keys(value)
             new_control = candidates[0]
-        insert = _row_button(_row_for_input(new_control), 'Insert row')
+        insert_row = _row_for_input(new_control)
+        _reveal_grid_column(driver, wait, 5)
+        insert = wait.until(lambda _driver: _row_button(
+            insert_row, 'Insert row'))
         if insert is None:
             raise RuntimeError('Firebird Insert row control is unavailable')
         insert.click()
@@ -348,6 +574,7 @@ def run(options, password):
         )))
         capture('insert-staged')
         _button(wait, 'Commit changes').click()
+        _reveal_grid_column(driver, wait, 1)
         wait.until(lambda value: any(
             item.get_attribute('value') == MARKER
             for item in _visible_inputs(value, 'CUSTOMER_ID value')
@@ -359,7 +586,8 @@ def run(options, password):
             if item.get_attribute('value') == MARKER
         )
         marker_row = _row_for_input(marker_control)
-        delete = _row_button(marker_row, 'Delete')
+        _reveal_grid_column(driver, wait, 5)
+        delete = wait.until(lambda _driver: _row_button(marker_row, 'Delete'))
         if delete is None:
             raise RuntimeError('Firebird Delete control is unavailable')
         delete.click()
@@ -374,6 +602,7 @@ def run(options, password):
         )))
         capture('delete-staged')
         _button(wait, 'Commit changes').click()
+        _reveal_grid_column(driver, wait, 1)
         wait.until(lambda value: not any(
             item.get_attribute('value') == MARKER
             for item in _visible_inputs(value, 'CUSTOMER_ID value')
@@ -387,6 +616,8 @@ def run(options, password):
             )) is not None and not control.is_enabled()
         ))
         capture('session-closed')
+        from tools.cdeadmin_firebird_populated_inspector import verify
+        populated_inspector = verify(driver, wait, options, capture)
         return {
             'schema': 'cdeadmin.firebird-grid-ui-gate.v1',
             'captured_at': datetime.now(timezone.utc).isoformat(),
@@ -405,6 +636,10 @@ def run(options, password):
             'credential_values_exported': False,
             'screenshots': screenshots,
             'controls': controls,
+            'layout_checks': layout,
+            'shell_layout_checks': shell_layout,
+            'inspector_keyboard_checks': inspector_keyboard,
+            'populated_inspector_checks': populated_inspector,
             'passed': True,
         }
     finally:
@@ -440,8 +675,9 @@ def main():
     finally:
         # This provider-driven gate also removes the fixed disposable marker
         # if browser execution stopped after its commit but before UI cleanup.
-        verify_and_clean_seeded_database(options.profiles)
+        independent = verify_and_clean_seeded_database(options.profiles)
         password = ''
+    evidence['independent_transaction_verification'] = independent
     options.summary_output.parent.mkdir(parents=True, exist_ok=True)
     options.summary_output.write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + '\n',

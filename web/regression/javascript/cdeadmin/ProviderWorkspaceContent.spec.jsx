@@ -1347,6 +1347,52 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('1142');
   });
 
+  it.each([false, true])('makes metadata panels keyboard focusable (tabbed=%s)', (tabbed) => {
+    render(<ObjectInspectorSection tabbed={tabbed} resource={{
+      display_name: 'V', resource_kind: 'view', extensions: {firebird: {native: {
+        property_sections: ['ddl'], ddl: 'CREATE VIEW "LongName" AS SELECT 1;',
+      }}},
+    }} />);
+    const panel = screen.getByRole('tabpanel', {name: 'ddl object section'});
+    expect(panel).toHaveAttribute('tabindex', '0');
+    expect(panel).toHaveTextContent('CREATE VIEW');
+    if (!tabbed) {
+      const style = getComputedStyle(screen.getByRole('combobox'));
+      expect({whiteSpace: style.whiteSpace, textOverflow: style.textOverflow,
+        overflowWrap: style.overflowWrap}).toEqual({
+        whiteSpace: 'normal', textOverflow: 'clip', overflowWrap: 'anywhere'});
+    }
+    expect(panel.querySelector('span')).toHaveStyle({overflowWrap: 'anywhere'});
+  });
+
+  it.each([false, true])('supports host-owned or bounded scrolling (%s)', (containedScroll) => {
+    render(<ObjectInspectorSection containedScroll={containedScroll}
+      resource={{display_name: 'V', resource_kind: 'view',
+        extensions: {firebird: {native: {property_sections: ['ddl'],
+          ddl: 'CREATE VIEW V AS SELECT 1;'}}}}} />);
+    expect(screen.getByRole('tabpanel')).toHaveStyle({
+      overflow: containedScroll ? 'auto' : 'visible',
+      maxHeight: containedScroll ? '320px' : 'none'});
+  });
+
+  it.each([false, true])('lays out nested column metadata for its host (%s)', (containedScroll) => {
+    render(<ObjectInspectorSection containedScroll={containedScroll}
+      resource={{display_name: 'T', resource_kind: 'table',
+        extensions: {firebird: {native: {property_sections: ['columns'],
+          columns: [{name: 'CUSTOMER_ID', details: {nullable: false,
+            description: 'A long column description'}}]}}}}} />);
+    const tables = screen.getAllByRole('table');
+    expect(tables).toHaveLength(2);
+    tables.forEach((table, index) => {
+      const columns = getComputedStyle(table).gridTemplateColumns;
+      expect(columns).toBe(containedScroll ?
+        (index === 0 ? 'minmax(160px, 0.7fr) minmax(220px, 1fr)' :
+          'minmax(100px, 0.7fr) minmax(140px, 1fr)') : 'minmax(0, 1fr)');
+    });
+    expect(screen.getByText('CUSTOMER_ID')).toBeVisible();
+    expect(screen.getByText('No')).toBeVisible();
+  });
+
   it('surfaces provider catalog warnings without interpreting markup', () => {
     render(<ObjectInspectorSection resource={{display_name: 'T',
       resource_kind: 'table', extensions: {firebird: {native: {
@@ -3369,7 +3415,63 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['view', 'update'], ['view', 'delete']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary', 'varying-binary', 'varying-text'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, kind) => {
+    const elementKind = kind.replace('varying-', '');
+    const nativeSpec = kind.startsWith('varying-') ? {type: 37, length: 16, charset: elementKind === 'binary' ? 'OCTETS' : 'UTF8'} : {};
+    const temporalDefault = {text: '', binary: '', date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[elementKind];
+    const editedValue = {text: 'line1\né\0 ', binary: 'AP8=', decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
+    api.get.mockResolvedValue({data: {data: {...bootstrap,
+      resource_page: {items: [{resource_id: 'array-table', resource_kind: 'table',
+        display_name: 'arrays', display_path: ['arrays']}]},
+      visual_admin: {...bootstrap.visual_admin, objects: [{resource_kind: 'table',
+        title: 'Table', operations: ['insert', 'update'].map((operation_id) => ({operation_id, execution_available: true}))}]},
+    }}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'array-session'},
+      visual_admin_rows: {columns: [{name: 'A', input_kind: 'array', editable: true, insertable: true,
+        array_spec: {bounds: [[-1, 0]], element_kind: elementKind, scale: 0, ...nativeSpec}}],
+      rows: [{values: {A: [temporalDefault ?? '1', temporalDefault ?? '2']}, identity_token: 'array-row'}],
+      editable: true, row_operations: ['insert', 'update']},
+      visual_admin_validate: {valid: true, errors: []},
+      visual_admin_plan: {state: 'ready', execution_available: true, plan_id: 'array-plan', plan_digest: 'array-digest'},
+      visual_admin_apply: {provider_result: {accepted: true, staged_in_provider_session: true}},
+      transaction_action: {provider_payload: {driver_observation_only: true}},
+      close_session: {provider_closed: true},
+    }[payload.action]}}));
+    const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="data" />);
+    fireEvent.click(await screen.findByText('Load rows'));
+    const label = operation === 'insert' ? 'A new value' : 'A value';
+    fireEvent.click(await screen.findByRole('button', {name: `${label} [-1:0]`}));
+    if (operation === 'insert') fireEvent.click(screen.getByRole('button', {name: 'Initialize array'}));
+    fireEvent.change(screen.getByRole('textbox', {name: `${label} [-1]`}), {target: {value: editedValue}});
+    fireEvent.click(screen.getByRole('button', {name: 'Close array editor'}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', {name: operation === 'insert' ? 'Insert row' : 'Save'}));
+    await waitFor(() => expect(api.post.mock.calls.some(([, payload]) => payload.action === 'visual_admin_apply')).toBe(true));
+    const planned = api.post.mock.calls.find(([, payload]) => payload.action === 'visual_admin_plan')[1];
+    const expected = [editedValue, temporalDefault ?? (operation === 'insert' ? '0' : '2')];
+    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual(elementKind === 'binary' ? expected.map((data) => ({encoding: 'base64', data, byte_length: atob(data).length})) : expected);
+    expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_action')).toBe(false);
+    unmount();
+  });
+
+  it.each([
+    ['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'],
+    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'],
+    ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'array'],
+    ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'],
+    ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'],
+    ['view', 'typed-time'], ['view', 'typed-timestamp'], ['view', 'typed-binary'],
+    ['view', 'typed-float32'], ['view', 'typed-float64'],
+  ])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+    const typed = operation.startsWith('typed-');
+    const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
+      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null,
+      'typed-date': '0001-01-01', 'typed-time': '23:59:59.9999', 'typed-timestamp': '9999-12-31 23:59:59.9999',
+      'typed-binary': {encoding: 'base64', data: 'AP9/', byte_length: 3},
+      'typed-float32': {encoding: 'float32', data: '-0.0'},
+      'typed-float64': {encoding: 'float64', data: '1.7976931348623157e308'}}[operation];
+    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3395,14 +3497,21 @@ describe('ProviderWorkspaceContent', () => {
         open_session: {session_id: 'grid-session'},
         visual_admin_rows: {
           columns: [
-            {name: 'id', key: true, editable: operation !== 'delete'},
-            {name: 'name', key: false, editable: operation !== 'delete'},
+            {name: 'id', key: true, editable: operation === 'update', insertable: false},
+            {name: 'second key', key: true, editable: false, insertable: false},
+            {name: 'name', key: false, editable: operation === 'update', insertable: true,
+              ...(typed ? {input_kind: ['typed-null', 'typed-date', 'typed-time', 'typed-timestamp'].includes(operation) ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
-            values: {id: 1, name: 'first'}, identity_token: 'row-one',
+            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: 'row-one',
           }],
-          editable: true,
-          row_operations: [operation],
+          editable: !(kind === 'table' && operation === 'defaults'),
+          ...(kind === 'table' && operation !== 'update' ? {
+            operation_authority: 'firebird-native-preparation',
+          } : {}),
+          row_operations: operation === 'select-only' ? [] : [mutation],
+          insert_identity_token: 'insert-one',
+          insert_default_values: ['defaults', 'omit'].includes(operation),
         },
         visual_admin_validate: {valid: true, errors: []},
         visual_admin_plan: {
@@ -3425,12 +3534,25 @@ describe('ProviderWorkspaceContent', () => {
     const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load rows'));
-    const name = await screen.findByDisplayValue('first');
+    const name = await screen.findByDisplayValue(operation === 'typed-binary' ? scalarValue.data : 'first');
     expect(screen.getByRole('textbox', {name: 'name value'})).toBe(name);
+    expect(screen.getByRole('textbox', {name: 'id value'})).toHaveValue('1');
+    expect(screen.getByRole('textbox', {name: 'second key value'})).toHaveValue('2');
+    if (operation === 'select-only') {
+      expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
+      expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
+      expect(name).toBeDisabled();
+      unmount();
+      return;
+    }
+    if (kind === 'table' && operation === 'defaults') {
+      expect(screen.getByText(/Insertion is available/)).toBeInTheDocument();
+    }
     if (kind === 'table') {
       expect(screen.getByRole('textbox', {name: 'name new value'}))
         .toHaveAttribute('placeholder', 'New value');
-    } else {
+    } else if (mutation !== 'insert') {
       expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
       if (operation === 'update') {
         expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
@@ -3442,6 +3564,39 @@ describe('ProviderWorkspaceContent', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
       expect(api.post).toHaveBeenCalledTimes(2);
       fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
+    } else if (mutation === 'insert') {
+      expect(screen.getByRole('textbox', {name: 'id new value'})).toBeDisabled();
+      if (operation === 'omit') {
+        fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+          {target: {value: 'discard'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Omit name from insert'}));
+        expect(screen.getByRole('textbox', {name: 'name new value'})).toHaveValue('');
+        expect(screen.queryByRole('button', {name: 'Omit name from insert'})).toBeNull();
+      }
+      if (['defaults', 'omit'].includes(operation)) {
+        fireEvent.click(screen.getByRole('button', {name: 'Insert default row'}));
+      } else {
+        fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+          {target: {value: 'new'}});
+        if (typed) {
+          if (operation === 'typed-null') {
+            fireEvent.mouseDown(screen.getByRole('combobox', {name: 'name new value mode'}));
+            fireEvent.click(screen.getByRole('option', {name: 'NULL'}));
+          } else {
+            fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+              {target: {value: scalarValue?.data ?? scalarValue}});
+          }
+        }
+        if (['empty', 'null'].includes(operation)) {
+          fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+            {target: {value: operation === 'empty' ? '' : 'null'}});
+        }
+        if (operation === 'array') {
+          fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+            {target: {value: '[[1,2],[3,4]]'}});
+        }
+        fireEvent.click(screen.getByRole('button', {name: 'Insert row'}));
+      }
     } else {
       fireEvent.change(name, {target: {value: 'second'}});
       fireEvent.click(screen.getByText('Save'));
@@ -3451,14 +3606,20 @@ describe('ProviderWorkspaceContent', () => {
       'open_session', 'visual_admin_rows', 'visual_admin_validate',
       'visual_admin_plan', 'visual_admin_apply', 'visual_admin_rows',
     ]);
-    expect(api.post.mock.calls[2][1].request.draft).toEqual({
+    expect(api.post.mock.calls[2][1].request.draft).toEqual(mutation === 'insert' ? {
+      values: ['defaults', 'omit'].includes(operation) ? {} : {
+        name: typed ? scalarValue : operation === 'empty' ? '' : operation === 'null' ? null :
+          operation === 'array' ? [[1, 2], [3, 4]] : 'new',
+      },
+      options: kind === 'view' ? {identity_token: 'insert-one'} : {},
+    } : {
       selector: {identity_token: 'row-one'},
       ...(operation === 'delete' ? {confirmation: 'provider-row-delete'} :
         {changes: {name: 'second'}}),
       concurrency_token: 'row-one',
     });
     expect(api.post.mock.calls[2][1].request.resource_kind).toBe(kind);
-    expect(api.post.mock.calls[2][1].request.operation_id).toBe(operation);
+    expect(api.post.mock.calls[2][1].request.operation_id).toBe(mutation);
     expect(api.post.mock.calls[0][1]).toEqual({
       action: 'open_session', language_profile: 'mysql-sql',
       database_target_id: 'database-one',

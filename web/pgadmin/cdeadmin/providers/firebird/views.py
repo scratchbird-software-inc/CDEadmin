@@ -24,7 +24,7 @@ def grid_update_identity(connection, name, *, operation='update'):
     Retain this connection/transaction for subsequent mutations.
     """
     import firebird.driver as native
-    if operation not in {'update', 'delete'}:
+    if operation not in {'update', 'delete', 'insert', 'insert-defaults'}:
         raise RelationalClientError('view row operation is unavailable')
     with connection.cursor() as cursor:
         cursor.execute(
@@ -67,11 +67,13 @@ def grid_update_identity(connection, name, *, operation='update'):
             if len(aliases) != 1:
                 return (), ()
             keys.append(aliases[0])
-        if operation == 'delete':
+        if operation in {'delete', 'insert-defaults'}:
             statement = None
             try:
-                statement = cursor.prepare(
-                    f'DELETE FROM {identifier(name)} WHERE 1 = 0')
+                command = (f'DELETE FROM {identifier(name)} WHERE 1 = 0'
+                           if operation == 'delete' else
+                           f'INSERT INTO {identifier(name)} DEFAULT VALUES')
+                statement = cursor.prepare(command)
                 return tuple(keys), ()
             except native.DatabaseError:
                 return (), ()
@@ -84,9 +86,12 @@ def grid_update_identity(connection, name, *, operation='update'):
             # No statement runs, even with an always-false predicate.
             statement = None
             try:
-                statement = cursor.prepare(
+                command = (
+                    f'INSERT INTO {identifier(name)} ({identifier(field)}) '
+                    'VALUES (?)' if operation == 'insert' else
                     f'UPDATE {identifier(name)} SET {identifier(field)} = ? '
                     'WHERE 1 = 0')
+                statement = cursor.prepare(command)
                 editable.append(field)
             except native.DatabaseError:
                 continue
@@ -204,6 +209,23 @@ def compile_operation(operation, draft, target=None):
     command = ('CREATE OR ALTER' if operation == 'create_or_alter'
                else 'RECREATE')
     return command + ' VIEW ' + quoted + column_sql + ' AS\n' + definition
+
+
+def populate_recreation_metadata(name, native):
+    """Keep late-generated view DDL and its inspector page consistent."""
+    sections = [section for section in native.get('property_sections', [])
+                if section != 'ddl']
+    try:
+        native['ddl'] = recreation_sql(
+            name, native.get('definition'), native.get('columns'))
+        native.pop('ddl_unavailable_reason', None)
+        position = (sections.index('definition') + 1
+                    if 'definition' in sections else min(1, len(sections)))
+        sections.insert(position, 'ddl')
+    except RelationalClientError as error:
+        native.pop('ddl', None)
+        native['ddl_unavailable_reason'] = str(error)
+    native['property_sections'] = sections
 
 
 def form(operation, field):

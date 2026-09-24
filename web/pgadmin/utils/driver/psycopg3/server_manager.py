@@ -30,6 +30,9 @@ from pgadmin.utils.master_password import get_crypt_key
 from pgadmin.utils.exception import ObjectGone
 from pgadmin.utils.passexec import PasswordExec
 from psycopg.conninfo import make_conninfo
+from pgadmin.cdeadmin.providers.postgresql.connection_target import (
+    initial_database,
+)
 
 if config.SUPPORT_SSH_TUNNEL:
     from sshtunnel import SSHTunnelForwarder, BaseSSHTunnelForwarderError
@@ -75,7 +78,7 @@ class ServerManager(object):
         self.sid = server.id
         self.host = server.host
         self.port = server.port
-        self.db = server.maintenance_db
+        self.db = initial_database(server)
         self.shared = server.shared
         self.did = None
         self.user = server.username

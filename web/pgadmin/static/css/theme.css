@@ -24,7 +24,7 @@
 }
 
 .dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar {
-  min-height: 34px !important;
+  min-height: max(34px, 3.25rem, var(--cde-tab-height, 34px)) !important;
 }
 .dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar .dock-ink-bar {
   display: none !important;

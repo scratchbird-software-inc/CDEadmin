@@ -1,5 +1,10 @@
 # CDEadmin reference-engine demonstration estate
 
+For a fresh developer machine, start with the
+[Windows/macOS/Linux development setup guide](../development/README.md).
+It covers the application, account setup, native clients, Docker and per-engine
+startup rather than assuming an existing configured Linux workspace.
+
 This directory contains the portable lifecycle, configuration, seed, and
 verification materials for every CDEadmin reference engine except native
 ScratchBird. It creates the same field-service sample in each engine through

@@ -63,11 +63,18 @@ export default function ObjectBreadcrumbs() {
   };
 
   useEffect(()=>{
+    const dismiss = () => setObjectData({path: null, description: null});
     if(preferences.breadcrumbs_enable) {
       pgAdmin.Browser.Events.on('pgadmin-browser:tree:hovered', onItemHover);
+      // Hover-only information must not obscure keyboard-reached content.
+      // Do not consume the event: Tab, End and shortcuts keep their action.
+      document.addEventListener('keydown', dismiss, true);
+      document.addEventListener('focusin', dismiss, true);
     }
     return ()=>{
       pgAdmin.Browser.Events.off('pgadmin-browser:tree:hovered', onItemHover);
+      document.removeEventListener('keydown', dismiss, true);
+      document.removeEventListener('focusin', dismiss, true);
     };
   }, [preferences.breadcrumbs_enable]);
 

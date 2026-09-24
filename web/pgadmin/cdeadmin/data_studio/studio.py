@@ -517,6 +517,19 @@ class DataStudioService:
         )
         return copy.deepcopy(presentation)
 
+    def query_stream(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if context.provider_id != 'org.cdeadmin.firebird':
+            raise DataStudioAccessError('Provider has not admitted streaming')
+        self.history.append('stream.requested', session_id, {
+            'action': request.get('stream_action'),
+            'finality': 'provider-owned',
+        })
+        return binding.instance.query_stream({
+            **copy.deepcopy(request),
+            'session_id': session.provider_session['session_id'],
+        })
+
     def close_session(self, context, session_id):
         """Close a provider-owned session and forget its local presentation."""
         session, binding = self._operational_session(context, session_id)

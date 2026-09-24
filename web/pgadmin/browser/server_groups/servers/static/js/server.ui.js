@@ -268,7 +268,7 @@ export default class ServerSchema extends BaseUISchema {
 
   requiresDatabase(state) {
     const profile = endpointProfiles.get(state.cde_profile_id);
-    return ['create_database', 'register_existing'].includes(
+    return profile?.workflow === 'legacy_preserved' || ['create_database', 'register_existing'].includes(
       state.cde_registration_intent
     ) || !profile || profile.database_targeting?.mode !== 'optional';
   }
@@ -375,6 +375,7 @@ export default class ServerSchema extends BaseUISchema {
         id: 'gid', label: gettext('Server group'), type: 'select',
         options: obj.serverGroupOptions,
         mode: ['create', 'edit'],
+        visible: () => !obj.registrationEngineId && !obj.registrationProfileId,
         controlProps: { allowClear: false },
         disabled: obj.isShared,
       },
@@ -544,10 +545,14 @@ export default class ServerSchema extends BaseUISchema {
         deps: ['cde_profile_id', 'cde_registration_intent'],
         visible: (state) => obj.requiresDatabase(state),
         noEmpty: false,
-        helpMessage: gettext(
-          'Optional for server-level engine profiles. A database can be '+
-          'created, attached, or selected later in the provider workspace.'
-        ),
+        helpMessage: obj.registrationProfiles.some((profile) =>
+          profile.workflow === 'legacy_preserved') ? gettext(
+            'Initial database used to establish the PostgreSQL connection. '+
+            'Use an existing database that this user can access.'
+          ) : gettext(
+            'Optional for server-level engine profiles. A database can be '+
+            'created, attached, or selected later in the provider workspace.'
+          ),
       },{
         id: 'username', label: gettext('Username'), type: 'text', group: gettext('Connection'),
         mode: ['properties', 'edit', 'create'],

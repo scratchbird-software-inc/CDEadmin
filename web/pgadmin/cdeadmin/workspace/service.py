@@ -1041,6 +1041,25 @@ class ProviderWorkspaceService:
             output_policy=policy,
         )
 
+    def query_stream(self, server, session_id, request,
+                     database_target_id=Ellipsis):
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id)
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Streaming request must be an object')
+        try:
+            return self.studio_service.query_stream(
+                context, session_id, request)
+        except Exception as exc:
+            # Native messages may include SQL, paths, or credentials.
+            from ..sdk.relational import RelationalClientError
+            detail = (str(exc) if isinstance(exc, RelationalClientError)
+                      else type(exc).__name__)
+            raise ProviderWorkspaceError(
+                'Stream request failed (' + detail +
+                '). Close the stream before retrying; no rollback or '
+                'commit is implied.') from None
+
     def poll(self, server, occurrence_id, database_target_id=Ellipsis):
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id

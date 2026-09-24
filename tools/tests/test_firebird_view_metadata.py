@@ -7,6 +7,45 @@ from pgadmin.cdeadmin.providers.firebird.ddl_dialect import generated_dialect
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
+@pytest.mark.parametrize('sections', [
+    ['properties', 'definition', 'columns', 'operations'],
+    ['properties', 'ddl', 'definition', 'ddl', 'columns'],
+    ['properties', 'columns'], []])
+def test_late_view_ddl_is_exposed_once_in_inspector(sections):
+    from pgadmin.cdeadmin.providers.firebird.views import (
+        populate_recreation_metadata)
+    native = {'definition': 'SELECT 1 FROM RDB$DATABASE',
+              'columns': [{'name': 'X', 'position': 0}],
+              'property_sections': list(sections),
+              'ddl_unavailable_reason': 'old failure'}
+    populate_recreation_metadata('V', native)
+    assert native['property_sections'].count('ddl') == 1
+    assert [s for s in native['property_sections'] if s != 'ddl'] == [
+        s for s in sections if s != 'ddl']
+    assert 'CREATE VIEW "V"' in native['ddl']
+    assert 'ddl_unavailable_reason' not in native
+    if 'definition' in sections:
+        assert native['property_sections'].index('ddl') == (
+            native['property_sections'].index('definition') + 1)
+
+
+@pytest.mark.parametrize('definition,columns', [
+    (None, [{'name': 'X', 'position': 0}]),
+    ('SELECT 1 FROM RDB$DATABASE', []),
+])
+def test_failed_view_ddl_removes_stale_content_and_inspector_page(
+        definition, columns):
+    from pgadmin.cdeadmin.providers.firebird.views import (
+        populate_recreation_metadata)
+    native = {'definition': definition, 'columns': columns,
+              'ddl': 'stale', 'property_sections': [
+                  'properties', 'ddl', 'columns', 'ddl']}
+    populate_recreation_metadata('V', native)
+    assert 'ddl' not in native
+    assert native['ddl_unavailable_reason']
+    assert native['property_sections'] == ['properties', 'columns']
+
+
 @pytest.mark.parametrize('definition', [
     'SELECT 1, 2 FROM RDB$DATABASE',
     'WITH Q AS (SELECT 1 X FROM RDB$DATABASE) SELECT X, X+1 FROM Q',

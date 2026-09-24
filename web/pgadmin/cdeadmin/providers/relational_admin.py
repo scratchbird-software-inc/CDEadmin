@@ -47,6 +47,7 @@ from .firebird import object_privileges as firebird_object_privileges
 from .firebird import packages as firebird_packages
 from .firebird import sequences as firebird_sequences
 from .firebird import views as firebird_views
+from .firebird import grid_values as firebird_grid_values
 from .firebird import exceptions as firebird_exceptions
 from .firebird import procedures as firebird_procedures
 from .firebird import functions as firebird_functions
@@ -165,6 +166,11 @@ class _RowIdentity:
     resource_kind: str = 'table'
     writable_columns: tuple[str, ...] | None = None
     delete_allowed: bool = True
+    purpose: str = 'row'
+    insert_defaults_allowed: bool = False
+    decfloat_columns: tuple[str, ...] = ()
+    array_columns: tuple[str, ...] = ()
+    native_record_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -256,14 +262,15 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird' and kind == 'view':
                 resource['operations'] = [
                     item for item in resource.get('operations', [])
-                    if item['operation_id'] not in {'update', 'delete'}
+                    if item['operation_id'] not in {
+                        'insert', 'update', 'delete'}
                 ] + [{'operation_id': operation,
                       'title': operation.title() + ' view row',
                       'mutation_class': ('destructive' if operation ==
                                          'delete' else 'write'),
                       'target_required': True,
                       'confirmation_required': operation == 'delete'}
-                     for operation in ('update', 'delete')]
+                     for operation in ('insert', 'update', 'delete')]
             if self.dialect.engine_id == 'firebird' and kind == 'database':
                 additions = firebird_limbo.ATTACHMENT_OPERATIONS & (
                     self.dialect.supported.get(kind, frozenset()))
@@ -793,7 +800,7 @@ class RelationalAdministration:
             resource_kind != 'table'
             and not (self.dialect.engine_id == 'firebird' and
                      resource_kind == 'view' and operation_id in {
-                         'update', 'delete'})
+                         'insert', 'update', 'delete'})
         ):
             errors.append({
                 'field_id': None,
@@ -2963,11 +2970,15 @@ class RelationalAdministration:
                     'firebird_dialect_binding' in payload):
                 from .firebird.ddl_dialect import verify_binding
                 verify_binding(connection, payload['firebird_dialect_binding'])
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.temporal_arrays import cursor as array_cursor
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
                     'execute_on_connection', False,
                 )
+                else array_cursor(connection)
+                if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
             if borrowed_firebird:
@@ -2988,7 +2999,15 @@ class RelationalAdministration:
                 cursor, transition, transition['old_name']
             ) if transition else None
             for statement in compiled.get('statements', []):
+                if (self.dialect.engine_id == 'firebird' and
+                        statement.get('firebird_array_guard')):
+                    from .firebird.grid_array_identity import verify
+                    verify(cursor, statement['firebird_array_guard'])
                 parameters = statement.get('parameters', ())
+                if self.dialect.engine_id == 'firebird' and parameters:
+                    from .firebird.grid_arrays import parameters as arrays
+                    parameters = arrays(connection, cursor,
+                                        statement['source'], parameters)
                 if parameters:
                     cursor.execute(statement['source'], parameters)
                 else:
@@ -3170,7 +3189,7 @@ class RelationalAdministration:
         cursor = None
         try:
             # Views default to read-only. Firebird may admit a direct,
-            # PK-preserving view in a retained session using native preparation;
+            # PK-preserving view in a retained session with native preparation;
             # never infer row identities for other view shapes or engines.
             key_columns = (
                 tuple(self._primary_key(connection, path))
@@ -3178,6 +3197,9 @@ class RelationalAdministration:
             )
             writable_columns = None
             delete_allowed = resource_kind == 'table'
+            insert_columns = ()
+            insert_keys = ()
+            default_keys = ()
             if (self.dialect.engine_id == 'firebird' and
                     resource_kind == 'view' and session_id and
                     not owns_connection):
@@ -3186,12 +3208,22 @@ class RelationalAdministration:
                 delete_keys, _ = firebird_views.grid_update_identity(
                     connection, path[-1], operation='delete')
                 delete_allowed = bool(delete_keys)
-                key_columns = key_columns or delete_keys
+                insert_keys, insert_columns = (
+                    firebird_views.grid_update_identity(
+                        connection, path[-1], operation='insert'))
+                default_keys, _ = firebird_views.grid_update_identity(
+                    connection, path[-1], operation='insert-defaults')
+                key_columns = (key_columns or delete_keys or insert_keys or
+                               default_keys)
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.temporal_arrays import cursor as array_cursor
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
                     'execute_on_connection', False,
                 )
+                else array_cursor(connection)
+                if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
             order = (
@@ -3216,14 +3248,65 @@ class RelationalAdministration:
                 None if len(item) < 2 else str(item[1])
                 for item in description
             )
+            if self.dialect.engine_id == 'firebird':
+                native_types = tuple(meta['native_type'] for meta in
+                                     firebird_grid_values.describe_columns(
+                                         cursor))
+            input_kinds = (firebird_grid_values.input_kinds(cursor)
+                           if self.dialect.engine_id == 'firebird' else
+                           (None,) * len(description))
+            array_specs = {}
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.grid_arrays import editor_specs
+                array_specs = editor_specs(
+                    connection, firebird_grid_values.describe_columns(cursor))
+            table_operations = None
+            if (self.dialect.engine_id == 'firebird' and
+                    resource_kind == 'table'):
+                table_operations = firebird_grid_values.table_operations(
+                    connection, path[-1], columns)
+                writable_columns = tuple(table_operations['update'])
+                insert_columns = tuple(table_operations['insert'])
+                delete_allowed = table_operations['delete']
             raw_rows = list(cursor.fetchall())
             has_more = len(raw_rows) > limit
             raw_rows = raw_rows[:limit]
             result_rows = []
             for raw_row in raw_rows:
                 values = dict(zip(columns, raw_row))
+                if self.dialect.engine_id == 'firebird':
+                    values = {name: firebird_grid_values.materialize(value)
+                              for name, value in values.items()}
                 identity_token = None
                 if key_columns and all(key in values for key in key_columns):
+                    array_columns = tuple(
+                        name for name, native in zip(columns, native_types)
+                        if self.dialect.engine_id == 'firebird' and
+                        native == 'ARRAY')
+                    decfloat_columns = tuple(
+                        name for name, kind in zip(columns, input_kinds)
+                        if kind == 'decfloat')
+                    version = None
+                    if array_columns:
+                        key_identity = _RowIdentity(
+                            fingerprint, path, key_columns,
+                            tuple(values[key] for key in key_columns), {},
+                            time.monotonic(),
+                            decfloat_columns=decfloat_columns)
+                        where, parameters = self._identity_predicate(
+                            key_identity)
+                        with connection.cursor() as version_cursor:
+                            version_cursor.execute(
+                                'SELECT RDB$RECORD_VERSION FROM ' +
+                                self._qualified(path) + ' WHERE ' + where,
+                                parameters)
+                            versions = version_cursor.fetchall()
+                        if (len(versions) != 1 or
+                                type(versions[0][0]) is not int):
+                            raise RelationalClientError(
+                                'Firebird array row version is unavailable; '
+                                'refresh the row page')
+                        version = versions[0][0]
                     identity_token = str(uuid.uuid4())
                     identity = _RowIdentity(
                         fingerprint, path, key_columns,
@@ -3234,6 +3317,9 @@ class RelationalAdministration:
                         resource_kind=resource_kind,
                         writable_columns=writable_columns,
                         delete_allowed=delete_allowed,
+                        decfloat_columns=decfloat_columns,
+                        array_columns=array_columns,
+                        native_record_version=version,
                     )
                     with self._identity_lock:
                         while len(self._row_identities) >= 5000:
@@ -3241,9 +3327,27 @@ class RelationalAdministration:
                             self._row_identities.pop(oldest, None)
                         self._row_identities[identity_token] = identity
                 result_rows.append({
-                    'values': copy.deepcopy(values),
+                    'values': ({name: firebird_grid_values.normalize_value(
+                        value)
+                                for name, value in values.items()}
+                               if self.dialect.engine_id == 'firebird' else
+                               copy.deepcopy(values)),
                     'identity_token': identity_token,
                 })
+            insert_token = None
+            if insert_keys or default_keys:
+                insert_token = str(uuid.uuid4())
+                identity = _RowIdentity(
+                    fingerprint, path, (), (), {}, time.monotonic(),
+                    session_id=session_id, resource_kind=resource_kind,
+                    writable_columns=insert_columns, delete_allowed=False,
+                    purpose='insert',
+                    insert_defaults_allowed=bool(default_keys))
+                with self._identity_lock:
+                    while len(self._row_identities) >= 5000:
+                        oldest = next(iter(self._row_identities))
+                        self._row_identities.pop(oldest)
+                    self._row_identities[insert_token] = identity
             next_continuation = None
             if has_more:
                 next_continuation = str(uuid.uuid4())
@@ -3262,7 +3366,15 @@ class RelationalAdministration:
                     {
                         'name': name,
                         'native_type': native_types[index],
+                        **({'input_kind': input_kinds[index]}
+                           if input_kinds[index] else {}),
+                        **({'input_kind': 'array',
+                            'array_spec': array_specs[name]}
+                           if name in array_specs else {}),
                         'key': name in key_columns,
+                        **({'insertable': name in insert_columns}
+                           if resource_kind == 'view' or table_operations
+                           else {}),
                         'editable': bool(key_columns) and (
                             writable_columns is None or
                             name in writable_columns),
@@ -3271,11 +3383,23 @@ class RelationalAdministration:
                 ],
                 'rows': result_rows,
                 'editable': bool(key_columns),
-                'row_operations': (
+                'insert_identity_token': insert_token,
+                'insert_default_values': (table_operations['defaults']
+                                          if table_operations else
+                                          bool(default_keys)),
+                **({'operation_authority': 'firebird-native-preparation'}
+                   if table_operations is not None else {}),
+                'row_operations': ((
+                    (['update'] if key_columns and writable_columns else []) +
+                    (['delete'] if key_columns and delete_allowed else []) +
+                    (['insert'] if insert_columns or
+                     table_operations['defaults'] else [])
+                ) if table_operations is not None else (
                     (['update'] if writable_columns is None or
                      writable_columns else []) +
-                    (['delete'] if delete_allowed else [])
-                ) if key_columns else [],
+                    (['delete'] if delete_allowed else []) +
+                    (['insert'] if insert_token else [])
+                ) if key_columns else []),
                 'identity_policy': (
                     ('provider-view-primary-key-and-original-values'
                      if resource_kind == 'view' else
@@ -5984,7 +6108,9 @@ class RelationalAdministration:
                 self._field('confirmation', 'Confirmation', 'text', True),
             ],
             'insert': [
-                self._field('values', 'Column values', 'json', True),
+                self._field('values', 'Column values', 'json', not (
+                    self.dialect.engine_id == 'firebird' and
+                    kind in {'table', 'view'})),
                 self._field('options', 'Insert options', 'json', False,
                             default={}),
             ],
@@ -7124,10 +7250,50 @@ class RelationalAdministration:
         }
 
     def _compile_insert(self, request):
+        if request['target_resource'].get(
+                'resource_kind', request['resource_kind']) != request[
+                    'resource_kind']:
+            raise RelationalClientError('insert target kind does not match')
         target = self._qualified(self._target_path(request['target_resource']))
         values = request['draft'].get('values')
-        if not isinstance(values, Mapping) or not values:
+        is_view = request['resource_kind'] == 'view'
+        firebird_table = (self.dialect.engine_id == 'firebird' and
+                          request['resource_kind'] == 'table')
+        if not isinstance(values, Mapping) or (
+                not values and not is_view and not firebird_table):
             raise RelationalClientError('insert values must be an object')
+        if is_view:
+            options = request['draft'].get('options', {})
+            token = options.get('identity_token') if isinstance(
+                options, Mapping) else None
+            with self._identity_lock:
+                identity = self._row_identities.pop(token, None) if isinstance(
+                    token, str) else None
+            if (identity is None or identity.purpose != 'insert' or
+                    identity.resource_kind != 'view' or
+                    request['target_resource'].get('resource_kind') !=
+                    'view' or
+                    not identity.session_id or
+                    identity.session_id != request.get('session_id') or
+                    identity.route_fingerprint != self._route_fingerprint(
+                        request.get('_provider_route')) or
+                    identity.target_path != self._target_path(
+                        request['target_resource']) or
+                    time.monotonic() - identity.issued_at > 600):
+                raise RelationalClientError(
+                    'view insert identity is unavailable or mismatched')
+            if any(name not in identity.writable_columns for name in values):
+                raise RelationalClientError(
+                    'insert contains a column not admitted for insertion')
+            if not values:
+                if not identity.insert_defaults_allowed:
+                    raise RelationalClientError(
+                        'default insertion is unavailable')
+                return {'source': f'INSERT INTO {target} DEFAULT VALUES',
+                        'parameters': ()}
+        if firebird_table and not values:
+            return {'source': f'INSERT INTO {target} DEFAULT VALUES',
+                    'parameters': ()}
         columns = list(values)
         source = (
             f'INSERT INTO {target} '
@@ -7136,7 +7302,10 @@ class RelationalAdministration:
         )
         return {
             'source': source,
-            'parameters': tuple(values[item] for item in columns),
+            'parameters': tuple(
+                firebird_grid_values.bind_value(values[item])
+                if self.dialect.engine_id == 'firebird' else values[item]
+                for item in columns),
         }
 
     def _compile_identity_dml(self, request):
@@ -7157,6 +7326,8 @@ class RelationalAdministration:
             raise RelationalClientError(
                 'row identity token is stale or invalid'
             )
+        if identity.purpose != 'row':
+            raise RelationalClientError('row identity has another purpose')
         if identity.session_id != request.get('session_id'):
             raise RelationalClientError(
                 'row identity belongs to another provider session')
@@ -7178,6 +7349,17 @@ class RelationalAdministration:
             )
         where, parameters = self._identity_predicate(identity)
         target = self._qualified(target_path)
+        guard = {}
+        if self.dialect.engine_id == 'firebird' and identity.array_columns:
+            from .firebird.grid_array_identity import snapshot
+            fields = ', '.join(self._quote(name)
+                               for name in identity.array_columns)
+            guard['firebird_array_guard'] = {
+                'source': f'SELECT {fields} FROM {target} WHERE {where}',
+                'parameters': parameters,
+                'snapshot': snapshot(tuple(identity.original[name]
+                                           for name in identity.array_columns)),
+            }
         if request['operation_id'] == 'delete':
             if not identity.delete_allowed:
                 raise RelationalClientError(
@@ -7186,6 +7368,7 @@ class RelationalAdministration:
             return {
                 'source': source, 'parameters': parameters,
                 'expected_rowcount': 1,
+                **guard,
             }
         changes = draft.get('changes')
         if not isinstance(changes, Mapping) or not changes:
@@ -7201,8 +7384,12 @@ class RelationalAdministration:
         source = f'UPDATE {target} SET {assignments} WHERE {where}'
         return {
             'source': source,
-            'parameters': tuple(changes.values()) + parameters,
+            'parameters': tuple(
+                firebird_grid_values.bind_value(value)
+                if self.dialect.engine_id == 'firebird' else value
+                for value in changes.values()) + parameters,
             'expected_rowcount': 1,
+            **guard,
         }
 
     def _compile_privilege(self, request):
@@ -7538,22 +7725,39 @@ class RelationalAdministration:
         clauses = []
         parameters = []
         for name, value in zip(identity.key_columns, identity.key_values):
-            clauses.append(
-                f'{self._quote(name)} = {self.dialect.parameter}'
-            )
+            clauses.append(self._identity_equality(name, identity))
             parameters.append(value)
         for name, value in identity.original.items():
             if name in identity.key_columns:
+                continue
+            if (self.dialect.engine_id == 'firebird' and
+                    name in identity.array_columns):
                 continue
             quoted = self._quote(name)
             if value is None:
                 clauses.append(f'{quoted} IS NULL')
             else:
-                clauses.append(
-                    f'{quoted} = {self.dialect.parameter}'
-                )
+                clauses.append(self._identity_equality(name, identity))
                 parameters.append(value)
+        if self.dialect.engine_id == 'firebird':
+            if identity.array_columns:
+                if type(identity.native_record_version) is not int:
+                    raise RelationalClientError(
+                        'Firebird array row version is unavailable')
+                clauses.append('RDB$RECORD_VERSION = ?')
+                parameters.append(identity.native_record_version)
+            from .firebird.grid_values import parameter
+            parameters = [parameter(value) for value in parameters]
         return ' AND '.join(clauses), tuple(parameters)
+
+    def _identity_equality(self, name, identity):
+        quoted = self._quote(name)
+        if (self.dialect.engine_id == 'firebird' and
+                name in identity.decfloat_columns):
+            # Native total ordering includes NaN/sNaN, signed zero and quantum.
+            # Ordinary '=' can trap on NaN and cannot preserve this identity.
+            return f'TOTALORDER({quoted}, {self.dialect.parameter}) = 0'
+        return f'{quoted} = {self.dialect.parameter}'
 
     def _programmable_create(self, kind, name, draft, options):
         body = self._safe_definition(draft.get('definition'))

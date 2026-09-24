@@ -134,7 +134,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
         }),
         'view': frozenset({'inspect', 'create', 'alter', 'drop',
                            'grant', 'revoke', 'create_or_alter', 'recreate',
-                           'update', 'delete'}),
+                           'insert', 'update', 'delete'}),
         'column': frozenset({'inspect', 'create', 'alter', 'comment',
                              'rename', 'drop', 'grant', 'revoke'}),
         'constraint': frozenset({'inspect', 'create', 'drop'}),
@@ -198,6 +198,15 @@ class FirebirdProvider(ActualEnginePilotProvider):
             with self.client._connecting():
                 return super().open_session(request)
         return super().open_session(request)
+
+    def query_stream(self, request):
+        self._require('execute')
+        request = _mapping(request)
+        session = self._sessions.get(request.get('session_id'))
+        if session is None:
+            raise ValueError('Provider session is unavailable')
+        self._invalidate_grid_session(request['session_id'])
+        return self.client.query_stream(session.handle, request)
 
     def _grid_session_guard(self, request, *, closing=False):
         context = self._visual_admin_session_context(_mapping(request))
@@ -3259,13 +3268,8 @@ def _resources(connection, request):
                 except RelationalClientError as error:
                     native['view_columns'] = []
                     native['view_columns_unavailable_reason'] = str(error)
-                try:
-                    native['ddl'] = views.recreation_sql(
-                        item['display_name'], native.get('definition'),
-                        native.get('columns'))
-                except RelationalClientError as error:
-                    native.pop('ddl', None)
-                    native['ddl_unavailable_reason'] = str(error)
+                views.populate_recreation_metadata(item['display_name'],
+                                                   native)
         return list(resources.values())
     finally:
         try:

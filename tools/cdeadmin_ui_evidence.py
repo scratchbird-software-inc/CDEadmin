@@ -130,24 +130,43 @@ def browser_binary(explicit=None):
     raise RuntimeError('A Chrome or Chromium binary is required')
 
 
-def named_tree_item(driver, label):
+def _matches_tree_ancestry(driver, element, ancestors):
+    if not ancestors:
+        return True
+    return driver.execute_script('''
+        const tree = window.pgAdmin?.Browser?.tree;
+        const row = arguments[0].closest('.file-entry');
+        if (!tree || !row) return false;
+        let item = tree.itemFrom(row);
+        for (const label of [...arguments[1]].reverse()) {
+          item = item && tree.parent(item);
+          const data = item && tree.itemData(item);
+          if ((data?.label ?? data?._label) !== label) return false;
+        }
+        return true;
+    ''', element, list(ancestors))
+
+
+def named_tree_item(driver, label, ancestors=()):
     matches = []
     for item in driver.find_elements(By.CSS_SELECTOR, '.file-name'):
         try:
-            if item.is_displayed() and item.text == label:
+            if (item.is_displayed() and item.text == label and
+                    _matches_tree_ancestry(driver, item, ancestors)):
                 matches.append(item)
         except StaleElementReferenceException:
             continue
     return matches[-1] if matches else None
 
 
-def expand(wait, label):
+def expand(wait, label, ancestors=()):
     def toggle(driver):
         collapsed = driver.find_elements(
             By.CSS_SELECTOR, f'button[aria-label="Expand {label}"]'
         )
         try:
-            collapsed = [item for item in collapsed if item.is_displayed()]
+            collapsed = [item for item in collapsed if item.is_displayed()
+                         and _matches_tree_ancestry(driver, item, ancestors)]
         except StaleElementReferenceException:
             return None
         if collapsed:
@@ -156,7 +175,8 @@ def expand(wait, label):
             By.CSS_SELECTOR, f'button[aria-label="Collapse {label}"]'
         )
         try:
-            expanded = [item for item in expanded if item.is_displayed()]
+            expanded = [item for item in expanded if item.is_displayed()
+                        and _matches_tree_ancestry(driver, item, ancestors)]
         except StaleElementReferenceException:
             return None
         if expanded:
@@ -191,9 +211,9 @@ def expand(wait, label):
         wait.until(click_when_ready)
 
 
-def wait_for_tree_item(wait, label):
+def wait_for_tree_item(wait, label, ancestors=()):
     """Wait until an asynchronously loaded tree child is mounted."""
-    return wait.until(lambda driver: named_tree_item(driver, label))
+    return wait.until(lambda driver: named_tree_item(driver, label, ancestors))
 
 
 def _xpath_literal(value):
@@ -516,6 +536,41 @@ def _context_pointer(wait, driver, supplied):
     actions.context_click().perform()
 
 
+def _observed_menu_click(driver, clickable):
+    """Record actual trusted click delivery without invoking a JS action."""
+    driver.execute_script('''
+        const expected = arguments[0];
+        const observation = {expected: expected.dataset.actionId || null,
+          received: false, matched: false, trusted: false, actual: null};
+        const handler = event => {
+          observation.received = true;
+          observation.matched = expected === event.target ||
+            expected.contains(event.target);
+          observation.trusted = event.isTrusted;
+          observation.actual = event.target.closest('[data-action-id]')
+            ?.dataset.actionId || null;
+        };
+        window.__cdeQaMenuClick = {observation, handler};
+        document.addEventListener('click', handler,
+          {capture: true, once: true});
+    ''', clickable)
+    try:
+        clickable.click()
+    finally:
+        observation = driver.execute_script('''
+            const trace = window.__cdeQaMenuClick;
+            if (!trace) return null;
+            document.removeEventListener('click', trace.handler, true);
+            delete window.__cdeQaMenuClick;
+            return trace.observation;
+        ''')
+        print('menu click delivery ' + json.dumps(observation, sort_keys=True),
+              flush=True)
+    if not observation or not all(observation.get(key) for key in (
+            'received', 'matched', 'trusted')):
+        raise RuntimeError('Context command did not receive its trusted click')
+
+
 def invoke_context_action(
         wait, driver, database, labels, endpoint_password=None,
         endpoint_prompt_timeout=5):
@@ -580,7 +635,7 @@ def invoke_context_action(
                   bounds.top + bounds.height / 2);
                 return item === hit || item.contains(hit);
             ''', clickable))
-            clickable.click()
+            _observed_menu_click(driver, clickable)
             complete_endpoint_prompt(
                 driver, endpoint_password, timeout=endpoint_prompt_timeout
             )

@@ -49,6 +49,12 @@ class _AttachmentState:
     worker_interrupted: bool = False
     visual_task_state_unknown: bool = False
     failed_cursors: list = field(default_factory=list)
+    result_stream: object = None
+    blob_upload: object = None
+    stream_owner: str | None = None
+    stream_cancel_lock: object = field(default_factory=threading.RLock)
+    stream_running: bool = False
+    stream_cancel_requested: bool = False
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
@@ -219,7 +225,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 id(handle), _AttachmentState())
 
     @contextmanager
-    def _exclusive(self, handle, *, closing=False):
+    def _exclusive(self, handle, *, closing=False, stream_access=False):
         if id(handle) in self._failed_initializations and not closing:
             raise RelationalClientError(
                 'Firebird initialization failed; attachment is cleanup-only')
@@ -233,6 +239,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird query is running; cancel or wait before '
                     'using this session')
+            if state.result_stream is not None and not (
+                    closing or stream_access):
+                raise RelationalClientError(
+                    'Close the streaming result before using this session')
             if state.cancellation_state_unknown and not closing:
                 raise RelationalClientError(
                     'Firebird cancellation state is unknown; close this '
@@ -466,7 +476,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
     def _query_cursor(self, handle, request):
         dialect = requested_dialect(request)
         if dialect is None or dialect == handle.sql_dialect:
-            return super()._query_cursor(handle, request)
+            from .temporal_arrays import cursor
+            return cursor(handle)
         return DialectCursor(handle, dialect)
 
     def _fetch_query_rows(self, cursor, request):
@@ -614,6 +625,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
 
     def close_session(self, handle):
         with self._exclusive(handle, closing=True):
+            self._close_result_stream(handle)
             result = self._release_attachment(handle)
             self._queries[:] = [query for query in self._queries
                                 if query.handle is not handle]
@@ -622,6 +634,169 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             with self._admission:
                 self._attachment_states.pop(id(handle), None)
             return result
+
+    def _close_result_stream(self, handle):
+        state = self._state(handle)
+        if state.blob_upload is not None:
+            state.blob_upload.close()
+            state.blob_upload = None
+        if state.result_stream is not None:
+            try:
+                state.result_stream.close()
+            except Exception:
+                state.result_cleanup_failed = True
+                raise
+            state.result_stream = None
+        state.stream_owner = None
+
+    @contextmanager
+    def _stream_native_call(self, handle, state):
+        # Separate from the attachment mutex: cancellation must be deliverable
+        # while a native execute/fetch/read holds exclusive attachment access.
+        with state.stream_cancel_lock:
+            state.stream_running = True
+            state.stream_cancel_requested = False
+        try:
+            yield
+        finally:
+            with state.stream_cancel_lock:
+                state.stream_running = False
+                if state.stream_cancel_requested:
+                    try:
+                        handle._att.cancel_operation(
+                            self.module.CancelType.DISABLE)
+                        handle._att.cancel_operation(
+                            self.module.CancelType.ENABLE)
+                    except BaseException:
+                        state.cancellation_state_unknown = True
+                        raise
+
+    def cancel_result_stream(self, handle, owner=None):
+        state = self._state(handle)
+        with state.stream_cancel_lock:
+            self._check_stream_owner(state, owner)
+            if not state.stream_running:
+                return {'cancel_request_accepted': False,
+                        'outcome': 'no native stream call in progress'}
+            state.stream_cancel_requested = True
+            handle._att.cancel_operation(self.module.CancelType.RAISE)
+            return {'cancel_request_accepted': True,
+                    'outcome': 'pending native observation'}
+
+    @staticmethod
+    def _check_stream_owner(state, owner):
+        if owner is not None and (
+                not isinstance(owner, str) or not 1 <= len(owner) <= 128):
+            raise RelationalClientError('Invalid stream owner')
+        if state.stream_owner is not None and state.stream_owner != owner:
+            raise RelationalClientError('Stream belongs to another workspace')
+
+    def query_stream(self, handle, request):
+        """One bounded pull per call, scoped to a retained native session."""
+        from firebird.driver.core import BlobReader
+        from .result_stream import BlobUpload, ResultStream
+        action = request.get('stream_action')
+        owner = request.get('owner_id')
+        if action == 'cancel':
+            return self.cancel_result_stream(handle, owner)
+        with self._exclusive(handle, stream_access=True,
+                             closing=action == 'close') as state:
+            self._check_stream_owner(state, owner)
+            if action == 'close':
+                self._close_result_stream(handle)
+                return {'closed': True, 'transaction_finality_changed': False}
+            if action == 'upload_begin':
+                if state.result_stream is not None:
+                    raise RelationalClientError('Close the previous stream')
+                if state.blob_upload is not None:
+                    raise RelationalClientError('Close the previous upload')
+                state.blob_upload = BlobUpload()
+                state.stream_owner = owner
+                return {'blob_upload': state.blob_upload.reference}
+            if action in ('upload_chunk', 'upload_finish'):
+                upload = state.blob_upload
+                if upload is None or request.get('blob_upload') != (
+                        upload.reference):
+                    raise RelationalClientError('Upload is unavailable')
+                if action == 'upload_chunk':
+                    offset = upload.append(request.get('offset'),
+                                           request.get('data'))
+                    return {'next_offset': offset}
+                upload.finish()
+                return {'blob_upload': upload.reference, 'ready': True}
+            if action == 'open':
+                if state.result_stream is not None:
+                    raise RelationalClientError('Close the previous stream')
+                source = request.get('source')
+                if not isinstance(source, str) or not source.strip():
+                    raise RelationalClientError('Query source is required')
+                if (starts_transaction(source) or
+                        transaction_command(source) is not None):
+                    raise RelationalClientError(
+                        'Use transaction controls outside the stream')
+                raw_parameters = request.get('parameters', [])
+                if not isinstance(raw_parameters, list):
+                    raise RelationalClientError('Parameters must be an array')
+                parameters = []
+                upload_used = False
+                for value in raw_parameters:
+                    if isinstance(value, dict) and 'blob_upload' in value:
+                        upload = state.blob_upload
+                        if (upload_used or upload is None or not upload.ready
+                                or value != {'blob_upload': upload.reference}):
+                            raise RelationalClientError(
+                                'Invalid upload binding')
+                        parameters.append(upload.finish())
+                        upload_used = True
+                    else:
+                        parameters.extend(normalize_parameters([value]))
+                native_request = {'output_policy': {
+                    'client_sql_dialect': request.get(
+                        'client_sql_dialect', 3)}}
+                requested_dialect(native_request)
+                cursor = self._query_cursor(handle, native_request)
+                # DialectCursor delegates reads, not attribute writes.
+                native_cursor = getattr(cursor, 'cursor', cursor)
+                native_cursor.stream_blob_threshold = -1
+                state.result_stream = ResultStream(cursor, [], BlobReader)
+                state.stream_owner = owner
+                try:
+                    with self._stream_native_call(handle, state):
+                        cursor.execute(source, parameters)
+                        state.result_stream.columns = list(
+                            self.config.query_columns_reader(cursor))
+                        if any(column.get('native_type_name') == 'ARRAY'
+                               for column in state.result_stream.columns):
+                            raise RelationalClientError(
+                                'Native ARRAY results require the ordinary '
+                                'query path; array slices are not streamed')
+                        if not cursor.description:
+                            state.result_stream.eof = True
+                            return {'stream_reference':
+                                    state.result_stream.reference,
+                                    'columns': [], 'rows': [], 'sequence': -1,
+                                    'end_of_cursor': True, 'rows_read': 0,
+                                    'transaction_finality_changed': False}
+                        return state.result_stream.fetch(0)
+                except Exception:
+                    state.result_stream.failed = True
+                    raise
+                finally:
+                    if upload_used:
+                        state.blob_upload.close()
+                        state.blob_upload = None
+            stream = state.result_stream
+            if stream is None or request.get('stream_reference') != (
+                    stream.reference):
+                raise RelationalClientError('Result stream is unavailable')
+            if action == 'next':
+                with self._stream_native_call(handle, state):
+                    return stream.fetch(request.get('sequence'))
+            if action == 'blob':
+                with self._stream_native_call(handle, state):
+                    return stream.read_blob(request.get('blob_reference'),
+                                            request.get('offset'))
+            raise RelationalClientError('Unknown streaming action')
 
     def _release_attachment(self, handle):
         if id(handle) in self._failed_initializations:
@@ -935,6 +1110,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     if id(handle) in protected:
                         continue
                     try:
+                        self._close_result_stream(handle)
                         self._release_attachment(handle)
                     except Exception as exc:
                         failures.append(exc)
