@@ -62,10 +62,11 @@ def layout(cursor, relation, field, description):
 
 
 def read(cursor, desc):
-    """Return (handled, value); leave non-character arrays to the driver."""
+    """Return (handled, value) for bounded character or scalar array reads."""
     description = metadata(cursor, desc.relation, desc.field)
     if description is None:
-        return False, None
+        from .scalar_arrays import read as read_scalar
+        return read_scalar(cursor, desc)
     code, characters, charset, _ = description
     bounds, dimensions, size, count = layout(
         cursor, desc.relation, desc.field, description)

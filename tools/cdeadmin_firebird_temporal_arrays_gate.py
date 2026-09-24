@@ -156,10 +156,16 @@ def verify(connection, client, route, password, result):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--slice-bytes', type=int, default=1024 * 1024)
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Output exists; preserve previous evidence')
+    if not 16 <= args.slice_bytes <= 1024 * 1024:
+        parser.error('Slice bytes must be between 16 and 1048576')
+    from pgadmin.cdeadmin.providers.firebird import varying_arrays
+    varying_arrays.SLICE_BYTES = args.slice_bytes
     result = base.run(extra_checks=verify)
+    result['slice_bytes'] = args.slice_bytes
     checks = result.get('temporal_array_checks', [])
     result['complete'] = bool(result['complete'] and not result['failures'] and
                               len(checks) == 48 and result.get(
