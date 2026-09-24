@@ -16,6 +16,7 @@ from tools.cdeadmin_ui_evidence import expand, named_tree_item
 CASES = (
     ('Tables', 'table', 'CUSTOMERS'),
     ('Tables', 'table', 'ASSETS'),
+    ('Tables', 'table', 'WORK_ORDERS'),
     ('Views', 'view', 'OPEN_WORK_ORDERS'),
     ('Sequences', 'sequence', 'INSPECTION_NUMBER'),
 )
@@ -25,6 +26,15 @@ RELATIONSHIP_SECTIONS = {
     'dependents': 'Depended on by',
     'privileges': 'Privileges and grants',
 }
+
+STRUCTURE_SECTIONS = {
+    'constraints': 'Constraints', 'indexes': 'Indexes', 'triggers': 'Triggers',
+}
+
+
+def sections_for(kind):
+    return {**RELATIONSHIP_SECTIONS,
+            **(STRUCTURE_SECTIONS if kind in ('table', 'view') else {})}
 
 
 def rendered_values(value):
@@ -38,12 +48,14 @@ def rendered_values(value):
         return [leaf for item in items for leaf in rendered_values(item)]
     if isinstance(value, bool):
         return ['Yes' if value else 'No']
+    if isinstance(value, float) and value.is_integer():
+        return [str(int(value))]  # JSON numbers render without a .0 suffix.
     return [str(value)]
 
 
 def assert_relationship_coverage(results):
-    for key in RELATIONSHIP_SECTIONS:
-        if not any(item['relationships'][key].get('populated')
+    for key in (*RELATIONSHIP_SECTIONS, *STRUCTURE_SECTIONS):
+        if not any(item['relationships'].get(key, {}).get('populated')
                    for item in results):
             raise RuntimeError(f'No populated {key} page was verified')
 
@@ -79,7 +91,7 @@ def native_expectations(profiles):
             result[name] = {
                 'ddl': ddl, 'columns': columns,
                 'relationships': {key: resource['native'].get(key, [])
-                                  for key in RELATIONSHIP_SECTIONS},
+                                  for key in sections_for(kind)},
             }
         return result
     finally:
@@ -176,7 +188,7 @@ def verify(driver, wait, options, capture):
                                   'error': str(error)}
             capture(f'object-{name}-columns-keyboard-bottom')
         relationships = {}
-        for key, title in RELATIONSHIP_SECTIONS.items():
+        for key, title in sections_for(kind).items():
             payload = expected[name]['relationships'][key]
             try:
                 panel = section(title, key)
