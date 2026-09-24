@@ -261,6 +261,72 @@ def _capture(driver, options, state, records):
     }
 
 
+def _inspector_keyboard_evidence(driver, wait, capture):
+    inspector = driver.find_element(
+        By.CSS_SELECTOR, 'aside[aria-label="Inspector"]')
+    tabs = inspector.find_elements(By.CSS_SELECTOR, '[role="tab"]')
+    if len(tabs) < 2:
+        raise RuntimeError('Inspector tab fixture is incomplete')
+
+    def selected(index):
+        def ready(browser):
+            current = inspector.find_elements(By.CSS_SELECTOR, '[role="tab"]')
+            item = current[index]
+            panel = inspector.find_element(
+                By.CSS_SELECTOR, '[role="tabpanel"]')
+            return (item.get_attribute('aria-selected') == 'true' and
+                    browser.switch_to.active_element == item and
+                    panel.get_attribute('aria-labelledby') ==
+                    item.get_attribute('id'))
+        wait.until(ready)
+
+    tabs[0].send_keys(Keys.HOME)
+    selected(0)
+    pages = [tabs[0].text]
+    for index in range(1, len(tabs)):
+        driver.switch_to.active_element.send_keys(Keys.ARROW_RIGHT)
+        selected(index)
+        pages.append(driver.switch_to.active_element.text)
+        capture(f'inspector-keyboard-page-{index}')
+    driver.switch_to.active_element.send_keys(Keys.HOME)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.END)
+    selected(len(tabs) - 1)
+    driver.switch_to.active_element.send_keys(Keys.ARROW_RIGHT)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.ARROW_LEFT)
+    selected(len(tabs) - 1)
+    driver.switch_to.active_element.send_keys(Keys.HOME)
+    selected(0)
+    driver.switch_to.active_element.send_keys(Keys.TAB)
+    panel = inspector.find_element(By.CSS_SELECTOR, '[role="tabpanel"]')
+    wait.until(lambda browser: browser.switch_to.active_element == panel)
+    panel.send_keys(Keys.END)
+    wait.until(lambda browser: browser.execute_script(
+        'return arguments[0].scrollTop >= arguments[0].scrollHeight - '
+        'arguments[0].clientHeight - 1', panel))
+    bottom = driver.execute_script("""
+      const panel = arguments[0];
+      const message = panel.querySelector('[data-cde-empty-state] span');
+      if (!message) throw new Error('Properties empty-state is absent');
+      return {scroll_top: panel.scrollTop, scroll_height: panel.scrollHeight,
+        client_height: panel.clientHeight,
+        message_bottom: message.getBoundingClientRect().bottom,
+        panel_bottom: panel.getBoundingClientRect().bottom};
+    """, panel)
+    if bottom['message_bottom'] > bottom['panel_bottom'] + 1:
+        raise RuntimeError(
+            'Inspector message bottom is not keyboard reachable')
+    capture('inspector-keyboard-bottom')
+    panel.send_keys(Keys.HOME)
+    wait.until(lambda browser: browser.execute_script(
+        'return arguments[0].scrollTop <= 1', panel))
+    capture('inspector-keyboard-top')
+    return {'pages': pages, 'arrow_wrap_home_end': True,
+            'tab_enters_panel': True, 'home_returns_to_top': True,
+            'bottom': bottom}
+
+
 def _write_records(options, evidence):
     manifest = options.manifest_output
     existing = []
@@ -406,6 +472,8 @@ def run(options, password):
         layout = _layout_evidence(driver, options.font_scale)
         shell_layout = _shell_layout_evidence(driver, options.database)
         capture('shell-layout')
+        inspector_keyboard = _inspector_keyboard_evidence(
+            driver, wait, capture)
 
         _reveal_grid_column(driver, wait, 2)
         name = _visible_inputs(driver, 'NAME value')[0]
@@ -527,6 +595,7 @@ def run(options, password):
             'controls': controls,
             'layout_checks': layout,
             'shell_layout_checks': shell_layout,
+            'inspector_keyboard_checks': inspector_keyboard,
             'passed': True,
         }
     finally:
