@@ -262,6 +262,24 @@ def _capture(driver, options, state, records):
     }
 
 
+def _wait_for_editor(driver, wait, options):
+    try:
+        return _button(wait, 'Load rows')
+    except Exception:
+        # Hide all editable values before capturing a failed opening: a late
+        # credential prompt may still be visible. Never serialize its values.
+        try:
+            driver.execute_script('''
+                document.querySelectorAll('input, textarea, [contenteditable]')
+                  .forEach(node => node.style.visibility = 'hidden');
+            ''')
+            screenshot(driver, options.output_root / 'editor-open-failed.png',
+                       reset_scroll=False)
+        except Exception:
+            pass  # Preserve the original failure if evidence capture fails.
+        raise
+
+
 def _inspector_keyboard_evidence(driver, wait, capture):
     inspector = driver.find_element(
         By.CSS_SELECTOR, 'aside[aria-label="Inspector"]')
@@ -446,7 +464,7 @@ def run(options, password):
             password, endpoint_prompt_timeout=1,
         )
         complete_endpoint_prompt(driver, password, timeout=1)
-        _button(wait, 'Load rows')
+        _wait_for_editor(driver, wait, options)
         _choose_table(driver, wait, 'CUSTOMERS')
         capture('initial')
         load_button = _button(wait, 'Load rows')

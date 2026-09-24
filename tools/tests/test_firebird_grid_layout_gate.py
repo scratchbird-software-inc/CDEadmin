@@ -10,6 +10,31 @@ from tools.cdeadmin_firebird_grid_ui_gate import (
 )
 
 
+def test_editor_open_failure_masks_values_and_preserves_error(
+        monkeypatch, tmp_path):
+    from tools import cdeadmin_firebird_grid_ui_gate as gate
+    error = RuntimeError('editor missing')
+    monkeypatch.setattr(gate, '_button', Mock(side_effect=error))
+    capture = Mock(side_effect=RuntimeError('capture failed'))
+    monkeypatch.setattr(gate, 'screenshot', capture)
+    driver = Mock()
+    with pytest.raises(RuntimeError, match='editor missing'):
+        gate._wait_for_editor(driver, Mock(),
+                              SimpleNamespace(output_root=tmp_path))
+    assert 'visibility' in driver.execute_script.call_args.args[0]
+    capture.assert_called_once_with(
+        driver, tmp_path / 'editor-open-failed.png', reset_scroll=False)
+
+
+def test_successful_editor_open_does_not_hide_inputs(monkeypatch):
+    from tools import cdeadmin_firebird_grid_ui_gate as gate
+    button = Mock()
+    monkeypatch.setattr(gate, '_button', Mock(return_value=button))
+    driver = Mock()
+    assert gate._wait_for_editor(driver, Mock(), Mock()) is button
+    driver.execute_script.assert_not_called()
+
+
 def observation(scale=100):
     return {
         'column_widths': [n * scale / 100 for n in

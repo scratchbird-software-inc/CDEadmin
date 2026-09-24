@@ -16,7 +16,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -28,6 +27,7 @@ if __package__:
         ROOT,
         _free_port,
         _retarget_config,
+        _snapshot_config,
         _wait_for_server,
         _write_config,
     )
@@ -36,6 +36,7 @@ else:
         ROOT,
         _free_port,
         _retarget_config,
+        _snapshot_config,
         _wait_for_server,
         _write_config,
     )
@@ -250,7 +251,7 @@ def run(options):
         data_dir = temporary_root / 'runtime'
         data_dir.mkdir()
         config_database = data_dir / 'cdeadmin.db'
-        shutil.copy2(options.source_config_db, config_database)
+        _snapshot_config(options.source_config_db, config_database)
         database_label = Path(options.database).name
         _retarget_config(
             config_database, options.desktop_user, options.database,
