@@ -11,6 +11,7 @@ import {
   Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import PropTypes from 'prop-types';
+import {useTheme} from '@mui/material/styles';
 import gettext from 'sources/gettext';
 import {
   Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel,
@@ -1828,6 +1829,24 @@ KeyValueDataGrid.propTypes = {
 
 function StructuredDataGrid({catalog, resources, post, setError,
   languageProfile, databaseTargetId, initialResourceId}) {
+  const theme = useTheme();
+  const [rootFontSize, setRootFontSize] = useState(16);
+  const themeScale = theme.cdeadminPresentation?.scale ?? 100;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const measure = () => setRootFontSize(
+      Number.parseFloat(getComputedStyle(root).fontSize) || 16);
+    measure();
+    // Include runtime text overrides, not only the saved presentation profile.
+    const observer = new MutationObserver(measure);
+    observer.observe(root, {attributes: true, attributeFilter: ['style', 'class']});
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [themeScale]);
+  const editorScale = Math.max(themeScale / 100, rootFontSize / 16);
   const relations = (resources || []).filter(
     (item) => ['table', 'view', 'materialized-view'].includes(
       item.resource_kind
@@ -2095,6 +2114,9 @@ function StructuredDataGrid({catalog, resources, post, setError,
   ] : [];
   const gridColumns = (page?.columns || []).map((column) => ({
     ...column,
+    // Inline editors contain a NULL/value selector as well as the value.
+    // Keep them usable at enlarged text sizes; scroll rather than compress.
+    minWidth: Math.max(column.minWidth || 0, Math.ceil(360 * editorScale)),
     key: typeof column.key === 'string' ? column.key : column.name,
     name: `${column.name}${(column.identity_key || column.key === true) ? ' 🔑' : ''}`,
     editable: false,
@@ -2143,7 +2165,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
   if (page) {
     gridColumns.push({
       key: '__actions', name: gettext('Actions'), width: '18rem',
-      minWidth: 240,
+      minWidth: Math.ceil(320 * editorScale),
       exportable: false, editable: false,
       renderCell: ({row}) => row.__insert ?
         <Button disabled={working || (Object.keys(newValues).length === 0 &&

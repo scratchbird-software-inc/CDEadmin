@@ -63,8 +63,9 @@ export function rowInputValue(draft, kind, spec) {
 
 export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec}) {
   if (kind === 'array') return <ProviderArrayInput {...{draft, label, disabled, onChange, spec}} />;
-  return <Box sx={{display: 'flex', gap: 0.5, minWidth: 220}}>
+  return <Box sx={{display: 'flex', gap: 0.5, minWidth: '18rem'}}>
     <TextField size="small" select value={draft.isNull ? 'null' : 'value'}
+      sx={{minWidth: '6rem', flexShrink: 0}}
       disabled={disabled} SelectProps={{inputProps: {'aria-label': `${label} mode`}}}
       onChange={(event) => onChange({...draft, isNull: event.target.value === 'null'})}>
       <MenuItem value="value">{gettext('Value')}</MenuItem>

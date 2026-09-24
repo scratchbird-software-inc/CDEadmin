@@ -54,7 +54,10 @@ describe('CDEadmin main dock tab switcher', () => {
         primary: {main: '#00f', contrastText: '#fff'}},
       shape: {borderRadius: 0},
     };
-    const panel = rcdockOverride(theme)['.dock-layout']['& .dock-panel'];
+    const layout = rcdockOverride(theme)['.dock-layout'];
+    expect(layout['& .dock-bar'].flexShrink).toBe(0);
+    expect(layout['& .dock-tab'].height).toBe('auto');
+    const panel = layout['& .dock-panel'];
     expect(panel['&.dock-style-playground'][
       '& > .dock > .dock-bar:has(.dock-tab):not(:has(.dock-tab ~ .dock-tab))'
     ]).toEqual({display: 'none'});

@@ -16,6 +16,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,11 +115,67 @@ def _row_for_input(control):
     return control.find_element(By.XPATH, 'ancestor::*[@role="row"]')
 
 
+def _reveal_grid_column(driver, wait, index):
+    """Exercise horizontal scrolling without disabling grid virtualization."""
+    driver.execute_script("""
+        const grid = document.querySelector(
+          '[role="grid"][aria-label="Provider table or view rows"]');
+        if (!grid) throw new Error('Provider grid is missing');
+        const widths = getComputedStyle(grid).gridTemplateColumns
+          .split(' ').map(Number.parseFloat);
+        grid.scrollLeft = widths.slice(0, arguments[0] - 1)
+          .reduce((sum, width) => sum + width, 0);
+    """, index)
+    wait.until(lambda browser: browser.find_elements(
+        By.CSS_SELECTOR,
+        '[role="grid"][aria-label="Provider table or view rows"] '
+        f'[role="columnheader"][aria-colindex="{index}"]',
+    ))
+
+
 def _row_button(row, name):
     return next((
         item for item in row.find_elements(By.TAG_NAME, 'button')
         if item.is_displayed() and item.text.strip() == name
     ), None)
+
+
+def _layout_evidence(driver, scale):
+    observation = driver.execute_script("""
+        const grid = document.querySelector(
+          '[role="grid"][aria-label="Provider table or view rows"]');
+        const bar = grid.closest('.dock-panel')?.querySelector('.dock-bar');
+        const bounds = element => {
+          const r = element.getBoundingClientRect();
+          return {top: r.top, bottom: r.bottom, height: r.height};
+        };
+        return {
+          column_widths: getComputedStyle(grid).gridTemplateColumns
+            .split(' ').map(Number.parseFloat),
+          viewport_width: grid.clientWidth, content_width: grid.scrollWidth,
+          tab_bar: bar ? bounds(bar) : null,
+          tabs: bar ? [...bar.querySelectorAll('.dock-tab')].map(tab => ({
+            ...bounds(tab),
+            content: bounds(tab.querySelector('.dock-tab-btn') ||
+              tab.firstElementChild || tab)
+          })) : []
+        };
+    """)
+    widths = observation['column_widths']
+    if len(widths) != 5 or any(
+            not isinstance(width, (int, float)) or not math.isfinite(width) or
+            width < minimum * scale / 100 - 1
+            for width, minimum in zip(widths, [360, 360, 360, 360, 320])):
+        raise RuntimeError('Grid columns compressed below editor minimums')
+    bar = observation['tab_bar']
+    if not bar or not observation['tabs'] or any(
+            tab['top'] < bar['top'] - 1 or
+            tab['bottom'] > bar['bottom'] + 1 or
+            tab['content']['top'] < tab['top'] - 1 or
+            tab['content']['bottom'] > tab['bottom'] + 1
+            for tab in observation['tabs']):
+        raise RuntimeError('Workspace tabs extend outside their tab bar')
+    return observation
 
 
 def _grid_control_evidence(driver):
@@ -303,12 +360,16 @@ def run(options, password):
                 f'Visible inputs: {visible_input_labels}'
             )
         capture('loaded')
+        layout = _layout_evidence(driver, options.font_scale)
 
+        _reveal_grid_column(driver, wait, 2)
         name = _visible_inputs(driver, 'NAME value')[0]
         original_name = name.get_attribute('value')
         name.send_keys(Keys.CONTROL, 'a')
         name.send_keys('CDEadmin rollback probe')
-        save = _row_button(_row_for_input(name), 'Save')
+        edited_row = _row_for_input(name)
+        _reveal_grid_column(driver, wait, 5)
+        save = wait.until(lambda _driver: _row_button(edited_row, 'Save'))
         if save is None:
             raise RuntimeError('Firebird row Save control is unavailable')
         save.click()
@@ -318,6 +379,7 @@ def run(options, password):
         )))
         capture('update-staged')
         _button(wait, 'Rollback changes').click()
+        _reveal_grid_column(driver, wait, 2)
         wait.until(expected.invisibility_of_element_located((
             By.CSS_SELECTOR,
             '[aria-label="Staged provider grid changes"]',
@@ -337,13 +399,18 @@ def run(options, password):
             'REGION new value': 'QA',
         }
         new_control = None
-        for label, value in new_values.items():
-            candidates = _visible_inputs(driver, label)
+        for index, (label, value) in enumerate(new_values.items(), 1):
+            _reveal_grid_column(driver, wait, index)
+            candidates = wait.until(lambda browser: _visible_inputs(
+                browser, label))
             if len(candidates) != 1:
                 raise RuntimeError(f'Firebird grid field {label} is missing')
             candidates[0].send_keys(value)
             new_control = candidates[0]
-        insert = _row_button(_row_for_input(new_control), 'Insert row')
+        insert_row = _row_for_input(new_control)
+        _reveal_grid_column(driver, wait, 5)
+        insert = wait.until(lambda _driver: _row_button(
+            insert_row, 'Insert row'))
         if insert is None:
             raise RuntimeError('Firebird Insert row control is unavailable')
         insert.click()
@@ -353,6 +420,7 @@ def run(options, password):
         )))
         capture('insert-staged')
         _button(wait, 'Commit changes').click()
+        _reveal_grid_column(driver, wait, 1)
         wait.until(lambda value: any(
             item.get_attribute('value') == MARKER
             for item in _visible_inputs(value, 'CUSTOMER_ID value')
@@ -364,7 +432,8 @@ def run(options, password):
             if item.get_attribute('value') == MARKER
         )
         marker_row = _row_for_input(marker_control)
-        delete = _row_button(marker_row, 'Delete')
+        _reveal_grid_column(driver, wait, 5)
+        delete = wait.until(lambda _driver: _row_button(marker_row, 'Delete'))
         if delete is None:
             raise RuntimeError('Firebird Delete control is unavailable')
         delete.click()
@@ -379,6 +448,7 @@ def run(options, password):
         )))
         capture('delete-staged')
         _button(wait, 'Commit changes').click()
+        _reveal_grid_column(driver, wait, 1)
         wait.until(lambda value: not any(
             item.get_attribute('value') == MARKER
             for item in _visible_inputs(value, 'CUSTOMER_ID value')
@@ -410,6 +480,7 @@ def run(options, password):
             'credential_values_exported': False,
             'screenshots': screenshots,
             'controls': controls,
+            'layout_checks': layout,
             'passed': True,
         }
     finally:

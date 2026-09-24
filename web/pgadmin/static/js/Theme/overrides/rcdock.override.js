@@ -26,6 +26,7 @@ export default function rcdockOverride(theme) {
       },
       '& .dock-bar': {
         paddingLeft: 0,
+        flexShrink: 0,
         minHeight: 'var(--cde-control-height, 28px)',
         backgroundColor: theme.palette.background.default,
         ...theme.mixins.panelBorder.bottom,
@@ -134,6 +135,7 @@ export default function rcdockOverride(theme) {
       },
       '& .dock-tab': {
         minWidth: 'unset',
+        height: 'auto',
         borderBottom: 'none',
         marginRight: 0,
         background: 'unset',
