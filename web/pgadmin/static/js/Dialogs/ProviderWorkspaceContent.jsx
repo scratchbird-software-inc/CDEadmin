@@ -25,6 +25,7 @@ import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
+import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {providerConnectionFieldGridSx} from
@@ -1852,7 +1853,9 @@ function StructuredDataGrid({catalog, resources, post, setError,
   );
   const operations = targetDescriptor?.operations || [];
   const admitted = (operationId) =>
-    (target?.resource_kind === 'table' ||
+    ((target?.resource_kind === 'table' &&
+      (page?.operation_authority !== 'firebird-native-preparation' ||
+       page.row_operations?.includes(operationId))) ||
       (target?.resource_kind === 'view' && page?.editable &&
         page?.row_operations?.includes(operationId))) &&
     operations.some((item) => item.operation_id === operationId &&
@@ -2021,7 +2024,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
       const changes = {};
       Object.entries(edits[index] || {}).forEach(([name, value]) => {
         if (value !== editorValue(row.values[name])) {
-          changes[name] = nativeValue(value);
+          const kind = page.columns.find((column) => column.name === name)?.input_kind;
+          changes[name] = kind ? rowInputValue(value, kind) : nativeValue(value);
         }
       });
       if (Object.keys(changes).length === 0) return;
@@ -2043,7 +2047,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
     try {
       const values = {};
       Object.entries(newValues).forEach(([name, value]) => {
-        if (value !== '') values[name] = nativeValue(value);
+        const kind = page.columns.find((column) => column.name === name)?.input_kind;
+        values[name] = kind ? rowInputValue(value, kind) : nativeValue(value);
       });
       await mutate('insert', {values, options: target.resource_kind === 'view' ?
         {identity_token: page.insert_identity_token} : {}});
@@ -2090,28 +2095,49 @@ function StructuredDataGrid({catalog, resources, post, setError,
   ] : [];
   const gridColumns = (page?.columns || []).map((column) => ({
     ...column,
-    key: column.key || column.name,
-    name: `${column.name}${column.identity_key ? ' 🔑' : ''}`,
+    key: typeof column.key === 'string' ? column.key : column.name,
+    name: `${column.name}${(column.identity_key || column.key === true) ? ' 🔑' : ''}`,
     editable: false,
-    renderCell: ({row}) => <TextField size="small"
-      inputProps={{'aria-label': `${column.name} ${row.__insert ?
-        gettext('new value') : gettext('value')}`}}
-      placeholder={row.__insert ? gettext('New value') : undefined}
-      value={row.__insert ? (newValues[column.name] || '') :
-        (edits[row.__rowIndex]?.[column.name] ??
+    renderCell: ({row}) => <Box sx={{display: 'flex', alignItems: 'center'}}>
+      {column.input_kind ? <ProviderRowInput kind={column.input_kind}
+        label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
+        draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
+          (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name]))}
+        disabled={working || (row.__insert ?
+          (column.insertable ?? column.editable) === false :
+          column.editable === false || !page.editable)}
+        onChange={(value) => row.__insert ?
+          setNewValues((current) => ({...current, [column.name]: value})) :
+          setEdits((current) => ({...current, [row.__rowIndex]: {
+            ...current[row.__rowIndex], [column.name]: value,
+          }}))} /> : <TextField size="small"
+        inputProps={{'aria-label': `${column.name} ${row.__insert ?
+          gettext('new value') : gettext('value')}`}}
+        placeholder={row.__insert ? gettext('New value') : undefined}
+        value={row.__insert ? (newValues[column.name] || '') :
+          (edits[row.__rowIndex]?.[column.name] ??
           editorValue(row[column.name]))}
-      disabled={working || (row.__insert ?
-        (column.insertable ?? column.editable) === false : column.editable === false) ||
+        disabled={working || (row.__insert ?
+          (column.insertable ?? column.editable) === false : column.editable === false) ||
         (!row.__insert && !page.editable)}
-      onChange={(event) => row.__insert ?
-        setNewValues((current) => ({
-          ...current, [column.name]: event.target.value,
-        })) : setEdits((current) => ({
-          ...current,
-          [row.__rowIndex]: {
-            ...current[row.__rowIndex], [column.name]: event.target.value,
-          },
-        }))} />,
+        onChange={(event) => row.__insert ?
+          setNewValues((current) => ({
+            ...current, [column.name]: event.target.value,
+          })) : setEdits((current) => ({
+            ...current,
+            [row.__rowIndex]: {
+              ...current[row.__rowIndex], [column.name]: event.target.value,
+            },
+          }))} />}
+      {row.__insert && Object.hasOwn(newValues, column.name) &&
+      <Button size="small" disabled={working}
+        aria-label={gettext('Omit %s from insert', column.name)}
+        onClick={() => setNewValues((current) => {
+          const next = {...current};
+          delete next[column.name];
+          return next;
+        })}>{gettext('Omit')}</Button>}
+    </Box>,
   }));
   if (page) {
     gridColumns.push({
@@ -2174,10 +2200,12 @@ function StructuredDataGrid({catalog, resources, post, setError,
         {gettext('%s grid change(s) are staged in the provider session. Commit or roll back before changing tables or closing this workspace.', stagedMutationCount)}
       </Alert>}
       <Alert severity={page.editable ? 'info' : 'warning'} sx={{mt: 2}}>
-        {page.editable ? gettext('Edits use provider-issued native row identities.') :
-          target?.resource_kind === 'table' ?
-            gettext('This table is read-only because the provider did not admit a stable row identity.') :
-            gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
+        {admitted('insert') && !page.editable ?
+          gettext('Insertion is available. Existing rows cannot be changed without an admitted row identity.') :
+          page.editable ? gettext('Edits use provider-issued native row identities.') :
+            target?.resource_kind === 'table' ?
+              gettext('This table is read-only because the provider did not admit a stable row identity.') :
+              gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
       <ProviderDataGrid columns={gridColumns} rows={gridRows}
         contract={page.grid || {}}

@@ -53,7 +53,10 @@ def verify(connection, client, route, password, result):
                 'CREATE TABLE VI_BASE (ID INTEGER GENERATED ALWAYS AS '
                 'IDENTITY PRIMARY KEY, V INTEGER DEFAULT 7 NOT NULL)',
                 'CREATE VIEW VI_VIEW AS SELECT ID, V, V * 2 AS DOUBLED '
-                'FROM VI_BASE', 'CREATE TABLE VI_PENDING (K INTEGER)'):
+                'FROM VI_BASE', 'CREATE TABLE VI_PENDING (K INTEGER)',
+                'CREATE TABLE VI_TEXT_BASE (ID INTEGER GENERATED ALWAYS AS '
+                "IDENTITY PRIMARY KEY, V VARCHAR(40) DEFAULT 'fallback')",
+                'CREATE VIEW VI_TEXT_VIEW AS SELECT ID, V FROM VI_TEXT_BASE'):
             sql(admin, source)
             client.control_transaction(admin, 'commit')
         for index, (mode, action) in enumerate(
@@ -129,6 +132,52 @@ def verify(connection, client, route, password, result):
                         password, '<redacted>')})
             finally:
                 client.close_session(handle)
+        text_checks = result['view_insert_text_checks'] = []
+        original_target = target
+        target = {'resource_kind': 'view', 'resource_id': 'view:VI_TEXT_VIEW',
+                  'display_name': 'VI_TEXT_VIEW',
+                  'display_path': ['VI_TEXT_VIEW']}
+        for mode, values, expected in (
+                ('omitted', {}, 'fallback'), ('empty', {'V': ''}, ''),
+                ('null', {'V': None}, None)):
+            for action in ('commit', 'rollback'):
+                handle = client.open_session({'route': route})
+                observer = client.open_session({'route': route})
+                case = mode + ':' + action
+                query = 'SELECT ID, V FROM VI_TEXT_BASE ORDER BY ID'
+                try:
+                    before = sql(observer, query)
+                    client.control_transaction(observer, 'rollback')
+                    sql(handle, 'INSERT INTO VI_PENDING VALUES (999)')
+                    transaction = handle.main_transaction.info.id
+                    p = page(handle)
+                    assert 'insert' in p['row_operations']
+                    plan = base.ADMINISTRATION.plan(request(p, values))
+                    receipt = base.ADMINISTRATION.apply(
+                        client, plan, connection=handle)
+                    assert receipt['staged_in_provider_session']
+                    pending = sql(handle, query)
+                    assert pending[:-1] == before
+                    assert pending[-1][1] == expected
+                    assert len(pending) == len(before) + 1
+                    assert handle.main_transaction.info.id == transaction
+                    assert sql(handle, 'SELECT COUNT(*) FROM VI_PENDING '
+                               'WHERE K = 999')[0][0] > 0
+                    assert sql(observer, query) == before
+                    client.control_transaction(observer, 'rollback')
+                    client.control_transaction(handle, action)
+                    assert sql(observer, query) == (
+                        pending if action == 'commit' else before)
+                    text_checks.append({'case': case, 'passed': True})
+                except Exception as exc:
+                    text_checks.append({'case': case, 'passed': False})
+                    result['failures'].append({
+                        'case': 'text:' + case,
+                        'message': str(exc).replace(password, '<redacted>')})
+                finally:
+                    client.close_session(observer)
+                    client.close_session(handle)
+        target = original_target
         secret = secrets.token_urlsafe(24)
         reader = base._create_client(SimpleNamespace(
             acquire_secret=lambda *_: base.SecretLease(secret)))
@@ -243,6 +292,10 @@ def main():
                               'view_insert_checks'])
                           and len(result.get('view_insert_permissions', []))
                           == 3
+                          and len(result.get('view_insert_text_checks', []))
+                          == 6
+                          and all(c['passed'] for c in result[
+                              'view_insert_text_checks'])
                           and (args.bootstrap_contract or
                                result.get('provider_insert_passed') is True))
     args.output.write_text(json.dumps(result, indent=2) + '\n')

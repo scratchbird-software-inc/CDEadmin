@@ -3369,8 +3369,11 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
-    const mutation = operation === 'defaults' ? 'insert' : operation;
+  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-null']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+    const typed = operation.startsWith('typed-');
+    const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
+      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-null': null}[operation];
+    const mutation = typed || ['defaults', 'empty', 'null', 'omit'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3397,15 +3400,20 @@ describe('ProviderWorkspaceContent', () => {
         visual_admin_rows: {
           columns: [
             {name: 'id', key: true, editable: operation === 'update', insertable: false},
-            {name: 'name', key: false, editable: operation === 'update', insertable: true},
+            {name: 'second key', key: true, editable: false, insertable: false},
+            {name: 'name', key: false, editable: operation === 'update', insertable: true,
+              ...(typed ? {input_kind: operation === 'typed-null' ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
-            values: {id: 1, name: 'first'}, identity_token: 'row-one',
+            values: {id: 1, 'second key': 2, name: 'first'}, identity_token: 'row-one',
           }],
-          editable: true,
-          row_operations: [mutation],
+          editable: !(kind === 'table' && operation === 'defaults'),
+          ...(kind === 'table' && operation !== 'update' ? {
+            operation_authority: 'firebird-native-preparation',
+          } : {}),
+          row_operations: operation === 'select-only' ? [] : [mutation],
           insert_identity_token: 'insert-one',
-          insert_default_values: operation === 'defaults',
+          insert_default_values: ['defaults', 'omit'].includes(operation),
         },
         visual_admin_validate: {valid: true, errors: []},
         visual_admin_plan: {
@@ -3430,6 +3438,19 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(await screen.findByText('Load rows'));
     const name = await screen.findByDisplayValue('first');
     expect(screen.getByRole('textbox', {name: 'name value'})).toBe(name);
+    expect(screen.getByRole('textbox', {name: 'id value'})).toHaveValue('1');
+    expect(screen.getByRole('textbox', {name: 'second key value'})).toHaveValue('2');
+    if (operation === 'select-only') {
+      expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
+      expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
+      expect(name).toBeDisabled();
+      unmount();
+      return;
+    }
+    if (kind === 'table' && operation === 'defaults') {
+      expect(screen.getByText(/Insertion is available/)).toBeInTheDocument();
+    }
     if (kind === 'table') {
       expect(screen.getByRole('textbox', {name: 'name new value'}))
         .toHaveAttribute('placeholder', 'New value');
@@ -3447,11 +3468,31 @@ describe('ProviderWorkspaceContent', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
     } else if (mutation === 'insert') {
       expect(screen.getByRole('textbox', {name: 'id new value'})).toBeDisabled();
-      if (operation === 'defaults') {
+      if (operation === 'omit') {
+        fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+          {target: {value: 'discard'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Omit name from insert'}));
+        expect(screen.getByRole('textbox', {name: 'name new value'})).toHaveValue('');
+        expect(screen.queryByRole('button', {name: 'Omit name from insert'})).toBeNull();
+      }
+      if (['defaults', 'omit'].includes(operation)) {
         fireEvent.click(screen.getByRole('button', {name: 'Insert default row'}));
       } else {
         fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
           {target: {value: 'new'}});
+        if (typed) {
+          if (operation === 'typed-null') {
+            fireEvent.mouseDown(screen.getByRole('combobox', {name: 'name new value mode'}));
+            fireEvent.click(screen.getByRole('option', {name: 'NULL'}));
+          } else {
+            fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+              {target: {value: scalarValue}});
+          }
+        }
+        if (['empty', 'null'].includes(operation)) {
+          fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+            {target: {value: operation === 'empty' ? '' : 'null'}});
+        }
         fireEvent.click(screen.getByRole('button', {name: 'Insert row'}));
       }
     } else {
@@ -3464,8 +3505,10 @@ describe('ProviderWorkspaceContent', () => {
       'visual_admin_plan', 'visual_admin_apply', 'visual_admin_rows',
     ]);
     expect(api.post.mock.calls[2][1].request.draft).toEqual(mutation === 'insert' ? {
-      values: operation === 'defaults' ? {} : {name: 'new'},
-      options: {identity_token: 'insert-one'},
+      values: ['defaults', 'omit'].includes(operation) ? {} : {
+        name: typed ? scalarValue : operation === 'empty' ? '' : operation === 'null' ? null : 'new',
+      },
+      options: kind === 'view' ? {identity_token: 'insert-one'} : {},
     } : {
       selector: {identity_token: 'row-one'},
       ...(operation === 'delete' ? {confirmation: 'provider-row-delete'} :
