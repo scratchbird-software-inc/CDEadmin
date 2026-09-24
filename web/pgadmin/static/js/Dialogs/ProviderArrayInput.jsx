@@ -63,7 +63,7 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
     <Dialog open={expanded} onClose={() => setExpanded(false)} fullWidth maxWidth="md" aria-labelledby={titleId}>
       <DialogTitle id={titleId}>{label} [{spec.bounds.map((bound) => bound.join(':')).join(', ')}]</DialogTitle>
       <DialogContent>
-        <Typography>{gettext('Element type')}: {spec.element_kind}; {gettext('Scale')}: {spec.scale}</Typography>
+        <Typography>{gettext('Element type')}: {spec.element_kind}{spec.precision ? `(${spec.precision})` : ''}; {gettext('Scale')}: {spec.scale}</Typography>
         <Typography>{gettext('Changes remain in the row draft. Save the row, then explicitly commit or roll back the data session.')}</Typography>
         <TextField select size="small" value={draft.isNull ? 'null' : 'value'} disabled={disabled}
           SelectProps={{inputProps: {'aria-label': `${label} mode`}}}
@@ -104,6 +104,6 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
 
 ProviderArrayInput.propTypes = {
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
-  spec: PropTypes.shape({bounds: PropTypes.array.isRequired, element_kind: PropTypes.string.isRequired, scale: PropTypes.number}).isRequired,
+  spec: PropTypes.shape({bounds: PropTypes.array.isRequired, element_kind: PropTypes.string.isRequired, scale: PropTypes.number, precision: PropTypes.number}).isRequired,
   label: PropTypes.string.isRequired, disabled: PropTypes.bool, onChange: PropTypes.func.isRequired,
 };

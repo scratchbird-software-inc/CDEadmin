@@ -3,7 +3,8 @@
 The driver uses ctypes integers for array slices, which can silently wrap.
 Client-provided type labels are never authoritative for these checks.
 """
-from decimal import Decimal, DecimalException, localcontext
+from decimal import (Context, Decimal, DecimalException, Inexact,
+                     InvalidOperation, Overflow, localcontext)
 import re
 
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
@@ -40,11 +41,15 @@ def editor_specs(connection, columns):
             spec = descriptor(catalog, column['source_relation'],
                               column['source_field'])
         kind = {7: 'integer', 8: 'integer', 16: 'integer', 26: 'integer',
-                10: 'float32', 27: 'float64', 23: 'boolean'}.get(spec['type'])
+                10: 'float32', 27: 'float64', 23: 'boolean',
+                24: 'decfloat', 25: 'decfloat'}.get(spec['type'])
         if kind == 'integer' and (spec['subtype'] or spec['scale']):
             kind = 'decimal'
         if kind:
             result[column['native_name']] = {**spec, 'element_kind': kind}
+            if kind == 'decfloat':
+                result[column['native_name']]['precision'] = (
+                    16 if spec['type'] == 24 else 34)
     return result
 
 
@@ -58,6 +63,29 @@ def convert(value, spec):
 
     def leaf(item):
         code = spec['type']
+        if code in (24, 25):
+            if type(item) not in (str, int, Decimal) or not re.fullmatch(
+                    r'[+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'
+                    r'|s?NaN|Infinity)', str(item), re.ASCII | re.IGNORECASE):
+                raise RelationalClientError(
+                    'Firebird DECFLOAT array requires exact numeric text')
+            try:
+                number = Decimal(str(item), context=Context(
+                    traps=[InvalidOperation]))
+                if number.is_finite():
+                    # Native decimal64/decimal128 limits. Reject value-changing
+                    # driver rounding before slice packing; exact subnormals
+                    # and explicit native special values remain available.
+                    precision, emin, emax = ((16, -383, 384) if code == 24
+                                             else (34, -6143, 6144))
+                    Context(prec=precision, Emin=emin, Emax=emax, clamp=1,
+                            traps=[Inexact, Overflow, InvalidOperation]
+                            ).create_decimal(number)
+                return number
+            except DecimalException:
+                raise RelationalClientError(
+                    'Firebird DECFLOAT array value is not exactly '
+                    'representable at its native precision and range')
         if code in (7, 8, 16, 26):
             bits = {7: 16, 8: 32, 16: 64, 26: 128}[code]
             fixed = bool(spec['subtype'] or spec['scale'])

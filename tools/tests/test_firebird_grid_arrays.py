@@ -122,7 +122,7 @@ def test_scalars_do_not_add_preparation_or_catalog_roundtrips():
     (7, 0, 0, 'integer'), (8, 1, -2, 'decimal'), (16, 0, 0, 'integer'),
     (26, 2, -4, 'decimal'), (10, 0, 0, 'float32'),
     (27, 0, 0, 'float64'), (23, 0, 0, 'boolean'), (12, 0, 0, None),
-    (14, 0, 0, None), (24, 0, 0, None),
+    (14, 0, 0, None), (24, 0, 0, 'decfloat'), (25, 0, 0, 'decfloat'),
 ])
 def test_only_verified_element_types_advertise_editor(
         code, subtype, scale, kind):
@@ -139,3 +139,38 @@ def test_only_verified_element_types_advertise_editor(
         assert result['ALIAS']['element_kind'] == kind
         assert result['ALIAS']['bounds'] == [(-1, 2)]
         assert result['ALIAS']['scale'] == scale
+
+
+@pytest.mark.parametrize('code,values', [
+    (24, ['9.999999999999999e384', '1e-398', '-0', '1234567890123456']),
+    (25, ['9.999999999999999999999999999999999e6144', '1e-6176', '-0',
+          '1234567890123456789012345678901234']),
+])
+def test_decfloat_arrays_preserve_native_boundaries(code, values):
+    for value in values + ['NaN', '-NaN', 'sNaN', '-sNaN', 'Infinity',
+                           '-Infinity']:
+        actual = convert([value], spec(code))[0]
+        assert actual.compare_total(Decimal(value)) == 0
+
+
+@pytest.mark.parametrize('code,values', [
+    (24, ['1e385', '1e-399', '12345678901234567']),
+    (25, ['1e6145', '1e-6177', '12345678901234567890123456789012345']),
+])
+def test_decfloat_arrays_reject_silent_packing_rounding(code, values):
+    for value in values + ['NaN12', ' 1', '1_0', '', True, None, 0.1]:
+        with pytest.raises(RelationalClientError):
+            convert([value], spec(code))
+
+
+@pytest.mark.parametrize('code', [24, 25])
+def test_decfloat_binding_is_independent_of_ambient_decimal_context(code):
+    from decimal import localcontext, InvalidOperation, ROUND_DOWN
+    with localcontext() as context:
+        context.prec = 2
+        context.rounding = ROUND_DOWN
+        context.traps[InvalidOperation] = False
+        assert convert(['1234567890123456'], spec(code)) == [
+            Decimal('1234567890123456')]
+        with pytest.raises(RelationalClientError):
+            convert(['1e999999999999999999999999999999999'], spec(code))

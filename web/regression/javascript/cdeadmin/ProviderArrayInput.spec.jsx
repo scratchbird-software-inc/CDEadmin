@@ -96,4 +96,17 @@ describe('Native coordinate array editor', () => {
     const value = [['-0.0', '1.401298464324817e-45'], ['0.0', '1e-30']];
     expect(rowInputValue(rowInputDraft(value, 'array'), 'array', {...spec, element_kind: 'float32'})).toEqual(value);
   });
+  it.each(['NaN', '-NaN', 'sNaN', '-sNaN', 'Infinity', '-Infinity', '-0',
+    '1e-6176', '9.999999999999999999999999999999999e6144'])('retains DECFLOAT array text %s', (text) => {
+    const value = [[text, '0'], ['1', '2']];
+    expect(rowInputValue(rowInputDraft(value, 'array'), 'array', {...spec, element_kind: 'decfloat'})).toEqual(value);
+  });
+  it.each([16, 34])('shows native DECFLOAT precision %s and edits special values', (precision) => {
+    const specification = {...spec, element_kind: 'decfloat', precision};
+    render(<Editor initial={[['0', '1'], ['2', '3']]} specification={specification} />);
+    fireEvent.click(screen.getByRole('button', {name: /A \[/}));
+    expect(screen.getByText(`Element type: decfloat(${precision}); Scale: 0`)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', {name: 'A [-1, 3]'}), {target: {value: 'sNaN'}});
+    expect(rowInputValue(JSON.parse(screen.getByTestId('draft').textContent), 'array', specification)[0][0]).toBe('sNaN');
+  });
 });

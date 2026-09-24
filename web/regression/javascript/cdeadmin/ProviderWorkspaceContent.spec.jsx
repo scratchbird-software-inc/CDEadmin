@@ -3369,7 +3369,8 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each(['insert', 'update'])('submits coordinate array %s without numeric rounding', async (operation) => {
+  it.each([['insert', 'integer'], ['update', 'integer'], ['insert', 'decfloat'], ['update', 'decfloat']])('submits coordinate array %s %s without numeric rounding', async (operation, elementKind) => {
+    const editedValue = elementKind === 'decfloat' ? 'sNaN' : '9223372036854775807';
     api.get.mockResolvedValue({data: {data: {...bootstrap,
       resource_page: {items: [{resource_id: 'array-table', resource_kind: 'table',
         display_name: 'arrays', display_path: ['arrays']}]},
@@ -3379,7 +3380,7 @@ describe('ProviderWorkspaceContent', () => {
     api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
       open_session: {session_id: 'array-session'},
       visual_admin_rows: {columns: [{name: 'A', input_kind: 'array', editable: true, insertable: true,
-        array_spec: {bounds: [[-1, 0]], element_kind: 'integer', scale: 0}}],
+        array_spec: {bounds: [[-1, 0]], element_kind: elementKind, scale: 0}}],
       rows: [{values: {A: ['1', '2']}, identity_token: 'array-row'}],
       editable: true, row_operations: ['insert', 'update']},
       visual_admin_validate: {valid: true, errors: []},
@@ -3393,13 +3394,13 @@ describe('ProviderWorkspaceContent', () => {
     const label = operation === 'insert' ? 'A new value' : 'A value';
     fireEvent.click(await screen.findByRole('button', {name: `${label} [-1:0]`}));
     if (operation === 'insert') fireEvent.click(screen.getByRole('button', {name: 'Initialize array'}));
-    fireEvent.change(screen.getByRole('textbox', {name: `${label} [-1]`}), {target: {value: '9223372036854775807'}});
+    fireEvent.change(screen.getByRole('textbox', {name: `${label} [-1]`}), {target: {value: editedValue}});
     fireEvent.click(screen.getByRole('button', {name: 'Close array editor'}));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(screen.getByRole('button', {name: operation === 'insert' ? 'Insert row' : 'Save'}));
     await waitFor(() => expect(api.post.mock.calls.some(([, payload]) => payload.action === 'visual_admin_apply')).toBe(true));
     const planned = api.post.mock.calls.find(([, payload]) => payload.action === 'visual_admin_plan')[1];
-    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual(['9223372036854775807', operation === 'insert' ? '0' : '2']);
+    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual([editedValue, operation === 'insert' ? '0' : '2']);
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_action')).toBe(false);
     unmount();
   });
