@@ -211,6 +211,23 @@ def compile_operation(operation, draft, target=None):
     return command + ' VIEW ' + quoted + column_sql + ' AS\n' + definition
 
 
+def populate_recreation_metadata(name, native):
+    """Keep late-generated view DDL and its inspector page consistent."""
+    sections = [section for section in native.get('property_sections', [])
+                if section != 'ddl']
+    try:
+        native['ddl'] = recreation_sql(
+            name, native.get('definition'), native.get('columns'))
+        native.pop('ddl_unavailable_reason', None)
+        position = (sections.index('definition') + 1
+                    if 'definition' in sections else min(1, len(sections)))
+        sections.insert(position, 'ddl')
+    except RelationalClientError as error:
+        native.pop('ddl', None)
+        native['ddl_unavailable_reason'] = str(error)
+    native['property_sections'] = sections
+
+
 def form(operation, field):
     if operation not in OPERATIONS:
         raise RelationalClientError('Unknown Firebird view form')

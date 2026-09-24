@@ -3259,13 +3259,8 @@ def _resources(connection, request):
                 except RelationalClientError as error:
                     native['view_columns'] = []
                     native['view_columns_unavailable_reason'] = str(error)
-                try:
-                    native['ddl'] = views.recreation_sql(
-                        item['display_name'], native.get('definition'),
-                        native.get('columns'))
-                except RelationalClientError as error:
-                    native.pop('ddl', None)
-                    native['ddl_unavailable_reason'] = str(error)
+                views.populate_recreation_metadata(item['display_name'],
+                                                   native)
         return list(resources.values())
     finally:
         try:

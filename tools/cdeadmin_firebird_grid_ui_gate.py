@@ -341,6 +341,12 @@ def _write_records(options, evidence):
     rows = []
     viewport = f'{options.width}x{options.height}'
     for state, value in evidence['screenshots'].items():
+        subject = next((item for item in evidence.get(
+            'populated_inspector_checks', [])
+            if state.startswith('object-' + item['name'] + '-')), None)
+        command_id = '' if subject else 'database.firebird.data'
+        form_id = ('provider_object_properties' if subject else
+                   'firebird_structured_data_grid')
         screenshot_path = Path(value['path'])
         occurrence_path = screenshot_path.with_suffix('.json')
         occurrence = {
@@ -351,8 +357,8 @@ def _write_records(options, evidence):
             'reference_version': '5.0.4',
             'server_label': options.server,
             'database_label': options.database,
-            'command_id': 'database.firebird.data',
-            'form_id': 'firebird_structured_data_grid',
+            'command_id': command_id,
+            'form_id': form_id,
             'state': state,
             'viewport': viewport,
             'theme': options.theme,
@@ -375,10 +381,10 @@ def _write_records(options, evidence):
             'profile_id': 'firebird-native',
             'server_id': options.server,
             'database_target_id': options.database,
-            'command_id': 'database.firebird.data',
-            'form_id': 'firebird_structured_data_grid',
-            'resource_kind': 'table',
-            'resource_id': 'CUSTOMERS',
+            'command_id': command_id,
+            'form_id': form_id,
+            'resource_kind': subject['kind'] if subject else 'table',
+            'resource_id': subject['name'] if subject else 'CUSTOMERS',
             'state': state,
             'viewport': viewport,
             'device_scale': '1',
@@ -575,6 +581,8 @@ def run(options, password):
             )) is not None and not control.is_enabled()
         ))
         capture('session-closed')
+        from tools.cdeadmin_firebird_populated_inspector import verify
+        populated_inspector = verify(driver, wait, options, capture)
         return {
             'schema': 'cdeadmin.firebird-grid-ui-gate.v1',
             'captured_at': datetime.now(timezone.utc).isoformat(),
@@ -596,6 +604,7 @@ def run(options, password):
             'layout_checks': layout,
             'shell_layout_checks': shell_layout,
             'inspector_keyboard_checks': inspector_keyboard,
+            'populated_inspector_checks': populated_inspector,
             'passed': True,
         }
     finally:

@@ -47,6 +47,11 @@ export function beforeOpenProviderDatabase(tree, serverNode, item) {
   const serverData = serverItem ? tree.itemData(serverItem) : undefined;
   if (!serverData?.cde_endpoint) return true;
   if (providerEndpointSessionReady(serverData)) {
+    // Aspen caches an empty result as a loaded directory, including when
+    // an earlier request failed before endpoint verification. A deliberate
+    // reopen must retry that read, not permanently present an empty catalog.
+    // Preserve populated branches and never load before verification.
+    if (item.children?.length === 0) item._children = null;
     return true;
   }
   serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
