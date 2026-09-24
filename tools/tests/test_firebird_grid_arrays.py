@@ -131,7 +131,8 @@ def test_only_verified_element_types_advertise_editor(
     from pgadmin.cdeadmin.providers.firebird.grid_arrays import editor_specs
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
-    cursor.fetchall.return_value = [(code, subtype, scale, 0, -1, 2)]
+    cursor.fetchall.return_value = [
+        (code, subtype, scale, 0, -1, 2, None, None)]
     result = editor_specs(connection, [{
         'native_type': 'ARRAY', 'source_relation': 'T', 'source_field': 'A',
         'native_name': 'ALIAS'}])
@@ -175,3 +176,37 @@ def test_decfloat_binding_is_independent_of_ambient_decimal_context(code):
             Decimal('1234567890123456')]
         with pytest.raises(RelationalClientError):
             convert(['1e999999999999999999999999999999999'], spec(code))
+
+
+@pytest.mark.parametrize('charset,kind', [
+    ('ASCII', 'text'), ('UTF8', 'text'), ('ISO8859_1', 'text'),
+    ('WIN1252', 'text'), ('OCTETS', 'binary'), ('NONE', None),
+    ('UNICODE_FSS', None)])
+def test_fixed_character_editor_admission(charset, kind):
+    from unittest.mock import MagicMock
+    from pgadmin.cdeadmin.providers.firebird.grid_arrays import editor_specs
+    connection = MagicMock()
+    catalog = connection.cursor.return_value.__enter__.return_value
+    catalog.fetchall.return_value = [(14, 0, 0, 0, -1, 0, 8, charset)]
+    result = editor_specs(connection, [{
+        'native_type': 'ARRAY', 'source_relation': 'T', 'source_field': 'A',
+        'native_name': 'A'}])
+    assert bool(result) == bool(kind)
+    if kind:
+        assert result['A']['element_kind'] == kind
+        assert result['A']['length'] == 8
+        assert result['A']['charset'] == charset
+
+
+def test_character_binding_uses_declared_length_and_native_kind():
+    from pgadmin.cdeadmin.providers.firebird.grid_values import normalize_value
+    text = dict(spec(14), charset='UTF8', length=2)
+    binary = dict(spec(14), charset='OCTETS', length=2)
+    assert convert(['🐦é'], text) == ['🐦é']
+    assert convert([normalize_value(b'\0\xff')], binary) == [b'\0\xff']
+    for value in (1, None, {}, '123'):
+        with pytest.raises(RelationalClientError):
+            convert([value], text)
+    for value in ('AA==', None, b'123'):
+        with pytest.raises(RelationalClientError):
+            convert([value], binary)

@@ -61,6 +61,11 @@ def verify(connection, client, route, password, result, *, binary_only=False):
                     expected = [[item.ljust(width, b'\0') for item in row]
                                 for row in original]
                     initial = page()
+                    column = next(c for c in initial['columns']
+                                  if c['name'] == 'A')
+                    assert column['array_spec']['element_kind'] == 'binary'
+                    assert column['array_spec']['length'] == width
+                    assert column['array_spec']['charset'] == 'OCTETS'
                     apply('insert', {'values': {
                         'ID': 1, 'A': normalize_value(original)},
                                      'options': {'identity_token': initial[

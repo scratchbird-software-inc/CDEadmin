@@ -11,6 +11,47 @@ function Editor({initial, specification = spec, disabled = false}) {
 }
 
 describe('Native coordinate array editor', () => {
+  it.each(['text', 'binary'])('initializes empty %s elements without shared objects', (element_kind) => {
+    expect(newArray({...spec, element_kind})).toEqual([['', ''], ['', '']]);
+  });
+  it('retains Unicode, control characters, empty text and trailing spaces', () => {
+    const values = [['🐦é', 'a\0b'], ['line1\nline2', ' ']];
+    expect(rowInputValue(rowInputDraft(values, 'array'), 'array', {...spec, element_kind: 'text', length: 20})).toEqual(values);
+  });
+  it('uses a multiline text control without losing unedited NUL or sibling values', () => {
+    render(<Editor initial={['a\0b', ' ']} specification={{...spec, bounds: [[1, 2]], element_kind: 'text', length: 20, charset: 'UTF8'}} />);
+    fireEvent.click(screen.getByRole('button', {name: /A \[/}));
+    const input = screen.getByRole('textbox', {name: 'A [1]'});
+    expect(input.tagName).toBe('TEXTAREA');
+    expect(input).toHaveValue('a\0b');
+    fireEvent.change(input, {target: {value: 'line1\nline2'}});
+    expect(JSON.parse(JSON.parse(screen.getByTestId('draft').textContent).text)).toEqual(['line1\nline2', ' ']);
+  });
+  it.each(['text', 'binary'])('keeps %s controls disabled when mutation is not allowed', (element_kind) => {
+    render(<Editor initial={['', '']} disabled specification={{...spec, bounds: [[1, 2]], element_kind}} />);
+    fireEvent.click(screen.getByRole('button', {name: /A \[/}));
+    expect(screen.getByRole('textbox', {name: 'A [1]'})).toBeDisabled();
+    expect(screen.getByRole('textbox', {name: 'A [2]'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Close array editor'})).not.toBeDisabled();
+  });
+  it('counts Unicode characters, rejects overlength and non-text leaves', () => {
+    const textSpec = {...spec, bounds: [[1, 1]], element_kind: 'text', length: 2};
+    expect(rowInputValue(rowInputDraft(['🐦é'], 'array'), 'array', textSpec)).toEqual(['🐦é']);
+    for (const value of ['🐦éx', 123, {}]) expect(() => rowInputValue(rowInputDraft([value], 'array'), 'array', textSpec)).toThrow();
+  });
+  it('preserves binary envelopes, edits Base64 and validates native byte length', () => {
+    const binarySpec = {...spec, bounds: [[1, 2]], element_kind: 'binary', length: 2, charset: 'OCTETS'};
+    const original = [{encoding: 'base64', data: 'AP8=', byte_length: 2}, {encoding: 'base64', data: '', byte_length: 0}];
+    expect(rowInputValue(rowInputDraft(original, 'array'), 'array', binarySpec)).toEqual(original);
+    for (const bad of ['!!!!', 'YWJj']) expect(() => rowInputValue(rowInputDraft([bad, ''], 'array'), 'array', binarySpec)).toThrow();
+    render(<Editor initial={original} specification={binarySpec} />);
+    fireEvent.click(screen.getByRole('button', {name: /A \[/}));
+    expect(screen.getByRole('textbox', {name: 'A [1]'})).toHaveValue('AP8=');
+    expect(screen.getByText(/Declared length/)).toHaveTextContent('2 bytes');
+    fireEvent.change(screen.getByRole('textbox', {name: 'A [1]'}), {target: {value: '/wA='}});
+    const draft = JSON.parse(screen.getByTestId('draft').textContent);
+    expect(rowInputValue(draft, 'array', binarySpec)).toEqual([{encoding: 'base64', data: '/wA=', byte_length: 2}, original[1]]);
+  });
   let originalHeight;
   beforeEach(() => { originalHeight = window.innerHeight; window.innerHeight = 1200; });
   afterEach(() => { window.innerHeight = originalHeight; });

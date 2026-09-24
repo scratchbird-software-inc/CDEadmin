@@ -72,6 +72,14 @@ def verify(connection, client, route, password, result, *,
                     expected = tuple(item.ljust(8) if kind == 'CHAR' else item
                                      for row in original for item in row)
                     initial = page()
+                    column = next(c for c in initial['columns']
+                                  if c['name'] == 'A')
+                    if kind == 'CHAR':
+                        assert column['array_spec']['element_kind'] == 'text'
+                        assert column['array_spec']['length'] == 8
+                        assert column['array_spec']['charset'] == charset
+                    else:
+                        assert column.get('input_kind') != 'array'
                     apply('insert', {'values': {'ID': 1, 'A': original},
                                      'options': {'identity_token': initial[
                                          'insert_identity_token']}})

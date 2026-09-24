@@ -3369,9 +3369,9 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, elementKind) => {
-    const temporalDefault = {date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[elementKind];
-    const editedValue = {decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
+  it.each(['integer', 'decfloat', 'date', 'time', 'timestamp', 'text', 'binary'].flatMap((kind) => [['insert', kind], ['update', kind]]))('submits coordinate array %s %s without numeric rounding', async (operation, elementKind) => {
+    const temporalDefault = {text: '', binary: '', date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[elementKind];
+    const editedValue = {text: 'line1\né', binary: 'AP8=', decfloat: 'sNaN', date: '0001-01-01', time: '23:59:59.9999', timestamp: '0001-01-01 12:34:56.0001'}[elementKind] ?? '9223372036854775807';
     api.get.mockResolvedValue({data: {data: {...bootstrap,
       resource_page: {items: [{resource_id: 'array-table', resource_kind: 'table',
         display_name: 'arrays', display_path: ['arrays']}]},
@@ -3401,7 +3401,8 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(screen.getByRole('button', {name: operation === 'insert' ? 'Insert row' : 'Save'}));
     await waitFor(() => expect(api.post.mock.calls.some(([, payload]) => payload.action === 'visual_admin_apply')).toBe(true));
     const planned = api.post.mock.calls.find(([, payload]) => payload.action === 'visual_admin_plan')[1];
-    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual([editedValue, temporalDefault ?? (operation === 'insert' ? '0' : '2')]);
+    const expected = [editedValue, temporalDefault ?? (operation === 'insert' ? '0' : '2')];
+    expect(planned.request.draft[operation === 'insert' ? 'values' : 'changes'].A).toEqual(elementKind === 'binary' ? expected.map((data) => ({encoding: 'base64', data, byte_length: atob(data).length})) : expected);
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_action')).toBe(false);
     unmount();
   });

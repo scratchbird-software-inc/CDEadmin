@@ -20,7 +20,9 @@ export function rowInputValue(draft, kind, spec) {
         if (depth < lengths.length - 1) return visit(item, depth + 1);
         if (item == null) throw new Error(gettext('Array elements cannot be NULL.'));
         if (typeof item === 'number' && !Number.isSafeInteger(item)) throw new Error(gettext('Exact array numbers must be transmitted as text.'));
-        const result = rowInputValue(rowInputDraft(item), spec.element_kind);
+        if (spec.element_kind === 'text' && typeof item !== 'string') throw new Error(gettext('Text array elements must be strings.'));
+        const result = rowInputValue(rowInputDraft(item, spec.element_kind), spec.element_kind);
+        if (spec.length && (spec.element_kind === 'binary' ? result.byte_length > spec.length : spec.element_kind === 'text' && Array.from(result).length > spec.length)) throw new Error(gettext('Array element exceeds the declared length.'));
         return ['float32', 'float64'].includes(spec.element_kind) ? result.data : result;
       });
     };

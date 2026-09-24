@@ -15,20 +15,26 @@ def descriptor(catalog, relation, field):
     catalog.execute(
         'SELECT F.RDB$FIELD_TYPE, F.RDB$FIELD_SUB_TYPE, '
         'F.RDB$FIELD_SCALE, D.RDB$DIMENSION, '
-        'D.RDB$LOWER_BOUND, D.RDB$UPPER_BOUND '
+        'D.RDB$LOWER_BOUND, D.RDB$UPPER_BOUND, '
+        'F.RDB$CHARACTER_LENGTH, TRIM(C.RDB$CHARACTER_SET_NAME) '
         'FROM RDB$RELATION_FIELDS R JOIN RDB$FIELDS F ON '
         'F.RDB$FIELD_NAME = R.RDB$FIELD_SOURCE '
         'JOIN RDB$FIELD_DIMENSIONS D ON '
         'D.RDB$FIELD_NAME = F.RDB$FIELD_NAME '
+        'LEFT JOIN RDB$CHARACTER_SETS C ON '
+        'C.RDB$CHARACTER_SET_ID = F.RDB$CHARACTER_SET_ID '
         'WHERE R.RDB$RELATION_NAME = ? AND R.RDB$FIELD_NAME = ? '
         'ORDER BY D.RDB$DIMENSION', (relation, field))
     rows = catalog.fetchall()
     if not rows or [row[3] for row in rows] != list(range(len(rows))):
         raise RelationalClientError(
             'Firebird array destination metadata unavailable')
-    return {'type': rows[0][0], 'subtype': rows[0][1] or 0,
-            'scale': rows[0][2] or 0,
-            'bounds': [(row[4], row[5]) for row in rows]}
+    result = {'type': rows[0][0], 'subtype': rows[0][1] or 0,
+              'scale': rows[0][2] or 0,
+              'bounds': [(row[4], row[5]) for row in rows]}
+    if result['type'] == 14:
+        result.update(length=rows[0][6], charset=rows[0][7])
+    return result
 
 
 def editor_specs(connection, columns):
@@ -46,6 +52,10 @@ def editor_specs(connection, columns):
                 13: 'time', 35: 'timestamp'}.get(spec['type'])
         if kind == 'integer' and (spec['subtype'] or spec['scale']):
             kind = 'decimal'
+        if (spec['type'] == 14 and spec.get('length') and
+                spec.get('charset') in {
+                    'ASCII', 'UTF8', 'ISO8859_1', 'WIN1252', 'OCTETS'}):
+            kind = 'binary' if spec['charset'] == 'OCTETS' else 'text'
         if kind:
             result[column['native_name']] = {**spec, 'element_kind': kind}
             if kind == 'decfloat':
@@ -64,6 +74,15 @@ def convert(value, spec):
 
     def leaf(item):
         code = spec['type']
+        if code == 14:
+            binary = spec.get('charset') == 'OCTETS'
+            item = bind_value(item) if binary else item
+            if (not isinstance(item, (bytes, bytearray) if binary else str) or
+                    not spec.get('length') or len(item) > spec['length']):
+                raise RelationalClientError(
+                    'Firebird CHAR array requires values within '
+                    'its declared character or byte length')
+            return item
         if code in (12, 13, 35):
             from .temporal_arrays import parse
             return parse(item, code)

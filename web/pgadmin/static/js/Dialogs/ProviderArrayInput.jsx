@@ -24,7 +24,7 @@ export function newArray(spec, depth = 0) {
   const lengths = arrayShape(spec);
   // Explicit UI allocation guard, not a native engine limit.
   if (lengths.reduce((a, b) => a * b, 1) > 100000) throw new Error(gettext('Initializing more than 100,000 array elements is not available in this editor.'));
-  const initial = {boolean: false, date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[spec.element_kind] ?? '0';
+  const initial = {text: '', binary: '', boolean: false, date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[spec.element_kind] ?? '0';
   return Array.from({length: lengths[depth]}, () => depth === lengths.length - 1 ? initial : newArray(spec, depth + 1));
 }
 
@@ -64,6 +64,8 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
       <DialogTitle id={titleId}>{label} [{spec.bounds.map((bound) => bound.join(':')).join(', ')}]</DialogTitle>
       <DialogContent>
         <Typography>{gettext('Element type')}: {spec.element_kind}{spec.precision ? `(${spec.precision})` : ''}; {gettext('Scale')}: {spec.scale}</Typography>
+        {spec.length && <Typography>{gettext('Declared length')}: {spec.length} {spec.element_kind === 'binary' ? gettext('bytes') : gettext('characters')}; {gettext('Character set')}: {spec.charset}</Typography>}
+        {spec.element_kind === 'binary' && <Typography>{gettext('Enter each element as canonical Base64. Fixed-width values are zero-padded by the engine.')}</Typography>}
         <Typography>{gettext('Changes remain in the row draft. Save the row, then explicitly commit or roll back the data session.')}</Typography>
         <TextField select size="small" value={draft.isNull ? 'null' : 'value'} disabled={disabled}
           SelectProps={{inputProps: {'aria-label': `${label} mode`}}}
@@ -80,7 +82,9 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
               items[coordinate - spec.bounds[dimension][0]], value);
             const name = `${label} [${coordinates.join(', ')}]`;
             return <TextField key={index} size="small" fullWidth helperText={name}
-              select={spec.element_kind === 'boolean'} value={String(element)}
+              select={spec.element_kind === 'boolean'}
+              multiline={spec.element_kind === 'text'}
+              value={spec.element_kind === 'binary' && element?.encoding === 'base64' ? element.data : String(element)}
               disabled={disabled || draft.isNull}
               inputProps={{'aria-label': name}}
               SelectProps={{inputProps: {'aria-label': name}}}
@@ -104,6 +108,6 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
 
 ProviderArrayInput.propTypes = {
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
-  spec: PropTypes.shape({bounds: PropTypes.array.isRequired, element_kind: PropTypes.string.isRequired, scale: PropTypes.number, precision: PropTypes.number}).isRequired,
+  spec: PropTypes.shape({bounds: PropTypes.array.isRequired, element_kind: PropTypes.string.isRequired, scale: PropTypes.number, precision: PropTypes.number, length: PropTypes.number, charset: PropTypes.string}).isRequired,
   label: PropTypes.string.isRequired, disabled: PropTypes.bool, onChange: PropTypes.func.isRequired,
 };
