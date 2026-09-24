@@ -1,8 +1,11 @@
-"""Scoped temporal array support for the qualified firebird-driver API.
+"""Scoped array buffer corrections for the qualified firebird-driver API.
 
 ISC_DATE is signed; ISC_TIME is unsigned. firebird-driver 2.0.3 omits signed
 packing for array dates/timestamps. This cursor corrects only those array
 leaves, without modifying driver files, global classes or scalar encoding.
+Character leaves use fresh, explicitly padded buffers. The legacy native
+VARCHAR slice descriptor is a C string, not a length-prefixed SQL VARCHAR;
+embedded NUL input must be rejected rather than silently truncated.
 """
 from ctypes import byref, memmove
 from datetime import date, datetime, time
@@ -41,6 +44,37 @@ def parse(value, code):
 class TemporalArrayCursor(core.Cursor):
     def _fill_db_array_buffer(self, esize, dtype, subtype, scale, dim,
                               dimensions, value, valuebuf, buf, bufpos):
+        text_types = (fbapi.blr_text, fbapi.blr_text2)
+        varying_types = (fbapi.blr_varying, fbapi.blr_varying2)
+        if dtype in text_types + varying_types and dim == len(dimensions)-1:
+            varying = dtype in varying_types
+            capacity = esize - 2 if varying else esize
+            if capacity < 1:
+                raise RelationalClientError('Invalid character array size')
+            for item in value:
+                if not isinstance(item, str):
+                    raise RelationalClientError(
+                        'Character array requires text elements')
+                try:
+                    packed = item.encode(self._encoding)
+                except UnicodeError as exc:
+                    raise RelationalClientError(
+                        'Character array value cannot use the connection '
+                        'encoding') from exc
+                if len(packed) > capacity:
+                    raise RelationalClientError(
+                        'Character array value exceeds native byte capacity')
+                if varying and b'\0' in packed:
+                    raise RelationalClientError(
+                        'Native VARCHAR array slice cannot preserve '
+                        'embedded NUL')
+                # Never reuse ctypes .value: shorter leaves can otherwise
+                # inherit bytes from the previous leaf. CHAR pads with spaces;
+                # VARCHAR requires a terminating NUL and zeroed remainder.
+                packed = packed.ljust(esize, b'\0' if varying else b' ')
+                memmove(byref(buf, bufpos), packed, esize)
+                bufpos += esize
+            return bufpos
         if (dtype not in (fbapi.blr_sql_date, fbapi.blr_timestamp) or
                 dim != len(dimensions)-1):
             return super()._fill_db_array_buffer(
