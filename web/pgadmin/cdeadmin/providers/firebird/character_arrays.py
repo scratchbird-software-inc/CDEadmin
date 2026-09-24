@@ -19,6 +19,8 @@ def metadata(cursor, relation, field):
             'WHERE R.RDB$RELATION_NAME=? AND R.RDB$FIELD_NAME=?',
             (connection.charset or 'NONE', relation, field))
         result = catalog.fetchone()
+    if result and result[0] == 14 and result[2] == 1:
+        return (*result[:3], 1)
     return (result if result and result[0] in (14, 37) and result[2] != 1
             else None)
 
@@ -63,7 +65,7 @@ def read(cursor, desc):
     description = metadata(cursor, desc.relation, desc.field)
     if description is None:
         return False, None
-    code, characters, _, _ = description
+    code, characters, charset, _ = description
     bounds, dimensions, size, count = layout(
         cursor, desc.relation, desc.field, description)
     data = create_string_buffer(count * size)
@@ -71,9 +73,14 @@ def read(cursor, desc):
     raw_id = cursor._stmt._out_buffer[desc.offset:desc.offset + desc.length]
     array_id = api.ISC_QUAD.from_buffer_copy(raw_id)
     status = api.ISC_STATUS_ARRAY()
-    api.get_api().isc_array_get_slice(
-        status, cursor._connection._get_handle(),
-        cursor._transaction._get_handle(), array_id, bounds, data, length)
+    if charset == 1:
+        from .array_sdl import octets
+        cursor._connection._att.get_slice(
+            cursor._transaction._tra, array_id, octets(bounds), b'', data)
+    else:
+        api.get_api().isc_array_get_slice(
+            status, cursor._connection._get_handle(),
+            cursor._transaction._get_handle(), array_id, bounds, data, length)
     if api.db_api_error(status):
         raise api.exception_from_status(DatabaseError, status,
                                         'Character array read')
@@ -81,6 +88,9 @@ def read(cursor, desc):
     raw = data.raw
     for index in range(count):
         packed = raw[index * size:(index + 1) * size]
+        if charset == 1:
+            leaves.append(packed)
+            continue
         if code == 37:
             packed = packed.split(b'\0', 1)[0]
         value = packed.decode(cursor._encoding)
@@ -102,7 +112,9 @@ def read(cursor, desc):
 
 def encode(values, dimensions, description, encoding):
     """Validate every element before allocating a native array slice."""
-    code, characters, _, width = description
+    code, characters, charset, width = description
+    if charset == 1 and code != 14:
+        raise RelationalClientError('Only fixed OCTETS array slices supported')
     capacity = characters * width
     size = capacity + (2 if code == 37 else 0)
     leaves = []
@@ -114,6 +126,15 @@ def encode(values, dimensions, description, encoding):
         for item in items:
             if depth < len(dimensions)-1:
                 visit(item, depth + 1)
+                continue
+            if charset == 1:
+                from .grid_values import bind_value
+                item = bind_value(item)
+                if (not isinstance(item, (bytes, bytearray)) or
+                        len(item) > size):
+                    raise RelationalClientError(
+                        'OCTETS array requires bytes within declared length')
+                leaves.append(bytes(item).ljust(size, b'\0'))
                 continue
             if not isinstance(item, str) or len(item) > characters:
                 raise RelationalClientError(
@@ -149,18 +170,24 @@ def pack(cursor, meta, buffer, parameters, native_pack):
             continue
         bounds, dimensions, _, _ = layout(cursor, relation, field, description)
         data = encode(value, dimensions, description, cursor._encoding)
-        pending.append((index, bounds, data))
+        pending.append((index, bounds, data, description[2]))
         delegated[index] = None
     result_meta, result_buffer = native_pack(meta, buffer, delegated)
     try:
-        for index, bounds, data in pending:
+        for index, bounds, data, charset in pending:
             array_id = api.ISC_QUAD(0, 0)
             status = api.ISC_STATUS_ARRAY()
             packed = create_string_buffer(data, len(data))
-            api.get_api().isc_array_put_slice(
-                status, cursor._connection._get_handle(),
-                cursor._transaction._get_handle(), pointer(array_id), bounds,
-                packed, api.ISC_LONG(len(data)))
+            if charset == 1:
+                from .array_sdl import octets
+                cursor._connection._att.put_slice(
+                    cursor._transaction._tra, array_id, octets(bounds), b'',
+                    packed)
+            else:
+                api.get_api().isc_array_put_slice(
+                    status, cursor._connection._get_handle(),
+                    cursor._transaction._get_handle(), pointer(array_id),
+                    bounds, packed, api.ISC_LONG(len(data)))
             if api.db_api_error(status):
                 raise api.exception_from_status(DatabaseError, status,
                                                 'Character array write')
