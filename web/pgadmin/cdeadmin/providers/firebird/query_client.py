@@ -466,7 +466,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
     def _query_cursor(self, handle, request):
         dialect = requested_dialect(request)
         if dialect is None or dialect == handle.sql_dialect:
-            return super()._query_cursor(handle, request)
+            from .temporal_arrays import cursor
+            return cursor(handle)
         return DialectCursor(handle, dialect)
 
     def _fetch_query_rows(self, cursor, request):

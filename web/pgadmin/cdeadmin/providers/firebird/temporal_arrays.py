@@ -42,6 +42,10 @@ def parse(value, code):
 
 
 class TemporalArrayCursor(core.Cursor):
+    def _unpack_output(self):
+        from .character_arrays import unpack
+        return unpack(self, super()._unpack_output)
+
     def _fill_db_array_buffer(self, esize, dtype, subtype, scale, dim,
                               dimensions, value, valuebuf, buf, bufpos):
         text_types = (fbapi.blr_text, fbapi.blr_text2)

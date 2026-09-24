@@ -3215,11 +3215,15 @@ class RelationalAdministration:
                     connection, path[-1], operation='insert-defaults')
                 key_columns = (key_columns or delete_keys or insert_keys or
                                default_keys)
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.temporal_arrays import cursor as array_cursor
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
                     'execute_on_connection', False,
                 )
+                else array_cursor(connection)
+                if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
             order = (

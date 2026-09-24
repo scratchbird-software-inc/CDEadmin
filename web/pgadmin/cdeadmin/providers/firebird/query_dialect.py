@@ -31,7 +31,8 @@ class DialectCursor:
     def __init__(self, connection, dialect):
         self.connection = connection
         self.dialect = dialect
-        self.cursor = connection.cursor()
+        from .temporal_arrays import cursor
+        self.cursor = cursor(connection)
         # The driver also uses the cursor-local dialect for parameter range
         # diagnostics. Match preparation without touching connection state.
         self.cursor._dialect = dialect

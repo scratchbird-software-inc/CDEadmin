@@ -18,11 +18,12 @@ def verify(connection, client, route, password, result, *,
         temporal.verify(connection, client, route, password, result)
     checks = result['character_array_buffer_checks'] = []
     from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    from pgadmin.cdeadmin.providers.firebird.temporal_arrays import cursor
 
     def sql(handle, source):
-        with handle.cursor() as cursor:
-            cursor.execute(source)
-            return cursor.fetchall() if cursor.description else []
+        with cursor(handle) as query:
+            query.execute(source)
+            return query.fetchall() if query.description else []
 
     for number, (kind, charset) in enumerate([
             ('CHAR', 'ASCII'), ('VARCHAR', 'ASCII'),
@@ -45,7 +46,7 @@ def verify(connection, client, route, password, result, *,
                                'display_path': [name]}}
 
                 def page():
-                    # Keep native diagnostics if the stock ARRAY decoder fails.
+                    # Exercise the same scoped decoder used by the query tool.
                     sql(handle, f'SELECT A FROM {name}')
                     return base.ADMINISTRATION.read_rows(
                         client, request, connection=handle)
@@ -71,13 +72,31 @@ def verify(connection, client, route, password, result, *,
                                      'options': {'identity_token': initial[
                                          'insert_identity_token']}})
                     assert leaves(handle) == [expected], leaves(handle)
-                    changed = [[special, ''], ['x', 'abcdefgh']]
+                    assert page()['rows'][0]['values']['A'] == [
+                        list(expected[:2]), list(expected[2:])]
+                    for dialect in (1, 3):
+                        query = client._query_cursor(handle, {
+                            'output_policy': {'client_sql_dialect': dialect}})
+                        try:
+                            query.execute(
+                                f'SELECT ID, A, A[-1,2], '
+                                f'CAST(NULL AS INTEGER) FROM {table}')
+                            actual = query.fetchall()
+                            assert actual == [(1, [
+                                list(expected[:2]), list(expected[2:])],
+                                expected[0], None)]
+                        finally:
+                            query.close()
+                    changed = [[special, 'a\0b' if kind == 'CHAR' else ''],
+                               ['x', 'abcdefgh']]
                     row = page()['rows'][0]
                     apply('update', {'selector': {'identity_token': row[
                         'identity_token']}, 'changes': {'A': changed}})
                     expected = tuple(item.ljust(8) if kind == 'CHAR' else item
                                      for row in changed for item in row)
                     assert leaves(handle) == [expected], leaves(handle)
+                    assert page()['rows'][0]['values']['A'] == [
+                        list(expected[:2]), list(expected[2:])]
                     for bad in ('z' * 100, None) + (
                             ('a\0b',) if kind == 'VARCHAR' else ()):
                         row = page()['rows'][0]
