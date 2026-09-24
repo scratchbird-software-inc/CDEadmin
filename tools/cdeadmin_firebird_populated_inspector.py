@@ -19,6 +19,8 @@ CASES = (
     ('Tables', 'table', 'WORK_ORDERS'),
     ('Views', 'view', 'OPEN_WORK_ORDERS'),
     ('Sequences', 'sequence', 'INSPECTION_NUMBER'),
+    ('Procedures', 'procedure', 'CDEADMIN_WORK_ORDER_COUNT'),
+    ('Functions', 'function', 'CDEADMIN_PRIORITY_LABEL'),
 )
 
 RELATIONSHIP_SECTIONS = {
@@ -31,10 +33,22 @@ STRUCTURE_SECTIONS = {
     'constraints': 'Constraints', 'indexes': 'Indexes', 'triggers': 'Triggers',
 }
 
+ROUTINE_SECTIONS = {
+    'definition': 'Native definition/source', 'parameters': 'Parameters',
+}
+
 
 def sections_for(kind):
     return {**RELATIONSHIP_SECTIONS,
-            **(STRUCTURE_SECTIONS if kind in ('table', 'view') else {})}
+            **(STRUCTURE_SECTIONS if kind in ('table', 'view') else {}),
+            **(ROUTINE_SECTIONS if kind in ('procedure', 'function') else {})}
+
+
+def section_payload(native, key):
+    if key == 'definition':
+        value = native.get('definition')
+        return native.get('metadata_source') if value is None else value
+    return native.get(key, [])
 
 
 def rendered_values(value):
@@ -54,7 +68,8 @@ def rendered_values(value):
 
 
 def assert_relationship_coverage(results):
-    for key in (*RELATIONSHIP_SECTIONS, *STRUCTURE_SECTIONS):
+    for key in (*RELATIONSHIP_SECTIONS, *STRUCTURE_SECTIONS,
+                *ROUTINE_SECTIONS):
         if not any(item['relationships'].get(key, {}).get('populated')
                    for item in results):
             raise RuntimeError(f'No populated {key} page was verified')
@@ -90,7 +105,7 @@ def native_expectations(profiles):
                     raise RuntimeError(f'Native columns are absent for {name}')
             result[name] = {
                 'ddl': ddl, 'columns': columns,
-                'relationships': {key: resource['native'].get(key, [])
+                'relationships': {key: section_payload(resource['native'], key)
                                   for key in sections_for(kind)},
             }
         return result
@@ -198,7 +213,8 @@ def verify(driver, wait, options, capture):
                 ] == rendered_values(payload))
                 capture(f'object-{name}-{key}')
                 layout = (column_layout_evidence(driver, panel)
-                          if payload else {})
+                          if payload and isinstance(payload, (list, dict))
+                          else {})
                 relationships[key] = {
                     'passed': True, 'populated': bool(payload),
                     'scalar_count': len(rendered_values(payload)),

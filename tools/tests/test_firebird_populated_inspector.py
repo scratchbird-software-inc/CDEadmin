@@ -7,6 +7,23 @@ import pytest
 from tools import cdeadmin_firebird_populated_inspector as gate
 
 
+@pytest.mark.parametrize('kind', ['procedure', 'function'])
+def test_routines_have_source_and_parameters_not_table_structure(kind):
+    sections = gate.sections_for(kind)
+    assert set(gate.ROUTINE_SECTIONS) <= set(sections)
+    assert not set(gate.STRUCTURE_SECTIONS) & set(sections)
+
+
+@pytest.mark.parametrize('native,expected', [
+    ({'metadata_source': 'BEGIN END'}, 'BEGIN END'),
+    ({'definition': '', 'metadata_source': 'fallback'}, ''),
+    ({'definition': None, 'metadata_source': 'fallback'}, 'fallback'),
+    ({}, None),
+])
+def test_routine_source_fallback_is_null_aware(native, expected):
+    assert gate.section_payload(native, 'definition') == expected
+
+
 @pytest.mark.parametrize('value,expected', [
     (None, ['Not set']), ([], ['None']), ({}, ['None']),
     (True, ['Yes']), (False, ['No']), (0, ['0']),
@@ -19,11 +36,13 @@ def test_rendered_values_match_native_property_renderer(value, expected):
 
 
 @pytest.mark.parametrize('missing', [
-    None, *gate.RELATIONSHIP_SECTIONS, *gate.STRUCTURE_SECTIONS])
+    None, *gate.RELATIONSHIP_SECTIONS, *gate.STRUCTURE_SECTIONS,
+    *gate.ROUTINE_SECTIONS])
 def test_empty_relationship_pages_cannot_satisfy_populated_coverage(missing):
     results = [{'relationships': {
         key: {'populated': key != missing}
-        for key in gate.sections_for('table')}}]
+        for key in {**gate.sections_for('table'),
+                    **gate.sections_for('procedure')}}}]
     if missing:
         with pytest.raises(RuntimeError, match=f'No populated {missing}'):
             gate.assert_relationship_coverage(results)
