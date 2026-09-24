@@ -40,7 +40,7 @@ export default function ProviderObjectProperties({nodeData}) {
     aria-label={gettext('Loading object properties')} />;
   if (state.error) return <Alert severity="error">{state.error}</Alert>;
   return <ObjectInspectorSection resource={state.resource}
-    descriptor={state.descriptor} />;
+    descriptor={state.descriptor} containedScroll={false} />;
 }
 
 ProviderObjectProperties.propTypes = {nodeData: PropTypes.object.isRequired};

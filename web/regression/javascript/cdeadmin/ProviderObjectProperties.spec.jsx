@@ -4,7 +4,8 @@ import getApiInstance from '../../../pgadmin/static/js/api_instance';
 
 jest.mock('../../../pgadmin/static/js/api_instance');
 jest.mock('../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent', () => ({
-  ObjectInspectorSection: ({resource}) => <div>{resource?.display_name}</div>,
+  ObjectInspectorSection: ({resource, containedScroll}) => <div
+    data-contained-scroll={String(containedScroll)}>{resource?.display_name}</div>,
 }));
 
 describe('provider selection inspector', () => {
@@ -19,6 +20,7 @@ describe('provider selection inspector', () => {
       cde_database_target_id: 'db1',
       cde_resource_id: 'table:1', cde_resource_kind: 'table'}} />);
     expect(await screen.findByText('Orders')).toBeVisible();
+    expect(screen.getByText('Orders')).toHaveAttribute('data-contained-scroll', 'false');
     expect(api.post).toHaveBeenCalledWith('/scope?database_target_id=db1', {
       action: 'resource_inspect', request: {resource_id: 'table:1', generation: 'g1',
         database_target_id: 'db1'},

@@ -257,7 +257,8 @@ def _capture(driver, options, state, records):
     path = options.output_root / f'{state}-{viewport}-{variant}.png'
     records[state] = {
         'path': str(path),
-        'sha256': screenshot(driver, path),
+        'sha256': screenshot(driver, path,
+                             reset_scroll=not state.startswith('object-')),
     }
 
 

@@ -1,6 +1,7 @@
 """Qualification assertions must reject compressed or clipped layouts."""
 
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 
@@ -110,3 +111,19 @@ def test_rejects_unreachable_navigator_label_start():
     driver.execute_script.return_value = value
     with pytest.raises(RuntimeError, match='Navigator'):
         _shell_layout_evidence(driver, 'owned.fdb')
+
+
+@pytest.mark.parametrize('state,reset', [
+    ('object-V-ddl-keyboard-bottom', False), ('initial', True)])
+def test_inspector_screenshot_preserves_keyboard_scroll(
+        monkeypatch, tmp_path, state, reset):
+    from tools import cdeadmin_firebird_grid_ui_gate as gate
+    screenshot = Mock(return_value='digest')
+    monkeypatch.setattr(gate, 'screenshot', screenshot)
+    options = SimpleNamespace(width=1600, height=1000, theme='default',
+                              font_scale=100, output_root=tmp_path)
+    records = {}
+    driver = Mock()
+    gate._capture(driver, options, state, records)
+    assert screenshot.call_args.kwargs == {'reset_scroll': reset}
+    assert records[state]['sha256'] == 'digest'

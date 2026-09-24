@@ -873,8 +873,9 @@ function NativePropertyValue({value, depth=0}) {
       </Fragment>)}
     </Box>;
   }
-  return <Box component="span" sx={{whiteSpace: 'pre-wrap'}}>{typeof value === 'boolean' ?
-    (value ? gettext('Yes') : gettext('No')) : String(value)}</Box>;
+  return <Box component="span" sx={{whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere'}}>{typeof value === 'boolean' ?
+      (value ? gettext('Yes') : gettext('No')) : String(value)}</Box>;
 }
 
 NativePropertyValue.propTypes = {
@@ -883,7 +884,7 @@ NativePropertyValue.propTypes = {
 };
 
 export function ObjectInspectorSection({resource, descriptor, loading,
-  tabbed=false, onRefresh, onOperation}) {
+  tabbed=false, containedScroll=true, onRefresh, onOperation}) {
   const sections = inspectorSections(resource, descriptor);
   const coverage = providerNative(resource)?.catalog_coverage;
   const [section, setSection] = useState(sections[0]);
@@ -914,13 +915,18 @@ export function ObjectInspectorSection({resource, descriptor, loading,
         label={INSPECTOR_SECTION_TITLES[item]} />)}
     </Tabs> : <TextField select fullWidth size="small" value={section}
       label={gettext('Object properties task')}
+      slotProps={{select: {SelectDisplayProps: {style: {
+        whiteSpace: 'normal', overflowWrap: 'anywhere', textOverflow: 'clip',
+      }}}}}
       onChange={(event) => setSection(event.target.value)}>
       {sections.map((item) => <MenuItem key={item} value={item}>
         {INSPECTOR_SECTION_TITLES[item] || item.replaceAll('-', ' ')}
       </MenuItem>)}
     </TextField>}
-    <Box role="tabpanel" aria-label={`${section} ${gettext('object section')}`}
-      sx={{m: 0, p: 1, overflow: 'auto', maxHeight: 320,
+    <Box role="tabpanel" tabIndex={0}
+      aria-label={`${section} ${gettext('object section')}`}
+      sx={{m: 0, p: 1, overflow: containedScroll ? 'auto' : 'visible',
+        maxHeight: containedScroll ? 320 : 'none',
         bgcolor: 'background.default'}}>
       {onOperation && ['privileges', 'security'].includes(section) &&
         <Box role="group" aria-label={gettext('Object permission tasks')}
@@ -947,6 +953,7 @@ ObjectInspectorSection.propTypes = {
   descriptor: PropTypes.object,
   loading: PropTypes.bool,
   tabbed: PropTypes.bool,
+  containedScroll: PropTypes.bool,
   onRefresh: PropTypes.func,
   onOperation: PropTypes.func,
 };

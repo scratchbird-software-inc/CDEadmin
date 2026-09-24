@@ -1347,6 +1347,34 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('1142');
   });
 
+  it.each([false, true])('makes metadata panels keyboard focusable (tabbed=%s)', (tabbed) => {
+    render(<ObjectInspectorSection tabbed={tabbed} resource={{
+      display_name: 'V', resource_kind: 'view', extensions: {firebird: {native: {
+        property_sections: ['ddl'], ddl: 'CREATE VIEW "LongName" AS SELECT 1;',
+      }}},
+    }} />);
+    const panel = screen.getByRole('tabpanel', {name: 'ddl object section'});
+    expect(panel).toHaveAttribute('tabindex', '0');
+    expect(panel).toHaveTextContent('CREATE VIEW');
+    if (!tabbed) {
+      const style = getComputedStyle(screen.getByRole('combobox'));
+      expect({whiteSpace: style.whiteSpace, textOverflow: style.textOverflow,
+        overflowWrap: style.overflowWrap}).toEqual({
+        whiteSpace: 'normal', textOverflow: 'clip', overflowWrap: 'anywhere'});
+    }
+    expect(panel.querySelector('span')).toHaveStyle({overflowWrap: 'anywhere'});
+  });
+
+  it.each([false, true])('supports host-owned or bounded scrolling (%s)', (containedScroll) => {
+    render(<ObjectInspectorSection containedScroll={containedScroll}
+      resource={{display_name: 'V', resource_kind: 'view',
+        extensions: {firebird: {native: {property_sections: ['ddl'],
+          ddl: 'CREATE VIEW V AS SELECT 1;'}}}}} />);
+    expect(screen.getByRole('tabpanel')).toHaveStyle({
+      overflow: containedScroll ? 'auto' : 'visible',
+      maxHeight: containedScroll ? '320px' : 'none'});
+  });
+
   it('surfaces provider catalog warnings without interpreting markup', () => {
     render(<ObjectInspectorSection resource={{display_name: 'T',
       resource_kind: 'table', extensions: {firebird: {native: {
