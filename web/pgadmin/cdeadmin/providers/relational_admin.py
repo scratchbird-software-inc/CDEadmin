@@ -169,6 +169,8 @@ class _RowIdentity:
     purpose: str = 'row'
     insert_defaults_allowed: bool = False
     decfloat_columns: tuple[str, ...] = ()
+    array_columns: tuple[str, ...] = ()
+    native_record_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -2993,6 +2995,10 @@ class RelationalAdministration:
                 cursor, transition, transition['old_name']
             ) if transition else None
             for statement in compiled.get('statements', []):
+                if (self.dialect.engine_id == 'firebird' and
+                        statement.get('firebird_array_guard')):
+                    from .firebird.grid_array_identity import verify
+                    verify(cursor, statement['firebird_array_guard'])
                 parameters = statement.get('parameters', ())
                 if parameters:
                     cursor.execute(statement['source'], parameters)
@@ -3256,6 +3262,34 @@ class RelationalAdministration:
                               for name, value in values.items()}
                 identity_token = None
                 if key_columns and all(key in values for key in key_columns):
+                    array_columns = tuple(
+                        name for name, native in zip(columns, native_types)
+                        if self.dialect.engine_id == 'firebird' and
+                        native == 'ARRAY')
+                    decfloat_columns = tuple(
+                        name for name, kind in zip(columns, input_kinds)
+                        if kind == 'decfloat')
+                    version = None
+                    if array_columns:
+                        key_identity = _RowIdentity(
+                            fingerprint, path, key_columns,
+                            tuple(values[key] for key in key_columns), {},
+                            time.monotonic(),
+                            decfloat_columns=decfloat_columns)
+                        where, parameters = self._identity_predicate(
+                            key_identity)
+                        with connection.cursor() as version_cursor:
+                            version_cursor.execute(
+                                'SELECT RDB$RECORD_VERSION FROM ' +
+                                self._qualified(path) + ' WHERE ' + where,
+                                parameters)
+                            versions = version_cursor.fetchall()
+                        if (len(versions) != 1 or
+                                type(versions[0][0]) is not int):
+                            raise RelationalClientError(
+                                'Firebird array row version is unavailable; '
+                                'refresh the row page')
+                        version = versions[0][0]
                     identity_token = str(uuid.uuid4())
                     identity = _RowIdentity(
                         fingerprint, path, key_columns,
@@ -3266,9 +3300,9 @@ class RelationalAdministration:
                         resource_kind=resource_kind,
                         writable_columns=writable_columns,
                         delete_allowed=delete_allowed,
-                        decfloat_columns=tuple(
-                            name for name, kind in zip(columns, input_kinds)
-                            if kind == 'decfloat'),
+                        decfloat_columns=decfloat_columns,
+                        array_columns=array_columns,
+                        native_record_version=version,
                     )
                     with self._identity_lock:
                         while len(self._row_identities) >= 5000:
@@ -7295,6 +7329,17 @@ class RelationalAdministration:
             )
         where, parameters = self._identity_predicate(identity)
         target = self._qualified(target_path)
+        guard = {}
+        if self.dialect.engine_id == 'firebird' and identity.array_columns:
+            from .firebird.grid_array_identity import snapshot
+            fields = ', '.join(self._quote(name)
+                               for name in identity.array_columns)
+            guard['firebird_array_guard'] = {
+                'source': f'SELECT {fields} FROM {target} WHERE {where}',
+                'parameters': parameters,
+                'snapshot': snapshot(tuple(identity.original[name]
+                                           for name in identity.array_columns)),
+            }
         if request['operation_id'] == 'delete':
             if not identity.delete_allowed:
                 raise RelationalClientError(
@@ -7303,6 +7348,7 @@ class RelationalAdministration:
             return {
                 'source': source, 'parameters': parameters,
                 'expected_rowcount': 1,
+                **guard,
             }
         changes = draft.get('changes')
         if not isinstance(changes, Mapping) or not changes:
@@ -7323,6 +7369,7 @@ class RelationalAdministration:
                 if self.dialect.engine_id == 'firebird' else value
                 for value in changes.values()) + parameters,
             'expected_rowcount': 1,
+            **guard,
         }
 
     def _compile_privilege(self, request):
@@ -7663,6 +7710,9 @@ class RelationalAdministration:
         for name, value in identity.original.items():
             if name in identity.key_columns:
                 continue
+            if (self.dialect.engine_id == 'firebird' and
+                    name in identity.array_columns):
+                continue
             quoted = self._quote(name)
             if value is None:
                 clauses.append(f'{quoted} IS NULL')
@@ -7670,6 +7720,12 @@ class RelationalAdministration:
                 clauses.append(self._identity_equality(name, identity))
                 parameters.append(value)
         if self.dialect.engine_id == 'firebird':
+            if identity.array_columns:
+                if type(identity.native_record_version) is not int:
+                    raise RelationalClientError(
+                        'Firebird array row version is unavailable')
+                clauses.append('RDB$RECORD_VERSION = ?')
+                parameters.append(identity.native_record_version)
             from .firebird.grid_values import parameter
             parameters = [parameter(value) for value in parameters]
         return ' AND '.join(clauses), tuple(parameters)

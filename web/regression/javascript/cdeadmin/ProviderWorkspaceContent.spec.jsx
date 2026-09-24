@@ -3369,7 +3369,15 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'], ['view', 'typed-time'], ['view', 'typed-timestamp'], ['view', 'typed-binary'], ['view', 'typed-float32'], ['view', 'typed-float64']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each([
+    ['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'],
+    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'],
+    ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'array'],
+    ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'],
+    ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'],
+    ['view', 'typed-time'], ['view', 'typed-timestamp'], ['view', 'typed-binary'],
+    ['view', 'typed-float32'], ['view', 'typed-float64'],
+  ])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
     const typed = operation.startsWith('typed-');
     const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
       'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null,
@@ -3377,7 +3385,7 @@ describe('ProviderWorkspaceContent', () => {
       'typed-binary': {encoding: 'base64', data: 'AP9/', byte_length: 3},
       'typed-float32': {encoding: 'float32', data: '-0.0'},
       'typed-float64': {encoding: 'float64', data: '1.7976931348623157e308'}}[operation];
-    const mutation = typed || ['defaults', 'empty', 'null', 'omit'].includes(operation) ? 'insert' : operation;
+    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3497,6 +3505,10 @@ describe('ProviderWorkspaceContent', () => {
           fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
             {target: {value: operation === 'empty' ? '' : 'null'}});
         }
+        if (operation === 'array') {
+          fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
+            {target: {value: '[[1,2],[3,4]]'}});
+        }
         fireEvent.click(screen.getByRole('button', {name: 'Insert row'}));
       }
     } else {
@@ -3510,7 +3522,8 @@ describe('ProviderWorkspaceContent', () => {
     ]);
     expect(api.post.mock.calls[2][1].request.draft).toEqual(mutation === 'insert' ? {
       values: ['defaults', 'omit'].includes(operation) ? {} : {
-        name: typed ? scalarValue : operation === 'empty' ? '' : operation === 'null' ? null : 'new',
+        name: typed ? scalarValue : operation === 'empty' ? '' : operation === 'null' ? null :
+          operation === 'array' ? [[1, 2], [3, 4]] : 'new',
       },
       options: kind === 'view' ? {identity_token: 'insert-one'} : {},
     } : {
