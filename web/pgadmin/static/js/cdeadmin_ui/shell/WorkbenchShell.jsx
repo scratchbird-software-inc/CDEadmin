@@ -18,7 +18,7 @@ import {Drawer, Splitter, StatusBar, Toolbar} from '../layout/WorkbenchChrome';
 
 export const WORKBENCH_LAYOUT_SCHEMA = 'cdeadmin.workbench-layout.v1';
 export const WORKBENCH_INSPECT_EVENT = 'cdeadmin:workbench-inspect';
-export const ACTIVITY_RAIL_HEIGHT = 48;
+export const ACTIVITY_RAIL_HEIGHT = 30;
 export const ACTIVITY_RAIL_WIDTH = ACTIVITY_RAIL_HEIGHT;
 export const DEFAULT_WORKBENCH_LAYOUT = Object.freeze({
   schema: WORKBENCH_LAYOUT_SCHEMA,
@@ -95,12 +95,34 @@ export class WorkbenchLayoutStore {
   }
 }
 
+const activityControlSx = {
+  width: 40,
+  height: '100%',
+  mx: '2px',
+  flex: '0 0 auto',
+  alignSelf: 'stretch',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 'none',
+  borderRadius: 0,
+  boxShadow: 'none',
+  minWidth: 0,
+  padding: 0,
+};
+
 function ActivityRail({activities, active, navigationVisible, onChange}) {
   return <Box component="nav" aria-label="Application activities"
     sx={{height: ACTIVITY_RAIL_HEIGHT, flex: `0 0 ${ACTIVITY_RAIL_HEIGHT}px`,
-      display: 'flex', alignItems: 'center', px: 0.5, borderBottom: '1px solid',
-      borderColor: 'divider', bgcolor: 'background.navigation',
-      overflowX: 'auto', overflowY: 'hidden'}}>
+      display: 'flex', alignItems: 'stretch', px: 0.5, border: 'none',
+      bgcolor: 'background.navigation',
+      overflowX: 'auto', overflowY: 'hidden',
+      '& > button, & > span': activityControlSx,
+      '& > span > button': {
+        ...activityControlSx,
+        width: '100%',
+        mx: 0,
+      }}}>
     {activities.map((activity) => {
       const ownsNavigation = activity.navigationVisible !== false;
       const selected = activity.id === active &&
@@ -115,12 +137,17 @@ function ActivityRail({activities, active, navigationVisible, onChange}) {
           if(activity.disabled) return;
           onChange(activity.id);
         }}
-        sx={{width: 40, height: 40, mx: '2px', flex: '0 0 auto',
-          filter: selected ? 'brightness(1)' :
+        sx={{
+          ...activityControlSx,
+          filter: selected ? 'none' :
             'brightness(var(--cde-inactive-brightness, 0.85))',
-          borderBottom: selected ? '3px solid' : '3px solid transparent',
-          borderColor: selected ? 'primary.main' : 'transparent',
-          borderRadius: 0}}>
+          '&&&': {
+            backgroundColor: selected ? 'primary.main' : 'transparent',
+            border: 'none',
+            borderRadius: 0,
+            boxShadow: 'none',
+            color: selected ? 'primary.contrastText' : 'inherit',
+          }}}>
         <Icon iconKey={activity.iconKey || 'command.default'} decorative size="20px" />
       </IconButton>;
     })}

@@ -50,6 +50,8 @@ define('pgadmin.node.engine_type', [
     pgBrowser.Nodes.engine_type = pgBrowser.Node.extend({
       parent_type: 'server_group',
       type: 'engine_type',
+      // The connector id is an engine name, not a browser-route object id.
+      hasId: false,
       label: gettext('Connector'),
       canEdit: false,
       canDrop: false,

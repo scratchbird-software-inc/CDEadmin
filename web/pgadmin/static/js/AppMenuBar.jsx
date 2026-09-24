@@ -42,6 +42,8 @@ const StyledBox = styled(Box)(({theme}) => ({
       width: '24px',
       height: '24px',
       flex: '0 0 24px',
+      filter: 'drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) '
+        + 'drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)',
     },
   },
   '& .AppMenuBar-menus': {

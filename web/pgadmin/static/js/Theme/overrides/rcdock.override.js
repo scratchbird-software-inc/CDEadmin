@@ -48,30 +48,35 @@ export default function rcdockOverride(theme) {
           },
           '&[data-dockid="id-main"]': {
             '& > .dock > .dock-bar': {
-              minHeight: '52px',
-              overflow: 'visible',
-              '& .dock-nav-wrap': {
-                padding: '4px 8px',
+              minHeight: '42px',
+              padding: 0,
+              overflow: 'hidden',
+              '& .dock-nav, & .dock-nav-wrap, & .dock-nav-list': {
+                height: '100%',
+                margin: 0,
+                padding: 0,
               },
               '& .dock-tab': {
-                margin: '0 6px',
+                alignSelf: 'stretch',
+                display: 'flex',
+                height: '100%',
+                margin: 0,
                 filter: 'brightness(var(--cde-inactive-brightness, 0.85))',
-                transform: 'scale(1)',
-                transformOrigin: 'center',
-                transition: 'transform 120ms ease, filter 120ms ease',
                 '& > div': {
-                  minHeight: '40px',
-                  padding: '8px 12px',
+                  alignItems: 'stretch',
+                  display: 'flex',
+                  flex: '1 1 auto',
                   fontSize: '1rem',
+                  height: '100%',
+                  minHeight: '100%',
+                  padding: 0,
                 },
                 '&.dock-tab-active': {
-                  filter: 'brightness(1)',
-                  transform: 'scale(var(--cde-active-tab-scale, 1.15))',
+                  backgroundColor: theme.palette.primary.main,
+                  color: theme.palette.primary.contrastText,
+                  filter: 'none',
                   zIndex: 2,
                 },
-              },
-              '@media (prefers-reduced-motion: reduce)': {
-                '& .dock-tab': {transition: 'none'},
               },
             },
           },
@@ -185,11 +190,6 @@ export default function rcdockOverride(theme) {
           '& svg, & img, & i': {
             width: '100%',
             height: '100%',
-          },
-          '&.dock-tab-product-icon': {
-            backgroundColor: '#214d67',
-            borderRadius: '4px',
-            padding: '2px',
           },
         }
       },

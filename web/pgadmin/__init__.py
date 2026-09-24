@@ -994,18 +994,25 @@ def create_app(app_name=None):
         Inject a reference to the current blueprint, if any.
         """
 
-        theme_css = os.path.join(
-            os.path.dirname(__file__), 'static', 'css', 'theme.css'
+        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        theme_css = os.path.join(static_dir, 'css', 'theme.css')
+        react_bundle = os.path.join(
+            static_dir, 'js', 'generated', 'vendor.react.js'
         )
         try:
             theme_css_mtime = int(os.path.getmtime(theme_css))
         except OSError:
             theme_css_mtime = 0
+        try:
+            react_bundle_mtime = int(os.path.getmtime(react_bundle))
+        except OSError:
+            react_bundle_mtime = 0
 
         return {
             'current_app': current_app,
             'current_blueprint': current_blueprint,
             'theme_css_mtime': theme_css_mtime,
+            'react_bundle_mtime': react_bundle_mtime,
         }
 
     @app.errorhandler(Exception)

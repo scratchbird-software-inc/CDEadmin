@@ -98,42 +98,31 @@ export default function reactAspenOverride(theme) {
         alignSelf: 'stretch',
         display: 'inline-flex',
         flexShrink: 0,
-        height: '100%',
         pointerEvents: 'none',
       },
 
       'span.tree-branch-segment': {
+        alignSelf: 'stretch',
         display: 'inline-block',
         flex: '0 0 var(--cde-tree-indent, 18px)',
-        height: '100%',
         position: 'relative',
         width: 'var(--cde-tree-indent, 18px)',
 
         '&.ancestor.continues:before, &.current:before': {
           backgroundColor: 'var(--cde-tree-guide-color, '
             + theme.otherVars.tree.textFg + ')',
+          bottom: '-2px',
           content: '""',
-          left: '50%',
+          left: 'calc(2px + (var(--cde-tree-expander-size, 16px) / 2) - '
+            + '(var(--cde-tree-guide-width, 1px) / 2))',
           position: 'absolute',
           top: '-2px',
           width: 'var(--cde-tree-guide-width, 1px)',
-          height: 'calc(100% + 4px)',
         },
 
         '&.current.is-last:before': {
+          bottom: 'auto',
           height: 'calc(50% + 2px)',
-        },
-
-        '&.current:after': {
-          backgroundColor: 'var(--cde-tree-guide-color, '
-            + theme.otherVars.tree.textFg + ')',
-          content: '""',
-          height: 'var(--cde-tree-guide-width, 1px)',
-          left: '50%',
-          position: 'absolute',
-          top: '50%',
-          width: 'calc(50% + '
-            + '(var(--cde-tree-expander-size, 16px) / 2) + 2px)',
         },
       },
 
@@ -156,6 +145,12 @@ export default function reactAspenOverride(theme) {
         cursor: 'pointer',
         padding: 0,
 
+        '&:not(.open):not(.loading)': {
+          backgroundColor: theme.palette.primary.main,
+          borderColor: theme.palette.primary.main,
+          color: theme.palette.primary.contrastText,
+        },
+
         '&:before, &:after': {
           backgroundColor: 'currentColor',
           content: '""',
@@ -174,7 +169,14 @@ export default function reactAspenOverride(theme) {
         },
 
         '&.open:after': {
-          display: 'none',
+          backgroundColor: 'var(--cde-tree-guide-color, '
+            + theme.otherVars.tree.textFg + ')',
+          display: 'block',
+          height: 'calc((var(--cde-tree-row-height, 30px) - '
+            + 'var(--cde-tree-expander-size, 16px)) / 2 + 2px)',
+          left: 'calc(50% - (var(--cde-tree-guide-width, 1px) / 2))',
+          top: '100%',
+          width: 'var(--cde-tree-guide-width, 1px)',
         },
 
         '&.loading': {
