@@ -15,6 +15,55 @@ from tools.cdeadmin_ui_evidence import (
 )
 
 
+@pytest.mark.parametrize('wrong_last', [False, True])
+def test_scoped_tree_lookup_does_not_select_other_localhost(
+        monkeypatch, wrong_last):
+    from tools import cdeadmin_ui_evidence as evidence
+    wanted, other = Mock(), Mock()
+    for item in (wanted, other):
+        item.text = 'localhost'
+        item.is_displayed.return_value = True
+    driver = Mock()
+    driver.find_elements.return_value = (
+        [wanted, other] if wrong_last else [other, wanted])
+    match = Mock(side_effect=lambda _driver, item, _ancestors: item is wanted)
+    monkeypatch.setattr(evidence, '_matches_tree_ancestry', match)
+    assert evidence.named_tree_item(driver, 'localhost',
+                                    ('Connectors', 'Firebird')) is wanted
+    assert all(call.args[2] == ('Connectors', 'Firebird')
+               for call in match.call_args_list)
+
+
+def test_scope_uses_tree_parentage_not_visible_sibling_order():
+    from tools.cdeadmin_ui_evidence import _matches_tree_ancestry
+    driver, item = Mock(), Mock()
+    driver.execute_script.return_value = False
+    assert not _matches_tree_ancestry(driver, item, ('Firebird', 'localhost'))
+    script, element, ancestors = driver.execute_script.call_args.args
+    assert element is item
+    assert ancestors == ['Firebird', 'localhost']
+    assert 'tree.parent(item)' in script and '.reverse()' in script
+    driver.reset_mock()
+    assert _matches_tree_ancestry(driver, item, ()) is True
+    driver.execute_script.assert_not_called()
+
+
+def test_scoped_expand_clicks_only_matching_server(monkeypatch):
+    from tools import cdeadmin_ui_evidence as evidence
+    wanted, other = Mock(), Mock()
+    driver = Mock()
+    driver.find_elements.return_value = [wanted, other]
+    monkeypatch.setattr(evidence, '_matches_tree_ancestry',
+                        lambda _driver, item, _ancestors: item is wanted)
+    monkeypatch.setattr(evidence, 'visible_menu_label', lambda *_args: None)
+    monkeypatch.setattr(evidence.expected, 'invisibility_of_element_located',
+                        lambda _locator: lambda _driver: True)
+    wait = SimpleNamespace(until=lambda callback: callback(driver))
+    evidence.expand(wait, 'localhost', ('Connectors', 'Firebird'))
+    wanted.click.assert_called_once_with()
+    other.click.assert_not_called()
+
+
 @pytest.mark.parametrize('obscured', [False, True])
 def test_context_command_scrolls_menu_and_requires_pointer_hit(
         monkeypatch, obscured):

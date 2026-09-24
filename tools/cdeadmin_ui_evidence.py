@@ -130,24 +130,43 @@ def browser_binary(explicit=None):
     raise RuntimeError('A Chrome or Chromium binary is required')
 
 
-def named_tree_item(driver, label):
+def _matches_tree_ancestry(driver, element, ancestors):
+    if not ancestors:
+        return True
+    return driver.execute_script('''
+        const tree = window.pgAdmin?.Browser?.tree;
+        const row = arguments[0].closest('.file-entry');
+        if (!tree || !row) return false;
+        let item = tree.itemFrom(row);
+        for (const label of [...arguments[1]].reverse()) {
+          item = item && tree.parent(item);
+          const data = item && tree.itemData(item);
+          if ((data?.label ?? data?._label) !== label) return false;
+        }
+        return true;
+    ''', element, list(ancestors))
+
+
+def named_tree_item(driver, label, ancestors=()):
     matches = []
     for item in driver.find_elements(By.CSS_SELECTOR, '.file-name'):
         try:
-            if item.is_displayed() and item.text == label:
+            if (item.is_displayed() and item.text == label and
+                    _matches_tree_ancestry(driver, item, ancestors)):
                 matches.append(item)
         except StaleElementReferenceException:
             continue
     return matches[-1] if matches else None
 
 
-def expand(wait, label):
+def expand(wait, label, ancestors=()):
     def toggle(driver):
         collapsed = driver.find_elements(
             By.CSS_SELECTOR, f'button[aria-label="Expand {label}"]'
         )
         try:
-            collapsed = [item for item in collapsed if item.is_displayed()]
+            collapsed = [item for item in collapsed if item.is_displayed()
+                         and _matches_tree_ancestry(driver, item, ancestors)]
         except StaleElementReferenceException:
             return None
         if collapsed:
@@ -156,7 +175,8 @@ def expand(wait, label):
             By.CSS_SELECTOR, f'button[aria-label="Collapse {label}"]'
         )
         try:
-            expanded = [item for item in expanded if item.is_displayed()]
+            expanded = [item for item in expanded if item.is_displayed()
+                        and _matches_tree_ancestry(driver, item, ancestors)]
         except StaleElementReferenceException:
             return None
         if expanded:
@@ -191,9 +211,9 @@ def expand(wait, label):
         wait.until(click_when_ready)
 
 
-def wait_for_tree_item(wait, label):
+def wait_for_tree_item(wait, label, ancestors=()):
     """Wait until an asynchronously loaded tree child is mounted."""
-    return wait.until(lambda driver: named_tree_item(driver, label))
+    return wait.until(lambda driver: named_tree_item(driver, label, ancestors))
 
 
 def _xpath_literal(value):

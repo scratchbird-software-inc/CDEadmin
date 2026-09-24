@@ -460,18 +460,21 @@ def _prepare_tree_once(driver, wait, options, password):
     wait.until(lambda value: '/browser/' in value.current_url)
     apply_presentation(driver, wait, options)
     ensure_data_explorer(wait)
-    for label, child in (
-        ('Connectors', options.engine),
-        (options.engine, options.server),
-        (options.server, options.database),
+    for label, child, ancestors in (
+        ('Connectors', options.engine, ()),
+        (options.engine, options.server, ('Connectors',)),
+        (options.server, options.database, ('Connectors', options.engine)),
     ):
-        expand(wait, label)
-        wait_for_tree_item(wait, child)
-    database = wait_for_tree_item(wait, options.database)
+        print('Expand tree path: ' + json.dumps([*ancestors, label, child]),
+              flush=True)
+        expand(wait, label, ancestors)
+        wait_for_tree_item(wait, child, (*ancestors, label))
+    database_path = ('Connectors', options.engine, options.server)
+    database = wait_for_tree_item(wait, options.database, database_path)
     ActionChains(driver).context_click(database).perform()
     if complete_endpoint_prompt(driver, password):
         ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-        database = wait_for_tree_item(wait, options.database)
+        database = wait_for_tree_item(wait, options.database, database_path)
         ActionChains(driver).context_click(database).perform()
     actions = selected_database_actions(driver)
     ActionChains(driver).send_keys(Keys.ESCAPE).perform()
@@ -486,6 +489,20 @@ def prepare_tree(driver, wait, options, password):
                 driver, wait, options, password
             )
         except TimeoutException:
+            # Preserve the failed visible state before the safe retry replaces
+            # it. Hide all editable values in case authentication is showing.
+            try:
+                driver.execute_script('''
+                    document.querySelectorAll(
+                      'input, textarea, [contenteditable]').forEach(node => {
+                        node.style.visibility = 'hidden';
+                      });
+                ''')
+                screenshot(driver, options.output_root /
+                           f'tree-navigation-timeout-{attempt + 1}.png',
+                           reset_scroll=False)
+            except Exception:
+                pass  # Evidence errors must not replace the timeout.
             if attempt:
                 raise
             # No provider form or mutation has been requested at this point.
