@@ -7248,7 +7248,10 @@ class RelationalAdministration:
         )
         return {
             'source': source,
-            'parameters': tuple(values[item] for item in columns),
+            'parameters': tuple(
+                firebird_grid_values.bind_value(values[item])
+                if self.dialect.engine_id == 'firebird' else values[item]
+                for item in columns),
         }
 
     def _compile_identity_dml(self, request):
@@ -7315,7 +7318,10 @@ class RelationalAdministration:
         source = f'UPDATE {target} SET {assignments} WHERE {where}'
         return {
             'source': source,
-            'parameters': tuple(changes.values()) + parameters,
+            'parameters': tuple(
+                firebird_grid_values.bind_value(value)
+                if self.dialect.engine_id == 'firebird' else value
+                for value in changes.values()) + parameters,
             'expected_rowcount': 1,
         }
 

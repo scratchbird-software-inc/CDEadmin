@@ -1,6 +1,10 @@
 """Native scalar editor hints and lossless grid transport."""
 from decimal import Decimal
 from datetime import date, datetime, time
+import base64
+from collections.abc import Mapping
+
+from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 from .query_values import normalize_value as normalize_query_value
 from .query_columns import describe_columns
@@ -25,6 +29,27 @@ def parameter(value):
 
 def normalize_value(value):
     return normalize_query_value(parameter(value))
+
+
+def bind_value(value):
+    """Decode the explicit binary wire envelope; never guess text encodings."""
+    if not isinstance(value, Mapping):
+        return value
+    if (set(value) != {'encoding', 'data', 'byte_length'} or
+            value.get('encoding') != 'base64' or
+            not isinstance(value.get('data'), str) or
+            type(value.get('byte_length')) is not int):
+        raise RelationalClientError(
+            'Firebird binary value envelope is invalid')
+    try:
+        binary = base64.b64decode(value['data'], validate=True)
+    except (ValueError, UnicodeError):
+        raise RelationalClientError('Firebird binary value is not base64')
+    if (len(binary) != value['byte_length'] or
+            base64.b64encode(binary).decode('ascii') != value['data']):
+        raise RelationalClientError('Firebird binary value length/encoding '
+                                    'does not match its envelope')
+    return binary
 
 
 def input_kind(native_type):
@@ -64,6 +89,10 @@ def input_kinds(cursor):
                  'BOOLEAN': 'boolean'}.get(native))
         if native == 'BLOB' and metadata['native_subtype'] == 1:
             kind = 'text'
+        elif (native in {'CHAR CHARACTER SET OCTETS',
+                         'VARCHAR CHARACTER SET OCTETS'} or
+              native == 'BLOB' and metadata['native_subtype'] == 0):
+            kind = 'binary'
         kinds.append(kind)
     return tuple(kinds)
 

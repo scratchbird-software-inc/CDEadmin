@@ -9,7 +9,7 @@ import pytest
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION
 from pgadmin.cdeadmin.providers.firebird.grid_values import input_kind
 from pgadmin.cdeadmin.providers.firebird.grid_values import (
-    input_kinds, materialize, normalize_value, parameter,
+    input_kinds, materialize, normalize_value, parameter, bind_value,
     table_operations,
 )
 from firebird.driver.types import SQLDataType
@@ -57,9 +57,10 @@ def test_hints_use_driver_types_not_names(value_type, expected):
     (SQLDataType.TIME, 0, 0, 0, 'text'),
     (SQLDataType.TIMESTAMP, 0, 0, 0, 'text'),
     (SQLDataType.VARYING, 0, 0, 4, 'text'),
-    (SQLDataType.VARYING, 0, 0, 1, None),
+    (SQLDataType.VARYING, 0, 0, 1, 'binary'),
+    (SQLDataType.TEXT, 0, 0, 1, 'binary'),
     (SQLDataType.BLOB, 1, 0, 4, 'text'),
-    (SQLDataType.BLOB, 0, 0, 0, None),
+    (SQLDataType.BLOB, 0, 0, 0, 'binary'),
     (SQLDataType.ARRAY, 0, 0, 0, None),
 ])
 def test_native_metadata_wins_over_incomplete_dbapi(
@@ -72,6 +73,37 @@ def test_native_metadata_wins_over_incomplete_dbapi(
                                                  nullable=True, relation='T',
                                                  field='VALUE', owner='O')]))
     assert input_kinds(cursor) == (expected,)
+
+
+@pytest.mark.parametrize('value', [b'', b'\x00\xff\x7f', bytes(range(256))])
+def test_binary_wire_roundtrip(value):
+    envelope = normalize_value(value)
+    assert bind_value(envelope) == value
+    assert envelope['byte_length'] == len(value)
+
+
+@pytest.mark.parametrize('envelope', [
+    {}, {'encoding': 'base64', 'data': 'AA==', 'byte_length': True},
+    {'encoding': 'base64', 'data': 'AA==', 'byte_length': 2},
+    {'encoding': 'base64', 'data': 'AR==', 'byte_length': 1},
+    {'encoding': 'base64', 'data': 'AA', 'byte_length': 1},
+    {'encoding': 'base64', 'data': 'é', 'byte_length': 1},
+    {'encoding': 'hex', 'data': '00', 'byte_length': 1},
+])
+def test_binary_envelope_is_strict(envelope):
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    with pytest.raises(RelationalClientError):
+        bind_value(envelope)
+
+
+def test_binary_insert_binding_does_not_decode_ordinary_text():
+    request = {'resource_kind': 'table',
+               'target_resource': {'resource_kind': 'table',
+                                   'display_path': ['T']},
+               'draft': {'values': {'B': normalize_value(b'\x00\xff'),
+                                    'T': 'AP8='}}}
+    assert ADMINISTRATION._compile_insert(request)['parameters'] == (
+        b'\x00\xff', 'AP8=')
 
 
 @pytest.mark.parametrize('failed', [False, True])

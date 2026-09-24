@@ -2102,7 +2102,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
         draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
-          (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name]))}
+          (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name], column.input_kind))}
         disabled={working || (row.__insert ?
           (column.insertable ?? column.editable) === false :
           column.editable === false || !page.editable)}

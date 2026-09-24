@@ -12,6 +12,19 @@ describe('Provider scalar inputs', () => {
   it.each(['null', 'true', 'false', '0012', '{"a":1}', '', 'λ'])('preserves text %s', (text) => {
     expect(rowInputValue(rowInputDraft(text), 'text')).toBe(text);
   });
+  it.each(['', 'AP9/', 'AA=='])('round trips binary %s', (data) => {
+    const value = {encoding: 'base64', data, byte_length: atob(data).length};
+    expect(rowInputValue(rowInputDraft(value, 'binary'), 'binary')).toEqual(value);
+  });
+  it.each(['AA', 'AR==', 'λ', 'AA==\n', '%%%'])('rejects noncanonical binary %s', (data) => {
+    expect(() => rowInputValue({text: data, isNull: false}, 'binary')).toThrow(/Base64/);
+  });
+  it('keeps empty binary and NULL distinct', () => {
+    expect(rowInputValue(rowInputDraft(null, 'binary'), 'binary')).toBeNull();
+    expect(rowInputValue(rowInputDraft('', 'binary'), 'binary')).toEqual({
+      encoding: 'base64', data: '', byte_length: 0,
+    });
+  });
   it.each([
     ['integer', '170141183460469231731687303715884105727'],
     ['integer', '-9223372036854775808'],

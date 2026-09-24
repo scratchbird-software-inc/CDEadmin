@@ -3369,11 +3369,12 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'], ['view', 'typed-time'], ['view', 'typed-timestamp']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'], ['view', 'typed-time'], ['view', 'typed-timestamp'], ['view', 'typed-binary']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
     const typed = operation.startsWith('typed-');
     const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
       'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null,
-      'typed-date': '0001-01-01', 'typed-time': '23:59:59.9999', 'typed-timestamp': '9999-12-31 23:59:59.9999'}[operation];
+      'typed-date': '0001-01-01', 'typed-time': '23:59:59.9999', 'typed-timestamp': '9999-12-31 23:59:59.9999',
+      'typed-binary': {encoding: 'base64', data: 'AP9/', byte_length: 3}}[operation];
     const mutation = typed || ['defaults', 'empty', 'null', 'omit'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
@@ -3406,7 +3407,7 @@ describe('ProviderWorkspaceContent', () => {
               ...(typed ? {input_kind: ['typed-null', 'typed-date', 'typed-time', 'typed-timestamp'].includes(operation) ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
-            values: {id: 1, 'second key': 2, name: 'first'}, identity_token: 'row-one',
+            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: 'row-one',
           }],
           editable: !(kind === 'table' && operation === 'defaults'),
           ...(kind === 'table' && operation !== 'update' ? {
@@ -3437,7 +3438,7 @@ describe('ProviderWorkspaceContent', () => {
     const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load rows'));
-    const name = await screen.findByDisplayValue('first');
+    const name = await screen.findByDisplayValue(operation === 'typed-binary' ? scalarValue.data : 'first');
     expect(screen.getByRole('textbox', {name: 'name value'})).toBe(name);
     expect(screen.getByRole('textbox', {name: 'id value'})).toHaveValue('1');
     expect(screen.getByRole('textbox', {name: 'second key value'})).toHaveValue('2');
@@ -3487,7 +3488,7 @@ describe('ProviderWorkspaceContent', () => {
             fireEvent.click(screen.getByRole('option', {name: 'NULL'}));
           } else {
             fireEvent.change(screen.getByRole('textbox', {name: 'name new value'}),
-              {target: {value: scalarValue}});
+              {target: {value: operation === 'typed-binary' ? scalarValue.data : scalarValue}});
           }
         }
         if (['empty', 'null'].includes(operation)) {

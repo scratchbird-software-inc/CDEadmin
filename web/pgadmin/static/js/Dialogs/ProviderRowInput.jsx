@@ -3,12 +3,22 @@ import PropTypes from 'prop-types';
 import {Box, MenuItem, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 
-export function rowInputDraft(value) {
-  return {text: value == null ? '' : String(value), isNull: value === null};
+export function rowInputDraft(value, kind) {
+  return {text: kind === 'binary' && value?.encoding === 'base64' ? value.data :
+    value == null ? '' : String(value), isNull: value === null};
 }
 
 export function rowInputValue(draft, kind) {
   if (draft.isNull) return null;
+  if (kind === 'binary') {
+    try {
+      const decoded = atob(draft.text);
+      if (btoa(decoded) !== draft.text) throw new Error('Noncanonical base64');
+      return {encoding: 'base64', data: draft.text, byte_length: decoded.length};
+    } catch {
+      throw new Error(gettext('Enter binary data as canonical Base64.'));
+    }
+  }
   if (kind === 'boolean') {
     if (!['true', 'false'].includes(draft.text)) {
       throw new Error(gettext('Choose True or False for a Boolean value.'));
@@ -43,13 +53,14 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
         <MenuItem value="false">{gettext('False')}</MenuItem>
       </TextField> :
       <TextField size="small" value={draft.text}
+        helperText={kind === 'binary' ? gettext('Base64 binary data') : undefined}
         disabled={disabled || draft.isNull} inputProps={{'aria-label': label}}
         onChange={(event) => onChange({...draft, text: event.target.value})} />}
   </Box>;
 }
 
 ProviderRowInput.propTypes = {
-  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'boolean']).isRequired,
+  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'boolean', 'binary']).isRequired,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,
