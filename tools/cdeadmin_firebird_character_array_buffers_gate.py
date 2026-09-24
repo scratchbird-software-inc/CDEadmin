@@ -158,14 +158,20 @@ def main():
                         help='Use UTF8 attachments also for ASCII arrays')
     parser.add_argument('--character-only', action='store_true',
                         help='Target character checks plus base view gate')
+    parser.add_argument('--slice-bytes', type=int, default=1024 * 1024)
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Output exists; preserve previous evidence')
+    if not 32 <= args.slice_bytes <= 1024 * 1024:
+        parser.error('Slice bytes must be between 32 and 1048576')
+    from pgadmin.cdeadmin.providers.firebird import varying_arrays
+    varying_arrays.SLICE_BYTES = args.slice_bytes
     result = base.run(extra_checks=lambda *values: verify(
         *values, cross_charset=args.cross_charset,
         character_only=args.character_only))
     result['cross_charset'] = args.cross_charset
     result['character_only'] = args.character_only
+    result['slice_bytes'] = args.slice_bytes
     result['complete'] = bool(result['complete'] and not result['failures']
                               and len(result.get(
                                   'character_array_buffer_checks', [])) == 32)

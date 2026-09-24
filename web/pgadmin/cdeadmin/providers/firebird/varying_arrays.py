@@ -1,6 +1,6 @@
 """Variable binary/text slices without C-string truncation."""
 from ctypes import create_string_buffer
-from itertools import product
+from itertools import chain, product
 
 from firebird.driver import fbapi
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
@@ -9,6 +9,65 @@ from .array_sdl import text_slice
 # Firebird intl/charsets.h identifiers; other charsets require qualification.
 TEXT_CHARSETS = {2: ('ascii', 1), 4: ('utf8', 4),
                  21: ('iso8859_1', 1), 53: ('cp1252', 1)}
+SLICE_BYTES = 1024 * 1024
+
+
+def chunks(bounds, dimensions, width):
+    """Yield contiguous row-major rectangles with bounded native buffers."""
+    if (not 1 <= len(dimensions) <= 16 or
+            len(dimensions) != bounds.array_desc_dimensions or
+            not 1 <= width <= 65535):
+        raise RelationalClientError('Invalid variable array slice metadata')
+    count = 1
+    for index, size in enumerate(dimensions):
+        bound = bounds.array_desc_bounds[index]
+        if size <= 0 or size != (
+                bound.array_bound_upper - bound.array_bound_lower + 1):
+            raise RelationalClientError('Variable array bounds disagree')
+        count *= size
+    if count * width <= SLICE_BYTES:
+        yield bounds, dimensions
+        return
+    index = next((i for i, size in enumerate(dimensions) if size > 1), None)
+    if index is None:
+        raise RelationalClientError(
+            'Variable array element exceeds buffer cap')
+    size = dimensions[index]
+    lower = bounds.array_desc_bounds[index].array_bound_lower
+    left = size // 2
+    for start, length in ((lower, left), (lower + left, size - left)):
+        part = fbapi.ISC_ARRAY_DESC.from_buffer_copy(bounds)
+        part.array_desc_bounds[index].array_bound_lower = start
+        part.array_desc_bounds[index].array_bound_upper = start + length - 1
+        shape = list(dimensions)
+        shape[index] = length
+        yield from chunks(part, shape, width)
+
+
+def _chunked(bounds, dimensions, width, reader):
+    parts = iter(chunks(bounds, dimensions, width))
+    first = next(parts)  # Validate all original bounds before reconstruction.
+    if first[0] is bounds:
+        return reader(*first)
+
+    def flatten(items, depth):
+        for item in items:
+            if depth == len(dimensions) - 1:
+                yield item
+            else:
+                yield from flatten(item, depth + 1)
+
+    def values():
+        for part, shape in chain((first,), parts):
+            yield from flatten(reader(part, shape), 0)
+
+    leaves = values()
+
+    def nest(depth):
+        return [next(leaves) if depth == len(dimensions) - 1 else nest(depth+1)
+                for _ in range(dimensions[depth])]
+
+    return nest(0)
 
 
 def read_text(cursor, array_id, bounds, dimensions, characters, charset):
@@ -17,9 +76,17 @@ def read_text(cursor, array_id, bounds, dimensions, characters, charset):
     if not 1 <= characters * width <= 65535:
         raise RelationalClientError(
             'Stored character slice width out of range')
+    return _chunked(
+        bounds, dimensions, max(characters * width, bounds.array_desc_length),
+        lambda part, shape: _read_text(
+            cursor, array_id, part, shape, characters, charset))
+
+
+def _read_text(cursor, array_id, bounds, dimensions, characters, charset):
+    encoding, width = TEXT_CHARSETS[charset]
     stored = fbapi.ISC_ARRAY_DESC.from_buffer_copy(bounds)
     stored.array_desc_length = characters * width
-    originals = read(cursor, array_id, stored, dimensions)
+    originals = _read(cursor, array_id, stored, dimensions)
     count = 1
     for dimension in dimensions:
         count *= dimension
@@ -63,6 +130,11 @@ def unpad(zero, space):
 
 
 def read(cursor, array_id, bounds, dimensions):
+    return _chunked(bounds, dimensions, bounds.array_desc_length,
+                    lambda part, shape: _read(cursor, array_id, part, shape))
+
+
+def _read(cursor, array_id, bounds, dimensions):
     count = 1
     for dimension in dimensions:
         count *= dimension

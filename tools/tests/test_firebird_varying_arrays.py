@@ -131,7 +131,7 @@ def test_text_lengths_preserve_nuls_and_require_native_conversion(
         return len(packed) - int(failure == 'short')
 
     cursor._connection._att.get_slice.side_effect = get
-    with patch('pgadmin.cdeadmin.providers.firebird.varying_arrays.read',
+    with patch('pgadmin.cdeadmin.providers.firebird.varying_arrays._read',
                return_value=[value.encode(encoding), b'']) as raw_read:
         if failure:
             with pytest.raises((RelationalClientError, ValueError)):

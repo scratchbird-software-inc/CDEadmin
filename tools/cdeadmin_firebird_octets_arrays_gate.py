@@ -140,12 +140,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--binary-only', action='store_true')
+    parser.add_argument('--slice-bytes', type=int, default=1024 * 1024)
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Output exists; preserve prior evidence')
+    if not 256 <= args.slice_bytes <= 1024 * 1024:
+        parser.error('Slice bytes must be between 256 and 1048576')
+    from pgadmin.cdeadmin.providers.firebird import varying_arrays
+    varying_arrays.SLICE_BYTES = args.slice_bytes
     result = base.run(extra_checks=lambda *values: verify(
         *values, binary_only=args.binary_only))
     result['binary_only'] = args.binary_only
+    result['slice_bytes'] = args.slice_bytes
     result['complete'] = bool(result['complete'] and not result['failures'] and
                               len(result.get('octets_array_checks', [])) == 16)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
