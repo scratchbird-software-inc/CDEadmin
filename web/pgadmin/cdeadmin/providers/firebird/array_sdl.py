@@ -4,13 +4,21 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
 def octets(bounds):
+    return text_slice(bounds, 1)
+
+
+def text_slice(bounds, charset, *, cstring=False):
     # consts_pub.h: version1, struct, relation, field, do2, long_integer,
     # element, scalar, variable, eoc. Unlike isc_array_get_slice's generated
-    # dynamic text descriptor, text2 explicitly fixes the charset to OCTETS.
+    # dynamic text descriptor, text2/cstring2 explicitly set the charset.
     count = bounds.array_desc_dimensions
     if not 1 <= count <= 16 or not 1 <= bounds.array_desc_length <= 65535:
         raise RelationalClientError('Invalid OCTETS array descriptor')
-    result = bytearray([1, 6, 1, fbapi.blr_text2, 1, 0])
+    if type(charset) is not int or not 0 <= charset <= 65535:
+        raise RelationalClientError('Invalid slice character set')
+    result = bytearray([1, 6, 1,
+                        fbapi.blr_cstring2 if cstring else fbapi.blr_text2])
+    result.extend(charset.to_bytes(2, 'little'))
     result.extend(bounds.array_desc_length.to_bytes(2, 'little'))
     for tag, name in ((2, bounds.array_desc_relation_name),
                       (4, bounds.array_desc_field_name)):

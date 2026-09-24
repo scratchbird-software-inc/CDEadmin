@@ -80,6 +80,5 @@ def test_octets_metadata_uses_byte_width_not_connection_character_width():
     catalog.fetchone.return_value = (14, 256, 1, 4)
     assert metadata(cursor, 'T', 'A') == (14, 256, 1, 1)
     catalog.fetchone.return_value = (37, 256, 1, 4)
-    assert metadata(cursor, 'T', 'A') is None  # No VARCHAR binary claim.
-    with pytest.raises(RelationalClientError, match='Only fixed OCTETS'):
-        encode([b'abc'], [1], (37, 256, 1, 1), 'utf8')
+    assert metadata(cursor, 'T', 'A') == (37, 256, 1, 1)
+    assert encode([b'abc'], [1], (37, 256, 1, 1), 'utf8') == [b'abc']
