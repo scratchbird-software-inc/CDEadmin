@@ -31,6 +31,8 @@ def parameter(value):
 
 
 def normalize_value(value):
+    if isinstance(value, (list, tuple)):
+        return [normalize_value(item) for item in value]
     # JS String(-0) and JSON.stringify(-0) both erase its sign. Transport all
     # approximate numerics as round-trip text; the native type remains visible.
     if isinstance(value, float):

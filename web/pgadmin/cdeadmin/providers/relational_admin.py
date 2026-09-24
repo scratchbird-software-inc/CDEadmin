@@ -3000,6 +3000,10 @@ class RelationalAdministration:
                     from .firebird.grid_array_identity import verify
                     verify(cursor, statement['firebird_array_guard'])
                 parameters = statement.get('parameters', ())
+                if self.dialect.engine_id == 'firebird' and parameters:
+                    from .firebird.grid_arrays import parameters as arrays
+                    parameters = arrays(connection, cursor,
+                                        statement['source'], parameters)
                 if parameters:
                     cursor.execute(statement['source'], parameters)
                 else:
