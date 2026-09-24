@@ -27,7 +27,9 @@ def verify(connection, client, route, password, result, *,
 
     for number, (kind, charset) in enumerate([
             ('CHAR', 'ASCII'), ('VARCHAR', 'ASCII'),
-            ('CHAR', 'UTF8'), ('VARCHAR', 'UTF8')]):
+            ('CHAR', 'UTF8'), ('VARCHAR', 'UTF8'),
+            ('CHAR', 'ISO8859_1'), ('VARCHAR', 'ISO8859_1'),
+            ('CHAR', 'WIN1252'), ('VARCHAR', 'WIN1252')]):
         table, view = f'GCAB_{number}', f'GCABV_{number}'
         sql(connection, f'CREATE TABLE {table}(ID INT PRIMARY KEY, '
             f'A {kind}(8)[-1:0,2:3] CHARACTER SET {charset})')
@@ -63,7 +65,9 @@ def verify(connection, client, route, password, result, *,
                                f'A[0,2], A[0,3] FROM {table}')
 
                 try:
-                    special = 'é🐦' if charset == 'UTF8' else 'xy'
+                    special = {'UTF8': 'é🐦', 'ASCII': 'xy',
+                               'ISO8859_1': 'é' * 8,
+                               'WIN1252': '€' * 8}[charset]
                     original = [['abcdefgh', 'x'], ['', special]]
                     expected = tuple(item.ljust(8) if kind == 'CHAR' else item
                                      for row in original for item in row)
@@ -97,8 +101,17 @@ def verify(connection, client, route, password, result, *,
                     assert leaves(handle) == [expected], leaves(handle)
                     assert page()['rows'][0]['values']['A'] == [
                         list(expected[:2]), list(expected[2:])]
-                    for bad in ('z' * 100, None) + (
-                            ('a\0b',) if kind == 'VARCHAR' else ()):
+                    row = page()['rows'][0]
+                    apply('update', {'selector': {'identity_token': row[
+                        'identity_token']}, 'changes': {'A': None}})
+                    row = page()['rows'][0]
+                    assert row['values']['A'] is None
+                    apply('update', {'selector': {'identity_token': row[
+                        'identity_token']}, 'changes': {'A': changed}})
+                    invalid = ('z' * 100, None) + (
+                        ('a\0b',) if kind == 'VARCHAR' else ()) + (
+                        ('🐦',) if charset != 'UTF8' else ())
+                    for bad in invalid:
                         row = page()['rows'][0]
                         try:
                             apply('update', {'selector': {
@@ -149,7 +162,7 @@ def main():
     result['character_only'] = args.character_only
     result['complete'] = bool(result['complete'] and not result['failures']
                               and len(result.get(
-                                  'character_array_buffer_checks', [])) == 16)
+                                  'character_array_buffer_checks', [])) == 32)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'complete': result['complete'],
                       'failures': result['failures']}))

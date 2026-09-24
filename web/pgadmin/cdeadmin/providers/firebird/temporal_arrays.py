@@ -42,6 +42,10 @@ def parse(value, code):
 
 
 class TemporalArrayCursor(core.Cursor):
+    def _pack_input(self, meta, buffer, parameters):
+        from .character_arrays import pack
+        return pack(self, meta, buffer, parameters, super()._pack_input)
+
     def _unpack_output(self):
         from .character_arrays import unpack
         return unpack(self, super()._unpack_output)
