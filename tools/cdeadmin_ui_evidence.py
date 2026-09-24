@@ -516,6 +516,41 @@ def _context_pointer(wait, driver, supplied):
     actions.context_click().perform()
 
 
+def _observed_menu_click(driver, clickable):
+    """Record actual trusted click delivery without invoking a JS action."""
+    driver.execute_script('''
+        const expected = arguments[0];
+        const observation = {expected: expected.dataset.actionId || null,
+          received: false, matched: false, trusted: false, actual: null};
+        const handler = event => {
+          observation.received = true;
+          observation.matched = expected === event.target ||
+            expected.contains(event.target);
+          observation.trusted = event.isTrusted;
+          observation.actual = event.target.closest('[data-action-id]')
+            ?.dataset.actionId || null;
+        };
+        window.__cdeQaMenuClick = {observation, handler};
+        document.addEventListener('click', handler,
+          {capture: true, once: true});
+    ''', clickable)
+    try:
+        clickable.click()
+    finally:
+        observation = driver.execute_script('''
+            const trace = window.__cdeQaMenuClick;
+            if (!trace) return null;
+            document.removeEventListener('click', trace.handler, true);
+            delete window.__cdeQaMenuClick;
+            return trace.observation;
+        ''')
+        print('menu click delivery ' + json.dumps(observation, sort_keys=True),
+              flush=True)
+    if not observation or not all(observation.get(key) for key in (
+            'received', 'matched', 'trusted')):
+        raise RuntimeError('Context command did not receive its trusted click')
+
+
 def invoke_context_action(
         wait, driver, database, labels, endpoint_password=None,
         endpoint_prompt_timeout=5):
@@ -580,7 +615,7 @@ def invoke_context_action(
                   bounds.top + bounds.height / 2);
                 return item === hit || item.contains(hit);
             ''', clickable))
-            clickable.click()
+            _observed_menu_click(driver, clickable)
             complete_endpoint_prompt(
                 driver, endpoint_password, timeout=endpoint_prompt_timeout
             )

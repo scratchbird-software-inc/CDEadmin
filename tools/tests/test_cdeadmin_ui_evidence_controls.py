@@ -31,6 +31,8 @@ def test_context_command_scrolls_menu_and_requires_pointer_hit(
                         Mock(return_value=False))
     monkeypatch.setattr(evidence, 'visible_menu_label',
                         Mock(return_value=item))
+    click = Mock()
+    monkeypatch.setattr(evidence, '_observed_menu_click', click)
 
     def until(callback):
         value = callback(driver)
@@ -43,13 +45,41 @@ def test_context_command_scrolls_menu_and_requires_pointer_hit(
         with pytest.raises(TimeoutException):
             evidence.invoke_context_action(wait, driver, object(), ['Task'])
         item.click.assert_not_called()
+        click.assert_not_called()
     else:
         evidence.invoke_context_action(wait, driver, object(), ['Task'])
-        item.click.assert_called_once_with()
+        click.assert_called_once_with(driver, item)
     scripts = [call.args[0] for call in driver.execute_script.call_args_list]
     assert 'menu.scrollTop' in scripts[-2]
     assert 'scrollIntoView' not in scripts[-2]
     assert 'elementFromPoint' in scripts[-1]
+
+
+@pytest.mark.parametrize('bad_key', [None, 'received', 'matched', 'trusted'])
+def test_menu_click_requires_actual_trusted_delivery(bad_key):
+    from tools.cdeadmin_ui_evidence import _observed_menu_click
+    observation = dict(received=True, matched=True, trusted=True)
+    if bad_key:
+        observation[bad_key] = False
+    driver, item = Mock(), Mock()
+    driver.execute_script.side_effect = [None, observation]
+    if bad_key:
+        with pytest.raises(RuntimeError, match='trusted click'):
+            _observed_menu_click(driver, item)
+    else:
+        _observed_menu_click(driver, item)
+    item.click.assert_called_once_with()
+    assert 'removeEventListener' in driver.execute_script.call_args.args[0]
+
+
+def test_menu_click_cleans_up_listener_on_webdriver_failure():
+    from tools.cdeadmin_ui_evidence import _observed_menu_click
+    driver, item = Mock(), Mock()
+    driver.execute_script.side_effect = [None, {}]
+    item.click.side_effect = RuntimeError('webdriver failed')
+    with pytest.raises(RuntimeError, match='webdriver failed'):
+        _observed_menu_click(driver, item)
+    assert 'removeEventListener' in driver.execute_script.call_args.args[0]
 
 
 @pytest.mark.parametrize('reachable', [False, True])

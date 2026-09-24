@@ -46,6 +46,7 @@ from tools.cdeadmin_firebird_ui_form_gate import (  # noqa: E402
     screenshot,
 )
 from tools.cdeadmin_ui_evidence import (  # noqa: E402
+    _endpoint_prompt_controls,
     complete_endpoint_prompt,
     invoke_context_action,
     visible_named_control,
@@ -262,9 +263,24 @@ def _capture(driver, options, state, records):
     }
 
 
-def _wait_for_editor(driver, wait, options):
+def _wait_for_editor(driver, wait, options, password=None):
+    verified = False
+
+    def ready(browser):
+        nonlocal verified
+        if _endpoint_prompt_controls(browser):
+            if verified:
+                raise RuntimeError('Endpoint verification reappeared')
+            print('Editor opening: completing delayed endpoint verification',
+                  flush=True)
+            complete_endpoint_prompt(browser, password,
+                                     timeout=options.timeout)
+            verified = True
+            return False
+        return visible_named_control(browser, 'Load rows')
+
     try:
-        return _button(wait, 'Load rows')
+        return wait.until(ready)
     except Exception:
         # Hide all editable values before capturing a failed opening: a late
         # credential prompt may still be visible. Never serialize its values.
@@ -464,7 +480,7 @@ def run(options, password):
             password, endpoint_prompt_timeout=1,
         )
         complete_endpoint_prompt(driver, password, timeout=1)
-        _wait_for_editor(driver, wait, options)
+        _wait_for_editor(driver, wait, options, password)
         _choose_table(driver, wait, 'CUSTOMERS')
         capture('initial')
         load_button = _button(wait, 'Load rows')

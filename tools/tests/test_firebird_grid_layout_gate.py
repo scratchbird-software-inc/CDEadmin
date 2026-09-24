@@ -14,12 +14,13 @@ def test_editor_open_failure_masks_values_and_preserves_error(
         monkeypatch, tmp_path):
     from tools import cdeadmin_firebird_grid_ui_gate as gate
     error = RuntimeError('editor missing')
-    monkeypatch.setattr(gate, '_button', Mock(side_effect=error))
     capture = Mock(side_effect=RuntimeError('capture failed'))
     monkeypatch.setattr(gate, 'screenshot', capture)
     driver = Mock()
+    wait = Mock()
+    wait.until.side_effect = error
     with pytest.raises(RuntimeError, match='editor missing'):
-        gate._wait_for_editor(driver, Mock(),
+        gate._wait_for_editor(driver, wait,
                               SimpleNamespace(output_root=tmp_path))
     assert 'visibility' in driver.execute_script.call_args.args[0]
     capture.assert_called_once_with(
@@ -29,10 +30,44 @@ def test_editor_open_failure_masks_values_and_preserves_error(
 def test_successful_editor_open_does_not_hide_inputs(monkeypatch):
     from tools import cdeadmin_firebird_grid_ui_gate as gate
     button = Mock()
-    monkeypatch.setattr(gate, '_button', Mock(return_value=button))
     driver = Mock()
-    assert gate._wait_for_editor(driver, Mock(), Mock()) is button
+    wait = Mock()
+    wait.until.return_value = button
+    assert gate._wait_for_editor(driver, wait, Mock()) is button
     driver.execute_script.assert_not_called()
+
+
+@pytest.mark.parametrize('reappears', [False, True])
+def test_editor_wait_handles_late_authentication_without_replaying_command(
+        monkeypatch, reappears, tmp_path):
+    from tools import cdeadmin_firebird_grid_ui_gate as gate
+    prompt = Mock(side_effect=[False, False, True, reappears])
+    monkeypatch.setattr(gate, '_endpoint_prompt_controls', prompt)
+    button = Mock()
+    controls = Mock(side_effect=[None, None, button])
+    monkeypatch.setattr(gate, 'visible_named_control', controls)
+    verify = Mock(return_value=True)
+    monkeypatch.setattr(gate, 'complete_endpoint_prompt', verify)
+    monkeypatch.setattr(gate, 'screenshot', Mock())
+    driver = Mock()
+
+    def until(callback):
+        for _ in range(4):
+            result = callback(driver)
+            if result:
+                return result
+        raise AssertionError('editor was never ready')
+
+    options = SimpleNamespace(timeout=45, output_root=tmp_path)
+    if reappears:
+        with pytest.raises(RuntimeError, match='verification reappeared'):
+            gate._wait_for_editor(driver, SimpleNamespace(until=until),
+                                  options, 'test-secret')
+    else:
+        assert gate._wait_for_editor(
+            driver, SimpleNamespace(until=until), options,
+            'test-secret') is button
+    verify.assert_called_once_with(driver, 'test-secret', timeout=45)
 
 
 def observation(scale=100):
