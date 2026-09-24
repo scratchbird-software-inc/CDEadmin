@@ -1375,6 +1375,24 @@ describe('ProviderWorkspaceContent', () => {
       maxHeight: containedScroll ? '320px' : 'none'});
   });
 
+  it.each([false, true])('lays out nested column metadata for its host (%s)', (containedScroll) => {
+    render(<ObjectInspectorSection containedScroll={containedScroll}
+      resource={{display_name: 'T', resource_kind: 'table',
+        extensions: {firebird: {native: {property_sections: ['columns'],
+          columns: [{name: 'CUSTOMER_ID', details: {nullable: false,
+            description: 'A long column description'}}]}}}}} />);
+    const tables = screen.getAllByRole('table');
+    expect(tables).toHaveLength(2);
+    tables.forEach((table, index) => {
+      const columns = getComputedStyle(table).gridTemplateColumns;
+      expect(columns).toBe(containedScroll ?
+        (index === 0 ? 'minmax(160px, 0.7fr) minmax(220px, 1fr)' :
+          'minmax(100px, 0.7fr) minmax(140px, 1fr)') : 'minmax(0, 1fr)');
+    });
+    expect(screen.getByText('CUSTOMER_ID')).toBeVisible();
+    expect(screen.getByText('No')).toBeVisible();
+  });
+
   it('surfaces provider catalog warnings without interpreting markup', () => {
     render(<ObjectInspectorSection resource={{display_name: 'T',
       resource_kind: 'table', extensions: {firebird: {native: {

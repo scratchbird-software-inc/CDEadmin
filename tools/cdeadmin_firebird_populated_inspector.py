@@ -129,21 +129,51 @@ def verify(driver, wait, options, capture):
         except Exception as error:
             keyboard = {'passed': False, 'error': str(error)}
         capture(f'object-{name}-ddl-keyboard-bottom')
+        columns_layout = {'passed': True, 'applicable': False}
         if expected[name]['columns']:
             panel = section('Columns', 'columns')
             wait.until(lambda _browser: all(
                 column in panel.text for column in expected[name]['columns']))
             capture(f'object-{name}-columns')
+            try:
+                columns_layout = {'passed': True, 'applicable': True,
+                                  **column_layout_evidence(driver, panel),
+                                  'keyboard': ddl_keyboard_evidence(
+                                      driver, wait, panel)}
+            except Exception as error:
+                columns_layout = {'passed': False, 'applicable': True,
+                                  'error': str(error)}
+            capture(f'object-{name}-columns-keyboard-bottom')
         results.append({'name': name, 'kind': kind,
                         'exact_provider_ddl_rendered': True,
                         'ddl_keyboard': keyboard,
+                        'columns_layout': columns_layout,
                         'native_column_names': expected[name]['columns']})
     (options.output_root / 'populated-inspector.json').write_text(
         json.dumps(results, indent=2) + '\n', encoding='utf-8')
-    if any(not item['ddl_keyboard']['passed'] for item in results):
+    if any(not item['ddl_keyboard']['passed'] or
+           not item['columns_layout']['passed'] for item in results):
         raise RuntimeError('Populated inspector keyboard checks failed; '
                            'see populated-inspector.json')
     return results
+
+
+def column_layout_evidence(driver, panel):
+    """All structured metadata must fit the panel horizontally."""
+    observation = driver.execute_script("""
+      const panel = arguments[0], bounds = panel.getBoundingClientRect();
+      const cells = [...panel.querySelectorAll(
+        '[role="rowheader"], [role="cell"]')];
+      return {cells: cells.length, overflowing: cells.filter(node => {
+        const rect = node.getBoundingClientRect();
+        return rect.left < bounds.left - 1 || rect.right > bounds.right + 1
+          || node.scrollWidth > node.clientWidth + 1;
+      }).length};
+    """, panel)
+    if observation['cells'] == 0 or observation['overflowing']:
+        raise RuntimeError('Column metadata overflows inspector: '
+                           + str(observation))
+    return observation
 
 
 def assert_text_visible(observation):

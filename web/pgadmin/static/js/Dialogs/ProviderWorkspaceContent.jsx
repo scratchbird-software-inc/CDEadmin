@@ -832,7 +832,7 @@ export function inspectorSections(resource, descriptor) {
   return sections;
 }
 
-function NativePropertyValue({value, depth=0}) {
+function NativePropertyValue({value, depth=0, compact=false}) {
   if (value === null || value === undefined) {
     return <Box component="span" sx={{color: 'text.secondary'}}>
       {gettext('Not set')}
@@ -846,7 +846,7 @@ function NativePropertyValue({value, depth=0}) {
     }
     return <Box component="ol" sx={{m: 0, pl: 2.5}}>
       {value.map((item, index) => <li key={index}>
-        <NativePropertyValue value={item} depth={depth + 1} />
+        <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
       </li>)}
     </Box>;
   }
@@ -858,17 +858,18 @@ function NativePropertyValue({value, depth=0}) {
       </Box>;
     }
     return <Box role="table" aria-label={gettext('Native provider properties')}
-      sx={{display: 'grid', gridTemplateColumns: depth > 1 ?
-        'minmax(100px, 0.7fr) minmax(140px, 1fr)' :
-        'minmax(160px, 0.7fr) minmax(220px, 1fr)',
-      borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
+      sx={{display: 'grid', minWidth: 0,
+        gridTemplateColumns: compact ? 'minmax(0, 1fr)' : depth > 1 ?
+          'minmax(100px, 0.7fr) minmax(140px, 1fr)' :
+          'minmax(160px, 0.7fr) minmax(220px, 1fr)',
+        borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
       {entries.map(([name, item]) => <Fragment key={name}>
         <Box role="rowheader" sx={{p: 0.75, fontWeight: 600,
           overflowWrap: 'anywhere', borderRight: 1, borderBottom: 1,
           borderColor: 'divider'}}>{name.replaceAll('_', ' ')}</Box>
         <Box role="cell" sx={{p: 0.75, overflowWrap: 'anywhere',
           borderRight: 1, borderBottom: 1, borderColor: 'divider'}}>
-          <NativePropertyValue value={item} depth={depth + 1} />
+          <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
         </Box>
       </Fragment>)}
     </Box>;
@@ -881,6 +882,7 @@ function NativePropertyValue({value, depth=0}) {
 NativePropertyValue.propTypes = {
   value: PropTypes.any,
   depth: PropTypes.number,
+  compact: PropTypes.bool,
 };
 
 export function ObjectInspectorSection({resource, descriptor, loading,
@@ -899,7 +901,7 @@ export function ObjectInspectorSection({resource, descriptor, loading,
         <Alert key={index} severity="warning">{message}</Alert>)}
     {coverage?.state === 'partial' && <Alert severity="warning">
       {gettext('Catalog visibility is incomplete. Missing objects may reflect denied access or failed catalog queries, not an empty database.')}
-      <NativePropertyValue value={coverage} />
+      <NativePropertyValue value={coverage} compact={!containedScroll} />
     </Alert>}
     <Box sx={{p: 1}}>
       <Box component="strong">{resource.display_name}</Box>
@@ -941,7 +943,7 @@ export function ObjectInspectorSection({resource, descriptor, loading,
               {item.title}
             </Button>)}
         </Box>}
-      <NativePropertyValue value={sectionPayload(
+      <NativePropertyValue compact={!containedScroll} value={sectionPayload(
         section, resource, descriptor
       )} />
     </Box>

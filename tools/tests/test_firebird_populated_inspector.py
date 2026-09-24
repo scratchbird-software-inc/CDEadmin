@@ -7,6 +7,22 @@ import pytest
 from tools import cdeadmin_firebird_populated_inspector as gate
 
 
+@pytest.mark.parametrize('cells,overflowing', [(0, 0), (12, 1), (12, 12)])
+def test_column_layout_rejects_missing_or_clipped_cells(cells, overflowing):
+    driver = Mock()
+    driver.execute_script.return_value = {
+        'cells': cells, 'overflowing': overflowing}
+    with pytest.raises(RuntimeError, match='Column metadata overflows'):
+        gate.column_layout_evidence(driver, Mock())
+
+
+def test_column_layout_accepts_visible_width():
+    driver = Mock()
+    driver.execute_script.return_value = {'cells': 24, 'overflowing': 0}
+    assert gate.column_layout_evidence(driver, Mock()) == {
+        'cells': 24, 'overflowing': 0}
+
+
 @pytest.fixture
 def native(monkeypatch):
     import firebird.driver as driver
