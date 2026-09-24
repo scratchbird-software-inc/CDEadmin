@@ -39,6 +39,47 @@ def test_temporal_parameter_refuses_silent_precision_loss():
         parameter(time(0, 0, 0, 1))
 
 
+@pytest.mark.parametrize('value,expected', [
+    (0.1, '0.1'), (-0.0, '-0.0'), (0.0, '0.0'),
+    (1.7976931348623157e308, '1.7976931348623157e+308'),
+    (2.2250738585072014e-308, '2.2250738585072014e-308'),
+])
+def test_float_grid_uses_roundtrip_text_and_preserves_negative_zero(
+        value, expected):
+    import json
+    import struct
+    result = json.loads(json.dumps(normalize_value(value)))
+    assert result == expected
+    assert struct.pack('d', float(result)) == struct.pack('d', value)
+    assert struct.pack('d', bind_value({'encoding': 'float64',
+                                       'data': result})) == struct.pack(
+                                           'd', value)
+
+
+@pytest.mark.parametrize('value', [
+    'NaN', 'Infinity', '-Infinity', '1e400', '1e-400',
+    '1_2', ' 1', '١', '', None, True])
+def test_float_binding_rejects_invalid_or_unrepresentable_input(value):
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    with pytest.raises(RelationalClientError):
+        bind_value({'encoding': 'float64', 'data': value})
+
+
+@pytest.mark.parametrize('value', ['1e100', '-1e100', '1e-100', '-1e-100'])
+def test_float32_rejects_overflow_and_zero_underflow(value):
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    with pytest.raises(RelationalClientError, match='range'):
+        bind_value({'encoding': 'float32', 'data': value})
+
+
+@pytest.mark.parametrize('value', [
+    '0.1', '-0.0', '1.401298464324817e-45', '3.4028234663852886e38'])
+def test_float32_native_width(value):
+    import struct
+    actual = bind_value({'encoding': 'float32', 'data': value})
+    assert struct.pack('f', actual) == struct.pack('f', float(value))
+
+
 @pytest.mark.parametrize('value_type,expected', [
     (str, 'text'), (int, 'integer'), (Decimal, 'decimal'), (bool, 'boolean'),
     (float, None), (bytes, None), (list, None), ('INTEGER', None),
@@ -53,6 +94,8 @@ def test_hints_use_driver_types_not_names(value_type, expected):
     (SQLDataType.INT64, 2, -4, 0, 'decimal'),
     (SQLDataType.DEC16, 0, 0, 0, 'decfloat'),
     (SQLDataType.DEC34, 0, 0, 0, 'decfloat'),
+    (SQLDataType.FLOAT, 0, 0, 0, 'float32'),
+    (SQLDataType.DOUBLE, 0, 0, 0, 'float64'),
     (SQLDataType.DATE, 0, 0, 0, 'text'),
     (SQLDataType.TIME, 0, 0, 0, 'text'),
     (SQLDataType.TIMESTAMP, 0, 0, 0, 'text'),

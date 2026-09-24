@@ -29,9 +29,10 @@ export function rowInputValue(draft, kind) {
     throw new Error(gettext('Enter an integer without a decimal point.'));
   }
   const decimalSpecial = kind === 'decfloat' && /^[+-]?(?:s?NaN|Infinity)$/i.test(draft.text);
-  if (['decimal', 'decfloat'].includes(kind) && !decimalSpecial && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
+  if (['decimal', 'decfloat', 'float32', 'float64'].includes(kind) && !decimalSpecial && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
     throw new Error(gettext('Enter an exact decimal value.'));
   }
+  if (['float32', 'float64'].includes(kind)) return {encoding: kind, data: draft.text};
   return draft.text;
 }
 
@@ -53,14 +54,15 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
         <MenuItem value="false">{gettext('False')}</MenuItem>
       </TextField> :
       <TextField size="small" value={draft.text}
-        helperText={kind === 'binary' ? gettext('Base64 binary data') : undefined}
+        helperText={kind === 'binary' ? gettext('Base64 binary data') :
+          ['float32', 'float64'].includes(kind) ? gettext('Approximate native FLOAT/DOUBLE value') : undefined}
         disabled={disabled || draft.isNull} inputProps={{'aria-label': label}}
         onChange={(event) => onChange({...draft, text: event.target.value})} />}
   </Box>;
 }
 
 ProviderRowInput.propTypes = {
-  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'boolean', 'binary']).isRequired,
+  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary']).isRequired,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,

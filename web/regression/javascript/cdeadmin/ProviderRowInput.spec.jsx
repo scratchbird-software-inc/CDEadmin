@@ -49,6 +49,14 @@ describe('Provider scalar inputs', () => {
   it.each(['NaN', 'Infinity', 'sNaN'])('does not admit DECFLOAT special %s for fixed point', (value) => {
     expect(() => rowInputValue(rowInputDraft(value), 'decimal')).toThrow();
   });
+  it.each(['-0.0', '1.7976931348623157e308', '2.2250738585072014e-308'])('tags float %s without JS numeric coercion', (value) => {
+    expect(rowInputValue(rowInputDraft(value, 'float64'), 'float64')).toEqual({
+      encoding: 'float64', data: value,
+    });
+  });
+  it.each(['NaN', 'Infinity', '1_2', ' 1'])('rejects invalid float %s', (value) => {
+    expect(() => rowInputValue(rowInputDraft(value), 'float32')).toThrow();
+  });
   it('uses a separate NULL selector without losing the text draft', () => {
     const changed = jest.fn();
     const {rerender} = render(<ProviderRowInput kind="text" label="value"

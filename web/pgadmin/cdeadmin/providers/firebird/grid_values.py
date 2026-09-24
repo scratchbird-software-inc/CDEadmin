@@ -2,6 +2,9 @@
 from decimal import Decimal
 from datetime import date, datetime, time
 import base64
+import math
+import re
+import struct
 from collections.abc import Mapping
 
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
@@ -28,13 +31,51 @@ def parameter(value):
 
 
 def normalize_value(value):
+    # JS String(-0) and JSON.stringify(-0) both erase its sign. Transport all
+    # approximate numerics as round-trip text; the native type remains visible.
+    if isinstance(value, float):
+        return repr(value)
     return normalize_query_value(parameter(value))
 
 
 def bind_value(value):
-    """Decode the explicit binary wire envelope; never guess text encodings."""
+    """Decode explicit wire envelopes; never guess ordinary text encodings."""
     if not isinstance(value, Mapping):
         return value
+    if value.get('encoding') in {'float32', 'float64'}:
+        if set(value) != {'encoding', 'data'} or not isinstance(
+                value.get('data'), str):
+            raise RelationalClientError('Firebird float envelope is invalid')
+        if not re.fullmatch(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)'
+                            r'(?:[eE][+-]?\d+)?', value['data'], re.ASCII):
+            raise RelationalClientError(
+                'Firebird floating-point value invalid')
+        try:
+            number = float(value['data'])
+        except ValueError:
+            raise RelationalClientError(
+                'Firebird floating-point value invalid')
+        if not math.isfinite(number):
+            raise RelationalClientError('Firebird floating-point value must '
+                                        'be finite and within binary64 range')
+        if number == 0 and any(character in '123456789' for character in
+                               value['data'].lower().split('e')[0]):
+            raise RelationalClientError('Firebird DOUBLE is below '
+                                        'nonzero binary64 range')
+        if value['encoding'] == 'float32':
+            try:
+                narrowed = struct.unpack('f', struct.pack('f', number))[0]
+            except OverflowError:
+                raise RelationalClientError('Firebird FLOAT exceeds '
+                                            'finite binary32 range')
+            if not math.isfinite(narrowed):
+                raise RelationalClientError('Firebird FLOAT exceeds '
+                                            'finite binary32 range')
+            if number and narrowed == 0:
+                raise RelationalClientError('Firebird FLOAT is below '
+                                            'nonzero binary32 range')
+            number = narrowed
+        return number
     if (set(value) != {'encoding', 'data', 'byte_length'} or
             value.get('encoding') != 'base64' or
             not isinstance(value.get('data'), str) or
@@ -84,6 +125,7 @@ def input_kinds(cursor):
                  'INTEGER': 'integer', 'BIGINT': 'integer',
                  'INT128': 'integer',
                  'NUMERIC': 'decimal', 'DECIMAL': 'decimal',
+                 'FLOAT': 'float32', 'DOUBLE PRECISION': 'float64',
                  'DECFLOAT(16)': 'decfloat', 'DECFLOAT(34)': 'decfloat',
                  'DATE': 'text', 'TIME': 'text', 'TIMESTAMP': 'text',
                  'BOOLEAN': 'boolean'}.get(native))
