@@ -199,6 +199,15 @@ class FirebirdProvider(ActualEnginePilotProvider):
                 return super().open_session(request)
         return super().open_session(request)
 
+    def query_stream(self, request):
+        self._require('execute')
+        request = _mapping(request)
+        session = self._sessions.get(request.get('session_id'))
+        if session is None:
+            raise ValueError('Provider session is unavailable')
+        self._invalidate_grid_session(request['session_id'])
+        return self.client.query_stream(session.handle, request)
+
     def _grid_session_guard(self, request, *, closing=False):
         context = self._visual_admin_session_context(_mapping(request))
         if context and isinstance(self.client, FirebirdQueryClient):

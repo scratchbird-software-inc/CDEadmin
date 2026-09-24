@@ -2651,6 +2651,12 @@ class ServerNode(PGChildNodeView):
                         max_rows=data.get('max_rows'),
                         client_sql_dialect=data.get('client_sql_dialect'),
                     )
+                elif action == 'query_stream':
+                    payload = service.query_stream(
+                        server, data.get('session_id'),
+                        data.get('request') or {},
+                        data.get('database_target_id'),
+                    )
                 elif action == 'poll':
                     payload = service.poll(
                         server, data.get('occurrence_id'),

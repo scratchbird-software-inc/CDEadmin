@@ -26,6 +26,7 @@ import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
+import FirebirdResultStream from './FirebirdResultStream';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
@@ -7410,6 +7411,12 @@ export default function ProviderWorkspaceContent({
           inputProps={{min: 0, max: 1000000, step: 1}}
           onChange={(event) => setMaximumRows(event.target.value)}
           helperText={gettext('0 fetches all rows. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
+        {languageProfile === 'firebird-sql' && <FirebirdResultStream
+          key={queryDatabaseTargetId}
+          post={post} ensureSession={ensureSession}
+          databaseTargetId={queryDatabaseTargetId} source={source}
+          parameters={parameterSource} dialect={clientSqlDialect}
+          disabled={busy || querySessionBlocked || !!occurrenceId} />}
         {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
           sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
           {fetchObservation.limit_reached ?
