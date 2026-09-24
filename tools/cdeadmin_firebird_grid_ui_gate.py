@@ -250,7 +250,12 @@ def _write_records(options, evidence):
 
 def run(options, password):
     driver = create_driver(options)
-    wait = WebDriverWait(driver, options.timeout)
+    # Commit/rollback replaces rendered row controls. Retry observations of
+    # detached elements, never the mutation button clicks themselves.
+    wait = WebDriverWait(
+        driver, options.timeout,
+        ignored_exceptions=(StaleElementReferenceException,),
+    )
     screenshots = {}
     controls = {}
 
@@ -440,8 +445,9 @@ def main():
     finally:
         # This provider-driven gate also removes the fixed disposable marker
         # if browser execution stopped after its commit but before UI cleanup.
-        verify_and_clean_seeded_database(options.profiles)
+        independent = verify_and_clean_seeded_database(options.profiles)
         password = ''
+    evidence['independent_transaction_verification'] = independent
     options.summary_output.parent.mkdir(parents=True, exist_ok=True)
     options.summary_output.write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + '\n',

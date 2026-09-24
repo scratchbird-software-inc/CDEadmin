@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -118,7 +119,7 @@ def _session_reference(session):
     ).hexdigest()[:16]
 
 
-def _execute(provider, session, sequence, source, parameters=()):
+def _execute(provider, session, sequence, source, parameters=(), timeout=30):
     sequence[0] += 1
     operation = provider.execute({
         'session_id': session['session_id'],
@@ -126,10 +127,26 @@ def _execute(provider, session, sequence, source, parameters=()):
         'source': source,
         'parameters': parameters,
     })
-    result = provider.describe_result(operation)
-    if not result['complete']:
-        raise RuntimeError('seeded Firebird result is incomplete')
-    return result['extensions']['firebird']['payload']
+    deadline = time.monotonic() + timeout
+    while True:
+        result = provider.describe_result(operation)
+        if result['complete']:
+            payload = result['extensions']['firebird']['payload']
+            if payload.get('execution_state') != 'succeeded':
+                raise RuntimeError('seeded Firebird query did not succeed')
+            return payload
+        if time.monotonic() >= deadline:
+            provider.cancel(operation)
+            # Cancellation acceptance is not a terminal outcome. Drain the
+            # native operation before the caller rolls back or closes it.
+            drain_deadline = time.monotonic() + timeout
+            while not provider.describe_result(operation)['complete']:
+                if time.monotonic() >= drain_deadline:
+                    raise RuntimeError(
+                        'seeded Firebird cancellation outcome is unknown')
+                time.sleep(0.01)
+            raise RuntimeError('seeded Firebird query timed out')
+        time.sleep(0.01)
 
 
 def _control(provider, session, action):
