@@ -208,6 +208,49 @@ def _grid_control_evidence(driver):
     )
 
 
+def _shell_layout_evidence(driver, database):
+    """Separate recoverable tree scrolling from inaccessible pane overflow."""
+    observed = driver.execute_script("""
+      const rect = element => {
+        const r = element.getBoundingClientRect();
+        return {left: r.left, right: r.right, width: r.width};
+      };
+      const inspector = document.querySelector(
+        'aside[aria-label="Inspector"]');
+      const empty = inspector?.querySelector('[data-cde-empty-state]');
+      if (!empty) throw new Error('Inspector empty-state fixture is absent');
+      const panel = empty.closest('[role="tabpanel"]');
+      const label = [...document.querySelectorAll('.file-name')]
+        .find(item => item.textContent.trim() === arguments[0]);
+      if (!label) throw new Error('Registered database label is absent');
+      const explorer = label.closest('aside');
+      const scrolls = [];
+      for (let node = label.parentElement; node && node !== explorer;
+           node = node.parentElement) {
+        if (node.scrollWidth > node.clientWidth) {
+          const before = node.scrollLeft;
+          node.scrollLeft = 0;
+          scrolls.push({before, after: node.scrollLeft});
+        }
+      }
+      return {inspector: rect(inspector), empty: rect(empty),
+        message: rect(empty.querySelector('span')),
+        panel_width: panel.clientWidth, panel_content_width: panel.scrollWidth,
+        explorer: rect(explorer), database_label: rect(label), scrolls};
+    """, database)
+    pane = observed['inspector']
+    if any(observed[key]['left'] < pane['left'] - 1 or
+           observed[key]['right'] > pane['right'] + 1
+           for key in ('empty', 'message')) or (
+            observed['panel_content_width'] > observed['panel_width'] + 1):
+        raise RuntimeError('Inspector empty-state overflows its pane')
+    if not (observed['explorer']['left'] - 1 <=
+            observed['database_label']['left'] <
+            observed['explorer']['right']):
+        raise RuntimeError('Navigator label start is unreachable by scrolling')
+    return observed
+
+
 def _capture(driver, options, state, records):
     viewport = f'{options.width}x{options.height}'
     variant = evidence_variant(options)
@@ -361,6 +404,8 @@ def run(options, password):
             )
         capture('loaded')
         layout = _layout_evidence(driver, options.font_scale)
+        shell_layout = _shell_layout_evidence(driver, options.database)
+        capture('shell-layout')
 
         _reveal_grid_column(driver, wait, 2)
         name = _visible_inputs(driver, 'NAME value')[0]
@@ -481,6 +526,7 @@ def run(options, password):
             'screenshots': screenshots,
             'controls': controls,
             'layout_checks': layout,
+            'shell_layout_checks': shell_layout,
             'passed': True,
         }
     finally:

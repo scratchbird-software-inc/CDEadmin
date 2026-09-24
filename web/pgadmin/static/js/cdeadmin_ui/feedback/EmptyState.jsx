@@ -23,16 +23,22 @@ const Root = styled(Box)(({theme}) => ({
   flexDirection: 'column',
   gap: theme.spacing(0.5),
   minHeight: 'var(--cde-target-size, 24px)',
-  height: '100%',
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box',
+  paddingInline: theme.spacing(1),
 }));
 
 export function EmptyState({message, icon, actionLabel, onAction, style,
   ...props}) {
-  return <Root style={style} {...props}>
+  return <Root data-cde-empty-state="true" style={style} {...props}>
     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5,
-      maxWidth: 520, textAlign: 'center'}}>
+      width: '100%', maxWidth: 520, minWidth: 0, textAlign: 'center',
+      '& > svg': {flexShrink: 0}}}>
       {icon ?? <InfoRoundedIcon aria-hidden="true" style={{height: '1.2rem'}} />}
-      <span>{message}</span>
+      <Box component="span" sx={{minWidth: 0, overflowWrap: 'anywhere'}}>
+        {message}</Box>
     </Box>
     {actionLabel && <Button onClick={onAction}>{actionLabel}</Button>}
   </Root>;

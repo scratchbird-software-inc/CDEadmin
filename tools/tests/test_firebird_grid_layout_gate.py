@@ -4,7 +4,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from tools.cdeadmin_firebird_grid_ui_gate import _layout_evidence
+from tools.cdeadmin_firebird_grid_ui_gate import (
+    _layout_evidence, _shell_layout_evidence,
+)
 
 
 def observation(scale=100):
@@ -71,3 +73,40 @@ def test_unmeasured_column_is_not_a_pass(invalid):
     driver.execute_script.return_value = value
     with pytest.raises(RuntimeError, match='compressed'):
         _layout_evidence(driver, 100)
+
+
+def shell_observation():
+    return {
+        'inspector': {'left': 0, 'right': 300},
+        'empty': {'left': 0, 'right': 300},
+        'message': {'left': 32, 'right': 292},
+        'panel_width': 300, 'panel_content_width': 300,
+        'explorer': {'left': 0, 'right': 300},
+        'database_label': {'left': 80, 'right': 900},
+        'scrolls': [{'before': 200, 'after': 0}],
+    }
+
+
+def test_recoverable_tree_scroll_is_not_misclassified_as_clipping():
+    driver = Mock()
+    driver.execute_script.return_value = shell_observation()
+    assert _shell_layout_evidence(driver, 'owned.fdb') == shell_observation()
+
+
+@pytest.mark.parametrize('key', ['empty', 'message'])
+def test_rejects_inspector_horizontal_overflow(key):
+    driver = Mock()
+    value = shell_observation()
+    value[key]['right'] = 350
+    driver.execute_script.return_value = value
+    with pytest.raises(RuntimeError, match='Inspector'):
+        _shell_layout_evidence(driver, 'owned.fdb')
+
+
+def test_rejects_unreachable_navigator_label_start():
+    driver = Mock()
+    value = shell_observation()
+    value['database_label']['left'] = -40
+    driver.execute_script.return_value = value
+    with pytest.raises(RuntimeError, match='Navigator'):
+        _shell_layout_evidence(driver, 'owned.fdb')

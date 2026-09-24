@@ -49,7 +49,7 @@ function Properties(props) {
   if(noPropertyMsg) {
     return (
       <StyledBox>
-        <Box margin={'4px auto'}>
+        <Box sx={{my: '4px', width: '100%', minWidth: 0}}>
           <EmptyPanelMessage text={noPropertyMsg} />
         </Box>
       </StyledBox>
