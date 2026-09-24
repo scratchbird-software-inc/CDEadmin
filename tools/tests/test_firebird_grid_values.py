@@ -1,5 +1,6 @@
 """Grid transport preserves native predicate values and exact wire values."""
 from decimal import Decimal
+from datetime import date, datetime, time
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
@@ -8,12 +9,34 @@ import pytest
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION
 from pgadmin.cdeadmin.providers.firebird.grid_values import input_kind
 from pgadmin.cdeadmin.providers.firebird.grid_values import (
-    input_kinds, materialize,
+    input_kinds, materialize, normalize_value, parameter,
     table_operations,
 )
 from firebird.driver.types import SQLDataType
 from firebird.driver import DatabaseError
 from pgadmin.cdeadmin.providers.relational_admin import _RowIdentity
+
+
+@pytest.mark.parametrize('value,expected', [
+    (date(1, 1, 1), '0001-01-01'),
+    (datetime(1, 1, 1), '0001-01-01 00:00:00'),
+    (datetime(9999, 12, 31, 23, 59, 59, 999900),
+     '9999-12-31 23:59:59.9999'),
+    (time(0, 0, 0, 100), '00:00:00.0001'),
+    (time(12, 34, 56, 123400), '12:34:56.1234'),
+])
+def test_temporal_grid_and_identity_share_native_lexical_precision(
+        value, expected):
+    assert normalize_value(value) == expected
+    assert parameter(value) == expected
+    identity = _RowIdentity((), ('T',), ('K',), (value,), {'K': value}, 0)
+    assert ADMINISTRATION._identity_predicate(identity) == (
+        '"K" = ?', (expected,))
+
+
+def test_temporal_parameter_refuses_silent_precision_loss():
+    with pytest.raises(ValueError, match='100 microseconds'):
+        parameter(time(0, 0, 0, 1))
 
 
 @pytest.mark.parametrize('value_type,expected', [
@@ -30,6 +53,9 @@ def test_hints_use_driver_types_not_names(value_type, expected):
     (SQLDataType.INT64, 2, -4, 0, 'decimal'),
     (SQLDataType.DEC16, 0, 0, 0, 'decfloat'),
     (SQLDataType.DEC34, 0, 0, 0, 'decfloat'),
+    (SQLDataType.DATE, 0, 0, 0, 'text'),
+    (SQLDataType.TIME, 0, 0, 0, 'text'),
+    (SQLDataType.TIMESTAMP, 0, 0, 0, 'text'),
     (SQLDataType.VARYING, 0, 0, 4, 'text'),
     (SQLDataType.VARYING, 0, 0, 1, None),
     (SQLDataType.BLOB, 1, 0, 4, 'text'),

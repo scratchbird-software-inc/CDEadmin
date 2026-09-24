@@ -7663,6 +7663,9 @@ class RelationalAdministration:
             else:
                 clauses.append(self._identity_equality(name, identity))
                 parameters.append(value)
+        if self.dialect.engine_id == 'firebird':
+            from .firebird.grid_values import parameter
+            parameters = [parameter(value) for value in parameters]
         return ' AND '.join(clauses), tuple(parameters)
 
     def _identity_equality(self, name, identity):

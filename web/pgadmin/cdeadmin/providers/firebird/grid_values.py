@@ -1,9 +1,30 @@
 """Native scalar editor hints and lossless grid transport."""
 from decimal import Decimal
+from datetime import date, datetime, time
 
-from .query_values import normalize_value  # noqa: F401
+from .query_values import normalize_value as normalize_query_value
 from .query_columns import describe_columns
 from .character_metadata import identifier
+
+
+def parameter(value):
+    """Native temporal text avoids driver timestamp range/precision loss."""
+    if isinstance(value, (datetime, time)) and value.tzinfo is None:
+        clock = f'{value.hour:02}:{value.minute:02}:{value.second:02}'
+        if value.microsecond:
+            if value.microsecond % 100:
+                raise ValueError(
+                    'Firebird temporal precision is 100 microseconds')
+            clock += f'.{value.microsecond // 100:04}'
+        return (value.date().isoformat() + ' ' + clock
+                if isinstance(value, datetime) else clock)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def normalize_value(value):
+    return normalize_query_value(parameter(value))
 
 
 def input_kind(native_type):
@@ -39,6 +60,7 @@ def input_kinds(cursor):
                  'INT128': 'integer',
                  'NUMERIC': 'decimal', 'DECIMAL': 'decimal',
                  'DECFLOAT(16)': 'decfloat', 'DECFLOAT(34)': 'decfloat',
+                 'DATE': 'text', 'TIME': 'text', 'TIMESTAMP': 'text',
                  'BOOLEAN': 'boolean'}.get(native))
         if native == 'BLOB' and metadata['native_subtype'] == 1:
             kind = 'text'

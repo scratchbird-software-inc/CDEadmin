@@ -3369,10 +3369,11 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'], ['view', 'typed-time'], ['view', 'typed-timestamp']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
     const typed = operation.startsWith('typed-');
     const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
-      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null}[operation];
+      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null,
+      'typed-date': '0001-01-01', 'typed-time': '23:59:59.9999', 'typed-timestamp': '9999-12-31 23:59:59.9999'}[operation];
     const mutation = typed || ['defaults', 'empty', 'null', 'omit'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
@@ -3402,7 +3403,7 @@ describe('ProviderWorkspaceContent', () => {
             {name: 'id', key: true, editable: operation === 'update', insertable: false},
             {name: 'second key', key: true, editable: false, insertable: false},
             {name: 'name', key: false, editable: operation === 'update', insertable: true,
-              ...(typed ? {input_kind: operation === 'typed-null' ? 'text' : operation.slice(6)} : {})},
+              ...(typed ? {input_kind: ['typed-null', 'typed-date', 'typed-time', 'typed-timestamp'].includes(operation) ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
             values: {id: 1, 'second key': 2, name: 'first'}, identity_token: 'row-one',
