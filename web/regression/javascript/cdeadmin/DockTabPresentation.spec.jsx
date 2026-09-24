@@ -32,19 +32,27 @@ describe('CDEadmin main dock tab switcher', () => {
     expect(unknown.internal.iconKey).toBe('command.default');
   });
 
-  it('renders the tab icon together with its visible name', () => {
+  it('renders a tool icon with the tab name and omits the product logo', () => {
+    const {unmount} = render(<Theme><ToolTabTitle id="sql" defaultInternal={{
+      title: 'SQL', iconKey: 'tool.query', closable: false,
+    }} /></Theme>);
+    expect(screen.getByText('SQL')).toBeInTheDocument();
+    expect(document.querySelector('[data-icon-key="tool.query"]'))
+      .toBeInTheDocument();
+    unmount();
+
     render(<Theme><ToolTabTitle id="id-dashboard" defaultInternal={{
       title: 'ScratchRobin', tooltip: 'ScratchRobin Dashboard',
       iconKey: 'tool.scratchrobin', closable: false,
     }} /></Theme>);
     expect(screen.getByText('ScratchRobin')).toBeInTheDocument();
     expect(document.querySelector('[data-icon-key="tool.scratchrobin"]'))
-      .toBeInTheDocument();
+      .not.toBeInTheDocument();
     expect(document.querySelector('[data-cdeadmin-tab-id="id-dashboard"]'))
       .toBeInTheDocument();
   });
 
-  it('defines the large 115/85 primary-tab visual treatment', () => {
+  it('fills the main dock bar with the active tab', () => {
     const theme = {
       custom: {icon: {contrastText: '#111'}},
       mixins: {panelBorder: {top: {}, bottom: {}}},
@@ -63,9 +71,13 @@ describe('CDEadmin main dock tab switcher', () => {
     expect(tab.filter).toBe(
       'brightness(var(--cde-inactive-brightness, 0.85))'
     );
+    expect(tab.margin).toBe(0);
+    expect(tab.height).toBe('100%');
+    expect(main['& > .dock > .dock-bar']['& .dock-nav, & .dock-nav-wrap, & .dock-nav-list'].padding).toBe(0);
     expect(tab['&.dock-tab-active']).toMatchObject({
-      filter: 'brightness(1)',
-      transform: 'scale(var(--cde-active-tab-scale, 1.15))',
+      backgroundColor: '#00f',
+      color: '#fff',
+      filter: 'none',
     });
   });
 });

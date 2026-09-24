@@ -74,7 +74,7 @@
             });
 
     </script>
-    <script type="application/javascript" src="{{ url_for('static', filename='js/generated/vendor.react.js') }}" ></script>
+    <script type="application/javascript" src="{{ url_for('static', filename='js/generated/vendor.react.js', t=react_bundle_mtime|default(0), v=2) }}" ></script>
     <script type="application/javascript" src="{{ url_for('static', filename='js/generated/vendor.main.js') }}" ></script>
     <script type="application/javascript" src="{{ url_for('static', filename='js/generated/vendor.others.js') }}" ></script>
     <script type="application/javascript" src="{{ url_for('static', filename='js/generated/vendor.sqleditor.js') }}"></script>

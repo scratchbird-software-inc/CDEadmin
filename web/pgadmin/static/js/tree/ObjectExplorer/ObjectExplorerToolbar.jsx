@@ -14,7 +14,7 @@ import { QueryToolIcon, RowFilterIcon, ViewDataIcon } from '../../components/Ext
 import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import FilterAltRoundedIcon from '@mui/icons-material/FilterAltRounded';
-import { PgButtonGroup, PgIconButton } from '../../components/Buttons';
+import { PgIconButton } from '../../components/Buttons';
 import _ from 'lodash';
 import PropTypes from 'prop-types';
 import CustomPropTypes from '../../custom_prop_types';
@@ -22,9 +22,12 @@ import usePreferences from '../../../../preferences/static/js/store';
 import gettext from 'sources/gettext';
 
 function ToolbarButton({menuItem, ...props}) {
+  const active = !(menuItem?.isDisabled??true);
   return (
-    <PgIconButton title={menuItem?.label??''} {...props} size="xs"
-      disabled={menuItem?.isDisabled??true} onClick={()=>menuItem?.callback()} />
+    <PgIconButton title={menuItem?.label??''} {...props} size="xs" noBorder
+      color={active ? 'primary' : 'default'}
+      style={{border: 'none'}}
+      disabled={!active} onClick={()=>menuItem?.callback()} />
   );
 }
 ToolbarButton.propTypes = {
@@ -78,8 +81,7 @@ export default function ObjectExplorerToolbar() {
   }, []);
 
   return (
-    <Box display="flex" alignItems="center" gap="2px">
-      <PgButtonGroup size="small">
+    <Box display="flex" alignItems="center" gap="6px" sx={{px: '4px'}}>
         <ToolbarButton icon={
           <Badge badgeContent=" " overlap="circular" variant='dot' color="success" invisible={!hasFilters}>
             <FilterAltRoundedIcon />
@@ -98,7 +100,6 @@ export default function ObjectExplorerToolbar() {
         <ToolbarButton icon={<RowFilterIcon />} menuItem={menus['view_filtered_rows_context'] ?? { label : gettext('Filtered Rows...')}} />
         <ToolbarButton icon={<SearchOutlinedIcon style={{height: '1.4rem'}} />} menuItem={menus['search_objects']} shortcut={browserPref?.sub_menu_search_objects} />
         {!_.isUndefined(menus['psql']) && <ToolbarButton icon={<TerminalRoundedIcon style={{height: '1.4rem'}}/>} menuItem={menus['psql']} />}
-      </PgButtonGroup>
     </Box>
   );
 }

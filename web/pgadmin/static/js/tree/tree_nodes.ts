@@ -220,13 +220,15 @@ export class ManageTreeNodes {
     while(_path != '/') {
       const node = this.findNode(_path);
       const _parent = unix.dirname(_path);
-      if(node.parentNode && node.parentNode.path == _parent) {
-        if (node.parentNode.metadata.data !== null && !node.parentNode.metadata.data._type.includes('coll-'))
-          if(node.parentNode.metadata.data._type.includes('partition')) {
-            _partitions.push(node.parentNode.metadata.data._id);
+      if(node?.parentNode && node.parentNode.path == _parent) {
+        const parentData = node.parentNode.metadata.data;
+        if (parentData !== null && contributesBrowserUrlSegment(parentData)) {
+          if(parentData._type.includes('partition')) {
+            _partitions.push(parentData._id);
           } else {
-            _parent_path.push(node.parentNode.metadata.data._id);
+            _parent_path.push(parentData._id);
           }
+        }
       }
       _path = _parent;
     }
@@ -357,6 +359,21 @@ export class TreeNode {
     });
   }
 
+}
+
+function contributesBrowserUrlSegment(parentData) {
+  const nodeType = parentData?._type;
+  if (!nodeType || nodeType.includes('coll-')) {
+    return false;
+  }
+  // Connector folders sit between a server group and its servers. They are
+  // not object ids, so leaving them in the path 404s routes such as
+  // database/nodes/<group>/<server>/.
+  if (nodeType === 'engine_type') {
+    return false;
+  }
+  const registered = pgAdmin.Browser?.Nodes?.[nodeType];
+  return !(registered && registered.hasId === false);
 }
 
 export function isCollectionNode(node) {

@@ -174,11 +174,13 @@ export function TabTitle({id, closable, defaultInternal}) {
   return (
     <Box display="flex" alignItems="center" title={attrs.tooltip}
       data-cdeadmin-tab-id={id} onContextMenu={onContextMenu}
-      onMouseDown={onMouseDown} width="100%">
-      <span className={attrs.iconKey === 'tool.scratchrobin' ?
-        'dock-tab-icon dock-tab-product-icon' : 'dock-tab-icon'}>
-        <Icon iconKey={attrs.iconKey} decorative />
-      </span>
+      onMouseDown={onMouseDown} width="100%"
+      sx={{pl: attrs.iconKey === 'tool.scratchrobin' ? '12px' : 0}}>
+      {attrs.iconKey !== 'tool.scratchrobin' &&
+        <span className="dock-tab-icon">
+          <Icon iconKey={attrs.iconKey} decorative />
+        </span>
+      }
       {showServerColorIndicator && attrs.bgcolor && !isVisible && (
         <Box
           component="span"
