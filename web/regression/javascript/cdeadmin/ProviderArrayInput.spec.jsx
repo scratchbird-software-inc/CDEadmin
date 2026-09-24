@@ -109,4 +109,24 @@ describe('Native coordinate array editor', () => {
     fireEvent.change(screen.getByRole('textbox', {name: 'A [-1, 3]'}), {target: {value: 'sNaN'}});
     expect(rowInputValue(JSON.parse(screen.getByTestId('draft').textContent), 'array', specification)[0][0]).toBe('sNaN');
   });
+  it.each([
+    ['date', '0001-01-01', '2000-01-01'],
+    ['time', '23:59:59.9999', '00:00:00'],
+    ['timestamp', '0001-01-01 12:34:56.0001', '2000-01-01 00:00:00'],
+  ])('initializes and edits native %s text without JS Date conversion', (element_kind, text, initial) => {
+    const specification = {...spec, element_kind};
+    expect(newArray(specification)).toEqual([[initial, initial], [initial, initial]]);
+    render(<Editor initial={null} specification={specification} />);
+    fireEvent.click(screen.getByRole('button', {name: /A \[/}));
+    fireEvent.click(screen.getByRole('button', {name: 'Initialize array'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'A [-1, 3]'}), {target: {value: text}});
+    expect(rowInputValue(JSON.parse(screen.getByTestId('draft').textContent), 'array', specification)[0][0]).toBe(text);
+  });
+  it.each([
+    ['date', '20000101'], ['date', '2000-01-01Z'], ['time', '12:00:00.00001'],
+    ['time', '12:00:00+01:00'], ['timestamp', '2000-01-01'],
+    ['timestamp', '2000-01-01 12:00:00Z'],
+  ])('rejects %s lexical loss %s', (element_kind, text) => {
+    expect(() => rowInputValue(rowInputDraft([[text, text], [text, text]], 'array'), 'array', {...spec, element_kind})).toThrow(/ISO/);
+  });
 });

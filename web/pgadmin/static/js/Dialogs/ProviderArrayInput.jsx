@@ -24,8 +24,8 @@ export function newArray(spec, depth = 0) {
   const lengths = arrayShape(spec);
   // Explicit UI allocation guard, not a native engine limit.
   if (lengths.reduce((a, b) => a * b, 1) > 100000) throw new Error(gettext('Initializing more than 100,000 array elements is not available in this editor.'));
-  return Array.from({length: lengths[depth]}, () => depth === lengths.length - 1 ?
-    (spec.element_kind === 'boolean' ? false : '0') : newArray(spec, depth + 1));
+  const initial = {boolean: false, date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[spec.element_kind] ?? '0';
+  return Array.from({length: lengths[depth]}, () => depth === lengths.length - 1 ? initial : newArray(spec, depth + 1));
 }
 
 export default function ProviderArrayInput({draft, spec, label, disabled, onChange}) {

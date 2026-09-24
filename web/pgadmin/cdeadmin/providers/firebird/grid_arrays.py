@@ -42,7 +42,8 @@ def editor_specs(connection, columns):
                               column['source_field'])
         kind = {7: 'integer', 8: 'integer', 16: 'integer', 26: 'integer',
                 10: 'float32', 27: 'float64', 23: 'boolean',
-                24: 'decfloat', 25: 'decfloat'}.get(spec['type'])
+                24: 'decfloat', 25: 'decfloat', 12: 'date',
+                13: 'time', 35: 'timestamp'}.get(spec['type'])
         if kind == 'integer' and (spec['subtype'] or spec['scale']):
             kind = 'decimal'
         if kind:
@@ -63,6 +64,9 @@ def convert(value, spec):
 
     def leaf(item):
         code = spec['type']
+        if code in (12, 13, 35):
+            from .temporal_arrays import parse
+            return parse(item, code)
         if code in (24, 25):
             if type(item) not in (str, int, Decimal) or not re.fullmatch(
                     r'[+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'

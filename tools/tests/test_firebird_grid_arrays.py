@@ -121,7 +121,8 @@ def test_scalars_do_not_add_preparation_or_catalog_roundtrips():
 @pytest.mark.parametrize('code,subtype,scale,kind', [
     (7, 0, 0, 'integer'), (8, 1, -2, 'decimal'), (16, 0, 0, 'integer'),
     (26, 2, -4, 'decimal'), (10, 0, 0, 'float32'),
-    (27, 0, 0, 'float64'), (23, 0, 0, 'boolean'), (12, 0, 0, None),
+    (27, 0, 0, 'float64'), (23, 0, 0, 'boolean'), (12, 0, 0, 'date'),
+    (13, 0, 0, 'time'), (35, 0, 0, 'timestamp'),
     (14, 0, 0, None), (24, 0, 0, 'decfloat'), (25, 0, 0, 'decfloat'),
 ])
 def test_only_verified_element_types_advertise_editor(

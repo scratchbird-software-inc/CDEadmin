@@ -2970,11 +2970,15 @@ class RelationalAdministration:
                     'firebird_dialect_binding' in payload):
                 from .firebird.ddl_dialect import verify_binding
                 verify_binding(connection, payload['firebird_dialect_binding'])
+            if self.dialect.engine_id == 'firebird':
+                from .firebird.temporal_arrays import cursor as array_cursor
             cursor = (
                 connection if getattr(
                     getattr(client, 'config', None),
                     'execute_on_connection', False,
                 )
+                else array_cursor(connection)
+                if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
             if borrowed_firebird:

@@ -41,6 +41,13 @@ export function rowInputValue(draft, kind, spec) {
     }
     return draft.text === 'true';
   }
+  if (['date', 'time', 'timestamp'].includes(kind)) {
+    const day = '\\d{4}-\\d{2}-\\d{2}';
+    const clock = '\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,4})?';
+    const expression = kind === 'date' ? day : kind === 'time' ? clock : `${day}[ T]${clock}`;
+    if (!new RegExp(`^${expression}$`).test(draft.text)) throw new Error(gettext('Enter an ISO date/time with at most four fractional second digits and no time zone.'));
+    return draft.text;
+  }
   if (kind === 'integer' && !/^[+-]?\d+$/.test(draft.text)) {
     throw new Error(gettext('Enter an integer without a decimal point.'));
   }
