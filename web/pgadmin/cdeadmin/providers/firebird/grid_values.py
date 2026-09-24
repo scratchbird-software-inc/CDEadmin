@@ -38,6 +38,7 @@ def input_kinds(cursor):
                  'INTEGER': 'integer', 'BIGINT': 'integer',
                  'INT128': 'integer',
                  'NUMERIC': 'decimal', 'DECIMAL': 'decimal',
+                 'DECFLOAT(16)': 'decfloat', 'DECFLOAT(34)': 'decfloat',
                  'BOOLEAN': 'boolean'}.get(native))
         if native == 'BLOB' and metadata['native_subtype'] == 1:
             kind = 'text'

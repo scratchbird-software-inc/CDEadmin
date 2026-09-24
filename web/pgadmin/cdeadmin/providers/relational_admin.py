@@ -168,6 +168,7 @@ class _RowIdentity:
     delete_allowed: bool = True
     purpose: str = 'row'
     insert_defaults_allowed: bool = False
+    decfloat_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -3229,6 +3230,10 @@ class RelationalAdministration:
                 None if len(item) < 2 else str(item[1])
                 for item in description
             )
+            if self.dialect.engine_id == 'firebird':
+                native_types = tuple(meta['native_type'] for meta in
+                                     firebird_grid_values.describe_columns(
+                                         cursor))
             input_kinds = (firebird_grid_values.input_kinds(cursor)
                            if self.dialect.engine_id == 'firebird' else
                            (None,) * len(description))
@@ -3261,6 +3266,9 @@ class RelationalAdministration:
                         resource_kind=resource_kind,
                         writable_columns=writable_columns,
                         delete_allowed=delete_allowed,
+                        decfloat_columns=tuple(
+                            name for name, kind in zip(columns, input_kinds)
+                            if kind == 'decfloat'),
                     )
                     with self._identity_lock:
                         while len(self._row_identities) >= 5000:
@@ -7644,9 +7652,7 @@ class RelationalAdministration:
         clauses = []
         parameters = []
         for name, value in zip(identity.key_columns, identity.key_values):
-            clauses.append(
-                f'{self._quote(name)} = {self.dialect.parameter}'
-            )
+            clauses.append(self._identity_equality(name, identity))
             parameters.append(value)
         for name, value in identity.original.items():
             if name in identity.key_columns:
@@ -7655,11 +7661,18 @@ class RelationalAdministration:
             if value is None:
                 clauses.append(f'{quoted} IS NULL')
             else:
-                clauses.append(
-                    f'{quoted} = {self.dialect.parameter}'
-                )
+                clauses.append(self._identity_equality(name, identity))
                 parameters.append(value)
         return ' AND '.join(clauses), tuple(parameters)
+
+    def _identity_equality(self, name, identity):
+        quoted = self._quote(name)
+        if (self.dialect.engine_id == 'firebird' and
+                name in identity.decfloat_columns):
+            # Native total ordering includes NaN/sNaN, signed zero and quantum.
+            # Ordinary '=' can trap on NaN and cannot preserve this identity.
+            return f'TOTALORDER({quoted}, {self.dialect.parameter}) = 0'
+        return f'{quoted} = {self.dialect.parameter}'
 
     def _programmable_create(self, kind, name, draft, options):
         body = self._safe_definition(draft.get('definition'))

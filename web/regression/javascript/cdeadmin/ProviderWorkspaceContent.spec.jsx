@@ -3369,10 +3369,10 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText(/provider-leader/)).toBeInTheDocument();
   });
 
-  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-null']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
+  it.each([['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'], ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'], ['view', 'typed-decfloat'], ['view', 'typed-null']])('runs %s %s through provider-issued identity plans', async (kind, operation) => {
     const typed = operation.startsWith('typed-');
     const scalarValue = {'typed-text': 'null', 'typed-integer': '170141183460469231731687303715884105727',
-      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-null': null}[operation];
+      'typed-decimal': '12345678901234567890.123456789012345678', 'typed-decfloat': 'NaN', 'typed-null': null}[operation];
     const mutation = typed || ['defaults', 'empty', 'null', 'omit'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,

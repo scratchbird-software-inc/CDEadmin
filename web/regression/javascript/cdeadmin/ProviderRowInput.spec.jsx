@@ -29,6 +29,13 @@ describe('Provider scalar inputs', () => {
   it.each([true, false])('preserves boolean %s', (value) => {
     expect(rowInputValue(rowInputDraft(value), 'boolean')).toBe(value);
   });
+  it.each(['NaN', 'sNaN', 'Infinity', '-Infinity', '+Infinity',
+    '12345678901234567890.12345678901234', '1.234567890123456789e-200'])('preserves DECFLOAT %s', (value) => {
+    expect(rowInputValue(rowInputDraft(value), 'decfloat')).toBe(value);
+  });
+  it.each(['NaN', 'Infinity', 'sNaN'])('does not admit DECFLOAT special %s for fixed point', (value) => {
+    expect(() => rowInputValue(rowInputDraft(value), 'decimal')).toThrow();
+  });
   it('uses a separate NULL selector without losing the text draft', () => {
     const changed = jest.fn();
     const {rerender} = render(<ProviderRowInput kind="text" label="value"

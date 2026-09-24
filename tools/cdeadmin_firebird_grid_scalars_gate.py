@@ -57,6 +57,10 @@ def verify(connection, client, route, password, result):
                     assert hints == {'ID': 'integer', 'H': 'integer',
                                      'D': 'decimal', 'T': 'text',
                                      'B': 'boolean'}, hints
+                    assert {c['name']: c['native_type']
+                            for c in page['columns']} == {
+                                'ID': 'INTEGER', 'H': 'INT128', 'D': 'NUMERIC',
+                                'T': 'VARCHAR', 'B': 'BOOLEAN'}
                     plan = base.ADMINISTRATION.plan({
                         **request, 'operation_id': 'insert', 'draft': {
                             'values': values, 'options': {
@@ -100,6 +104,146 @@ def verify(connection, client, route, password, result):
         client.close_session(admin)
     verify_composite(client, route, password, result)
     verify_table_permissions(client, route, password, result)
+    verify_decfloat(client, route, password, result)
+    verify_decfloat_stale(client, route, password, result)
+
+
+def verify_decfloat_stale(client, route, password, result):
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    checks = result['decfloat_stale_checks'] = []
+    for kind, name in (('table', 'GD_BASE'), ('view', 'GD_VIEW')):
+        for before, after in (('1.0', '1.00'), ('-0', '0'), ('NaN', '-NaN')):
+            handle = client.open_session({'route': route})
+            case = kind + ':' + before + ':' + after
+            try:
+                with handle.cursor() as cursor:
+                    cursor.execute('INSERT INTO GD_BASE (A, B) VALUES '
+                                   '(CAST(? AS DECFLOAT(16)), 1)', (before,))
+                request = {'_provider_route': route, 'session_id': case,
+                           'resource_kind': kind, 'target_resource': {
+                               'resource_kind': kind, 'display_path': [name]}}
+                page = base.ADMINISTRATION.read_rows(
+                    client, request, connection=handle)
+                row = page['rows'][-1]
+                row_id = row['values']['ID']
+                plan = base.ADMINISTRATION.plan({
+                    **request, 'operation_id': 'update', 'draft': {
+                        'selector': {'identity_token': row['identity_token']},
+                        'changes': {'B': '99'}}})
+                with handle.cursor() as cursor:
+                    cursor.execute('UPDATE GD_BASE SET A = '
+                                   'CAST(? AS DECFLOAT(16)) WHERE ID = ?',
+                                   (after, row_id))
+                transaction = handle.main_transaction.info.id
+                try:
+                    base.ADMINISTRATION.apply(client, plan, connection=handle)
+                except RelationalClientError as exc:
+                    assert 'exactly one row' in str(exc), str(exc)
+                else:
+                    raise AssertionError('DECFLOAT representation changed')
+                assert handle.main_transaction.info.id == transaction
+                with handle.cursor() as cursor:
+                    cursor.execute('SELECT A, B FROM GD_BASE WHERE ID = ?',
+                                   (row_id,))
+                    assert tuple(str(v) for v in cursor.fetchone()) == (
+                        after, '1')
+                client.control_transaction(handle, 'rollback')
+                checks.append({'case': case, 'passed': True})
+            except Exception as exc:
+                checks.append({'case': case, 'passed': False})
+                result['failures'].append({
+                    'case': case, 'message': str(exc).replace(
+                        password, '<redacted>')})
+            finally:
+                client.close_session(handle)
+
+
+def verify_decfloat(client, route, password, result):
+    checks = result['decfloat_grid_checks'] = []
+    admin = client.open_session({'route': route})
+
+    def sql(handle, source):
+        with handle.cursor() as cursor:
+            cursor.execute(source)
+            return cursor.fetchall() if cursor.description else []
+
+    def observe():
+        handle = client.open_session({'route': route})
+        try:
+            return [tuple(str(v) for v in row) for row in sql(
+                handle, 'SELECT A, B FROM GD_BASE ORDER BY ID')]
+        finally:
+            client.close_session(handle)
+
+    try:
+        sql(admin, 'CREATE TABLE GD_BASE (ID INTEGER GENERATED ALWAYS AS '
+            'IDENTITY PRIMARY KEY, A DECFLOAT(16), B DECFLOAT(34))')
+        client.control_transaction(admin, 'commit')
+        sql(admin, 'CREATE VIEW GD_VIEW AS SELECT * FROM GD_BASE')
+        client.control_transaction(admin, 'commit')
+        for kind, name in (('table', 'GD_BASE'), ('view', 'GD_VIEW')):
+            for a, b in (('1234567890.123456',
+                          '12345678901234567890.12345678901234'),
+                         ('1E+200', '1E-200'), ('NaN', 'NaN'),
+                         ('Infinity', 'Infinity'),
+                         ('-Infinity', '-Infinity'), ('sNaN', 'sNaN'),
+                         ('-0', '-0'), ('1.00', '1.000'),
+                         ('-NaN', '-sNaN')):
+                for action in ('commit', 'rollback'):
+                    handle = client.open_session({'route': route})
+                    case = f'{kind}:{a}:{action}'
+                    request = {'_provider_route': route, 'session_id': case,
+                               'resource_kind': kind, 'target_resource': {
+                                   'resource_kind': kind,
+                                   'display_path': [name]}}
+                    try:
+                        before = observe()
+                        page = base.ADMINISTRATION.read_rows(
+                            client, request, connection=handle)
+                        assert all(c.get('input_kind') == 'decfloat'
+                                   for c in page['columns']
+                                   if c['name'] != 'ID')
+                        assert {c['name']: c['native_type']
+                                for c in page['columns']} == {
+                                    'ID': 'INTEGER', 'A': 'DECFLOAT(16)',
+                                    'B': 'DECFLOAT(34)'}
+                        plan = base.ADMINISTRATION.plan({
+                            **request, 'operation_id': 'insert', 'draft': {
+                                'values': {'A': a, 'B': b}, 'options': {
+                                    'identity_token': page[
+                                        'insert_identity_token']}}})
+                        base.ADMINISTRATION.apply(client, plan,
+                                                  connection=handle)
+                        page = base.ADMINISTRATION.read_rows(
+                            client, request, connection=handle)
+                        row = page['rows'][-1]
+                        assert row['values']['A'] == str(Decimal(a)), row
+                        assert row['values']['B'] == str(Decimal(b)), row
+                        assert observe() == before
+                        # Also prove predicates can safely address special
+                        # values before claiming grid round-trip support.
+                        plan = base.ADMINISTRATION.plan({
+                            **request, 'operation_id': 'update', 'draft': {
+                                'selector': {'identity_token': row[
+                                    'identity_token']},
+                                'changes': {'A': '2.5', 'B': '3.5'}}})
+                        base.ADMINISTRATION.apply(client, plan,
+                                                  connection=handle)
+                        assert observe() == before
+                        client.control_transaction(handle, action)
+                        assert observe() == (
+                            before + [('2.5', '3.5')]
+                            if action == 'commit' else before)
+                        checks.append({'case': case, 'passed': True})
+                    except Exception as exc:
+                        checks.append({'case': case, 'passed': False})
+                        result['failures'].append({
+                            'case': case, 'message': str(exc).replace(
+                                password, '<redacted>')})
+                    finally:
+                        client.close_session(handle)
+    finally:
+        client.close_session(admin)
 
 
 def verify_table_permissions(client, route, password, result):
@@ -378,6 +522,8 @@ def main():
     composite = result.get('composite_grid_checks', [])
     permissions = result.get('table_permission_checks', [])
     defaults = result.get('provider_default_checks', [])
+    decfloat = result.get('decfloat_grid_checks', [])
+    stale = result.get('decfloat_stale_checks', [])
     result['complete'] = (result['complete'] and len(checks) == 4 and
                           all(check['passed'] for check in checks) and
                           len(composite) == 8 and
@@ -385,7 +531,11 @@ def main():
                           len(permissions) == 11 and
                           all(check['passed'] for check in permissions) and
                           len(defaults) == 2 and
-                          all(check['passed'] for check in defaults))
+                          all(check['passed'] for check in defaults) and
+                          len(decfloat) == 36 and
+                          all(check['passed'] for check in decfloat) and
+                          len(stale) == 6 and
+                          all(check['passed'] for check in stale))
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'complete': result['complete'],
                       'failures': result['failures']}))

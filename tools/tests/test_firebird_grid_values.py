@@ -13,6 +13,7 @@ from pgadmin.cdeadmin.providers.firebird.grid_values import (
 )
 from firebird.driver.types import SQLDataType
 from firebird.driver import DatabaseError
+from pgadmin.cdeadmin.providers.relational_admin import _RowIdentity
 
 
 @pytest.mark.parametrize('value_type,expected', [
@@ -27,6 +28,8 @@ def test_hints_use_driver_types_not_names(value_type, expected):
     (SQLDataType.INT128, 0, 0, 0, 'integer'),
     (SQLDataType.INT128, 1, -18, 0, 'decimal'),
     (SQLDataType.INT64, 2, -4, 0, 'decimal'),
+    (SQLDataType.DEC16, 0, 0, 0, 'decfloat'),
+    (SQLDataType.DEC34, 0, 0, 0, 'decfloat'),
     (SQLDataType.VARYING, 0, 0, 4, 'text'),
     (SQLDataType.VARYING, 0, 0, 1, None),
     (SQLDataType.BLOB, 1, 0, 4, 'text'),
@@ -85,6 +88,17 @@ def test_firebird_table_default_values_without_generic_dialect_fallback():
         'target_resource': {'resource_kind': 'table', 'display_path': ['T']},
         'draft': {'values': {}}}) == {
             'source': 'INSERT INTO "T" DEFAULT VALUES', 'parameters': ()}
+
+
+def test_decfloat_identity_uses_total_order_including_key_and_null():
+    identity = _RowIdentity((), ('T',), ('K',), (Decimal('NaN'),),
+                            {'K': Decimal('NaN'), 'D': Decimal('-0'),
+                             'N': None, 'F': Decimal('1.00')}, 0,
+                            decfloat_columns=('K', 'D', 'N'))
+    source, params = ADMINISTRATION._identity_predicate(identity)
+    assert source == ('TOTALORDER("K", ?) = 0 AND TOTALORDER("D", ?) = 0 '
+                      'AND "N" IS NULL AND "F" = ?')
+    assert [str(v) for v in params] == ['NaN', '-0', '1.00']
 
 
 def test_grid_retains_native_identity_but_emits_lossless_values():

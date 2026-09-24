@@ -18,7 +18,8 @@ export function rowInputValue(draft, kind) {
   if (kind === 'integer' && !/^[+-]?\d+$/.test(draft.text)) {
     throw new Error(gettext('Enter an integer without a decimal point.'));
   }
-  if (kind === 'decimal' && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
+  const decimalSpecial = kind === 'decfloat' && /^[+-]?(?:s?NaN|Infinity)$/i.test(draft.text);
+  if (['decimal', 'decfloat'].includes(kind) && !decimalSpecial && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
     throw new Error(gettext('Enter an exact decimal value.'));
   }
   return draft.text;
@@ -48,7 +49,7 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
 }
 
 ProviderRowInput.propTypes = {
-  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'boolean']).isRequired,
+  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'boolean']).isRequired,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,
