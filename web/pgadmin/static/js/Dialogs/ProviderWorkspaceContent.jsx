@@ -27,6 +27,8 @@ import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
 import FirebirdResultStream from './FirebirdResultStream';
+import {isProviderRegistrationWorkspace} from
+  'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
@@ -6771,9 +6773,18 @@ export default function ProviderWorkspaceContent({
     setSelectedResourceKind(initialContext.resource_kind || '');
     const requestedIdentity = initialContext.resource_id ||
       initialContext.parent_resource_id;
-    api.get(endpointUrl).then(async (response) => {
+    const localProfile = isProviderRegistrationWorkspace(initialTab, initialContext);
+    const load = localProfile ? api.post(endpointUrl, {
+      action: 'endpoint_profile_read',
+    }) : api.get(endpointUrl);
+    load.then(async (response) => {
       if (!active) return;
       const workspaceValue = response.data.data;
+      if (localProfile) {
+        setLoadedWorkspace({context: workspaceContext, value: workspaceValue});
+        setBusy(false);
+        return;
+      }
       let page = workspaceValue?.resource_page || null;
       let resources = [...(page?.items || [])];
       let requestedResource = resources.find(
@@ -6835,7 +6846,7 @@ export default function ProviderWorkspaceContent({
       setBusy(false);
     }).catch((requestError) => {
       if (!active) return;
-      if (requestError?.response?.status === 401 &&
+      if (!localProfile && requestError?.response?.status === 401 &&
           typeof onCredentialRequired === 'function') {
         onCredentialRequired(() => {
           setWorkspaceLoadGeneration((generation) => generation + 1);

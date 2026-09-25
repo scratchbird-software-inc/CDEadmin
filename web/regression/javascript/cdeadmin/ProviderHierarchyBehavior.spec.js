@@ -12,10 +12,26 @@ import {allowsSoleChildAutomation} from
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
   invalidateProviderEndpointProfile,
+  isProviderRegistrationWorkspace,
 } from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
 describe('CDEadmin provider hierarchy behavior', () => {
+  it.each(['edit', 'remove'])(
+    'allows local registration %s without a native session', (mode) => {
+      expect(isProviderRegistrationWorkspace('connections', {
+        server_mode: mode})).toBe(true);
+    });
+
+  it.each([
+    ['connections', {}], ['connections', {server_mode: 'create'}],
+    ['data', {server_mode: 'edit'}],
+    ['query', {server_mode: 'remove'}],
+    ['connections', {database_mode: 'create'}],
+  ])('does not bypass native verification for %s %j', (tab, context) => {
+    expect(isProviderRegistrationWorkspace(tab, context)).toBe(false);
+  });
+
   it.each([false, true])('invalidates edited profiles with saved credentials %s', (saved) => {
     const server = {cde_endpoint: true, runtime_verification_state: 'verified',
       cde_session_authenticated: true, connected: false,
@@ -26,7 +42,7 @@ describe('CDEadmin provider hierarchy behavior', () => {
     const database = {_id: 'target-1'};
     const tree = {itemData: jest.fn((value) => value === item ? server : database),
       addIcon: jest.fn(), setLabel: jest.fn(), parent: () => item};
-    const result = {display_name: 'Firebird laboratory', route_catalog: {
+    const result = {display_name: 'Firebird laboratory', navigator_label: 'localhost', route_catalog: {
       routes: [{configuration: {user: 'new-user'}}]}};
     expect(invalidateProviderEndpointProfile(tree, item, result)).toBe(true);
     expect(providerEndpointSessionReady(server)).toBe(false);
@@ -35,11 +51,11 @@ describe('CDEadmin provider hierarchy behavior', () => {
       verified_runtime_family: null, verified_runtime_version: null,
       runtime_evidence_reference: null, declared_runtime_family: 'firebird',
       is_password_saved: saved, username: 'new-user',
-      label: 'Firebird laboratory', _label: 'Firebird laboratory'});
+      label: 'localhost', _label: 'localhost'});
     expect(tree.addIcon).toHaveBeenCalledWith(item, {
       icon: 'icon-server-not-connected'});
     expect(tree.setLabel).toHaveBeenCalledWith(item, {
-      label: 'Firebird laboratory'});
+      label: 'localhost'});
     const verify = jest.fn();
     expect(beforeOpenProviderDatabase(tree, {
       callbacks: {verify_cde_endpoint: verify}}, database)).toBe(false);

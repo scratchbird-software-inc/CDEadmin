@@ -2608,6 +2608,8 @@ class ServerNode(PGChildNodeView):
                     ).delete_route(
                         server, route_request.get('route_id')
                     )
+                elif action == 'endpoint_profile_read':
+                    payload = service.registration_workspace(server)
                 elif action == 'endpoint_profile_update':
                     payload = endpoint_service_for_app(
                         current_app

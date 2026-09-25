@@ -267,6 +267,19 @@ class RegistrationProfileTests(unittest.TestCase):
             '/srv/firebird/databases', route['database_create_root']
         )
 
+    def test_firebird_server_registration_needs_no_creation_directory(self):
+        profile = registration_profile('firebird-native')
+        route = provider_route_options(profile, {}, {
+            'host': 'unavailable.example', 'port': 3050, 'user': 'SYSDBA',
+        })
+        self.assertNotIn('database', route)
+        self.assertNotIn('database_create_root', route)
+        for mode in ('define', 'edit'):
+            fields = profile['form_contract']['server']['forms'][mode]['fields']
+            root = next(field for field in fields
+                        if field['field_id'] == 'database_create_root')
+            self.assertFalse(root.get('required', False))
+
     def test_network_server_form_owns_endpoint_and_default_credentials(self):
         profile = registration_profile('firebird-native')
         fields = {
@@ -985,6 +998,10 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertEqual('127.0.0.10', route['host'])
         self.assertEqual(53050, route['port'])
         self.assertEqual('database_operator', route['user'])
+        self.assertEqual('127.0.0.10', server.host)
+        self.assertEqual(53050, server.port)
+        self.assertEqual('database_operator', server.username)
+        self.assertEqual('localhost', result['navigator_label'])
         self.assertNotIn('default-secret-canary', json.dumps(route))
         self.assertEqual(['database_password'], route['credential_kinds'])
         self.assertTrue(server.save_password)

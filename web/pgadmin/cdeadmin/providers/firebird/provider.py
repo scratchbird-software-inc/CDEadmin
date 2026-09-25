@@ -57,6 +57,7 @@ from .session_settings import initialize_timeouts
 from .transaction_state import observe_transaction, release_session
 from . import availability
 from . import repair
+from .embedded import embedded_route, reject_embedded_service
 
 
 PROFILE = PilotProfile(
@@ -297,6 +298,8 @@ _CONFIG_LOCK = threading.RLock()
 
 
 def _wire_configuration(route):
+    if route.get('attachment_mode') == 'embedded':
+        return 'Providers=Engine13'
     options = []
     if route.get('wire_config') is not None and not isinstance(
             route['wire_config'], str):
@@ -318,6 +321,10 @@ def _wire_configuration(route):
 
 
 def _route_arguments(route, module=None, *, creation=None):
+    route = embedded_route(
+        route, database=creation['database'] if creation else None)
+    if creation is not None and route.get('attachment_mode') == 'embedded':
+        creation = {**creation, 'database': route['database']}
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
     cache_pages = requested_pages(route)
@@ -379,6 +386,8 @@ def _route_arguments(route, module=None, *, creation=None):
             'wire_crypt', 'wire_compression', 'decfloat_round', 'no_linger',
         )
     }
+    material['attachment_mode'] = route.get('attachment_mode', 'network')
+    material['filesystem_root'] = route.get('filesystem_root')
     if creation is not None:
         material['creation'] = creation
     material['attachment_cache_pages'] = cache_pages
@@ -487,6 +496,7 @@ def _server_route(route):
 
 def _server_arguments(route, module):
     """Build a Firebird service-manager attachment without a database."""
+    reject_embedded_service(route)
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
     expected_db = route.get('service_expected_database')
@@ -3360,7 +3370,8 @@ def _create_client(permissions):
             'FROM RDB$DATABASE'
         ),
         version_parser=_version,
-        connect_arguments=lambda route: _route_arguments(route, module),
+        connect_arguments=lambda route: _route_arguments(
+            embedded_route(route, permissions), module),
         metadata_reader=_resources,
         query_parameter_normalizer=normalize_parameters,
         query_value_normalizer=lambda value: normalize_value(
@@ -3378,7 +3389,9 @@ def _create_client(permissions):
         ),
         failed_session_releaser=discard_failed_session,
         database_create_arguments=lambda route, database, options: (
-            _database_create_arguments(route, database, options, module)
+            _database_create_arguments(
+                embedded_route(route, permissions, database=database),
+                database, options, module)
         ),
         database_creator=(
             (lambda **kwargs: create_owned_database(module, core, **kwargs))

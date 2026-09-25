@@ -18,7 +18,7 @@ import uuid
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +57,48 @@ from pgadmin.cdeadmin.visual_admin.provider import (  # noqa: E402
 class Permissions:
     def require(self, _permission, _scope='endpoint'):
         return None
+
+
+class OfflineRegistrationTests(unittest.TestCase):
+    def test_rejected_catalog_read_does_not_fall_back_to_native_access(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.route_catalog.side_effect = ValueError(
+            'Endpoint registration unavailable')
+        with self.assertRaisesRegex(ValueError, 'registration unavailable'):
+            service.registration_workspace(SimpleNamespace(name='Offline'))
+        service.endpoint_service.workspace.assert_not_called()
+        service.endpoint_service.provider_registry.resolve.assert_not_called()
+
+    def test_local_profile_read_never_opens_a_native_workspace(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.workspace.side_effect = AssertionError(
+            'Offline editing must not resolve a native workspace')
+        forms = {'forms': {'edit': {'form_id': 'firebird.server.edit'}}}
+        route = {'configuration': {'host': '127.0.0.10', 'port': 3050}}
+        service.endpoint_service.route_catalog.return_value = {
+            'server_forms': forms, 'routes': [route],
+        }
+        server = SimpleNamespace(name='Offline Firebird', save_password=False)
+        result = service.registration_workspace(server)
+        self.assertEqual(result, {'endpoint_registration': {
+            'display_name': 'Offline Firebird', 'is_password_saved': False,
+            'forms': forms, 'primary_route': route,
+        }})
+        service.endpoint_service.workspace.assert_not_called()
+        service.endpoint_service.provider_registry.resolve.assert_not_called()
+
+    def test_missing_primary_route_is_represented_without_connecting(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.route_catalog.return_value = {
+            'server_forms': {'forms': {}}, 'routes': [],
+        }
+        result = service.registration_workspace(
+            SimpleNamespace(name='Unconfigured Firebird', save_password=True))
+        self.assertIsNone(result['endpoint_registration']['primary_route'])
+        self.assertTrue(result['endpoint_registration']['is_password_saved'])
 
 
 class PilotClient:

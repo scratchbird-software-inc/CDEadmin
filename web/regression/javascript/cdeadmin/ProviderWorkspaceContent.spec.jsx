@@ -1197,10 +1197,23 @@ describe('ProviderWorkspaceContent', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['edit', 'remove'])('does not prompt for engine credentials on a denied local profile %s', async (mode) => {
+    const onCredentialRequired = jest.fn();
+    api.post.mockRejectedValue({response: {status: 401,
+      data: {errormsg: 'Application login required'}}});
+    render(<ProviderWorkspaceContent endpointUrl="/workspace/1"
+      initialTab="connections" initialContext={{server_mode: mode}}
+      onCredentialRequired={onCredentialRequired} />);
+    expect(await screen.findByText('Application login required')).toBeInTheDocument();
+    expect(onCredentialRequired).not.toHaveBeenCalled();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
   it('forwards a successful focused endpoint edit through the workspace boundary', async () => {
     const result = {display_name: 'Owned Firebird'};
     const onEndpointProfileSaved = jest.fn();
-    api.get.mockResolvedValue({data: {data: {...bootstrap,
+    api.get.mockRejectedValue(new Error('Native Services API unavailable'));
+    api.post.mockResolvedValueOnce({data: {data: {
       endpoint_registration: {forms: {forms: {edit: {
         form_id: 'owned-firebird-edit', title: 'Owned Firebird editor', fields: [],
       }}}},
@@ -1214,6 +1227,10 @@ describe('ProviderWorkspaceContent', () => {
     }));
     await waitFor(() => expect(onEndpointProfileSaved).toHaveBeenCalledWith(result));
     expect(onEndpointProfileSaved).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'endpoint_profile_read',
+    });
     expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'endpoint_profile_update', request: {},
     });

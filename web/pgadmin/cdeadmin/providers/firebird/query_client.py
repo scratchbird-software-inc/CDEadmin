@@ -58,6 +58,18 @@ class _AttachmentState:
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
+    def _invoke_connector(self, request, connector, overrides=None, **kwargs):
+        route = self._route(request)
+        if route.get('attachment_mode') == 'embedded' and (
+                route.get('credential_reference_id') or
+                route.get('credential_references') or
+                (overrides and overrides.get('password'))):
+            raise RelationalClientError(
+                'Firebird embedded attachment uses filesystem authorization, '
+                'not saved network credentials')
+        return super()._invoke_connector(
+            request, connector, overrides, **kwargs)
+
     def __init__(self, config, module=None, *, service_connector=None,
                  service_attached=None):
         super().__init__(config, module)

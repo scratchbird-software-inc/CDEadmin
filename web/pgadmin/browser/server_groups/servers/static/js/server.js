@@ -17,6 +17,7 @@ import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
+  isProviderRegistrationWorkspace,
 } from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
@@ -340,9 +341,11 @@ define('pgadmin.node.server', [
           const item = args?.item || tree.selected();
           const data = item ? tree.itemData(item) : undefined;
           const providerReady = providerEndpointSessionReady(data);
+          const localProfile = data?.cde_endpoint &&
+            isProviderRegistrationWorkspace(initialTab, initialContext);
           const postgresReady = initialTab === 'semantic' &&
             !data?.cde_endpoint && data?.connected;
-          if (!providerReady && !postgresReady) {
+          if (!providerReady && !postgresReady && !localProfile) {
             if(data?.cde_endpoint) {
               this.callbacks.verify_cde_endpoint.call(this, {
                 item,

@@ -59,6 +59,21 @@ class ProviderWorkspaceService:
         self._semantic_executions = {}
         self._semantic_lock = threading.RLock()
 
+    def registration_workspace(self, server):
+        """Read local endpoint configuration without native verification.
+
+        The authenticated workspace route enforces endpoint ownership. This
+        response admits no native resources, sessions, or capabilities.
+        """
+        catalog = self.endpoint_service.route_catalog(server)
+        return {'endpoint_registration': {
+            'display_name': server.name,
+            'is_password_saved': bool(getattr(server, 'save_password', False)),
+            'forms': catalog['server_forms'],
+            'primary_route': (catalog['routes'][0]
+                              if catalog['routes'] else None),
+        }}
+
     def bootstrap(
         self, server, database_target_id=Ellipsis,
         focused_operation_id=None,

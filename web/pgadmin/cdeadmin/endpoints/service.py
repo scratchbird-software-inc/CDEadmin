@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from functools import wraps
 
 from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError
+from pgadmin.cdeadmin.navigator import server_display_name
 from pgadmin.cdeadmin.security import SecretReference
 from pgadmin.cdeadmin.security import (
     credential_from_protected_value,
@@ -1028,9 +1029,18 @@ class EndpointService:
             self._principal_overrides.pop(endpoint.id, None)
         self.route_health.clear(endpoint.id, route.id)
         self._stale(endpoint)
+        # The navigator still reads these compatibility fields. Keep them in
+        # step with the validated primary route, not the pre-edit address.
+        if profile['route_kind'] == 'network':
+            server.host = route_configuration['host']
+            server.port = route_configuration['port']
+            server.username = route_configuration.get('user', '')
         db.session.commit()
         return {
             'display_name': server.name,
+            'navigator_label': server_display_name(
+                'localhost' if profile['route_kind'] == 'embedded_file'
+                else getattr(server, 'host', None), server.name),
             'route_catalog': self.route_catalog(server),
         }
 

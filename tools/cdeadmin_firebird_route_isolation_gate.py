@@ -26,8 +26,12 @@ else:
     )
 
 from pgadmin.cdeadmin.providers.firebird.error_diagnostics import status_codes
+from pgadmin.cdeadmin.providers.firebird.connection_strings import database_dsn
 from pgadmin.cdeadmin.providers.firebird.provider import _server_arguments
 from pgadmin.cdeadmin.providers.firebird.provider import _create_client
+from pgadmin.cdeadmin.providers.firebird.provider import (
+    _database_create_arguments,
+)
 from pgadmin.cdeadmin.providers.firebird.failed_session import (
     discard_failed_session,
 )
@@ -486,15 +490,28 @@ def run(image):
                         assert role.strip() == 'NONE'
                         assert handle.info.name == path
                         handle.rollback()
-                    if phase in ('INET', 'INET4'):
-                        with native.connect_server(
-                                **_server_arguments(selected, native),
-                                password=password) as service:
-                            assert '5.0.4' in service.info.version
+                    with native.connect_server(
+                            **_server_arguments(selected, native),
+                            password=password) as service:
+                        assert '5.0.4' in service.info.version
+                    created_path = (
+                        f'/var/lib/firebird/data/owned_create_{phase}.fdb')
+                    created = native.create_database(
+                        **_database_create_arguments(
+                            selected, database_dsn(
+                                created_path, selected['host'],
+                                selected['port'], selected.get('protocol')),
+                            {}, native),
+                        password=password)
+                    try:
+                        assert created.info.name == created_path
+                        assert '5.0.4' in created.info.firebird_version
+                    finally:
+                        created.drop_database()
                 result['cases'].append({'case': phase, 'target_verified': True,
                                         'identity_verified': True,
-                                        'service_verified': phase in (
-                                            'INET', 'INET4')})
+                                        'service_verified': True,
+                                        'creation_verified': True})
             except Exception as error:
                 failure(error)
         for retained in (False, True):

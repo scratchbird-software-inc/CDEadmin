@@ -16,6 +16,11 @@ export function providerEndpointSessionReady(serverData) {
   );
 }
 
+/** Local registration metadata is editable even when native auth is down. */
+export function isProviderRegistrationWorkspace(tab, context={}) {
+  return tab === 'connections' && ['edit', 'remove'].includes(context.server_mode);
+}
+
 /** Mirror a committed profile edit without reusing its old verification. */
 export function invalidateProviderEndpointProfile(tree, item, result={}) {
   const data = tree?.itemData?.(item);
@@ -32,10 +37,10 @@ export function invalidateProviderEndpointProfile(tree, item, result={}) {
   // supplies its current value; do not erase credentials to invalidate state.
   const primary = result?.route_catalog?.routes?.[0]?.configuration;
   if (typeof primary?.user === 'string') data.username = primary.user;
-  if (typeof result?.display_name === 'string' && result.display_name.trim()) {
-    data.label = result.display_name;
-    data._label = result.display_name;
-    tree.setLabel(item, {label: result.display_name});
+  if (typeof result?.navigator_label === 'string' && result.navigator_label.trim()) {
+    data.label = result.navigator_label;
+    data._label = result.navigator_label;
+    tree.setLabel(item, {label: result.navigator_label});
   }
   tree.addIcon(item, {icon: data.icon});
   return true;

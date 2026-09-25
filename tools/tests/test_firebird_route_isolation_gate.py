@@ -1,6 +1,7 @@
 """The isolation gate collects failures and releases only its owned fixture."""
 
 from unittest.mock import MagicMock, Mock
+import re
 
 import pytest
 import firebird.driver as native
@@ -47,6 +48,16 @@ def test_gate_collects_failures_and_always_attempts_cleanup(
     service = MagicMock()
     service.__enter__().info.version = '5.0.4'
     monkeypatch.setattr(native, 'connect_server', Mock(return_value=service))
+
+    def create_database(**kwargs):
+        created = MagicMock()
+        configuration = native.driver_config.get_database(kwargs['database'])
+        created.info.name = re.search(
+            r'/var/lib/.*', configuration.dsn.value).group(0)
+        created.info.firebird_version = '5.0.4'
+        return created
+
+    monkeypatch.setattr(native, 'create_database', create_database)
     original = native.driver_config
     result = gate.run('owned-image')
     cleanup.assert_called_once_with(container)
