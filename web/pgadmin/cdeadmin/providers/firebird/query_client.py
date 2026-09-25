@@ -16,7 +16,7 @@ from . import limbo
 from .query_parameters import normalize_parameters
 from .query_limits import query_row_limit
 from .query_dialect import DialectCursor, requested_dialect
-from .service_connection import effective_service_role
+from .service_connection import effective_service_role, service_authentication
 from .transaction_sql import (
     start_native_transaction, starts_transaction, transaction_command,
 )
@@ -67,8 +67,20 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             raise RelationalClientError(
                 'Firebird embedded attachment uses filesystem authorization, '
                 'not saved network credentials')
-        return super()._invoke_connector(
-            request, connector, overrides, **kwargs)
+        try:
+            return super()._invoke_connector(
+                request, connector, overrides, **kwargs)
+        except RelationalClientError as exc:
+            codes = getattr(exc, 'gds_codes', ())
+            if route.get('attachment_mode') != 'embedded' or not codes:
+                raise
+            error = RelationalClientError(
+                f'{exc}. For an embedded attachment, check the application-'
+                'host Firebird 5 runtime (Engine13 plugin and its '
+                'dependencies), database filename, filesystem access and '
+                'SQL identity. No network password is used.')
+            error.gds_codes = codes
+            raise error from None
 
     def __init__(self, config, module=None, *, service_connector=None,
                  service_attached=None):
@@ -860,10 +872,15 @@ class FirebirdQueryClient(RelationalDBAPIClient):
 
     def run_server_operation(self, request, operation_id, database, options):
         with self._temporary_operation():
-            request, options = self._service_role_scope(request, options)
+            scoped_request, scoped_options = self._service_role_scope(
+                request, options)
+            authentication = service_authentication(
+                request.get('route', {}), options)
+            request, options = scoped_request, scoped_options
             try:
                 result = super().run_server_operation(
                     request, operation_id, database, options)
+                result['service_authentication_requested'] = authentication
                 if (operation_id == 'repair_database' and
                         isinstance(result.get('repair_selection_requested'),
                                    Mapping)):
@@ -876,6 +893,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 return result
             except RelationalClientError as exc:
                 exc.native_status_codes = status_codes(exc)
+                exc.service_authentication_requested = authentication
                 raise
 
     @staticmethod

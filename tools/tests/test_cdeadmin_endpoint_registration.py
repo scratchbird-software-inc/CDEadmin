@@ -20,7 +20,7 @@ import uuid
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -102,6 +102,7 @@ class RegistrationProfileTests(unittest.TestCase):
             {
                 'postgresql-native', 'mysql-native', 'mariadb-native',
                 'duckdb-native', 'firebird-native', 'mongodb-native',
+                'firebird-embedded',
                 'neo4j-native', 'cassandra-native', 'redis-native',
                 'xtdb-native', 'clickhouse-native', 'sqlite-native',
                 'influxdb-native', 'milvus-native', 'opensearch-native',
@@ -165,6 +166,32 @@ class RegistrationProfileTests(unittest.TestCase):
             source = path.read_text(encoding='utf-8').casefold()
             self.assertNotIn('<script', source)
             self.assertNotIn('data:image', source)
+
+    def test_mixed_firebird_interfaces_do_not_hide_local_server_probe(self):
+        path = WEB / 'pgadmin/browser/server_groups/engine_types/__init__.py'
+        syntax = ast.parse(path.read_text())
+        function = next(node for node in syntax.body if isinstance(
+            node, ast.FunctionDef) and node.name == 'localhost_engine_status')
+        socket = Mock()
+        socket.create_connection.return_value = MagicMock()
+        namespace = {
+            'socket': socket, '_EMBEDDED_MODULES': {},
+            'navigator_engine_id': lambda value: value,
+        }
+        exec(compile(ast.Module(body=[function], type_ignores=[]),
+                     str(path), 'exec'), namespace)
+        probe = namespace['localhost_engine_status']
+        profiles = [registration_profile('firebird-native'),
+                    registration_profile('firebird-embedded')]
+        result = probe('firebird', profiles)
+        self.assertTrue(result['available'])
+        self.assertEqual('tcp-listener-detected', result['observation'])
+        socket.create_connection.assert_called_once_with(
+            ('127.0.0.1', 3050), timeout=0.15)
+        socket.create_connection.side_effect = OSError('No listener')
+        result = probe('firebird', profiles)
+        self.assertFalse(result['available'])
+        self.assertEqual('no-default-port-listener', result['observation'])
 
     def test_engine_connectors_are_loadable_and_expose_localhost(self):
         connector_root = WEB / 'pgadmin/browser/server_groups/engine_types'
@@ -275,7 +302,8 @@ class RegistrationProfileTests(unittest.TestCase):
         self.assertNotIn('database', route)
         self.assertNotIn('database_create_root', route)
         for mode in ('define', 'edit'):
-            fields = profile['form_contract']['server']['forms'][mode]['fields']
+            fields = profile['form_contract']['server']['forms'][mode][
+                'fields']
             root = next(field for field in fields
                         if field['field_id'] == 'database_create_root')
             self.assertFalse(root.get('required', False))
@@ -914,6 +942,56 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertEqual(12, configuration['timeout'])
         self.assertEqual('rw', configuration['uri_mode'])
         self.assertEqual('stale', endpoint.runtime_identity.verification_state)
+
+    def test_embedded_firebird_route_edit_preserves_target_catalog(self):
+        profile = registration_profile('firebird-embedded')
+        existing = {
+            'attachment_mode': 'embedded', 'filesystem_root': '/srv/firebird',
+            'user': 'SYSDBA',
+        }
+        route = EndpointService._validated_route(profile, {}, existing)
+        self.assertEqual(existing, {key: route[key] for key in existing})
+        self.assertNotIn('database', route)
+        with self.assertRaisesRegex(
+                EndpointRegistrationError,
+                'Approved local database directory is required'):
+            EndpointService._validated_route(profile, {}, {
+                'attachment_mode': 'embedded', 'user': 'SYSDBA',
+            })
+
+    def test_embedded_bootstrap_retains_only_native_success(self):
+        profile = registration_profile('firebird-embedded')
+        route = {'attachment_mode': 'embedded', 'filesystem_root': '/owned',
+                 'database': '/owned/new.fdb', 'user': 'SYSDBA'}
+        endpoint = SimpleNamespace(id='owned', routes=[SimpleNamespace(
+            configuration=json.dumps(route))])
+        server = SimpleNamespace(endpoint_profile=endpoint)
+        registry = Mock()
+        service = EndpointService(registry, Mock())
+        service._managed_endpoint = Mock(return_value=(endpoint, profile))
+        service._context = Mock(return_value='local-context')
+        service.retain_created_database = Mock()
+        create = registry.resolve.return_value.instance.create_initial_database
+        target = {'database': '/owned/new.fdb', 'display_name': 'new.fdb'}
+        create.return_value = {'endpoint_database_target': target}
+        result = service.create_initial_embedded_database(server)
+        self.assertEqual(target, result['endpoint_database_target'])
+        service._context.assert_called_once_with(endpoint, frozenset({
+            'administer', 'embedded_runtime', 'filesystem'}))
+        create.assert_called_once_with({'route': route})
+        service.retain_created_database.assert_called_once_with(server, target)
+        service.retain_created_database.reset_mock()
+        create.side_effect = RuntimeError('native creation failed')
+        with self.assertRaisesRegex(EndpointRegistrationError,
+                                    'native creation failed'):
+            service.create_initial_embedded_database(server)
+        service.retain_created_database.assert_not_called()
+        service._managed_endpoint.return_value = (
+            endpoint, registration_profile('firebird-native'))
+        with self.assertRaisesRegex(EndpointRegistrationError,
+                                    'does not admit'):
+            service.create_initial_embedded_database(server)
+        self.assertEqual(2, create.call_count)
 
     def test_sqlite_endpoint_remove_requires_exact_profile_name(self):
         endpoint = SimpleNamespace(

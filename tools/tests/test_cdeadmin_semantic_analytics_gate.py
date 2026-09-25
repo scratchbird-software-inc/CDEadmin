@@ -17,7 +17,7 @@ class SemanticAnalyticsGateTests(unittest.TestCase):
 
     def test_all_reference_profiles_have_recognized_family_profiles(self):
         self.assertTrue(self.result['complete'], self.result['failures'])
-        self.assertEqual(26, self.result['profile_count'])
+        self.assertEqual(27, self.result['profile_count'])
         self.assertGreaterEqual(self.result['semantic_family_count'], 8)
         self.assertEqual(23, self.result['required_capability_count'])
         self.assertEqual(3, self.result['native_compiler_count'])

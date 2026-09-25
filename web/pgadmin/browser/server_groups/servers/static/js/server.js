@@ -1080,6 +1080,10 @@ define('pgadmin.node.server', [
             d = t.itemData(i);
             t.removeIcon(i);
             d.connected = false;
+            if (d.cde_endpoint) {
+              d.runtime_verification_state = 'unverified';
+              d.cde_session_authenticated = false;
+            }
             d.label = label;
             t.setLabel(i, {label});
             // Update server tree node data after server diconnected.
@@ -1102,15 +1106,10 @@ define('pgadmin.node.server', [
             if (pgBrowser.serverInfo && d._id in pgBrowser.serverInfo) {
               delete pgBrowser.serverInfo[d._id];
             }
-            else {
-              try {
-                pgAdmin.Browser.notifier.errorText(res.errormsg);
-              } catch (e) {
-                console.warn(e.stack || e);
-              }
-              t.setLabel(i, {label});
-              t.unload(i);
-            }
+          } else {
+            pgAdmin.Browser.notifier.errorText(res.errormsg);
+            t.setLabel(i, {label});
+            t.unload(i);
           }
         }).catch(function(error) {
           pgAdmin.Browser.notifier.pgRespErrorNotify(error);

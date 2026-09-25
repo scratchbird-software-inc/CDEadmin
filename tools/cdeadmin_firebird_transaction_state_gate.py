@@ -7,14 +7,18 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from cdeadmin_firebird_admin_mapping_gate import (
-    _create_client, _route_arguments, RelationalClientError,
-)
+if __package__:
+    from .cdeadmin_firebird_admin_mapping_gate import (
+        _create_client, _route_arguments, RelationalClientError,
+    )
+else:
+    from cdeadmin_firebird_admin_mapping_gate import (
+        _create_client, _route_arguments, RelationalClientError,
+    )
 from pgadmin.cdeadmin.security.secrets import SecretLease
 
 
 def run(profiles):
-    import firebird.driver as driver
     document = json.loads(profiles.read_text())
     route = next(dict(item) for item in document['profiles']
                  if item['engine'] == 'firebird')
@@ -22,6 +26,14 @@ def run(profiles):
     password = route.pop('password')
     route.update(credential_reference_id='transaction-state-secret',
                  principal_reference='transaction-state-principal')
+    return verify_route(route, SimpleNamespace(
+        acquire_secret=lambda *_args: SecretLease(password)), password)
+
+
+def verify_route(route, permissions, password=None):
+    """Share native observation cases across network and embedded routes."""
+    import firebird.driver as driver
+
     result = {'complete': False, 'cases': [], 'failures': [],
               'driver_version': importlib.metadata.version('firebird-driver'),
               'read_only_queries': True, 'credential_values_exported': False}
@@ -33,8 +45,7 @@ def run(profiles):
             for timeout in (-1, 0, 3, 32767):
                 case = {'requested_isolation': isolation, 'access': access,
                         'lock_timeout': timeout}
-                client = _create_client(SimpleNamespace(
-                    acquire_secret=lambda *_args: SecretLease(password)))
+                client = _create_client(permissions)
                 handle = None
                 try:
                     handle = client.open_session({'route': {
@@ -87,8 +98,7 @@ def run(profiles):
                     client.close()
     for timeout in (32768, 86400):
         case = {'invalid_lock_timeout': timeout}
-        client = _create_client(SimpleNamespace(
-            acquire_secret=lambda *_args: SecretLease(password)))
+        client = _create_client(permissions)
         direct = None
         try:
             try:

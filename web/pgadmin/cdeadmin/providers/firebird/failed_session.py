@@ -1,4 +1,10 @@
-"""Discard unpublished failed attachments without detach-retention hooks."""
+"""Discard unpublished failed attachments without detach-retention hooks.
+
+Linux native qualification is covered by the native-opening failed-detach gate.
+Windows/macOS qualification must repeat that gate with their native libraries:
+verify retained handle ownership, rollback, failed detach and explicit retry.
+Linux evidence does not qualify platform-specific client teardown behavior.
+"""
 
 
 def discard_failed_session(connection):

@@ -31,7 +31,7 @@ class OperationalWorkspaceTests(unittest.TestCase):
     def test_every_profile_has_complete_explicit_workspace_facets(self):
         result = audit(self.catalogs)
         self.assertTrue(result['complete'], result['failures'])
-        self.assertEqual(26, result['profile_count'])
+        self.assertEqual(27, result['profile_count'])
         self.assertEqual(27, result['general_facet_count'])
         self.assertEqual(11, result['distributed_facet_count'])
         self.assertEqual([], result['failures'])

@@ -20,17 +20,23 @@ class ConnectionParityGateTests(unittest.TestCase):
 
     def test_gate_covers_every_active_engine_interface_profile(self):
         result = audit()
-        self.assertEqual(26, result['profile_count'])
-        self.assertEqual(26, len({
+        self.assertEqual(27, result['profile_count'])
+        self.assertEqual(27, len({
             item['profile_id'] for item in result['profiles']
         }))
 
-    def test_gate_requires_every_profile_to_be_complete(self):
+    def test_gate_rejects_unqualified_embedded_interface(self):
         result = audit()
-        self.assertTrue(result['complete'])
-        self.assertEqual([], result['incomplete_profiles'])
+        self.assertFalse(result['complete'])
+        self.assertEqual(['firebird-embedded'], result['incomplete_profiles'])
         for profile in result['profiles']:
-            self.assertEqual([], profile['incomplete_categories'])
+            if profile['profile_id'] == 'firebird-embedded':
+                self.assertEqual({
+                    'connection_profiles', 'session_defaults', 'timeouts',
+                    'consistency_isolation', 'state_visibility',
+                }, set(profile['incomplete_categories']))
+            else:
+                self.assertEqual([], profile['incomplete_categories'])
 
 
 if __name__ == '__main__':

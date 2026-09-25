@@ -15,6 +15,7 @@ import {
   validateSchema,
 } from 'sources/SchemaView/SchemaState/common';
 import ServerSchema from '../../../pgadmin/browser/server_groups/servers/static/js/server.ui';
+import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {genericBeforeEach, getCreateView, getEditView, getPropertiesView} from '../genericFunctions';
 
 describe('ServerSchema', ()=>{
@@ -36,8 +37,64 @@ describe('ServerSchema', ()=>{
     await getCreateView(createSchemaObject());
   });
 
+  it('initializes exact interface defaults without a profile-change event', ()=>{
+    const schema = new ServerSchema([], 0, {}, {profileId: 'qualified-native'});
+    expect(schema.defaults.cde_profile_id).toBe('qualified-native');
+    expect(schema.defaults.cde_route_tls_mode).toBe('disabled');
+    expect(new ServerSchema([], 0, {
+      cde_profile_id: 'qualified-native', cde_route_tls_mode: 'system-ca',
+    }).defaults.cde_route_tls_mode).toBe('system-ca');
+    expect(new ServerSchema().defaults.cde_route_tls_mode).toBeUndefined();
+  });
+
+  it('preserves false and zero defaults and isolates mutable default values', ()=>{
+    const profile = endpointProfiles.get('qualified-native');
+    const fields = profile.connection_fields;
+    try {
+      profile.connection_fields = [
+        {field_id: 'flag', default: false}, {field_id: 'limit', default: 0},
+        {field_id: 'settings', default: {items: []}}, {field_id: 'unset'},
+      ];
+      const schema = new ServerSchema([], 0, {cde_profile_id: profile.profile_id});
+      expect(schema.defaults.cde_route_flag).toBe(false);
+      expect(schema.defaults.cde_route_limit).toBe(0);
+      expect(schema.defaults).not.toHaveProperty('cde_route_unset');
+      schema.defaults.cde_route_settings.items.push('changed');
+      expect(profile.connection_fields[2].default.items).toEqual([]);
+    } finally {
+      profile.connection_fields = fields;
+    }
+  });
+
   it('edit', async ()=>{
     await getEditView(createSchemaObject(), getInitData);
+  });
+
+  it('clears inactive provider defaults and restores them only when selected', ()=>{
+    const profile = endpointProfiles.get('qualified-native');
+    const fields = profile.connection_fields;
+    try {
+      profile.connection_fields = [
+        {field_id: 'policy', default: 'NATIVE', control: 'text'},
+        {field_id: 'trap', default: true, control: 'boolean',
+          visible_when: {field_id: 'policy', equals: 'CUSTOM'}},
+      ];
+      const schema = new ServerSchema([], 0, {}, {profileId: profile.profile_id});
+      expect(schema.defaults.cde_route_trap).toBeNull();
+      const trap = schema.providerConnectionFields().find((f) => f.id === 'cde_route_trap');
+      const policy = schema.providerConnectionFields().find((f) => f.id === 'cde_route_policy');
+      expect(policy.depChange({...schema.defaults, cde_route_policy: null})).toEqual({});
+      const state = {...schema.defaults, cde_route_policy: 'CUSTOM'};
+      expect(trap.visible(state)).toBe(true);
+      expect(trap.depChange(state)).toEqual({cde_route_trap: true});
+      expect(trap.depChange({...state, cde_route_trap: false})).toEqual({});
+      expect(trap.depChange({...state, cde_route_policy: 'NATIVE', cde_route_trap: true})).toEqual({cde_route_trap: null});
+      expect(new ServerSchema([], 0, {
+        cde_profile_id: profile.profile_id, cde_route_policy: 'CUSTOM',
+      }).defaults.cde_route_trap).toBe(true);
+    } finally {
+      profile.connection_fields = fields;
+    }
   });
 
   it('properties', async ()=>{

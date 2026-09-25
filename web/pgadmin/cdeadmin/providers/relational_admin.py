@@ -64,7 +64,9 @@ from .firebird.error_diagnostics import status_codes as firebird_status_codes
 from .firebird import tables as firebird_tables
 from .firebird import identity as firebird_identity
 from .firebird.task_savepoint import NativeTaskSavepoint
-from .firebird.service_connection import validate_service_role
+from .firebird.service_connection import (
+    validate_service_role, service_authentication,
+)
 
 
 _FRAGMENT = re.compile(r'^[\w\s(),.+*/%<>=\'"-]+$', re.UNICODE)
@@ -2789,6 +2791,9 @@ class RelationalAdministration:
                 'statements': preview,
                 'provider_constructed': True,
                 'driver_operation': compiled.get('driver_operation'),
+                **({'service_authentication_requested': copy.deepcopy(
+                    compiled['service_authentication_requested'])}
+                   if 'service_authentication_requested' in compiled else {}),
                 **({'repair_selection': copy.deepcopy(
                     compiled['repair_selection'])}
                    if 'repair_selection' in compiled else {}),
@@ -3489,6 +3494,8 @@ class RelationalAdministration:
             return {'driver_operation': 'firebird-service',
                     'operation_id': operation,
                     'database': values['shadow_filename'],
+                    'service_authentication_requested':
+                    service_authentication(route, request['draft']),
                     'options': copy.deepcopy(request['draft']),
                     'statements': [],
                     'warnings': [firebird_shadow_activation.WARNING]}
@@ -3752,6 +3759,8 @@ class RelationalAdministration:
                 'driver_operation': 'firebird-service',
                 'operation_id': operation,
                 'database': database,
+                'service_authentication_requested': service_authentication(
+                    route, request.get('draft', {})),
                 'options': copy.deepcopy(request.get('draft', {})),
                 'statements': [],
                 **({'repair_selection': firebird_repair.selection(

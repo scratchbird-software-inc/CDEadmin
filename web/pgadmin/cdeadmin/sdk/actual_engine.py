@@ -132,9 +132,13 @@ class PilotProfile:
             'result_export_formats',
         ):
             values = getattr(self, name)
-            if not values or len(values) != len(set(values)):
+            # An embedded interface may have no server administration tools.
+            # Do not invent a tool merely to satisfy a network-era invariant.
+            if (not values and name != 'admin_tools') or (
+                    len(values) != len(set(values))):
                 raise PilotProviderError(
-                    f'{name} must be unique and non-empty'
+                    f'{name} must be unique' + (
+                        '' if name == 'admin_tools' else ' and non-empty')
                 )
             if any(not isinstance(item, str) or not item for item in values):
                 raise PilotProviderError(f'{name} contains an invalid value')

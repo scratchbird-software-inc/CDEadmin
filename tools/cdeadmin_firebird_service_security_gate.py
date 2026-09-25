@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Qualify Services API security-context selection in an owned container."""
+"""Qualify database-local identities and Services API context on Linux.
+
+Windows/macOS teams must repeat with native paths, aliases, client libraries
+and service environment. Mapping DDL alone is not identity-isolation evidence.
+All security-store copies/config edits belong to an owned stopped fixture.
+"""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import os
@@ -86,16 +92,20 @@ def remove_owned_container(container):
     docker('rm', '--force', '--volumes', container)
 
 
-def run(image):
+def run(image, browser=None):
     import firebird.driver as driver
     _configure_client_library(driver)
     token = uuid.uuid4().hex
     name = 'cdeadmin-firebird-security-' + token[:16]
     root_password = secrets.token_urlsafe(24)
     alternate_password = 'Alt-密-' + secrets.token_hex(10)
+    default_password = 'Default-' + secrets.token_hex(12)
     username = 'CDE_ALT_' + token[:12].upper()
     database = '/var/lib/firebird/data/context_target.fdb'
+    default_database = '/var/lib/firebird/data/default_target.fdb'
     alternate = '/var/lib/firebird/data/alternate_security.fdb'
+    local_database = '/var/lib/firebird/data/local_東京.fdb'
+    local_alias = 'owned_local_東京'
     alias = 'context_owned'
     result = {'complete': False, 'cases': [], 'failures': [],
               'container_name': name, 'owned_container_removed': False,
@@ -140,6 +150,10 @@ def run(image):
         result['initial_port'] = route['port']
         phase = 'initial-readiness'
         await_server(route)
+        initial = driver.create_database(
+            database=f'127.0.0.1/{route["port"]}:{default_database}',
+            user='SYSDBA', password=root_password)
+        initial.close()
         phase = 'offline-security-copy'
         docker('stop', '--time', '20', container)
         # Copy only this stopped fixture's security store. Never copy an open
@@ -149,13 +163,18 @@ def run(image):
         write_container_file(container, '/var/lib/firebird/data',
                              'alternate_security.fdb', security, uid, gid,
                              0o600)
+        write_container_file(container, '/var/lib/firebird/data',
+                             'local_東京.fdb', security, uid, gid, 0o600)
         security = b''
         config, _uid, _gid = read_container_file(
             container, '/opt/firebird/databases.conf')
         config += (f'\n{alias} = {database}\n{{\n'
                    f'  SecurityDatabase = {alternate}\n}}\n'
                    f'owned_security = {alternate}\n{{\n'
-                   '  RemoteAccess = false\n}\n').encode()
+                   '  RemoteAccess = false\n}\n'
+                   f'{local_alias} = {local_database}\n{{\n'
+                   f'  SecurityDatabase = {local_alias}\n'
+                   '  RemoteAccess = true\n}\n').encode()
         write_container_file(container, '/opt/firebird', 'databases.conf',
                              config, 0, 0, 0o644)
         phase = 'alternate-start'
@@ -169,12 +188,25 @@ def run(image):
         admin = connection(route)
         try:
             with admin.cursor() as cursor:
-                cursor.execute('CREATE USER "' + username + '" PASSWORD \'' +
-                               alternate_password + '\' USING PLUGIN Srp')
+                for user, password in (
+                        (username, alternate_password),
+                        (username + '_OTHER', alternate_password + '-2')):
+                    cursor.execute('CREATE USER "' + user + '" PASSWORD \'' +
+                                   password + '\' USING PLUGIN Srp')
             admin.commit()
         finally:
             admin.close()
         result['cases'].append('alternate-security-account-created')
+        with connection({**route, 'database': default_database}) as admin:
+            admin.execute_immediate(
+                'CREATE USER "' + username + '" PASSWORD \'' +
+                default_password + '\' USING PLUGIN Srp')
+            admin.commit()
+        with connection({**route, 'database': local_alias}) as admin:
+            admin.execute_immediate(
+                'CREATE USER "' + username + '" PASSWORD \'' +
+                alternate_password + '-local\' USING PLUGIN Srp')
+            admin.commit()
         for context, expected in ((None, False), (database, True),
                                   (alias, True), ('missing_' + token, False)):
             client = _create_client(SimpleNamespace(
@@ -218,13 +250,99 @@ def run(image):
                                            'error_type': type(exc).__name__})
             finally:
                 client.close()
+
+        phase = 'concurrent-identity-separation'
+
+        def check(case):
+            name, target, context, password, expected = case
+            client = _create_client(SimpleNamespace(
+                acquire_secret=lambda *_args: SecretLease(password)))
+            selected = {
+                **route, 'user': username, 'database': target,
+                'service_expected_database': context,
+                'credential_reference_id': 'owned-secret',
+                'principal_reference': 'owned-principal'}
+            try:
+                try:
+                    if target is None:
+                        handle = client._connect_server({'route': selected})
+                    else:
+                        handle = client.open_session({'route': selected})
+                except RelationalClientError as error:
+                    assert not expected and 335544472 in error.gds_codes
+                    assert not client._connections
+                else:
+                    assert expected
+                    if target is not None:
+                        with handle.cursor() as cursor:
+                            cursor.execute(
+                                "SELECT CURRENT_USER, RDB$GET_CONTEXT("
+                                "'SYSTEM', 'DB_NAME') FROM RDB$DATABASE")
+                            assert cursor.fetchone() == (username, target)
+                        handle.rollback()
+                    client.close_session(handle)
+                    assert not client._connections
+                return name
+            finally:
+                client.close()
+
+        checks = (
+            ('default-identity', default_database, alias,
+             default_password, True),
+            ('alternate-identity', database, default_database,
+             alternate_password, True),
+            ('default-rejects-alternate-password', default_database, alias,
+             alternate_password, False),
+            ('alternate-rejects-default-password', database, None,
+             default_password, False),
+            ('service-default-identity', None, None, default_password, True),
+            ('service-alternate-identity', None, alias,
+             alternate_password, True),
+            ('service-context-rejects-default-password', None, alias,
+             default_password, False),
+            ('self-security-database', local_database, alias,
+             alternate_password + '-local', True),
+            ('self-security-rejects-other-password', local_database, alias,
+             alternate_password, False),
+            ('self-security-service-alias', None, local_alias,
+             alternate_password + '-local', True),
+            ('self-security-service-rejects-default', None, local_alias,
+             default_password, False),
+        )
+        # A hostile environment must not redirect an omitted service context.
+        # Fixture process only; production code never edits this environment.
+        previous = os.environ.get('FB_EXPECTED_DB')
+        os.environ['FB_EXPECTED_DB'] = alias
+        try:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = [(case[0], pool.submit(check, case))
+                           for case in checks]
+                for name, future in futures:
+                    try:
+                        result['cases'].append(future.result())
+                    except Exception as error:
+                        result['failures'].append({
+                            'case': name, 'error_type': type(error).__name__})
+        finally:
+            if previous is None:
+                os.environ.pop('FB_EXPECTED_DB', None)
+            else:
+                os.environ['FB_EXPECTED_DB'] = previous
+        if browser:
+            phase = 'browser'
+            result['browser'] = browser(
+                route, 'Srp256',
+                [(username, alternate_password),
+                 (username + '_OTHER', alternate_password + '-2')], alias)
     except Exception as exc:
         result['failures'].append({'case': 'fixture',
                                    'phase': phase,
                                    'error_type': type(exc).__name__,
                                    'message': str(exc).replace(
                                        root_password, '[redacted]').replace(
-                                           alternate_password, '[redacted]')})
+                                       alternate_password,
+                                       '[redacted]').replace(
+                                       default_password, '[redacted]')})
     finally:
         if container is not None and re.fullmatch('[0-9a-f]{64}', container):
             if result['failures']:
@@ -233,7 +351,8 @@ def run(image):
                                   include_stderr=True).decode(errors='replace')
                     result['fixture_log_redacted'] = logs.replace(
                         root_password, '[redacted]').replace(
-                            alternate_password, '[redacted]')
+                            alternate_password, '[redacted]').replace(
+                                default_password, '[redacted]')
                 except Exception:
                     result['fixture_log_unavailable'] = True
             try:
@@ -242,7 +361,7 @@ def run(image):
             except Exception as exc:
                 result['failures'].append({'case': 'owned-container-cleanup',
                                            'error_type': type(exc).__name__})
-    result['complete'] = (len(result['cases']) == 7 and
+    result['complete'] = (len(result['cases']) == 18 and
                           not result['failures'] and
                           result['owned_container_removed'])
     return result

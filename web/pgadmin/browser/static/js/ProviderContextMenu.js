@@ -15,7 +15,7 @@ const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
   'forget_endpoint', 'open_workspace', 'refresh_node',
-  'register_endpoint', 'verify_endpoint',
+  'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
 export const PROVIDER_MENU_CATEGORIES = Object.freeze({
@@ -104,6 +104,10 @@ function dispatch(action, args, context) {
   }
   case 'verify_endpoint':
     return serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
+      item: endpoint.item,
+    });
+  case 'disconnect_endpoint':
+    return serverNode.callbacks.disconnect_server.call(serverNode, {
       item: endpoint.item,
     });
   case 'open_workspace':

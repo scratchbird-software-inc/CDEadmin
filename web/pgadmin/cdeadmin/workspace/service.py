@@ -1029,7 +1029,8 @@ class ProviderWorkspaceService:
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
         if client_sql_dialect is not None:
-            if context.provider_id != 'org.cdeadmin.firebird':
+            if context.provider_id not in {
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
                 raise ProviderWorkspaceError(
                     'client SQL dialect selection is only admitted for '
                     'Firebird')
@@ -1039,7 +1040,8 @@ class ProviderWorkspaceService:
                     'Firebird client SQL dialect must be integer 1, 2 or 3')
             policy['client_sql_dialect'] = client_sql_dialect
         if max_rows is not None:
-            if context.provider_id != 'org.cdeadmin.firebird':
+            if context.provider_id not in {
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
                 raise ProviderWorkspaceError(
                     'this provider has not admitted a maximum-row fetch '
                     'policy')

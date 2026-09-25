@@ -357,6 +357,7 @@ FormInputDateTimePicker.propTypes = {
 
 /* Use forwardRef to pass ref prop to OutlinedInput */
 export function InputText({ref, cid, helpid, readonly, disabled, value, onChange, controlProps, type, size, inputStyle, ...props }) {
+  const {'aria-label': ariaLabel, ...rootControlProps} = controlProps || {};
 
   const maxlength = typeof(controlProps?.maxLength) != 'undefined' ? controlProps.maxLength : 255;
   const patterns = {
@@ -407,6 +408,7 @@ export function InputText({ref, cid, helpid, readonly, disabled, value, onChange
         id: cid,
         maxLength: controlProps?.multiline ? null : maxlength,
         'aria-describedby': helpid,
+        'aria-label': ariaLabel,
         ...(type ? { pattern: !_.isUndefined(controlProps) && !_.isUndefined(controlProps.pattern) ? controlProps.pattern : patterns[type] } : {}),
         style: inputStyle || {},
         autoComplete: _.isUndefined(controlProps?.autoComplete) ? 'off' : controlProps?.autoComplete,
@@ -428,7 +430,7 @@ export function InputText({ref, cid, helpid, readonly, disabled, value, onChange
       {
         ...(controlProps?.onBlur && { onBlur: controlProps.onBlur })
       }
-      {...controlProps}
+      {...rootControlProps}
       {...filteredProps}
       {...(['numeric', 'int'].indexOf(type) > -1 ? { type: 'tel' } : { type: type })}
     />

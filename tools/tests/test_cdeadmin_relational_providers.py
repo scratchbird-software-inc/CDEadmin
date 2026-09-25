@@ -1204,7 +1204,12 @@ class RelationalInventoryTests(unittest.TestCase):
                     'database': 'example.fdb', 'charset': charset,
                 })['charset'])
 
-    def test_firebird_route_maps_trusted_auth_and_dpb_configuration(self):
+    @mock.patch('pgadmin.cdeadmin.providers.firebird.authentication.'
+                'windows_authentication_host', return_value=True)
+    def test_firebird_route_maps_trusted_auth_and_dpb_configuration(
+            self, _windows_host):
+        # Argument mapping only. Windows team must obtain real SSPI login
+        # evidence; Linux must reject this selection before driver setup.
         import firebird.driver as firebird_module
 
         route = firebird_route_arguments({

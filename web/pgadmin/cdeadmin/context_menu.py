@@ -27,6 +27,7 @@ CONTEXT_ACTION_SCHEMA = 'cdeadmin.context-action.v1'
 _COMMAND_ID = re.compile(r'^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$')
 _HANDLERS = frozenset({
     'clear_credentials',
+    'disconnect_endpoint',
     'connector_info',
     'edit_endpoint',
     'forget_endpoint',
@@ -172,9 +173,10 @@ def connector_context_actions(
             ]['form_id'],
         }
         if profile['route_kind'] == 'embedded_file':
+            suffix = f'.{profile_id}' if len(ordered) > 1 else ''
             actions.extend([
                 _action(
-                    f'connector.{engine_id}.create_database',
+                    f'connector.{engine_id}.create_database{suffix}',
                     f'Create new {display} database file...',
                     'register_endpoint', icon='action.create_database',
                     group='register', priority=10 + index * 10,
@@ -184,7 +186,7 @@ def connector_context_actions(
                     },
                 ),
                 _action(
-                    f'connector.{engine_id}.register_database',
+                    f'connector.{engine_id}.register_database{suffix}',
                     f'Open existing {display} database file...',
                     'register_endpoint', icon='action.attach',
                     group='register', priority=11 + index * 10,
@@ -657,6 +659,18 @@ def endpoint_context_actions(
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
+    if engine_id == 'firebird':
+        # Firebird implements guarded native release; do not advertise this
+        # lifecycle action for providers without that release contract.
+        actions.append(_action(
+            f'endpoint.{engine_id}.disconnect',
+            f'Disconnect {display} endpoint...', 'disconnect_endpoint',
+            icon='action.disconnect', group='connection', priority=11,
+            mutation='admin', enabled=ready and can_manage,
+            disabled_reason=('Endpoint is not verified.' if not ready else
+                             '' if can_manage else
+                             'Only the endpoint owner can disconnect it.'),
+        ))
     actions.extend([
         _action(
             f'endpoint.{engine_id}.create_database',
@@ -697,7 +711,7 @@ def endpoint_context_actions(
                 'operation_id': 'check_upgrade_required',
             }, enabled=ready, disabled_reason=blocked,
         ))
-    if engine_id == 'firebird':
+    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
         actions.append(_action(
             'endpoint.firebird.activate_shadow',
             'Recover a Firebird shadow...', 'open_workspace',
@@ -935,6 +949,12 @@ def database_target_context_actions(
         )
         for offset, (operation_id, label, icon, mutation, group) in enumerate(
                 tasks):
+            if profile.get('route_kind') == 'embedded_file':
+                from .providers.relational_admin import (
+                    _FIREBIRD_SERVICE_OPERATIONS,
+                )
+                if operation_id in _FIREBIRD_SERVICE_OPERATIONS:
+                    continue
             actions.append(_action(
                 f'database.firebird.{operation_id}', label,
                 'open_workspace', icon=icon, group=group,

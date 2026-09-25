@@ -52,7 +52,7 @@ def compile_mapping(kind, operation, draft, target=None):
             raise RelationalClientError(
                 'Firebird 5.0.4 exposes only the first 32767 bytes of a '
                 'global mapping comment. Use fewer than 32767 ASCII bytes '
-                'so complete metadata can be verified.')
+                'to stay below the native projection limit.')
         if (kind == KINDS[1] and isinstance(value, str) and
                 not value.isascii()):
             raise RelationalClientError(
@@ -88,11 +88,20 @@ def compile_mapping(kind, operation, draft, target=None):
         source_name = draft.get('from_name')
         if not isinstance(source_name, str) or not source_name:
             raise RelationalClientError('Source name is required')
+        if source_name.rstrip() == '*':
+            raise RelationalClientError(
+                'Firebird treats * as ANY source name. Select Any source '
+                'name explicitly instead of entering a named identity.')
         source = from_type + ' ' + literal(source_name)
     to_type = draft.get('to_type', 'USER')
     if to_type not in ('USER', 'ROLE'):
         raise RelationalClientError('Mapping target must be USER or ROLE')
     destination = to_type
+    if isinstance(draft.get('to_name'), str) and (
+            draft['to_name'].rstrip() == '*'):
+        raise RelationalClientError(
+            'Firebird treats * as preserving the source name. Leave Target '
+            'name empty explicitly instead of entering a literal asterisk.')
     if draft.get('to_name'):
         destination += ' ' + identifier(draft['to_name'])
     verb = {'create': 'CREATE', 'alter': 'ALTER',
@@ -127,7 +136,12 @@ def form(kind, operation, field):
             field('using_mode', 'Authentication source', 'select', True,
                   'Global mappings affect all databases using the security '
                   'database; local mappings affect this database only. '
-                  'A mapping does not install or enable an auth plugin.',
+                  'Global changes also require authority in the security '
+                  'database; a local role grant alone does not grant it. '
+                  'A mapping does not install or enable an auth plugin. '
+                  'Native exact matches precede wildcard matching; '
+                  'conflicting '
+                  'destinations can reject login. Test a fresh attachment.',
                   'PLUGIN', options=MODES),
             field('plugin', 'Plugin name', 'text', True,
                   'Required for PLUGIN; empty for other source modes.', ''),
@@ -138,11 +152,13 @@ def form(kind, operation, field):
                   'Predefined_Group. Case is preserved.', 'USER'),
             field('from_any', 'Any source name', 'boolean', False, '', False),
             field('from_name', 'Source name', 'text', True,
-                  'Required unless Any source name is selected.', ''),
+                  'Required unless Any source name is selected. A literal '
+                  '* is not a named identity in Firebird mappings.', ''),
             field('to_type', 'Target identity type', 'select', True, '',
                   'USER', options=('USER', 'ROLE')),
             field('to_name', 'Target name', 'text', False,
-                  'Empty preserves the original source name.', ''),
+                  'Empty preserves the original source name. Do not enter *.',
+                  ''),
         ])
         for item in fields:
             if item['field_id'] == 'plugin':
@@ -199,7 +215,9 @@ def metadata(kind, row):
         'using_mode': mode_name, 'plugin': plugin or '',
         'source_database': database or '', 'from_type': from_type,
         'from_any': source in (None, '*'), 'from_name': source or '',
-        'to_type': {0: 'USER', 1: 'ROLE'}.get(to_type), 'to_name': to or '',
+        'to_type': {0: 'USER', 1: 'ROLE'}.get(to_type),
+        # Native '*' means preserve source, never a literal target identity.
+        'to_name': '' if to in (None, '*') else to,
     }
     native = {
         'name': name,
@@ -211,9 +229,21 @@ def metadata(kind, row):
         'description_source': ('SEC$GLOBAL_AUTH_MAPPING' if kind == KINDS[1]
                                else 'RDB$AUTH_MAPPING'),
         'privileges_unavailable_reason': 'Mappings are administered through '
-        'CHANGE_MAPPING_RULES authority, not per-mapping GRANT/REVOKE.',
+        'CHANGE_MAPPING_RULES authority, not per-mapping GRANT/REVOKE.' + (
+            ' Global changes additionally require security-database '
+            'authority; a local grant alone is insufficient.'
+            if kind == KINDS[1] else ''),
     }
     if kind == KINDS[1] and comment is not None:
+        # Firebird 5.0.4 MappingList::getList reads one BLOB segment only.
+        # Even a short projection cannot certify the stored BLOB's entirety.
+        # Do not silently claim storage verification or repair Unicode text.
+        native['description_storage_verified'] = False
+        native['recreation_metadata_verified'] = False
+        native['description_projection_warning'] = (
+            'Firebird 5.0.4 exposes one security-database comment BLOB '
+            'segment, at most 32767 bytes. This catalog cannot independently '
+            'verify the complete stored comment or non-ASCII fidelity.')
         native['description_completeness'] = (
             'unverified-at-native-projection-limit'
             if len(comment.encode('utf-8')) >= 32767 else

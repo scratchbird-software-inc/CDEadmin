@@ -1,0 +1,680 @@
+{
+  "identity": {
+    "contract_version": "1.1.0",
+    "provider_id": "org.cdeadmin.firebird.embedded",
+    "provider_version": "0.1.0",
+    "profile_id": "firebird-embedded",
+    "profile_version": "5.0.4",
+    "evidence_reference": "firebird-embedded:linux-attachment-qualified-2026-09-25"
+  },
+  "package_type": "engine",
+  "sdk_compatibility": {
+    "minimum": "1.1.0",
+    "maximum_exclusive": "2.0.0"
+  },
+  "support_state": "experimental",
+  "enabled": true,
+  "fixture": false,
+  "production_registration": true,
+  "contracts": [
+    "EndpointProvider",
+    "ResourceProvider",
+    "LanguageProvider",
+    "SessionProvider",
+    "ExecutionProvider",
+    "ResultProvider",
+    "ResultRenderer",
+    "DiagnosticProvider",
+    "OperationProvider",
+    "ToolProvider",
+    "SecurityProvider",
+    "SemanticLayerProvider",
+    "AnalyticalQueryProvider"
+  ],
+  "permissions": [
+    {
+      "permission_id": "data_read",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_write",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "administer",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "execute",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "security_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "maintenance_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "embedded_runtime",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "filesystem",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    }
+  ],
+  "required_permissions": [
+    "embedded_runtime",
+    "filesystem"
+  ],
+  "composition": {
+    "experience_families": [
+      "firebird"
+    ],
+    "target_adapter_ids": [
+      "firebird-embedded-client"
+    ]
+  },
+  "extension_schema": null,
+  "registration": {
+    "display_name": "Firebird 5.0 Embedded",
+    "workflow": "provider_endpoint",
+    "route_kind": "embedded_file",
+    "requires_secret": false,
+    "default_port": null,
+    "default": false,
+    "database_targeting": {
+      "mode": "required",
+      "multiple": true,
+      "server_verification": false,
+      "create_and_activate": true
+    },
+    "target_adapter_version": "firebird-driver-1.10.11 with Firebird 5.0.4 client library",
+    "secret_fields": [],
+    "connection_fields": [
+      {
+        "field_id": "attachment_mode",
+        "route_key": "attachment_mode",
+        "label": "Attachment mode",
+        "control": "select",
+        "default": "embedded",
+        "options": [
+          {
+            "value": "embedded",
+            "label": "Embedded: Engine13 only"
+          }
+        ],
+        "group": "Embedded access"
+      },
+      {
+        "field_id": "filesystem_root",
+        "route_key": "filesystem_root",
+        "label": "Approved local database directory",
+        "control": "text",
+        "required": true,
+        "group": "Embedded access",
+        "help": "Directory on the application host, not the browser. Local file access grants embedded access; a password is not checked."
+      },
+      {
+        "field_id": "user",
+        "route_key": "user",
+        "label": "SQL authorization identity",
+        "control": "text",
+        "required": true,
+        "default": "SYSDBA",
+        "group": "Embedded access",
+        "help": "Embedded mode uses filesystem authorization, not password authentication. SQL privileges still apply to this identity."
+      },
+      {
+        "field_id": "role",
+        "route_key": "role",
+        "label": "Initial role",
+        "control": "text",
+        "group": "Firebird session"
+      },
+      {
+        "field_id": "charset",
+        "route_key": "charset",
+        "label": "Connection character set",
+        "control": "text",
+        "group": "Firebird session",
+        "default": "UTF8"
+      },
+      {
+        "field_id": "session_time_zone",
+        "route_key": "session_time_zone",
+        "label": "Session time zone",
+        "control": "text",
+        "group": "Firebird session"
+      },
+      {
+        "field_id": "decfloat_traps_policy",
+        "route_key": "decfloat_traps_policy",
+        "label": "Initial DECFLOAT trap policy",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "NATIVE_DEFAULT",
+        "options": [
+          {
+            "value": "NATIVE_DEFAULT",
+            "label": "Native default"
+          },
+          {
+            "value": "CUSTOM",
+            "label": "Custom initial traps"
+          }
+        ],
+        "help": "Custom requires at least one trap: an empty attachment list means native defaults, not disable all traps. Applies to new attachments including creation and is restored by ALTER SESSION RESET. Not a stored database setting."
+      },
+      {
+        "field_id": "trap_division_by_zero",
+        "route_key": "trap_division_by_zero",
+        "label": "Trap division by zero",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": true,
+        "visible_when": {
+          "field_id": "decfloat_traps_policy",
+          "equals": "CUSTOM"
+        }
+      },
+      {
+        "field_id": "trap_inexact",
+        "route_key": "trap_inexact",
+        "label": "Trap inexact results",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": false,
+        "visible_when": {
+          "field_id": "decfloat_traps_policy",
+          "equals": "CUSTOM"
+        }
+      },
+      {
+        "field_id": "trap_invalid_operation",
+        "route_key": "trap_invalid_operation",
+        "label": "Trap invalid operations",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": true,
+        "visible_when": {
+          "field_id": "decfloat_traps_policy",
+          "equals": "CUSTOM"
+        }
+      },
+      {
+        "field_id": "trap_overflow",
+        "route_key": "trap_overflow",
+        "label": "Trap overflow",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": true,
+        "visible_when": {
+          "field_id": "decfloat_traps_policy",
+          "equals": "CUSTOM"
+        }
+      },
+      {
+        "field_id": "trap_underflow",
+        "route_key": "trap_underflow",
+        "label": "Trap underflow",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": false,
+        "visible_when": {
+          "field_id": "decfloat_traps_policy",
+          "equals": "CUSTOM"
+        }
+      },
+      {
+        "field_id": "decfloat_round",
+        "route_key": "decfloat_round",
+        "label": "Initial DECFLOAT rounding mode",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "NATIVE_DEFAULT",
+        "options": [
+          {
+            "value": "NATIVE_DEFAULT",
+            "label": "Native default"
+          },
+          {
+            "value": "CEILING",
+            "label": "CEILING"
+          },
+          {
+            "value": "UP",
+            "label": "UP"
+          },
+          {
+            "value": "HALF_UP",
+            "label": "HALF_UP"
+          },
+          {
+            "value": "HALF_EVEN",
+            "label": "HALF_EVEN"
+          },
+          {
+            "value": "HALF_DOWN",
+            "label": "HALF_DOWN"
+          },
+          {
+            "value": "DOWN",
+            "label": "DOWN"
+          },
+          {
+            "value": "FLOOR",
+            "label": "FLOOR"
+          },
+          {
+            "value": "REROUND",
+            "label": "REROUND"
+          }
+        ],
+        "help": "Native default sends no rounding override. Applies to this attachment, including after ALTER SESSION RESET. It does not alter stored database values."
+      },
+      {
+        "field_id": "no_linger",
+        "route_key": "no_linger",
+        "label": "Attachment linger policy",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "NATIVE_DEFAULT",
+        "options": [
+          {
+            "value": "NATIVE_DEFAULT",
+            "label": "Native default"
+          },
+          {
+            "value": "SUPPRESS",
+            "label": "Suppress current cache linger (SuperServer)"
+          }
+        ],
+        "help": "Applies on the next existing-database attachment. Suppress clears the current shared SuperServer cache's linger timer, not the stored LINGER setting. No effect in SuperClassic or Classic. Native default sends no override and does not restore a timer already suppressed."
+      },
+      {
+        "field_id": "attachment_cache_policy",
+        "route_key": "attachment_cache_policy",
+        "label": "Attachment page-cache policy",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "NATIVE_DEFAULT",
+        "options": [
+          {
+            "value": "NATIVE_DEFAULT",
+            "label": "Native default"
+          },
+          {
+            "value": "CUSTOM",
+            "label": "Request cache pages"
+          }
+        ],
+        "help": "Native default sends no attachment override. This preference applies to new attachments, including database creation, and does not change existing sessions or stored database buffers."
+      },
+      {
+        "field_id": "attachment_cache_pages",
+        "route_key": "attachment_cache_pages",
+        "label": "Requested attachment cache pages",
+        "control": "number",
+        "group": "Firebird session",
+        "default": 128,
+        "required": true,
+        "integer": true,
+        "minimum": 25,
+        "maximum": 2147483646,
+        "visible_when": {
+          "field_id": "attachment_cache_policy",
+          "equals": "CUSTOM"
+        },
+        "help": "This request does not change stored database buffers. SuperServer ignores it. SuperClassic/Classic use a minimum allocation of 50 pages, and stored nonzero buffers take precedence. Server architecture and available memory can reduce allocation. Read actual allocation in database properties."
+      },
+      {
+        "field_id": "parallel_workers_policy",
+        "route_key": "parallel_workers_policy",
+        "label": "Initial parallel-worker policy",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "NATIVE_DEFAULT",
+        "options": [
+          {
+            "value": "NATIVE_DEFAULT",
+            "label": "Native default"
+          },
+          {
+            "value": "CUSTOM",
+            "label": "Request parallel workers"
+          }
+        ],
+        "help": "Native default uses the server's ParallelWorkers configuration. Applies to new attachments, including creation, and survives ALTER SESSION RESET. Existing sessions and stored database settings are unchanged."
+      },
+      {
+        "field_id": "parallel_workers",
+        "route_key": "parallel_workers",
+        "label": "Requested parallel workers",
+        "control": "number",
+        "group": "Firebird session",
+        "default": 1,
+        "required": true,
+        "integer": true,
+        "minimum": 0,
+        "maximum": 32767,
+        "visible_when": {
+          "field_id": "parallel_workers_policy",
+          "equals": "CUSTOM"
+        },
+        "help": "Zero is an explicit zero request, not the native default. Positive requests are capped by the server's MaxParallelWorkers configuration. This is an attachment preference, not a count of workers executing a task or a backup/restore service setting."
+      },
+      {
+        "field_id": "no_gc",
+        "route_key": "no_gc",
+        "label": "Disable cooperative garbage collection",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": false,
+        "help": "Applies when attaching to an existing database. Firebird 5.0 does not apply this flag to the initial database-creation attachment."
+      },
+      {
+        "field_id": "no_db_triggers",
+        "route_key": "no_db_triggers",
+        "label": "Disable database triggers",
+        "control": "boolean",
+        "group": "Firebird session",
+        "default": false
+      },
+      {
+        "field_id": "dbkey_scope",
+        "route_key": "dbkey_scope",
+        "label": "DBKEY scope",
+        "control": "select",
+        "group": "Firebird session",
+        "default": "TRANSACTION",
+        "options": [
+          {
+            "value": "TRANSACTION",
+            "label": "Transaction"
+          },
+          {
+            "value": "ATTACHMENT",
+            "label": "Attachment"
+          }
+        ]
+      },
+      {
+        "field_id": "transaction_isolation",
+        "route_key": "transaction_isolation",
+        "label": "Default transaction isolation",
+        "control": "select",
+        "group": "Firebird transaction",
+        "default": "SNAPSHOT",
+        "options": [
+          {
+            "value": "READ_COMMITTED",
+            "label": "Read committed"
+          },
+          {
+            "value": "READ_COMMITTED_NO_RECORD_VERSION",
+            "label": "Read committed, no record version"
+          },
+          {
+            "value": "READ_COMMITTED_RECORD_VERSION",
+            "label": "Read committed, record version"
+          },
+          {
+            "value": "READ_COMMITTED_READ_CONSISTENCY",
+            "label": "Read committed, read consistency"
+          },
+          {
+            "value": "SNAPSHOT",
+            "label": "Snapshot"
+          },
+          {
+            "value": "SERIALIZABLE",
+            "label": "Serializable"
+          }
+        ]
+      },
+      {
+        "field_id": "transaction_access",
+        "route_key": "transaction_access",
+        "label": "Default transaction access",
+        "control": "select",
+        "group": "Firebird transaction",
+        "default": "WRITE",
+        "options": [
+          {
+            "value": "WRITE",
+            "label": "Read/write"
+          },
+          {
+            "value": "READ",
+            "label": "Read only"
+          }
+        ]
+      },
+      {
+        "field_id": "transaction_lock_timeout",
+        "route_key": "transaction_lock_timeout",
+        "label": "Transaction lock timeout (seconds; -1 waits forever)",
+        "control": "number",
+        "group": "Firebird transaction",
+        "default": -1,
+        "minimum": -1,
+        "maximum": 32767
+      },
+      {
+        "field_id": "transaction_auto_commit",
+        "route_key": "transaction_auto_commit",
+        "label": "Native autocommit (writes cannot be rolled back later)",
+        "control": "boolean",
+        "group": "Firebird transaction",
+        "default": false
+      },
+      {
+        "field_id": "transaction_no_auto_undo",
+        "route_key": "transaction_no_auto_undo",
+        "label": "No auto undo (native rollback still applies)",
+        "control": "boolean",
+        "group": "Firebird transaction",
+        "default": false
+      },
+      {
+        "field_id": "transaction_ignore_limbo",
+        "route_key": "transaction_ignore_limbo",
+        "label": "Ignore records from limbo transactions",
+        "control": "boolean",
+        "group": "Firebird transaction",
+        "default": false
+      },
+      {
+        "field_id": "statement_timeout_ms",
+        "route_key": "statement_timeout_ms",
+        "label": "Statement timeout (milliseconds; 0 uses database policy)",
+        "control": "number",
+        "group": "Firebird timeouts",
+        "minimum": 0,
+        "maximum": 2147483647
+      },
+      {
+        "field_id": "session_idle_timeout_seconds",
+        "route_key": "session_idle_timeout_seconds",
+        "label": "Session idle timeout (seconds; 0 uses database policy)",
+        "control": "number",
+        "group": "Firebird timeouts",
+        "minimum": 0,
+        "maximum": 2147483647
+      }
+    ],
+    "supports_secret": false,
+    "interface": {
+      "engine_id": "firebird",
+      "engine_display_name": "Firebird 5.0",
+      "interface_id": "firebird-embedded",
+      "interface_display_name": "Embedded (application host)",
+      "protocol_id": "firebird_embedded"
+    },
+    "connection_capabilities": {
+      "contract_version": "1.0",
+      "categories": {
+        "authentication": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "No password exchange: the application-host operating system authorizes access to the file; SQL privileges apply to the selected identity."
+        },
+        "tls": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "No network transport."
+        },
+        "client_certificates": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "No network certificate exchange."
+        },
+        "multiple_endpoints": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "Embedded files are database targets, not failover servers."
+        },
+        "topology_discovery": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "No remote server topology is discovered."
+        },
+        "routing_failover": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "Engine13 only; network fallback is refused."
+        },
+        "compression": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "No wire compression."
+        },
+        "pooling": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "Native attachment ownership; no client connection pool."
+        },
+        "reconnection": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "Closed attachments reopen explicitly; mutations are never replayed."
+        },
+        "connection_profiles": {
+          "state": "partial",
+          "features": [
+            "provider-owned-embedded-attachments"
+          ],
+          "evidence": [
+            "unit:test_firebird_embedded_boundary",
+            "native:cdeadmin_firebird_embedded_gate"
+          ],
+          "reason": "Provider attachment verified; embedded registration and end-user qualification are in progress."
+        },
+        "session_defaults": {
+          "state": "partial",
+          "features": [
+            "provider-owned-embedded-attachments"
+          ],
+          "evidence": [
+            "unit:test_firebird_embedded_boundary",
+            "native:cdeadmin_firebird_embedded_gate"
+          ],
+          "reason": "Provider attachment verified; embedded registration and end-user qualification are in progress."
+        },
+        "timeouts": {
+          "state": "partial",
+          "features": [
+            "provider-owned-embedded-attachments"
+          ],
+          "evidence": [
+            "unit:test_firebird_embedded_boundary",
+            "native:cdeadmin_firebird_embedded_gate"
+          ],
+          "reason": "Provider attachment verified; embedded registration and end-user qualification are in progress."
+        },
+        "consistency_isolation": {
+          "state": "partial",
+          "features": [
+            "provider-owned-embedded-attachments"
+          ],
+          "evidence": [
+            "unit:test_firebird_embedded_boundary",
+            "native:cdeadmin_firebird_embedded_gate"
+          ],
+          "reason": "Provider attachment verified; embedded registration and end-user qualification are in progress."
+        },
+        "state_visibility": {
+          "state": "partial",
+          "features": [
+            "provider-owned-embedded-attachments"
+          ],
+          "evidence": [
+            "unit:test_firebird_embedded_boundary",
+            "native:cdeadmin_firebird_embedded_gate"
+          ],
+          "reason": "Provider attachment verified; embedded registration and end-user qualification are in progress."
+        }
+      }
+    }
+  },
+  "provenance": {
+    "purpose": "Separate Firebird embedded interface, without network or Services API authority",
+    "protocol": "firebird_embedded",
+    "runtime_state": "linux_embedded_attachment_and_browser_qualified",
+    "activation_gate": "pending_cross_platform_and_full_provider_activation",
+    "linux_attachment_qualification": {
+      "feature_id": "FM-FB01-007",
+      "engine_version": "5.0.4",
+      "native_gate": "tools/cdeadmin_firebird_embedded_gate.py",
+      "browser_gate": "tools/cdeadmin_firebird_embedded_ui_gate.py",
+      "scope": "Linux local-file attachment; not full-provider or cross-platform activation"
+    },
+    "platform_test_notes": {
+      "windows": "Repeat native/UI gates with DLL/plugin discovery, drive/UNC containment, ACL denial, locking, recovery and Windows accessibility. Linux chmod evidence is not an ACL test.",
+      "macos": "Repeat native/UI gates with dylib/plugin discovery, signing/quarantine, filesystem permissions, recovery and macOS accessibility. Linux evidence does not qualify macOS."
+    }
+  }
+}

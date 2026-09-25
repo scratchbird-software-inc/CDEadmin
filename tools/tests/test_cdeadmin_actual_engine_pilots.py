@@ -310,7 +310,7 @@ def provider(provider_type, profile):
 
 class ActualEnginePilotContractTests(unittest.TestCase):
 
-    def test_builtins_contain_only_preserved_and_live_qualified_profiles(self):
+    def test_builtins_contain_preserved_and_explicit_engine_interfaces(self):
         class Registry:
             def __init__(self):
                 self.packages = []
@@ -322,11 +322,12 @@ class ActualEnginePilotContractTests(unittest.TestCase):
 
         registry = Registry()
         registrations = register_builtin_providers(registry)
-        self.assertEqual(26, len(registrations))
+        self.assertEqual(27, len(registrations))
         self.assertEqual(
             {
                 'postgresql-native', 'mysql-native', 'mariadb-native',
                 'duckdb-native', 'firebird-native', 'mongodb-native',
+                'firebird-embedded',
                 'neo4j-native', 'cassandra-native', 'redis-native',
                 'xtdb-native', 'clickhouse-native', 'sqlite-native',
                 'influxdb-native', 'milvus-native', 'opensearch-native',
@@ -349,6 +350,8 @@ class ActualEnginePilotContractTests(unittest.TestCase):
     def test_repository_policy_gate_passes(self):
         result = evaluate(ROOT)
         self.assertTrue(result['valid'], result['errors'])
+        # Embedded is a separate experimental interface, not another
+        # completed reference-engine pilot qualification.
         self.assertEqual(26, result['pilot_profiles'])
         self.assertEqual(0, result['donor_manifests_verified'])
 

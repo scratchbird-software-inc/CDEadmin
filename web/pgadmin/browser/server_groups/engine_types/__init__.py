@@ -100,7 +100,9 @@ def localhost_engine_status(engine_id, active_profiles=None):
         profile for profile in profiles
         if profile['route_kind'] == 'embedded_file'
     ]
-    if embedded:
+    # A mixed engine (Firebird) still has a server listener. Its optional
+    # local-file interface must not suppress the network availability probe.
+    if embedded and len(embedded) == len(profiles):
         module_name = _EMBEDDED_MODULES.get(engine_id)
         available = bool(
             module_name and importlib.util.find_spec(module_name) is not None

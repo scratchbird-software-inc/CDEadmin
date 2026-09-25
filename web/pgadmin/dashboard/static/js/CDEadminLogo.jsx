@@ -17,7 +17,7 @@ export default function CDEadminLogo() {
       <div className="welcome-wordmark">
         <h1>ScratchRobin CDE Administrator</h1>
         <p className="WelcomeDashboard-description">
-            {gettext('A data management and business intelligence tool. A part of the ScratchBird CDE family of products.')}
+          {gettext('A data management and business intelligence tool. A part of the ScratchBird CDE family of products.')}
         </p>
       </div>
     </div>

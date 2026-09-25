@@ -75,6 +75,19 @@ def profile(engine_id, *, route_kind='network', multiple=False):
 
 class ContextMenuTests(unittest.TestCase):
 
+    def test_firebird_interfaces_have_distinct_registration_commands(self):
+        network = profile('firebird', multiple=True)
+        embedded = profile('firebird', route_kind='embedded_file', multiple=True)
+        embedded['profile_id'] = 'firebird-embedded'
+        actions = connector_context_actions('firebird', [network, embedded])
+        ids = [item['command_id'] for item in actions]
+        self.assertEqual(len(ids), len(set(ids)))
+        action = next(item for item in actions if item['command_id'] ==
+                      'connector.firebird.register_database.firebird-embedded')
+        self.assertEqual('firebird-embedded', action['arguments']['profile_id'])
+        self.assertEqual('register_existing',
+                         action['arguments']['registration_intent'])
+
     def test_firebird_shadow_recovery_is_an_explicit_server_service_task(self):
         for state, can_manage in (('verified', True), ('unverified', True),
                                   ('verified', False)):
@@ -89,6 +102,24 @@ class ContextMenuTests(unittest.TestCase):
             self.assertIsNone(action['arguments']['database_target_id'])
             self.assertEqual('activate_shadow',
                              action['arguments']['operation_id'])
+
+    def test_embedded_firebird_menus_omit_services_but_keep_native_sql(self):
+        from pgadmin.cdeadmin.providers.relational_admin import (
+            _FIREBIRD_SERVICE_OPERATIONS,
+        )
+        embedded = profile('firebird', route_kind='embedded_file', multiple=True)
+        embedded['profile_id'] = 'firebird-embedded'
+        server_actions = endpoint_context_actions(embedded, 'verified')
+        self.assertNotIn('endpoint.firebird.activate_shadow', {
+            item['command_id'] for item in server_actions})
+        actions = database_target_context_actions(embedded, {
+            'target_id': 'owned', 'database': '/owned/example.fdb',
+            'display_name': 'owned',
+        })
+        operations = {item['arguments'].get('operation_id') for item in actions}
+        self.assertFalse(operations & _FIREBIRD_SERVICE_OPERATIONS)
+        self.assertIn('add_files', operations)
+        self.assertIn('inspect_limbo', operations)
 
     def test_group_create_retains_scope_without_fabricating_target(self):
         catalog = {'objects': [{'resource_kind': 'table', 'title': 'Table',

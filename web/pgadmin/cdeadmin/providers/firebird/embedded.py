@@ -7,6 +7,17 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 from ..embedded_route import contained_database
 
 
+def require_attachment_mode(route, expected):
+    """An admitted provider instance never changes transport per request."""
+    selected = route.get('attachment_mode', 'network')
+    if selected not in ('network', 'embedded'):
+        raise RelationalClientError('Firebird attachment mode is invalid')
+    if expected is not None and selected != expected:
+        raise RelationalClientError(
+            'Firebird attachment mode does not match the admitted endpoint')
+    return route
+
+
 def embedded_route(route, permissions=None, *, database=None):
     """Validate an opted-in local route before consulting the native driver.
 

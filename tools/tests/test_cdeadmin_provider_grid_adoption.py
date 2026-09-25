@@ -47,7 +47,7 @@ class ProviderGridAdoptionTests(unittest.TestCase):
     """Prevent a provider package from bypassing grid/native-view gates."""
 
     def test_every_builtin_provider_passes_workspace_adoption_gates(self):
-        self.assertEqual(26, len(BUILTIN_PACKAGES))
+        self.assertEqual(27, len(BUILTIN_PACKAGES))
         self.assertFalse(any(
             'scratchbird' in manifest_path.lower()
             for manifest_path, _module_name in BUILTIN_PACKAGES

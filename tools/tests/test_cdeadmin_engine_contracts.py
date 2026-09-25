@@ -534,18 +534,29 @@ def test_sqlite_exact_contracts_activate_generated_tasks_and_metrics():
     )
 
 
-def test_every_provider_manifest_records_completed_activation_gate():
+def test_provider_manifests_record_activation_without_promoting_experiments():
     manifests = (
         WEB / 'pgadmin/cdeadmin/providers'
     ).glob('**/*manifest*.json')
     activated = []
     incomplete = []
+    experimental = []
     for path in manifests:
         document = json.loads(path.read_text(encoding='utf-8'))
         gate = (document.get('provenance') or {}).get('activation_gate', '')
         if str(gate).startswith('passed'):
             activated.append(str(path.relative_to(WEB)))
+        elif document['identity']['profile_id'] == 'firebird-embedded':
+            assert document['support_state'] == 'experimental'
+            assert gate == (
+                'pending_cross_platform_and_full_provider_activation')
+            provenance = document['provenance']
+            assert provenance['linux_attachment_qualification'][
+                'feature_id'] == 'FM-FB01-007'
+            assert set(provenance['platform_test_notes']) == {'windows', 'macos'}
+            experimental.append(document['identity']['profile_id'])
         else:
             incomplete.append(str(path.relative_to(WEB)))
     assert incomplete == []
     assert len(activated) == 26
+    assert experimental == ['firebird-embedded']

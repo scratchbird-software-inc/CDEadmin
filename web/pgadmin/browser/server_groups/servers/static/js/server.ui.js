@@ -175,9 +175,33 @@ export function getConnectionParameters() {
   return conParams;
 };
 
+function routeFieldVisible(field, state) {
+  const condition = field.visible_when;
+  if (!condition) return true;
+  const value = state[`cde_route_${condition.field_id}`];
+  return Object.prototype.hasOwnProperty.call(condition, 'equals') ?
+    value === condition.equals : condition.in.includes(value);
+}
+
+function routeFieldDefaults(profile, values={}) {
+  const fields = profile.connection_fields || [];
+  const defaults = Object.fromEntries(fields.filter((field) =>
+    Object.prototype.hasOwnProperty.call(field, 'default')
+  ).map((field) => [`cde_route_${field.field_id}`, _.cloneDeep(field.default)]));
+  const state = {...defaults, ...values};
+  fields.forEach((field) => {
+    if (!routeFieldVisible(field, state)) defaults[`cde_route_${field.field_id}`] = null;
+  });
+  return defaults;
+}
+
 export default class ServerSchema extends BaseUISchema {
   constructor(serverGroupOptions=[], userId=0, initValues={},
     registrationContext={}) {
+    const initialProfile = endpointProfiles.get(
+      registrationContext.profileId || initValues.cde_profile_id
+    ) || endpointProfiles.defaultProfile;
+    const routeDefaults = routeFieldDefaults(initialProfile, initValues);
     super({
       gid: undefined,
       id: undefined,
@@ -191,7 +215,7 @@ export default class ServerSchema extends BaseUISchema {
       role: null,
       connect_now: true,
       cde_verify_now: false,
-      cde_profile_id: endpointProfiles.defaultProfile.profile_id,
+      cde_profile_id: initialProfile.profile_id,
       cde_registration_intent: 'endpoint',
       password: undefined,
       save_password: false,
@@ -216,6 +240,7 @@ export default class ServerSchema extends BaseUISchema {
         {'name': 'sslmode', 'value': 'prefer', 'keyword': 'sslmode'},
         {'name': 'connect_timeout', 'value': 10, 'keyword': 'connect_timeout'}],
       tags: [],
+      ...routeDefaults,
       ...initValues,
     });
 
@@ -305,11 +330,13 @@ export default class ServerSchema extends BaseUISchema {
       ],
       visible: (state) => {
         if (!field.profileIds.includes(state.cde_profile_id)) return false;
-        const condition = field.visible_when;
-        if (!condition) return true;
-        const value = state[`cde_route_${condition.field_id}`];
-        return Object.prototype.hasOwnProperty.call(condition, 'equals') ?
-          value === condition.equals : condition.in.includes(value);
+        return routeFieldVisible(field, state);
+      },
+      depChange: (state) => {
+        if (!field.profileIds.includes(state.cde_profile_id) ||
+            !routeFieldVisible(field, state)) return {[field.id]: null};
+        return field.visible_when && state[field.id] == null && 'default' in field ?
+          {[field.id]: _.cloneDeep(field.default)} : {};
       },
       noEmpty: Boolean(field.required),
       min: field.minimum,
@@ -411,10 +438,7 @@ export default class ServerSchema extends BaseUISchema {
             role: providerEndpoint ? null : state.role,
             kerberos_conn: providerEndpoint ? false : state.kerberos_conn,
             use_ssh_tunnel: providerEndpoint ? false : state.use_ssh_tunnel,
-            ...(profile.connection_fields || []).reduce((values, field) => ({
-              ...values,
-              [`cde_route_${field.field_id}`]: field.default ?? null,
-            }), {}),
+            ...routeFieldDefaults(profile),
           };
         },
       },

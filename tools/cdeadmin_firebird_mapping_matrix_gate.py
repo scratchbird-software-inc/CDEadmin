@@ -92,6 +92,7 @@ def run(options=None):
             return next((row for row in rows if row[0] == 'CDE_MAPPING'), None)
 
         def case(label, callback):
+            print('mapping case: ' + label, flush=True)
             try:
                 callback()
                 result['checks'].append(label)
@@ -241,6 +242,15 @@ def run(options=None):
                     other.close()
             case(kind + ':native-user-mapping-authentication', authentication)
 
+        from cdeadmin_firebird_local_mapping_cases import exercise
+        exercise(driver, connection, route, password, user_password,
+                 apply, case, _route_arguments)
+
+        from cdeadmin_firebird_global_mapping_cases import exercise as globals_
+        result['global_observations'] = globals_(
+            driver, connection, route, password, user_password,
+            apply, case, _route_arguments)
+
         def global_comment_projection():
             kind = mappings.KINDS[1]
             apply(kind, 'create', {
@@ -305,10 +315,15 @@ def run(options=None):
                         str(port), '--client-library', os.environ[
                             'CDEADMIN_FIREBIRD_CLIENT_LIBRARY'],
                         '--profiles', str(profiles), '--gate-kind', gate,
-                        '--resource-kind', mappings.KINDS[0],
-                        '--resource-kind', mappings.KINDS[1],
                         '--theme', theme, '--font-scale', str(scale),
                         '--timeout', '30']
+                    browser_kinds = getattr(
+                        options, 'browser_resource_kind', None)
+                    browser_kinds = browser_kinds or mappings.KINDS
+                    for kind in browser_kinds:
+                        command.extend(['--resource-kind', kind])
+                    for operation in getattr(options, 'browser_operation', ()):
+                        command.extend(['--operation-id', operation])
                     for key, filename in (
                             ('evidence-root', 'screenshots'),
                             ('summary-output', 'summary.json'),
@@ -346,6 +361,10 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--browser', action='store_true')
     parser.add_argument('--browser-mutations', action='store_true')
+    parser.add_argument('--browser-resource-kind', action='append',
+                        choices=mappings.KINDS)
+    parser.add_argument('--browser-operation', action='append', default=[],
+                        choices=sorted(mappings.OPERATIONS))
     parser.add_argument('--source-config-db', type=Path)
     parser.add_argument('--desktop-user')
     args = parser.parse_args()

@@ -573,13 +573,13 @@ def _observed_menu_click(driver, clickable):
 
 def invoke_context_action(
         wait, driver, database, labels, endpoint_password=None,
-        endpoint_prompt_timeout=5):
+        endpoint_prompt_timeout=5, handle_endpoint_prompt=True):
     """Open a database context menu and traverse its visible label path."""
     def open_selected_context_menu(target=None):
         _context_pointer(wait, driver, target)
 
     open_selected_context_menu(database)
-    if complete_endpoint_prompt(
+    if handle_endpoint_prompt and complete_endpoint_prompt(
             driver, endpoint_password, timeout=endpoint_prompt_timeout):
         ActionChains(driver).send_keys(Keys.ESCAPE).perform()
         open_selected_context_menu()
@@ -636,9 +636,10 @@ def invoke_context_action(
                 return item === hit || item.contains(hit);
             ''', clickable))
             _observed_menu_click(driver, clickable)
-            complete_endpoint_prompt(
-                driver, endpoint_password, timeout=endpoint_prompt_timeout
-            )
+            if handle_endpoint_prompt:
+                complete_endpoint_prompt(
+                    driver, endpoint_password, timeout=endpoint_prompt_timeout
+                )
         else:
             ActionChains(driver).move_to_element(element).perform()
 

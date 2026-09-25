@@ -65,8 +65,9 @@ def test_scoped_expand_clicks_only_matching_server(monkeypatch):
 
 
 @pytest.mark.parametrize('obscured', [False, True])
+@pytest.mark.parametrize('handle_prompt', [False, True])
 def test_context_command_scrolls_menu_and_requires_pointer_hit(
-        monkeypatch, obscured):
+        monkeypatch, obscured, handle_prompt):
     from tools import cdeadmin_ui_evidence as evidence
     from selenium.common.exceptions import TimeoutException
 
@@ -92,12 +93,18 @@ def test_context_command_scrolls_menu_and_requires_pointer_hit(
     wait = SimpleNamespace(until=until)
     if obscured:
         with pytest.raises(TimeoutException):
-            evidence.invoke_context_action(wait, driver, object(), ['Task'])
+            evidence.invoke_context_action(
+                wait, driver, object(), ['Task'],
+                handle_endpoint_prompt=handle_prompt)
         item.click.assert_not_called()
         click.assert_not_called()
     else:
-        evidence.invoke_context_action(wait, driver, object(), ['Task'])
+        evidence.invoke_context_action(
+            wait, driver, object(), ['Task'],
+            handle_endpoint_prompt=handle_prompt)
         click.assert_called_once_with(driver, item)
+    assert evidence.complete_endpoint_prompt.call_count == (
+        (1 if obscured else 2) if handle_prompt else 0)
     scripts = [call.args[0] for call in driver.execute_script.call_args_list]
     assert 'menu.scrollTop' in scripts[-2]
     assert 'scrollIntoView' not in scripts[-2]

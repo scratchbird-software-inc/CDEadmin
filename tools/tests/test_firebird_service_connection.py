@@ -112,9 +112,54 @@ def test_service_security_context_is_optional_and_not_a_database(context):
     assert 'database' not in result
 
 
-@pytest.mark.parametrize('context', [False, 42, [], {}, 'bad\x00path'])
+@pytest.mark.parametrize('context', [
+    False, 42, [], {}, 'bad\x00path', 'bad\npath', 'bad\tpath'])
 def test_invalid_security_context_fails_before_native_configuration(context):
     module = Mock()
     with pytest.raises(RelationalClientError):
         _server_arguments({'service_expected_database': context}, module)
     module.driver_config.get_server.assert_not_called()
+
+
+@pytest.mark.parametrize('context', [None, '', ' '])
+def test_default_context_is_explicit_to_block_environment_override(context):
+    module, core, _config, _builder, _dispatcher = setup_connector()
+    connect_service(module, core, server='private', expected_db=context)
+    assert core.SPB_ATTACH.call_args.kwargs['expected_db'] == ''
+
+
+@pytest.mark.parametrize('context', ['bad\npath', 'bad\x00path', 123])
+def test_direct_service_and_saved_profile_reject_bad_context(context):
+    from pgadmin.cdeadmin.endpoints import EndpointRegistrationError
+    from pgadmin.cdeadmin.endpoints.service import EndpointService
+    module, core, _config, _builder, dispatcher = setup_connector()
+    with pytest.raises(RelationalClientError):
+        connect_service(module, core, server='private', expected_db=context)
+    dispatcher.attach_service_manager.assert_not_called()
+    with pytest.raises(EndpointRegistrationError):
+        EndpointService._server_form_values(
+            {'profile_id': 'firebird-native'}, 'edit',
+            {'service_expected_database': context})
+
+
+def test_contexts_remain_per_call_and_do_not_change_database_target():
+    from concurrent.futures import ThreadPoolExecutor
+    import firebird.driver as driver
+    from pgadmin.cdeadmin.providers.firebird.provider import _route_arguments
+    route = {'host': 'localhost', 'port': 53050, 'database': '/ordinary.fdb',
+             'user': 'same-name'}
+
+    def arguments(context):
+        selected = {**route, 'service_expected_database': context}
+        service = _server_arguments(selected, driver)
+        ordinary = _route_arguments(selected)
+        assert ordinary['database'] == 'localhost/53050:/ordinary.fdb'
+        assert 'expected_db' not in ordinary
+        assert selected['database'] == '/ordinary.fdb'
+        return service.get('expected_db')
+
+    contexts = [None, 'alias', '/ordinary.fdb', '/東京.fdb']
+    with patch('pgadmin.cdeadmin.providers.firebird.provider.'
+               '_configure_client_library'):
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert list(pool.map(arguments, contexts)) == contexts

@@ -1933,6 +1933,13 @@ class ServerNode(PGChildNodeView):
                         'The parent directory for the database does not exist.'
                     ))
         targeting = endpoint_registration.get('database_targeting', {})
+        explicit_embedded_create = (
+            endpoint_registration['profile_id'] == 'firebird-embedded' and
+            registration_intent == 'create_database')
+        if explicit_embedded_create and not data.get('cde_verify_now'):
+            return bad_request(errormsg=gettext(
+                'Firebird embedded creation requires immediate verification.'
+            ))
         if provider_endpoint and not embedded_endpoint and (
             registration_intent in {'register_existing', 'create_database'}
         ) and not data.get('db'):
@@ -2150,11 +2157,26 @@ class ServerNode(PGChildNodeView):
                             'A password is required to verify this endpoint.'
                         )
                     )
+                created_embedded = False
                 try:
-                    verification = endpoint_service_for_app(
-                        current_app
-                    ).verify_server(server, transient_password)
+                    endpoint_service = endpoint_service_for_app(current_app)
+                    if explicit_embedded_create:
+                        created_embedded = True
+                        endpoint_service.create_initial_embedded_database(
+                            server)
+                    verification = endpoint_service.verify_server(
+                        server, transient_password)
                 except EndpointRegistrationError as exc:
+                    if created_embedded:
+                        return make_json_response(
+                            status=409, success=0, errormsg=gettext(
+                                'Embedded database creation or verification '
+                                'did not complete. The endpoint was preserved; '
+                                'inspect the destination before retrying: '
+                                '%(e)s',
+                                e=str(exc)),
+                            data={'server_id': server.id,
+                                  'endpoint_preserved': True})
                     db.session.delete(server)
                     db.session.commit()
                     return make_json_response(
@@ -2410,6 +2432,9 @@ class ServerNode(PGChildNodeView):
     @pga_login_required
     def verify_endpoint(self, gid, sid):
         """Verify a provider endpoint without invoking PostgreSQL drivers."""
+        from pgadmin.cdeadmin.endpoints.credential_storage import (
+            encrypted_credentials, protected_configuration_write,
+        )
         server = get_server(sid)
         if server is None:
             return bad_request(self.not_found_error_msg())
@@ -2432,30 +2457,39 @@ class ServerNode(PGChildNodeView):
         )
         password = data.get('password') or None
         connect_as = data.get('connect_as') or None
-        if connect_as and data.get('save_password'):
+        save_password = data.get('save_password', False)
+        if isinstance(save_password, str):
+            save_password = {'true': True, 'false': False}.get(save_password)
+        if not isinstance(save_password, bool):
+            return bad_request(gettext('Save password must be true or false.'))
+        if connect_as and save_password:
             return bad_request(gettext(
                 'Credentials used to connect as another user are session '
                 'only. Edit the connection profile to change and save the '
                 'default user credentials.'
             ))
+        verification = None
         try:
+            # Check policy/key availability before creating a verified session.
+            protected_password = encrypted_credentials(password) if (
+                password and save_password) else None
             verification = endpoint_service_for_app(
                 current_app
             ).verify_server(
                 server, password, connect_as=connect_as,
                 database_target_id=data.get('database_target_id') or None)
+            if protected_password is not None:
+                with protected_configuration_write(db.session):
+                    server.password = protected_password
+                    server.save_password = 1
+                    db.session.commit()
         except EndpointRegistrationError as exc:
+            if verification is not None:
+                endpoint_service_for_app(
+                    current_app).forget_server_credentials(server)
             return make_json_response(
                 status=401, success=0, errormsg=str(exc)
             )
-        if password and data.get('save_password'):
-            crypt_key_present, crypt_key = get_crypt_key()
-            if not crypt_key_present:
-                raise CryptKeyMissing
-            if config.ALLOW_SAVE_PASSWORD:
-                server.password = encrypt(password, crypt_key)
-                server.save_password = 1
-                db.session.commit()
         return make_json_response(
             data={
                 **verification,
@@ -3151,6 +3185,24 @@ class ServerNode(PGChildNodeView):
         server = get_server(sid)
         if server is None:
             return bad_request(self.not_found_error_msg())
+
+        disconnect_profile = _cde_registration(server)
+        if (disconnect_profile['workflow'] == 'provider_endpoint' and
+                disconnect_profile['engine_id'] == 'firebird'):
+            if _is_non_owner(server):
+                return forbidden(errormsg=gettext(
+                    'Only the endpoint owner can disconnect its credentials.'))
+            try:
+                endpoint_service_for_app(current_app).disconnect_server(server)
+            except EndpointRegistrationError as exc:
+                return make_json_response(
+                    status=409, success=0, errormsg=str(exc))
+            return make_json_response(
+                success=1, info=gettext('Endpoint disconnected.'), data={
+                    'icon': server_icon_and_background(
+                        False, None, server, 'unverified'),
+                    'connected': False,
+                    'runtime_verification_state': 'unverified'})
 
         # Release Connection
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)

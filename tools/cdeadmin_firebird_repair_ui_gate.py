@@ -13,9 +13,65 @@ from cdeadmin_firebird_query_ui_gate import _load_profile
 from cdeadmin_firebird_ui_form_gate import (
     click_unobscured, screenshot_form_pages, screenshot, fill_form_values,
     MENU_GROUP_LABELS, invoke_context_action, accessibility_observation,
+    open_workspace, PREVIEW_VALUES,
 )
 from cdeadmin_firebird_logical_volumes_gate import docker, OWNER
 from pgadmin.cdeadmin.providers.firebird import repair
+from pgadmin.cdeadmin.providers.relational_admin import (
+    _FIREBIRD_SERVICE_OPERATIONS,
+)
+
+
+def service_role_forms(browser, wait, options, route, descriptor, checks):
+    """All service forms: native roles, preview and keyboard/layout evidence.
+
+    Linux browser qualification; Windows/macOS teams must repeat these controls
+    and their native client transport. Preview never grants native privileges.
+    """
+    for operation_id in sorted(_FIREBIRD_SERVICE_OPERATIONS):
+        operation = {**next(item for item in descriptor['operations']
+                            if item['operation_id'] == operation_id),
+                     'resource_kind': 'database'}
+        item = forms.wait_for_tree_item(wait, options.database)
+        forms._context_click_visible_label(browser, wait, item)
+        command = browser.execute_script('''
+            const tree = window.pgAdmin.Browser.tree;
+            return (tree.itemData(tree.selected()).cde_context_actions || [])
+              .find(item => item.command_id === arguments[0] && item.enabled);
+        ''', 'database.firebird.' + operation_id)
+        assert command
+        forms.ActionChains(browser).send_keys(forms.Keys.ESCAPE).perform()
+        open_workspace(browser, wait, options, route['password'], command,
+                       operation)
+        controls = forms.assert_form_controls(
+            wait, operation['form']['fields'])
+        accessibility = accessibility_observation(
+            browser, wait, operation, controls)
+        fill_form_values(browser, wait, operation['form']['fields'], {
+            **PREVIEW_VALUES.get(operation_id, {}),
+            'SQL role': 'ROLE WITH SPACE'})
+        validate = visible_named_control(browser, 'Validate and preview')
+        click_unobscured(browser, wait, validate)
+        wait.until(lambda driver: 'whitespace or control characters' in
+                   driver.find_element('tag name', 'body').text)
+        assert not browser.find_elements(
+            'css selector', '[aria-label="Provider plan preview"]')
+        previews = []
+        for role in ('', 'CDE_OWNED_TASK_ROLE', ''):
+            values = {**PREVIEW_VALUES.get(operation_id, {}), 'SQL role': role}
+            plan = plan_preview(browser, wait, operation, values)
+            auth = plan['command_preview']['service_authentication_requested']
+            assert auth['requested_role'] == (role or route.get('role'))
+            assert auth['role_source'] == ('task' if role else 'connection')
+            assert auth['authorization_verified'] is False
+            previews.append(auth)
+        pages = screenshot_form_pages(
+            browser, options.output_root / ('roles-' + operation_id))
+        close_workspace(browser, wait)
+        checks.append({'operation_id': operation_id, 'previews': previews,
+                       'unsafe_role_rejected': True,
+                       'accessibility': accessibility, 'screenshots': pages})
+    return checks
 
 
 def run(options, profiles):
@@ -53,6 +109,10 @@ def run(options, profiles):
         operation = {**next(item for item in descriptor['operations']
                             if item['operation_id'] == 'repair_database'),
                      'resource_kind': 'database'}
+        if route.get('role'):
+            result['service_role_forms'] = []
+            service_role_forms(browser, wait, options, route, descriptor,
+                               result['service_role_forms'])
         browser.execute_script('''
             window.__ownedRepairDispatches = 0;
             const send = XMLHttpRequest.prototype.send;
@@ -167,6 +227,15 @@ def run(options, profiles):
                 'no_linger': no_linger},
                 route.get('role'))
             assert plan['command_preview']['repair_selection'] == selection
+            authentication = plan['command_preview'][
+                'service_authentication_requested']
+            assert authentication['requested_role'] == (
+                task_role or route.get('role') or None)
+            assert authentication['role_source'] == (
+                'task' if task_role else
+                'connection' if route.get('role') else 'none')
+            assert authentication['authorization_verified'] is False
+            assert authentication['role_transport'] == 'service_attachment'
             assert browser.execute_script(
                 'return window.__ownedRepairDispatches') == len(
                     result['checks'])
@@ -186,6 +255,13 @@ def run(options, profiles):
                        for item in driver.find_elements(
                            'css selector',
                            '[aria-label="Firebird service result"]')))
+            observed = browser.find_element(
+                'css selector', '[aria-label="Firebird service result"]')
+            assert 'Requested service role' in observed.text
+            assert (authentication['requested_role'] or
+                    'None requested') in observed.text
+            assert 'Service authentication database' in observed.text
+            assert 'not a grant of privileges' in observed.text
             connection = firebird.connect(
                 password=route['password'],
                 **_route_arguments(route, firebird))
@@ -202,6 +278,8 @@ def run(options, profiles):
                     result['checks']) + 1
             result['checks'].append({
                 'reviewed_selection': selection, 'apply_dispatch_count': 1,
+                'service_authentication_requested': authentication,
+                'service_identity_result_visible': True,
                 'healthy_rows_preserved': True,
                 'database_popup_verified': True,
                 'accessibility': accessibility,

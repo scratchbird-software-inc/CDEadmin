@@ -5,10 +5,16 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+from contextlib import nullcontext
+import threading
 
 import pytest
 
 from tools.tests.test_firebird_async_queries import rig  # noqa: F401
+from tools.tests.test_firebird_async_queries import service_handle
+from pgadmin.cdeadmin.providers.firebird.query_client import (
+    FirebirdQueryClient,
+)
 from tools.tests.test_cdeadmin_actual_engine_pilots import context
 from pgadmin.cdeadmin.core import ProviderRegistry, ProviderReleaseError
 from pgadmin.cdeadmin.endpoints import (
@@ -130,3 +136,133 @@ def test_local_persistence_failure_does_not_resurrect_released_client(rig):
             raise ValueError('owned persistence failure')
     assert not registration.bindings
     assert rig.client._closed
+
+
+@pytest.mark.parametrize('state', [
+    'idle', 'failed-initialization', 'uncertain-transaction', 'service',
+    'opening', 'temporary', 'recovery',
+])
+def test_all_owned_states_refuse_then_recover_without_profile_write(
+        rig, state):
+    registry, registration, binding = registered(rig.client)
+    scope = nullcontext()
+    if state in {'opening', 'temporary', 'recovery', 'service'}:
+        rig.client.close_session(rig.handle)
+    if state == 'failed-initialization':
+        rig.client._failed_initializations.add(id(rig.handle))
+    if state == 'uncertain-transaction':
+        rig.client._state(rig.handle).visual_task_state_unknown = True
+    if state == 'service':
+        service = service_handle(rig)
+    if state == 'opening':
+        scope = rig.client._connecting()
+    if state == 'temporary':
+        scope = rig.client._temporary_operation()
+    if state == 'recovery':
+        rig.client._recoveries.append(object())
+    try:
+        with scope, pytest.raises(ProviderReleaseError):
+            with registry.endpoint_configuration_change(
+                    binding.context.endpoint_id):
+                pytest.fail('Profile write was admitted')
+        assert not rig.client._closed
+        assert registration.release_failure_count == 0
+        assert registry.resolve(binding.context) is binding
+    finally:
+        if state == 'recovery':
+            rig.client._recoveries.clear()
+    if state == 'service':
+        rig.client.close_session(service)
+    elif rig.handle in rig.client._connections:
+        if state == 'failed-initialization':
+            # The mock must report confirmed native detachment, just as the
+            # real failed-initialization releaser is required to do.
+            rig.handle._att = None
+        rig.client.close_session(rig.handle)
+    with registry.endpoint_configuration_change(binding.context.endpoint_id):
+        assert rig.client._closed
+        assert not registration.bindings
+
+
+def test_busy_binding_does_not_release_an_idle_sibling(rig):
+    registry, registration, binding = registered(rig.client)
+    idle = FirebirdQueryClient(rig.client.config, module=rig.module)
+    sibling = replace(binding, instance=FirebirdProvider(
+        binding.context, registration.permission_grants, idle))
+    original = dict(registration.bindings)
+    registration.bindings.clear()
+    registration.bindings['idle-sibling'] = sibling
+    registration.bindings.update(original)
+    try:
+        with pytest.raises(ProviderReleaseError):
+            with registry.endpoint_configuration_change(
+                    binding.context.endpoint_id):
+                pytest.fail('Busy endpoint accepted')
+        assert not idle._closed
+        assert len(registration.bindings) == 2
+    finally:
+        idle.close()
+
+
+def test_admission_is_held_through_profile_persistence(rig):
+    registry, _registration, binding = registered(rig.client)
+    rig.client.close_session(rig.handle)
+    entered = threading.Event()
+    done = threading.Event()
+    errors = []
+
+    def opening():
+        entered.set()
+        try:
+            with rig.client._connecting():
+                errors.append('unexpected admission')
+        except RelationalClientError as error:
+            errors.append(str(error))
+        finally:
+            done.set()
+
+    with registry.endpoint_configuration_change(binding.context.endpoint_id):
+        worker = threading.Thread(target=opening)
+        worker.start()
+        assert entered.wait(2)
+        assert not done.wait(0.05)
+    worker.join(2)
+    assert not worker.is_alive()
+    assert errors == ['Firebird client is closed']
+
+
+def test_new_generation_cannot_implicitly_rollback_existing_attachment(rig):
+    registry, registration, binding = registered(rig.client)
+    before = list(rig.handle.mock_calls)
+    with pytest.raises(ProviderReleaseError, match='previous connection'):
+        registry.resolve(replace(binding.context,
+                                 runtime_identity_generation='new-profile'))
+    assert rig.handle.mock_calls == before
+    assert not rig.client._closed
+    assert len(registration.bindings) == 1
+    assert registry.resolve(binding.context) is binding
+
+
+def test_generation_preflight_preserves_idle_sibling_and_allows_retry(rig):
+    registry, registration, binding = registered(rig.client)
+    idle = FirebirdQueryClient(rig.client.config, module=rig.module)
+    sibling = replace(binding, instance=FirebirdProvider(
+        binding.context, registration.permission_grants, idle))
+    original = dict(registration.bindings)
+    registration.bindings.clear()
+    registration.bindings['idle-sibling'] = sibling
+    registration.bindings.update(original)
+    replacement = replace(binding.context,
+                          runtime_identity_generation='replacement')
+    try:
+        with pytest.raises(ProviderReleaseError):
+            registry.resolve(replacement)
+        assert not idle._closed
+        assert len(registration.bindings) == 2
+        rig.client.close_session(rig.handle)
+        registry._retire_superseded_generation(registration, replacement)
+        assert idle._closed and rig.client._closed
+        assert not registration.bindings
+        assert registration.release_failure_count == 0
+    finally:
+        idle.close()

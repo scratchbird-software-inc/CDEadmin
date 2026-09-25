@@ -37,6 +37,10 @@ BUILTIN_PACKAGES = (
         'pgadmin.cdeadmin.providers.firebird.provider',
     ),
     (
+        'firebird/embedded_provider_manifest.json',
+        'pgadmin.cdeadmin.providers.firebird.embedded_provider',
+    ),
+    (
         'mongodb/provider_manifest.json',
         'pgadmin.cdeadmin.providers.mongodb.provider',
     ),

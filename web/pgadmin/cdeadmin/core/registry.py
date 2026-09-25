@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import importlib
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Callable, Iterable, Mapping
@@ -570,17 +570,30 @@ class ProviderRegistry:
             if binding.context.endpoint_id == context.endpoint_id and
             binding.context.runtime_identity_generation != current
         ]
-        for key in stale_keys:
-            binding = registration.bindings[key]
+        with ExitStack() as admission:
             try:
-                ProviderRegistry._close_instance(binding.instance)
+                for key in stale_keys:
+                    instance = registration.bindings[key].instance
+                    guard = getattr(type(instance), 'profile_change_guard',
+                                    None)
+                    if callable(guard):
+                        admission.enter_context(guard(instance))
+                for key in stale_keys:
+                    instance = registration.bindings[key].instance
+                    release = getattr(type(instance),
+                                      'release_for_profile_change', None)
+                    if callable(release):
+                        release(instance)
+                    else:
+                        ProviderRegistry._close_instance(instance)
+                    del registration.bindings[key]
             except Exception:
                 registration.release_failure_count = 1
                 raise ProviderReleaseError(
                     'previous connection generation still owns resources; '
-                    'finish or cancel its operations before replacing it'
+                    'explicitly finish its transactions and release its '
+                    'attachments before replacing it'
                 ) from None
-            del registration.bindings[key]
         registration.release_failure_count = 0
 
     def _quarantine_permission_violation(
@@ -668,7 +681,26 @@ class ProviderRegistry:
         sessions need the existing credentials/routing. A confirmed release
         invalidates already acquired instances before metadata can change.
         """
-        with self._lock:
+        with self._lock, ExitStack() as admission:
+            # Preflight every opted-in binding before releasing any of them.
+            # Keep provider admission held through persistence, so an already
+            # acquired client cannot start work between the check and release.
+            for registration in self._registrations.values():
+                for binding in list(registration.bindings.values()):
+                    if binding.context.endpoint_id != endpoint_id:
+                        continue
+                    guard = getattr(type(binding.instance),
+                                    'profile_change_guard', None)
+                    if callable(guard):
+                        try:
+                            admission.enter_context(guard(binding.instance))
+                        except Exception:
+                            raise ProviderReleaseError(
+                                'close this connection\'s open sessions; '
+                                'explicitly commit or roll back pending work '
+                                'and release failed or temporary attachments '
+                                'before changing its configuration'
+                            ) from None
             for registration in self._registrations.values():
                 for key, binding in list(registration.bindings.items()):
                     if binding.context.endpoint_id != endpoint_id:

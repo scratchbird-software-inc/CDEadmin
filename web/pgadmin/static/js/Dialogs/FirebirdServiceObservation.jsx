@@ -24,6 +24,27 @@ export default function FirebirdServiceObservation({observation, title}) {
       release === false ? gettext('Release unconfirmed') : gettext('Not reported')],
   ];
   const selection = observation.backup_selection_requested;
+  const authentication = observation.service_authentication_requested;
+  let authenticationInvalid = false;
+  if (authentication !== undefined) {
+    const sources = {task: gettext('This task'), connection: gettext('Connection default'),
+      none: gettext('No requested role')};
+    const role = authentication?.requested_role;
+    const hasRole = typeof role === 'string' && role.length > 0;
+    const valid = authentication?.role_transport === 'service_attachment' &&
+      authentication.authorization_verified === false &&
+      (authentication.authentication_database === null ||
+        typeof authentication.authentication_database === 'string') &&
+      (hasRole ? ['task', 'connection'].includes(authentication.role_source) :
+        role === null && authentication.role_source === 'none');
+    authenticationInvalid = !valid;
+    fields.push([gettext('Requested service role'), !valid ? gettext('Not reported') :
+      hasRole ? role : gettext('None requested')]);
+    fields.push([gettext('Service role source'), valid ? sources[authentication.role_source] :
+      gettext('Not reported')]);
+    fields.push([gettext('Service authentication database'), !valid ? gettext('Not reported') :
+      authentication.authentication_database || gettext('Server default security context')]);
+  }
   const retention = observation.history_retention_requested;
   const restore = observation.restore_policy_requested;
   let restorePolicyInvalid = false;
@@ -108,6 +129,10 @@ export default function FirebirdServiceObservation({observation, title}) {
     </Alert>}
     {restorePolicyInvalid && <Alert severity="warning">
       {gettext('Restore policy is incomplete or inconsistent. Review the native service receipt.')}
+    </Alert>}
+    {authentication !== undefined && <Alert severity={authenticationInvalid ? 'warning' : 'info'}>
+      {authenticationInvalid ? gettext('Service authentication provenance is incomplete or inconsistent.') :
+        gettext('This is the requested service identity, not a grant of privileges. Firebird authorizes each native action; service tasks do not commit or roll back a query session.')}
     </Alert>}
     <Box component="h4" sx={{fontSize: '1em'}}>{gettext('Native output')}</Box>
     {output.length > 0 ? <Box component="pre"

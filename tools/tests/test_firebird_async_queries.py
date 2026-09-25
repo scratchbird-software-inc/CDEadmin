@@ -217,7 +217,8 @@ def test_service_execution_blocks_whole_client_release(rig):
                'run_server_operation', side_effect=native_service):
         result = rig.client.run_server_operation(
             {'route': {'host': 'test'}}, 'database_statistics', 'owned', {})
-    assert result == {'server_completed': True}
+    assert result['server_completed'] is True
+    assert result['service_authentication_requested']['requested_role'] is None
     assert rig.client._native_operations == 0
 
 

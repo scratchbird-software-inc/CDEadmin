@@ -6,8 +6,9 @@ import json
 import os
 import re
 import threading
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, nullcontext, contextmanager
 from enum import Enum
+from dataclasses import replace
 from importlib import resources as package_resources
 
 from pgadmin.cdeadmin.sdk import (
@@ -35,6 +36,7 @@ from .backup_volumes import logical_backup_volumes, start_logical_backup
 from .restore_files import logical_restore_files, start_logical_restore
 from .encryption_info import read_encryption_text
 from .attachment_cache import requested_pages, stored_page_buffers
+from .authentication import validate_authentication_plugins
 from .decfloat_traps import requested_traps
 from .parallel_workers import requested_workers
 from .failed_session import discard_failed_session
@@ -51,13 +53,17 @@ from .query_parameters import normalize_parameters
 from .query_values import normalize_value
 from .query_columns import describe_columns
 from .query_client import FirebirdQueryClient
-from .service_connection import connect_service, notify_attached
+from .service_connection import (
+    connect_service, notify_attached, security_context,
+)
 from .database_creation import create_database as create_owned_database
 from .session_settings import initialize_timeouts
 from .transaction_state import observe_transaction, release_session
 from . import availability
 from . import repair
-from .embedded import embedded_route, reject_embedded_service
+from .embedded import (
+    embedded_route, reject_embedded_service, require_attachment_mode,
+)
 
 
 PROFILE = PilotProfile(
@@ -189,10 +195,28 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 
 
 class FirebirdProvider(ActualEnginePilotProvider):
-    def __init__(self, context, permissions, client):
-        super().__init__(context, permissions, client, PROFILE)
+    def __init__(self, context, permissions, client, *, profile=PROFILE):
+        embedded = context.target_adapter_id == 'firebird-embedded-client'
+        if embedded and 'network' in context.effective_permissions:
+            raise RelationalClientError(
+                'Firebird endpoint cannot admit network and embedded '
+                'execution permissions together')
+        self.attachment_mode = 'embedded' if embedded else 'network'
+        profile = (replace(profile, required_permissions=(
+            'embedded_runtime', 'filesystem')) if embedded else profile)
+        super().__init__(context, permissions, client, profile)
+
+    def _admit_transport(self, request):
+        payload = _mapping(request)
+        require_attachment_mode(
+            _mapping(payload.get('route', {})), self.attachment_mode)
+
+    def discover_endpoint(self, request):
+        self._admit_transport(request)
+        return super().discover_endpoint(request)
 
     def open_session(self, request):
+        self._admit_transport(request)
         if isinstance(self.client, FirebirdQueryClient):
             # Initialization alone is not admission: identity verification,
             # failed-open cleanup and publication must precede shutdown too.
@@ -262,6 +286,28 @@ class FirebirdProvider(ActualEnginePilotProvider):
             return self.client.discard_unverified_session(handle)
         return super()._discard_unverified_session(handle)
 
+    @contextmanager
+    def profile_change_guard(self):
+        """Refuse profile edits without releasing any live native identity.
+
+        Linux qualification covers database/service/failed attachments and
+        concurrent admission. Windows/macOS teams must repeat native detach,
+        credential-store and UI recovery tests with their client runtimes.
+        No connection failure is evidence that an attachment was released.
+        """
+        lock = (self.client._admission if isinstance(
+            self.client, FirebirdQueryClient) else nullcontext())
+        with lock:
+            if self._sessions or (isinstance(
+                    self.client, FirebirdQueryClient) and any((
+                        self.client._connections, self.client._opening,
+                        self.client._native_operations,
+                        self.client._recoveries))):
+                raise RelationalClientError(
+                    'Close Firebird sessions and release outstanding '
+                    'attachments before changing this connection')
+            yield
+
     def release_for_profile_change(self):
         """Do not replace credentials or routing beneath an owned session."""
         if not isinstance(self.client, FirebirdQueryClient):
@@ -321,8 +367,13 @@ def _wire_configuration(route):
 
 
 def _route_arguments(route, module=None, *, creation=None):
+    validate_authentication_plugins(route)
     route = embedded_route(
         route, database=creation['database'] if creation else None)
+    if route.get('attachment_mode') == 'embedded' and module is not None:
+        # Missing local runtime is an endpoint dependency error, not a broken
+        # provider factory. Keep registration/catalog inspection available.
+        _configure_client_library(module)
     if creation is not None and route.get('attachment_mode') == 'embedded':
         creation = {**creation, 'database': route['database']}
     validate_transport(route.get('protocol'), route.get('host'),
@@ -496,15 +547,11 @@ def _server_route(route):
 
 def _server_arguments(route, module):
     """Build a Firebird service-manager attachment without a database."""
+    validate_authentication_plugins(route)
     reject_embedded_service(route)
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
-    expected_db = route.get('service_expected_database')
-    if expected_db is not None:
-        if not isinstance(expected_db, str) or '\x00' in expected_db:
-            raise RelationalClientError(
-                'Firebird service authentication database must be text')
-        expected_db = expected_db.strip() or None
+    expected_db = security_context(route.get('service_expected_database'))
     _configure_client_library(module)
     wire_configuration = _wire_configuration(route)
     material = {
@@ -3204,7 +3251,8 @@ def _resources(connection, request):
                 sections.append('files')
             sections.append('operations')
             native['property_sections'] = sections
-        for name in PROFILE.admin_tools:
+        for name in (() if request.get('route', {}).get(
+                'attachment_mode') == 'embedded' else PROFILE.admin_tools):
             add('service-operation', [], name)
         for metric in _metric_records():
             if not str(metric['source']).startswith('MON$'):
@@ -3356,14 +3404,15 @@ def _sequence_state(cursor, name):
                 'reason': 'Generator value could not be read by this account'}
 
 
-def _create_client(permissions):
+def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
+                   administration=ADMINISTRATION):
     module = load_optional_module('firebird.driver')
     core = (load_optional_module('firebird.driver.core')
             if module is not None else None)
-    if module is not None:
+    if module is not None and attachment_mode != 'embedded':
         _configure_client_library(module)
     return FirebirdQueryClient(RelationalClientConfig(
-        profile=PROFILE,
+        profile=profile,
         module_name='firebird.driver',
         version_query=(
             "SELECT RDB$GET_CONTEXT('SYSTEM', 'ENGINE_VERSION') "
@@ -3371,7 +3420,8 @@ def _create_client(permissions):
         ),
         version_parser=_version,
         connect_arguments=lambda route: _route_arguments(
-            embedded_route(route, permissions), module),
+            embedded_route(require_attachment_mode(
+                route, attachment_mode), permissions), module),
         metadata_reader=_resources,
         query_parameter_normalizer=normalize_parameters,
         query_value_normalizer=lambda value: normalize_value(
@@ -3390,17 +3440,18 @@ def _create_client(permissions):
         failed_session_releaser=discard_failed_session,
         database_create_arguments=lambda route, database, options: (
             _database_create_arguments(
-                embedded_route(route, permissions, database=database),
+                embedded_route(require_attachment_mode(
+                    route, attachment_mode), permissions, database=database),
                 database, options, module)
         ),
         database_creator=(
             (lambda **kwargs: create_owned_database(module, core, **kwargs))
             if module is not None else None),
-        administration=ADMINISTRATION,
+        administration=administration,
         server_route=_server_route,
         server_connector_name='connect_server',
         server_connect_arguments=lambda route: _server_arguments(
-            route, module
+            require_attachment_mode(route, attachment_mode), module
         ),
         server_identity_reader=lambda server, request: _server_identity(
             server, request, module
@@ -3420,5 +3471,8 @@ def _create_client(permissions):
 
 def create_provider(context, permissions, client=None):
     return FirebirdProvider(
-        context, permissions, client or _create_client(permissions)
+        context, permissions, client or _create_client(
+            permissions, attachment_mode=(
+                'embedded' if context.target_adapter_id ==
+                'firebird-embedded-client' else 'network'))
     )

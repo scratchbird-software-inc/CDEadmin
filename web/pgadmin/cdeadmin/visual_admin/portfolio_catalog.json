@@ -601,7 +601,9 @@
       ]
     },
     "firebird_upgrade_database": {
-      "title": "Upgrade Firebird database ODS", "fields": []
+      "title": "Upgrade Firebird database ODS", "fields": [
+        {"field_id": "role", "label": "SQL role", "control": "text", "required": false, "help": "Leave empty to inherit the connection role. This override applies only to this service task; native Firebird determines upgrade privileges."}
+      ]
     },
     "alter": {
       "title": "Alter",

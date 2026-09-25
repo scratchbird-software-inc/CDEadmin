@@ -694,6 +694,16 @@ _DATABASE_SPECS = {
 }
 
 
+_DATABASE_SPECS['firebird-embedded'] = copy.deepcopy(
+    _DATABASE_SPECS['firebird-native'])
+_DATABASE_SPECS['firebird-embedded']['identity_label'] = (
+    'Absolute local Firebird database filename')
+_DATABASE_SPECS['firebird-embedded']['create_fields'][0].update(
+    label='Absolute database filename on the application host',
+    help='Must remain within the approved local database directory. '
+         'Filesystem authorization, not password authentication, applies.')
+
+
 def _operation(profile_id, operation_id, noun, fields, execution, *,
                supported=True, reason=None, destructive=False):
     return {

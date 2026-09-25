@@ -379,7 +379,10 @@ def layout_observation(driver):
     observation = driver.execute_script(
         """
         const root = document.documentElement;
-        const dialog = document.querySelector('[role="dialog"]');
+        const dialog = document.querySelector('[role="dialog"]') ||
+          [...document.querySelectorAll('.dock-tabpane')].reverse().find(
+            element => element.getClientRects().length &&
+              getComputedStyle(element).visibility !== 'hidden');
         if (!dialog) return null;
         const rect = dialog.getBoundingClientRect();
         const style = getComputedStyle(dialog);
@@ -915,13 +918,54 @@ def close_workspace(driver, wait):
     close = wait.until(
         lambda value: visible_named_control(value, 'Close')
     )
-    dialog = close.find_element(By.XPATH, 'ancestor::*[@role="dialog"]')
     close.click()
-    wait.until(expected.staleness_of(dialog))
+    # Workspaces dock by default. Close is removed for both a docked tab and
+    # a floating dialog; neither needs a modal parent.
+    wait.until(expected.staleness_of(close))
 
 
 def accessibility_observation(driver, wait, operation, controls):
     """Verify dialog semantics and keyboard focus containment."""
+    if not any(item.is_displayed() for item in driver.find_elements(
+            By.CSS_SELECTOR, '[role="dialog"]')):
+        close = wait.until(lambda browser: visible_named_control(
+            browser, 'Close'))
+        pane = close.find_element(
+            By.XPATH, 'ancestor::*[contains(concat(" ", '
+            'normalize-space(@class), " "), " dock-tabpane ")]')
+        unnamed = [item['field_id'] for item in controls
+                   if item.get('visible', True)
+                   and not item.get('accessible_name')]
+        if unnamed:
+            raise RuntimeError('Docked form has unnamed controls: ' +
+                               ', '.join(unnamed))
+        # A docked document is deliberately non-modal: focus must be able to
+        # leave it. Verify a real keyboard path, not a fictitious focus trap.
+        focusable = driver.execute_script('''
+          return [...arguments[0].querySelectorAll(
+            'button,input,textarea,select,[href],[tabindex]')].filter(e =>
+              !e.disabled && e.tabIndex >= 0 && e.getClientRects().length &&
+              getComputedStyle(e).visibility !== 'hidden');
+        ''', pane)
+        if not focusable:
+            raise RuntimeError('Docked form has no keyboard controls')
+        trace = []
+        for control in focusable:
+            driver.execute_script('arguments[0].focus()', control)
+            if driver.switch_to.active_element != control:
+                raise RuntimeError('Docked control cannot receive focus')
+            ActionChains(driver).send_keys(Keys.TAB).perform()
+            active = driver.switch_to.active_element
+            trace.append({'tag': active.tag_name,
+                          'accessible_name': active.accessible_name or ''})
+        driver.execute_script('arguments[0].focus()', close)
+        ActionChains(driver).key_down(Keys.SHIFT).send_keys(
+            Keys.TAB).key_up(Keys.SHIFT).perform()
+        return {'state': 'observed', 'presentation': 'docked',
+                'aria_modal': False, 'focus_trap_applicable': False,
+                'declared_fields_named': len(controls), 'unnamed_fields': [],
+                'focusable_control_count': len(focusable),
+                'focus_trace': trace, 'control_values_recorded': False}
     dialog = wait.until(expected.visibility_of_element_located((
         By.CSS_SELECTOR, '[role="dialog"]',
     )))
@@ -1032,11 +1076,29 @@ def accessibility_observation(driver, wait, operation, controls):
 
 def close_workspace_with_keyboard(driver, wait):
     """Dismiss the active task through its keyboard escape path."""
+    if not any(item.is_displayed() for item in driver.find_elements(
+            By.CSS_SELECTOR, '[role="dialog"]')):
+        close = wait.until(lambda browser: visible_named_control(
+            browser, 'Close'))
+        driver.execute_script('''
+          window.__cdeadminQaDismissedRoot = arguments[0].closest(
+            '.dock-tabpane');
+        ''', close)
+        driver.execute_script('arguments[0].focus()', close)
+        ActionChains(driver).send_keys(Keys.SPACE).perform()
+        wait.until(expected.staleness_of(close))
+        driver.execute_script(
+            "window.__cdeadminQaDismissalInput = 'keyboard_close_button'")
+        return
     dialog = wait.until(expected.visibility_of_element_located((
         By.CSS_SELECTOR, '[role="dialog"]',
     )))
+    driver.execute_script(
+        'window.__cdeadminQaDismissedRoot = arguments[0]', dialog)
     ActionChains(driver).send_keys(Keys.ESCAPE).perform()
     wait.until(expected.staleness_of(dialog))
+    driver.execute_script(
+        "window.__cdeadminQaDismissalInput = 'keyboard_escape'")
 
 
 def open_workspace(driver, wait, options, password, action, operation):
@@ -1066,10 +1128,14 @@ def cancellation_observation(driver):
     )
     if dialog_present:
         raise RuntimeError('provider form remained visible after Close')
+    if driver.execute_script(
+            'return Boolean(window.__cdeadminQaDismissedRoot?.isConnected)'):
+        raise RuntimeError('provider workspace remained visible after Close')
     return {
         'dialog_present': False,
         'dialog_dismissed': True,
-        'dismissal_input': 'keyboard_escape',
+        'dismissal_input': driver.execute_script(
+            'return window.__cdeadminQaDismissalInput'),
         'provider_plan_requested': False,
         'provider_operation_executed': False,
     }
