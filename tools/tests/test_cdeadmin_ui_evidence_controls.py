@@ -177,7 +177,11 @@ def test_context_pointer_waits_for_visible_hit_without_synthetic_click(
         assert required in script
     assert 'dispatchEvent' not in script
     assert '.click()' not in script
-    assert 'scrollIntoView' not in script
+    # Bring restored/clipped rows into view explicitly, then re-measure and
+    # hit-test. Scrolling is not permission to synthesize command clicks.
+    assert "behavior: 'instant'" in script
+    assert script.index('scrollIntoView') < script.index(
+        'target.getBoundingClientRect')
 
 
 @pytest.mark.parametrize('value', ['{}', 'null', '[1]', '["A", "A"]'])

@@ -16,18 +16,32 @@ WINDOWS_CLIENT = sys.platform == 'win32'
 
 def validate_transport(protocol, host=None, port=None):
     """Never substitute TCP for an invalid or platform-specific transport."""
-    if protocol is None:
-        return
-    if not isinstance(protocol, str) or protocol not in {
-            'INET', 'INET4', 'INET6', 'XNET'}:
+    if protocol is not None and (
+            not isinstance(protocol, str) or protocol not in {
+                'INET', 'INET4', 'INET6', 'XNET'}):
         raise RelationalClientError('Firebird network protocol is invalid')
     if protocol == 'XNET':
+        # FM-FB03-003: XNET is native Windows shared memory, not a Linux
+        # transport. Never emulate it with TCP or an embedded attachment.
+        # Windows QA must qualify actual database/Services attachments,
+        # create/drop, authentication, transactions and browser controls;
+        # monkeypatched Windows DSN tests are mapping evidence only.
         if not WINDOWS_CLIENT:
             raise RelationalClientError(
                 'Firebird XNET requires a Windows application host')
         if host not in (None, '', 'localhost') or port is not None:
             raise RelationalClientError(
                 'Firebird XNET requires a local target without a TCP port')
+    else:
+        # Do not silently discard an explicit TCP port on a hostless route.
+        # Native hostless INET remains supported when no port is supplied.
+        # Linux qualified; Windows/macOS must repeat native address/failure
+        # tests with their own resolver and client library.
+        address = server_host(host)
+        selected_port = _port(port)
+        if selected_port is not None and address is None:
+            raise RelationalClientError(
+                'Firebird server port requires an explicit host')
 
 
 def server_host(host):

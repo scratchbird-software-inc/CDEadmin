@@ -74,7 +74,13 @@ def service_authentication(route, options):
 
 
 def connect_service(module, core, *, server, user=None, password=None,
-                    expected_db=None, role=None, crypt_callback=None):
+                    expected_db=None, role=None, crypt_callback=None,
+                    connect_timeout=None):
+    if connect_timeout is not None and (
+            type(connect_timeout) is not int or
+            not 0 <= connect_timeout <= 2147483647):
+        raise RelationalClientError(
+            'Firebird connection timeout must be a non-negative integer')
     validate_service_role(role)
     expected_db = security_context(expected_db)
     config = module.driver_config.get_server(server)
@@ -100,6 +106,10 @@ def connect_service(module, core, *, server, user=None, password=None,
     ).get_buffer()
     with api.util.get_xpb_builder(core.XpbKind.SPB_ATTACH, buffer) as builder:
         builder.insert_tag(core.SPBItem.UTF8_FILENAME)
+        if connect_timeout is not None:
+            # Native REMOTE_get_timeout_params reads isc_spb_connect_timeout.
+            # Linux qualified; Windows/macOS repeat stalled-handshake tests.
+            builder.insert_int(core.SPBItem.CONNECT_TIMEOUT, connect_timeout)
         buffer = builder.get_buffer()
     # Allocate the Python owner before obtaining the native attachment.
     # Publish driver ATTACHED hooks only after the client records ownership.

@@ -65,6 +65,14 @@ def test_native_attach_is_not_attempted_when_text_cannot_be_encoded():
     dispatcher.attach_service_manager.assert_not_called()
 
 
+@pytest.mark.parametrize('timeout', [0, 1, 30, 2147483647])
+def test_service_timeout_is_in_native_attach_buffer(timeout):
+    module, core, _config, builder, _dispatcher = setup_connector()
+    core.SPBItem.CONNECT_TIMEOUT = 57
+    connect_service(module, core, server='private', connect_timeout=timeout)
+    builder.insert_int.assert_called_once_with(57, timeout)
+
+
 @pytest.mark.parametrize('role', [
     'ROLE -shut full', '"Role with spaces"', 'ROLE\x00extra',
     'ROLE\nextra', 'ROLE\textra', False, 12,

@@ -1232,7 +1232,8 @@ class RelationalInventoryTests(unittest.TestCase):
         )
         self.assertTrue(config.trusted_auth.value)
         self.assertEqual(12, config.timeout.value)
-        self.assertEqual('WireCrypt=Required', config.config.value)
+        self.assertEqual('DummyPacketInterval=30\nWireCrypt=Required',
+                         config.config.value)
 
     def test_firebird_transaction_defaults_use_typed_driver_tpb(self):
         import firebird.driver as firebird_module

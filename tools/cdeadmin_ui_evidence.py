@@ -503,6 +503,11 @@ def _context_pointer(wait, driver, supplied):
         const target = supplied?.closest('.file-entry') || supplied ||
           document.querySelector('.file-entry[aria-selected="true"]');
         if (!target?.isConnected) return null;
+        // A restored tree may leave its endpoint partially clipped at the
+        // scrollbar. Scroll the actual row into view before hit-testing;
+        // the subsequent context gesture is still a trusted pointer action.
+        target.scrollIntoView({block: 'center', inline: 'nearest',
+                               behavior: 'instant'});
         const bounds = target.getBoundingClientRect();
         let left = Math.max(0, bounds.left);
         let right = Math.min(innerWidth, bounds.right);

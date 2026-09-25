@@ -14,7 +14,7 @@ import PropTypes from 'prop-types';
 import {useTheme} from '@mui/material/styles';
 import gettext from 'sources/gettext';
 import {
-  Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel,
+  Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, FormHelperText,
   IconButton, InputAdornment, MenuItem, Tab, Tabs, TextField,
 } from '@mui/material';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
@@ -560,6 +560,7 @@ PasswordAdminField.propTypes = {
 };
 
 export function VisualAdminField({field, value, onChange, disabled=false}) {
+  const helpId = useId();
   if (field.object_editor) {
     let record = value ?? initialFieldValue(field);
     if (typeof record === 'string') {
@@ -579,9 +580,14 @@ export function VisualAdminField({field, value, onChange, disabled=false}) {
       onChange={onChange} />;
   }
   if (field.control === 'boolean') {
-    return <FormControlLabel disabled={disabled} control={<Checkbox checked={Boolean(admittedValue)}
-      onChange={(event) => onChange(event.target.checked)} />}
-    label={field.label} />;
+    const help = field.help || field.help_text;
+    return <Box>
+      <FormControlLabel disabled={disabled} control={<Checkbox checked={Boolean(admittedValue)}
+        inputProps={{'aria-describedby': help ? helpId : undefined}}
+        onChange={(event) => onChange(event.target.checked)} />}
+      label={field.label} />
+      {help && <FormHelperText id={helpId} disabled={disabled}>{help}</FormHelperText>}
+    </Box>;
   }
   if (field.control === 'select') {
     const selectedValue = field.option_values_path && !field.options?.some(
@@ -5771,7 +5777,7 @@ export function ServerProfileWorkspace({registration, post, setError,
       const result = await post({
         action: removing ? 'endpoint_profile_remove' :
           'endpoint_profile_update',
-        request: databaseFormRequest(form, draft),
+        request: databaseFormRequest(form, draft, !removing),
       });
       setSaved(true);
       if(removing) onRemoved?.(result);
@@ -5827,7 +5833,7 @@ ServerProfileWorkspace.propTypes = {
   onSaved: PropTypes.func,
 };
 
-function databaseFormRequest(form, draft) {
+function databaseFormRequest(form, draft, preserveEmpty=false) {
   return Object.fromEntries((form?.fields || []).filter((field) =>
     fieldVisible(field, draft)).map((field) => {
     let value = draft[field.field_id];
@@ -5835,7 +5841,8 @@ function databaseFormRequest(form, draft) {
       value = JSON.parse(value);
     }
     return [field.field_id, value];
-  }).filter(([, value]) => value !== '' && value !== undefined));
+  }).filter(([, value]) => value !== undefined &&
+    (preserveEmpty || value !== '')));
 }
 
 export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,

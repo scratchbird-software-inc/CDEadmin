@@ -1027,6 +1027,8 @@ class EndpointVerificationTests(unittest.TestCase):
                     'user': 'SYSDBA',
                     'database_create_root': '/srv/firebird/databases',
                     'trusted_auth': False,
+                    'wire_crypt_plugins': 'ChaCha64',
+                    'wire_compression': True,
                 }),
             )],
             runtime_identity=SimpleNamespace(
@@ -1070,12 +1072,15 @@ class EndpointVerificationTests(unittest.TestCase):
                 'database_create_root': '/srv/firebird/databases',
                 'password': 'default-secret-canary',
                 'save_password': True,
+                'wire_crypt_plugins': '',
             })
 
         route = json.loads(endpoint.routes[0].configuration)
         self.assertEqual('127.0.0.10', route['host'])
         self.assertEqual(53050, route['port'])
         self.assertEqual('database_operator', route['user'])
+        self.assertNotIn('wire_crypt_plugins', route)
+        self.assertTrue(route['wire_compression'])
         self.assertEqual('127.0.0.10', server.host)
         self.assertEqual(53050, server.port)
         self.assertEqual('database_operator', server.username)

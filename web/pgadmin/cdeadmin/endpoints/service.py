@@ -1075,6 +1075,11 @@ class EndpointService:
             field_id = field['field_id']
             if field_id in values:
                 route_input[f'cde_route_{field_id}'] = values[field_id]
+            elif field_id in data and data[field_id] in (None, ''):
+                # An explicit clear differs from an omitted partial-update
+                # field. Required/visibility checks already ran above; route
+                # validation owns removal of this optional configuration key.
+                route_input[f'cde_route_{field_id}'] = data[field_id]
         route_configuration = self._validated_route(
             profile, route_input, existing
         )
@@ -1358,7 +1363,15 @@ class EndpointService:
                 ', '.join(sorted(unknown))
             )
         values = {}
+        connection_fields = {
+            field['field_id'] for field in profile.get('connection_fields', [])
+        }
         for field_id, field in fields.items():
+            if (operation_id == 'edit' and field_id not in data and
+                    field_id in connection_fields):
+                # Preserve existing options on partial edits; creation
+                # defaults apply only when there is no existing route value.
+                continue
             if not _form_field_is_visible(field, form, data):
                 if data.get(field_id) not in (None, ''):
                     raise EndpointRegistrationError(

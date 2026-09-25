@@ -41,7 +41,8 @@ def embedded_route(route, permissions=None, *, database=None):
         permissions.require('filesystem')
     forbidden = (
         'host', 'port', 'protocol', 'wire_config', 'wire_crypt',
-        'wire_compression', 'auth_plugin_list', 'trusted_auth',
+        'wire_compression', 'wire_crypt_plugins', 'auth_plugin_list',
+        'trusted_auth',
         'service_expected_database', 'password', 'timeout',
         'dummy_packet_interval',
     )

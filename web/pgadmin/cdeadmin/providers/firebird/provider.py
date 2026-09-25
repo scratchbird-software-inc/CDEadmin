@@ -343,25 +343,68 @@ class FirebirdProvider(ActualEnginePilotProvider):
 _CONFIG_LOCK = threading.RLock()
 
 
+def _validate_network_timing(route):
+    # Native DPB/SPB/config integers share the signed 32-bit domain. Zero is
+    # explicit (not an omitted/default value). Windows/macOS teams repeat
+    # native handshake/dummy-packet behavior with their client libraries.
+    for field, label in (('timeout', 'connection timeout'),
+                         ('dummy_packet_interval', 'dummy packet interval')):
+        value = route.get(field)
+        if value is not None and (type(value) is not int or
+                                  not 0 <= value <= 2147483647):
+            raise RelationalClientError(
+                f'Firebird {label} must be an integer from 0 to 2147483647')
+
+
 def _wire_configuration(route):
     if route.get('attachment_mode') == 'embedded':
         return 'Providers=Engine13'
+    _validate_network_timing(route)
     options = []
     if route.get('wire_config') is not None and not isinstance(
             route['wire_config'], str):
         raise RelationalClientError('Firebird wire configuration is invalid')
-    if route.get('wire_crypt'):
-        if route['wire_crypt'] not in {'Disabled', 'Enabled', 'Required'}:
+    if route.get('wire_crypt') is not None:
+        if (not isinstance(route['wire_crypt'], str) or
+                route['wire_crypt'] not in {
+                    'Disabled', 'Enabled', 'Required'}):
             raise RelationalClientError(
                 'Firebird wire encryption policy is invalid')
         options.append(f'WireCrypt={route["wire_crypt"]}')
+    plugins = route.get('wire_crypt_plugins')
+    if plugins is not None:
+        # Native plugin discovery owns availability and ordered negotiation.
+        # This field is one config value, never an injected config document.
+        # Windows/macOS teams repeat loader/handshake/browser qualification.
+        if (not isinstance(plugins, str) or not plugins.strip(' \t,;') or
+                any(ord(char) < 32 and char != '\t' for char in plugins) or
+                any(char in plugins for char in '\x7f#={}')):
+            raise RelationalClientError(
+                'Firebird wire encryption plugin list is invalid')
+        options.append('WireCryptPlugin=' + plugins)
     if route.get('wire_compression') is not None:
         if type(route['wire_compression']) is not bool:
             raise RelationalClientError(
                 'Firebird wire compression policy is invalid')
         options.append('WireCompression=' + (
             'true' if route['wire_compression'] else 'false'))
+    if route.get('dummy_packet_interval') is not None:
+        # Firebird 5 REMOTE_get_timeout_params reads native configuration,
+        # not the legacy dummy-packet DPB/SPB item. Applies to Services too.
+        options.append('DummyPacketInterval=' +
+                       str(route['dummy_packet_interval']))
     if route.get('wire_config'):
+        # Do not let a second definition silently override the visual policy
+        # or plugin field. Raw-only profiles retain native configuration use.
+        for key, field in (('WireCrypt', 'wire_crypt'),
+                           ('WireCryptPlugin', 'wire_crypt_plugins'),
+                           ('WireCompression', 'wire_compression'),
+                           ('DummyPacketInterval', 'dummy_packet_interval')):
+            if route.get(field) is not None and re.search(
+                    r'(?mi)^\s*' + key + r'\s*=', route['wire_config']):
+                raise RelationalClientError(
+                    'Firebird wire configuration duplicates the explicit ' +
+                    key + ' field; use one configuration source')
         options.append(route['wire_config'])
     return '\n'.join(options) or None
 
@@ -370,6 +413,7 @@ def _route_arguments(route, module=None, *, creation=None):
     validate_authentication_plugins(route)
     route = embedded_route(
         route, database=creation['database'] if creation else None)
+    _validate_network_timing(route)
     if route.get('attachment_mode') == 'embedded' and module is not None:
         # Missing local runtime is an endpoint dependency error, not a broken
         # provider factory. Keep registration/catalog inspection available.
@@ -434,7 +478,8 @@ def _route_arguments(route, module=None, *, creation=None):
             'host', 'port', 'database', 'user', 'auth_plugin_list',
             'trusted_auth', 'timeout',
             'protocol', 'dummy_packet_interval', 'wire_config',
-            'wire_crypt', 'wire_compression', 'decfloat_round', 'no_linger',
+            'wire_crypt', 'wire_crypt_plugins', 'wire_compression',
+            'decfloat_round', 'no_linger',
         )
     }
     material['attachment_mode'] = route.get('attachment_mode', 'network')
@@ -552,13 +597,15 @@ def _server_arguments(route, module):
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
     expected_db = security_context(route.get('service_expected_database'))
-    _configure_client_library(module)
     wire_configuration = _wire_configuration(route)
+    _configure_client_library(module)
     material = {
         name: route.get(name) for name in (
-            'host', 'port', 'user', 'protocol', 'trusted_auth',
+            'host', 'port', 'user', 'protocol', 'trusted_auth', 'timeout',
+            'dummy_packet_interval',
             'auth_plugin_list',
-            'wire_config', 'wire_crypt', 'wire_compression',
+            'wire_config', 'wire_crypt', 'wire_crypt_plugins',
+            'wire_compression',
         )
     }
     digest = hashlib.sha256(json.dumps(
@@ -3450,9 +3497,11 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         administration=administration,
         server_route=_server_route,
         server_connector_name='connect_server',
-        server_connect_arguments=lambda route: _server_arguments(
-            require_attachment_mode(route, attachment_mode), module
-        ),
+        server_connect_arguments=lambda route: {
+            **_server_arguments(
+                require_attachment_mode(route, attachment_mode), module),
+            'connect_timeout': route.get('timeout'),
+        },
         server_identity_reader=lambda server, request: _server_identity(
             server, request, module
         ),

@@ -133,6 +133,7 @@ def route(tmp_path):
 @pytest.mark.parametrize('key,value', [
     ('host', 'localhost'), ('port', 3050), ('protocol', 'INET'),
     ('wire_config', 'Providers=Remote'), ('wire_crypt', 'Required'),
+    ('wire_crypt_plugins', 'ChaCha64'),
     ('wire_compression', False), ('auth_plugin_list', 'Srp'),
     ('trusted_auth', False), ('service_expected_database', 'other'),
     ('password', 'not-used'), ('timeout', 1), ('dummy_packet_interval', 0),

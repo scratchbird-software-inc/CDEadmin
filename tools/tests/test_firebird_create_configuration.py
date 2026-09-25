@@ -55,7 +55,7 @@ def test_create_retains_every_selected_connection_option(
     assert config.dummy_packet_interval.value == 20
     assert config.config.value == (
         'WireCrypt=Required\nWireCompression=' + str(compression).lower() +
-        '\nWireCryptPlugin=ChaCha64')
+        '\nDummyPacketInterval=20\nWireCryptPlugin=ChaCha64')
     assert config.page_size.value == 16384
     assert config.db_charset.value == 'UTF8'
     assert config.db_sql_dialect.value == 1

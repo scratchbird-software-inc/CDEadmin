@@ -1,6 +1,7 @@
 """Native transport selection must not silently fall back to TCP."""
 
 from unittest.mock import Mock
+import sys
 
 import firebird.driver as native
 from firebird.driver.config import DriverConfig
@@ -49,6 +50,41 @@ def test_xnet_refuses_non_windows_application_host(monkeypatch, scope):
     assert not module.mock_calls
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='Actual Linux boundary')
+@pytest.mark.parametrize('host,port', [
+    (None, None), ('localhost', None), ('127.0.0.1', 3050), ('::1', 3050),
+])
+@pytest.mark.parametrize('scope', [
+    'attach', 'create', 'service', 'database-dsn', 'service-dsn', 'compile',
+])
+def test_actual_linux_xnet_boundary_without_platform_simulation(
+        host, port, scope):
+    # Windows/macOS teams run their own platform gates. This verifies actual
+    # Linux rejection, not a pretend Windows attachment or TCP substitute.
+    assert not strings.WINDOWS_CLIENT
+    module = Mock()
+    route = {'host': host, 'port': port, 'database': '/owned/test.fdb',
+             'protocol': 'XNET'}
+    with pytest.raises(RelationalClientError,
+                       match='Windows application host'):
+        if scope == 'attach':
+            provider._route_arguments(route, module)
+        elif scope == 'create':
+            provider._database_create_arguments(
+                route, 'xnet:///owned/new.fdb', {}, module)
+        elif scope == 'service':
+            provider._server_arguments(route, module)
+        elif scope == 'database-dsn':
+            strings.database_dsn('/owned/test.fdb', host, port, 'XNET')
+        elif scope == 'service-dsn':
+            strings.service_dsn(host, port, 'XNET')
+        else:
+            ADMINISTRATION._compile_database_create({
+                '_provider_route': route,
+                'draft': {'database_path': '/owned/new.fdb'}})
+    assert not module.mock_calls
+
+
 @pytest.mark.parametrize('host,port', [
     ('remote', None), ('127.0.0.1', None),
     (None, 3050), ('localhost', 3050)])
@@ -88,3 +124,50 @@ def test_database_creation_compiler_cannot_discard_transport(protocol):
         'draft': {'database_path': '/owned/new.fdb'}}
     with pytest.raises(RelationalClientError, match='protocol'):
         ADMINISTRATION._compile_database_create(request)
+
+
+@pytest.mark.parametrize('protocol', [None, 'INET', 'INET4'])
+@pytest.mark.parametrize('host,port', [
+    (None, 3051), ('', 3051), ('db/3050', 3050),
+    ('db:3050', 3050), ('localhost', True), ('localhost', 65536),
+])
+@pytest.mark.parametrize('scope', ['attach', 'create', 'service'])
+def test_tcp_address_rejected_before_native_configuration(
+        protocol, host, port, scope):
+    module = Mock()
+    route = {'host': host, 'port': port, 'database': 'owned',
+             'protocol': protocol}
+    with pytest.raises(RelationalClientError):
+        if scope == 'attach':
+            provider._route_arguments(route, module)
+        elif scope == 'create':
+            provider._database_create_arguments(route, 'owned', {}, module)
+        else:
+            provider._server_arguments(route, module)
+    assert not module.mock_calls
+
+
+@pytest.mark.parametrize('protocol', ['INET', 'INET4'])
+def test_hostless_native_loopback_without_port_is_preserved(protocol):
+    assert strings.database_dsn('/data/owned.fdb', protocol=protocol) == (
+        protocol.lower() + ':///data/owned.fdb')
+
+
+def test_service_timeout_has_private_configuration_identity(monkeypatch):
+    registry = DriverConfig('owned-timeout')
+    monkeypatch.setattr(native, 'driver_config', registry)
+    monkeypatch.setattr(provider, '_configure_client_library', Mock())
+    route = {'host': 'localhost', 'port': 3050,
+             'wire_config': 'ConnectionTimeout=180', 'timeout': 1}
+    first = provider._server_arguments(route, native)
+    second = provider._server_arguments({**route, 'timeout': 2}, native)
+    assert first['server'] != second['server']
+
+
+@pytest.mark.parametrize('timeout', [-1, True, 1.5, '1', 2147483648])
+def test_invalid_service_timeout_refused_before_native_access(timeout):
+    module = Mock()
+    with pytest.raises(RelationalClientError, match='timeout'):
+        provider._server_arguments({'host': 'localhost', 'timeout': timeout},
+                                   module)
+    assert not module.mock_calls
