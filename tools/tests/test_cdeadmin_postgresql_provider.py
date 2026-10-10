@@ -129,6 +129,10 @@ class FakeConnection:
         self.executions = []
         self.cancelled = []
         self.connect_calls = []
+        self.conn = self
+
+    def connected(self):
+        return True
 
     def connect(self, **values):
         self.connect_calls.append(values)
@@ -171,6 +175,10 @@ class FakeManager:
     def __init__(self, connection=None):
         self._connection = connection or FakeConnection()
         self.connection_calls = []
+        self.release_calls = []
+
+    def release(self, **kwargs):
+        self.release_calls.append(kwargs)
 
     def connection(self, **kwargs):
         self.connection_calls.append(kwargs)
@@ -237,6 +245,19 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.permissions = FakePermissions()
         self.driver = FakeDriver()
         self.catalog = FakeCatalog()
+
+        def pages(connection, source, parameters):
+            connection.executions.append((source, parameters or None, {}))
+            yield {'rows': [[1, 'row']],
+                   'columns': [{'name': 'id'}, {'name': 'value'}],
+                   'has_page': True, 'result_set_index': 0,
+                   'row_offset': 0, 'result_set_end': True}
+
+        replacement = patch(
+            'pgadmin.cdeadmin.providers.postgresql.execution.result_pages',
+            side_effect=pages)
+        replacement.start()
+        self.addCleanup(replacement.stop)
         self.provider = PostgreSQLProvider(
             endpoint(), self.permissions, self.driver, self.catalog
         )
@@ -356,6 +377,8 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'parameters': {},
         }
         operation = self.provider.execute(execution)
+        self.provider._operations[
+            operation['operation_id']].execution.worker.join(timeout=2)
         result = self.provider.describe_result(operation)
         current = self.provider.get_operation(operation)
         transaction = self.provider.describe_transaction(session)
@@ -426,6 +449,8 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'semantic_model': model,
             'semantic_query': query,
         })
+        self.provider._operations[
+            operation['operation_id']].execution.worker.join(timeout=2)
         result = self.provider.describe_result(operation)
         source, parameters, _options = (
             self.driver.manager._connection.executions[-1]
@@ -458,6 +483,8 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'source': 'SELECT pg_sleep(10)',
             'parameters': {},
         })
+        token = self.provider._operations[operation['operation_id']].execution
+        token.cancel = Mock(return_value=True)
         cancelled = self.provider.cancel(operation)
         self.assertTrue(
             cancelled['provider_receipt']['cancel_request_accepted']
@@ -467,9 +494,9 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             cancelled['provider_receipt']['outcome'],
         )
         self.assertFalse(cancelled['terminal'])
-        self.assertEqual(
-            [('query-tool-1', 10)], self.driver.manager._connection.cancelled
-        )
+        token.cancel.assert_called_once_with()
+        self.assertNotEqual('query-tool-1',
+                            session['provider_state']['connection_id'])
 
     def test_data_studio_contributions_are_postgresql_owned(self):
         contributions = self.provider.data_studio_contributions()

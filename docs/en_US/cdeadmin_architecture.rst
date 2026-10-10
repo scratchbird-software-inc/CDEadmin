@@ -813,6 +813,216 @@ truncation/no-plan notices. Stored/exported results reuse that observation and
 do not prepare or execute SQL again.
 
 
+MariaDB native query fidelity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MariaDB query cursors must preserve SQL NULL separately from zero and partial
+calendar dates, negative and extended TIME values, and fractional seconds.
+Connector/Python 1.1.14 converts some valid MariaDB temporal values to Python
+None or raises before converter callbacks run. The pinned ScratchRobin build
+therefore applies the opt-in ``cdeadmin_exact_temporals`` cursor extension in
+``tools/driver_patches/mariadb-1.1.14-exact-temporals.patch``. It returns temporal
+text from both native text and binary result protocols. Catalog cursors retain
+the connector's default behavior. Query cursors require the extension; silently
+falling back to lossy decoding is prohibited. SQL and parameter parsing remain
+the native connector's responsibility. Platform receipts must exercise both
+protocols, including zero dates, SQL NULL and negative fractional TIME.
+
+Browser-facing integers outside the exact JavaScript range and decimal values
+are strings. Binary values carry base64 data and byte length. Ordered parameter
+arrays and named parameter objects admit explicit integer, decimal and base64
+envelopes. Integer envelopes wider than native signed/unsigned 64-bit bounds
+bind through exact DECIMAL, avoiding the connector's binary-integer truncation.
+Result sets keep separate native metadata, ordinal column identities
+and row offsets; repeated labels must not overwrite values. Streaming consumes
+all native result sets with bounded queued pages. Terminal errors follow any
+already queued pages. The pinned connector patch also propagates positive
+errors from both native next-result APIs; only their negative no-more-results
+return is successful exhaustion. Uncertain protocol or transaction outcomes quarantine
+the connection without replay or automatic reconnect.
+
+MariaDB cancellation binds the original native connection ID to the server UID
+observed on that connection and uses the winning native host/port/socket for
+the control connection. Verify its server UID before issuing KILL QUERY; do not
+retry cancellation against another failover candidate. Cancellation drains the
+original protocol before reuse and does not roll back earlier transaction work.
+Transaction observation/control and session release must not issue commands
+while a worker owns the protocol. Shutdown refuses new sessions/executions,
+cancels and joins workers, and retains their handles if they have not stopped.
+It must not close a connection under a still-running worker.
+
+Column metadata corrects Connector/Python 1.1.14's reversed length/max_length
+entries before publishing declared and observed byte lengths. Native unsigned
+flags, charset IDs, extended type identity and duplicate labels remain available.
+
+MariaDB provider connection ownership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MariaDB pools belong to individual provider instances, with local pool names
+and a maximum of 64 physical connections. Pool reset/validation preferences
+alone do not enable pooling. Compare the complete connection, credential and
+pool configuration on every checkout using a private keyed digest. Retire an
+old generation on configuration change; close idle connections and allow leased
+connections to finish on their original native attachment before discarding
+them. A returned lease cannot access a subsequently borrowed connection.
+
+Use native MariaDB connections with provider-private lease accounting instead
+of the connector's process-global named pool registry. On return request native
+rollback, then native ``reset()`` when configured. A failed return/reset discards
+the physical connection. Following a reset, checkout restores the original
+database and autocommit defaults and reapplies the admitted initial command.
+If an originally unselected database cannot be restored after a USE command,
+discard that idle connection and open a fresh one. Validation interval is milliseconds since return;
+zero validates every idle checkout with native ping. Idle failure permits a
+fresh connection; no active operation may reconnect or replay. Reject enabled
+automatic reconnect for these retained sessions instead of silently honoring
+it inside an active transaction. Closing a provider retires its pools.
+
+MySQL provider connection ownership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MySQL pooling belongs to one provider instance. Connector/Python's process-wide
+named-pool registry must not select another provider's endpoint, credentials or
+TLS/session configuration. Pool reset preferences alone do not enable pooling;
+an explicit positive pool size enables a bounded, lazily populated pool.
+The pool name is local to that provider. Every checkout compares the complete
+native connection configuration, including current credential values, using a
+process-private digest. Changed configuration retires idle old connections;
+outstanding old leases remain with their original session until release and
+cannot enter the replacement pool. Never write credentials or their digests
+into evidence, logs or public observations.
+
+Only idle connections may be replaced after a failed non-reconnecting liveness
+check. Never reconnect or replay a retained active session. Returning a lease
+rolls back pending work, and applies native session reset when enabled. Failure
+of rollback/reset closes the physical connection and does not make it reusable.
+Closing a provider closes its idle connections; outstanding leases from a
+retired pool close on return. Exhaustion is explicit; no connection is borrowed
+from another pool. DNS SRV and failover remain native fresh-connection options.
+MariaDB's pool and transaction semantics remain independently specified.
+
+MySQL query value transport
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+User query results retain the native text-protocol values before the Python
+driver's date/time conversions. Native zero/incomplete dates are text, not SQL
+NULL; TIME is a signed duration (potentially over 24 hours). Preserve native
+fractional digits and the session's temporal interpretation. DECIMAL and
+floating-point protocol text must not pass through browser Number conversion.
+Integers beyond JavaScript's exact range are decimal strings. SQL NULL remains
+JSON null. Binary strings/BLOBs, geometry and VECTOR retain exact bytes through
+base64 envelopes; text BLOBs and JSON retain their text without parsing JSON
+numbers into floats. BIT values retain their full unsigned magnitude.
+
+Result metadata records native type codes, flags, charset/collation IDs and
+nullability when reported by Connector/Python. Unique result keys preserve
+duplicate labels separately from the original native labels. Select cell types
+that do not reparse exact text as browser dates/numbers. Never infer precision,
+scale or a base relation from sample values. Ordinary catalog readers continue
+to use their native typed connector interface.
+
+Named and positional query bindings use Connector/Python's native placeholders.
+The MySQL language declares ``object-or-array`` parameter shape. Data Studio and
+its query form accept both shapes without weakening object-only or array-only
+providers. Use ``%(name)s`` for an object and ``%s`` for an ordered array.
+Within either parameter container, an explicit ``encoding: base64`` envelope
+binds binary bytes; ``encoding: decimal`` and ``encoding: integer`` envelopes
+bind exact finite numbers from textual ``data``. Reject malformed envelopes,
+nonfinite numbers and unsafe JSON integer magnitudes before native dispatch.
+Plain temporal strings retain server SQL-mode validation, including zero dates;
+no client rewrite changes that policy. MariaDB bindings are independent.
+An explicitly empty MySQL ``sql_mode`` clears the session mode; it must not be
+treated as an omitted option by the driver's post-connect truthiness check.
+Apply it through the native session property before exposing the connection.
+
+MySQL execution streams
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The native MySQL endpoint exposes ``use_pure`` separately from other engines.
+True selects Connector/Python's portable implementation; false explicitly
+requires its installed C extension and must fail if unavailable. The form
+defaults to true. A saved route without this field retains the connector's
+native selection behavior. Qualification records the implementation actually
+loaded, Python/OS architecture, connector and server revisions. TLS settings
+remain native connector options, including certificate and hostname checking;
+failed verification never retries with verification disabled.
+MySQL alone also exposes native ``allow_local_infile`` (default false) and
+``allow_local_infile_in_path``. The latter admits a client-side directory
+through Connector/Python's native path checks; it is not a server path or a
+MySQL Shell workspace. The provider never enables LOCAL loading implicitly.
+Server ``local_infile`` policy still applies, and importing rows does not
+implicitly request commit or rollback.
+The MySQL 9.7 form excludes ``mysql_native_password``, removed from the server
+in 9.0, without changing other MySQL-wire engine forms. An old route explicitly
+selecting that plugin is rejected; it is not silently remapped to another
+authentication method. Optional installed authentication plugins retain their
+server, connector and platform prerequisites.
+The ``mysql-native-9.7-v1`` connection capability set declares provider-private
+pooling and active/idle/executing/unknown observations, and omits removed native
+password authentication and unobserved isolation-level state. Shared wire
+capability declarations for other engines remain independent.
+
+A retained MySQL session has one native execution owner at a time. Execute
+returns a provider token while a worker consumes the native protocol. Polling
+delivers bounded pages in protocol order, with zero-based result-set index,
+row offset, native column metadata, and an end-of-set marker. Include empty
+sets and affected-row results, including a procedure's trailing OK response.
+Completion means all native results have been consumed, not merely that the
+first SELECT ended. A later native error preserves pages already delivered;
+its terminal observation carries native error identity without SQL or secrets.
+No error implies rollback or replay of the batch.
+
+The provider queue holds at most two pages of 256 rows with a one-MiB target
+per page. A single larger native row is delivered intact; Connector/Python
+materializes that row, so this is not chunked BLOB transport. Backpressure
+stops further fetching. The query form displays each delivered page and its
+result-set identity; an empty terminal status must not replace the last grid.
+Transaction control, another execution and session release cannot race the
+worker. While it owns the protocol, transaction observation reports executing
+without issuing another command on that connection.
+
+Cancellation uses a separate authenticated connection pinned to the original
+server UUID and physical endpoint, then requests native KILL QUERY for the
+original connection ID. It never reconnects or replays the query connection.
+Cancellation is a request, not proof of rollback or nonexecution of later
+statements already sent in the same batch. The worker consumes remaining native
+responses before releasing the session; cleanup failure quarantines it.
+Provider shutdown cancels and joins workers before releasing connections; a
+worker that cannot be stopped remains owned and shutdown reports failure.
+
+MySQL retained transaction observations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Observe connection liveness without reconnecting before reporting native
+transaction flags. A failed commit/rollback call is an unknown outcome, even
+when the driver later reports an idle flag. Quarantine that retained session:
+no later execution, finality request or pool return may reuse it. Closing it
+releases the physical connection without claiming rollback or commit success.
+After a decoded server SQL error, a failed non-reconnecting native ping also
+quarantines the session. Client-side refusals, transport errors and conversion
+failures do not establish a command boundary: quarantine without issuing a
+ping or cursor cleanup command. In particular, LOCAL file rejection may leave
+the server awaiting file packets; a new command would corrupt that exchange.
+Ordinary SQL errors on a still-usable connection remain native
+errors and do not imply automatic rollback. An explicit new session is separate
+from resolution of the earlier outcome; do not retry user SQL automatically.
+
+MySQL result charset ownership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Text decoding follows each native column's reported collation/charset ID,
+including ``character_set_results=NULL``. It does not assume that all result
+columns use the connection's command encoding. MySQL latin1 uses its Windows
+1252 mapping, including the five control-code positions. Unicode multibyte
+results use their declared byte order. If the connector charset registry has
+no matching client codec, preserve the exact bytes in a base64 envelope with
+native charset and collation identity, and declare a JSON cell. Do not guess,
+replace invalid characters or treat those bytes as UTF-8. The default UTF-8
+result path lets the server perform conversion from its storage charsets.
+Changing SQL character-set variables does not change the connector's command
+encoder; connection character-set changes belong in the connection profile.
+
+
 Firebird attachment metadata and ARRAY identifier encodings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -941,3 +1151,90 @@ attachment initialization. A callback failure follows failed-session quarantine
 and release; it does not lose the handle or repeat the callback. If the Python
 connection constructor fails after native attachment, retain that partial owner
 until detach is confirmed, including when local transaction fields are absent.
+
+
+PostgreSQL retained-session driver contract
+-------------------------------------------
+
+Provider sessions own a fresh connection identity and the exact manager which
+created it, including delegated managers. Caller-supplied Query Tool identities
+do not alias these sessions. Disable automatic reconnect on retained sessions.
+Connection loss never authorizes replay of SQL or a transaction decision.
+
+Only one execution may own a retained session. Completion and transaction
+commands require an idle, usable session. Cancellation is a request whose
+result is observed separately; a terminal operation cannot cancel later work.
+Uncertain transaction decisions quarantine the session until explicit close.
+A failed rollback during close must not prevent release; release failure must
+retain ownership for a later cleanup attempt. Shutdown closes owned sessions
+and may not merely drop their handles. Driver diagnostics exposed by this
+contract contain error classes and SQLSTATE, not SQL, connection strings or
+credential values. PostgreSQL remains transaction-finality authority.
+
+The preserved pgAdmin Query Tool, native tools, connection configuration and
+authentication remain PostgreSQL-owned surfaces. Their separate connection
+identities must not be borrowed by retained provider sessions.
+
+Provider execution uses a dedicated synchronous libpq connection owned by one
+background worker, with at most two queued browser pages (256 rows or 1 MiB
+per page; one larger value may exceed the byte target). Native libpq result
+buffering is separate and is not claimed to be bounded. Every successful
+result set has an ordinal, offset, final-page marker and command status.
+Native text output and OIDs preserve numeric precision, temporal extremes,
+arrays, composites, ranges, JSON, extension types and duplicate column names.
+NULL remains NULL; text output is never parsed through JavaScript numbers.
+Binary parameters use an explicit base64 envelope; decimal/integer envelopes
+are exact. PostgreSQL SQL casts select engine-specific parameter types.
+Server errors terminate the operation and retain native SQLSTATE. A script
+which fails can have effects from earlier statements: no replay is implied.
+COPY workflows remain on the existing PostgreSQL import/export and native
+Query Tool surfaces; the generic query pane does not invent file paths.
+
+A native PostgreSQL attachment remains owned if initialization raises after
+libpq connects. Close the attachment before clearing its handle. If close
+itself fails, retain the handle and its ownership flag for manager cleanup;
+an initialization exception must not hide a live connection from release.
+
+SQLite retained-session and backup driver contract
+-------------------------------------------------
+
+SQLite retains its native five storage classes, lock behavior and transaction
+rules. Queries use one background worker per retained connection and bounded
+browser pages (256 rows or 1 MiB target, two queued pages; one larger cell may
+exceed the byte target). Native named and positional bindings are admitted.
+Large signed 64-bit integers use decimal text at the browser boundary; BLOBs
+use base64 with their byte length. SQLite does not gain a decimal storage type.
+Column identity includes an ordinal because result labels may repeat and
+SQLite result columns do not have one fixed storage class. Optional Python
+type detection remains an explicit connector conversion, not an engine type.
+
+One execution owns a session until observed or explicitly closed. Cancellation
+calls SQLite interrupt and observes the actual native result and in_transaction
+state; it does not promise that only the current statement, or the entire
+transaction, was rolled back. SQLITE_BUSY at commit may leave the transaction
+active and retryable by explicit user choice; do not automatically retry a
+transaction decision. I/O or ownership uncertainty blocks session reuse until
+close. Failed rollback does not bypass close; failed close retains ownership.
+Single-statement execution does not silently invoke executescript, whose
+native implicit-commit behavior differs from execute.
+
+Online backup uses SQLite's backup API, verifies quick_check, and publishes a
+completed staging file atomically. Failed backup preserves an existing backup.
+Without overwrite authorization, publication must not replace any existing
+file. Reject active-file aliases, including hard links; preserve native page
+size and SQLite's consistent backup semantics for its supported journal modes.
+Restore validates the source, uses an escaped read-only URI and the native
+backup API into the selected live attachment. Neither operation is admitted
+inside a retained transaction. Both have an explicit bounded deadline and
+preserve failure diagnostics. SQLite's journal/WAL behavior remains its own;
+ScratchBird's transaction design is not substituted for SQLite semantics.
+
+DuckDB native driver contract
+-----------------------------
+
+DuckDB retains one native connection for transactions, SQL and metadata;
+its cursor factory must not be used as a same-session cursor. Worker execution,
+ordered bounded pages, exact Arrow values, native interruption, separate
+decision/restart observations and cleanup ownership follow
+:doc:`duckdb_driver_development`. Native COPY/import/export and attachments
+retain DuckDB semantics; no unsupported server or savepoint features are added.

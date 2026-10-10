@@ -319,6 +319,21 @@ MYSQL = {
 }
 
 
+MYSQL_97 = copy.deepcopy(MYSQL)
+MYSQL_97['authentication']['features'].remove('native-password')
+MYSQL_97['pooling'] = _complete(
+    ('provider-private-pool', 'pool-size', 'session-reset',
+     'generation-based-pool-retirement'),
+    'unit:test_mysql_connection_ownership',
+    'native:cdeadmin_mysql_connection_ownership_gate',
+)
+MYSQL_97['state_visibility'] = _complete(
+    ('autocommit', 'in-transaction', 'executing', 'unknown',
+     'provider-owned-finality'),
+    'unit:test_mysql_execution', 'native:cdeadmin_mysql_execution_gate',
+)
+
+
 MARIADB = copy.deepcopy(MYSQL)
 MARIADB.update({
     'authentication': _complete(
@@ -336,20 +351,25 @@ MARIADB.update({
         'unit:test_cdeadmin_relational_providers',
     ),
     'routing_failover': _complete(
-        ('Connector-C-host-failover', 'automatic-driver-reconnect-option',
+        ('Connector-C-host-failover', 'no-active-session-reconnect',
          'bounded-pre-session-route-failover'),
         'unit:test_cdeadmin_relational_providers', ROUTE_EVIDENCE,
     ),
     'session_defaults': _complete(
-        ('autocommit', 'initial-and-reconnect-command',
+        ('autocommit', 'initial-session-command',
          'client-option-file-and-group'),
         'unit:test_cdeadmin_relational_providers',
     ),
     'pooling': _complete(
-        ('native-ConnectionPool', 'pool-size', 'session-reset',
+        ('provider-private-pool', 'pool-size', 'session-reset',
          'validation-interval', 'generation-based-pool-retirement'),
         'unit:test_cdeadmin_relational_providers',
         'unit:test_cdeadmin_provider_registry',
+    ),
+    'state_visibility': _complete(
+        ('autocommit', 'in-transaction', 'executing', 'unknown',
+         'provider-owned-finality'),
+        'native:cdeadmin_mariadb_driver_gate',
     ),
 })
 
@@ -999,6 +1019,7 @@ CONNECTION_CAPABILITY_SETS = {
     'redis-py-v1': REDIS,
     'neo4j-bolt-v1': NEO4J,
     'mysql-connector-python-v1': MYSQL,
+    'mysql-native-9.7-v1': MYSQL_97,
     'mariadb-connector-python-v1': MARIADB,
     'firebird-driver-v1': FIREBIRD,
     'postgresql-wire-v1': POSTGRESQL_WIRE,

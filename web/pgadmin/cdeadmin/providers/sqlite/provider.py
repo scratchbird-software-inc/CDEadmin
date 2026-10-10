@@ -13,8 +13,10 @@ from pgadmin.cdeadmin.sdk import (
     PilotProfile,
     RelationalClientConfig,
     RelationalClientError,
-    RelationalDBAPIClient,
 )
+from .driver import SQLiteClient
+from .values import text as native_text
+from .backup import database_operation as _sqlite_database_operation
 from ..relational_admin import (
     RelationalAdministration,
     RelationalAdminDialect,
@@ -47,6 +49,9 @@ PROFILE = PilotProfile(
             'percent_change', 'rank', 'dense_rank',
         ),
     },
+    parameter_shape='object-or-array',
+    parameter_hint=('Named :name or positional ? bindings; '
+                    'exact integer and base64 envelopes.'),
     dialect_contract_id='sqlite.dialect.3.53.0.v1',
     dialect_evidence=(
         'sqlite-3.53.0-source-grammar',
@@ -61,7 +66,28 @@ PROFILE = PilotProfile(
 )
 
 
-ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
+class SQLiteAdministration(RelationalAdministration):
+    @staticmethod
+    def _validate_sqlite_database_operation(operation, draft, route):
+        validate = RelationalAdministration._validate_sqlite_database_operation
+        native_draft = dict(draft)
+        if operation not in {'backup', 'restore'}:
+            return validate(operation, native_draft, route)
+        timeout = native_draft.pop('backup_timeout', 30)
+        errors = validate(operation, native_draft, route)
+        if (isinstance(timeout, bool) or
+                not isinstance(timeout, (int, float)) or
+                not 0 < timeout <= 3600):
+            errors.append({
+                'field_id': 'backup_timeout',
+                'code': 'invalid_sqlite_backup_timeout',
+                'message': ('SQLite backup timeout must be above 0 '
+                            'and at most 3600 seconds.'),
+            })
+        return errors
+
+
+ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
     engine_id='sqlite',
     supports_cascade=False,
     embedded_database=True,
@@ -106,6 +132,9 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 class SQLiteProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
+
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
 
 
 def _route_arguments(route):
@@ -431,6 +460,7 @@ def _security(connection, request):
 
 
 def _initialize_connection(connection, route):
+    connection.text_factory = native_text
     attachments = route.get('attached_databases', [])
     if not isinstance(attachments, list):
         raise RelationalClientError(
@@ -445,16 +475,14 @@ def _initialize_connection(connection, route):
                 )
             name = attachment.get('name')
             database = attachment.get('database')
-            if not isinstance(name, str) or not re.fullmatch(
-                    r'[A-Za-z_][A-Za-z0-9_]{0,127}', name) or name.lower() in {
-                        'main', 'temp',
-                    }:
+            if (not isinstance(name, str) or not name or len(name) > 128 or
+                    '\x00' in name or name.lower() in {'main', 'temp'}):
                 raise RelationalClientError(
                     'SQLite attachment name is invalid'
                 )
             attached_route = dict(route)
             attached_route['database'] = database
-            path = contained_database(attached_route)
+            path = sqlite_arguments(attached_route)['database']
             cursor.execute(
                 'ATTACH DATABASE ? AS "' + name.replace('"', '""') + '"',
                 (path,),
@@ -573,89 +601,8 @@ def _drop_database_file(route, database):
     }
 
 
-def _sqlite_database_operation(connection, route, operation, options):
-    """Run SQLite's native online backup/restore API within route bounds."""
-    if operation not in {'backup', 'restore'}:
-        raise RelationalClientError('SQLite database operation is unknown')
-    if getattr(connection, 'in_transaction', False):
-        raise RelationalClientError(
-            'commit or roll back the SQLite transaction before this operation'
-        )
-    active_path = contained_database(route)
-    backup_route = dict(route)
-    backup_route['database'] = options.get('backup_path')
-    backup_path = contained_database(backup_route)
-    if backup_path in {':memory:', active_path}:
-        raise RelationalClientError(
-            'SQLite backup and active database paths must differ'
-        )
-    if os.path.lexists(backup_path):
-        details = os.lstat(backup_path)
-        if stat.S_ISLNK(details.st_mode) or not stat.S_ISREG(details.st_mode):
-            raise RelationalClientError(
-                'SQLite backup path must be a regular file'
-            )
-    if operation == 'backup':
-        overwrite = options.get('overwrite', False)
-        if os.path.exists(backup_path) and not overwrite:
-            raise RelationalClientError(
-                'SQLite backup file exists and overwrite is disabled'
-            )
-        if os.path.exists(backup_path):
-            os.unlink(backup_path)
-        destination = sqlite3.connect(backup_path)
-        try:
-            connection.backup(destination)
-            destination.commit()
-            integrity = destination.execute(
-                'PRAGMA quick_check(1)'
-            ).fetchone()
-        except Exception:
-            destination.close()
-            try:
-                os.unlink(backup_path)
-            except OSError:
-                pass
-            raise
-        else:
-            destination.close()
-        return {
-            'operation': 'sqlite-online-backup',
-            'backup_path': backup_path,
-            'bytes': os.path.getsize(backup_path),
-            'quick_check': integrity[0] if integrity else None,
-            'driver_returned': True,
-        }
-    if not os.path.isfile(backup_path):
-        raise RelationalClientError('SQLite restore source does not exist')
-    with open(backup_path, 'rb') as source_file:
-        if source_file.read(16) != b'SQLite format 3\x00':
-            raise RelationalClientError(
-                'SQLite restore source has no SQLite database header'
-            )
-    source = sqlite3.connect(
-        'file:' + backup_path + '?mode=ro', uri=True
-    )
-    try:
-        integrity = source.execute('PRAGMA quick_check(1)').fetchone()
-        if not integrity or integrity[0] != 'ok':
-            raise RelationalClientError(
-                'SQLite restore source did not pass quick_check'
-            )
-        source.backup(connection)
-    finally:
-        source.close()
-    observed = connection.execute('PRAGMA quick_check(1)').fetchone()
-    return {
-        'operation': 'sqlite-online-restore',
-        'backup_path': backup_path,
-        'quick_check': observed[0] if observed else None,
-        'driver_returned': True,
-    }
-
-
 def _create_client():
-    return RelationalDBAPIClient(RelationalClientConfig(
+    return SQLiteClient(RelationalClientConfig(
         profile=PROFILE,
         module_name='sqlite3',
         version_query='SELECT sqlite_version()',

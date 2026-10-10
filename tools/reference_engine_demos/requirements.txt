@@ -1,7 +1,10 @@
 cassandra-driver==3.30.1
 duckdb==1.5.2
+pyarrow==25.0.1
 firebird-driver==1.10.11
 foundationdb==7.3.77
+# ScratchRobin query use requires the patched same-version wheel; see
+# docs/en_US/mariadb_driver_development.rst (stock pin is for reference tooling).
 mariadb==1.1.14
 mysql-connector-python==26.7.0
 neo4j==6.3.0

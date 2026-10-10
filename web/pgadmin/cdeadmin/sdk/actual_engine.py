@@ -111,8 +111,9 @@ class PilotProfile:
     parameter_hint: str = ''
 
     def __post_init__(self):
-        if self.parameter_shape not in {'object', 'array'}:
-            raise PilotProviderError('parameter_shape must be object or array')
+        if self.parameter_shape not in {'object', 'array', 'object-or-array'}:
+            raise PilotProviderError(
+                'parameter_shape must be object, array or object-or-array')
         if not isinstance(self.parameter_hint, str):
             raise PilotProviderError('parameter_hint must be a string')
         fields = (

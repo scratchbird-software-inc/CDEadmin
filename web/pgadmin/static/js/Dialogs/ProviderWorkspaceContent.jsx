@@ -6736,6 +6736,7 @@ export default function ProviderWorkspaceContent({
   const [fetchObservation, setFetchObservation] = useState(null);
   const [scriptResult, setScriptResult] = useState(null);
   const [firebirdPlan, setFirebirdPlan] = useState(null);
+  const [nativePage, setNativePage] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
   const [rendered, setRendered] = useState(null);
@@ -6788,6 +6789,7 @@ export default function ProviderWorkspaceContent({
     setLoadedWorkspace(null);
     setScriptResult(null);
     setFirebirdPlan(null);
+    setNativePage(null);
     setResourcePage(null);
     setLoadingMore(false);
     setSelectedResource(null);
@@ -7079,8 +7081,25 @@ export default function ProviderWorkspaceContent({
         action: 'poll', occurrence_id: id,
         database_target_id: queryDatabaseTargetId,
       });
-      if (response.occurrence?.result?.complete !== false) {
+      const duck = response.occurrence?.result?.extensions?.duckdb?.payload;
+      const sqlite = response.occurrence?.result?.extensions?.sqlite?.payload;
+      const postgres = response.occurrence?.result?.extensions?.postgresql?.payload;
+      const maria = response.occurrence?.result?.extensions?.mariadb?.payload;
+      const mysql = response.occurrence?.result?.extensions?.mysql?.payload
+        || response.occurrence?.result?.extensions?.mariadb?.payload || postgres || sqlite || duck;
+      if (mysql?.has_page) setNativePage(mysql);
+      if (mysql ? mysql.has_page : response.occurrence?.result?.complete !== false) {
         acceptRendered(response.rendered_result);
+      }
+      if (mysql?.error) {
+        setError((duck ? gettext('DuckDB query did not complete.') : sqlite ? gettext('SQLite query did not complete.') : postgres ? gettext('PostgreSQL query did not complete.') : maria ? gettext('MariaDB query did not complete.') : gettext('MySQL query did not complete.')) + ' ' +
+          [mysql.error.type, mysql.error.errno, mysql.error.sqlstate,
+            mysql.error.sqlite_errorcode, mysql.error.sqlite_errorname]
+            .filter(value => value !== undefined).join(' '));
+      }
+      if (mysql?.session_reuse_blocked) {
+        setQuerySessionBlocked(true);
+        setError((duck ? gettext('DuckDB connection state is unknown. Do not replay the statement. Close this query session and explicitly reconnect.') : sqlite ? gettext('SQLite connection state is unknown. Do not replay the statement. Close this query session and explicitly reconnect.') : postgres ? gettext('PostgreSQL connection state is unknown. Do not replay the statement. Close this query session and explicitly reconnect.') : maria ? gettext('MariaDB connection state is unknown. Do not replay the statement. Close this query session and explicitly reconnect.') : gettext('MySQL connection state is unknown. Do not replay the statement. Close this query session and explicitly reconnect.')));
       }
       const native = response.occurrence?.result?.extensions?.firebird?.payload;
       setFetchObservation(native?.fetch_observation || null);
@@ -7113,7 +7132,7 @@ export default function ProviderWorkspaceContent({
   }, [acceptRendered, post, queryDatabaseTargetId]);
 
   useEffect(() => {
-    if (languageProfile !== 'firebird-sql' ||
+    if (!['firebird-sql', 'mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql'].includes(languageProfile) ||
         !occurrenceId || busy || queryPollingPaused) return undefined;
     const timer = setTimeout(() => poll(occurrenceId), 400);
     return () => clearTimeout(timer);
@@ -7128,6 +7147,7 @@ export default function ProviderWorkspaceContent({
     setFetchObservation(null);
     setScriptResult(null);
     setFirebirdPlan(null);
+    setNativePage(null);
     setResultPresentation(presentation);
     try {
       let rowPolicy = {};
@@ -7140,9 +7160,10 @@ export default function ProviderWorkspaceContent({
       const parameters = sessionCommand || planMode ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
       const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
-      if(expectsArray ? !Array.isArray(parameters) :
+      const permitsEither = !sessionCommand && activeLanguage?.parameter_shape === 'object-or-array';
+      if(permitsEither ? (!parameters || typeof parameters !== 'object') : expectsArray ? !Array.isArray(parameters) :
         (!parameters || typeof parameters !== 'object' || Array.isArray(parameters))) {
-        throw new Error(expectsArray ?
+        throw new Error(permitsEither ? gettext('This provider requires a JSON parameter object or array.') : expectsArray ?
           gettext('This provider requires an ordered JSON parameter array.') :
           gettext('This provider requires a JSON parameter object.'));
       }
@@ -7203,11 +7224,15 @@ export default function ProviderWorkspaceContent({
     setBusy(true); setError(null);
     try {
       const activeSession = await ensureSession();
-      setTransaction(await post({
+      const observation = await post({
         action: 'transaction_action', session_id: activeSession,
         transaction_action: action,
         database_target_id: queryDatabaseTargetId,
-      }));
+      });
+      setTransaction(observation);
+      if (observation.provider_payload?.session_reuse_blocked) {
+        setQuerySessionBlocked(true);
+      }
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally { setBusy(false); }
@@ -7256,6 +7281,7 @@ export default function ProviderWorkspaceContent({
       setFetchObservation(null);
       setScriptResult(null);
       setFirebirdPlan(null);
+      setNativePage(null);
       setTransaction(null);
     } catch (requestError) {
       // The existing language and session remain owned until native release.
@@ -7445,7 +7471,8 @@ export default function ProviderWorkspaceContent({
           inputProps={{'aria-label': gettext('Query source')}} />
         <TextField multiline minRows={2} maxRows={6} value={parameterSource}
           sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
-            gettext('Query parameters (JSON array)') : gettext('Query parameters (JSON)')}
+            gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
+              gettext('Query parameters (JSON object or array)') : gettext('Query parameters (JSON)')}
           helperText={activeLanguage?.parameter_hint ||
             gettext('Use a JSON object of parameter names and values.')}
           onChange={(event) => setParameterSource(event.target.value)} />
@@ -7471,6 +7498,13 @@ export default function ProviderWorkspaceContent({
           databaseTargetId={queryDatabaseTargetId} source={source}
           parameters={parameterSource} dialect={clientSqlDialect}
           disabled={busy || querySessionBlocked || !!occurrenceId} />}
+        {['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql'].includes(languageProfile) && nativePage && <Alert severity="info"
+          sx={{mt: 1}} aria-label={languageProfile === 'duckdb-sql' ? gettext('DuckDB result page') : languageProfile === 'sqlite-sql' ? gettext('SQLite result page') : languageProfile === 'postgresql-sql' ? gettext('PostgreSQL result page') : languageProfile === 'mariadb-sql' ? gettext('MariaDB result page') : gettext('MySQL result page')}>
+          {gettext('Result set:')} {nativePage.result_set_index + 1}
+          {' '}{gettext('Row offset:')} {nativePage.row_offset}
+          {' '}{gettext('Rows on this page:')} {nativePage.rows.length}
+          {nativePage.result_set_end && ' ' + gettext('End of result set.')}
+        </Alert>}
         {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
           sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
           {fetchObservation.limit_reached ?

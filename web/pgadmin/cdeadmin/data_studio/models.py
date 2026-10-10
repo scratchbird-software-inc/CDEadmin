@@ -77,8 +77,9 @@ class LanguageContribution:
     parameter_hint: str = ''
 
     def __post_init__(self):
-        if self.parameter_shape not in {'object', 'array'}:
-            raise DataStudioError('parameter_shape must be object or array')
+        if self.parameter_shape not in {'object', 'array', 'object-or-array'}:
+            raise DataStudioError(
+                'parameter_shape must be object, array or object-or-array')
         if not isinstance(self.parameter_hint, str):
             raise DataStudioError('parameter_hint must be a string')
         names = ('language_profile', 'title', 'editor_mode', 'source_kind')

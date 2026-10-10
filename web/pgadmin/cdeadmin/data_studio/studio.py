@@ -290,7 +290,9 @@ class DataStudioService:
                                   isinstance(parameters, dict) and
                                   not parameters):
             parameters = [] if language.parameter_shape == 'array' else {}
-        expected = list if language.parameter_shape == 'array' else dict
+        expected = ((dict, list)
+                    if language.parameter_shape == 'object-or-array' else
+                    list if language.parameter_shape == 'array' else dict)
         if not isinstance(parameters, expected):
             raise DataStudioAccessError(
                 'This provider language requires a JSON parameter ' +

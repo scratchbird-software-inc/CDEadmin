@@ -4,11 +4,7 @@ import copy
 import hashlib
 import json
 import os
-import queue
 import re
-import threading
-import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from importlib import resources as package_resources
 
@@ -31,6 +27,7 @@ from ..relational_admin import (
 )
 from ..distributed_sql import mysql_route
 from ..form_contracts import provider_form_contract
+from .mariadb_connections import Connector as _MariaDBConnectorFacade
 
 
 MYSQL_PROFILE = PilotProfile(
@@ -64,6 +61,14 @@ MYSQL_PROFILE = PilotProfile(
     ),
     dialect_contract_file='mysql_dialect_9_7_0.json',
     metrics_contract_file='mysql_metrics_9_7_0.json',
+    parameter_shape='object-or-array',
+    parameter_hint=(
+        'Use a JSON object for %(name)s placeholders or an ordered array '
+        'for %s placeholders. Exact numeric values use '
+        '{"encoding":"integer","data":"9007199254740993"} or '
+        '{"encoding":"decimal","data":"1.2300"}; binary values use '
+        '{"encoding":"base64","data":"/wA="}.'
+    ),
     query_plan_templates=(
         ('MySQL JSON query plan', 'EXPLAIN FORMAT=JSON {source}'),
         ('MySQL execution plan', 'EXPLAIN ANALYZE {source}'),
@@ -104,6 +109,12 @@ MARIADB_PROFILE = PilotProfile(
     ),
     dialect_contract_file='mariadb_dialect_12_2_2.json',
     metrics_contract_file='mariadb_metrics_12_2_2.json',
+    parameter_shape='object-or-array',
+    parameter_hint=(
+        'Use an ordered JSON array for ? or %s parameters, or a JSON object '
+        'for %(name)s parameters. Exact numbers use integer/decimal encoding '
+        'envelopes; binary parameters use base64 encoding and data.'
+    ),
     starter_source=(
         'SELECT id, value, event_date\n'
         'FROM qualification\n'
@@ -249,89 +260,8 @@ def _metric_records(profile):
     } for item in document['metrics']]
 
 
-class _MariaDBConnectorFacade:
-    """Route MariaDB pooled connections through its native pool object."""
-
-    _POOL_ARGUMENTS = frozenset({
-        'pool_name', 'pool_size', 'pool_reset_connection',
-        'pool_validation_interval',
-    })
-
-    def __init__(self, module, pool_namespace):
-        self.module = module
-        self.pool_namespace = str(pool_namespace)
-        self._pools = {}
-
-    def __call__(self, *args, **kwargs):
-        options = dict(kwargs)
-        pool_options = {
-            key: options.pop(key)
-            for key in tuple(options)
-            if key in self._POOL_ARGUMENTS
-        }
-        if not pool_options.get('pool_size'):
-            return self.module.connect(*args, **options)
-        if args:
-            raise RelationalClientError(
-                'MariaDB pooled connections require named arguments'
-            )
-        pool_name = pool_options.get('pool_name')
-        if not pool_name:
-            pool_name = 'cde_' + hashlib.sha256(
-                self.pool_namespace.encode('utf-8')
-            ).hexdigest()[:24]
-            pool_options['pool_name'] = pool_name
-        pool = self._pools.get(pool_name)
-        if pool is None:
-            factory = getattr(self.module, 'ConnectionPool', None)
-            if not callable(factory):
-                raise RelationalClientError(
-                    'MariaDB connector has no native connection pool'
-                )
-            pool = factory(**pool_options, **options)
-            self._pools[pool_name] = pool
-        return pool.get_connection()
-
-    def close(self):
-        for pool in tuple(self._pools.values()):
-            close = getattr(pool, 'close', None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    pass
-        self._pools.clear()
-
-
-@dataclass
-class _MariaDBStreamToken:
-    """Provider-private state for one MariaDB streamed execution."""
-
-    connection: object
-    request: dict
-    stream_reference: str = field(default_factory=lambda: str(uuid.uuid4()))
-    cursor: object | None = None
-    columns: tuple = ()
-    rowcount: int | None = None
-    cancel_requested: bool = False
-    cancelled: bool = False
-    closed: bool = False
-    error: RelationalClientError | None = None
-    pages: queue.Queue = field(
-        default_factory=lambda: queue.Queue(maxsize=2), repr=False
-    )
-    ready: threading.Event = field(default_factory=threading.Event, repr=False)
-    finished: threading.Event = field(
-        default_factory=threading.Event, repr=False
-    )
-    worker: threading.Thread | None = field(default=None, repr=False)
-
-
 class MariaDBDBAPIClient(RelationalDBAPIClient):
-    """DB-API client using MariaDB's explicit ``ConnectionPool`` API."""
-
-    _STREAM_PAGE_SIZE = 500
-    _INITIAL_POLL_WAIT_SECONDS = 0.25
+    """Native MariaDB sessions with private pools and ordered result streams."""
 
     def __init__(self, config, pool_namespace, module=None, tool_runner=None):
         super().__init__(config, module)
@@ -339,9 +269,10 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             self.module, pool_namespace
         )
         self._connector = self._mariadb_connector
-        self._stream_tokens = []
+        self._uncertain_sessions = set()
+        from .mariadb_execution import Executions
+        self._executions = Executions(self)
         self._session_requests = {}
-        self._stream_lock = threading.RLock()
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mariadb-dump': os.environ.get(
                 'CDEADMIN_MARIADB_DUMP_BINARY', 'mariadb-dump'
@@ -355,235 +286,116 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         })
 
     def open_session(self, request):
-        connection = super().open_session(request)
-        self._session_requests[id(connection)] = copy.deepcopy(dict(request))
-        return connection
-
-    def _active_token(self, connection):
-        with self._stream_lock:
-            return next((
-                token for token in self._stream_tokens
-                if token.connection is connection and not (
-                    token.finished.is_set()
-                )
-            ), None)
-
-    @staticmethod
-    def _execution_error(exc):
-        native_identity = []
-        for attribute in ('errno', 'sqlstate'):
-            value = getattr(exc, attribute, None)
-            if isinstance(value, (int, str)) and str(value).strip():
-                native_identity.append(f'{attribute}={value}')
-        detail = '; ' + ', '.join(native_identity) if native_identity else ''
-        return RelationalClientError(
-            f'relational execution failed ({type(exc).__name__}{detail})'
-        )
-
-    @staticmethod
-    def _put_stream_page(token, rows, complete):
-        page = {'rows': list(rows), 'complete': bool(complete)}
-        while not token.cancel_requested:
-            try:
-                token.pages.put(page, timeout=0.1)
-                token.ready.set()
-                return True
-            except queue.Full:
-                continue
-        return False
-
-    def _run_stream(self, token, source, parameters):
-        cursor = None
-        try:
-            cursor = token.connection.cursor(buffered=False)
-            token.cursor = cursor
-            if parameters:
-                cursor.execute(source, parameters)
-            else:
-                cursor.execute(source)
-            description = getattr(cursor, 'description', None) or ()
-            token.columns = tuple({
-                'name': str(column[0]),
-                'native_type': None if len(column) < 2 else str(column[1]),
-            } for column in description)
-            try:
-                rowcount = getattr(cursor, 'rowcount', None)
-            except Exception:
-                rowcount = None
-            token.rowcount = rowcount if isinstance(rowcount, int) else None
-            if not description:
-                self._put_stream_page(token, (), True)
-                return
-
-            current = list(cursor.fetchmany(self._STREAM_PAGE_SIZE))
-            if not current:
-                self._put_stream_page(token, (), True)
-                return
-            while not token.cancel_requested:
-                following = list(cursor.fetchmany(self._STREAM_PAGE_SIZE))
-                if not self._put_stream_page(
-                        token, current, not following):
-                    break
-                if not following:
-                    break
-                current = following
-        except Exception as exc:
-            if not token.cancel_requested:
-                token.error = self._execution_error(exc)
-        finally:
-            if cursor is not None:
-                self._safe_close(cursor)
-            token.finished.set()
-            token.ready.set()
+        with self._executions.lock:
+            if self._executions.closing:
+                raise RelationalClientError('MariaDB client is closing')
+            connection = super().open_session(request)
+            self._session_requests[id(connection)] = copy.deepcopy(dict(request))
+            return connection
 
     def execute(self, handle, request):
-        source = request.get('source')
-        if not isinstance(source, str) or not source.strip():
-            raise RelationalClientError('relational query source is required')
-        parameters = request.get('parameters', ())
-        if not isinstance(parameters, (dict, list, tuple)):
-            raise RelationalClientError(
-                'relational query parameters must be a mapping or sequence'
-            )
-        if self._active_token(handle) is not None:
-            raise RelationalClientError(
-                'MariaDB session already has an active streamed execution'
-            )
         session_request = self._session_requests.get(id(handle))
         if session_request is None:
             raise RelationalClientError('MariaDB session route is unavailable')
-        token = _MariaDBStreamToken(handle, copy.deepcopy(session_request))
-        worker = threading.Thread(
-            target=self._run_stream,
-            args=(token, source, copy.deepcopy(parameters)),
-            name=f'cdeadmin-mariadb-query-{token.stream_reference[:8]}',
-            daemon=True,
-        )
-        token.worker = worker
-        with self._stream_lock:
-            self._stream_tokens.append(token)
-        worker.start()
-        return token
+        return self._executions.execute(handle, request, session_request)
 
     def describe_result(self, token):
-        with self._stream_lock:
-            if not isinstance(token, _MariaDBStreamToken) or (
-                    token not in self._stream_tokens):
-                raise RelationalClientError(
-                    'MariaDB streamed result token is invalid'
-                )
-        if token.closed:
-            raise RelationalClientError(
-                'MariaDB streamed result token is closed'
-            )
-        token.ready.wait(self._INITIAL_POLL_WAIT_SECONDS)
-        try:
-            page = token.pages.get_nowait()
-        except queue.Empty:
-            page = None
-        if token.error is not None:
-            token.closed = True
-            raise token.error
-        if page is None:
-            complete = token.finished.is_set()
-            rows = []
-        else:
-            complete = bool(page['complete'])
-            rows = page['rows']
-        if complete:
-            token.closed = True
-        return {
-            'result_kind': (
-                self.config.result_kind or self.config.profile.result_kind
-            ),
-            'schema': {'columns': list(token.columns)},
-            'payload': {
-                'rows': copy.deepcopy(rows),
-                'rowcount': token.rowcount,
-                'cancelled': token.cancelled,
-                'streamed_by_provider': True,
-            },
-            'stream_reference': token.stream_reference,
-            'complete': complete,
-        }
+        return self._executions.describe(token)
 
     def cancel(self, token):
-        with self._stream_lock:
-            if not isinstance(token, _MariaDBStreamToken) or (
-                    token not in self._stream_tokens):
-                raise RelationalClientError(
-                    'MariaDB streamed result token is invalid'
-                )
-        if token.closed or token.finished.is_set():
-            return False
-        thread_id = getattr(token.connection, 'thread_id', None)
-        if isinstance(thread_id, bool) or not isinstance(thread_id, int) or (
-                thread_id <= 0):
-            raise RelationalClientError(
-                'MariaDB connection has no native thread identity'
-            )
-        control = None
-        cursor = None
-        token.cancel_requested = True
-        try:
-            def control_arguments(route):
-                values = dict(self.config.connect_arguments(route))
-                for name in _MariaDBConnectorFacade._POOL_ARGUMENTS:
-                    values.pop(name, None)
-                return values
+        return self._executions.cancel(token)
 
-            control = self._invoke_connector(
-                token.request, self.module.connect,
-                connect_arguments=control_arguments,
-            )
-            cursor = control.cursor()
-            cursor.execute(f'KILL QUERY {thread_id}')
-        except Exception as exc:
-            token.cancel_requested = False
+    def _discard_failed_session(self, connection):
+        from .mariadb_connections import discard
+        self._forget_connection(connection)
+        discard(connection)
+
+    def _require_usable_session(self, handle):
+        if id(handle) in self._uncertain_sessions:
             raise RelationalClientError(
-                'MariaDB native query cancellation failed '
-                f'({type(exc).__name__})'
-            ) from None
-        finally:
-            if cursor is not None:
-                self._safe_close(cursor)
-            if control is not None:
-                self._safe_close(control)
-        token.cancelled = True
-        token.ready.set()
-        return True
+                'MariaDB session outcome is unknown; close it before '
+                'opening a separate session. Do not replay the operation.')
+
+    def describe_transaction(self, handle):
+        with self._executions.lock:
+            if self._executions.active(handle):
+                return {'state': 'executing', 'connection_usable': False,
+                        'driver_observation_only': True,
+                        'finality_interpreted_by_common_code': False}
+            return self._describe_idle_transaction(handle)
+
+    def _describe_idle_transaction(self, handle):
+        if id(handle) not in self._uncertain_sessions:
+            try:
+                handle.ping()
+                autocommit = handle.autocommit
+                status = handle.server_status
+                if type(status) is not int:
+                    raise RelationalClientError(
+                        'MariaDB server transaction status is unavailable')
+                active = bool(status & 1)
+                if type(autocommit) is not bool or type(active) is not bool:
+                    raise RelationalClientError(
+                        'MariaDB transaction flags are unavailable')
+            except Exception:
+                self._uncertain_sessions.add(id(handle))
+        if id(handle) in self._uncertain_sessions:
+            return {'state': 'unknown', 'connection_usable': False,
+                    'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
+        return {'state': 'active' if active else 'idle',
+                'autocommit': autocommit, 'in_transaction': active,
+                'connection_usable': True, 'driver_observation_only': True,
+                'finality_interpreted_by_common_code': False}
 
     def control_transaction(self, handle, action):
-        if self._active_token(handle) is not None:
-            raise RelationalClientError(
-                'MariaDB transaction control is unavailable while a '
-                'streamed execution is active'
-            )
-        return super().control_transaction(handle, action)
+        with self._executions.lock:
+            self._executions.require_idle(handle)
+            return self._control_idle_transaction(handle, action)
+
+    def _control_idle_transaction(self, handle, action):
+        self._require_usable_session(handle)
+        if action not in self.transaction_actions:
+            return super().control_transaction(handle, action)
+        try:
+            return super().control_transaction(handle, action)
+        except BaseException:
+            self._uncertain_sessions.add(id(handle))
+            raise
 
     def close_session(self, handle):
-        if self._active_token(handle) is not None:
-            raise RelationalClientError(
-                'MariaDB session close is unavailable while a streamed '
-                'execution is active'
-            )
-        self._session_requests.pop(id(handle), None)
-        return super().close_session(handle)
+        with self._executions.lock:
+            self._executions.require_idle(handle)
+            self._session_requests.pop(id(handle), None)
+            return self._close_idle_session(handle)
+
+    def _close_idle_session(self, handle):
+        from .mariadb_connections import discard
+        if id(handle) in self._uncertain_sessions:
+            self._forget_connection(handle)
+            discard(handle)
+            self._uncertain_sessions.discard(id(handle))
+            return {'rollback_requested': False, 'connection_released': True,
+                    'state': 'unknown', 'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
+        try:
+            return super().close_session(handle)
+        except BaseException:
+            self._forget_connection(handle)
+            discard(handle)
+            raise
 
     def close(self):
-        for token in tuple(self._stream_tokens):
-            if not token.finished.is_set():
-                try:
-                    self.cancel(token)
-                except RelationalClientError:
-                    pass
-            if token.worker is not None:
-                token.worker.join(timeout=2)
-            token.closed = True
-        self._stream_tokens.clear()
-        self._session_requests.clear()
-        super().close()
-        self._mariadb_connector.close()
+        self._executions.close()
+        try:
+            for handle in tuple(self._connections):
+                if id(handle) in self._uncertain_sessions:
+                    self.close_session(handle)
+            super().close()
+        finally:
+            self._mariadb_connector.close()
+            self._uncertain_sessions.clear()
+            self._session_requests.clear()
 
     @staticmethod
     def _workspace_path(workspace, value):
@@ -1137,11 +949,123 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def __init__(self, config, module=None, tool_runner=None):
         super().__init__(config, module)
+        from .mysql_connections import Connector
+        self._mysql_connector = Connector(self.module)
+        self._connector = self._mysql_connector
+        self._uncertain_sessions = set()
+        from .mysql_execution import Executions
+        self._executions = Executions(self)
+        self._session_requests = {}
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mysql-shell': os.environ.get(
                 'CDEADMIN_MYSQLSH_BINARY', 'mysqlsh'
             ),
         })
+
+    def open_session(self, request):
+        handle = super().open_session(request)
+        self._session_requests[id(handle)] = copy.deepcopy(dict(request))
+        return handle
+
+    def execute(self, handle, request):
+        session_request = self._session_requests.get(id(handle))
+        if session_request is None:
+            raise RelationalClientError('MySQL session route is unavailable')
+        return self._executions.execute(handle, request, session_request)
+
+    def describe_result(self, token):
+        return self._executions.describe(token)
+
+    def cancel(self, token):
+        return self._executions.cancel(token)
+
+    def _discard_failed_session(self, connection):
+        from .mysql_connections import discard
+        self._forget_connection(connection)
+        discard(connection)
+
+    def _require_usable_session(self, handle):
+        if id(handle) in self._uncertain_sessions:
+            raise RelationalClientError(
+                'MySQL session outcome is unknown; close it before '
+                'opening a separate session. Do not replay the operation.')
+
+    def describe_transaction(self, handle):
+        with self._executions.lock:
+            if self._executions.active(handle):
+                return {'state': 'executing', 'connection_usable': False,
+                        'driver_observation_only': True,
+                        'finality_interpreted_by_common_code': False}
+            return self._describe_idle_transaction(handle)
+
+    def _describe_idle_transaction(self, handle):
+        if id(handle) not in self._uncertain_sessions:
+            try:
+                handle.ping(reconnect=False)
+                autocommit = handle.autocommit
+                active = handle.in_transaction
+                if type(autocommit) is not bool or type(active) is not bool:
+                    raise RelationalClientError(
+                        'MySQL transaction flags are unavailable')
+            except Exception:
+                self._uncertain_sessions.add(id(handle))
+        if id(handle) in self._uncertain_sessions:
+            return {'state': 'unknown', 'connection_usable': False,
+                    'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
+        return {'state': 'active' if active else 'idle',
+                'autocommit': autocommit, 'in_transaction': active,
+                'connection_usable': True, 'driver_observation_only': True,
+                'finality_interpreted_by_common_code': False}
+
+    def control_transaction(self, handle, action):
+        with self._executions.lock:
+            self._executions.require_idle(handle)
+            return self._control_idle_transaction(handle, action)
+
+    def _control_idle_transaction(self, handle, action):
+        self._require_usable_session(handle)
+        if action not in self.transaction_actions:
+            return super().control_transaction(handle, action)
+        try:
+            return super().control_transaction(handle, action)
+        except BaseException:
+            self._uncertain_sessions.add(id(handle))
+            raise
+
+    def close_session(self, handle):
+        with self._executions.lock:
+            self._executions.require_idle(handle)
+            self._session_requests.pop(id(handle), None)
+            return self._close_idle_session(handle)
+
+    def _close_idle_session(self, handle):
+        from .mysql_connections import discard
+        if id(handle) in self._uncertain_sessions:
+            self._forget_connection(handle)
+            discard(handle)
+            self._uncertain_sessions.discard(id(handle))
+            return {'rollback_requested': False, 'connection_released': True,
+                    'state': 'unknown', 'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
+        try:
+            return super().close_session(handle)
+        except BaseException:
+            self._forget_connection(handle)
+            discard(handle)
+            raise
+
+    def close(self):
+        self._executions.close()
+        try:
+            for handle in tuple(self._connections):
+                if id(handle) in self._uncertain_sessions:
+                    self.close_session(handle)
+            super().close()
+        finally:
+            self._mysql_connector.close()
+            self._uncertain_sessions.clear()
+            self._session_requests.clear()
 
     @staticmethod
     def _workspace_path(workspace, value, label):
@@ -1502,7 +1426,19 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
 
 def _route_arguments(route, profile):
     if profile is MYSQL_PROFILE:
-        return mysql_route(route)
+        if route.get('auth_plugin') == 'mysql_native_password':
+            raise RelationalClientError(
+                'MySQL 9.7 does not support mysql_native_password')
+        options = mysql_route(route)
+        if 'use_pure' in route:
+            if type(route['use_pure']) is not bool:
+                raise RelationalClientError(
+                    'MySQL driver mode must be boolean')
+            options['use_pure'] = route['use_pure']
+        for name in ('allow_local_infile', 'allow_local_infile_in_path'):
+            if name in route:
+                options[name] = route[name]
+        return options
     allowed = {
         'host', 'port', 'user', 'database', 'unix_socket',
         'connection_timeout', 'connect_timeout', 'read_timeout',
@@ -1543,6 +1479,14 @@ def _initialize_connection(connection, route):
         )
     finally:
         cursor.close()
+
+
+def _initialize_mysql_connection(connection, route):
+    _initialize_connection(connection, route)
+    # Connector/Python's post-connection initialization ignores empty strings.
+    # Clearing sql_mode explicitly differs from preserving server defaults.
+    if route.get('sql_mode') == '':
+        connection.sql_mode = ''
 
 
 def _version(row):
@@ -2214,6 +2158,11 @@ def _security(connection, request):
 
 
 def _create_client(profile, permissions, context):
+    mysql_values = None
+    if profile is MYSQL_PROFILE:
+        from pgadmin.cdeadmin.sdk import load_optional_module
+        load_optional_module('mysql.connector')
+        from . import mysql_values
     module_name = (
         'mysql.connector' if profile is MYSQL_PROFILE else 'mariadb'
     )
@@ -2237,7 +2186,13 @@ def _create_client(profile, permissions, context):
             {'database_password': 'password'}
         ),
         secret_acquirer=permissions.acquire_secret,
-        connection_initializer=_initialize_connection,
+        connection_initializer=(
+            _initialize_mysql_connection if profile is MYSQL_PROFILE
+            else _initialize_connection),
+        query_parameter_normalizer=(
+            mysql_values.parameters if profile is MYSQL_PROFILE else None),
+        query_columns_reader=(
+            mysql_values.columns if profile is MYSQL_PROFILE else None),
         administration=(
             MYSQL_ADMINISTRATION if profile is MYSQL_PROFILE
             else MARIADB_ADMINISTRATION

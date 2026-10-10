@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import os
+import math
+import sqlite3
 import re
 import urllib.parse
 from collections.abc import Mapping
@@ -37,19 +39,18 @@ def contained_database(route):
         raise RelationalClientError(
             'embedded route requires a database file'
         )
-    database = database.strip()
     if not os.path.isabs(database):
         raise RelationalClientError(
             'embedded database file must be absolute'
         )
     root = route.get('filesystem_root')
     if not isinstance(root, str) or not root.strip() or not os.path.isabs(
-        root.strip()
+        root
     ):
         raise RelationalClientError(
             'embedded route requires an absolute filesystem root'
         )
-    root_path = os.path.realpath(root.strip())
+    root_path = os.path.realpath(root)
     database_path = os.path.realpath(database)
     try:
         contained = os.path.commonpath((root_path, database_path)) == root_path
@@ -96,7 +97,7 @@ def sqlite_arguments(route):
         )
     timeout = route.get('timeout', 5.0)
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or (
-        timeout < 0
+        timeout < 0 or not math.isfinite(timeout)
     ):
         raise RelationalClientError('SQLite timeout must not be negative')
     database = contained_database(route)
@@ -105,7 +106,19 @@ def sqlite_arguments(route):
         'timeout': float(timeout),
         'check_same_thread': False,
     }
+    if hasattr(sqlite3, 'LEGACY_TRANSACTION_CONTROL'):
+        # Keep the explicit isolation_level route meaningful across Python
+        # releases whose default DB-API transaction policy may differ.
+        result['autocommit'] = sqlite3.LEGACY_TRANSACTION_CONTROL
     mode = route.get('uri_mode', 'default')
+    read_only = route.get('read_only', False)
+    if type(read_only) is not bool:
+        raise RelationalClientError('SQLite read_only must be true or false')
+    if read_only:
+        if mode not in {'default', 'ro'}:
+            raise RelationalClientError(
+                'SQLite read-only mode conflicts with write mode')
+        mode = 'ro'
     cache = route.get('uri_cache', 'default')
     if mode not in {'default', 'ro', 'rw', 'rwc'}:
         raise RelationalClientError('SQLite file open mode is invalid')

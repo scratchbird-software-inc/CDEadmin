@@ -21,6 +21,11 @@ upstream attribution.
    project_governance
    cdeadmin_architecture
    firebird_driver_development
+   mysql_driver_development
+   mariadb_driver_development
+   postgresql_driver_development
+   sqlite_driver_development
+   duckdb_driver_development
    interface_designer
    implementation_status
    report_delivery

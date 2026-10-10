@@ -1,0 +1,138 @@
+--- a/include/mariadb_python.h
++++ b/include/mariadb_python.h
+@@ -336,6 +336,7 @@
+     enum enum_result_format result_format;
+     uint8_t is_prepared;
+     char is_buffered;
++    char cdeadmin_exact_temporals;
+     uint8_t fetched;
+     uint8_t closed;
+     uint8_t reprepare;
+--- a/mariadb/mariadb_cursor.c
++++ b/mariadb/mariadb_cursor.c
+@@ -241,6 +241,11 @@
+         offsetof(MrdbCursor, cursor_type),
+         0,
+         MISSING_DOC},
++    {"cdeadmin_exact_temporals",
++        T_BOOL,
++        offsetof(MrdbCursor, cdeadmin_exact_temporals),
++        0,
++        "Return exact temporal text for ScratchRobin query cursors."},
+     {"buffered",
+         T_BOOL,
+         offsetof(MrdbCursor, is_buffered),
+@@ -978,7 +983,15 @@
+         Py_END_ALLOW_THREADS;
+     }
+ 
+-    if (rc)
++    if (rc > 0)
++    {
++        if (self->parseinfo.is_text)
++            mariadb_throw_exception(self->connection->mysql, NULL, 0, NULL);
++        else
++            mariadb_throw_exception(self->stmt, NULL, 1, NULL);
++        return NULL;
++    }
++    if (rc < 0)
+     {
+         Py_RETURN_NONE;
+     }
+--- a/mariadb/mariadb_codecs.c
++++ b/mariadb/mariadb_codecs.c
+@@ -502,6 +502,69 @@
+     return new_value;
+ }
+ 
++
++/* ScratchRobin opt-in: preserve SQL temporal values outside Python's calendar.
++   This affects only query cursors explicitly opting in, not catalog consumers. */
++static int cdeadmin_temporal_type(enum enum_field_types type)
++{
++    return type == MYSQL_TYPE_DATE || type == MYSQL_TYPE_DATETIME ||
++           type == MYSQL_TYPE_TIMESTAMP || type == MYSQL_TYPE_TIME;
++}
++
++static PyObject *cdeadmin_binary_temporal(MYSQL_FIELD *field, unsigned char **row)
++{
++    unsigned long len= mysql_net_field_length(row);
++    unsigned char *p= *row;
++    unsigned int year= 0, month= 0, day= 0, hour= 0, minute= 0, second= 0;
++    unsigned int microsecond= 0, negative= 0;
++    char result[64], fraction[8];
++    unsigned int precision= field->decimals <= 6 ? field->decimals : 6;
++    if (field->type == MYSQL_TYPE_TIME)
++    {
++        if (len != 0 && len != 8 && len != 12)
++            goto invalid;
++        if (len)
++        {
++            negative= p[0];
++            hour= uint4korr(p + 1) * 24 + p[5];
++            minute= p[6]; second= p[7];
++            if (len == 12) microsecond= uint4korr(p + 8);
++        }
++        snprintf(result, sizeof(result), "%s%02u:%02u:%02u",
++                 negative ? "-" : "", hour, minute, second);
++    }
++    else
++    {
++        if (len != 0 && len != 4 && len != 7 && len != 11)
++            goto invalid;
++        if (len)
++        {
++            year= uint2korr(p); month= p[2]; day= p[3];
++            if (len >= 7) { hour= p[4]; minute= p[5]; second= p[6]; }
++            if (len == 11) microsecond= uint4korr(p + 7);
++        }
++        if (field->type == MYSQL_TYPE_DATE)
++        {
++            precision= 0;
++            snprintf(result, sizeof(result), "%04u-%02u-%02u", year, month, day);
++        }
++        else
++            snprintf(result, sizeof(result), "%04u-%02u-%02u %02u:%02u:%02u",
++                     year, month, day, hour, minute, second);
++    }
++    if (precision)
++    {
++        snprintf(fraction, sizeof(fraction), ".%06u", microsecond);
++        fraction[precision + 1]= 0;
++        strncat(result, fraction, sizeof(result) - strlen(result) - 1);
++    }
++    *row+= len;
++    return PyUnicode_FromString(result);
++invalid:
++    PyErr_SetString(PyExc_ValueError, "Invalid native temporal field length");
++    return NULL;
++}
++
+ void
+ field_fetch_fromtext(MrdbCursor *self, char *data, unsigned int column)
+ {
+@@ -516,6 +579,11 @@
+       type= MYSQL_TYPE_NULL;
+ 
+     length= mysql_fetch_lengths(self->result);
++    if (data && self->cdeadmin_exact_temporals && cdeadmin_temporal_type(type))
++    {
++        self->values[column]= PyUnicode_FromStringAndSize(data, length[column]);
++        return;
++    }
+ 
+     switch (type)
+     {
+@@ -690,6 +758,12 @@
+     {
+         Py_INCREF(Py_None);
+         self->values[column]= Py_None;
++        goto end;
++    }
++    if (self->cdeadmin_exact_temporals &&
++        cdeadmin_temporal_type(self->fields[column].type))
++    {
++        self->values[column]= cdeadmin_binary_temporal(&self->fields[column], row);
+         goto end;
+     }
+     switch(self->fields[column].type) {

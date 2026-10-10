@@ -830,6 +830,59 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });
 
+  it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL',
+      starter_source: 'SELECT 1', parameter_shape: 'object-or-array',
+      parameter_hint: 'Native MySQL named or positional placeholders',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-session'},
+      execute: {occurrence_id: 'mysql-occurrence'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'mysql-target'}} />);
+    const input = await screen.findByLabelText('Query parameters (JSON object or array)');
+    fireEvent.change(input, {target: {value: parameters}});
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'execute', session_id: 'mysql-session', source: 'SELECT 1',
+      parameters: JSON.parse(parameters), database_target_id: 'mysql-target',
+    }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+  });
+
+  it.each([['mysql', 'MySQL'], ['mariadb', 'MariaDB'], ['postgresql', 'PostgreSQL'], ['sqlite', 'SQLite'], ['duckdb', 'DuckDB']])('polls %s pages and retains page identity after a terminal status', async (engine, title) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${title} SQL`,
+      starter_source: engine === 'sqlite' ? 'SELECT 2' : 'SELECT 1; SELECT 2', parameter_shape: 'object-or-array',
+    }]}}});
+    let polls = 0;
+    api.post.mockImplementation((_url, payload) => {
+      const result = payload.action === 'poll' ? {
+        occurrence: {operation: {terminal: ++polls > 1}, result: {
+          complete: polls > 1, extensions: {[engine]: {payload: polls === 1 ? {
+            has_page: true, rows: [[2]], result_set_index: engine === 'sqlite' ? 0 : 1,
+            row_offset: 256, result_set_end: true,
+          } : {has_page: false, rows: [], error: engine === 'sqlite' ? {type: 'OperationalError', sqlite_errorcode: 8, sqlite_errorname: 'SQLITE_READONLY'} : {type: 'ProgrammingError',
+            errno: 1146, sqlstate: '42S02'}}}},
+        }}, rendered_result: null,
+      } : {open_session: {session_id: 'mysql-session'},
+        execute: {occurrence_id: 'mysql-occurrence'}}[payload.action];
+      return Promise.resolve({data: {data: result}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    expect(await screen.findByLabelText(`${title} result page`))
+      .toHaveTextContent(`Result set: ${engine === 'sqlite' ? 1 : 2} Row offset: 256 Rows on this page: 1`);
+    expect(await screen.findByText(`${title} query did not complete. ${engine === 'sqlite' ? 'OperationalError 8 SQLITE_READONLY' : 'ProgrammingError 1146 42S02'}`))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText(`${title} result page`)).toHaveTextContent('End of result set.');
+  });
+
   it('runs confirmed trap control on the existing session without editor parameters or a new attachment', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'firebird-sql', title: 'Firebird SQL',
@@ -2936,6 +2989,30 @@ describe('ProviderWorkspaceContent', () => {
     expect(warning).toHaveTextContent(failure === 'runtime' ?
       'live provider verification' : 'column_contract');
     expect(screen.queryByText('Grid checks passed')).not.toBeInTheDocument();
+  });
+
+  it('preserves a DuckDB decision and blocks replay when the next transaction fails', async () => {
+    api.get.mockResolvedValue({data: {data: {
+      ...bootstrap,
+      languages: [{language_profile: 'duckdb-sql', title: 'DuckDB SQL',
+        starter_source: 'SELECT 1', transaction_actions: ['commit', 'rollback']}],
+    }}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {
+      data: payload.action === 'open_session' ? {session_id: 'duck-session'} : {
+        session_id: 'duck-session', transaction_model: 'duckdb-native-transaction',
+        provider_payload: {last_decision: 'commit', decision_returned: true,
+          next_transaction_started: false, session_reuse_blocked: true},
+      },
+    }}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.click(await screen.findByText('commit'));
+    expect(await screen.findByText(/next_transaction_started/)).toBeVisible();
+    expect(screen.getByText('Run')).toBeDisabled();
+    expect(screen.getByText('commit')).toBeDisabled();
+    expect(screen.getByText('Close query session')).toBeEnabled();
+    expect(api.post.mock.calls.filter(([, payload]) =>
+      payload.action === 'transaction_action')).toHaveLength(1);
   });
 
   it('uses provider transaction controls without inferring finality', async () => {

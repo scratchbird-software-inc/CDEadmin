@@ -345,14 +345,16 @@
       "title": "Back up SQLite database",
       "fields": [
         {"field_id": "backup_path", "label": "Absolute backup database filename", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "overwrite", "label": "Replace an existing backup file", "control": "boolean", "required": false, "default": false}
+        {"field_id": "overwrite", "label": "Replace an existing backup file", "control": "boolean", "required": false, "default": false},
+        {"field_id": "backup_timeout", "label": "Backup deadline (seconds)", "control": "number", "required": false, "default": 30, "minimum": 0.01, "maximum": 3600}
       ]
     },
     "sqlite_database_restore": {
       "title": "Restore SQLite database",
       "fields": [
         {"field_id": "backup_path", "label": "Absolute backup database filename", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "confirmation", "label": "Type the active database path to confirm replacement", "control": "text", "required": true, "max_length": 4096}
+        {"field_id": "confirmation", "label": "Type the active database path to confirm replacement", "control": "text", "required": true, "max_length": 4096},
+        {"field_id": "backup_timeout", "label": "Backup deadline (seconds)", "control": "number", "required": false, "default": 30, "minimum": 0.01, "maximum": 3600}
       ]
     },
     "sqlite_database_check": {

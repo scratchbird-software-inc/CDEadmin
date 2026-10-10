@@ -261,7 +261,10 @@ class RegistrationProfileTests(unittest.TestCase):
         self.assertTrue({'auth_plugin', 'failover', 'pool_size'} <= {
             field['route_key'] for field in mysql['connection_fields']
         })
-        self.assertTrue({'plugin_dir', 'reconnect', 'tls_version'} <= {
+        self.assertTrue({'plugin_dir', 'tls_version'} <= {
+            field['route_key'] for field in mariadb['connection_fields']
+        })
+        self.assertNotIn('reconnect', {
             field['route_key'] for field in mariadb['connection_fields']
         })
         self.assertEqual(3, len(mysql['secret_fields']))

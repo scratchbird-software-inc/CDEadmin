@@ -1537,42 +1537,28 @@ class RelationalInventoryTests(unittest.TestCase):
                     'config': {'nested': {'not': 'admitted'}},
                 })
 
-    def test_mariadb_pool_arguments_use_native_connection_pool(self):
-        observed = {}
-
-        class Pool:
-            def __init__(self, **kwargs):
-                observed['pool_options'] = kwargs
-                self.closed = False
-
-            def get_connection(self):
-                observed['checkout'] = True
-                return SimpleNamespace(close=lambda: None)
-
-            def close(self):
-                self.closed = True
-                observed['closed'] = True
-
-        module = SimpleNamespace(
-            connect=lambda **kwargs: observed.setdefault('direct', kwargs),
-            ConnectionPool=Pool,
-        )
+    def test_mariadb_pool_arguments_use_private_native_connections(self):
+        native = mock.Mock()
+        module = SimpleNamespace(connect=mock.Mock(return_value=native),
+                                 ConnectionPool=mock.Mock())
         facade = _MariaDBConnectorFacade(module, 'pool-namespace')
-        connection = facade(
-            host='db.example', user='operator', password='secret-canary',
-            pool_name='cde_test_pool', pool_size=7,
-            pool_reset_connection=False, pool_validation_interval=900,
-        )
-        self.assertIsNotNone(connection)
-        self.assertNotIn('direct', observed)
-        self.assertTrue(observed['checkout'])
-        self.assertEqual(7, observed['pool_options']['pool_size'])
-        self.assertEqual(
-            900, observed['pool_options']['pool_validation_interval']
-        )
-        self.assertEqual('db.example', observed['pool_options']['host'])
+        options = dict(host='db.example', user='operator',
+                       password='secret-canary', pool_name='cde_test_pool',
+                       pool_size=7, pool_reset_connection=False,
+                       pool_validation_interval=900)
+        connection = facade(**options)
+        module.ConnectionPool.assert_not_called()
+        module.connect.assert_called_once_with(
+            host='db.example', user='operator', password='secret-canary')
+        connection.close()
+        native.rollback.assert_called_once()
+        native.reset.assert_not_called()
+        again = facade(**options)
+        self.assertIs(again._native, native)
         facade.close()
-        self.assertTrue(observed['closed'])
+        native.close.assert_not_called()
+        again.close()
+        native.close.assert_called_once()
 
     def test_mariadb_direct_connection_strips_pool_only_defaults(self):
         observed = {}
@@ -1597,198 +1583,36 @@ class RelationalInventoryTests(unittest.TestCase):
         }, observed['options'])
         module.ConnectionPool.assert_not_called()
 
-    def test_mariadb_client_closes_native_pool_after_checked_out_handle(self):
-        events = []
-
-        class Connection:
-            def close(self):
-                events.append('connection')
-
-        class Pool:
-            def __init__(self, **_kwargs):
-                pass
-
-            def get_connection(self):
-                return Connection()
-
-            def close(self):
-                events.append('pool')
-
-        module = SimpleNamespace(
-            connect=lambda **_kwargs: Connection(), ConnectionPool=Pool
-        )
+    def test_mariadb_client_retires_private_pool_after_checked_out_handle(self):
+        native = mock.Mock()
+        module = SimpleNamespace(connect=mock.Mock(return_value=native),
+                                 ConnectionPool=mock.Mock())
         client = MariaDBDBAPIClient(RelationalClientConfig(
-            profile=MARIADB_PROFILE,
-            module_name='test.mariadb.dbapi',
+            profile=MARIADB_PROFILE, module_name='test.mariadb.dbapi',
             version_query='SELECT VERSION()',
             connect_arguments=lambda route: dict(route),
             metadata_reader=lambda *_args: [],
         ), 'pool-namespace', module)
         client.open_session({'route': {
-            'host': 'db.example', 'pool_name': 'cde_test_pool',
-            'pool_size': 2,
-        }})
+            'host': 'db.example', 'pool_name': 'cde_test_pool', 'pool_size': 2}})
         client.close()
-        self.assertEqual(['connection', 'pool'], events)
+        module.ConnectionPool.assert_not_called()
+        native.rollback.assert_called_once()
+        native.reset.assert_called_once()
+        native.close.assert_called_once()
 
-    def test_mariadb_results_are_provider_streamed_in_bounded_pages(self):
-        observations = {'fetch_sizes': [], 'fetchall': 0}
-
-        class Cursor:
-            description = (('value', 'INTEGER'),)
-            rowcount = -1
-
-            def __init__(self):
-                self.batches = [
-                    [(value,) for value in range(500)],
-                    [(500,)],
-                    [],
-                ]
-
-            @staticmethod
-            def execute(source, parameters=None):
-                assert source == 'SELECT value FROM large_result'
-                assert parameters is None
-
-            def fetchmany(self, size):
-                observations['fetch_sizes'].append(size)
-                return self.batches.pop(0)
-
-            @staticmethod
-            def fetchall():
-                observations['fetchall'] += 1
-                raise AssertionError('streamed execution used fetchall')
-
-            @staticmethod
-            def close():
-                return None
-
-        class Connection:
-            thread_id = 41
-
-            @staticmethod
-            def cursor(**options):
-                assert options == {'buffered': False}
-                return Cursor()
-
-            @staticmethod
-            def close():
-                return None
-
-        module = SimpleNamespace(
-            connect=lambda **_kwargs: Connection(), ConnectionPool=mock.Mock()
+    def test_mariadb_client_uses_ordered_result_manager(self):
+        from pgadmin.cdeadmin.providers.mysql_family.mariadb_execution import (
+            Executions,
         )
         client = MariaDBDBAPIClient(RelationalClientConfig(
-            profile=MARIADB_PROFILE,
-            module_name='test.mariadb.streaming',
+            profile=MARIADB_PROFILE, module_name='test.mariadb',
             version_query='SELECT VERSION()',
-            connect_arguments=lambda route: dict(route),
-            metadata_reader=lambda *_args: [],
-        ), 'streaming-namespace', module)
-        handle = client.open_session({'route': {'host': 'db.example'}})
-        try:
-            token = client.execute(handle, {
-                'source': 'SELECT value FROM large_result',
-                'parameters': (),
-            })
-            first = client.describe_result(token)
-            second = client.describe_result(token)
-            self.assertFalse(first['complete'])
-            self.assertEqual(500, len(first['payload']['rows']))
-            self.assertTrue(second['complete'])
-            self.assertEqual([(500,)], second['payload']['rows'])
-            self.assertTrue(first['payload']['streamed_by_provider'])
-            self.assertEqual(
-                first['stream_reference'], second['stream_reference']
-            )
-            self.assertEqual([500, 500, 500], observations['fetch_sizes'])
-            self.assertEqual(0, observations['fetchall'])
-        finally:
-            client.close()
-
-    def test_mariadb_active_query_uses_native_kill_query_control_session(self):
-        started = threading.Event()
-        interrupted = threading.Event()
-        statements = []
-
-        class QueryInterrupted(Exception):
-            errno = 1317
-            sqlstate = '70100'
-
-        class QueryCursor:
-            description = ()
-            rowcount = -1
-
-            @staticmethod
-            def execute(source, parameters=None):
-                assert source == 'SELECT SLEEP(30)'
-                assert parameters is None
-                started.set()
-                if not interrupted.wait(2):
-                    raise AssertionError('native cancellation was not issued')
-                raise QueryInterrupted()
-
-            @staticmethod
-            def close():
-                return None
-
-        class ControlCursor:
-            @staticmethod
-            def execute(source):
-                statements.append(source)
-                interrupted.set()
-
-            @staticmethod
-            def close():
-                return None
-
-        class QueryConnection:
-            thread_id = 73
-
-            @staticmethod
-            def cursor(**options):
-                assert options == {'buffered': False}
-                return QueryCursor()
-
-            @staticmethod
-            def close():
-                return None
-
-        class ControlConnection:
-            @staticmethod
-            def cursor():
-                return ControlCursor()
-
-            @staticmethod
-            def close():
-                return None
-
-        connections = iter((QueryConnection(), ControlConnection()))
-        module = SimpleNamespace(
-            connect=lambda **_kwargs: next(connections),
-            ConnectionPool=mock.Mock(),
-        )
-        client = MariaDBDBAPIClient(RelationalClientConfig(
-            profile=MARIADB_PROFILE,
-            module_name='test.mariadb.cancellation',
-            version_query='SELECT VERSION()',
-            connect_arguments=lambda route: dict(route),
-            metadata_reader=lambda *_args: [],
-        ), 'cancellation-namespace', module)
-        handle = client.open_session({'route': {'host': 'db.example'}})
-        try:
-            token = client.execute(handle, {
-                'source': 'SELECT SLEEP(30)', 'parameters': (),
-            })
-            self.assertTrue(started.wait(1))
-            self.assertTrue(client.cancel(token))
-            token.worker.join(timeout=2)
-            result = client.describe_result(token)
-            self.assertTrue(result['complete'])
-            self.assertTrue(result['payload']['cancelled'])
-            self.assertEqual(['KILL QUERY 73'], statements)
-        finally:
-            client.close()
+            connect_arguments=lambda route: route,
+            metadata_reader=lambda *_: [],
+        ), 'namespace', SimpleNamespace(connect=mock.Mock()))
+        self.assertIsInstance(client._executions, Executions)
+        client.close()
 
 
 class RelationalDBAPIClientTests(unittest.TestCase):
