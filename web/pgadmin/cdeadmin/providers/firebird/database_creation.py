@@ -6,6 +6,8 @@ adapter local to the provider; never patch driver globals or change defaults.
 
 import re
 
+from .attachment_dpb import build
+
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
@@ -64,17 +66,18 @@ def create_database(module, core, *, database, user=None, password=None,
         no_gc=no_gc, no_db_triggers=no_db_triggers, dbkey_scope=dbkey_scope,
         sql_dialect=config.db_sql_dialect.value, overwrite=False,
     )
-    buffer = core.DPB(**options).get_buffer(for_create=True)
+    buffer = build(core, options, for_create=True)
     attachment = connection = None
     try:
         with module.get_api().master.get_dispatcher() as dispatcher:
             if crypt_callback is not None:
                 dispatcher.set_dbcrypt_callback(crypt_callback)
             attachment = dispatcher.create_database(
-                dsn, buffer, 'utf-8' if config.utf8filename.value
-                else core.FS_ENCODING)
+                dsn, buffer, 'utf-8')
             connection = core.Connection(
                 attachment, dsn, buffer, config.sql_dialect.value, charset)
+        from .attachment_metadata import install
+        install(connection)
         for callback in core.get_callbacks(
                 core.ConnectionHook.ATTACHED, connection):
             callback(connection)

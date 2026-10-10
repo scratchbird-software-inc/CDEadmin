@@ -9,8 +9,19 @@ project channels, not to the pgAdmin Development Team.
 Current work must follow these rules:
 
 - Provider code describes only behavior supported by the exact engine.
+- The target is full replacement of each engine's management console. An
+  engine's unique features are required coverage, not optional exceptions to
+  a common feature set. Catalog completeness alone does not prove this.
 - Shared UI components may provide layout but may not invent shared engine
   semantics or silently substitute PostgreSQL behavior.
+- Reuse functional forms when their provider contracts allow it. Hide fields
+  and actions that do not apply to the selected engine, version, edition or
+  attachment mode. A missing implementation is an open coverage obligation,
+  not evidence that the native engine lacks the feature.
+- Backend contributors own functional forms and native workflows, including
+  validation, permissions, execution and outcome handling. The human-interface
+  team owns visual refinement; that handoff must not leave functionality
+  unimplemented.
 - A supported mutation needs a provider-owned form, validation, preview,
   execution path, live evidence and browser review.
 - Secrets must not appear in routes, logs, screenshots or retained evidence.

@@ -17,11 +17,37 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 PROFILE = replace(
     NETWORK_PROFILE, provider_id='org.cdeadmin.firebird.embedded',
     profile_id='firebird-embedded', protocol_id='firebird_embedded',
+    dialect_contract_file='firebird_embedded_dialect_5_0_4.json',
+    metrics_contract_file='firebird_embedded_metrics_5_0_4.json',
     required_permissions=('embedded_runtime', 'filesystem'), admin_tools=(),
     resource_kinds=tuple(kind for kind in NETWORK_PROFILE.resource_kinds
                          if kind != 'service-operation'))
 
-ADMINISTRATION = RelationalAdministration(replace(
+
+class EmbeddedAdministration(RelationalAdministration):
+    """Reuse SQL forms without exposing the network service boundary."""
+
+    def catalog(self, catalog):
+        value = super().catalog(catalog)
+        value['objects'] = [
+            resource for resource in value.get('objects', [])
+            if resource['resource_kind'] not in {'server', 'service-operation'}
+        ]
+        for resource in value['objects']:
+            if resource['resource_kind'] != 'database':
+                continue
+            for operation in resource.get('operations', []):
+                if operation['operation_id'] != 'create':
+                    continue
+                for field in operation.get('form', {}).get('fields', []):
+                    if field['field_id'] == 'database_path':
+                        field['label'] = (
+                            'Absolute local database filename on the '
+                            'ScratchRobin host')
+        return value
+
+
+ADMINISTRATION = EmbeddedAdministration(replace(
     NETWORK_ADMINISTRATION.dialect,
     not_applicable_concepts=(
         NETWORK_ADMINISTRATION.dialect.not_applicable_concepts |

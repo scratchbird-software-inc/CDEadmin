@@ -154,3 +154,13 @@ def test_variable_text_encoding_retains_nuls_and_exact_lengths(charset):
 def test_stored_slice_width_cannot_wrap_before_native_call(characters):
     with pytest.raises(RelationalClientError, match='width out of range'):
         read_text(None, None, None, [1], characters, 4)
+
+
+@pytest.mark.parametrize('charset,raw,length', [
+    (44, 'a4d4', 1), (44, '8141', 1), (44, '81410020', 3),
+    (67, 'aaa1', 1), (67, 'ff', 1), (67, '80aaa10020', 4),
+    (69, '9439fc36', 1), (69, '8135f437', 1),
+])
+def test_character_array_length_uses_native_stored_codec(charset, raw, length):
+    from pgadmin.cdeadmin.providers.firebird.varying_arrays import _text_length
+    assert _text_length(bytes.fromhex(raw), charset) == length

@@ -52,6 +52,7 @@ def test_invalid_observation_does_not_hide_other_fields(
 def test_failed_native_info_is_redacted_and_client_dialect_is_preserved():
     class Handle:
         sql_dialect = 3
+        ping = Mock()
         main_transaction = connection(active=False).main_transaction
 
         @property

@@ -58,6 +58,87 @@ class ProviderWorkspaceService:
         self.report_scheduler_service = report_scheduler_service
         self._semantic_executions = {}
         self._semantic_lock = threading.RLock()
+        from pgadmin.cdeadmin.providers.firebird.recovery_groups import (
+            RecoveryGroups,
+        )
+        self.firebird_recovery_groups = RecoveryGroups(
+            operation_bus.store if operation_bus is not None else None)
+
+    def firebird_recovery_action(
+            self, server, action, request, resolve_server):
+        """Resolve each participant under the authenticated route's owner."""
+        from pgadmin.cdeadmin.providers.firebird.provider import (
+            FirebirdProvider,
+        )
+        from pgadmin.cdeadmin.providers.firebird.recovery_groups import (
+            RecoveryGroupError, inspect_participant, participant_binding,
+        )
+        owner = self._principal_id(server)
+        groups = self.firebird_recovery_groups
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id',
+                   None) not in {'firebird-native', 'firebird-embedded'}:
+            raise RecoveryGroupError('Select a Firebird recovery workspace')
+
+        def resolve(selection):
+            participant = resolve_server(selection['server_id'])
+            if participant is None or self._principal_id(participant) != owner:
+                raise RecoveryGroupError('Participant endpoint is unavailable')
+            context, endpoint, _root = self.endpoint_service.workspace(
+                participant,
+                database_target_id=selection['database_target_id'])
+            provider = self.endpoint_service.provider_registry.resolve(
+                context).instance
+            if not isinstance(provider, FirebirdProvider) or (
+                    context.profile_id not in {
+                        'firebird-native', 'firebird-embedded'}):
+                raise RecoveryGroupError('Select a verified Firebird endpoint')
+            route = endpoint['route']
+            binding = participant_binding(context, route)
+            identity, observation = inspect_participant(
+                provider, route, selection['transaction_id'])
+
+            def execute(decision):
+                values = {
+                    'transaction_id': selection['transaction_id'],
+                    'confirmation': selection['transaction_id'],
+                    'database_confirmation': route['database'],
+                    'coordinator_reviewed': True,
+                }
+                result = provider.client.run_limbo_operation(
+                    {'route': route}, decision + '_limbo_local', values)
+                try:
+                    self.resource_service.invalidate(context)
+                except Exception as error:
+                    # A failed explorer refresh cannot erase a native receipt.
+                    result['workspace_follow_up'] = {
+                        'refresh_required': True,
+                        'error_type': type(error).__name__,
+                    }
+                return result
+
+            def dispatch(decision):
+                # Re-resolve immediately before each native call: earlier
+                # participants may have taken time or changed authorization.
+                latest = resolve(selection)
+                if latest['binding'] != binding or (
+                        latest['database_identity'] != identity):
+                    raise RecoveryGroupError(
+                        'Participant changed before dispatch')
+                return latest['execute'](decision)
+
+            return {'database': route['database'],
+                    'server_name': participant.name, 'binding': binding,
+                    'database_identity': identity, 'observation': observation,
+                    'dispatch': dispatch, 'execute': execute}
+
+        coordinator = int(server.id)
+        if action == 'firebird_recovery_preview':
+            return groups.preview(request, owner, coordinator, resolve)
+        if action == 'firebird_recovery_apply':
+            return groups.apply(request, owner, coordinator, resolve)
+        if action == 'firebird_recovery_status' and isinstance(request, dict):
+            return groups.get(request.get('group_id'), owner, coordinator)
+        raise RecoveryGroupError('Recovery action is unavailable')
 
     def registration_workspace(self, server):
         """Read local endpoint configuration without native verification.
@@ -1018,6 +1099,7 @@ class ProviderWorkspaceService:
     def execute(
         self, server, session_id, source, parameters=None,
         database_target_id=Ellipsis, *, max_rows=None, client_sql_dialect=None,
+        script_mode=False, plan_mode=False,
     ):
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
@@ -1028,6 +1110,22 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
+        if type(script_mode) is not bool:
+            raise ProviderWorkspaceError('script mode must be boolean')
+        if script_mode:
+            if context.provider_id not in {
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
+                raise ProviderWorkspaceError(
+                    'Provider has not admitted SQL scripts')
+            policy['firebird_script'] = True
+        if type(plan_mode) is not bool:
+            raise ProviderWorkspaceError('plan mode must be boolean')
+        if plan_mode:
+            if (script_mode or context.provider_id not in {
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
+                raise ProviderWorkspaceError(
+                    'Select a single Firebird statement for plan preparation')
+            policy['firebird_plan'] = True
         if client_sql_dialect is not None:
             if context.provider_id not in {
                     'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
@@ -1057,6 +1155,12 @@ class ProviderWorkspaceService:
             parameters=copy.deepcopy(parameters),
             output_policy=policy,
         )
+
+    def preview_script(self, server, session_id, source,
+                       database_target_id=Ellipsis):
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id)
+        return self.studio_service.preview_script(context, session_id, source)
 
     def query_stream(self, server, session_id, request,
                      database_target_id=Ellipsis):

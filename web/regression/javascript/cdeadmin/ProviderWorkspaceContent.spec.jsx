@@ -890,6 +890,28 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_control')).toBe(false);
   });
 
+  it('prepares Firebird plans through the retained session without bindings, row limits or source rewriting', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'DELETE FROM T WHERE ID=?', parameter_shape: 'array',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'fb'}, execute: {occurrence_id: 'query'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.change(await screen.findByLabelText('Maximum fetched rows'), {target: {value: '-1'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Explain / query plan'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', plan_mode: true, parameters: [], session_id: 'fb',
+      source: 'DELETE FROM T WHERE ID=?', client_sql_dialect: 3,
+    })));
+    const request = api.post.mock.calls.find(([, payload]) => payload.action === 'execute')[1];
+    expect(request).not.toHaveProperty('max_rows');
+    expect(request).not.toHaveProperty('script_mode');
+  });
+
   it.each(['', '-1', '1.5', '1000001'])('rejects invalid Firebird row bound %s before opening a session', async (value) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'firebird-sql', title: 'Firebird SQL',
@@ -3137,6 +3159,28 @@ describe('ProviderWorkspaceContent', () => {
     expect(results).toHaveTextContent('30');
   });
 
+  it.each([
+    ['firebird-native', false], ['firebird-embedded', false],
+    ['firebird-native', true], ['firebird-embedded', true],
+    ['mysql-native', false], ['mysql-native', true],
+  ])('surfaces prepared recovery only for its engine: %s tabbed=%s', async (profile, tabbed) => {
+    api.get.mockResolvedValue({data: {data: {
+      ...bootstrap, endpoint: {...bootstrap.endpoint, profile_id: profile},
+    }}});
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="administration"
+      initialContext={{composition_mode: tabbed ? 'tabbed' : 'focused'}} />);
+    await screen.findByRole('textbox', {name: /Name/});
+    const entry = screen.queryByRole(tabbed ? 'tab' : 'button', {name: 'Prepared Transaction Recovery'});
+    if (profile.startsWith('firebird')) {
+      expect(entry).toBeInTheDocument();
+      fireEvent.click(entry);
+      expect(await screen.findByRole('region', {name: 'Coordinated Firebird recovery'})).toBeInTheDocument();
+    } else {
+      expect(entry).not.toBeInTheDocument();
+    }
+  });
+
   it('renders provider-declared administration forms and blocked plans', async () => {
     api.post.mockImplementation((_url, payload) => {
       if (payload.action === 'visual_admin_validate') {
@@ -3474,7 +3518,7 @@ describe('ProviderWorkspaceContent', () => {
 
   it.each([
     ['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'],
-    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'],
+    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'keyless'],
     ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'array'],
     ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'],
     ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'],
@@ -3488,7 +3532,7 @@ describe('ProviderWorkspaceContent', () => {
       'typed-binary': {encoding: 'base64', data: 'AP9/', byte_length: 3},
       'typed-float32': {encoding: 'float32', data: '-0.0'},
       'typed-float64': {encoding: 'float64', data: '1.7976931348623157e308'}}[operation];
-    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array'].includes(operation) ? 'insert' : operation;
+    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array', 'keyless'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3520,9 +3564,9 @@ describe('ProviderWorkspaceContent', () => {
               ...(typed ? {input_kind: ['typed-null', 'typed-date', 'typed-time', 'typed-timestamp'].includes(operation) ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
-            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: 'row-one',
+            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: operation === 'keyless' ? null : 'row-one',
           }],
-          editable: !(kind === 'table' && operation === 'defaults'),
+          editable: !(kind === 'table' && operation === 'defaults') && operation !== 'keyless',
           ...(kind === 'table' && operation !== 'update' ? {
             operation_authority: 'firebird-native-preparation',
           } : {}),
@@ -3563,7 +3607,7 @@ describe('ProviderWorkspaceContent', () => {
       unmount();
       return;
     }
-    if (kind === 'table' && operation === 'defaults') {
+    if ((kind === 'table' && operation === 'defaults') || operation === 'keyless') {
       expect(screen.getByText(/Insertion is available/)).toBeInTheDocument();
     }
     if (kind === 'table') {
@@ -3578,7 +3622,15 @@ describe('ProviderWorkspaceContent', () => {
     if (operation === 'delete') {
       expect(name).toBeDisabled();
       expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
-      fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+      const remove = screen.getByRole('button', {name: 'Delete'});
+      const focus = jest.spyOn(remove, 'focus');
+      fireEvent.mouseDown(remove, {button: 2});
+      expect(focus).not.toHaveBeenCalled();
+      fireEvent.mouseDown(remove, {button: 0});
+      expect(focus).toHaveBeenCalledWith({preventScroll: true});
+      expect(remove).toHaveFocus();
+      expect(api.post).toHaveBeenCalledTimes(2);
+      fireEvent.click(remove);
       expect(api.post).toHaveBeenCalledTimes(2);
       fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
     } else if (mutation === 'insert') {

@@ -29,9 +29,11 @@ def test_exact_public_sdl_with_explicit_binary_charset():
     assert octets(descriptor()) == (
         bytes([1, 6, 1, fbapi.blr_text2, 1, 0, 0, 1, 2, 1]) + b'T' +
         bytes([4, 1]) + b'A' +
-        bytes([34, 0, 11, 255, 255, 255, 255, 11, 0, 0, 0, 0,
-               34, 1, 11, 2, 0, 0, 0, 11, 3, 0, 0, 0,
-               36, 1, 8, 0, 2, 7, 0, 7, 1, 255]))
+        bytes([34, 0, 11, 0, 0, 0, 0, 11, 1, 0, 0, 0,
+               34, 1, 11, 0, 0, 0, 0, 11, 1, 0, 0, 0,
+               36, 1, 8, 0, 2,
+               13, 11, 255, 255, 255, 255, 7, 0,
+               13, 11, 2, 0, 0, 0, 7, 1, 255]))
 
 
 @pytest.mark.parametrize('count', [0, 17])

@@ -52,7 +52,7 @@ def test_no_single_source(sources):
 
 
 @pytest.mark.parametrize('relation', [
-    None, (b'view', 1), (None, 2), (None, 4)])
+    None, (None, 2), (None, 3)])
 def test_not_a_persistent_base_table(relation):
     handle, cursor = connection()
     cursor.fetchone.side_effect = [relation]
@@ -60,11 +60,13 @@ def test_not_a_persistent_base_table(relation):
     cursor.prepare.assert_not_called()
 
 
-def test_active_view_triggers_need_separate_identity_contract():
+def test_view_trigger_presence_does_not_override_native_admission():
     handle, cursor = connection()
-    cursor.fetchone.side_effect = [(None, 0), (1,)]
-    assert grid_update_identity(handle, 'V') == ((), ())
-    cursor.prepare.assert_not_called()
+    cursor.fetchone.side_effect = [(None, 0)]
+    assert grid_update_identity(handle, 'V') == (
+        ('KEY_ALIAS',), ('KEY_ALIAS', 'VALUE', 'CALC'))
+    assert not any('RDB$TRIGGERS' in call.args[0]
+                   for call in cursor.execute.call_args_list)
 
 
 @pytest.mark.parametrize('keys,fields', [
@@ -241,3 +243,32 @@ def test_delete_contract_requires_native_and_permission_proof(fault):
             document, proof, 'a' * 64, 'owned.json')
         assert result == module.supplement_view_delete(
             result, proof, 'a' * 64, 'owned.json')
+
+
+def test_nested_projection_maps_aliases_without_preparing_source_dml():
+    handle, catalog = connection()
+    catalog.fetchall.side_effect = [
+        [('INNER_VIEW', 3)], [('BASE', 0)], [('ID',)],
+        [('INNER_KEY', 'ID', 0), ('INNER_V', 'V', 0)],
+        [('OUTER_KEY', 'INNER_KEY', 3), ('OUTER_V', 'INNER_V', 3)]]
+    catalog.fetchone.side_effect = [(b'view', 1), (None, 0)]
+    assert grid_update_identity(handle, 'OUTER_VIEW') == (
+        ('OUTER_KEY',), ('OUTER_KEY', 'OUTER_V'))
+    assert all('UPDATE "OUTER_VIEW"' in call.args[0]
+               for call in catalog.prepare.call_args_list)
+
+
+def test_recursive_catalog_projection_cannot_loop():
+    handle, catalog = connection()
+    catalog.fetchall.side_effect = [[('V', 0)]]
+    catalog.fetchone.side_effect = [(b'view', 1)]
+    assert grid_update_identity(handle, 'V') == ((), ())
+    catalog.prepare.assert_not_called()
+
+
+@pytest.mark.parametrize('relation_type', [4, 5])
+def test_temporary_source_projection_preserves_key(relation_type):
+    handle, catalog = connection()
+    catalog.fetchone.side_effect = [(None, relation_type)]
+    assert grid_update_identity(handle, 'V') == (
+        ('KEY_ALIAS',), ('KEY_ALIAS', 'VALUE', 'CALC'))

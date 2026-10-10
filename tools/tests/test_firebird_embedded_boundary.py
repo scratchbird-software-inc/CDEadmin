@@ -49,6 +49,36 @@ def test_optional_admin_tools_does_not_relax_other_profile_lists(field):
         replace(PROFILE, admin_tools=('duplicate', 'duplicate'))
 
 
+def test_embedded_catalog_reuses_forms_without_network_objects():
+    from copy import deepcopy
+    from pgadmin.cdeadmin.providers.firebird.embedded_provider import (
+        ADMINISTRATION as local_admin,
+    )
+    from pgadmin.cdeadmin.visual_admin import catalog_for_engine
+
+    baseline = catalog_for_engine('firebird')
+    original = deepcopy(baseline)
+    local = local_admin.catalog(baseline)
+    network = ADMINISTRATION.catalog(baseline)
+    local_kinds = {item['resource_kind'] for item in local['objects']}
+    network_kinds = {item['resource_kind'] for item in network['objects']}
+    assert not {'server', 'service-operation'} & local_kinds
+    assert {'server', 'service-operation'} <= network_kinds
+    assert {'table', 'view', 'database'} <= local_kinds
+
+    def path_field(catalog):
+        database = next(item for item in catalog['objects']
+                        if item['resource_kind'] == 'database')
+        create = next(item for item in database['operations']
+                      if item['operation_id'] == 'create')
+        return next(field for field in create['form']['fields']
+                    if field['field_id'] == 'database_path')
+
+    assert 'ScratchRobin host' in path_field(local)['label']
+    assert 'Firebird server' in path_field(network)['label']
+    assert baseline == original
+
+
 @pytest.mark.parametrize('denied', [
     None, 'administer', 'embedded_runtime', 'filesystem',
 ])

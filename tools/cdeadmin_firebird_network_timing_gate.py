@@ -85,7 +85,6 @@ def observed_relay(upstream):
                               hold=hold, sent=sent, records=snapshot)
     finally:
         stop.set()
-        hold.clear()
         with lock:
             for connection in tuple(sockets):
                 try:
@@ -96,6 +95,7 @@ def observed_relay(upstream):
         server.server_close()
         worker.join(5)
         assert not worker.is_alive()
+        hold.clear()
 
 
 def matrix(native, admin, route, accounts, evidence):

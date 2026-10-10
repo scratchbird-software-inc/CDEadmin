@@ -4,9 +4,11 @@ Pages replace (not append to) their predecessor. BLOB references expire when
 advancing the page. Closing releases resources, never transaction finality.
 """
 import base64
+import codecs
 import copy
 import json
 import tempfile
+import threading
 import uuid
 
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
@@ -18,19 +20,70 @@ BLOB_BYTES = 64 * 1024
 UPLOAD_BYTES = 256 * 1024 * 1024
 
 
+class UploadBudget:
+    """Process-local admission shared across native sessions and providers."""
+
+    def __init__(self, slots=16, byte_limit=1024 * 1024 * 1024):
+        self.slots = slots
+        self.byte_limit = byte_limit
+        self._lock = threading.Lock()
+        self._reservations = {}
+        self._bytes = 0
+
+    def acquire(self):
+        with self._lock:
+            if len(self._reservations) >= self.slots:
+                raise RelationalClientError(
+                    'Firebird process upload slot limit reached; '
+                    'close an existing upload before retrying')
+            token = object()
+            self._reservations[token] = 0
+            return token
+
+    def reserve(self, token, size):
+        with self._lock:
+            if self._bytes + size > self.byte_limit:
+                raise RelationalClientError(
+                    'Firebird process upload byte limit reached; '
+                    'close an existing upload before retrying')
+            self._reservations[token] += size
+            self._bytes += size
+
+    def release(self, token):
+        with self._lock:
+            self._bytes -= self._reservations.pop(token, 0)
+
+
+_UPLOAD_BUDGET = UploadBudget()
+
+
 class BlobUpload:
     """Session-owned disk spool; client and driver both use bounded chunks."""
+    kind = 'blob'
+
     def __init__(self):
         self.reference = str(uuid.uuid4())
-        self.file = tempfile.TemporaryFile(mode='w+b')
+        self._budget = _UPLOAD_BUDGET
+        self._reservation = self._budget.acquire()
+        try:
+            self.file = tempfile.TemporaryFile(mode='w+b')
+        except BaseException:
+            self._budget.release(self._reservation)
+            raise
         self.size = 0
         self.ready = False
         self.failed = False
         self.last = None
+        self.closed = False
 
-    def append(self, offset, encoded):
+    def _check_usable(self):
+        if self.closed:
+            raise RelationalClientError('Upload is closed')
         if self.failed:
             raise RelationalClientError('Failed upload must be closed')
+
+    def append(self, offset, encoded):
+        self._check_usable()
         if (type(offset) is not int or not isinstance(encoded, str) or
                 len(encoded) > 4 * ((BLOB_BYTES + 2) // 3)):
             raise RelationalClientError('Invalid upload chunk')
@@ -47,9 +100,11 @@ class BlobUpload:
             raise RelationalClientError('Upload offset is out of sequence')
         if self.size + len(data) > UPLOAD_BYTES:
             raise RelationalClientError('Upload exceeds the 256 MiB limit')
+        self._budget.reserve(self._reservation, len(data))
         try:
-            self.file.write(data)
-        except OSError:
+            if self.file.write(data) != len(data):
+                raise RelationalClientError('Incomplete upload spool write')
+        except BaseException:
             self.failed = True
             raise
         self.size += len(data)
@@ -57,47 +112,63 @@ class BlobUpload:
         return self.size
 
     def finish(self):
-        if self.failed:
-            raise RelationalClientError('Failed upload must be closed')
+        self._check_usable()
         try:
             self.file.flush()
             self.file.seek(0)
-        except OSError:
+        except BaseException:
             self.failed = True
             raise
         self.ready = True
         return self.file
 
     def close(self):
-        self.file.close()
+        if self.closed:
+            return
+        try:
+            self.file.close()
+        except BaseException:
+            self.failed = True
+            raise
+        self.closed = True
+        self.last = None
+        self._budget.release(self._reservation)
 
 
 class ResultStream:
-    def __init__(self, cursor, columns, blob_type):
+    def __init__(self, cursor, columns, blob_type, array_type=(), *,
+                 validate_text_encoding=None):
         self.cursor = cursor
         self.columns = list(columns)
         self.blob_type = blob_type
+        self.array_type = array_type
+        self.validate_text_encoding = validate_text_encoding
         self.reference = str(uuid.uuid4())
         self.sequence = -1
         self.page = None
         self.blobs = {}
+        self.arrays = {}
         self.eof = False
         self.closed = False
         self.failed = False
         self.rows_read = 0
+        self.download = None
 
     def _release_blobs(self):
         failures = []
-        for reference, entry in tuple(self.blobs.items()):
-            try:
-                entry['reader'].close()
-                del self.blobs[reference]
-            except Exception as exc:
-                failures.append(exc)
+        for resources in (self.blobs, self.arrays):
+            for reference, entry in tuple(resources.items()):
+                try:
+                    entry['reader'].close()
+                    del resources[reference]
+                except Exception as exc:
+                    failures.append(exc)
         if failures:
             raise failures[0]
 
     def close(self):
+        if self.download is not None:
+            self.download.abort()
         # Retain failed owners for a cleanup retry.
         self._release_blobs()
         if not self.closed:
@@ -106,6 +177,12 @@ class ResultStream:
         self.page = None
 
     def _value(self, value):
+        if isinstance(value, self.array_type):
+            reference = str(uuid.uuid4())
+            self.arrays[reference] = {
+                'reader': value, 'offset': 0, 'last': None,
+            }
+            return {'array_reference': reference, **value.describe()}
         if isinstance(value, self.blob_type):
             reference = str(uuid.uuid4())
             subtype = value.sub_type
@@ -114,6 +191,9 @@ class ResultStream:
             value.sub_type = 0
             self.blobs[reference] = {
                 'reader': value, 'offset': 0, 'last': None,
+                'decoder': (codecs.getincrementaldecoder(
+                    self.validate_text_encoding)() if subtype == 1 and
+                    self.validate_text_encoding else None),
             }
             return {'blob_reference': reference, 'sub_type': subtype,
                     'transfer_encoding': 'base64'}
@@ -136,11 +216,14 @@ class ResultStream:
                 if row is None:
                     self.eof = True
                     break
-                # Register all BLOB owners before converting other values.
-                converted = [self._value(value) if isinstance(
-                    value, self.blob_type) else value for value in row]
+                # Register native owners before converting other values.
+                converted = [self._value(value) if (
+                    isinstance(value, self.blob_type) or
+                    isinstance(value, self.array_type)) else value
+                    for value in row]
                 converted = [value if isinstance(value, dict) and
-                             'blob_reference' in value else
+                             ('blob_reference' in value or
+                              'array_reference' in value) else
                              normalize_value(value) for value in converted]
                 row_size = len(json.dumps(converted, ensure_ascii=True,
                                           allow_nan=False).encode('utf-8'))
@@ -163,6 +246,32 @@ class ResultStream:
             self.failed = True
             raise
 
+    def read_array(self, reference, offset):
+        if self.closed or self.failed or reference not in self.arrays:
+            raise RelationalClientError('ARRAY reference is unavailable')
+        if type(offset) is not int or offset < 0:
+            raise RelationalClientError('Invalid ARRAY element offset')
+        entry = self.arrays[reference]
+        if entry['last'] is not None and offset == entry['last']['offset']:
+            return copy.deepcopy(entry['last'])
+        if offset != entry['offset'] or (
+                entry['last'] is not None and entry['last']['complete']):
+            raise RelationalClientError('ARRAY element offset out of sequence')
+        try:
+            result = {'array_reference': reference,
+                      **entry['reader'].read(offset)}
+            if len(json.dumps(result, ensure_ascii=True, allow_nan=False)
+                   .encode('utf-8')) > PAGE_BYTES:
+                raise RelationalClientError('ARRAY slice exceeds byte budget')
+            if result['complete']:
+                entry['reader'].close()
+            entry['offset'] = result['next_offset']
+            entry['last'] = result
+            return copy.deepcopy(result)
+        except Exception:
+            self.failed = True
+            raise
+
     def read_blob(self, reference, offset):
         if self.closed or self.failed or reference not in self.blobs:
             raise RelationalClientError('BLOB reference is unavailable')
@@ -178,6 +287,14 @@ class ResultStream:
             raw = entry['reader'].read(BLOB_BYTES)
             if not isinstance(raw, bytes) or len(raw) > BLOB_BYTES:
                 raise RelationalClientError('Invalid native BLOB chunk')
+            decoder = entry.get('decoder')
+            if decoder is not None:
+                try:
+                    decoder.decode(raw, final=len(raw) < BLOB_BYTES)
+                except UnicodeDecodeError:
+                    raise RelationalClientError(
+                        'Native UNICODE_FSS text BLOB conversion is not '
+                        'lossless; use a UTF8 attachment') from None
             result = {'blob_reference': reference, 'offset': offset,
                       'next_offset': offset + len(raw),
                       'data': base64.b64encode(raw).decode('ascii'),

@@ -1033,7 +1033,7 @@
         {"resource_kind": "blob-filter", "title": "BLOB filter", "parent_kinds": ["database"], "operation_profile": "read_only", "editor": {"sections": ["properties", "ddl", "dependencies", "dependents", "privileges", "operations"]}},
         {"resource_kind": "shadow", "title": "Shadow", "parent_kinds": ["database"], "navigator_group": "storage", "operation_profile": "read_only", "editor": {"sections": ["properties", "ddl", "files", "operations"]}},
         {"resource_kind": "storage-file", "title": "Storage file", "parent_kinds": ["database", "shadow"], "navigator_group": "storage", "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
-        {"resource_kind": "plugin", "title": "Configured plugin", "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
+        {"resource_kind": "configuration", "title": "Effective configuration setting", "parent_kinds": ["database"], "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
         {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition", "editor": {"sections": ["properties", "dependencies", "dependents", "privileges", "operations"]}},
         {"resource_kind": "service-operation", "title": "Service operation", "operation_profile": "operational", "editor": {"sections": ["properties", "state", "operations"]}}
       ]

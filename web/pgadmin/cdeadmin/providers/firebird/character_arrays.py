@@ -1,10 +1,12 @@
 """Character array slices sized for the attachment, not the stored charset."""
-from ctypes import addressof, create_string_buffer, memmove, pointer
+from ctypes import addressof, create_string_buffer, memmove
 
 from firebird.driver import fbapi as api
-from firebird.driver.types import DatabaseError, SQLDataType
+from firebird.driver.types import SQLDataType
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 from .varying_arrays import TEXT_CHARSETS
+from .array_layout import lookup
+from .array_sdl import transport_charset
 
 
 def metadata(cursor, relation, field):
@@ -22,29 +24,20 @@ def metadata(cursor, relation, field):
         result = catalog.fetchone()
     if result and result[0] in (14, 37) and result[2] == 1:
         return (*result[:3], 1)
+    if result and connection.charset == 'UNICODE_FSS':
+        return (*result[:3], 4)
     return (result if result and result[0] in (14, 37) and result[2] != 1
             else None)
 
 
 def layout(cursor, relation, field, description):
-    connection = cursor._connection
     code, characters, _, width = description
     if not characters or not width:
         raise RelationalClientError('Character array charset metadata missing')
     capacity = characters * width
     if capacity <= 0 or capacity + (2 if code == 37 else 0) > 65535:
         raise RelationalClientError('Character array slice width out of range')
-    native = api.get_api()
-    status = api.ISC_STATUS_ARRAY()
-    bounds = api.ISC_ARRAY_DESC(0)
-    db = connection._get_handle()
-    transaction = cursor._transaction._get_handle()
-    native.isc_array_lookup_bounds(
-        status, db, transaction, relation.encode(cursor._encoding),
-        field.encode(cursor._encoding), bounds)
-    if api.db_api_error(status):
-        raise api.exception_from_status(DatabaseError, status,
-                                        'Character array bounds')
+    bounds, _ = lookup(cursor, relation, field)
     bounds.array_desc_length = capacity
     dimensions = [bound.array_bound_upper - bound.array_bound_lower + 1
                   for bound in bounds.array_desc_bounds[
@@ -55,7 +48,7 @@ def layout(cursor, relation, field, description):
     for size in dimensions:
         count *= size
     size = capacity + (2 if code == 37 else 0)
-    if count * size > 2147483647:
+    if count * bounds.stored_element_width > 2147483647:
         raise RelationalClientError(
             'Character array exceeds native slice size')
     return bounds, dimensions, size, count
@@ -68,7 +61,7 @@ def read(cursor, desc):
         from .scalar_arrays import read as read_scalar
         return read_scalar(cursor, desc)
     code, characters, charset, _ = description
-    bounds, dimensions, size, count = layout(
+    bounds, dimensions, _, _ = layout(
         cursor, desc.relation, desc.field, description)
     raw_id = cursor._stmt._out_buffer[desc.offset:desc.offset + desc.length]
     array_id = api.ISC_QUAD.from_buffer_copy(raw_id)
@@ -83,35 +76,16 @@ def read(cursor, desc):
         from .varying_arrays import read_text
         return True, read_text(cursor, array_id, bounds, dimensions,
                                characters, charset)
-    data = create_string_buffer(count * size)
-    length = api.ISC_LONG(len(data))
-    status = api.ISC_STATUS_ARRAY()
-    # Unqualified VARCHAR charsets retain the legacy driver slice path.
-    api.get_api().isc_array_get_slice(
-        status, cursor._connection._get_handle(),
-        cursor._transaction._get_handle(), array_id, bounds, data, length)
-    if api.db_api_error(status):
-        raise api.exception_from_status(DatabaseError, status,
-                                        'Character array read')
-    leaves = []
-    raw = data.raw
-    for index in range(count):
-        packed = raw[index * size:(index + 1) * size]
-        packed = packed.split(b'\0', 1)[0]
-        value = packed.decode(cursor._encoding)
-        leaves.append(value)
-    iterator = iter(leaves)
-
-    def nest(depth):
-        return [next(iterator) if depth == len(dimensions)-1 else
-                nest(depth + 1) for _ in range(dimensions[depth])]
-
-    return True, nest(0)
+    raise RelationalClientError(
+        'Variable ARRAY character set requires a lossless slice adapter')
 
 
 def encode(values, dimensions, description, encoding):
     """Validate every element before allocating a native array slice."""
     code, characters, charset, width = description
+    if code == 37 and charset not in (1, *TEXT_CHARSETS):
+        raise RelationalClientError(
+            'Variable ARRAY character set requires a lossless slice adapter')
     capacity = characters * width
     size = capacity + (2 if code == 37 else 0)
     leaves = []
@@ -181,11 +155,11 @@ def pack(cursor, meta, buffer, parameters, native_pack):
     try:
         for index, bounds, data, charset, code in pending:
             array_id = api.ISC_QUAD(0, 0)
-            status = api.ISC_STATUS_ARRAY()
             if code == 37 and charset in (1, *TEXT_CHARSETS):
                 from .varying_arrays import write as write_varying
                 write_varying(cursor, array_id, bounds, data,
-                              charset=1 if charset == 1 else 127)
+                              charset=(1 if charset == 1 else
+                                       transport_charset(cursor)))
             elif charset == 1:
                 packed = create_string_buffer(data, len(data))
                 from .array_sdl import octets
@@ -194,13 +168,10 @@ def pack(cursor, meta, buffer, parameters, native_pack):
                     packed)
             else:
                 packed = create_string_buffer(data, len(data))
-                api.get_api().isc_array_put_slice(
-                    status, cursor._connection._get_handle(),
-                    cursor._transaction._get_handle(), pointer(array_id),
-                    bounds, packed, api.ISC_LONG(len(data)))
-            if api.db_api_error(status):
-                raise api.exception_from_status(DatabaseError, status,
-                                                'Character array write')
+                from .array_sdl import text_slice
+                cursor._connection._att.put_slice(
+                    cursor._transaction._tra, array_id,
+                    text_slice(bounds, transport_charset(cursor)), b'', packed)
             if result_meta.get_length(index) != 8:
                 raise RelationalClientError('Invalid native array identifier')
             memmove(addressof(result_buffer) + result_meta.get_offset(index),
@@ -228,7 +199,11 @@ def unpack(cursor, native_unpack):
             if (desc.datatype != SQLDataType.ARRAY or
                     buffer[desc.null_offset] != b'\0'):
                 continue
-            handled, value = read(cursor, desc)
+            if getattr(cursor, 'stream_arrays', False):
+                from .array_stream import ArrayReader
+                handled, value = True, ArrayReader(cursor, desc)
+            else:
+                handled, value = read(cursor, desc)
             if handled:
                 replacements[index] = value
                 saved[desc.null_offset] = buffer[desc.null_offset]
@@ -239,4 +214,15 @@ def unpack(cursor, native_unpack):
             buffer[offset] = original
     for index, value in replacements.items():
         result[index] = value
+    for index, desc in enumerate(cursor._stmt._out_desc):
+        if (desc.datatype == SQLDataType.TEXT and result[index] is not None
+                and TEXT_CHARSETS.get(getattr(desc, 'charset', None),
+                                      (None, 1))[1] == 2):
+            # The qualified driver only removes transport expansion for
+            # UTF8/FSS/GB18030. Other multibyte CHAR buffers need it too.
+            value, capacity = result[index], desc.length // 2
+            if (desc.length % 2 or not isinstance(value, str) or
+                    len(value) < capacity or value[capacity:].strip(' ')):
+                raise RelationalClientError('Fixed character padding invalid')
+            result[index] = value[:capacity]
     return tuple(result)

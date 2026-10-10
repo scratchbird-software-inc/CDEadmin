@@ -42,9 +42,14 @@ class DialectCursor:
         return getattr(self.cursor, name)
 
     def execute(self, source, parameters=None):
+        self.prepare(source, self.connection.main_transaction)
+        self.cursor.execute(self.statement, parameters)
+        return self
+
+    def prepare(self, source, transaction):
+        """Retain native preparation ownership even on metadata failure."""
         from firebird.driver.core import Statement
 
-        transaction = self.connection.main_transaction
         if not transaction.is_active():
             transaction.begin()
         # Retain the partially initialized wrapper if metadata acquisition
@@ -61,8 +66,7 @@ class DialectCursor:
         statement._istmt = native
         Statement.__init__(statement, self.connection, native, source,
                            self.dialect)
-        self.cursor.execute(statement, parameters)
-        return self
+        return statement
 
     def close(self):
         # A failed result close must not free the statement underneath it.

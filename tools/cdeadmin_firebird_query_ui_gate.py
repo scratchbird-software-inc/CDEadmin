@@ -346,7 +346,9 @@ def run(options, password):
             ('timestamp-zone-result',
              'SELECT CAST(? AS TIMESTAMP WITH TIME ZONE) AS NATIVE_TIME '
              'FROM RDB$DATABASE', ['2026-09-14 12:34:56.1234 +02:00'],
-             '2026-09-14 12:34:56.123400+02:00'),
+             json.dumps({'encoding': 'firebird-timestamp-tz',
+                         'utc': '2026-09-14 10:34:56.123400',
+                         'time_zone': '+02:00'}, separators=(',', ':'))),
         ):
             _set_text(driver, editor, source)
             _set_text(driver, parameters, json.dumps(values))

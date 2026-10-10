@@ -92,10 +92,14 @@ def _validate_firebird_auth_selection(profile, values):
     from pgadmin.cdeadmin.providers.firebird.service_connection import (
         security_context,
     )
+    from pgadmin.cdeadmin.providers.firebird.config_text import (
+        validate_config_selection,
+    )
     from pgadmin.cdeadmin.sdk.relational import RelationalClientError
     try:
         validate_authentication_plugins(values)
         security_context(values.get('service_expected_database'))
+        validate_config_selection(values)
     except RelationalClientError as error:
         raise EndpointRegistrationError(str(error)) from None
 
@@ -1419,7 +1423,14 @@ class EndpointService:
                 raise EndpointRegistrationError(
                     f'{field["label"]} is not an admitted option'
                 )
-            if isinstance(value, str) and (
+            # Firebird native text has already passed its exact grammar and
+            # 16-KiB UTF-8 limit above; it is intentionally multiline. Do not
+            # relax the single-line rules for unrelated provider fields.
+            native_text = field_id == 'wire_config' and (
+                profile.get('profile_id') or profile.get(
+                    'form_contract', {}).get('profile_id')
+            ) == 'firebird-native'
+            if not native_text and isinstance(value, str) and (
                 len(value) > 4096 or any(
                     character in value for character in ('\x00', '\r', '\n')
                 )

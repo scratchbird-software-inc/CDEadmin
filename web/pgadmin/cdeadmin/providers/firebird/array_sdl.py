@@ -1,10 +1,18 @@
 """Explicit OCTETS fixed-width slices using Firebird's public SDL format."""
 from firebird.driver import fbapi
+from .array_layout import program
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
 def octets(bounds):
     return text_slice(bounds, 1)
+
+
+def transport_charset(cursor):
+    if (getattr(cursor._connection, 'charset', None) == 'UNICODE_FSS' and
+            cursor._encoding == 'utf8'):
+        return 4
+    return 127
 
 
 def text_slice(bounds, charset, *, cstring=False):
@@ -16,28 +24,8 @@ def text_slice(bounds, charset, *, cstring=False):
         raise RelationalClientError('Invalid OCTETS array descriptor')
     if type(charset) is not int or not 0 <= charset <= 65535:
         raise RelationalClientError('Invalid slice character set')
-    result = bytearray([1, 6, 1,
-                        fbapi.blr_cstring2 if cstring else fbapi.blr_text2])
-    result.extend(charset.to_bytes(2, 'little'))
-    result.extend(bounds.array_desc_length.to_bytes(2, 'little'))
-    for tag, name in ((2, bounds.array_desc_relation_name),
-                      (4, bounds.array_desc_field_name)):
-        if not name or len(name) > 255:
-            raise RelationalClientError('Invalid OCTETS array source name')
-        result.extend([tag, len(name)])
-        result.extend(name)
-    for index in range(count):
-        bound = bounds.array_desc_bounds[index]
-        if bound.array_bound_upper < bound.array_bound_lower:
-            raise RelationalClientError('Invalid OCTETS array bounds')
-        result.extend([34, index, 11])
-        result.extend(bound.array_bound_lower.to_bytes(
-            4, 'little', signed=True))
-        result.append(11)
-        result.extend(bound.array_bound_upper.to_bytes(
-            4, 'little', signed=True))
-    result.extend([36, 1, 8, 0, count])
-    for index in range(count):
-        result.extend([7, index])
-    result.append(255)
-    return bytes(result)
+    descriptor = bytearray([
+        fbapi.blr_cstring2 if cstring else fbapi.blr_text2])
+    descriptor.extend(charset.to_bytes(2, 'little'))
+    descriptor.extend(bounds.array_desc_length.to_bytes(2, 'little'))
+    return program(bounds, descriptor)

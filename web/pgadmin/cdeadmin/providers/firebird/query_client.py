@@ -2,6 +2,7 @@
 
 import copy
 import threading
+import time
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -13,6 +14,7 @@ from .error_diagnostics import (
     diagnostic_flag, execution_identity, status_codes,
 )
 from . import limbo
+from . import stream_leases
 from .query_parameters import normalize_parameters
 from .query_limits import query_row_limit
 from .query_dialect import DialectCursor, requested_dialect
@@ -38,6 +40,8 @@ class _Query:
     done: bool = False
     worker: object = None
     dispatch_allowed: bool = False
+    script_plan: tuple | None = None
+    script_execution: object = None
 
 
 @dataclass
@@ -48,6 +52,7 @@ class _AttachmentState:
     result_cleanup_failed: bool = False
     worker_interrupted: bool = False
     visual_task_state_unknown: bool = False
+    attachment_liveness_failed: bool = False
     failed_cursors: list = field(default_factory=list)
     result_stream: object = None
     blob_upload: object = None
@@ -55,6 +60,10 @@ class _AttachmentState:
     stream_cancel_lock: object = field(default_factory=threading.RLock)
     stream_running: bool = False
     stream_cancel_requested: bool = False
+    stream_last_activity: float | None = None
+    stream_expired: bool = False
+    script_context: object = None
+    script_ddl_transaction: object = None
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
@@ -83,8 +92,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             raise error from None
 
     def __init__(self, config, module=None, *, service_connector=None,
-                 service_attached=None):
+                 service_attached=None, database_connector=None):
         super().__init__(config, module)
+        if database_connector is not None:
+            self._connector = database_connector
         if service_connector is not None:
             self._server_connector = service_connector
         self._service_attached = service_attached
@@ -155,6 +166,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         super()._forget_connection(handle)
         self._server_handles.discard(id(handle))
         self._failed_initializations.discard(id(handle))
+
+    def _retain_failed_attachment(self, connection):
+        self._connections.append(connection)
+        self._discard_failed_session(connection)
 
     def _discard_failed_session(self, connection):
         self._failed_initializations.add(id(connection))
@@ -263,8 +278,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird query is running; cancel or wait before '
                     'using this session')
-            if state.result_stream is not None and not (
-                    closing or stream_access):
+            if ((state.result_stream is not None or state.stream_expired) and
+                    not (closing or stream_access)):
                 raise RelationalClientError(
                     'Close the streaming result before using this session')
             if state.cancellation_state_unknown and not closing:
@@ -283,6 +298,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird visual task state is unknown; close this '
                     'session and explicitly reconnect')
+            if state.attachment_liveness_failed and not closing:
+                raise RelationalClientError(
+                    'Firebird attachment liveness check failed; close this '
+                    'session and explicitly reconnect')
             yield state
         finally:
             state.lock.release()
@@ -296,8 +315,30 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         self.config.query_parameter_normalizer(payload.get('parameters', ()))
         query_row_limit(payload)
         requested_dialect(payload)
+        script = (payload.get('output_policy') or {}).get(
+            'firebird_script', False)
+        if type(script) is not bool:
+            raise RelationalClientError('Firebird script mode must be Boolean')
+        plan_mode = (payload.get('output_policy') or {}).get(
+            'firebird_plan', False)
+        if type(plan_mode) is not bool:
+            raise RelationalClientError('Firebird plan mode must be Boolean')
+        if plan_mode:
+            if script or payload.get('parameters'):
+                raise RelationalClientError(
+                    'Plan preparation cannot run scripts or bind parameters')
+            from .query_plans import validate_source
+            validate_source(source)
+        plan = None
+        if script:
+            if payload.get('parameters'):
+                raise RelationalClientError(
+                    'Firebird scripts do not accept positional parameters')
+            from .scripts import parse
+            plan = parse(source)
         with self._exclusive(handle) as state:
             query = _Query(handle)
+            query.script_plan = plan
             query.worker = threading.Thread(
                 target=self._run_query, args=(query, state, payload),
                 name='cdeadmin-firebird-query', daemon=True)
@@ -320,9 +361,16 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             if not query.dispatch_allowed or state.query is not query:
                 return
         try:
-            token = self._execute_sql(query.handle, request)
-            native = self._describe_native_token(token)
-            native['payload']['execution_state'] = 'succeeded'
+            if (request.get('output_policy') or {}).get('firebird_plan'):
+                from .query_plans import acquire
+                native = acquire(self, query.handle, request, state)
+            elif query.script_plan is not None:
+                from .script_execution import ScriptExecution
+                native = ScriptExecution(self, query, state, request).run()
+            else:
+                token = self._execute_sql(query.handle, request)
+                native = self._describe_native_token(token)
+                native['payload']['execution_state'] = 'succeeded'
         except Exception as exc:
             codes = status_codes(exc)
             execution_completed = diagnostic_flag(
@@ -378,8 +426,23 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 },
             }
         with state.lock:
+            if (query.script_execution is not None and
+                    'script' not in native['payload']):
+                query.script_execution.mark_unknown()
+                native['payload']['execution_outcome_unknown'] = True
+                native['payload']['script'] = (
+                    query.script_execution.snapshot(results=True))
             if native['payload'].get('execution_outcome_unknown'):
                 state.worker_interrupted = True
+                native['payload']['session_reuse_blocked'] = True
+                native['payload']['session_reuse_blocked_reason'] = (
+                    'attachment_liveness_failed'
+                    if state.attachment_liveness_failed else
+                    'worker_interrupted')
+            if state.attachment_liveness_failed:
+                native['payload']['session_reuse_blocked'] = True
+                native['payload']['session_reuse_blocked_reason'] = (
+                    'attachment_liveness_failed')
             if state.result_cleanup_failed:
                 native['payload']['session_reuse_blocked'] = True
                 native['payload']['session_reuse_blocked_reason'] = (
@@ -428,7 +491,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 'schema': {'columns': []}, 'complete': False,
                 'stream_reference': None,
                 'payload': {'rows': [], 'execution_state': 'running',
-                            'cancel_requested': token.cancellation_attempted},
+                            'cancel_requested': token.cancellation_attempted,
+                            **({'script': token.script_execution.snapshot()}
+                               if token.script_execution is not None else {})},
             }
 
     def cancel(self, token):
@@ -460,6 +525,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             return True  # Delivery accepted, NOT an observed final outcome.
 
     def execute(self, handle, request):
+        policy = request.get('output_policy') or {}
+        if policy.get('firebird_script') or policy.get('firebird_plan'):
+            raise RelationalClientError(
+                'Scripts and plans require the asynchronous execution channel')
         with self._exclusive(handle):
             return self._execute_sql(handle, request)
 
@@ -498,6 +567,12 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         return token
 
     def _query_cursor(self, handle, request):
+        state = self._attachment_states.get(id(handle))
+        if state is not None and state.script_context is not None:
+            return state.script_context.cursor(request)
+        return self._ordinary_query_cursor(handle, request)
+
+    def _ordinary_query_cursor(self, handle, request):
         dialect = requested_dialect(request)
         if dialect is None or dialect == handle.sql_dialect:
             from .temporal_arrays import cursor
@@ -637,8 +712,11 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     'protocol_id': self.config.profile.protocol_id}
 
     def describe_transaction(self, handle):
-        with self._exclusive(handle):
-            return super().describe_transaction(handle)
+        with self._exclusive(handle) as state:
+            result = super().describe_transaction(handle)
+            if result.get('attachment_live') is False:
+                state.attachment_liveness_failed = True
+            return result
 
     def control_transaction(self, handle, action):
         with self._exclusive(handle):
@@ -672,6 +750,72 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise
             state.result_stream = None
         state.stream_owner = None
+        state.stream_last_activity = None
+        state.stream_expired = False
+
+    def reap_idle_streams(self, now=None):
+        """Release idle stream resources, retaining attachment and outcome."""
+        if now is None:
+            now = time.monotonic()
+        with self._admission:
+            if self._closed:
+                return
+            entries = [(handle, self._attachment_states.get(id(handle)))
+                       for handle in tuple(self._connections)]
+        for handle, state in entries:
+            if state is None or not state.lock.acquire(blocking=False):
+                continue
+            try:
+                with self._admission:
+                    if self._closed or self._attachment_states.get(
+                            id(handle)) is not state:
+                        continue
+                if (state.query is not None or state.stream_running or
+                        state.stream_last_activity is None or
+                        now - state.stream_last_activity <
+                        stream_leases.IDLE_SECONDS):
+                    continue
+                if state.result_stream is None and state.blob_upload is None:
+                    continue
+                self._expire_stream_resources(handle, state)
+            finally:
+                state.lock.release()
+
+    def _expire_stream_resources(self, handle, state):
+        state.stream_expired = True
+        owner = state.stream_owner
+        activity = state.stream_last_activity
+        try:
+            self._close_result_stream(handle)
+        except Exception:
+            state.result_cleanup_failed = True
+        finally:
+            # Preserve the expired owner until explicit stream/session close.
+            state.stream_owner = owner
+            state.stream_last_activity = activity
+            state.stream_expired = True
+
+    @contextmanager
+    def _stream_lease(self, handle, state, action, owner):
+        self._check_stream_owner(state, owner)
+        if (action != 'close' and state.stream_last_activity is not None and
+                time.monotonic() - state.stream_last_activity >=
+                stream_leases.IDLE_SECONDS and
+                (state.result_stream is not None or
+                 state.blob_upload is not None)):
+            self._expire_stream_resources(handle, state)
+        if state.stream_expired and action != 'close':
+            raise RelationalClientError(
+                'Firebird stream idle lease expired; close the stream. '
+                'The transaction outcome is unchanged')
+        try:
+            yield
+        finally:
+            if ((state.result_stream is not None or
+                 state.blob_upload is not None) and not state.stream_expired
+                    and action != 'download_status'):
+                state.stream_last_activity = time.monotonic()
+                stream_leases.watch(self)
 
     @contextmanager
     def _stream_native_call(self, handle, state):
@@ -718,13 +862,26 @@ class FirebirdQueryClient(RelationalDBAPIClient):
     def query_stream(self, handle, request):
         """One bounded pull per call, scoped to a retained native session."""
         from firebird.driver.core import BlobReader
+        from .array_stream import ArrayReader
         from .result_stream import BlobUpload, ResultStream
         action = request.get('stream_action')
         owner = request.get('owner_id')
         if action == 'cancel':
             return self.cancel_result_stream(handle, owner)
+        if action in ('download_status', 'download_abort'):
+            # Local delivery observations never contend with native reads.
+            # Abort fences the next yield after the current read settles.
+            state = self._state(handle)
+            self._check_stream_owner(state, owner)
+            stream = state.result_stream
+            if (stream is None or state.stream_expired or
+                    request.get('stream_reference') != stream.reference or
+                    stream.download is None):
+                raise RelationalClientError('File delivery is unavailable')
+            return stream.download.dispatch(action, request)
         with self._exclusive(handle, stream_access=True,
-                             closing=action == 'close') as state:
+                             closing=action == 'close') as state, \
+                self._stream_lease(handle, state, action, owner):
             self._check_stream_owner(state, owner)
             if action == 'close':
                 self._close_result_stream(handle)
@@ -734,12 +891,17 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     raise RelationalClientError('Close the previous stream')
                 if state.blob_upload is not None:
                     raise RelationalClientError('Close the previous upload')
-                state.blob_upload = BlobUpload()
+                kind = request.get('value_kind', 'blob')
+                if kind not in ('blob', 'array'):
+                    raise RelationalClientError('Invalid upload value kind')
+                from .array_file import ArrayUpload
+                state.blob_upload = (ArrayUpload() if kind == 'array'
+                                     else BlobUpload())
                 state.stream_owner = owner
-                return {'blob_upload': state.blob_upload.reference}
+                return {kind + '_upload': state.blob_upload.reference}
             if action in ('upload_chunk', 'upload_finish'):
                 upload = state.blob_upload
-                if upload is None or request.get('blob_upload') != (
+                if upload is None or request.get(upload.kind + '_upload') != (
                         upload.reference):
                     raise RelationalClientError('Upload is unavailable')
                 if action == 'upload_chunk':
@@ -747,7 +909,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                                            request.get('data'))
                     return {'next_offset': offset}
                 upload.finish()
-                return {'blob_upload': upload.reference, 'ready': True}
+                return {upload.kind + '_upload': upload.reference, 'ready': True}
             if action == 'open':
                 if state.result_stream is not None:
                     raise RelationalClientError('Close the previous stream')
@@ -764,10 +926,12 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 parameters = []
                 upload_used = False
                 for value in raw_parameters:
-                    if isinstance(value, dict) and 'blob_upload' in value:
+                    if isinstance(value, dict) and (
+                            'blob_upload' in value or 'array_upload' in value):
                         upload = state.blob_upload
                         if (upload_used or upload is None or not upload.ready
-                                or value != {'blob_upload': upload.reference}):
+                                or value != {upload.kind + '_upload':
+                                             upload.reference}):
                             raise RelationalClientError(
                                 'Invalid upload binding')
                         parameters.append(upload.finish())
@@ -782,18 +946,18 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 # DialectCursor delegates reads, not attribute writes.
                 native_cursor = getattr(cursor, 'cursor', cursor)
                 native_cursor.stream_blob_threshold = -1
-                state.result_stream = ResultStream(cursor, [], BlobReader)
+                native_cursor.stream_arrays = True
+                state.result_stream = ResultStream(
+                    cursor, [], BlobReader, ArrayReader,
+                    validate_text_encoding=(
+                        'utf8' if getattr(handle, 'charset', None) ==
+                        'UNICODE_FSS' else None))
                 state.stream_owner = owner
                 try:
                     with self._stream_native_call(handle, state):
                         cursor.execute(source, parameters)
                         state.result_stream.columns = list(
                             self.config.query_columns_reader(cursor))
-                        if any(column.get('native_type_name') == 'ARRAY'
-                               for column in state.result_stream.columns):
-                            raise RelationalClientError(
-                                'Native ARRAY results require the ordinary '
-                                'query path; array slices are not streamed')
                         if not cursor.description:
                             state.result_stream.eof = True
                             return {'stream_reference':
@@ -813,6 +977,21 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             if stream is None or request.get('stream_reference') != (
                     stream.reference):
                 raise RelationalClientError('Result stream is unavailable')
+            if isinstance(action, str) and action.startswith('download_'):
+                from .file_download import FileDownload
+                if action == 'download_begin':
+                    if stream.download is not None and stream.download.active:
+                        raise RelationalClientError('File delivery is active')
+                    stream.download = FileDownload(
+                        stream, request.get('value_kind'),
+                        request.get('value_reference'))
+                    return stream.download.status()
+                if stream.download is None:
+                    raise RelationalClientError('File delivery is unavailable')
+                with self._stream_native_call(handle, state):
+                    return stream.download.dispatch(action, request)
+            if stream.download is not None and stream.download.active:
+                raise RelationalClientError('Finish or stop file delivery')
             if action == 'next':
                 with self._stream_native_call(handle, state):
                     return stream.fetch(request.get('sequence'))
@@ -820,6 +999,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 with self._stream_native_call(handle, state):
                     return stream.read_blob(request.get('blob_reference'),
                                             request.get('offset'))
+            if action == 'array':
+                with self._stream_native_call(handle, state):
+                    return stream.read_array(request.get('array_reference'),
+                                             request.get('offset'))
             raise RelationalClientError('Unknown streaming action')
 
     def _release_attachment(self, handle):

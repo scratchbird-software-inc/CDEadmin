@@ -1,14 +1,24 @@
 """Bounded character slices and lossless variable binary/text transport."""
+from copy import deepcopy
 from ctypes import create_string_buffer
 from itertools import chain, product
 
-from firebird.driver import fbapi
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
-from .array_sdl import text_slice
+from .array_sdl import text_slice, transport_charset
+from .attachment_codecs import PRIVATE_CHARSETS, codec_name, native_name
 
 # Firebird intl/charsets.h identifiers; other charsets require qualification.
-TEXT_CHARSETS = {2: ('ascii', 1), 4: ('utf8', 4),
-                 21: ('iso8859_1', 1), 53: ('cp1252', 1)}
+TEXT_CHARSETS = {
+    # Single-byte encodings need byte counts, not Python transliteration.
+    # Firebird converts the separate dynamic-charset slice itself.
+    **{identifier: ('latin1', 1) for identifier in (
+        *range(9, 20), 21, 22, 23, *range(34, 41), *range(45, 56),
+        58, 59, 60, 63, 64, 65, 66)},
+    0: (None, 1), 2: ('ascii', 1), 3: ('utf8', 3), 4: ('utf8', 4),
+    5: ('shift_jis', 2), 6: ('euc_jp', 2), 44: ('euc_kr', 2),
+    56: ('big5', 2), 57: ('gb2312', 2), 67: ('gbk', 2),
+    68: ('cp932', 2), 69: ('gb18030', 4),
+}
 SLICE_BYTES = 1024 * 1024
 
 
@@ -36,7 +46,7 @@ def chunks(bounds, dimensions, width):
     lower = bounds.array_desc_bounds[index].array_bound_lower
     left = size // 2
     for start, length in ((lower, left), (lower + left, size - left)):
-        part = fbapi.ISC_ARRAY_DESC.from_buffer_copy(bounds)
+        part = deepcopy(bounds)
         part.array_desc_bounds[index].array_bound_lower = start
         part.array_desc_bounds[index].array_bound_upper = start + length - 1
         shape = list(dimensions)
@@ -84,15 +94,23 @@ def read_text(cursor, array_id, bounds, dimensions, characters, charset):
 
 def read_fixed(cursor, array_id, bounds, dimensions, characters, charset):
     """Preserve fixed-width bytes or characters using bounded native slices."""
+    if charset == 0:
+        stored = deepcopy(bounds)
+        stored.array_desc_length = characters
+        return _decode_nested(read_fixed(
+            cursor, array_id, stored, dimensions, characters, 1),
+            cursor._encoding)
+
     def rectangle(part, shape):
         count = 1
         for size in shape:
             count *= size
         capacity = part.array_desc_length
         data = create_string_buffer(count * capacity)
+        selected = 1 if charset == 1 else transport_charset(cursor)
         received = cursor._connection._att.get_slice(
             cursor._transaction._tra, array_id,
-            text_slice(part, 1 if charset == 1 else 127), b'', data)
+            text_slice(part, selected), b'', data)
         if received != len(data):
             raise RelationalClientError('Incomplete fixed array slice')
         raw = data.raw
@@ -120,18 +138,33 @@ def read_fixed(cursor, array_id, bounds, dimensions, characters, charset):
     return _chunked(bounds, dimensions, bounds.array_desc_length, rectangle)
 
 
+def _decode_nested(values, encoding):
+    return [_decode_nested(value, encoding) if isinstance(value, list) else
+            value.decode(encoding) for value in values]
+
+
+def _text_length(raw, charset):
+    name = native_name(charset)
+    encoding = (codec_name(name) if name in PRIVATE_CHARSETS
+                else TEXT_CHARSETS[charset][0])
+    return len(raw.decode(encoding))
+
+
 def _read_text(cursor, array_id, bounds, dimensions, characters, charset):
-    encoding, width = TEXT_CHARSETS[charset]
-    stored = fbapi.ISC_ARRAY_DESC.from_buffer_copy(bounds)
+    _, width = TEXT_CHARSETS[charset]
+    stored = deepcopy(bounds)
     stored.array_desc_length = characters * width
     originals = _read(cursor, array_id, stored, dimensions)
+    if charset == 0:
+        return _decode_nested(originals, cursor._encoding)
     count = 1
     for dimension in dimensions:
         count *= dimension
     capacity = bounds.array_desc_length
     data = create_string_buffer(count * capacity)
     received = cursor._connection._att.get_slice(
-        cursor._transaction._tra, array_id, text_slice(bounds, 127), b'', data)
+        cursor._transaction._tra, array_id,
+        text_slice(bounds, transport_charset(cursor)), b'', data)
     if received != len(data):
         raise RelationalClientError('Incomplete variable text array slice')
     raw = data.raw
@@ -144,7 +177,7 @@ def _read_text(cursor, array_id, bounds, dimensions, characters, charset):
             if depth < len(dimensions) - 1:
                 result.append(decode(item, depth + 1))
                 continue
-            length = len(item.decode(encoding))
+            length = _text_length(item, charset)
             value = raw[position:position+capacity].decode(cursor._encoding)
             position += capacity
             if len(value) < length or value[length:].strip(' '):
@@ -206,7 +239,7 @@ def write(cursor, array_id, bounds, values, *, charset=1):
     if len(values) != count:
         raise RelationalClientError('Variable array element count mismatch')
     for coordinates, value in zip(product(*ranges), values):
-        leaf = fbapi.ISC_ARRAY_DESC.from_buffer_copy(bounds)
+        leaf = deepcopy(bounds)
         for index, coordinate in enumerate(coordinates):
             leaf.array_desc_bounds[index].array_bound_lower = coordinate
             leaf.array_desc_bounds[index].array_bound_upper = coordinate

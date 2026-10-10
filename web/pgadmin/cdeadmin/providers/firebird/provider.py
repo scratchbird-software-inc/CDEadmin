@@ -25,7 +25,7 @@ from ..relational_admin import (
     RelationalAdminDialect,
 )
 from . import columns, mappings, character_metadata, external_functions
-from . import packages
+from . import packages, configuration
 from . import (
     blob_filters, object_privileges, shadows, database_storage,
     shadow_activation, limbo, views,
@@ -74,7 +74,7 @@ PROFILE = PilotProfile(
      'constraint', 'domain', 'sequence', 'routine', 'trigger', 'procedure',
      'function', 'package', 'exception', 'user', 'role', 'privilege',
      'character-set', 'collation', 'external-function', 'blob-filter',
-     'plugin', 'shadow', 'storage-file',
+     'configuration', 'shadow', 'storage-file',
      'publication', 'authentication-mapping', 'global-authentication-mapping',
      'service-operation', 'metric'),
     ('isql', 'gbak', 'gfix', 'gstat', 'nbackup', 'user-administration'),
@@ -117,6 +117,9 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
     database_create_mode='firebird-driver',
     supports_cascade=False,
     database_extension='.fdb',
+    concept_resource_kinds={
+        'extensions_and_plugins': ('configuration',),
+    },
     not_applicable_concepts=frozenset({
         'schemas', 'materialized_views', 'types', 'partitions',
         'tablespaces_and_filespaces', 'jobs_and_events',
@@ -187,7 +190,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
         'external-function': (external_functions.OPERATIONS |
                               object_privileges.OPERATIONS),
         'blob-filter': blob_filters.OPERATIONS,
-        'plugin': frozenset({'inspect'}),
+        'configuration': frozenset({'inspect'}),
         'publication': frozenset({'inspect', 'alter'}),
         'service-operation': frozenset({'inspect'}),
     },
@@ -223,6 +226,14 @@ class FirebirdProvider(ActualEnginePilotProvider):
             with self.client._connecting():
                 return super().open_session(request)
         return super().open_session(request)
+
+    def preview_script(self, request):
+        self._require('execute')
+        request = _mapping(request)
+        if request.get('session_id') not in self._sessions:
+            raise ValueError('Provider session is unavailable')
+        from .scripts import preview
+        return preview(request.get('source'))
 
     def query_stream(self, request):
         self._require('execute')
@@ -361,9 +372,8 @@ def _wire_configuration(route):
         return 'Providers=Engine13'
     _validate_network_timing(route)
     options = []
-    if route.get('wire_config') is not None and not isinstance(
-            route['wire_config'], str):
-        raise RelationalClientError('Firebird wire configuration is invalid')
+    from .config_text import validate_config_selection
+    validate_config_selection(route)
     if route.get('wire_crypt') is not None:
         if (not isinstance(route['wire_crypt'], str) or
                 route['wire_crypt'] not in {
@@ -394,17 +404,6 @@ def _wire_configuration(route):
         options.append('DummyPacketInterval=' +
                        str(route['dummy_packet_interval']))
     if route.get('wire_config'):
-        # Do not let a second definition silently override the visual policy
-        # or plugin field. Raw-only profiles retain native configuration use.
-        for key, field in (('WireCrypt', 'wire_crypt'),
-                           ('WireCryptPlugin', 'wire_crypt_plugins'),
-                           ('WireCompression', 'wire_compression'),
-                           ('DummyPacketInterval', 'dummy_packet_interval')):
-            if route.get(field) is not None and re.search(
-                    r'(?mi)^\s*' + key + r'\s*=', route['wire_config']):
-                raise RelationalClientError(
-                    'Firebird wire configuration duplicates the explicit ' +
-                    key + ' field; use one configuration source')
         options.append(route['wire_config'])
     return '\n'.join(options) or None
 
@@ -1211,6 +1210,8 @@ def _version(row):
 
 
 def _initialize_connection(connection, route, module):
+    from .attachment_metadata import install
+    install(connection)
     _client_library_identity(module)
     isolation_name = route.get('transaction_isolation', 'SNAPSHOT')
     access_name = route.get('transaction_access', 'WRITE')
@@ -1243,6 +1244,9 @@ def _initialize_connection(connection, route, module):
     connection.default_tpb = value
     connection.main_transaction.default_tpb = value
     initialize_timeouts(connection, route, module)
+    from .connection_opening import notify_attached
+    if getattr(connection, '_cdeadmin_attached_pending', False) is True:
+        notify_attached(module.core, connection)
 
 
 def _materialize_catalog_value(value):
@@ -1769,9 +1773,6 @@ def _resources(connection, request):
             ('user', 'SELECT TRIM(TRAILING FROM SEC$USER_NAME), '
              'TRIM(TRAILING FROM SEC$PLUGIN) '
              'FROM SEC$USERS ORDER BY 1'),
-            ('plugin', 'SELECT TRIM(TRAILING FROM RDB$CONFIG_NAME), '
-             'RDB$CONFIG_VALUE FROM RDB$CONFIG WHERE '
-             "UPPER(RDB$CONFIG_NAME) LIKE '%PLUGIN%' ORDER BY 1"),
             ('publication', 'SELECT TRIM(TRAILING FROM RDB$PUBLICATION_NAME), '
              'RDB$ACTIVE_FLAG FROM RDB$PUBLICATIONS ORDER BY 1'),
         )
@@ -1823,7 +1824,6 @@ def _resources(connection, request):
                 'system_flag', 'owner', 'description', 'character_set',
             ),
             'user': ('plugin',),
-            'plugin': ('value',),
             'publication': ('active',),
         }
 
@@ -1832,7 +1832,7 @@ def _resources(connection, request):
 
         for kind, source in simple_queries:
             for row in catalog_rows(source, kind + ' objects',
-                                    required=kind not in {'user', 'plugin'}):
+                                    required=kind != 'user'):
                 native = {
                     field: detail_value(field, detail)
                     for field, detail in zip(
@@ -1893,6 +1893,21 @@ def _resources(connection, request):
                 package = native.get('package') if kind in {
                     'procedure', 'function', 'external-function'} else None
                 add(kind, [package] if package else [], row[0], native)
+
+        settings = catalog_rows(configuration.SQL, 'effective configuration',
+                                required=False)
+        settings_available = catalog_reader.observations[-1]['available']
+        database_native['configuration_catalog'] = {
+            'available': settings_available,
+            'visible_row_count': len(settings) if settings_available else None,
+            'visibility': 'current attachment native privileges',
+            'empty_result_note': (
+                'No visible rows does not establish that configuration '
+                'is absent; native privileges may limit visibility.'),
+        }
+        for setting in settings:
+            add('configuration', [], setting[0],
+                configuration.metadata(setting))
 
         def routine_named(kind, name, package):
             name = str(name or '').rstrip(' ')
@@ -3458,7 +3473,8 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
             if module is not None else None)
     if module is not None and attachment_mode != 'embedded':
         _configure_client_library(module)
-    return FirebirdQueryClient(RelationalClientConfig(
+    from .connection_opening import connect as connect_database
+    client = FirebirdQueryClient(RelationalClientConfig(
         profile=profile,
         module_name='firebird.driver',
         version_query=(
@@ -3515,7 +3531,11 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         (lambda **kwargs: connect_service(module, core, **kwargs))
         if module is not None else None), service_attached=(
         (lambda connection: notify_attached(core, connection))
-        if core is not None else None))
+        if core is not None else None), database_connector=(
+        (lambda **kwargs: connect_database(
+            module, core, failed_owner=client._retain_failed_attachment,
+            **kwargs)) if core is not None else None))
+    return client
 
 
 def create_provider(context, permissions, client=None):

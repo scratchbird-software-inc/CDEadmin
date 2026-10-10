@@ -54,3 +54,23 @@ def test_array_identity_without_native_version_is_rejected():
                             {'ID': 1, 'A': [1, 2]}, 0, array_columns=('A',))
     with pytest.raises(RelationalClientError, match='version is unavailable'):
         ADMINISTRATION._identity_predicate(identity)
+
+
+def test_scalar_representations_use_guard_instead_of_sql_equality():
+    identity = _RowIdentity((), ('T',), ('ID',), (1,),
+                            {'ID': 1, 'A': [1], 'D': float('nan'), 'V': 9}, 0,
+                            array_columns=('A',),
+                            representation_columns=('D',),
+                            native_record_version=123)
+    assert identity.guarded_columns == ('A', 'D')
+    assert ADMINISTRATION._identity_predicate(identity) == (
+        '"ID" = ? AND "V" = ? AND RDB$RECORD_VERSION = ?', (1, 9, 123))
+
+
+def test_zoned_snapshot_includes_zone_even_when_utc_is_unchanged():
+    from pgadmin.cdeadmin.providers.firebird.zoned_values import parse
+    original = {'encoding': 'firebird-timestamp-tz',
+                'utc': '2025-11-02 05:30:00.000100',
+                'time_zone': 'America/New_York'}
+    assert snapshot(parse(original)) != snapshot(parse({
+        **original, 'time_zone': 'UTC'}))

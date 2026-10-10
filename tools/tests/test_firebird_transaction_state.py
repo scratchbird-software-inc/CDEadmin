@@ -39,7 +39,7 @@ def connection(active=True, closed=False):
     transaction.is_active.return_value = active
     transaction.is_closed.return_value = closed
     transaction.info = info
-    return SimpleNamespace(main_transaction=transaction)
+    return SimpleNamespace(main_transaction=transaction, ping=Mock())
 
 
 def test_active_transaction_information_is_native_and_enum_is_serializable():
@@ -193,3 +193,18 @@ def test_advanced_flags_reach_native_tpb_builder(flags):
         isolation=2, access_mode=9, lock_timeout=-1, **options)
     assert value.default_tpb == b'advanced-native-tpb'
     assert value.main_transaction.default_tpb == b'advanced-native-tpb'
+
+
+@pytest.mark.parametrize('active', [False, True])
+def test_dead_attachment_is_unknown_even_with_cached_driver_state(active):
+    handle = connection(active=active)
+    error = RuntimeError('secret network details')
+    error.gds_codes = (335544726,)
+    handle.ping.side_effect = error
+    result = observe_transaction(handle)
+    assert result['state'] == 'unknown'
+    assert result['attachment_live'] is False
+    assert result['native_status_codes'] == [335544726]
+    assert 'in_transaction' not in result
+    assert 'secret' not in str(result)
+    assert handle.main_transaction.method_calls == []

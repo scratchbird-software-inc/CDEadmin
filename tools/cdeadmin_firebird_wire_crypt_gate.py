@@ -43,7 +43,8 @@ def observe(handle, encrypted, plugin):
 
 
 def check(route, password, policy, plugins, admitted, encrypted, plugin,
-          *, creation=True, observation=observe):
+          *, creation=True, observation=observe,
+          creation_root='/var/lib/firebird/data'):
     import firebird.driver as native
     import firebird.driver.core as core
     values = {**route, 'wire_crypt': policy, 'wire_crypt_plugins': plugins,
@@ -75,7 +76,8 @@ def check(route, password, policy, plugins, admitted, encrypted, plugin,
             assert not client._connections
         if creation:
             target = database_dsn(
-                '/var/lib/firebird/data/wire-' + uuid.uuid4().hex + '.fdb',
+                str(Path(creation_root) /
+                    ('wire-' + uuid.uuid4().hex + '.fdb')),
                 route['host'], route['port'])
             handle = None
             try:

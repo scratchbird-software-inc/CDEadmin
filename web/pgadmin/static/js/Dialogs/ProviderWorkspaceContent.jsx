@@ -26,7 +26,10 @@ import ContextMenu from '../components/ContextMenu';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import FirebirdSessionTraps from './FirebirdSessionTraps';
+import FirebirdScript from './FirebirdScript';
+import FirebirdQueryPlan from './FirebirdQueryPlan';
 import FirebirdResultStream from './FirebirdResultStream';
+import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
 import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
@@ -1893,7 +1896,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
     ((target?.resource_kind === 'table' &&
       (page?.operation_authority !== 'firebird-native-preparation' ||
        page.row_operations?.includes(operationId))) ||
-      (target?.resource_kind === 'view' && page?.editable &&
+      (target?.resource_kind === 'view' &&
+        (page?.editable || (operationId === 'insert' && page?.insert_identity_token)) &&
         page?.row_operations?.includes(operationId))) &&
     operations.some((item) => item.operation_id === operationId &&
       item.execution_available);
@@ -2252,7 +2256,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
         contract={page.grid || {}}
         gridId={page.grid?.grid_id || `provider/admin/${targetId}`}
         readOnly={!page.editable}
-        rowKeyGetter={(row) => row.__identityToken}
+        rowKeyGetter={(row) => row.__identityToken ?? `display-row-${row.__rowIndex}`}
         ariaLabel={gettext('Provider table or view rows')} />
       {transaction && <ProviderTransactionObservation transaction={transaction}
         label={gettext('Provider grid transaction state')} />}
@@ -2470,7 +2474,16 @@ function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   const finalColumns = providerGridColumns(
     suppliedColumns.length ? suppliedColumns : contractColumns
   );
-  return <Box sx={{height: 'min(52vh, 34rem)', minHeight: 180, mt: 1}}>
+  return <Box sx={{height: 'min(52vh, 34rem)', minHeight: 180, mt: 1}}
+    onMouseDownCapture={(event) => {
+      const button = event.target.closest?.('button');
+      if (event.button !== 0 || !button || button.disabled ||
+          !event.currentTarget.contains(button)) return;
+      // Browser focus can scroll an action out from under the pointer between
+      // mousedown and mouseup. Preserve focus without moving the click target.
+      event.preventDefault();
+      button.focus({preventScroll: true});
+    }}>
     <DataGrid columns={finalColumns} rows={gridRows}
       gridId={gridId || contract.grid_id || 'provider/result'}
       persistColumnState selectionMode={contract.selection_mode || 'row'}
@@ -6721,6 +6734,8 @@ export default function ProviderWorkspaceContent({
   const [maximumRows, setMaximumRows] = useState('1000');
   const [clientSqlDialect, setClientSqlDialect] = useState(3);
   const [fetchObservation, setFetchObservation] = useState(null);
+  const [scriptResult, setScriptResult] = useState(null);
+  const [firebirdPlan, setFirebirdPlan] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
   const [rendered, setRendered] = useState(null);
@@ -6771,6 +6786,8 @@ export default function ProviderWorkspaceContent({
     setBusy(true);
     setError(null);
     setLoadedWorkspace(null);
+    setScriptResult(null);
+    setFirebirdPlan(null);
     setResourcePage(null);
     setLoadingMore(false);
     setSelectedResource(null);
@@ -7067,6 +7084,8 @@ export default function ProviderWorkspaceContent({
       }
       const native = response.occurrence?.result?.extensions?.firebird?.payload;
       setFetchObservation(native?.fetch_observation || null);
+      setScriptResult(native?.script || null);
+      setFirebirdPlan(native?.query_plan || null);
       if (native?.error) {
         const codes = (native.error.native_status_codes || []).join(', ');
         setError(gettext('Firebird query did not complete.') +
@@ -7100,23 +7119,25 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll]);
 
-  const execute = async (executionSource=source, presentation='native', sessionCommand=false) => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false) => {
     if (querySessionBlocked) return;
     if (sessionCommand && (languageProfile !== 'firebird-sql' || !sessionId || busy || occurrenceId)) return;
     setBusy(true);
     setError(null);
     setRendered(null);
     setFetchObservation(null);
+    setScriptResult(null);
+    setFirebirdPlan(null);
     setResultPresentation(presentation);
     try {
       let rowPolicy = {};
-      if (languageProfile === 'firebird-sql' && !sessionCommand) {
+      if (languageProfile === 'firebird-sql' && !sessionCommand && !planMode) {
         if (!/^\d+$/.test(maximumRows) || Number(maximumRows) > 1000000) {
           throw new Error(gettext('Maximum fetched rows must be an integer from 0 to 1000000.'));
         }
         rowPolicy = {max_rows: Number(maximumRows) || null};
       }
-      const parameters = sessionCommand ? [] : JSON.parse(
+      const parameters = sessionCommand || planMode ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
       const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
       if(expectsArray ? !Array.isArray(parameters) :
@@ -7125,12 +7146,15 @@ export default function ProviderWorkspaceContent({
           gettext('This provider requires an ordered JSON parameter array.') :
           gettext('This provider requires a JSON parameter object.'));
       }
+      if (scriptMode && parameters.length) throw new Error(gettext('Scripts do not accept parameter bindings. Clear the parameter array first.'));
       const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
       const occurrence = await post({
         action: 'execute', session_id: activeSession, source: executionSource,
         parameters,
+        ...(scriptMode ? {script_mode: true} : {}),
+        ...(planMode ? {plan_mode: true} : {}),
         ...rowPolicy,
         ...(languageProfile === 'firebird-sql' ? {
           client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
@@ -7230,6 +7254,8 @@ export default function ProviderWorkspaceContent({
       setOccurrenceId(null);
       setRendered(null);
       setFetchObservation(null);
+      setScriptResult(null);
+      setFirebirdPlan(null);
       setTransaction(null);
     } catch (requestError) {
       // The existing language and session remain owned until native release.
@@ -7329,6 +7355,8 @@ export default function ProviderWorkspaceContent({
         <Tab value="data" label={gettext('Edit Data')} />
         <Tab value="administration" label={gettext('Administration')} />
         <Tab value="operations" label={gettext('Operations & Health')} />
+        {['firebird-native', 'firebird-embedded'].includes(workspace?.endpoint?.profile_id) &&
+          <Tab value="firebird-recovery" label={gettext('Prepared Transaction Recovery')} />}
         <Tab value="semantic" label={gettext('Cubes & Semantic Models')} />
         <Tab value="movement" label={gettext('Import & Bulk')} />
         {(initialTab === 'connections' ||
@@ -7348,12 +7376,17 @@ export default function ProviderWorkspaceContent({
           studio: gettext('Data Studio'),
           data: gettext('Edit Data'),
           administration: gettext('Administration'),
+          'firebird-recovery': gettext('Prepared Transaction Recovery'),
           operations: gettext('Operations & Health'),
           semantic: gettext('Cubes & Semantic Models'),
           movement: gettext('Import & Bulk'),
           connections: gettext('Databases & Connections'),
           streams: gettext('Change streams'),
         }[tab]}</Box>
+        {tab === 'administration' &&
+          ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+          <Button onClick={() => setTab('firebird-recovery')}>
+            {gettext('Prepared Transaction Recovery')}</Button>}
         {tab !== initialTab && <Button size="small" sx={{ml: 'auto'}}
           onClick={() => setTab(initialTab)}>{gettext('Back')}</Button>}
       </Box>}
@@ -7380,6 +7413,9 @@ export default function ProviderWorkspaceContent({
           databaseTargets={workspace.database_targets}
           resources={resourcePage?.items || []}
           targetId={initialContext.resource_id} />}
+      {workspace && tab === 'firebird-recovery' &&
+        ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <FirebirdRecoveryGroup post={post} />}
       {workspace && tab === 'studio' && <Box role="region"
         aria-label={gettext('Provider query workspace')}
         sx={{p: 2, flex: 1, display: 'flex', flexDirection: 'column',
@@ -7428,10 +7464,10 @@ export default function ProviderWorkspaceContent({
           disabled={busy || !!occurrenceId}
           inputProps={{min: 0, max: 1000000, step: 1}}
           onChange={(event) => setMaximumRows(event.target.value)}
-          helperText={gettext('0 fetches all rows. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
+          helperText={gettext('0 removes the row-count limit; ordinary results still have a memory budget. Use Run streaming for large results. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
         {languageProfile === 'firebird-sql' && <FirebirdResultStream
           key={queryDatabaseTargetId}
-          post={post} ensureSession={ensureSession}
+          post={post} ensureSession={ensureSession} downloadUrl={endpointUrl}
           databaseTargetId={queryDatabaseTargetId} source={source}
           parameters={parameterSource} dialect={clientSqlDialect}
           disabled={busy || querySessionBlocked || !!occurrenceId} />}
@@ -7445,6 +7481,10 @@ export default function ProviderWorkspaceContent({
         <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
           <Button variant="contained" disabled={busy || querySessionBlocked || !!occurrenceId || !source.trim()}
             onClick={() => execute()}>{gettext('Run')}</Button>
+          {languageProfile === 'firebird-sql' && <Button
+            disabled={busy || querySessionBlocked || !!occurrenceId || !source.trim()}
+            onClick={() => execute(source, 'native', false, false, true)}>
+            {gettext('Explain / query plan')}</Button>}
           {activePlanTemplates.map((template, index) =>
             <Button key={template.label} disabled={busy || querySessionBlocked || !!occurrenceId || !source.trim()}
               onClick={() => execute(
@@ -7464,6 +7504,18 @@ export default function ProviderWorkspaceContent({
             {gettext('Close query session')}</Button>
           {busy && <CircularProgress size={24} />}
         </Box>
+        {languageProfile === 'firebird-sql' && <FirebirdScript
+          key={'script:' + queryDatabaseTargetId}
+          source={source} result={scriptResult} onSourceChange={setSource}
+          disabled={busy || querySessionBlocked || !!occurrenceId}
+          onPreview={async (scriptSource) => {
+            setBusy(true);
+            try { return await post({action: 'script_preview',
+              session_id: await ensureSession(), source: scriptSource,
+              database_target_id: queryDatabaseTargetId}); }
+            finally { setBusy(false); }
+          }}
+          onRun={(scriptSource) => execute(scriptSource, 'native', false, true)} />}
         {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
           key={sessionId || 'no-session'} sessionId={sessionId}
           disabled={busy || querySessionBlocked || !!occurrenceId}
@@ -7473,6 +7525,7 @@ export default function ProviderWorkspaceContent({
         </Alert>}
         {transaction && <ProviderTransactionObservation transaction={transaction}
           label={gettext('Provider query transaction state')} />}
+        {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
         {rendered && <ResultControls rendered={rendered} history={resultHistory}
           post={post} onRendered={acceptRendered} setError={setError}
           setBusy={setBusy}

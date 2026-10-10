@@ -13,10 +13,15 @@ import math
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
+from .zoned_values import ZonedValue
+
+
 JS_SAFE_INTEGER = (1 << 53) - 1
 
 
 def normalize_value(value, blob_type=()):
+    if isinstance(value, ZonedValue):
+        return value.envelope()
     if isinstance(value, blob_type):
         reader = value
         try:
@@ -31,6 +36,8 @@ def normalize_value(value, blob_type=()):
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, float):
+        if value == 0 and math.copysign(1, value) < 0:
+            return '-0.0'
         return value if math.isfinite(value) else str(value)
     if isinstance(value, datetime):
         return value.isoformat(sep=' ')

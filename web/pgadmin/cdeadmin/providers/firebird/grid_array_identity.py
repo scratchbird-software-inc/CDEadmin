@@ -1,4 +1,4 @@
-"""Array original-value checks supplement native record-version predicates."""
+"""Exact stored-value checks supplement native record-version predicates."""
 from datetime import datetime, time
 import struct
 
@@ -20,7 +20,7 @@ def verify(cursor, guard):
     """Run inside the caller's task savepoint and exclusive session ownership.
 
     Native version predicates on the subsequent DML protect against another
-    attachment changing the row after this check. Comparing array contents also
+    attachment changing the row after this check. The exact comparison also
     catches changes made earlier in this transaction, whose native record
     version is otherwise unchanged. No write probe or base-view bypass occurs.
     """
@@ -29,4 +29,4 @@ def verify(cursor, guard):
     if len(rows) != 1 or snapshot(rows[0]) != guard['snapshot']:
         raise RelationalClientError(
             'row identity no longer identifies exactly one '
-            'unchanged array row')
+            'unchanged ' + guard.get('value_kind', 'array') + ' row')

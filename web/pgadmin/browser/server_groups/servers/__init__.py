@@ -2604,6 +2604,20 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'firebird_file_download':
+                    from pgadmin.cdeadmin.workspace.firebird_download import (
+                        response as file_response,
+                    )
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        data = json.loads(body)
+                        if not isinstance(data, dict):
+                            raise ValueError('Invalid request')
+                        return file_response(service, server, data)
+                    except (ValueError, TypeError, KeyError):
+                        return bad_request('Invalid file delivery request')
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
@@ -2686,7 +2700,20 @@ class ServerNode(PGChildNodeView):
                         data.get('database_target_id'),
                         max_rows=data.get('max_rows'),
                         client_sql_dialect=data.get('client_sql_dialect'),
+                        script_mode=data.get('script_mode', False),
+                        plan_mode=data.get('plan_mode', False),
                     )
+                elif action == 'script_preview':
+                    from pgadmin.cdeadmin.providers.firebird.scripts import (
+                        ScriptPreflightError,
+                    )
+                    try:
+                        payload = service.preview_script(
+                            server, data.get('session_id'), data.get('source'),
+                            data.get('database_target_id'),
+                        )
+                    except ScriptPreflightError as exc:
+                        return bad_request(errormsg=str(exc))
                 elif action == 'query_stream':
                     payload = service.query_stream(
                         server, data.get('session_id'),
@@ -2757,6 +2784,44 @@ class ServerNode(PGChildNodeView):
                     payload = service.plan_visual_admin(
                         server, data.get('request')
                     )
+                elif action == 'firebird_recovery_targets':
+                    if profile['profile_id'] not in {
+                            'firebird-native', 'firebird-embedded'}:
+                        raise ProviderWorkspaceError(
+                            'Firebird recovery workspace required')
+                    choices = []
+                    for candidate in Server.query.filter_by(
+                            user_id=current_user.id).all():
+                        endpoint = getattr(candidate, 'endpoint_profile', None)
+                        if getattr(endpoint, 'profile_id', None) not in {
+                                'firebird-native', 'firebird-embedded'}:
+                            continue
+                        catalog = service.endpoint_service.database_catalog(
+                            candidate)
+                        choices.append({
+                            'server_id': candidate.id, 'name': candidate.name,
+                            'targets': [{key: item[key] for key in (
+                                'target_id', 'display_name', 'database')}
+                                for item in catalog.get('targets', [])],
+                        })
+                    payload = {'endpoints': choices}
+                elif action in {
+                        'firebird_recovery_preview', 'firebird_recovery_apply',
+                        'firebird_recovery_status'}:
+                    from pgadmin.cdeadmin.providers.firebird import (
+                        recovery_groups,
+                    )
+
+                    def owned_participant(identifier):
+                        return Server.query.filter_by(
+                            id=identifier, user_id=current_user.id).first()
+
+                    try:
+                        payload = service.firebird_recovery_action(
+                            server, action, data.get('request'),
+                            owned_participant)
+                    except recovery_groups.RecoveryGroupError as exc:
+                        return bad_request(errormsg=str(exc))
                 elif action == 'visual_admin_apply':
                     payload = service.apply_visual_admin(
                         server, data.get('request')

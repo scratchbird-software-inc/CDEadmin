@@ -44,10 +44,16 @@ def bind_value(value):
     """Decode explicit wire envelopes; never guess ordinary text encodings."""
     if not isinstance(value, Mapping):
         return value
+    from .zoned_values import KINDS, parse
+    if value.get('encoding') in KINDS.values():
+        return parse(value)
     if value.get('encoding') in {'float32', 'float64'}:
         if set(value) != {'encoding', 'data'} or not isinstance(
                 value.get('data'), str):
             raise RelationalClientError('Firebird float envelope is invalid')
+        if re.fullmatch(r'[+-]?(?:nan|inf(?:inity)?)', value['data'],
+                        re.ASCII | re.IGNORECASE):
+            return float(value['data'])
         if not re.fullmatch(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)'
                             r'(?:[eE][+-]?\d+)?', value['data'], re.ASCII):
             raise RelationalClientError(
@@ -130,12 +136,14 @@ def input_kinds(cursor):
                  'FLOAT': 'float32', 'DOUBLE PRECISION': 'float64',
                  'DECFLOAT(16)': 'decfloat', 'DECFLOAT(34)': 'decfloat',
                  'DATE': 'text', 'TIME': 'text', 'TIMESTAMP': 'text',
+                 'TIME WITH TIME ZONE': 'firebird-time-tz',
+                 'TIMESTAMP WITH TIME ZONE': 'firebird-timestamp-tz',
                  'BOOLEAN': 'boolean'}.get(native))
         if native == 'BLOB' and metadata['native_subtype'] == 1:
             kind = 'text'
         elif (native in {'CHAR CHARACTER SET OCTETS',
                          'VARCHAR CHARACTER SET OCTETS'} or
-              native == 'BLOB' and metadata['native_subtype'] == 0):
+              native == 'BLOB' and metadata['native_subtype'] <= 0):
             kind = 'binary'
         kinds.append(kind)
     return tuple(kinds)

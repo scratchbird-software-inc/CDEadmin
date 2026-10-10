@@ -81,9 +81,11 @@ def describe_columns(cursor):
             })
             # Do not round exact numerics or strip time-zone/microsecond data
             # through generic JavaScript Number/Date cell formatting.
+            is_zoned = code in {'TIME_TZ', 'TIMESTAMP_TZ',
+                                'TIME_TZ_EX', 'TIMESTAMP_TZ_EX'}
             column['cell_type'] = (
                 'boolean' if code == 'BOOLEAN' else
-                'json' if code == 'ARRAY' or binary_text or (
+                'json' if code == 'ARRAY' or is_zoned or binary_text or (
                     code == 'BLOB' and meta.subtype != 1) else 'text')
         columns.append(column)
     return columns

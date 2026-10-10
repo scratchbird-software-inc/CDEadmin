@@ -59,3 +59,23 @@ def test_no_array_columns_use_unmodified_driver_result():
     cursor = fixture()
     cursor._stmt._out_desc = []
     assert unpack(cursor, lambda: ('scalar', 123)) == ('scalar', 123)
+
+
+@pytest.mark.parametrize('charset', [5, 6, 44, 56, 57, 67, 68])
+def test_fixed_multibyte_scalar_removes_only_transport_padding(charset):
+    description = SimpleNamespace(datatype=SQLDataType.TEXT, charset=charset,
+                                  length=16, null_offset=0)
+    cursor = SimpleNamespace(_stmt=SimpleNamespace(
+        _out_buffer=create_string_buffer(b'\0'), _out_desc=[description]))
+    assert unpack(cursor, lambda: ('a\0漢' + ' ' * 12,)) == ('a\0漢     ',)
+    assert unpack(cursor, lambda: (None,)) == (None,)
+
+
+def test_multibyte_scalar_never_silently_truncates_data():
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    description = SimpleNamespace(datatype=SQLDataType.TEXT, charset=5,
+                                  length=16, null_offset=0)
+    cursor = SimpleNamespace(_stmt=SimpleNamespace(
+        _out_buffer=create_string_buffer(b'\0'), _out_desc=[description]))
+    with pytest.raises(RelationalClientError, match='padding invalid'):
+        unpack(cursor, lambda: ('123456789',))
