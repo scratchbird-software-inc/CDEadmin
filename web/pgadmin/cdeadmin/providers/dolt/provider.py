@@ -9,6 +9,7 @@ from pgadmin.cdeadmin.sdk import (
     PilotProfile,
     RelationalClientError,
 )
+from .driver import DoltNativeClient
 from ..distributed_sql import (
     create_sql_client,
     mysql_catalog,
@@ -34,6 +35,8 @@ PROFILE = PilotProfile(
         'user', 'role', 'privilege',
     ),
     ('dolt-sql', 'dolt-log', 'dolt-diff', 'dolt-backup'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native MySQL-wire bindings and exact encoding/data envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'dolt-sql', 'quote_open': '`',
@@ -1067,6 +1070,9 @@ def _extras(cursor, _request, generation):
 
 
 class DoltProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -1085,5 +1091,6 @@ def create_provider(context, permissions, client=None):
                 connection, request, 'Dolt', _extras
             ),
             administration=ADMINISTRATION,
+            client_class=DoltNativeClient,
         ),
     )

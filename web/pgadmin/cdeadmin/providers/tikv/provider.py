@@ -1,9 +1,6 @@
 """TiKV 8.5.6 native distributed key/value provider."""
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
-from ..native_distributed import (
-    NativeDistributedClient,
-)
 from .client import ADMIN_OPERATIONS
 
 PROFILE = PilotProfile(
@@ -27,12 +24,15 @@ OPERATIONS = ADMIN_OPERATIONS
 
 
 class TiKVProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
 
 def create_provider(context, permissions, client=None):
     if client is None:
-        from .client import TiKVBackend
-        client = NativeDistributedClient(PROFILE, TiKVBackend(), OPERATIONS)
+        from .driver import TiKVDriver, TiKVDriverBackend
+        client = TiKVDriver(PROFILE, TiKVDriverBackend(), OPERATIONS)
     return TiKVProvider(context, permissions, client)

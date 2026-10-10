@@ -9,11 +9,11 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from ..catalog_presentation import annotate_relation_ownership
+from .driver import VitessNativeClient
 
 from pgadmin.cdeadmin.sdk import (
     ActualEnginePilotProvider,
     PilotProfile,
-    RelationalDBAPIClient,
     RelationalClientError,
 )
 from ..distributed_sql import (
@@ -48,6 +48,8 @@ PROFILE = PilotProfile(
         'online-ddl', 'backup',
     ),
     ('mysql-client', 'vtctldclient', 'vtadmin', 'backup-restore'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native MySQL-wire bindings and exact encoding/data envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'vitess-sql', 'quote_open': '`',
@@ -597,7 +599,7 @@ class VitessControlAdministration(VitessAdministration):
 ADMINISTRATION = VitessControlAdministration(_VITESS_DIALECT)
 
 
-class VitessDBAPIClient(RelationalDBAPIClient):
+class VitessDBAPIClient(VitessNativeClient):
     """Verify both the VTGate MySQL wire and its native build identity."""
 
     MAX_IDENTITY_BYTES = 1024 * 1024
@@ -886,6 +888,9 @@ def _catalog(connection, request):
 
 
 class VitessProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

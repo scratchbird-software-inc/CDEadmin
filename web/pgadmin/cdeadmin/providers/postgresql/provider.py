@@ -1135,6 +1135,10 @@ class PostgreSQLProvider:
         }
         return copy.deepcopy(state.operation)
 
+    def script_statement_outcome(self, occurrence):
+        from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
+        return retained_outcome(occurrence, 'postgresql')
+
     @_session_serialized
     def describe_result(self, request):
         payload = _mapping(request)

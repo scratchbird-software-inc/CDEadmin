@@ -67,10 +67,22 @@ def execute(provider, session_id, operation, sequence):
         'source': json.dumps(operation),
         'parameters': {},
     })
-    result = provider.describe_result({
-        'operation_id': token['operation_id'],
-    })
-    payload = result['extensions']['tikv']['payload']
+    entries, native = [], {}
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        result = provider.describe_result({
+            'operation_id': token['operation_id'],
+        })
+        page = result['extensions']['tikv']['payload']
+        if page.get('error'):
+            raise RuntimeError('TiKV native operation failed')
+        entries.extend(page.get('entries', []))
+        native.update(page.get('native', {}))
+        if result['complete']:
+            break
+    else:
+        raise RuntimeError('TiKV operation observation timeout')
+    payload = dict(entries=entries, native=native)
     native = payload['native']
     if native.get('provider_finality_only') is not True:
         raise RuntimeError('TiKV provider finality boundary was not retained')

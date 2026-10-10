@@ -208,7 +208,12 @@ class ProviderWorkspaceService:
         endpoint_display_name = getattr(
             server, 'name', root.get('display_name', 'Endpoint')
         )
+        from pgadmin.cdeadmin.visual_admin.navigation_design import navigation_design
+        native_navigation = navigation_design(
+            root.get('engine_id') or (visual_admin or {}).get('engine_id'),
+            context.profile_id)
         return {
+            'native_navigation': native_navigation,
             'endpoint': {
                 'endpoint_id': context.endpoint_id,
                 'display_name': endpoint_display_name,
@@ -1155,6 +1160,25 @@ class ProviderWorkspaceService:
             parameters=copy.deepcopy(parameters),
             output_policy=policy,
         )
+
+    def language_tool_action(self, server, action, data):
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=data.get('database_target_id'))
+        from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
+        try:
+            if action == 'source_validate':
+                return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
+            if action == 'native_script_prepare':
+                return self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source'))
+            if action == 'native_script_advance':
+                return self.studio_service.scripts.advance(context, data.get('plan_id'), data.get('revision'))
+            if action == 'native_script_stop':
+                return self.studio_service.scripts.stop(context, data.get('plan_id'))
+            if action == 'native_script_discard':
+                return self.studio_service.scripts.discard(context, data.get('plan_id'))
+        except LanguageToolError as exc:
+            raise ProviderWorkspaceError(str(exc)) from exc
+        raise ProviderWorkspaceError('Unknown language-tool action')
 
     def preview_script(self, server, session_id, source,
                        database_target_id=Ellipsis):

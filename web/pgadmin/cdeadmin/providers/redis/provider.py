@@ -12,6 +12,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .client import RedisClient
+from .driver import RedisDriver, RedisDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -38,6 +39,8 @@ PROFILE = PilotProfile(
     ),
     admin_tools=('redis-cli', 'redis-check-rdb', 'redis-check-aof'),
     required_permissions=('network', 'secret_read'),
+    parameter_shape='array',
+    parameter_hint='Native arguments, $binary or exact $integer envelopes',
     language_mime_type='application/vnd.redis.resp3',
     result_renderer_kind='key-value',
     result_renderer_id='cdeadmin.result.key-value.inspector',
@@ -52,6 +55,9 @@ PROFILE = PilotProfile(
 class RedisPilotProvider(ActualEnginePilotProvider):
     """Bind the Redis adapter to the common actual-engine facade."""
 
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -61,5 +67,7 @@ def create_provider(context, permissions, client=None):
     return RedisPilotProvider(
         context,
         permissions,
-        client or RedisClient(permissions.acquire_secret),
+        client or RedisDriver(
+            PROFILE, RedisDriverBackend(permissions.acquire_secret),
+            RedisClient.ADMIN_OPERATIONS),
     )

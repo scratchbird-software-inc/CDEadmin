@@ -1238,3 +1238,91 @@ ordered bounded pages, exact Arrow values, native interruption, separate
 decision/restart observations and cleanup ownership follow
 :doc:`duckdb_driver_development`. Native COPY/import/export and attachments
 retain DuckDB semantics; no unsupported server or savepoint features are added.
+
+CockroachDB retained native driver contract
+------------------------------------------
+
+CockroachDB owns its transaction retries and ambiguous outcomes. The provider
+uses psycopg transport mechanics with isolated retained sessions, savepoint-safe
+metadata, configuration-specific pools, native cancellation and exact result
+pages as specified in :doc:`cockroachdb_driver_development`. No automatic
+transaction replay or reconnect is admitted. PostgreSQL wire compatibility
+does not enable PostgreSQL-only administration features.
+
+YugabyteDB YSQL retained native driver contract
+----------------------------------------------
+
+YSQL admits shared retained PG-wire mechanics while preserving its own
+metadata, language, forms and distributed transaction authority. Its exact
+contract and portable qualification requirements are specified in
+:doc:`yugabytedb_ysql_driver_development`. YCQL remains a separate provider.
+
+YugabyteDB YCQL retained native driver contract
+----------------------------------------------
+
+YCQL uses native prepared binary bindings, asynchronous operation ownership,
+complete native paging, ordinal exact-value results and conservative uncertain
+outcomes as specified in :doc:`yugabytedb_ycql_driver_development`. Cancellation
+stops local delivery only; protocol v4 does not supply server query cancellation.
+Native YCQL table transaction and conditional mutation semantics remain native.
+
+TiDB retained native driver contract
+------------------------------------
+
+TiDB admits exact MySQL-wire values and retained operation mechanics without
+inheriting MySQL Shell administration. Its process-identity checked cancellation,
+conflict decisions, metadata isolation and pool behavior follow
+:doc:`tidb_driver_development`. TiCDC credentials remain leased separately;
+copying an administration request preserves its native session handle by
+reference instead of attempting to copy a live socket.
+
+Vitess retained driver
+----------------------
+
+See :doc:`vitess_driver_development` for retained VTGate execution ownership,
+exact MySQL-wire values, uncertain-outcome quarantine, transport-abort
+cancellation and physical lease discard. COM_RESET_CONNECTION alone is not
+evidence of complete VTGate session isolation. Routing and distributed
+transaction policy remain native Vitess decisions.
+
+Dolt retained driver
+--------------------
+
+See :doc:`dolt_driver_development` for native SQL versus version-control
+commit separation, exact streaming, branch-sensitive lease disposal and
+unknown-outcome handling. No version-control mutation is implicit.
+
+XTDB retained driver
+--------------------
+
+See :doc:`xtdb_driver_development` for bitemporal document values, native
+transaction policy, asynchronous retained execution and unknown outcomes.
+
+immudb retained driver
+----------------------
+
+See :doc:`immudb_driver_development` for native SQL/REST separation, exact BLOB
+binding, independent metadata, retained ownership and uncertain decisions.
+
+MongoDB, ClickHouse, InfluxDB and Neo4j retained drivers
+-----------------------------------------------------
+
+The default factories retain worker ownership and stream native results.
+MongoDB and Neo4j keep writes on the explicit native transaction session;
+ClickHouse and InfluxDB expose their native request semantics without SQL
+transaction controls. Exact value envelopes and engine-native forms remain
+provider-owned. See :doc:`mongodb_driver_development`,
+:doc:`clickhouse_driver_development`, :doc:`influxdb_driver_development` and
+:doc:`neo4j_driver_development` for formats, cancellation, cleanup and portable
+native qualification gates.
+
+Search and vector retained drivers
+----------------------------------
+
+Milvus uses owned gRPC sessions, exact vector values and native iterators.
+OpenSearch preserves Query DSL top-K semantics and provides explicit scroll
+scans, native REST and per-item bulk results. Its SQL plugin drains native
+cursors; PPL retains native result limits without inventing pagination.
+See :doc:`milvus_driver_development`, :doc:`opensearch_driver_development`
+and :doc:`opensearch_sql_ppl_driver_development` for lifecycle, cancellation,
+security and portable qualification contracts.

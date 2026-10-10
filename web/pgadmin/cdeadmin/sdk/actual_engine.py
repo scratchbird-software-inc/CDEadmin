@@ -19,6 +19,8 @@ operation.
 from __future__ import annotations
 
 import copy
+from functools import partial
+import json
 import inspect
 import uuid
 from dataclasses import dataclass
@@ -303,6 +305,7 @@ class PilotProfile:
 class _Session:
     handle: object
     route_id: str
+    language_profile: str | None = None
 
 
 @dataclass
@@ -809,12 +812,13 @@ class ActualEnginePilotProvider:
             SessionContribution,
         )
 
-        profiles = frozenset({self.profile.language_profile})
+        alternatives = getattr(self, 'language_alternatives', ())
+        profiles = frozenset({self.profile.language_profile, *(item[0] for item in alternatives)})
         prefix = f'{self.profile.engine_id}.data-studio'
         transaction_actions = frozenset(getattr(
             self.client, 'transaction_actions', ()
         ))
-        return {
+        contributions = {
             'languages': (
                 LanguageContribution(
                     self.profile.language_profile,
@@ -856,6 +860,35 @@ class ActualEnginePilotProvider:
                 ),
             ),
         }
+
+        if alternatives:
+            # Keep the legacy session contribution for persisted callers, but
+            # new editors list distinct languages and use distinct session ports.
+            contributions['languages'] = tuple(LanguageContribution(
+                name, title, mime, frozenset({self.profile.model_family}),
+                parameter_shape=self.profile.parameter_shape,
+                parameter_hint=self.profile.parameter_hint,
+            ) for name, title, mime in alternatives) + contributions['languages']
+            contributions['sessions'] = tuple(SessionContribution(
+                f'{prefix}.session.{name}', frozenset({name}),
+                partial(ActualEnginePilotProvider._studio_open_language_session, language=name),
+                ActualEnginePilotProvider._studio_describe_transaction,
+                transaction_actions,
+                ActualEnginePilotProvider._studio_control_transaction if transaction_actions else None,
+                ActualEnginePilotProvider._studio_close_session,
+            ) for name, _title, _mime in alternatives) + (
+                SessionContribution(
+                    f'{prefix}.session.legacy', frozenset({self.profile.language_profile}),
+                    ActualEnginePilotProvider._studio_open_session,
+                    ActualEnginePilotProvider._studio_describe_transaction,
+                    transaction_actions,
+                    ActualEnginePilotProvider._studio_control_transaction if transaction_actions else None,
+                    ActualEnginePilotProvider._studio_close_session),)
+        return contributions
+
+    @staticmethod
+    def _studio_open_language_session(binding, request, *, language):
+        return binding.instance.open_session(request, language_profile=language)
 
     @staticmethod
     def _describe_provider_result(binding, result):
@@ -943,10 +976,16 @@ class ActualEnginePilotProvider:
             ),
         }
 
-    def open_session(self, request):
+    def open_session(self, request, *, language_profile=None):
         for permission in self.profile.required_permissions:
             self._require(permission)
         payload = _mapping(request)
+        language = language_profile or self.profile.language_profile
+        admitted = getattr(self, 'language_routes', {})
+        if language != self.profile.language_profile:
+            if language not in admitted:
+                raise PilotProviderError('Language is not admitted by this provider')
+            payload['route'] = {**payload.get('route', {}), 'query_language': admitted[language]}
         handle = self.client.open_session(payload)
         try:
             self._runtime_identity(payload, handle)
@@ -960,7 +999,7 @@ class ActualEnginePilotProvider:
             raise
         session_id = str(uuid.uuid4())
         route_id = str(payload.get('route', {}).get('route_id', 'direct'))
-        self._sessions[session_id] = _Session(handle, route_id)
+        self._sessions[session_id] = _Session(handle, route_id, language)
         return {
             'identity': self._identity(),
             'session_id': session_id,
@@ -969,7 +1008,7 @@ class ActualEnginePilotProvider:
             'principal_reference': str(
                 payload.get('route', {}).get('principal_reference', 'endpoint')
             ),
-            'language_profile': self.profile.language_profile,
+            'language_profile': language,
             'transaction_model': self.profile.transaction_model,
             'provider_state': {'handle_retained_by_provider': True},
             'occurrence_id': self.context.session_namespace,
@@ -1058,6 +1097,10 @@ class ActualEnginePilotProvider:
             'common_finality_interpreted': False,
         }
 
+    def script_statement_outcome(self, occurrence):
+        from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
+        return retained_outcome(occurrence, self.profile.engine_id)
+
     def _execute_query_token(self, handle, payload):
         return self.client.execute(handle, payload)
 
@@ -1067,6 +1110,21 @@ class ActualEnginePilotProvider:
         session = self._sessions.get(payload.get('session_id'))
         if session is None:
             raise PilotProviderError('provider session is unavailable')
+        expected_language = session.language_profile or self.profile.language_profile
+        if payload.get('language_profile', expected_language) != expected_language:
+            raise PilotProviderError('Execution language does not match its retained session')
+        payload['language_profile'] = expected_language
+        admitted = getattr(self, 'language_routes', {})
+        if expected_language in admitted:
+            source = payload.get('source')
+            if isinstance(source, str) and source.lstrip().startswith('{'):
+                try:
+                    command = json.loads(source)
+                except ValueError:
+                    command = None
+                if isinstance(command, dict) and command.get('language') not in (
+                        None, expected_language, admitted[expected_language]):
+                    raise PilotProviderError('Command language differs from its session')
         token = self._execute_query_token(session.handle, payload)
         operation_id = str(uuid.uuid4())
         operation = {

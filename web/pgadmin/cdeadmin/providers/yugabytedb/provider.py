@@ -19,6 +19,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
+from .driver import YugabyteDBYSQLClient
 from ..relational_admin import RelationalAdministration
 from .control_plane import (
     OPERATIONS as CONTROL_OPERATIONS,
@@ -46,6 +47,8 @@ PROFILE = PilotProfile(
         'xcluster-replication',
     ),
     ('ysqlsh', 'yb-admin', 'backup-restore'),
+    parameter_shape='object-or-array',
+    parameter_hint='Named or positional bindings; exact type/value envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'ysql', 'quote_open': '"',
@@ -546,6 +549,9 @@ def _catalog(connection, request):
 
 
 class YugabyteDBProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -563,5 +569,7 @@ def create_provider(context, permissions, client=None):
             metadata_reader=_catalog,
             administration=ADMINISTRATION,
             pool_namespace=context.pool_namespace,
+            client_class=YugabyteDBYSQLClient,
+            client_options={'pool_namespace': context.pool_namespace},
         ),
     )

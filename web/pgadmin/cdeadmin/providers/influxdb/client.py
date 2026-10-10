@@ -257,18 +257,22 @@ class InfluxDBClient:
 
     @staticmethod
     def _language(value, default):
-        if not value:
+        # A named language wins over the route default. Wire compatibility or
+        # a substring in an unknown profile is not language authorization.
+        if default not in ('sql', 'influxql'):
+            raise InfluxDBClientError('query language default is invalid')
+        if value is None or value == '':
             return default
-        value = str(value).casefold()
-        if value in {'sql', 'influxql'}:
-            return value
+        if not isinstance(value, str):
+            raise InfluxDBClientError('query language is invalid')
+        value = value.casefold()
         if value == 'influxdb3-sql-influxql':
+            # Compatibility for existing combined-profile sessions only.
             return default
-        if 'influxql' in value:
-            return 'influxql'
-        if 'sql' in value:
-            return default
-        raise InfluxDBClientError('query language is invalid')
+        aliases = {'sql': 'sql', 'influxql': 'influxql', 'influxdb3-sql': 'sql', 'influxdb3-influxql': 'influxql'}
+        if value not in aliases:
+            raise InfluxDBClientError('query language is invalid')
+        return aliases[value]
 
     def execute(self, handle, request):
         if not isinstance(handle, _Session) or handle.closed:

@@ -2,7 +2,7 @@
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
-from .client import OpenSearchSQLPPLClient
+from .driver import OpenSearchSQLPPLDriver, OpenSearchSQLPPLDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -37,6 +37,12 @@ PROFILE = PilotProfile(
 
 
 class OpenSearchSQLPPLPilotProvider(ActualEnginePilotProvider):
+    language_alternatives = (('opensearch-sql', 'OpenSearch SQL', 'text/x-sql'), ('opensearch-ppl', 'OpenSearch PPL', 'text/x-ppl'))
+    language_routes = {'opensearch-sql': 'sql', 'opensearch-ppl': 'ppl'}
+
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -44,5 +50,7 @@ class OpenSearchSQLPPLPilotProvider(ActualEnginePilotProvider):
 def create_provider(context, permissions, client=None):
     return OpenSearchSQLPPLPilotProvider(
         context, permissions,
-        client or OpenSearchSQLPPLClient(permissions.acquire_secret),
+        client or OpenSearchSQLPPLDriver(
+            PROFILE, OpenSearchSQLPPLDriverBackend(permissions.acquire_secret),
+            OpenSearchSQLPPLDriverBackend.ADMIN_OPERATIONS),
     )

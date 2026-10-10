@@ -113,10 +113,20 @@ def _execute(provider, session_id, command):
         'source': json.dumps(command, separators=(',', ':')),
         'parameters': {},
     })
-    result = provider.describe_result({
-        'operation_id': operation['operation_id'],
-    })
-    return result['extensions']['foundationdb']['payload']
+    entries, native = [], {}
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        result = provider.describe_result({
+            'operation_id': operation['operation_id'],
+        })
+        page = result['extensions']['foundationdb']['payload']
+        if page.get('error'):
+            raise RuntimeError('FoundationDB operation failed')
+        entries.extend(page.get('entries', []))
+        native.update(page.get('native', {}))
+        if result['complete']:
+            return dict(page, entries=entries, native=native)
+    raise RuntimeError('FoundationDB operation observation timeout')
 
 
 def _native(resource):

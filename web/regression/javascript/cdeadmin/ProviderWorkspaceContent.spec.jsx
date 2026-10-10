@@ -854,19 +854,19 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });
 
-  it.each([['mysql', 'MySQL'], ['mariadb', 'MariaDB'], ['postgresql', 'PostgreSQL'], ['sqlite', 'SQLite'], ['duckdb', 'DuckDB']])('polls %s pages and retains page identity after a terminal status', async (engine, title) => {
+  it.each([['mysql', 'MySQL'], ['mariadb', 'MariaDB'], ['postgresql', 'PostgreSQL'], ['sqlite', 'SQLite'], ['duckdb', 'DuckDB'], ['cockroachdb', 'CockroachDB'], ['yugabytedb', 'YugabyteDB YSQL'], ['ycql', 'YugabyteDB YCQL'], ['tidb', 'TiDB'], ['vitess', 'Vitess'], ['dolt', 'Dolt'], ['xtdb', 'XTDB'], ['immudb', 'immudb'], ['apache_ignite', 'Ignite'], ['cassandra', 'Cassandra'], ['foundationdb', 'FoundationDB'], ['tikv', 'TiKV'], ['redis', 'Redis'], ['mongodb', 'MongoDB'], ['clickhouse', 'ClickHouse'], ['influxdb', 'InfluxDB'], ['neo4j', 'Neo4j'], ['milvus', 'Milvus'], ['opensearch', 'OpenSearch'], ['opensearch_sql_ppl', 'OpenSearch SQL/PPL']])('polls %s pages and retains page identity after a terminal status', async (engine, title) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
-      language_profile: `${engine}-sql`, title: `${title} SQL`,
+      language_profile: engine === 'opensearch_sql_ppl' ? 'opensearch-sql-ppl' : engine === 'opensearch' ? 'opensearch-query-dsl' : engine === 'milvus' ? 'milvus-query-search-api' : engine === 'neo4j' ? 'cypher' : engine === 'influxdb' ? 'influxdb3-sql-influxql' : engine === 'mongodb' ? 'mongodb-query-api-json' : engine === 'redis' ? 'redis-resp3-command' : engine === 'tikv' ? 'tikv-keyvalue-json' : engine === 'foundationdb' ? 'foundationdb-keyvalue-json' : engine === 'cassandra' ? 'cql-3' : engine === 'apache_ignite' ? 'ignite-sql-keyvalue' : engine === 'xtdb' ? 'xtdb-sql-2.1' : engine === 'ycql' ? 'ycql' : engine === 'yugabytedb' ? 'ysql' : `${engine}-sql`, title: `${title} SQL`,
       starter_source: engine === 'sqlite' ? 'SELECT 2' : 'SELECT 1; SELECT 2', parameter_shape: 'object-or-array',
     }]}}});
     let polls = 0;
     api.post.mockImplementation((_url, payload) => {
       const result = payload.action === 'poll' ? {
         occurrence: {operation: {terminal: ++polls > 1}, result: {
-          complete: polls > 1, extensions: {[engine]: {payload: polls === 1 ? {
-            has_page: true, rows: [[2]], result_set_index: engine === 'sqlite' ? 0 : 1,
+          complete: polls > 1, extensions: {[engine === 'ycql' ? 'yugabytedb' : engine]: {payload: polls === 1 ? {
+            has_page: true, [['apache_ignite', 'foundationdb', 'tikv', 'redis'].includes(engine) ? 'entries' : 'rows']: [[2]], result_set_index: engine === 'sqlite' ? 0 : 1,
             row_offset: 256, result_set_end: true,
-          } : {has_page: false, rows: [], error: engine === 'sqlite' ? {type: 'OperationalError', sqlite_errorcode: 8, sqlite_errorname: 'SQLITE_READONLY'} : {type: 'ProgrammingError',
+          } : {has_page: false, rows: [], error: engine === 'sqlite' ? {type: 'OperationalError', sqlite_errorcode: 8, sqlite_errorname: 'SQLITE_READONLY'} : engine === 'cassandra' ? {type: 'SyntaxException', native_code: 8192} : {type: 'ProgrammingError',
             errno: 1146, sqlstate: '42S02'}}}},
         }}, rendered_result: null,
       } : {open_session: {session_id: 'mysql-session'},
@@ -878,7 +878,7 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     expect(await screen.findByLabelText(`${title} result page`))
       .toHaveTextContent(`Result set: ${engine === 'sqlite' ? 1 : 2} Row offset: 256 Rows on this page: 1`);
-    expect(await screen.findByText(`${title} query did not complete. ${engine === 'sqlite' ? 'OperationalError 8 SQLITE_READONLY' : 'ProgrammingError 1146 42S02'}`))
+    expect(await screen.findByText(`${title} ${['foundationdb', 'tikv', 'redis'].includes(engine) ? 'operation' : 'query'} did not complete. ${engine === 'sqlite' ? 'OperationalError 8 SQLITE_READONLY' : engine === 'cassandra' ? 'SyntaxException 8192' : 'ProgrammingError 1146 42S02'}`))
       .toBeInTheDocument();
     expect(screen.getByLabelText(`${title} result page`)).toHaveTextContent('End of result set.');
   });

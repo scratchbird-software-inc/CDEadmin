@@ -5,6 +5,7 @@ from pgadmin.cdeadmin.sdk import (
     PilotProfile,
 )
 from .client import MongoDBClient
+from .driver import MongoDBDriver, MongoDBDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -49,6 +50,9 @@ PROFILE = PilotProfile(
 
 
 class MongoDBPilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -62,5 +66,7 @@ def create_provider(context, permissions, client=None):
     return MongoDBPilotProvider(
         context,
         permissions,
-        client or MongoDBClient(permissions.acquire_secret),
+        client or MongoDBDriver(
+            PROFILE, MongoDBDriverBackend(permissions.acquire_secret),
+            MongoDBClient.ADMIN_OPERATIONS),
     )

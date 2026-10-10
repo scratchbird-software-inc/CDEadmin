@@ -5,6 +5,7 @@ from pgadmin.cdeadmin.sdk import (
     PilotProfile,
 )
 from .client import Neo4jClient, QUALIFIED_GDS_SHA256
+from .driver import Neo4jDriver, Neo4jDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -48,6 +49,9 @@ PROFILE = PilotProfile(
 
 
 class Neo4jPilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -61,8 +65,8 @@ def create_provider(context, permissions, client=None):
     return Neo4jPilotProvider(
         context,
         permissions,
-        client or Neo4jClient(
+        client or Neo4jDriver(PROFILE, Neo4jDriverBackend(
             permissions.acquire_secret,
             gds_surface_sha256=QUALIFIED_GDS_SHA256,
-        ),
+        ), Neo4jClient.ADMIN_OPERATIONS),
     )

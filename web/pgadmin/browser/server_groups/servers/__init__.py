@@ -2703,6 +2703,10 @@ class ServerNode(PGChildNodeView):
                         script_mode=data.get('script_mode', False),
                         plan_mode=data.get('plan_mode', False),
                     )
+                elif action in {'source_validate', 'native_script_prepare',
+                                'native_script_advance', 'native_script_stop',
+                                'native_script_discard'}:
+                    payload = service.language_tool_action(server, action, data)
                 elif action == 'script_preview':
                     from pgadmin.cdeadmin.providers.firebird.scripts import (
                         ScriptPreflightError,

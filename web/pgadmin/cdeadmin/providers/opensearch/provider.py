@@ -3,6 +3,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .client import OpenSearchClient
+from .driver import OpenSearchDriver, OpenSearchDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -42,6 +43,9 @@ PROFILE = PilotProfile(
 
 
 class OpenSearchPilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -54,5 +58,7 @@ class OpenSearchPilotProvider(ActualEnginePilotProvider):
 def create_provider(context, permissions, client=None):
     return OpenSearchPilotProvider(
         context, permissions,
-        client or OpenSearchClient(permissions.acquire_secret),
+        client or OpenSearchDriver(
+            PROFILE, OpenSearchDriverBackend(permissions.acquire_secret),
+            OpenSearchClient.ADMIN_OPERATIONS),
     )

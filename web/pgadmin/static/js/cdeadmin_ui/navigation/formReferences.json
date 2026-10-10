@@ -1,0 +1,5394 @@
+{
+  "schema": "scratchrobin.form-references.v1",
+  "allocation": "Append only; never renumber or recycle an existing reference. Identity belongs to a reusable form, not an object instance.",
+  "forms": {
+    "workspace": {
+      "reference": "SR-F-000001",
+      "title": "Provider workspace"
+    },
+    "inspector": {
+      "reference": "SR-F-000002",
+      "title": "Native object inspector"
+    },
+    "placeholder": {
+      "reference": "SR-F-000003",
+      "title": "Missing form"
+    },
+    "query-editor": {
+      "reference": "SR-F-000004",
+      "title": "Language-aware query editor"
+    },
+    "script": {
+      "reference": "SR-F-000005",
+      "title": "Native script runner"
+    },
+    "server-profile": {
+      "reference": "SR-F-000006",
+      "title": "Server profile"
+    },
+    "database-target": {
+      "reference": "SR-F-000007",
+      "title": "Database target"
+    },
+    "navigation": {
+      "reference": "SR-F-000008",
+      "title": "Native navigation"
+    },
+    "operation:alter": {
+      "reference": "SR-F-000009",
+      "title": "Alter"
+    },
+    "operation:create": {
+      "reference": "SR-F-000010",
+      "title": "Create"
+    },
+    "operation:data_delete": {
+      "reference": "SR-F-000011",
+      "title": "Delete data"
+    },
+    "operation:data_insert": {
+      "reference": "SR-F-000012",
+      "title": "Insert data"
+    },
+    "operation:data_update": {
+      "reference": "SR-F-000013",
+      "title": "Update data"
+    },
+    "operation:drop": {
+      "reference": "SR-F-000014",
+      "title": "Drop"
+    },
+    "operation:duckdb_database_action": {
+      "reference": "SR-F-000015",
+      "title": "Run DuckDB database operation"
+    },
+    "operation:duckdb_database_create": {
+      "reference": "SR-F-000016",
+      "title": "Create DuckDB database file"
+    },
+    "operation:duckdb_database_drop": {
+      "reference": "SR-F-000017",
+      "title": "Delete DuckDB database file"
+    },
+    "operation:duckdb_database_export": {
+      "reference": "SR-F-000018",
+      "title": "Export DuckDB database"
+    },
+    "operation:duckdb_database_import": {
+      "reference": "SR-F-000019",
+      "title": "Import DuckDB database"
+    },
+    "operation:execute": {
+      "reference": "SR-F-000020",
+      "title": "Run provider operation"
+    },
+    "operation:firebird_activate_shadow": {
+      "reference": "SR-F-000021",
+      "title": "Activate a Firebird database shadow"
+    },
+    "operation:firebird_backup_logical": {
+      "reference": "SR-F-000022",
+      "title": "Firebird logical backup (gbak)"
+    },
+    "operation:firebird_backup_physical": {
+      "reference": "SR-F-000023",
+      "title": "Firebird physical backup (nbackup)"
+    },
+    "operation:firebird_bring_online": {
+      "reference": "SR-F-000024",
+      "title": "Bring Firebird database online"
+    },
+    "operation:firebird_database_alter": {
+      "reference": "SR-F-000025",
+      "title": "Alter Firebird database properties"
+    },
+    "operation:firebird_database_create": {
+      "reference": "SR-F-000026",
+      "title": "Create Firebird database"
+    },
+    "operation:firebird_database_drop": {
+      "reference": "SR-F-000027",
+      "title": "Drop Firebird database"
+    },
+    "operation:firebird_database_statistics": {
+      "reference": "SR-F-000028",
+      "title": "Firebird database statistics (gstat)"
+    },
+    "operation:firebird_fixup_database": {
+      "reference": "SR-F-000029",
+      "title": "Fix up Firebird database after a filesystem copy"
+    },
+    "operation:firebird_remove_linger": {
+      "reference": "SR-F-000030",
+      "title": "Remove Firebird database linger for the next attachment"
+    },
+    "operation:firebird_repair_database": {
+      "reference": "SR-F-000031",
+      "title": "Repair Firebird database (gfix)"
+    },
+    "operation:firebird_restore_logical": {
+      "reference": "SR-F-000032",
+      "title": "Firebird logical restore (gbak)"
+    },
+    "operation:firebird_restore_physical": {
+      "reference": "SR-F-000033",
+      "title": "Firebird physical restore (nbackup)"
+    },
+    "operation:firebird_set_access_mode": {
+      "reference": "SR-F-000034",
+      "title": "Set Firebird database access mode"
+    },
+    "operation:firebird_set_page_cache_size": {
+      "reference": "SR-F-000035",
+      "title": "Set Firebird database page cache size"
+    },
+    "operation:firebird_set_replica_mode": {
+      "reference": "SR-F-000036",
+      "title": "Set Firebird database replica mode"
+    },
+    "operation:firebird_set_space_reservation": {
+      "reference": "SR-F-000037",
+      "title": "Set Firebird page space reservation"
+    },
+    "operation:firebird_set_sql_dialect": {
+      "reference": "SR-F-000038",
+      "title": "Set Firebird database SQL dialect"
+    },
+    "operation:firebird_set_sweep_interval": {
+      "reference": "SR-F-000039",
+      "title": "Set Firebird automatic sweep interval"
+    },
+    "operation:firebird_set_write_mode": {
+      "reference": "SR-F-000040",
+      "title": "Set Firebird database write mode"
+    },
+    "operation:firebird_shutdown_database": {
+      "reference": "SR-F-000041",
+      "title": "Shut down Firebird database"
+    },
+    "operation:firebird_sweep_database": {
+      "reference": "SR-F-000042",
+      "title": "Sweep Firebird database"
+    },
+    "operation:firebird_upgrade_database": {
+      "reference": "SR-F-000043",
+      "title": "Upgrade Firebird database ODS"
+    },
+    "operation:firebird_validate_database": {
+      "reference": "SR-F-000044",
+      "title": "Validate Firebird database"
+    },
+    "operation:grant": {
+      "reference": "SR-F-000045",
+      "title": "Grant"
+    },
+    "operation:inspect": {
+      "reference": "SR-F-000046",
+      "title": "Inspect"
+    },
+    "operation:mariadb_analyze_tables": {
+      "reference": "SR-F-000047",
+      "title": "Analyze MariaDB tables and persistent statistics"
+    },
+    "operation:mariadb_backup_logical": {
+      "reference": "SR-F-000048",
+      "title": "Back up MariaDB database with mariadb-dump 12.2"
+    },
+    "operation:mariadb_binary_log_purge": {
+      "reference": "SR-F-000049",
+      "title": "Purge MariaDB binary logs before selected file"
+    },
+    "operation:mariadb_binary_log_rotate": {
+      "reference": "SR-F-000050",
+      "title": "Rotate MariaDB binary log"
+    },
+    "operation:mariadb_check_objects": {
+      "reference": "SR-F-000051",
+      "title": "Check MariaDB tables or views"
+    },
+    "operation:mariadb_checksum_tables": {
+      "reference": "SR-F-000052",
+      "title": "Checksum MariaDB tables"
+    },
+    "operation:mariadb_optimize_tables": {
+      "reference": "SR-F-000053",
+      "title": "Optimize MariaDB tables"
+    },
+    "operation:mariadb_repair_objects": {
+      "reference": "SR-F-000054",
+      "title": "Repair MariaDB tables or views"
+    },
+    "operation:mariadb_restore_logical": {
+      "reference": "SR-F-000055",
+      "title": "Restore MariaDB database with mariadb 12.2"
+    },
+    "operation:mariadb_session_termination": {
+      "reference": "SR-F-000056",
+      "title": "Terminate MariaDB session work"
+    },
+    "operation:mariadb_set_global": {
+      "reference": "SR-F-000057",
+      "title": "Set MariaDB global system variable"
+    },
+    "operation:mariadb_upgrade_check": {
+      "reference": "SR-F-000058",
+      "title": "Check whether this MariaDB server requires upgrade"
+    },
+    "operation:mysql_analyze_tables": {
+      "reference": "SR-F-000059",
+      "title": "Analyze MySQL tables and histograms"
+    },
+    "operation:mysql_backup_logical": {
+      "reference": "SR-F-000060",
+      "title": "Back up MySQL database with MySQL Shell 9.7"
+    },
+    "operation:mysql_check_tables": {
+      "reference": "SR-F-000061",
+      "title": "Check MySQL tables"
+    },
+    "operation:mysql_checksum_tables": {
+      "reference": "SR-F-000062",
+      "title": "Checksum MySQL tables"
+    },
+    "operation:mysql_optimize_tables": {
+      "reference": "SR-F-000063",
+      "title": "Optimize MySQL tables"
+    },
+    "operation:mysql_repair_tables": {
+      "reference": "SR-F-000064",
+      "title": "Repair MySQL tables"
+    },
+    "operation:mysql_restore_logical": {
+      "reference": "SR-F-000065",
+      "title": "Restore MySQL database with MySQL Shell 9.7"
+    },
+    "operation:rename": {
+      "reference": "SR-F-000066",
+      "title": "Rename"
+    },
+    "operation:replication_change": {
+      "reference": "SR-F-000067",
+      "title": "Configure replication channel"
+    },
+    "operation:replication_reset": {
+      "reference": "SR-F-000068",
+      "title": "Reset replication channel"
+    },
+    "operation:replication_start": {
+      "reference": "SR-F-000069",
+      "title": "Start replication channel"
+    },
+    "operation:replication_stop": {
+      "reference": "SR-F-000070",
+      "title": "Stop replication channel"
+    },
+    "operation:revoke": {
+      "reference": "SR-F-000071",
+      "title": "Revoke"
+    },
+    "operation:set_default": {
+      "reference": "SR-F-000072",
+      "title": "Set default"
+    },
+    "operation:sqlite_database_action": {
+      "reference": "SR-F-000073",
+      "title": "Run SQLite database operation"
+    },
+    "operation:sqlite_database_alter": {
+      "reference": "SR-F-000074",
+      "title": "Configure SQLite database file"
+    },
+    "operation:sqlite_database_backup": {
+      "reference": "SR-F-000075",
+      "title": "Back up SQLite database"
+    },
+    "operation:sqlite_database_check": {
+      "reference": "SR-F-000076",
+      "title": "Check SQLite database"
+    },
+    "operation:sqlite_database_create": {
+      "reference": "SR-F-000077",
+      "title": "Create SQLite database file"
+    },
+    "operation:sqlite_database_drop": {
+      "reference": "SR-F-000078",
+      "title": "Delete SQLite database file"
+    },
+    "operation:sqlite_database_restore": {
+      "reference": "SR-F-000079",
+      "title": "Restore SQLite database"
+    },
+    "operation:sqlite_foreign_key_check": {
+      "reference": "SR-F-000080",
+      "title": "Check SQLite foreign keys"
+    },
+    "operation:sqlite_incremental_vacuum": {
+      "reference": "SR-F-000081",
+      "title": "Run SQLite incremental vacuum"
+    },
+    "operation:sqlite_named_database_action": {
+      "reference": "SR-F-000082",
+      "title": "Run SQLite object maintenance"
+    },
+    "operation:sqlite_wal_checkpoint": {
+      "reference": "SR-F-000083",
+      "title": "Checkpoint SQLite write-ahead log"
+    },
+    "operation:truncate": {
+      "reference": "SR-F-000084",
+      "title": "Truncate all data"
+    },
+    "native:firebird:endpoint:engine": {
+      "reference": "SR-F-000085",
+      "title": "engine / endpoint"
+    },
+    "native:firebird:engine:endpoint": {
+      "reference": "SR-F-000086",
+      "title": "endpoint / engine"
+    },
+    "native:firebird:endpoint:security-database": {
+      "reference": "SR-F-000087",
+      "title": "security-database / endpoint"
+    },
+    "native:firebird:security-database:folder": {
+      "reference": "SR-F-000088",
+      "title": "folder / security-database"
+    },
+    "native:firebird:security-database:user": {
+      "reference": "SR-F-000089",
+      "title": "user / security-database"
+    },
+    "native:firebird:user:security-definition": {
+      "reference": "SR-F-000090",
+      "title": "security-definition / user"
+    },
+    "native:firebird:security-database:role": {
+      "reference": "SR-F-000091",
+      "title": "role / security-database"
+    },
+    "native:firebird:role:role-membership": {
+      "reference": "SR-F-000092",
+      "title": "role-membership / role"
+    },
+    "native:firebird:role:privilege": {
+      "reference": "SR-F-000093",
+      "title": "privilege / role"
+    },
+    "native:firebird:security-database:global-authentication-mapping": {
+      "reference": "SR-F-000094",
+      "title": "global-authentication-mapping / security-database"
+    },
+    "native:firebird:endpoint:folder": {
+      "reference": "SR-F-000095",
+      "title": "folder / endpoint"
+    },
+    "native:firebird:endpoint:database": {
+      "reference": "SR-F-000096",
+      "title": "database / endpoint"
+    },
+    "native:firebird:database:folder": {
+      "reference": "SR-F-000097",
+      "title": "folder / database"
+    },
+    "native:firebird:database:table": {
+      "reference": "SR-F-000098",
+      "title": "table / database"
+    },
+    "native:firebird:table:folder": {
+      "reference": "SR-F-000099",
+      "title": "folder / table"
+    },
+    "native:firebird:table:column": {
+      "reference": "SR-F-000100",
+      "title": "column / table"
+    },
+    "native:firebird:table:primary-key": {
+      "reference": "SR-F-000101",
+      "title": "primary-key / table"
+    },
+    "native:firebird:table:unique-constraint": {
+      "reference": "SR-F-000102",
+      "title": "unique-constraint / table"
+    },
+    "native:firebird:table:check-constraint": {
+      "reference": "SR-F-000103",
+      "title": "check-constraint / table"
+    },
+    "native:firebird:table:foreign-key": {
+      "reference": "SR-F-000104",
+      "title": "foreign-key / table"
+    },
+    "native:firebird:table:reference": {
+      "reference": "SR-F-000105",
+      "title": "reference / table"
+    },
+    "native:firebird:table:index": {
+      "reference": "SR-F-000106",
+      "title": "index / table"
+    },
+    "native:firebird:index:index-key": {
+      "reference": "SR-F-000107",
+      "title": "index-key / index"
+    },
+    "native:firebird:index:index-options": {
+      "reference": "SR-F-000108",
+      "title": "index-options / index"
+    },
+    "native:firebird:index:definition-property": {
+      "reference": "SR-F-000109",
+      "title": "definition-property / index"
+    },
+    "native:firebird:index:definition-option": {
+      "reference": "SR-F-000110",
+      "title": "definition-option / index"
+    },
+    "native:firebird:table:trigger": {
+      "reference": "SR-F-000111",
+      "title": "trigger / table"
+    },
+    "native:firebird:trigger:trigger-property": {
+      "reference": "SR-F-000112",
+      "title": "trigger-property / trigger"
+    },
+    "native:firebird:trigger:trigger-option": {
+      "reference": "SR-F-000113",
+      "title": "trigger-option / trigger"
+    },
+    "native:firebird:table:privilege": {
+      "reference": "SR-F-000114",
+      "title": "privilege / table"
+    },
+    "native:firebird:table:data": {
+      "reference": "SR-F-000115",
+      "title": "data / table"
+    },
+    "native:firebird:database:view": {
+      "reference": "SR-F-000116",
+      "title": "view / database"
+    },
+    "native:firebird:view:folder": {
+      "reference": "SR-F-000117",
+      "title": "folder / view"
+    },
+    "native:firebird:view:column": {
+      "reference": "SR-F-000118",
+      "title": "column / view"
+    },
+    "native:firebird:view:trigger": {
+      "reference": "SR-F-000119",
+      "title": "trigger / view"
+    },
+    "native:firebird:view:definition": {
+      "reference": "SR-F-000120",
+      "title": "definition / view"
+    },
+    "native:firebird:view:privilege": {
+      "reference": "SR-F-000121",
+      "title": "privilege / view"
+    },
+    "native:firebird:view:reference": {
+      "reference": "SR-F-000122",
+      "title": "reference / view"
+    },
+    "native:firebird:database:domain": {
+      "reference": "SR-F-000123",
+      "title": "domain / database"
+    },
+    "native:firebird:domain:definition": {
+      "reference": "SR-F-000124",
+      "title": "definition / domain"
+    },
+    "native:firebird:database:sequence": {
+      "reference": "SR-F-000125",
+      "title": "sequence / database"
+    },
+    "native:firebird:sequence:definition-property": {
+      "reference": "SR-F-000126",
+      "title": "definition-property / sequence"
+    },
+    "native:firebird:sequence:definition-option": {
+      "reference": "SR-F-000127",
+      "title": "definition-option / sequence"
+    },
+    "native:firebird:database:procedure": {
+      "reference": "SR-F-000128",
+      "title": "procedure / database"
+    },
+    "native:firebird:procedure:folder": {
+      "reference": "SR-F-000129",
+      "title": "folder / procedure"
+    },
+    "native:firebird:procedure:parameter": {
+      "reference": "SR-F-000130",
+      "title": "parameter / procedure"
+    },
+    "native:firebird:procedure:return-definition": {
+      "reference": "SR-F-000131",
+      "title": "return-definition / procedure"
+    },
+    "native:firebird:procedure:privilege": {
+      "reference": "SR-F-000132",
+      "title": "privilege / procedure"
+    },
+    "native:firebird:procedure:definition-property": {
+      "reference": "SR-F-000133",
+      "title": "definition-property / procedure"
+    },
+    "native:firebird:procedure:definition-option": {
+      "reference": "SR-F-000134",
+      "title": "definition-option / procedure"
+    },
+    "native:firebird:database:function": {
+      "reference": "SR-F-000135",
+      "title": "function / database"
+    },
+    "native:firebird:function:folder": {
+      "reference": "SR-F-000136",
+      "title": "folder / function"
+    },
+    "native:firebird:function:parameter": {
+      "reference": "SR-F-000137",
+      "title": "parameter / function"
+    },
+    "native:firebird:function:return-definition": {
+      "reference": "SR-F-000138",
+      "title": "return-definition / function"
+    },
+    "native:firebird:function:privilege": {
+      "reference": "SR-F-000139",
+      "title": "privilege / function"
+    },
+    "native:firebird:database:package": {
+      "reference": "SR-F-000140",
+      "title": "package / database"
+    },
+    "native:firebird:package:definition": {
+      "reference": "SR-F-000141",
+      "title": "definition / package"
+    },
+    "native:firebird:package:folder": {
+      "reference": "SR-F-000142",
+      "title": "folder / package"
+    },
+    "native:firebird:package:procedure": {
+      "reference": "SR-F-000143",
+      "title": "procedure / package"
+    },
+    "native:firebird:package:function": {
+      "reference": "SR-F-000144",
+      "title": "function / package"
+    },
+    "native:firebird:database:exception": {
+      "reference": "SR-F-000145",
+      "title": "exception / database"
+    },
+    "native:firebird:database:collation": {
+      "reference": "SR-F-000146",
+      "title": "collation / database"
+    },
+    "native:firebird:database:external-function": {
+      "reference": "SR-F-000147",
+      "title": "external-function / database"
+    },
+    "native:firebird:database:blob-filter": {
+      "reference": "SR-F-000148",
+      "title": "blob-filter / database"
+    },
+    "native:firebird:database:trigger-event-group": {
+      "reference": "SR-F-000149",
+      "title": "trigger-event-group / database"
+    },
+    "native:firebird:trigger-event-group:trigger": {
+      "reference": "SR-F-000150",
+      "title": "trigger / trigger-event-group"
+    },
+    "native:firebird:database:trigger": {
+      "reference": "SR-F-000151",
+      "title": "trigger / database"
+    },
+    "native:firebird:database:authentication-mapping": {
+      "reference": "SR-F-000152",
+      "title": "authentication-mapping / database"
+    },
+    "native:firebird:database:role": {
+      "reference": "SR-F-000153",
+      "title": "role / database"
+    },
+    "native:firebird:database:publication": {
+      "reference": "SR-F-000154",
+      "title": "publication / database"
+    },
+    "native:firebird:database:storage-file": {
+      "reference": "SR-F-000155",
+      "title": "storage-file / database"
+    },
+    "native:firebird:database:shadow": {
+      "reference": "SR-F-000156",
+      "title": "shadow / database"
+    },
+    "native:firebird:shadow:storage-file": {
+      "reference": "SR-F-000157",
+      "title": "storage-file / shadow"
+    },
+    "native:firebird:database:system-catalog": {
+      "reference": "SR-F-000158",
+      "title": "system-catalog / database"
+    },
+    "native:firebird:system-catalog:folder": {
+      "reference": "SR-F-000159",
+      "title": "folder / system-catalog"
+    },
+    "native:firebird:system-catalog:table": {
+      "reference": "SR-F-000160",
+      "title": "table / system-catalog"
+    },
+    "native:firebird:system-catalog:system-relation": {
+      "reference": "SR-F-000161",
+      "title": "system-relation / system-catalog"
+    },
+    "native:firebird:system-relation:folder": {
+      "reference": "SR-F-000162",
+      "title": "folder / system-relation"
+    },
+    "native:firebird:system-relation:column": {
+      "reference": "SR-F-000163",
+      "title": "column / system-relation"
+    },
+    "native:firebird:system-catalog:character-set": {
+      "reference": "SR-F-000164",
+      "title": "character-set / system-catalog"
+    },
+    "native:firebird:system-catalog:collation": {
+      "reference": "SR-F-000165",
+      "title": "collation / system-catalog"
+    },
+    "native:firebird:system-catalog:function": {
+      "reference": "SR-F-000166",
+      "title": "function / system-catalog"
+    },
+    "native:mysql:endpoint:engine": {
+      "reference": "SR-F-000167",
+      "title": "engine / endpoint"
+    },
+    "native:mysql:engine:endpoint": {
+      "reference": "SR-F-000168",
+      "title": "endpoint / engine"
+    },
+    "native:mysql:endpoint:folder": {
+      "reference": "SR-F-000169",
+      "title": "folder / endpoint"
+    },
+    "native:mysql:endpoint:user": {
+      "reference": "SR-F-000170",
+      "title": "user / endpoint"
+    },
+    "native:mysql:user:security-definition": {
+      "reference": "SR-F-000171",
+      "title": "security-definition / user"
+    },
+    "native:mysql:endpoint:role": {
+      "reference": "SR-F-000172",
+      "title": "role / endpoint"
+    },
+    "native:mysql:role:role-membership": {
+      "reference": "SR-F-000173",
+      "title": "role-membership / role"
+    },
+    "native:mysql:role:privilege": {
+      "reference": "SR-F-000174",
+      "title": "privilege / role"
+    },
+    "native:mysql:endpoint:tablespace": {
+      "reference": "SR-F-000175",
+      "title": "tablespace / endpoint"
+    },
+    "native:mysql:endpoint:logfile-group": {
+      "reference": "SR-F-000176",
+      "title": "logfile-group / endpoint"
+    },
+    "native:mysql:endpoint:plugin": {
+      "reference": "SR-F-000177",
+      "title": "plugin / endpoint"
+    },
+    "native:mysql:endpoint:component": {
+      "reference": "SR-F-000178",
+      "title": "component / endpoint"
+    },
+    "native:mysql:endpoint:external-function": {
+      "reference": "SR-F-000179",
+      "title": "external-function / endpoint"
+    },
+    "native:mysql:endpoint:resource-group": {
+      "reference": "SR-F-000180",
+      "title": "resource-group / endpoint"
+    },
+    "native:mysql:endpoint:replication-channel": {
+      "reference": "SR-F-000181",
+      "title": "replication-channel / endpoint"
+    },
+    "native:mysql:endpoint:persistent-setting": {
+      "reference": "SR-F-000182",
+      "title": "persistent-setting / endpoint"
+    },
+    "native:mysql:endpoint:spatial-reference-system": {
+      "reference": "SR-F-000183",
+      "title": "spatial-reference-system / endpoint"
+    },
+    "native:mysql:endpoint:database": {
+      "reference": "SR-F-000184",
+      "title": "database / endpoint"
+    },
+    "native:mysql:database:folder": {
+      "reference": "SR-F-000185",
+      "title": "folder / database"
+    },
+    "native:mysql:database:table": {
+      "reference": "SR-F-000186",
+      "title": "table / database"
+    },
+    "native:mysql:table:folder": {
+      "reference": "SR-F-000187",
+      "title": "folder / table"
+    },
+    "native:mysql:table:column": {
+      "reference": "SR-F-000188",
+      "title": "column / table"
+    },
+    "native:mysql:table:primary-key": {
+      "reference": "SR-F-000189",
+      "title": "primary-key / table"
+    },
+    "native:mysql:table:unique-constraint": {
+      "reference": "SR-F-000190",
+      "title": "unique-constraint / table"
+    },
+    "native:mysql:table:check-constraint": {
+      "reference": "SR-F-000191",
+      "title": "check-constraint / table"
+    },
+    "native:mysql:table:foreign-key": {
+      "reference": "SR-F-000192",
+      "title": "foreign-key / table"
+    },
+    "native:mysql:table:reference": {
+      "reference": "SR-F-000193",
+      "title": "reference / table"
+    },
+    "native:mysql:table:index": {
+      "reference": "SR-F-000194",
+      "title": "index / table"
+    },
+    "native:mysql:index:index-key": {
+      "reference": "SR-F-000195",
+      "title": "index-key / index"
+    },
+    "native:mysql:index:index-options": {
+      "reference": "SR-F-000196",
+      "title": "index-options / index"
+    },
+    "native:mysql:index:definition-property": {
+      "reference": "SR-F-000197",
+      "title": "definition-property / index"
+    },
+    "native:mysql:index:definition-option": {
+      "reference": "SR-F-000198",
+      "title": "definition-option / index"
+    },
+    "native:mysql:table:trigger": {
+      "reference": "SR-F-000199",
+      "title": "trigger / table"
+    },
+    "native:mysql:trigger:definition-property": {
+      "reference": "SR-F-000200",
+      "title": "definition-property / trigger"
+    },
+    "native:mysql:trigger:definition-option": {
+      "reference": "SR-F-000201",
+      "title": "definition-option / trigger"
+    },
+    "native:mysql:table:partition": {
+      "reference": "SR-F-000202",
+      "title": "partition / table"
+    },
+    "native:mysql:partition:partition-definition": {
+      "reference": "SR-F-000203",
+      "title": "partition-definition / partition"
+    },
+    "native:mysql:partition:definition-property": {
+      "reference": "SR-F-000204",
+      "title": "definition-property / partition"
+    },
+    "native:mysql:partition:definition-option": {
+      "reference": "SR-F-000205",
+      "title": "definition-option / partition"
+    },
+    "native:mysql:table:privilege": {
+      "reference": "SR-F-000206",
+      "title": "privilege / table"
+    },
+    "native:mysql:table:data": {
+      "reference": "SR-F-000207",
+      "title": "data / table"
+    },
+    "native:mysql:database:view": {
+      "reference": "SR-F-000208",
+      "title": "view / database"
+    },
+    "native:mysql:view:folder": {
+      "reference": "SR-F-000209",
+      "title": "folder / view"
+    },
+    "native:mysql:view:column": {
+      "reference": "SR-F-000210",
+      "title": "column / view"
+    },
+    "native:mysql:view:definition": {
+      "reference": "SR-F-000211",
+      "title": "definition / view"
+    },
+    "native:mysql:view:privilege": {
+      "reference": "SR-F-000212",
+      "title": "privilege / view"
+    },
+    "native:mysql:view:reference": {
+      "reference": "SR-F-000213",
+      "title": "reference / view"
+    },
+    "native:mysql:database:procedure": {
+      "reference": "SR-F-000214",
+      "title": "procedure / database"
+    },
+    "native:mysql:procedure:folder": {
+      "reference": "SR-F-000215",
+      "title": "folder / procedure"
+    },
+    "native:mysql:procedure:parameter": {
+      "reference": "SR-F-000216",
+      "title": "parameter / procedure"
+    },
+    "native:mysql:procedure:return-definition": {
+      "reference": "SR-F-000217",
+      "title": "return-definition / procedure"
+    },
+    "native:mysql:procedure:privilege": {
+      "reference": "SR-F-000218",
+      "title": "privilege / procedure"
+    },
+    "native:mysql:procedure:definition-property": {
+      "reference": "SR-F-000219",
+      "title": "definition-property / procedure"
+    },
+    "native:mysql:procedure:definition-option": {
+      "reference": "SR-F-000220",
+      "title": "definition-option / procedure"
+    },
+    "native:mysql:database:function": {
+      "reference": "SR-F-000221",
+      "title": "function / database"
+    },
+    "native:mysql:function:folder": {
+      "reference": "SR-F-000222",
+      "title": "folder / function"
+    },
+    "native:mysql:function:parameter": {
+      "reference": "SR-F-000223",
+      "title": "parameter / function"
+    },
+    "native:mysql:function:return-definition": {
+      "reference": "SR-F-000224",
+      "title": "return-definition / function"
+    },
+    "native:mysql:function:privilege": {
+      "reference": "SR-F-000225",
+      "title": "privilege / function"
+    },
+    "native:mysql:function:definition-property": {
+      "reference": "SR-F-000226",
+      "title": "definition-property / function"
+    },
+    "native:mysql:function:definition-option": {
+      "reference": "SR-F-000227",
+      "title": "definition-option / function"
+    },
+    "native:mysql:database:event": {
+      "reference": "SR-F-000228",
+      "title": "event / database"
+    },
+    "native:mysql:event:definition-property": {
+      "reference": "SR-F-000229",
+      "title": "definition-property / event"
+    },
+    "native:mysql:event:definition-option": {
+      "reference": "SR-F-000230",
+      "title": "definition-option / event"
+    },
+    "native:mysql:database:json-duality-view": {
+      "reference": "SR-F-000231",
+      "title": "json-duality-view / database"
+    },
+    "native:mysql:json-duality-view:definition": {
+      "reference": "SR-F-000232",
+      "title": "definition / json-duality-view"
+    },
+    "native:mysql:database:library": {
+      "reference": "SR-F-000233",
+      "title": "library / database"
+    },
+    "native:mysql:database:materialized-view": {
+      "reference": "SR-F-000234",
+      "title": "materialized-view / database"
+    },
+    "native:mysql:endpoint:system-catalog": {
+      "reference": "SR-F-000235",
+      "title": "system-catalog / endpoint"
+    },
+    "native:mysql:system-catalog:database": {
+      "reference": "SR-F-000236",
+      "title": "database / system-catalog"
+    },
+    "native:mariadb:endpoint:engine": {
+      "reference": "SR-F-000237",
+      "title": "engine / endpoint"
+    },
+    "native:mariadb:engine:endpoint": {
+      "reference": "SR-F-000238",
+      "title": "endpoint / engine"
+    },
+    "native:mariadb:endpoint:folder": {
+      "reference": "SR-F-000239",
+      "title": "folder / endpoint"
+    },
+    "native:mariadb:endpoint:user": {
+      "reference": "SR-F-000240",
+      "title": "user / endpoint"
+    },
+    "native:mariadb:user:security-definition": {
+      "reference": "SR-F-000241",
+      "title": "security-definition / user"
+    },
+    "native:mariadb:endpoint:role": {
+      "reference": "SR-F-000242",
+      "title": "role / endpoint"
+    },
+    "native:mariadb:role:role-membership": {
+      "reference": "SR-F-000243",
+      "title": "role-membership / role"
+    },
+    "native:mariadb:role:privilege": {
+      "reference": "SR-F-000244",
+      "title": "privilege / role"
+    },
+    "native:mariadb:endpoint:plugin": {
+      "reference": "SR-F-000245",
+      "title": "plugin / endpoint"
+    },
+    "native:mariadb:endpoint:external-function": {
+      "reference": "SR-F-000246",
+      "title": "external-function / endpoint"
+    },
+    "native:mariadb:endpoint:server-link": {
+      "reference": "SR-F-000247",
+      "title": "server-link / endpoint"
+    },
+    "native:mariadb:endpoint:replication-channel": {
+      "reference": "SR-F-000248",
+      "title": "replication-channel / endpoint"
+    },
+    "native:mariadb:endpoint:tablespace": {
+      "reference": "SR-F-000249",
+      "title": "tablespace / endpoint"
+    },
+    "native:mariadb:endpoint:database": {
+      "reference": "SR-F-000250",
+      "title": "database / endpoint"
+    },
+    "native:mariadb:database:folder": {
+      "reference": "SR-F-000251",
+      "title": "folder / database"
+    },
+    "native:mariadb:database:table": {
+      "reference": "SR-F-000252",
+      "title": "table / database"
+    },
+    "native:mariadb:table:folder": {
+      "reference": "SR-F-000253",
+      "title": "folder / table"
+    },
+    "native:mariadb:table:column": {
+      "reference": "SR-F-000254",
+      "title": "column / table"
+    },
+    "native:mariadb:table:primary-key": {
+      "reference": "SR-F-000255",
+      "title": "primary-key / table"
+    },
+    "native:mariadb:table:unique-constraint": {
+      "reference": "SR-F-000256",
+      "title": "unique-constraint / table"
+    },
+    "native:mariadb:table:check-constraint": {
+      "reference": "SR-F-000257",
+      "title": "check-constraint / table"
+    },
+    "native:mariadb:table:foreign-key": {
+      "reference": "SR-F-000258",
+      "title": "foreign-key / table"
+    },
+    "native:mariadb:table:reference": {
+      "reference": "SR-F-000259",
+      "title": "reference / table"
+    },
+    "native:mariadb:table:index": {
+      "reference": "SR-F-000260",
+      "title": "index / table"
+    },
+    "native:mariadb:index:index-key": {
+      "reference": "SR-F-000261",
+      "title": "index-key / index"
+    },
+    "native:mariadb:index:index-options": {
+      "reference": "SR-F-000262",
+      "title": "index-options / index"
+    },
+    "native:mariadb:index:definition-property": {
+      "reference": "SR-F-000263",
+      "title": "definition-property / index"
+    },
+    "native:mariadb:index:definition-option": {
+      "reference": "SR-F-000264",
+      "title": "definition-option / index"
+    },
+    "native:mariadb:table:trigger": {
+      "reference": "SR-F-000265",
+      "title": "trigger / table"
+    },
+    "native:mariadb:trigger:definition-property": {
+      "reference": "SR-F-000266",
+      "title": "definition-property / trigger"
+    },
+    "native:mariadb:trigger:definition-option": {
+      "reference": "SR-F-000267",
+      "title": "definition-option / trigger"
+    },
+    "native:mariadb:table:partition": {
+      "reference": "SR-F-000268",
+      "title": "partition / table"
+    },
+    "native:mariadb:partition:partition-definition": {
+      "reference": "SR-F-000269",
+      "title": "partition-definition / partition"
+    },
+    "native:mariadb:table:temporal-definition": {
+      "reference": "SR-F-000270",
+      "title": "temporal-definition / table"
+    },
+    "native:mariadb:table:privilege": {
+      "reference": "SR-F-000271",
+      "title": "privilege / table"
+    },
+    "native:mariadb:table:data": {
+      "reference": "SR-F-000272",
+      "title": "data / table"
+    },
+    "native:mariadb:table:definition-property": {
+      "reference": "SR-F-000273",
+      "title": "definition-property / table"
+    },
+    "native:mariadb:table:definition-option": {
+      "reference": "SR-F-000274",
+      "title": "definition-option / table"
+    },
+    "native:mariadb:database:view": {
+      "reference": "SR-F-000275",
+      "title": "view / database"
+    },
+    "native:mariadb:view:folder": {
+      "reference": "SR-F-000276",
+      "title": "folder / view"
+    },
+    "native:mariadb:view:column": {
+      "reference": "SR-F-000277",
+      "title": "column / view"
+    },
+    "native:mariadb:view:definition": {
+      "reference": "SR-F-000278",
+      "title": "definition / view"
+    },
+    "native:mariadb:view:privilege": {
+      "reference": "SR-F-000279",
+      "title": "privilege / view"
+    },
+    "native:mariadb:view:reference": {
+      "reference": "SR-F-000280",
+      "title": "reference / view"
+    },
+    "native:mariadb:database:sequence": {
+      "reference": "SR-F-000281",
+      "title": "sequence / database"
+    },
+    "native:mariadb:database:procedure": {
+      "reference": "SR-F-000282",
+      "title": "procedure / database"
+    },
+    "native:mariadb:procedure:folder": {
+      "reference": "SR-F-000283",
+      "title": "folder / procedure"
+    },
+    "native:mariadb:procedure:parameter": {
+      "reference": "SR-F-000284",
+      "title": "parameter / procedure"
+    },
+    "native:mariadb:procedure:return-definition": {
+      "reference": "SR-F-000285",
+      "title": "return-definition / procedure"
+    },
+    "native:mariadb:procedure:privilege": {
+      "reference": "SR-F-000286",
+      "title": "privilege / procedure"
+    },
+    "native:mariadb:procedure:definition-property": {
+      "reference": "SR-F-000287",
+      "title": "definition-property / procedure"
+    },
+    "native:mariadb:procedure:definition-option": {
+      "reference": "SR-F-000288",
+      "title": "definition-option / procedure"
+    },
+    "native:mariadb:database:function": {
+      "reference": "SR-F-000289",
+      "title": "function / database"
+    },
+    "native:mariadb:function:folder": {
+      "reference": "SR-F-000290",
+      "title": "folder / function"
+    },
+    "native:mariadb:function:parameter": {
+      "reference": "SR-F-000291",
+      "title": "parameter / function"
+    },
+    "native:mariadb:function:return-definition": {
+      "reference": "SR-F-000292",
+      "title": "return-definition / function"
+    },
+    "native:mariadb:function:privilege": {
+      "reference": "SR-F-000293",
+      "title": "privilege / function"
+    },
+    "native:mariadb:function:definition-property": {
+      "reference": "SR-F-000294",
+      "title": "definition-property / function"
+    },
+    "native:mariadb:function:definition-option": {
+      "reference": "SR-F-000295",
+      "title": "definition-option / function"
+    },
+    "native:mariadb:database:package": {
+      "reference": "SR-F-000296",
+      "title": "package / database"
+    },
+    "native:mariadb:package:definition": {
+      "reference": "SR-F-000297",
+      "title": "definition / package"
+    },
+    "native:mariadb:package:folder": {
+      "reference": "SR-F-000298",
+      "title": "folder / package"
+    },
+    "native:mariadb:package:procedure": {
+      "reference": "SR-F-000299",
+      "title": "procedure / package"
+    },
+    "native:mariadb:package:function": {
+      "reference": "SR-F-000300",
+      "title": "function / package"
+    },
+    "native:mariadb:database:event": {
+      "reference": "SR-F-000301",
+      "title": "event / database"
+    },
+    "native:mariadb:event:definition-property": {
+      "reference": "SR-F-000302",
+      "title": "definition-property / event"
+    },
+    "native:mariadb:event:definition-option": {
+      "reference": "SR-F-000303",
+      "title": "definition-option / event"
+    },
+    "native:mariadb:endpoint:system-catalog": {
+      "reference": "SR-F-000304",
+      "title": "system-catalog / endpoint"
+    },
+    "native:mariadb:system-catalog:database": {
+      "reference": "SR-F-000305",
+      "title": "database / system-catalog"
+    },
+    "native:postgresql:endpoint:engine": {
+      "reference": "SR-F-000306",
+      "title": "engine / endpoint"
+    },
+    "native:postgresql:engine:endpoint": {
+      "reference": "SR-F-000307",
+      "title": "endpoint / engine"
+    },
+    "native:postgresql:endpoint:folder": {
+      "reference": "SR-F-000308",
+      "title": "folder / endpoint"
+    },
+    "native:postgresql:endpoint:role": {
+      "reference": "SR-F-000309",
+      "title": "role / endpoint"
+    },
+    "native:postgresql:role:role-membership": {
+      "reference": "SR-F-000310",
+      "title": "role-membership / role"
+    },
+    "native:postgresql:role:privilege": {
+      "reference": "SR-F-000311",
+      "title": "privilege / role"
+    },
+    "native:postgresql:endpoint:tablespace": {
+      "reference": "SR-F-000312",
+      "title": "tablespace / endpoint"
+    },
+    "native:postgresql:endpoint:database": {
+      "reference": "SR-F-000313",
+      "title": "database / endpoint"
+    },
+    "native:postgresql:database:folder": {
+      "reference": "SR-F-000314",
+      "title": "folder / database"
+    },
+    "native:postgresql:database:extension": {
+      "reference": "SR-F-000315",
+      "title": "extension / database"
+    },
+    "native:postgresql:extension:reference": {
+      "reference": "SR-F-000316",
+      "title": "reference / extension"
+    },
+    "native:postgresql:database:language": {
+      "reference": "SR-F-000317",
+      "title": "language / database"
+    },
+    "native:postgresql:database:cast": {
+      "reference": "SR-F-000318",
+      "title": "cast / database"
+    },
+    "native:postgresql:database:transform": {
+      "reference": "SR-F-000319",
+      "title": "transform / database"
+    },
+    "native:postgresql:database:access-method": {
+      "reference": "SR-F-000320",
+      "title": "access-method / database"
+    },
+    "native:postgresql:database:event-trigger": {
+      "reference": "SR-F-000321",
+      "title": "event-trigger / database"
+    },
+    "native:postgresql:event-trigger:definition-property": {
+      "reference": "SR-F-000322",
+      "title": "definition-property / event-trigger"
+    },
+    "native:postgresql:event-trigger:definition-option": {
+      "reference": "SR-F-000323",
+      "title": "definition-option / event-trigger"
+    },
+    "native:postgresql:database:foreign-data-wrapper": {
+      "reference": "SR-F-000324",
+      "title": "foreign-data-wrapper / database"
+    },
+    "native:postgresql:foreign-data-wrapper:folder": {
+      "reference": "SR-F-000325",
+      "title": "folder / foreign-data-wrapper"
+    },
+    "native:postgresql:foreign-data-wrapper:foreign-server": {
+      "reference": "SR-F-000326",
+      "title": "foreign-server / foreign-data-wrapper"
+    },
+    "native:postgresql:foreign-server:user-mapping": {
+      "reference": "SR-F-000327",
+      "title": "user-mapping / foreign-server"
+    },
+    "native:postgresql:database:publication": {
+      "reference": "SR-F-000328",
+      "title": "publication / database"
+    },
+    "native:postgresql:publication:publication-membership": {
+      "reference": "SR-F-000329",
+      "title": "publication-membership / publication"
+    },
+    "native:postgresql:database:subscription": {
+      "reference": "SR-F-000330",
+      "title": "subscription / database"
+    },
+    "native:postgresql:database:schema": {
+      "reference": "SR-F-000331",
+      "title": "schema / database"
+    },
+    "native:postgresql:schema:folder": {
+      "reference": "SR-F-000332",
+      "title": "folder / schema"
+    },
+    "native:postgresql:schema:table": {
+      "reference": "SR-F-000333",
+      "title": "table / schema"
+    },
+    "native:postgresql:table:folder": {
+      "reference": "SR-F-000334",
+      "title": "folder / table"
+    },
+    "native:postgresql:table:column": {
+      "reference": "SR-F-000335",
+      "title": "column / table"
+    },
+    "native:postgresql:table:primary-key": {
+      "reference": "SR-F-000336",
+      "title": "primary-key / table"
+    },
+    "native:postgresql:table:unique-constraint": {
+      "reference": "SR-F-000337",
+      "title": "unique-constraint / table"
+    },
+    "native:postgresql:table:check-constraint": {
+      "reference": "SR-F-000338",
+      "title": "check-constraint / table"
+    },
+    "native:postgresql:table:exclusion-constraint": {
+      "reference": "SR-F-000339",
+      "title": "exclusion-constraint / table"
+    },
+    "native:postgresql:table:foreign-key": {
+      "reference": "SR-F-000340",
+      "title": "foreign-key / table"
+    },
+    "native:postgresql:table:reference": {
+      "reference": "SR-F-000341",
+      "title": "reference / table"
+    },
+    "native:postgresql:table:index": {
+      "reference": "SR-F-000342",
+      "title": "index / table"
+    },
+    "native:postgresql:index:index-key": {
+      "reference": "SR-F-000343",
+      "title": "index-key / index"
+    },
+    "native:postgresql:index:index-options": {
+      "reference": "SR-F-000344",
+      "title": "index-options / index"
+    },
+    "native:postgresql:index:definition-property": {
+      "reference": "SR-F-000345",
+      "title": "definition-property / index"
+    },
+    "native:postgresql:index:definition-option": {
+      "reference": "SR-F-000346",
+      "title": "definition-option / index"
+    },
+    "native:postgresql:table:trigger": {
+      "reference": "SR-F-000347",
+      "title": "trigger / table"
+    },
+    "native:postgresql:trigger:definition-property": {
+      "reference": "SR-F-000348",
+      "title": "definition-property / trigger"
+    },
+    "native:postgresql:trigger:definition-option": {
+      "reference": "SR-F-000349",
+      "title": "definition-option / trigger"
+    },
+    "native:postgresql:table:partition": {
+      "reference": "SR-F-000350",
+      "title": "partition / table"
+    },
+    "native:postgresql:partition:partition-definition": {
+      "reference": "SR-F-000351",
+      "title": "partition-definition / partition"
+    },
+    "native:postgresql:partition:definition-property": {
+      "reference": "SR-F-000352",
+      "title": "definition-property / partition"
+    },
+    "native:postgresql:partition:definition-option": {
+      "reference": "SR-F-000353",
+      "title": "definition-option / partition"
+    },
+    "native:postgresql:table:rule": {
+      "reference": "SR-F-000354",
+      "title": "rule / table"
+    },
+    "native:postgresql:table:row-policy": {
+      "reference": "SR-F-000355",
+      "title": "row-policy / table"
+    },
+    "native:postgresql:table:statistics": {
+      "reference": "SR-F-000356",
+      "title": "statistics / table"
+    },
+    "native:postgresql:table:privilege": {
+      "reference": "SR-F-000357",
+      "title": "privilege / table"
+    },
+    "native:postgresql:table:data": {
+      "reference": "SR-F-000358",
+      "title": "data / table"
+    },
+    "native:postgresql:schema:view": {
+      "reference": "SR-F-000359",
+      "title": "view / schema"
+    },
+    "native:postgresql:view:folder": {
+      "reference": "SR-F-000360",
+      "title": "folder / view"
+    },
+    "native:postgresql:view:column": {
+      "reference": "SR-F-000361",
+      "title": "column / view"
+    },
+    "native:postgresql:view:trigger": {
+      "reference": "SR-F-000362",
+      "title": "trigger / view"
+    },
+    "native:postgresql:view:rule": {
+      "reference": "SR-F-000363",
+      "title": "rule / view"
+    },
+    "native:postgresql:view:definition": {
+      "reference": "SR-F-000364",
+      "title": "definition / view"
+    },
+    "native:postgresql:view:privilege": {
+      "reference": "SR-F-000365",
+      "title": "privilege / view"
+    },
+    "native:postgresql:view:reference": {
+      "reference": "SR-F-000366",
+      "title": "reference / view"
+    },
+    "native:postgresql:schema:materialized-view": {
+      "reference": "SR-F-000367",
+      "title": "materialized-view / schema"
+    },
+    "native:postgresql:materialized-view:folder": {
+      "reference": "SR-F-000368",
+      "title": "folder / materialized-view"
+    },
+    "native:postgresql:materialized-view:column": {
+      "reference": "SR-F-000369",
+      "title": "column / materialized-view"
+    },
+    "native:postgresql:materialized-view:index": {
+      "reference": "SR-F-000370",
+      "title": "index / materialized-view"
+    },
+    "native:postgresql:materialized-view:definition": {
+      "reference": "SR-F-000371",
+      "title": "definition / materialized-view"
+    },
+    "native:postgresql:materialized-view:privilege": {
+      "reference": "SR-F-000372",
+      "title": "privilege / materialized-view"
+    },
+    "native:postgresql:schema:sequence": {
+      "reference": "SR-F-000373",
+      "title": "sequence / schema"
+    },
+    "native:postgresql:schema:foreign-table": {
+      "reference": "SR-F-000374",
+      "title": "foreign-table / schema"
+    },
+    "native:postgresql:foreign-table:folder": {
+      "reference": "SR-F-000375",
+      "title": "folder / foreign-table"
+    },
+    "native:postgresql:foreign-table:column": {
+      "reference": "SR-F-000376",
+      "title": "column / foreign-table"
+    },
+    "native:postgresql:foreign-table:definition": {
+      "reference": "SR-F-000377",
+      "title": "definition / foreign-table"
+    },
+    "native:postgresql:foreign-table:constraint": {
+      "reference": "SR-F-000378",
+      "title": "constraint / foreign-table"
+    },
+    "native:postgresql:foreign-table:trigger": {
+      "reference": "SR-F-000379",
+      "title": "trigger / foreign-table"
+    },
+    "native:postgresql:foreign-table:privilege": {
+      "reference": "SR-F-000380",
+      "title": "privilege / foreign-table"
+    },
+    "native:postgresql:schema:domain": {
+      "reference": "SR-F-000381",
+      "title": "domain / schema"
+    },
+    "native:postgresql:schema:enum-type": {
+      "reference": "SR-F-000382",
+      "title": "enum-type / schema"
+    },
+    "native:postgresql:schema:composite-type": {
+      "reference": "SR-F-000383",
+      "title": "composite-type / schema"
+    },
+    "native:postgresql:schema:range-type": {
+      "reference": "SR-F-000384",
+      "title": "range-type / schema"
+    },
+    "native:postgresql:schema:base-type": {
+      "reference": "SR-F-000385",
+      "title": "base-type / schema"
+    },
+    "native:postgresql:schema:function": {
+      "reference": "SR-F-000386",
+      "title": "function / schema"
+    },
+    "native:postgresql:function:folder": {
+      "reference": "SR-F-000387",
+      "title": "folder / function"
+    },
+    "native:postgresql:function:parameter": {
+      "reference": "SR-F-000388",
+      "title": "parameter / function"
+    },
+    "native:postgresql:function:return-definition": {
+      "reference": "SR-F-000389",
+      "title": "return-definition / function"
+    },
+    "native:postgresql:function:privilege": {
+      "reference": "SR-F-000390",
+      "title": "privilege / function"
+    },
+    "native:postgresql:schema:procedure": {
+      "reference": "SR-F-000391",
+      "title": "procedure / schema"
+    },
+    "native:postgresql:procedure:folder": {
+      "reference": "SR-F-000392",
+      "title": "folder / procedure"
+    },
+    "native:postgresql:procedure:parameter": {
+      "reference": "SR-F-000393",
+      "title": "parameter / procedure"
+    },
+    "native:postgresql:procedure:return-definition": {
+      "reference": "SR-F-000394",
+      "title": "return-definition / procedure"
+    },
+    "native:postgresql:procedure:privilege": {
+      "reference": "SR-F-000395",
+      "title": "privilege / procedure"
+    },
+    "native:postgresql:schema:aggregate": {
+      "reference": "SR-F-000396",
+      "title": "aggregate / schema"
+    },
+    "native:postgresql:aggregate:folder": {
+      "reference": "SR-F-000397",
+      "title": "folder / aggregate"
+    },
+    "native:postgresql:aggregate:parameter": {
+      "reference": "SR-F-000398",
+      "title": "parameter / aggregate"
+    },
+    "native:postgresql:aggregate:return-definition": {
+      "reference": "SR-F-000399",
+      "title": "return-definition / aggregate"
+    },
+    "native:postgresql:aggregate:privilege": {
+      "reference": "SR-F-000400",
+      "title": "privilege / aggregate"
+    },
+    "native:postgresql:schema:collation": {
+      "reference": "SR-F-000401",
+      "title": "collation / schema"
+    },
+    "native:postgresql:schema:conversion": {
+      "reference": "SR-F-000402",
+      "title": "conversion / schema"
+    },
+    "native:postgresql:schema:operator": {
+      "reference": "SR-F-000403",
+      "title": "operator / schema"
+    },
+    "native:postgresql:schema:operator-class": {
+      "reference": "SR-F-000404",
+      "title": "operator-class / schema"
+    },
+    "native:postgresql:schema:operator-family": {
+      "reference": "SR-F-000405",
+      "title": "operator-family / schema"
+    },
+    "native:postgresql:schema:text-search-configuration": {
+      "reference": "SR-F-000406",
+      "title": "text-search-configuration / schema"
+    },
+    "native:postgresql:schema:text-search-dictionary": {
+      "reference": "SR-F-000407",
+      "title": "text-search-dictionary / schema"
+    },
+    "native:postgresql:schema:text-search-parser": {
+      "reference": "SR-F-000408",
+      "title": "text-search-parser / schema"
+    },
+    "native:postgresql:schema:text-search-template": {
+      "reference": "SR-F-000409",
+      "title": "text-search-template / schema"
+    },
+    "native:postgresql:database:system-catalog": {
+      "reference": "SR-F-000410",
+      "title": "system-catalog / database"
+    },
+    "native:postgresql:system-catalog:folder": {
+      "reference": "SR-F-000411",
+      "title": "folder / system-catalog"
+    },
+    "native:postgresql:system-catalog:schema": {
+      "reference": "SR-F-000412",
+      "title": "schema / system-catalog"
+    },
+    "native:postgresql:schema:type": {
+      "reference": "SR-F-000413",
+      "title": "type / schema"
+    },
+    "native:sqlite:endpoint:engine": {
+      "reference": "SR-F-000414",
+      "title": "engine / endpoint"
+    },
+    "native:sqlite:engine:endpoint": {
+      "reference": "SR-F-000415",
+      "title": "endpoint / engine"
+    },
+    "native:sqlite:endpoint:folder": {
+      "reference": "SR-F-000416",
+      "title": "folder / endpoint"
+    },
+    "native:sqlite:endpoint:database": {
+      "reference": "SR-F-000417",
+      "title": "database / endpoint"
+    },
+    "native:sqlite:database:folder": {
+      "reference": "SR-F-000418",
+      "title": "folder / database"
+    },
+    "native:sqlite:database:table": {
+      "reference": "SR-F-000419",
+      "title": "table / database"
+    },
+    "native:sqlite:table:folder": {
+      "reference": "SR-F-000420",
+      "title": "folder / table"
+    },
+    "native:sqlite:table:column": {
+      "reference": "SR-F-000421",
+      "title": "column / table"
+    },
+    "native:sqlite:table:primary-key": {
+      "reference": "SR-F-000422",
+      "title": "primary-key / table"
+    },
+    "native:sqlite:table:unique-constraint": {
+      "reference": "SR-F-000423",
+      "title": "unique-constraint / table"
+    },
+    "native:sqlite:table:check-constraint": {
+      "reference": "SR-F-000424",
+      "title": "check-constraint / table"
+    },
+    "native:sqlite:table:foreign-key": {
+      "reference": "SR-F-000425",
+      "title": "foreign-key / table"
+    },
+    "native:sqlite:table:reference": {
+      "reference": "SR-F-000426",
+      "title": "reference / table"
+    },
+    "native:sqlite:table:index": {
+      "reference": "SR-F-000427",
+      "title": "index / table"
+    },
+    "native:sqlite:index:index-key": {
+      "reference": "SR-F-000428",
+      "title": "index-key / index"
+    },
+    "native:sqlite:index:index-options": {
+      "reference": "SR-F-000429",
+      "title": "index-options / index"
+    },
+    "native:sqlite:index:definition-property": {
+      "reference": "SR-F-000430",
+      "title": "definition-property / index"
+    },
+    "native:sqlite:index:definition-option": {
+      "reference": "SR-F-000431",
+      "title": "definition-option / index"
+    },
+    "native:sqlite:table:trigger": {
+      "reference": "SR-F-000432",
+      "title": "trigger / table"
+    },
+    "native:sqlite:trigger:definition-property": {
+      "reference": "SR-F-000433",
+      "title": "definition-property / trigger"
+    },
+    "native:sqlite:trigger:definition-option": {
+      "reference": "SR-F-000434",
+      "title": "definition-option / trigger"
+    },
+    "native:sqlite:table:data": {
+      "reference": "SR-F-000435",
+      "title": "data / table"
+    },
+    "native:sqlite:table:definition-property": {
+      "reference": "SR-F-000436",
+      "title": "definition-property / table"
+    },
+    "native:sqlite:table:definition-option": {
+      "reference": "SR-F-000437",
+      "title": "definition-option / table"
+    },
+    "native:sqlite:database:view": {
+      "reference": "SR-F-000438",
+      "title": "view / database"
+    },
+    "native:sqlite:view:folder": {
+      "reference": "SR-F-000439",
+      "title": "folder / view"
+    },
+    "native:sqlite:view:column": {
+      "reference": "SR-F-000440",
+      "title": "column / view"
+    },
+    "native:sqlite:view:trigger": {
+      "reference": "SR-F-000441",
+      "title": "trigger / view"
+    },
+    "native:sqlite:view:definition": {
+      "reference": "SR-F-000442",
+      "title": "definition / view"
+    },
+    "native:sqlite:view:reference": {
+      "reference": "SR-F-000443",
+      "title": "reference / view"
+    },
+    "native:sqlite:database:virtual-table": {
+      "reference": "SR-F-000444",
+      "title": "virtual-table / database"
+    },
+    "native:sqlite:virtual-table:folder": {
+      "reference": "SR-F-000445",
+      "title": "folder / virtual-table"
+    },
+    "native:sqlite:virtual-table:column": {
+      "reference": "SR-F-000446",
+      "title": "column / virtual-table"
+    },
+    "native:sqlite:virtual-table:definition": {
+      "reference": "SR-F-000447",
+      "title": "definition / virtual-table"
+    },
+    "native:sqlite:virtual-table:reference": {
+      "reference": "SR-F-000448",
+      "title": "reference / virtual-table"
+    },
+    "native:sqlite:database:system-catalog": {
+      "reference": "SR-F-000449",
+      "title": "system-catalog / database"
+    },
+    "native:sqlite:system-catalog:table": {
+      "reference": "SR-F-000450",
+      "title": "table / system-catalog"
+    },
+    "native:sqlite:database:persistent-setting": {
+      "reference": "SR-F-000451",
+      "title": "persistent-setting / database"
+    },
+    "native:sqlite:endpoint:runtime": {
+      "reference": "SR-F-000452",
+      "title": "runtime / endpoint"
+    },
+    "native:duckdb:endpoint:engine": {
+      "reference": "SR-F-000453",
+      "title": "engine / endpoint"
+    },
+    "native:duckdb:engine:endpoint": {
+      "reference": "SR-F-000454",
+      "title": "endpoint / engine"
+    },
+    "native:duckdb:endpoint:folder": {
+      "reference": "SR-F-000455",
+      "title": "folder / endpoint"
+    },
+    "native:duckdb:endpoint:database": {
+      "reference": "SR-F-000456",
+      "title": "database / endpoint"
+    },
+    "native:duckdb:database:folder": {
+      "reference": "SR-F-000457",
+      "title": "folder / database"
+    },
+    "native:duckdb:database:schema": {
+      "reference": "SR-F-000458",
+      "title": "schema / database"
+    },
+    "native:duckdb:schema:folder": {
+      "reference": "SR-F-000459",
+      "title": "folder / schema"
+    },
+    "native:duckdb:schema:table": {
+      "reference": "SR-F-000460",
+      "title": "table / schema"
+    },
+    "native:duckdb:table:folder": {
+      "reference": "SR-F-000461",
+      "title": "folder / table"
+    },
+    "native:duckdb:table:column": {
+      "reference": "SR-F-000462",
+      "title": "column / table"
+    },
+    "native:duckdb:table:primary-key": {
+      "reference": "SR-F-000463",
+      "title": "primary-key / table"
+    },
+    "native:duckdb:table:unique-constraint": {
+      "reference": "SR-F-000464",
+      "title": "unique-constraint / table"
+    },
+    "native:duckdb:table:check-constraint": {
+      "reference": "SR-F-000465",
+      "title": "check-constraint / table"
+    },
+    "native:duckdb:table:foreign-key": {
+      "reference": "SR-F-000466",
+      "title": "foreign-key / table"
+    },
+    "native:duckdb:table:reference": {
+      "reference": "SR-F-000467",
+      "title": "reference / table"
+    },
+    "native:duckdb:table:index": {
+      "reference": "SR-F-000468",
+      "title": "index / table"
+    },
+    "native:duckdb:index:index-key": {
+      "reference": "SR-F-000469",
+      "title": "index-key / index"
+    },
+    "native:duckdb:index:index-options": {
+      "reference": "SR-F-000470",
+      "title": "index-options / index"
+    },
+    "native:duckdb:index:definition-property": {
+      "reference": "SR-F-000471",
+      "title": "definition-property / index"
+    },
+    "native:duckdb:index:definition-option": {
+      "reference": "SR-F-000472",
+      "title": "definition-option / index"
+    },
+    "native:duckdb:table:data": {
+      "reference": "SR-F-000473",
+      "title": "data / table"
+    },
+    "native:duckdb:schema:view": {
+      "reference": "SR-F-000474",
+      "title": "view / schema"
+    },
+    "native:duckdb:view:folder": {
+      "reference": "SR-F-000475",
+      "title": "folder / view"
+    },
+    "native:duckdb:view:column": {
+      "reference": "SR-F-000476",
+      "title": "column / view"
+    },
+    "native:duckdb:view:definition": {
+      "reference": "SR-F-000477",
+      "title": "definition / view"
+    },
+    "native:duckdb:view:reference": {
+      "reference": "SR-F-000478",
+      "title": "reference / view"
+    },
+    "native:duckdb:schema:sequence": {
+      "reference": "SR-F-000479",
+      "title": "sequence / schema"
+    },
+    "native:duckdb:schema:type": {
+      "reference": "SR-F-000480",
+      "title": "type / schema"
+    },
+    "native:duckdb:type:definition-property": {
+      "reference": "SR-F-000481",
+      "title": "definition-property / type"
+    },
+    "native:duckdb:type:definition-option": {
+      "reference": "SR-F-000482",
+      "title": "definition-option / type"
+    },
+    "native:duckdb:schema:macro": {
+      "reference": "SR-F-000483",
+      "title": "macro / schema"
+    },
+    "native:duckdb:macro:folder": {
+      "reference": "SR-F-000484",
+      "title": "folder / macro"
+    },
+    "native:duckdb:macro:parameter": {
+      "reference": "SR-F-000485",
+      "title": "parameter / macro"
+    },
+    "native:duckdb:macro:return-definition": {
+      "reference": "SR-F-000486",
+      "title": "return-definition / macro"
+    },
+    "native:duckdb:macro:definition-property": {
+      "reference": "SR-F-000487",
+      "title": "definition-property / macro"
+    },
+    "native:duckdb:macro:definition-option": {
+      "reference": "SR-F-000488",
+      "title": "definition-option / macro"
+    },
+    "native:duckdb:database:system-catalog": {
+      "reference": "SR-F-000489",
+      "title": "system-catalog / database"
+    },
+    "native:duckdb:system-catalog:schema": {
+      "reference": "SR-F-000490",
+      "title": "schema / system-catalog"
+    },
+    "native:duckdb:system-catalog:function": {
+      "reference": "SR-F-000491",
+      "title": "function / system-catalog"
+    },
+    "native:duckdb:endpoint:secret": {
+      "reference": "SR-F-000492",
+      "title": "secret / endpoint"
+    },
+    "native:duckdb:endpoint:extension": {
+      "reference": "SR-F-000493",
+      "title": "extension / endpoint"
+    },
+    "native:cockroachdb:endpoint:engine": {
+      "reference": "SR-F-000494",
+      "title": "engine / endpoint"
+    },
+    "native:cockroachdb:engine:endpoint": {
+      "reference": "SR-F-000495",
+      "title": "endpoint / engine"
+    },
+    "native:cockroachdb:endpoint:folder": {
+      "reference": "SR-F-000496",
+      "title": "folder / endpoint"
+    },
+    "native:cockroachdb:endpoint:role": {
+      "reference": "SR-F-000497",
+      "title": "role / endpoint"
+    },
+    "native:cockroachdb:role:role-membership": {
+      "reference": "SR-F-000498",
+      "title": "role-membership / role"
+    },
+    "native:cockroachdb:role:privilege": {
+      "reference": "SR-F-000499",
+      "title": "privilege / role"
+    },
+    "native:cockroachdb:endpoint:persistent-setting": {
+      "reference": "SR-F-000500",
+      "title": "persistent-setting / endpoint"
+    },
+    "native:cockroachdb:endpoint:external-connection": {
+      "reference": "SR-F-000501",
+      "title": "external-connection / endpoint"
+    },
+    "native:cockroachdb:endpoint:schedule": {
+      "reference": "SR-F-000502",
+      "title": "schedule / endpoint"
+    },
+    "native:cockroachdb:endpoint:changefeed": {
+      "reference": "SR-F-000503",
+      "title": "changefeed / endpoint"
+    },
+    "native:cockroachdb:endpoint:database": {
+      "reference": "SR-F-000504",
+      "title": "database / endpoint"
+    },
+    "native:cockroachdb:database:folder": {
+      "reference": "SR-F-000505",
+      "title": "folder / database"
+    },
+    "native:cockroachdb:database:schema": {
+      "reference": "SR-F-000506",
+      "title": "schema / database"
+    },
+    "native:cockroachdb:schema:folder": {
+      "reference": "SR-F-000507",
+      "title": "folder / schema"
+    },
+    "native:cockroachdb:schema:table": {
+      "reference": "SR-F-000508",
+      "title": "table / schema"
+    },
+    "native:cockroachdb:table:folder": {
+      "reference": "SR-F-000509",
+      "title": "folder / table"
+    },
+    "native:cockroachdb:table:column": {
+      "reference": "SR-F-000510",
+      "title": "column / table"
+    },
+    "native:cockroachdb:table:primary-key": {
+      "reference": "SR-F-000511",
+      "title": "primary-key / table"
+    },
+    "native:cockroachdb:table:unique-constraint": {
+      "reference": "SR-F-000512",
+      "title": "unique-constraint / table"
+    },
+    "native:cockroachdb:table:check-constraint": {
+      "reference": "SR-F-000513",
+      "title": "check-constraint / table"
+    },
+    "native:cockroachdb:table:foreign-key": {
+      "reference": "SR-F-000514",
+      "title": "foreign-key / table"
+    },
+    "native:cockroachdb:table:reference": {
+      "reference": "SR-F-000515",
+      "title": "reference / table"
+    },
+    "native:cockroachdb:table:index": {
+      "reference": "SR-F-000516",
+      "title": "index / table"
+    },
+    "native:cockroachdb:index:index-key": {
+      "reference": "SR-F-000517",
+      "title": "index-key / index"
+    },
+    "native:cockroachdb:index:index-options": {
+      "reference": "SR-F-000518",
+      "title": "index-options / index"
+    },
+    "native:cockroachdb:index:definition-property": {
+      "reference": "SR-F-000519",
+      "title": "definition-property / index"
+    },
+    "native:cockroachdb:index:definition-option": {
+      "reference": "SR-F-000520",
+      "title": "definition-option / index"
+    },
+    "native:cockroachdb:table:trigger": {
+      "reference": "SR-F-000521",
+      "title": "trigger / table"
+    },
+    "native:cockroachdb:trigger:definition-property": {
+      "reference": "SR-F-000522",
+      "title": "definition-property / trigger"
+    },
+    "native:cockroachdb:trigger:definition-option": {
+      "reference": "SR-F-000523",
+      "title": "definition-option / trigger"
+    },
+    "native:cockroachdb:table:partition": {
+      "reference": "SR-F-000524",
+      "title": "partition / table"
+    },
+    "native:cockroachdb:partition:partition-definition": {
+      "reference": "SR-F-000525",
+      "title": "partition-definition / partition"
+    },
+    "native:cockroachdb:table:row-policy": {
+      "reference": "SR-F-000526",
+      "title": "row-policy / table"
+    },
+    "native:cockroachdb:table:column-family": {
+      "reference": "SR-F-000527",
+      "title": "column-family / table"
+    },
+    "native:cockroachdb:column-family:definition-property": {
+      "reference": "SR-F-000528",
+      "title": "definition-property / column-family"
+    },
+    "native:cockroachdb:column-family:definition-option": {
+      "reference": "SR-F-000529",
+      "title": "definition-option / column-family"
+    },
+    "native:cockroachdb:table:zone-config": {
+      "reference": "SR-F-000530",
+      "title": "zone-config / table"
+    },
+    "native:cockroachdb:table:privilege": {
+      "reference": "SR-F-000531",
+      "title": "privilege / table"
+    },
+    "native:cockroachdb:table:data": {
+      "reference": "SR-F-000532",
+      "title": "data / table"
+    },
+    "native:cockroachdb:schema:view": {
+      "reference": "SR-F-000533",
+      "title": "view / schema"
+    },
+    "native:cockroachdb:view:folder": {
+      "reference": "SR-F-000534",
+      "title": "folder / view"
+    },
+    "native:cockroachdb:view:column": {
+      "reference": "SR-F-000535",
+      "title": "column / view"
+    },
+    "native:cockroachdb:view:definition": {
+      "reference": "SR-F-000536",
+      "title": "definition / view"
+    },
+    "native:cockroachdb:view:privilege": {
+      "reference": "SR-F-000537",
+      "title": "privilege / view"
+    },
+    "native:cockroachdb:view:reference": {
+      "reference": "SR-F-000538",
+      "title": "reference / view"
+    },
+    "native:cockroachdb:schema:materialized-view": {
+      "reference": "SR-F-000539",
+      "title": "materialized-view / schema"
+    },
+    "native:cockroachdb:materialized-view:folder": {
+      "reference": "SR-F-000540",
+      "title": "folder / materialized-view"
+    },
+    "native:cockroachdb:materialized-view:column": {
+      "reference": "SR-F-000541",
+      "title": "column / materialized-view"
+    },
+    "native:cockroachdb:materialized-view:index": {
+      "reference": "SR-F-000542",
+      "title": "index / materialized-view"
+    },
+    "native:cockroachdb:materialized-view:definition": {
+      "reference": "SR-F-000543",
+      "title": "definition / materialized-view"
+    },
+    "native:cockroachdb:materialized-view:privilege": {
+      "reference": "SR-F-000544",
+      "title": "privilege / materialized-view"
+    },
+    "native:cockroachdb:schema:sequence": {
+      "reference": "SR-F-000545",
+      "title": "sequence / schema"
+    },
+    "native:cockroachdb:schema:type": {
+      "reference": "SR-F-000546",
+      "title": "type / schema"
+    },
+    "native:cockroachdb:schema:function": {
+      "reference": "SR-F-000547",
+      "title": "function / schema"
+    },
+    "native:cockroachdb:function:folder": {
+      "reference": "SR-F-000548",
+      "title": "folder / function"
+    },
+    "native:cockroachdb:function:parameter": {
+      "reference": "SR-F-000549",
+      "title": "parameter / function"
+    },
+    "native:cockroachdb:function:return-definition": {
+      "reference": "SR-F-000550",
+      "title": "return-definition / function"
+    },
+    "native:cockroachdb:function:privilege": {
+      "reference": "SR-F-000551",
+      "title": "privilege / function"
+    },
+    "native:cockroachdb:schema:procedure": {
+      "reference": "SR-F-000552",
+      "title": "procedure / schema"
+    },
+    "native:cockroachdb:procedure:folder": {
+      "reference": "SR-F-000553",
+      "title": "folder / procedure"
+    },
+    "native:cockroachdb:procedure:parameter": {
+      "reference": "SR-F-000554",
+      "title": "parameter / procedure"
+    },
+    "native:cockroachdb:procedure:return-definition": {
+      "reference": "SR-F-000555",
+      "title": "return-definition / procedure"
+    },
+    "native:cockroachdb:procedure:privilege": {
+      "reference": "SR-F-000556",
+      "title": "privilege / procedure"
+    },
+    "native:cockroachdb:database:system-catalog": {
+      "reference": "SR-F-000557",
+      "title": "system-catalog / database"
+    },
+    "native:cockroachdb:system-catalog:folder": {
+      "reference": "SR-F-000558",
+      "title": "folder / system-catalog"
+    },
+    "native:cockroachdb:system-catalog:schema": {
+      "reference": "SR-F-000559",
+      "title": "schema / system-catalog"
+    },
+    "native:cockroachdb:database:zone-config": {
+      "reference": "SR-F-000560",
+      "title": "zone-config / database"
+    },
+    "native:cockroachdb:endpoint:system-catalog": {
+      "reference": "SR-F-000561",
+      "title": "system-catalog / endpoint"
+    },
+    "native:cockroachdb:endpoint:topology": {
+      "reference": "SR-F-000562",
+      "title": "topology / endpoint"
+    },
+    "native:tidb:endpoint:engine": {
+      "reference": "SR-F-000563",
+      "title": "engine / endpoint"
+    },
+    "native:tidb:engine:endpoint": {
+      "reference": "SR-F-000564",
+      "title": "endpoint / engine"
+    },
+    "native:tidb:endpoint:folder": {
+      "reference": "SR-F-000565",
+      "title": "folder / endpoint"
+    },
+    "native:tidb:endpoint:user": {
+      "reference": "SR-F-000566",
+      "title": "user / endpoint"
+    },
+    "native:tidb:user:security-definition": {
+      "reference": "SR-F-000567",
+      "title": "security-definition / user"
+    },
+    "native:tidb:endpoint:role": {
+      "reference": "SR-F-000568",
+      "title": "role / endpoint"
+    },
+    "native:tidb:role:role-membership": {
+      "reference": "SR-F-000569",
+      "title": "role-membership / role"
+    },
+    "native:tidb:role:privilege": {
+      "reference": "SR-F-000570",
+      "title": "privilege / role"
+    },
+    "native:tidb:endpoint:placement-policy": {
+      "reference": "SR-F-000571",
+      "title": "placement-policy / endpoint"
+    },
+    "native:tidb:placement-policy:definition-property": {
+      "reference": "SR-F-000572",
+      "title": "definition-property / placement-policy"
+    },
+    "native:tidb:placement-policy:definition-option": {
+      "reference": "SR-F-000573",
+      "title": "definition-option / placement-policy"
+    },
+    "native:tidb:endpoint:resource-group": {
+      "reference": "SR-F-000574",
+      "title": "resource-group / endpoint"
+    },
+    "native:tidb:resource-group:definition-property": {
+      "reference": "SR-F-000575",
+      "title": "definition-property / resource-group"
+    },
+    "native:tidb:resource-group:definition-option": {
+      "reference": "SR-F-000576",
+      "title": "definition-option / resource-group"
+    },
+    "native:tidb:endpoint:plan-binding": {
+      "reference": "SR-F-000577",
+      "title": "plan-binding / endpoint"
+    },
+    "native:tidb:endpoint:database": {
+      "reference": "SR-F-000578",
+      "title": "database / endpoint"
+    },
+    "native:tidb:database:folder": {
+      "reference": "SR-F-000579",
+      "title": "folder / database"
+    },
+    "native:tidb:database:table": {
+      "reference": "SR-F-000580",
+      "title": "table / database"
+    },
+    "native:tidb:table:folder": {
+      "reference": "SR-F-000581",
+      "title": "folder / table"
+    },
+    "native:tidb:table:column": {
+      "reference": "SR-F-000582",
+      "title": "column / table"
+    },
+    "native:tidb:table:primary-key": {
+      "reference": "SR-F-000583",
+      "title": "primary-key / table"
+    },
+    "native:tidb:table:unique-constraint": {
+      "reference": "SR-F-000584",
+      "title": "unique-constraint / table"
+    },
+    "native:tidb:table:check-constraint": {
+      "reference": "SR-F-000585",
+      "title": "check-constraint / table"
+    },
+    "native:tidb:table:foreign-key": {
+      "reference": "SR-F-000586",
+      "title": "foreign-key / table"
+    },
+    "native:tidb:table:reference": {
+      "reference": "SR-F-000587",
+      "title": "reference / table"
+    },
+    "native:tidb:table:index": {
+      "reference": "SR-F-000588",
+      "title": "index / table"
+    },
+    "native:tidb:index:index-key": {
+      "reference": "SR-F-000589",
+      "title": "index-key / index"
+    },
+    "native:tidb:index:index-options": {
+      "reference": "SR-F-000590",
+      "title": "index-options / index"
+    },
+    "native:tidb:index:definition-property": {
+      "reference": "SR-F-000591",
+      "title": "definition-property / index"
+    },
+    "native:tidb:index:definition-option": {
+      "reference": "SR-F-000592",
+      "title": "definition-option / index"
+    },
+    "native:tidb:table:partition": {
+      "reference": "SR-F-000593",
+      "title": "partition / table"
+    },
+    "native:tidb:partition:partition-definition": {
+      "reference": "SR-F-000594",
+      "title": "partition-definition / partition"
+    },
+    "native:tidb:table:tiflash-replica": {
+      "reference": "SR-F-000595",
+      "title": "tiflash-replica / table"
+    },
+    "native:tidb:table:definition": {
+      "reference": "SR-F-000596",
+      "title": "definition / table"
+    },
+    "native:tidb:table:privilege": {
+      "reference": "SR-F-000597",
+      "title": "privilege / table"
+    },
+    "native:tidb:table:data": {
+      "reference": "SR-F-000598",
+      "title": "data / table"
+    },
+    "native:tidb:table:definition-property": {
+      "reference": "SR-F-000599",
+      "title": "definition-property / table"
+    },
+    "native:tidb:table:definition-option": {
+      "reference": "SR-F-000600",
+      "title": "definition-option / table"
+    },
+    "native:tidb:database:view": {
+      "reference": "SR-F-000601",
+      "title": "view / database"
+    },
+    "native:tidb:view:folder": {
+      "reference": "SR-F-000602",
+      "title": "folder / view"
+    },
+    "native:tidb:view:column": {
+      "reference": "SR-F-000603",
+      "title": "column / view"
+    },
+    "native:tidb:view:definition": {
+      "reference": "SR-F-000604",
+      "title": "definition / view"
+    },
+    "native:tidb:view:privilege": {
+      "reference": "SR-F-000605",
+      "title": "privilege / view"
+    },
+    "native:tidb:view:reference": {
+      "reference": "SR-F-000606",
+      "title": "reference / view"
+    },
+    "native:tidb:database:sequence": {
+      "reference": "SR-F-000607",
+      "title": "sequence / database"
+    },
+    "native:tidb:endpoint:system-catalog": {
+      "reference": "SR-F-000608",
+      "title": "system-catalog / endpoint"
+    },
+    "native:tidb:system-catalog:database": {
+      "reference": "SR-F-000609",
+      "title": "database / system-catalog"
+    },
+    "native:tidb:endpoint:changefeed": {
+      "reference": "SR-F-000610",
+      "title": "changefeed / endpoint"
+    },
+    "native:tidb:endpoint:backup": {
+      "reference": "SR-F-000611",
+      "title": "backup / endpoint"
+    },
+    "native:vitess:endpoint:engine": {
+      "reference": "SR-F-000612",
+      "title": "engine / endpoint"
+    },
+    "native:vitess:engine:endpoint": {
+      "reference": "SR-F-000613",
+      "title": "endpoint / engine"
+    },
+    "native:vitess:endpoint:folder": {
+      "reference": "SR-F-000614",
+      "title": "folder / endpoint"
+    },
+    "native:vitess:endpoint:cell": {
+      "reference": "SR-F-000615",
+      "title": "cell / endpoint"
+    },
+    "native:vitess:endpoint:reference": {
+      "reference": "SR-F-000616",
+      "title": "reference / endpoint"
+    },
+    "native:vitess:endpoint:tablet": {
+      "reference": "SR-F-000617",
+      "title": "tablet / endpoint"
+    },
+    "native:vitess:endpoint:keyspace": {
+      "reference": "SR-F-000618",
+      "title": "keyspace / endpoint"
+    },
+    "native:vitess:keyspace:vschema": {
+      "reference": "SR-F-000619",
+      "title": "vschema / keyspace"
+    },
+    "native:vitess:vschema:vindex": {
+      "reference": "SR-F-000620",
+      "title": "vindex / vschema"
+    },
+    "native:vitess:vindex:definition-property": {
+      "reference": "SR-F-000621",
+      "title": "definition-property / vindex"
+    },
+    "native:vitess:vindex:definition-option": {
+      "reference": "SR-F-000622",
+      "title": "definition-option / vindex"
+    },
+    "native:vitess:vschema:vschema-table": {
+      "reference": "SR-F-000623",
+      "title": "vschema-table / vschema"
+    },
+    "native:vitess:vschema:sequence-binding": {
+      "reference": "SR-F-000624",
+      "title": "sequence-binding / vschema"
+    },
+    "native:vitess:vschema:definition-property": {
+      "reference": "SR-F-000625",
+      "title": "definition-property / vschema"
+    },
+    "native:vitess:vschema:definition-option": {
+      "reference": "SR-F-000626",
+      "title": "definition-option / vschema"
+    },
+    "native:vitess:keyspace:folder": {
+      "reference": "SR-F-000627",
+      "title": "folder / keyspace"
+    },
+    "native:vitess:keyspace:table": {
+      "reference": "SR-F-000628",
+      "title": "table / keyspace"
+    },
+    "native:vitess:table:folder": {
+      "reference": "SR-F-000629",
+      "title": "folder / table"
+    },
+    "native:vitess:table:column": {
+      "reference": "SR-F-000630",
+      "title": "column / table"
+    },
+    "native:vitess:table:constraint": {
+      "reference": "SR-F-000631",
+      "title": "constraint / table"
+    },
+    "native:vitess:table:index": {
+      "reference": "SR-F-000632",
+      "title": "index / table"
+    },
+    "native:vitess:index:index-key": {
+      "reference": "SR-F-000633",
+      "title": "index-key / index"
+    },
+    "native:vitess:index:index-options": {
+      "reference": "SR-F-000634",
+      "title": "index-options / index"
+    },
+    "native:vitess:table:foreign-key": {
+      "reference": "SR-F-000635",
+      "title": "foreign-key / table"
+    },
+    "native:vitess:table:data": {
+      "reference": "SR-F-000636",
+      "title": "data / table"
+    },
+    "native:vitess:keyspace:view": {
+      "reference": "SR-F-000637",
+      "title": "view / keyspace"
+    },
+    "native:vitess:view:folder": {
+      "reference": "SR-F-000638",
+      "title": "folder / view"
+    },
+    "native:vitess:view:column": {
+      "reference": "SR-F-000639",
+      "title": "column / view"
+    },
+    "native:vitess:view:definition": {
+      "reference": "SR-F-000640",
+      "title": "definition / view"
+    },
+    "native:vitess:view:privilege": {
+      "reference": "SR-F-000641",
+      "title": "privilege / view"
+    },
+    "native:vitess:view:reference": {
+      "reference": "SR-F-000642",
+      "title": "reference / view"
+    },
+    "native:vitess:keyspace:sequence": {
+      "reference": "SR-F-000643",
+      "title": "sequence / keyspace"
+    },
+    "native:vitess:keyspace:shard": {
+      "reference": "SR-F-000644",
+      "title": "shard / keyspace"
+    },
+    "native:vitess:shard:reference": {
+      "reference": "SR-F-000645",
+      "title": "reference / shard"
+    },
+    "native:vitess:shard:replication": {
+      "reference": "SR-F-000646",
+      "title": "replication / shard"
+    },
+    "native:vitess:shard:backup": {
+      "reference": "SR-F-000647",
+      "title": "backup / shard"
+    },
+    "native:vitess:keyspace:workflow": {
+      "reference": "SR-F-000648",
+      "title": "workflow / keyspace"
+    },
+    "native:vitess:workflow:vreplication-stream": {
+      "reference": "SR-F-000649",
+      "title": "vreplication-stream / workflow"
+    },
+    "native:vitess:workflow:definition-property": {
+      "reference": "SR-F-000650",
+      "title": "definition-property / workflow"
+    },
+    "native:vitess:workflow:definition-option": {
+      "reference": "SR-F-000651",
+      "title": "definition-option / workflow"
+    },
+    "native:vitess:keyspace:online-ddl": {
+      "reference": "SR-F-000652",
+      "title": "online-ddl / keyspace"
+    },
+    "native:vitess:endpoint:routing-rule": {
+      "reference": "SR-F-000653",
+      "title": "routing-rule / endpoint"
+    },
+    "native:vitess:endpoint:mirror-rule": {
+      "reference": "SR-F-000654",
+      "title": "mirror-rule / endpoint"
+    },
+    "native:yugabytedb:endpoint:engine": {
+      "reference": "SR-F-000655",
+      "title": "engine / endpoint"
+    },
+    "native:yugabytedb:engine:endpoint": {
+      "reference": "SR-F-000656",
+      "title": "endpoint / engine"
+    },
+    "native:yugabytedb:endpoint:folder": {
+      "reference": "SR-F-000657",
+      "title": "folder / endpoint"
+    },
+    "native:yugabytedb:endpoint:role": {
+      "reference": "SR-F-000658",
+      "title": "role / endpoint"
+    },
+    "native:yugabytedb:role:role-membership": {
+      "reference": "SR-F-000659",
+      "title": "role-membership / role"
+    },
+    "native:yugabytedb:role:privilege": {
+      "reference": "SR-F-000660",
+      "title": "privilege / role"
+    },
+    "native:yugabytedb:endpoint:tablespace": {
+      "reference": "SR-F-000661",
+      "title": "tablespace / endpoint"
+    },
+    "native:yugabytedb:endpoint:database": {
+      "reference": "SR-F-000662",
+      "title": "database / endpoint"
+    },
+    "native:yugabytedb:database:folder": {
+      "reference": "SR-F-000663",
+      "title": "folder / database"
+    },
+    "native:yugabytedb:database:schema": {
+      "reference": "SR-F-000664",
+      "title": "schema / database"
+    },
+    "native:yugabytedb:schema:folder": {
+      "reference": "SR-F-000665",
+      "title": "folder / schema"
+    },
+    "native:yugabytedb:schema:table": {
+      "reference": "SR-F-000666",
+      "title": "table / schema"
+    },
+    "native:yugabytedb:table:folder": {
+      "reference": "SR-F-000667",
+      "title": "folder / table"
+    },
+    "native:yugabytedb:table:column": {
+      "reference": "SR-F-000668",
+      "title": "column / table"
+    },
+    "native:yugabytedb:table:primary-key": {
+      "reference": "SR-F-000669",
+      "title": "primary-key / table"
+    },
+    "native:yugabytedb:table:unique-constraint": {
+      "reference": "SR-F-000670",
+      "title": "unique-constraint / table"
+    },
+    "native:yugabytedb:table:check-constraint": {
+      "reference": "SR-F-000671",
+      "title": "check-constraint / table"
+    },
+    "native:yugabytedb:table:foreign-key": {
+      "reference": "SR-F-000672",
+      "title": "foreign-key / table"
+    },
+    "native:yugabytedb:table:reference": {
+      "reference": "SR-F-000673",
+      "title": "reference / table"
+    },
+    "native:yugabytedb:table:index": {
+      "reference": "SR-F-000674",
+      "title": "index / table"
+    },
+    "native:yugabytedb:index:index-key": {
+      "reference": "SR-F-000675",
+      "title": "index-key / index"
+    },
+    "native:yugabytedb:index:index-options": {
+      "reference": "SR-F-000676",
+      "title": "index-options / index"
+    },
+    "native:yugabytedb:table:trigger": {
+      "reference": "SR-F-000677",
+      "title": "trigger / table"
+    },
+    "native:yugabytedb:trigger:definition-property": {
+      "reference": "SR-F-000678",
+      "title": "definition-property / trigger"
+    },
+    "native:yugabytedb:trigger:definition-option": {
+      "reference": "SR-F-000679",
+      "title": "definition-option / trigger"
+    },
+    "native:yugabytedb:table:partition": {
+      "reference": "SR-F-000680",
+      "title": "partition / table"
+    },
+    "native:yugabytedb:partition:partition-definition": {
+      "reference": "SR-F-000681",
+      "title": "partition-definition / partition"
+    },
+    "native:yugabytedb:table:row-policy": {
+      "reference": "SR-F-000682",
+      "title": "row-policy / table"
+    },
+    "native:yugabytedb:table:privilege": {
+      "reference": "SR-F-000683",
+      "title": "privilege / table"
+    },
+    "native:yugabytedb:table:data": {
+      "reference": "SR-F-000684",
+      "title": "data / table"
+    },
+    "native:yugabytedb:schema:view": {
+      "reference": "SR-F-000685",
+      "title": "view / schema"
+    },
+    "native:yugabytedb:view:folder": {
+      "reference": "SR-F-000686",
+      "title": "folder / view"
+    },
+    "native:yugabytedb:view:column": {
+      "reference": "SR-F-000687",
+      "title": "column / view"
+    },
+    "native:yugabytedb:view:trigger": {
+      "reference": "SR-F-000688",
+      "title": "trigger / view"
+    },
+    "native:yugabytedb:view:rule": {
+      "reference": "SR-F-000689",
+      "title": "rule / view"
+    },
+    "native:yugabytedb:view:definition": {
+      "reference": "SR-F-000690",
+      "title": "definition / view"
+    },
+    "native:yugabytedb:view:privilege": {
+      "reference": "SR-F-000691",
+      "title": "privilege / view"
+    },
+    "native:yugabytedb:view:reference": {
+      "reference": "SR-F-000692",
+      "title": "reference / view"
+    },
+    "native:yugabytedb:schema:materialized-view": {
+      "reference": "SR-F-000693",
+      "title": "materialized-view / schema"
+    },
+    "native:yugabytedb:materialized-view:folder": {
+      "reference": "SR-F-000694",
+      "title": "folder / materialized-view"
+    },
+    "native:yugabytedb:materialized-view:column": {
+      "reference": "SR-F-000695",
+      "title": "column / materialized-view"
+    },
+    "native:yugabytedb:materialized-view:index": {
+      "reference": "SR-F-000696",
+      "title": "index / materialized-view"
+    },
+    "native:yugabytedb:materialized-view:definition": {
+      "reference": "SR-F-000697",
+      "title": "definition / materialized-view"
+    },
+    "native:yugabytedb:materialized-view:privilege": {
+      "reference": "SR-F-000698",
+      "title": "privilege / materialized-view"
+    },
+    "native:yugabytedb:schema:sequence": {
+      "reference": "SR-F-000699",
+      "title": "sequence / schema"
+    },
+    "native:yugabytedb:schema:type": {
+      "reference": "SR-F-000700",
+      "title": "type / schema"
+    },
+    "native:yugabytedb:schema:domain": {
+      "reference": "SR-F-000701",
+      "title": "domain / schema"
+    },
+    "native:yugabytedb:schema:function": {
+      "reference": "SR-F-000702",
+      "title": "function / schema"
+    },
+    "native:yugabytedb:function:folder": {
+      "reference": "SR-F-000703",
+      "title": "folder / function"
+    },
+    "native:yugabytedb:function:parameter": {
+      "reference": "SR-F-000704",
+      "title": "parameter / function"
+    },
+    "native:yugabytedb:function:return-definition": {
+      "reference": "SR-F-000705",
+      "title": "return-definition / function"
+    },
+    "native:yugabytedb:function:privilege": {
+      "reference": "SR-F-000706",
+      "title": "privilege / function"
+    },
+    "native:yugabytedb:schema:procedure": {
+      "reference": "SR-F-000707",
+      "title": "procedure / schema"
+    },
+    "native:yugabytedb:procedure:folder": {
+      "reference": "SR-F-000708",
+      "title": "folder / procedure"
+    },
+    "native:yugabytedb:procedure:parameter": {
+      "reference": "SR-F-000709",
+      "title": "parameter / procedure"
+    },
+    "native:yugabytedb:procedure:return-definition": {
+      "reference": "SR-F-000710",
+      "title": "return-definition / procedure"
+    },
+    "native:yugabytedb:procedure:privilege": {
+      "reference": "SR-F-000711",
+      "title": "privilege / procedure"
+    },
+    "native:yugabytedb:schema:aggregate": {
+      "reference": "SR-F-000712",
+      "title": "aggregate / schema"
+    },
+    "native:yugabytedb:aggregate:folder": {
+      "reference": "SR-F-000713",
+      "title": "folder / aggregate"
+    },
+    "native:yugabytedb:aggregate:parameter": {
+      "reference": "SR-F-000714",
+      "title": "parameter / aggregate"
+    },
+    "native:yugabytedb:aggregate:return-definition": {
+      "reference": "SR-F-000715",
+      "title": "return-definition / aggregate"
+    },
+    "native:yugabytedb:aggregate:privilege": {
+      "reference": "SR-F-000716",
+      "title": "privilege / aggregate"
+    },
+    "native:yugabytedb:schema:collation": {
+      "reference": "SR-F-000717",
+      "title": "collation / schema"
+    },
+    "native:yugabytedb:schema:operator": {
+      "reference": "SR-F-000718",
+      "title": "operator / schema"
+    },
+    "native:yugabytedb:schema:text-search-object": {
+      "reference": "SR-F-000719",
+      "title": "text-search-object / schema"
+    },
+    "native:yugabytedb:database:extension": {
+      "reference": "SR-F-000720",
+      "title": "extension / database"
+    },
+    "native:yugabytedb:database:language": {
+      "reference": "SR-F-000721",
+      "title": "language / database"
+    },
+    "native:yugabytedb:database:system-catalog": {
+      "reference": "SR-F-000722",
+      "title": "system-catalog / database"
+    },
+    "native:yugabytedb:system-catalog:folder": {
+      "reference": "SR-F-000723",
+      "title": "folder / system-catalog"
+    },
+    "native:yugabytedb:system-catalog:schema": {
+      "reference": "SR-F-000724",
+      "title": "schema / system-catalog"
+    },
+    "native:yugabytedb:database:event-trigger": {
+      "reference": "SR-F-000725",
+      "title": "event-trigger / database"
+    },
+    "native:yugabytedb:event-trigger:definition-property": {
+      "reference": "SR-F-000726",
+      "title": "definition-property / event-trigger"
+    },
+    "native:yugabytedb:event-trigger:definition-option": {
+      "reference": "SR-F-000727",
+      "title": "definition-option / event-trigger"
+    },
+    "native:yugabytedb:database:tablegroup": {
+      "reference": "SR-F-000728",
+      "title": "tablegroup / database"
+    },
+    "native:yugabytedb:tablegroup:definition-property": {
+      "reference": "SR-F-000729",
+      "title": "definition-property / tablegroup"
+    },
+    "native:yugabytedb:tablegroup:reference": {
+      "reference": "SR-F-000730",
+      "title": "reference / tablegroup"
+    },
+    "native:yugabytedb:tablegroup:definition-option": {
+      "reference": "SR-F-000731",
+      "title": "definition-option / tablegroup"
+    },
+    "native:yugabytedb:endpoint:topology": {
+      "reference": "SR-F-000732",
+      "title": "topology / endpoint"
+    },
+    "native:yugabytedb:endpoint:replication": {
+      "reference": "SR-F-000733",
+      "title": "replication / endpoint"
+    },
+    "native:yugabytedb:endpoint:login-profile": {
+      "reference": "SR-F-000734",
+      "title": "login-profile / endpoint"
+    },
+    "native:yugabytedb:login-profile:definition-property": {
+      "reference": "SR-F-000735",
+      "title": "definition-property / login-profile"
+    },
+    "native:yugabytedb:endpoint:keyspace": {
+      "reference": "SR-F-000736",
+      "title": "keyspace / endpoint"
+    },
+    "native:yugabytedb:keyspace:replication": {
+      "reference": "SR-F-000737",
+      "title": "replication / keyspace"
+    },
+    "native:yugabytedb:keyspace:folder": {
+      "reference": "SR-F-000738",
+      "title": "folder / keyspace"
+    },
+    "native:yugabytedb:keyspace:table": {
+      "reference": "SR-F-000739",
+      "title": "table / keyspace"
+    },
+    "native:yugabytedb:table:key-definition": {
+      "reference": "SR-F-000740",
+      "title": "key-definition / table"
+    },
+    "native:yugabytedb:table:definition": {
+      "reference": "SR-F-000741",
+      "title": "definition / table"
+    },
+    "native:yugabytedb:keyspace:user-defined-type": {
+      "reference": "SR-F-000742",
+      "title": "user-defined-type / keyspace"
+    },
+    "native:yugabytedb:user-defined-type:definition-property": {
+      "reference": "SR-F-000743",
+      "title": "definition-property / user-defined-type"
+    },
+    "native:yugabytedb:user-defined-type:definition-option": {
+      "reference": "SR-F-000744",
+      "title": "definition-option / user-defined-type"
+    },
+    "native:yugabytedb:endpoint:system-catalog": {
+      "reference": "SR-F-000745",
+      "title": "system-catalog / endpoint"
+    },
+    "native:yugabytedb:system-catalog:keyspace": {
+      "reference": "SR-F-000746",
+      "title": "keyspace / system-catalog"
+    },
+    "native:dolt:endpoint:engine": {
+      "reference": "SR-F-000747",
+      "title": "engine / endpoint"
+    },
+    "native:dolt:engine:endpoint": {
+      "reference": "SR-F-000748",
+      "title": "endpoint / engine"
+    },
+    "native:dolt:endpoint:folder": {
+      "reference": "SR-F-000749",
+      "title": "folder / endpoint"
+    },
+    "native:dolt:endpoint:user": {
+      "reference": "SR-F-000750",
+      "title": "user / endpoint"
+    },
+    "native:dolt:user:security-definition": {
+      "reference": "SR-F-000751",
+      "title": "security-definition / user"
+    },
+    "native:dolt:endpoint:role": {
+      "reference": "SR-F-000752",
+      "title": "role / endpoint"
+    },
+    "native:dolt:role:role-membership": {
+      "reference": "SR-F-000753",
+      "title": "role-membership / role"
+    },
+    "native:dolt:role:privilege": {
+      "reference": "SR-F-000754",
+      "title": "privilege / role"
+    },
+    "native:dolt:endpoint:database": {
+      "reference": "SR-F-000755",
+      "title": "database / endpoint"
+    },
+    "native:dolt:database:folder": {
+      "reference": "SR-F-000756",
+      "title": "folder / database"
+    },
+    "native:dolt:database:branch": {
+      "reference": "SR-F-000757",
+      "title": "branch / database"
+    },
+    "native:dolt:branch:folder": {
+      "reference": "SR-F-000758",
+      "title": "folder / branch"
+    },
+    "native:dolt:branch:table": {
+      "reference": "SR-F-000759",
+      "title": "table / branch"
+    },
+    "native:dolt:table:folder": {
+      "reference": "SR-F-000760",
+      "title": "folder / table"
+    },
+    "native:dolt:table:column": {
+      "reference": "SR-F-000761",
+      "title": "column / table"
+    },
+    "native:dolt:table:primary-key": {
+      "reference": "SR-F-000762",
+      "title": "primary-key / table"
+    },
+    "native:dolt:table:unique-constraint": {
+      "reference": "SR-F-000763",
+      "title": "unique-constraint / table"
+    },
+    "native:dolt:table:check-constraint": {
+      "reference": "SR-F-000764",
+      "title": "check-constraint / table"
+    },
+    "native:dolt:table:foreign-key": {
+      "reference": "SR-F-000765",
+      "title": "foreign-key / table"
+    },
+    "native:dolt:table:reference": {
+      "reference": "SR-F-000766",
+      "title": "reference / table"
+    },
+    "native:dolt:table:index": {
+      "reference": "SR-F-000767",
+      "title": "index / table"
+    },
+    "native:dolt:index:index-key": {
+      "reference": "SR-F-000768",
+      "title": "index-key / index"
+    },
+    "native:dolt:index:index-options": {
+      "reference": "SR-F-000769",
+      "title": "index-options / index"
+    },
+    "native:dolt:index:definition-property": {
+      "reference": "SR-F-000770",
+      "title": "definition-property / index"
+    },
+    "native:dolt:index:definition-option": {
+      "reference": "SR-F-000771",
+      "title": "definition-option / index"
+    },
+    "native:dolt:table:trigger": {
+      "reference": "SR-F-000772",
+      "title": "trigger / table"
+    },
+    "native:dolt:trigger:definition-property": {
+      "reference": "SR-F-000773",
+      "title": "definition-property / trigger"
+    },
+    "native:dolt:trigger:definition-option": {
+      "reference": "SR-F-000774",
+      "title": "definition-option / trigger"
+    },
+    "native:dolt:table:privilege": {
+      "reference": "SR-F-000775",
+      "title": "privilege / table"
+    },
+    "native:dolt:table:data": {
+      "reference": "SR-F-000776",
+      "title": "data / table"
+    },
+    "native:dolt:branch:view": {
+      "reference": "SR-F-000777",
+      "title": "view / branch"
+    },
+    "native:dolt:view:folder": {
+      "reference": "SR-F-000778",
+      "title": "folder / view"
+    },
+    "native:dolt:view:column": {
+      "reference": "SR-F-000779",
+      "title": "column / view"
+    },
+    "native:dolt:view:definition": {
+      "reference": "SR-F-000780",
+      "title": "definition / view"
+    },
+    "native:dolt:view:privilege": {
+      "reference": "SR-F-000781",
+      "title": "privilege / view"
+    },
+    "native:dolt:view:reference": {
+      "reference": "SR-F-000782",
+      "title": "reference / view"
+    },
+    "native:dolt:branch:procedure": {
+      "reference": "SR-F-000783",
+      "title": "procedure / branch"
+    },
+    "native:dolt:procedure:folder": {
+      "reference": "SR-F-000784",
+      "title": "folder / procedure"
+    },
+    "native:dolt:procedure:parameter": {
+      "reference": "SR-F-000785",
+      "title": "parameter / procedure"
+    },
+    "native:dolt:procedure:return-definition": {
+      "reference": "SR-F-000786",
+      "title": "return-definition / procedure"
+    },
+    "native:dolt:procedure:privilege": {
+      "reference": "SR-F-000787",
+      "title": "privilege / procedure"
+    },
+    "native:dolt:procedure:definition-property": {
+      "reference": "SR-F-000788",
+      "title": "definition-property / procedure"
+    },
+    "native:dolt:procedure:definition-option": {
+      "reference": "SR-F-000789",
+      "title": "definition-option / procedure"
+    },
+    "native:dolt:branch:event": {
+      "reference": "SR-F-000790",
+      "title": "event / branch"
+    },
+    "native:dolt:event:definition-property": {
+      "reference": "SR-F-000791",
+      "title": "definition-property / event"
+    },
+    "native:dolt:event:definition-option": {
+      "reference": "SR-F-000792",
+      "title": "definition-option / event"
+    },
+    "native:dolt:branch:working-set": {
+      "reference": "SR-F-000793",
+      "title": "working-set / branch"
+    },
+    "native:dolt:branch:conflict": {
+      "reference": "SR-F-000794",
+      "title": "conflict / branch"
+    },
+    "native:dolt:branch:commit": {
+      "reference": "SR-F-000795",
+      "title": "commit / branch"
+    },
+    "native:dolt:branch:definition-property": {
+      "reference": "SR-F-000796",
+      "title": "definition-property / branch"
+    },
+    "native:dolt:branch:definition-option": {
+      "reference": "SR-F-000797",
+      "title": "definition-option / branch"
+    },
+    "native:dolt:database:tag": {
+      "reference": "SR-F-000798",
+      "title": "tag / database"
+    },
+    "native:dolt:database:remote": {
+      "reference": "SR-F-000799",
+      "title": "remote / database"
+    },
+    "native:dolt:database:backup": {
+      "reference": "SR-F-000800",
+      "title": "backup / database"
+    },
+    "native:dolt:database:system-catalog": {
+      "reference": "SR-F-000801",
+      "title": "system-catalog / database"
+    },
+    "native:dolt:system-catalog:table": {
+      "reference": "SR-F-000802",
+      "title": "table / system-catalog"
+    },
+    "native:dolt:system-catalog:folder": {
+      "reference": "SR-F-000803",
+      "title": "folder / system-catalog"
+    },
+    "native:dolt:system-catalog:procedure": {
+      "reference": "SR-F-000804",
+      "title": "procedure / system-catalog"
+    },
+    "native:dolt:system-catalog:function": {
+      "reference": "SR-F-000805",
+      "title": "function / system-catalog"
+    },
+    "native:dolt:function:folder": {
+      "reference": "SR-F-000806",
+      "title": "folder / function"
+    },
+    "native:dolt:function:parameter": {
+      "reference": "SR-F-000807",
+      "title": "parameter / function"
+    },
+    "native:dolt:function:return-definition": {
+      "reference": "SR-F-000808",
+      "title": "return-definition / function"
+    },
+    "native:dolt:function:privilege": {
+      "reference": "SR-F-000809",
+      "title": "privilege / function"
+    },
+    "native:dolt:function:definition-property": {
+      "reference": "SR-F-000810",
+      "title": "definition-property / function"
+    },
+    "native:dolt:function:definition-option": {
+      "reference": "SR-F-000811",
+      "title": "definition-option / function"
+    },
+    "native:cassandra:endpoint:engine": {
+      "reference": "SR-F-000812",
+      "title": "engine / endpoint"
+    },
+    "native:cassandra:engine:endpoint": {
+      "reference": "SR-F-000813",
+      "title": "endpoint / engine"
+    },
+    "native:cassandra:endpoint:role": {
+      "reference": "SR-F-000814",
+      "title": "role / endpoint"
+    },
+    "native:cassandra:endpoint:identity": {
+      "reference": "SR-F-000815",
+      "title": "identity / endpoint"
+    },
+    "native:cassandra:endpoint:folder": {
+      "reference": "SR-F-000816",
+      "title": "folder / endpoint"
+    },
+    "native:cassandra:endpoint:keyspace": {
+      "reference": "SR-F-000817",
+      "title": "keyspace / endpoint"
+    },
+    "native:cassandra:keyspace:replication": {
+      "reference": "SR-F-000818",
+      "title": "replication / keyspace"
+    },
+    "native:cassandra:keyspace:folder": {
+      "reference": "SR-F-000819",
+      "title": "folder / keyspace"
+    },
+    "native:cassandra:keyspace:table": {
+      "reference": "SR-F-000820",
+      "title": "table / keyspace"
+    },
+    "native:cassandra:table:folder": {
+      "reference": "SR-F-000821",
+      "title": "folder / table"
+    },
+    "native:cassandra:table:column": {
+      "reference": "SR-F-000822",
+      "title": "column / table"
+    },
+    "native:cassandra:table:key-definition": {
+      "reference": "SR-F-000823",
+      "title": "key-definition / table"
+    },
+    "native:cassandra:table:index": {
+      "reference": "SR-F-000824",
+      "title": "index / table"
+    },
+    "native:cassandra:index:index-key": {
+      "reference": "SR-F-000825",
+      "title": "index-key / index"
+    },
+    "native:cassandra:index:index-options": {
+      "reference": "SR-F-000826",
+      "title": "index-options / index"
+    },
+    "native:cassandra:index:definition-property": {
+      "reference": "SR-F-000827",
+      "title": "definition-property / index"
+    },
+    "native:cassandra:index:definition-option": {
+      "reference": "SR-F-000828",
+      "title": "definition-option / index"
+    },
+    "native:cassandra:table:trigger": {
+      "reference": "SR-F-000829",
+      "title": "trigger / table"
+    },
+    "native:cassandra:trigger:definition-property": {
+      "reference": "SR-F-000830",
+      "title": "definition-property / trigger"
+    },
+    "native:cassandra:trigger:definition-option": {
+      "reference": "SR-F-000831",
+      "title": "definition-option / trigger"
+    },
+    "native:cassandra:table:definition": {
+      "reference": "SR-F-000832",
+      "title": "definition / table"
+    },
+    "native:cassandra:table:data": {
+      "reference": "SR-F-000833",
+      "title": "data / table"
+    },
+    "native:cassandra:keyspace:materialized-view": {
+      "reference": "SR-F-000834",
+      "title": "materialized-view / keyspace"
+    },
+    "native:cassandra:materialized-view:reference": {
+      "reference": "SR-F-000835",
+      "title": "reference / materialized-view"
+    },
+    "native:cassandra:materialized-view:folder": {
+      "reference": "SR-F-000836",
+      "title": "folder / materialized-view"
+    },
+    "native:cassandra:materialized-view:column": {
+      "reference": "SR-F-000837",
+      "title": "column / materialized-view"
+    },
+    "native:cassandra:materialized-view:key-definition": {
+      "reference": "SR-F-000838",
+      "title": "key-definition / materialized-view"
+    },
+    "native:cassandra:keyspace:user-defined-type": {
+      "reference": "SR-F-000839",
+      "title": "user-defined-type / keyspace"
+    },
+    "native:cassandra:keyspace:function": {
+      "reference": "SR-F-000840",
+      "title": "function / keyspace"
+    },
+    "native:cassandra:function:folder": {
+      "reference": "SR-F-000841",
+      "title": "folder / function"
+    },
+    "native:cassandra:function:parameter": {
+      "reference": "SR-F-000842",
+      "title": "parameter / function"
+    },
+    "native:cassandra:function:return-definition": {
+      "reference": "SR-F-000843",
+      "title": "return-definition / function"
+    },
+    "native:cassandra:function:privilege": {
+      "reference": "SR-F-000844",
+      "title": "privilege / function"
+    },
+    "native:cassandra:function:definition-property": {
+      "reference": "SR-F-000845",
+      "title": "definition-property / function"
+    },
+    "native:cassandra:function:definition-option": {
+      "reference": "SR-F-000846",
+      "title": "definition-option / function"
+    },
+    "native:cassandra:keyspace:aggregate": {
+      "reference": "SR-F-000847",
+      "title": "aggregate / keyspace"
+    },
+    "native:cassandra:aggregate:folder": {
+      "reference": "SR-F-000848",
+      "title": "folder / aggregate"
+    },
+    "native:cassandra:aggregate:parameter": {
+      "reference": "SR-F-000849",
+      "title": "parameter / aggregate"
+    },
+    "native:cassandra:aggregate:return-definition": {
+      "reference": "SR-F-000850",
+      "title": "return-definition / aggregate"
+    },
+    "native:cassandra:aggregate:privilege": {
+      "reference": "SR-F-000851",
+      "title": "privilege / aggregate"
+    },
+    "native:cassandra:aggregate:definition-property": {
+      "reference": "SR-F-000852",
+      "title": "definition-property / aggregate"
+    },
+    "native:cassandra:aggregate:definition-option": {
+      "reference": "SR-F-000853",
+      "title": "definition-option / aggregate"
+    },
+    "native:cassandra:endpoint:system-catalog": {
+      "reference": "SR-F-000854",
+      "title": "system-catalog / endpoint"
+    },
+    "native:cassandra:system-catalog:keyspace": {
+      "reference": "SR-F-000855",
+      "title": "keyspace / system-catalog"
+    },
+    "native:cassandra:endpoint:topology": {
+      "reference": "SR-F-000856",
+      "title": "topology / endpoint"
+    },
+    "native:apache_ignite:endpoint:engine": {
+      "reference": "SR-F-000857",
+      "title": "engine / endpoint"
+    },
+    "native:apache_ignite:engine:endpoint": {
+      "reference": "SR-F-000858",
+      "title": "endpoint / engine"
+    },
+    "native:apache_ignite:endpoint:configuration": {
+      "reference": "SR-F-000859",
+      "title": "configuration / endpoint"
+    },
+    "native:apache_ignite:configuration:data-region": {
+      "reference": "SR-F-000860",
+      "title": "data-region / configuration"
+    },
+    "native:apache_ignite:configuration:baseline-topology": {
+      "reference": "SR-F-000861",
+      "title": "baseline-topology / configuration"
+    },
+    "native:apache_ignite:endpoint:folder": {
+      "reference": "SR-F-000862",
+      "title": "folder / endpoint"
+    },
+    "native:apache_ignite:endpoint:user": {
+      "reference": "SR-F-000863",
+      "title": "user / endpoint"
+    },
+    "native:apache_ignite:user:security-definition": {
+      "reference": "SR-F-000864",
+      "title": "security-definition / user"
+    },
+    "native:apache_ignite:endpoint:sql-schema": {
+      "reference": "SR-F-000865",
+      "title": "sql-schema / endpoint"
+    },
+    "native:apache_ignite:sql-schema:folder": {
+      "reference": "SR-F-000866",
+      "title": "folder / sql-schema"
+    },
+    "native:apache_ignite:sql-schema:table": {
+      "reference": "SR-F-000867",
+      "title": "table / sql-schema"
+    },
+    "native:apache_ignite:table:folder": {
+      "reference": "SR-F-000868",
+      "title": "folder / table"
+    },
+    "native:apache_ignite:table:column": {
+      "reference": "SR-F-000869",
+      "title": "column / table"
+    },
+    "native:apache_ignite:table:primary-key": {
+      "reference": "SR-F-000870",
+      "title": "primary-key / table"
+    },
+    "native:apache_ignite:table:index": {
+      "reference": "SR-F-000871",
+      "title": "index / table"
+    },
+    "native:apache_ignite:index:index-key": {
+      "reference": "SR-F-000872",
+      "title": "index-key / index"
+    },
+    "native:apache_ignite:index:index-options": {
+      "reference": "SR-F-000873",
+      "title": "index-options / index"
+    },
+    "native:apache_ignite:table:reference": {
+      "reference": "SR-F-000874",
+      "title": "reference / table"
+    },
+    "native:apache_ignite:table:data": {
+      "reference": "SR-F-000875",
+      "title": "data / table"
+    },
+    "native:apache_ignite:sql-schema:view": {
+      "reference": "SR-F-000876",
+      "title": "view / sql-schema"
+    },
+    "native:apache_ignite:view:folder": {
+      "reference": "SR-F-000877",
+      "title": "folder / view"
+    },
+    "native:apache_ignite:view:column": {
+      "reference": "SR-F-000878",
+      "title": "column / view"
+    },
+    "native:apache_ignite:view:definition": {
+      "reference": "SR-F-000879",
+      "title": "definition / view"
+    },
+    "native:apache_ignite:view:reference": {
+      "reference": "SR-F-000880",
+      "title": "reference / view"
+    },
+    "native:apache_ignite:endpoint:cache": {
+      "reference": "SR-F-000881",
+      "title": "cache / endpoint"
+    },
+    "native:apache_ignite:cache:binary-type": {
+      "reference": "SR-F-000882",
+      "title": "binary-type / cache"
+    },
+    "native:apache_ignite:cache:query-entity": {
+      "reference": "SR-F-000883",
+      "title": "query-entity / cache"
+    },
+    "native:apache_ignite:cache:definition": {
+      "reference": "SR-F-000884",
+      "title": "definition / cache"
+    },
+    "native:apache_ignite:cache:data": {
+      "reference": "SR-F-000885",
+      "title": "data / cache"
+    },
+    "native:apache_ignite:cache:definition-property": {
+      "reference": "SR-F-000886",
+      "title": "definition-property / cache"
+    },
+    "native:apache_ignite:cache:definition-option": {
+      "reference": "SR-F-000887",
+      "title": "definition-option / cache"
+    },
+    "native:apache_ignite:endpoint:cache-template": {
+      "reference": "SR-F-000888",
+      "title": "cache-template / endpoint"
+    },
+    "native:apache_ignite:endpoint:snapshot": {
+      "reference": "SR-F-000889",
+      "title": "snapshot / endpoint"
+    },
+    "native:apache_ignite:endpoint:system-catalog": {
+      "reference": "SR-F-000890",
+      "title": "system-catalog / endpoint"
+    },
+    "native:apache_ignite:system-catalog:sql-schema": {
+      "reference": "SR-F-000891",
+      "title": "sql-schema / system-catalog"
+    },
+    "native:foundationdb:endpoint:engine": {
+      "reference": "SR-F-000892",
+      "title": "engine / endpoint"
+    },
+    "native:foundationdb:engine:endpoint": {
+      "reference": "SR-F-000893",
+      "title": "endpoint / engine"
+    },
+    "native:foundationdb:endpoint:configuration": {
+      "reference": "SR-F-000894",
+      "title": "configuration / endpoint"
+    },
+    "native:foundationdb:endpoint:keyspace": {
+      "reference": "SR-F-000895",
+      "title": "keyspace / endpoint"
+    },
+    "native:foundationdb:keyspace:folder": {
+      "reference": "SR-F-000896",
+      "title": "folder / keyspace"
+    },
+    "native:foundationdb:keyspace:directory": {
+      "reference": "SR-F-000897",
+      "title": "directory / keyspace"
+    },
+    "native:foundationdb:directory:directory": {
+      "reference": "SR-F-000898",
+      "title": "directory / directory"
+    },
+    "native:foundationdb:directory:definition-property": {
+      "reference": "SR-F-000899",
+      "title": "definition-property / directory"
+    },
+    "native:foundationdb:directory:definition-option": {
+      "reference": "SR-F-000900",
+      "title": "definition-option / directory"
+    },
+    "native:foundationdb:directory:subspace": {
+      "reference": "SR-F-000901",
+      "title": "subspace / directory"
+    },
+    "native:foundationdb:directory:data": {
+      "reference": "SR-F-000902",
+      "title": "data / directory"
+    },
+    "native:foundationdb:keyspace:key-range": {
+      "reference": "SR-F-000903",
+      "title": "key-range / keyspace"
+    },
+    "native:foundationdb:key-range:data": {
+      "reference": "SR-F-000904",
+      "title": "data / key-range"
+    },
+    "native:foundationdb:endpoint:folder": {
+      "reference": "SR-F-000905",
+      "title": "folder / endpoint"
+    },
+    "native:foundationdb:endpoint:tenant": {
+      "reference": "SR-F-000906",
+      "title": "tenant / endpoint"
+    },
+    "native:foundationdb:tenant:definition": {
+      "reference": "SR-F-000907",
+      "title": "definition / tenant"
+    },
+    "native:foundationdb:tenant:keyspace": {
+      "reference": "SR-F-000908",
+      "title": "keyspace / tenant"
+    },
+    "native:foundationdb:keyspace:data": {
+      "reference": "SR-F-000909",
+      "title": "data / keyspace"
+    },
+    "native:foundationdb:tenant:definition-property": {
+      "reference": "SR-F-000910",
+      "title": "definition-property / tenant"
+    },
+    "native:foundationdb:tenant:definition-option": {
+      "reference": "SR-F-000911",
+      "title": "definition-option / tenant"
+    },
+    "native:foundationdb:endpoint:backup": {
+      "reference": "SR-F-000912",
+      "title": "backup / endpoint"
+    },
+    "native:foundationdb:endpoint:system-catalog": {
+      "reference": "SR-F-000913",
+      "title": "system-catalog / endpoint"
+    },
+    "native:foundationdb:system-catalog:key-range": {
+      "reference": "SR-F-000914",
+      "title": "key-range / system-catalog"
+    },
+    "native:tikv:endpoint:engine": {
+      "reference": "SR-F-000915",
+      "title": "engine / endpoint"
+    },
+    "native:tikv:engine:endpoint": {
+      "reference": "SR-F-000916",
+      "title": "endpoint / engine"
+    },
+    "native:tikv:endpoint:topology": {
+      "reference": "SR-F-000917",
+      "title": "topology / endpoint"
+    },
+    "native:tikv:endpoint:configuration": {
+      "reference": "SR-F-000918",
+      "title": "configuration / endpoint"
+    },
+    "native:tikv:endpoint:placement-rule": {
+      "reference": "SR-F-000919",
+      "title": "placement-rule / endpoint"
+    },
+    "native:tikv:endpoint:scheduler": {
+      "reference": "SR-F-000920",
+      "title": "scheduler / endpoint"
+    },
+    "native:tikv:endpoint:keyspace": {
+      "reference": "SR-F-000921",
+      "title": "keyspace / endpoint"
+    },
+    "native:tikv:keyspace:key-range": {
+      "reference": "SR-F-000922",
+      "title": "key-range / keyspace"
+    },
+    "native:tikv:key-range:data": {
+      "reference": "SR-F-000923",
+      "title": "data / key-range"
+    },
+    "native:tikv:data:definition-property": {
+      "reference": "SR-F-000924",
+      "title": "definition-property / data"
+    },
+    "native:tikv:key-range:definition-property": {
+      "reference": "SR-F-000925",
+      "title": "definition-property / key-range"
+    },
+    "native:tikv:key-range:definition-option": {
+      "reference": "SR-F-000926",
+      "title": "definition-option / key-range"
+    },
+    "native:tikv:endpoint:folder": {
+      "reference": "SR-F-000927",
+      "title": "folder / endpoint"
+    },
+    "native:tikv:keyspace:definition": {
+      "reference": "SR-F-000928",
+      "title": "definition / keyspace"
+    },
+    "native:tikv:endpoint:backup": {
+      "reference": "SR-F-000929",
+      "title": "backup / endpoint"
+    },
+    "native:redis:endpoint:engine": {
+      "reference": "SR-F-000930",
+      "title": "engine / endpoint"
+    },
+    "native:redis:engine:endpoint": {
+      "reference": "SR-F-000931",
+      "title": "endpoint / engine"
+    },
+    "native:redis:endpoint:folder": {
+      "reference": "SR-F-000932",
+      "title": "folder / endpoint"
+    },
+    "native:redis:endpoint:acl-user": {
+      "reference": "SR-F-000933",
+      "title": "acl-user / endpoint"
+    },
+    "native:redis:acl-user:definition": {
+      "reference": "SR-F-000934",
+      "title": "definition / acl-user"
+    },
+    "native:redis:acl-user:definition-property": {
+      "reference": "SR-F-000935",
+      "title": "definition-property / acl-user"
+    },
+    "native:redis:acl-user:definition-option": {
+      "reference": "SR-F-000936",
+      "title": "definition-option / acl-user"
+    },
+    "native:redis:endpoint:function-library": {
+      "reference": "SR-F-000937",
+      "title": "function-library / endpoint"
+    },
+    "native:redis:function-library:function": {
+      "reference": "SR-F-000938",
+      "title": "function / function-library"
+    },
+    "native:redis:function-library:definition-property": {
+      "reference": "SR-F-000939",
+      "title": "definition-property / function-library"
+    },
+    "native:redis:function-library:definition-option": {
+      "reference": "SR-F-000940",
+      "title": "definition-option / function-library"
+    },
+    "native:redis:endpoint:database": {
+      "reference": "SR-F-000941",
+      "title": "database / endpoint"
+    },
+    "native:redis:database:string": {
+      "reference": "SR-F-000942",
+      "title": "string / database"
+    },
+    "native:redis:database:hash": {
+      "reference": "SR-F-000943",
+      "title": "hash / database"
+    },
+    "native:redis:hash:data": {
+      "reference": "SR-F-000944",
+      "title": "data / hash"
+    },
+    "native:redis:database:list": {
+      "reference": "SR-F-000945",
+      "title": "list / database"
+    },
+    "native:redis:database:set": {
+      "reference": "SR-F-000946",
+      "title": "set / database"
+    },
+    "native:redis:database:sorted-set": {
+      "reference": "SR-F-000947",
+      "title": "sorted-set / database"
+    },
+    "native:redis:database:folder": {
+      "reference": "SR-F-000948",
+      "title": "folder / database"
+    },
+    "native:redis:database:stream": {
+      "reference": "SR-F-000949",
+      "title": "stream / database"
+    },
+    "native:redis:stream:data": {
+      "reference": "SR-F-000950",
+      "title": "data / stream"
+    },
+    "native:redis:stream:folder": {
+      "reference": "SR-F-000951",
+      "title": "folder / stream"
+    },
+    "native:redis:stream:consumer-group": {
+      "reference": "SR-F-000952",
+      "title": "consumer-group / stream"
+    },
+    "native:redis:consumer-group:consumer": {
+      "reference": "SR-F-000953",
+      "title": "consumer / consumer-group"
+    },
+    "native:redis:consumer-group:data": {
+      "reference": "SR-F-000954",
+      "title": "data / consumer-group"
+    },
+    "native:redis:consumer-group:definition-property": {
+      "reference": "SR-F-000955",
+      "title": "definition-property / consumer-group"
+    },
+    "native:redis:consumer-group:definition-option": {
+      "reference": "SR-F-000956",
+      "title": "definition-option / consumer-group"
+    },
+    "native:redis:database:vector-set": {
+      "reference": "SR-F-000957",
+      "title": "vector-set / database"
+    },
+    "native:redis:database:module-type": {
+      "reference": "SR-F-000958",
+      "title": "module-type / database"
+    },
+    "native:redis:endpoint:configuration": {
+      "reference": "SR-F-000959",
+      "title": "configuration / endpoint"
+    },
+    "native:redis:endpoint:module": {
+      "reference": "SR-F-000960",
+      "title": "module / endpoint"
+    },
+    "native:redis:endpoint:topology": {
+      "reference": "SR-F-000961",
+      "title": "topology / endpoint"
+    },
+    "native:mongodb:endpoint:engine": {
+      "reference": "SR-F-000962",
+      "title": "engine / endpoint"
+    },
+    "native:mongodb:engine:endpoint": {
+      "reference": "SR-F-000963",
+      "title": "endpoint / engine"
+    },
+    "native:mongodb:endpoint:deployment": {
+      "reference": "SR-F-000964",
+      "title": "deployment / endpoint"
+    },
+    "native:mongodb:deployment:replica-set": {
+      "reference": "SR-F-000965",
+      "title": "replica-set / deployment"
+    },
+    "native:mongodb:deployment:shard": {
+      "reference": "SR-F-000966",
+      "title": "shard / deployment"
+    },
+    "native:mongodb:endpoint:folder": {
+      "reference": "SR-F-000967",
+      "title": "folder / endpoint"
+    },
+    "native:mongodb:endpoint:database": {
+      "reference": "SR-F-000968",
+      "title": "database / endpoint"
+    },
+    "native:mongodb:database:folder": {
+      "reference": "SR-F-000969",
+      "title": "folder / database"
+    },
+    "native:mongodb:database:collection": {
+      "reference": "SR-F-000970",
+      "title": "collection / database"
+    },
+    "native:mongodb:collection:validator": {
+      "reference": "SR-F-000971",
+      "title": "validator / collection"
+    },
+    "native:mongodb:validator:definition-property": {
+      "reference": "SR-F-000972",
+      "title": "definition-property / validator"
+    },
+    "native:mongodb:validator:definition-option": {
+      "reference": "SR-F-000973",
+      "title": "definition-option / validator"
+    },
+    "native:mongodb:collection:folder": {
+      "reference": "SR-F-000974",
+      "title": "folder / collection"
+    },
+    "native:mongodb:collection:index": {
+      "reference": "SR-F-000975",
+      "title": "index / collection"
+    },
+    "native:mongodb:index:index-key": {
+      "reference": "SR-F-000976",
+      "title": "index-key / index"
+    },
+    "native:mongodb:index:index-options": {
+      "reference": "SR-F-000977",
+      "title": "index-options / index"
+    },
+    "native:mongodb:index:definition-property": {
+      "reference": "SR-F-000978",
+      "title": "definition-property / index"
+    },
+    "native:mongodb:index:definition-option": {
+      "reference": "SR-F-000979",
+      "title": "definition-option / index"
+    },
+    "native:mongodb:collection:sharding-definition": {
+      "reference": "SR-F-000980",
+      "title": "sharding-definition / collection"
+    },
+    "native:mongodb:collection:definition": {
+      "reference": "SR-F-000981",
+      "title": "definition / collection"
+    },
+    "native:mongodb:collection:data": {
+      "reference": "SR-F-000982",
+      "title": "data / collection"
+    },
+    "native:mongodb:collection:reference": {
+      "reference": "SR-F-000983",
+      "title": "reference / collection"
+    },
+    "native:mongodb:database:view": {
+      "reference": "SR-F-000984",
+      "title": "view / database"
+    },
+    "native:mongodb:view:definition": {
+      "reference": "SR-F-000985",
+      "title": "definition / view"
+    },
+    "native:mongodb:database:user": {
+      "reference": "SR-F-000986",
+      "title": "user / database"
+    },
+    "native:mongodb:user:security-definition": {
+      "reference": "SR-F-000987",
+      "title": "security-definition / user"
+    },
+    "native:mongodb:database:role": {
+      "reference": "SR-F-000988",
+      "title": "role / database"
+    },
+    "native:mongodb:role:role-membership": {
+      "reference": "SR-F-000989",
+      "title": "role-membership / role"
+    },
+    "native:mongodb:role:privilege": {
+      "reference": "SR-F-000990",
+      "title": "privilege / role"
+    },
+    "native:mongodb:endpoint:system-catalog": {
+      "reference": "SR-F-000991",
+      "title": "system-catalog / endpoint"
+    },
+    "native:mongodb:system-catalog:database": {
+      "reference": "SR-F-000992",
+      "title": "database / system-catalog"
+    },
+    "native:milvus:endpoint:engine": {
+      "reference": "SR-F-000993",
+      "title": "engine / endpoint"
+    },
+    "native:milvus:engine:endpoint": {
+      "reference": "SR-F-000994",
+      "title": "endpoint / engine"
+    },
+    "native:milvus:endpoint:folder": {
+      "reference": "SR-F-000995",
+      "title": "folder / endpoint"
+    },
+    "native:milvus:endpoint:user": {
+      "reference": "SR-F-000996",
+      "title": "user / endpoint"
+    },
+    "native:milvus:user:security-definition": {
+      "reference": "SR-F-000997",
+      "title": "security-definition / user"
+    },
+    "native:milvus:endpoint:role": {
+      "reference": "SR-F-000998",
+      "title": "role / endpoint"
+    },
+    "native:milvus:role:role-membership": {
+      "reference": "SR-F-000999",
+      "title": "role-membership / role"
+    },
+    "native:milvus:role:privilege": {
+      "reference": "SR-F-001000",
+      "title": "privilege / role"
+    },
+    "native:milvus:endpoint:privilege-group": {
+      "reference": "SR-F-001001",
+      "title": "privilege-group / endpoint"
+    },
+    "native:milvus:endpoint:resource-group": {
+      "reference": "SR-F-001002",
+      "title": "resource-group / endpoint"
+    },
+    "native:milvus:endpoint:database": {
+      "reference": "SR-F-001003",
+      "title": "database / endpoint"
+    },
+    "native:milvus:database:folder": {
+      "reference": "SR-F-001004",
+      "title": "folder / database"
+    },
+    "native:milvus:database:collection": {
+      "reference": "SR-F-001005",
+      "title": "collection / database"
+    },
+    "native:milvus:collection:folder": {
+      "reference": "SR-F-001006",
+      "title": "folder / collection"
+    },
+    "native:milvus:collection:field": {
+      "reference": "SR-F-001007",
+      "title": "field / collection"
+    },
+    "native:milvus:field:definition": {
+      "reference": "SR-F-001008",
+      "title": "definition / field"
+    },
+    "native:milvus:collection:definition": {
+      "reference": "SR-F-001009",
+      "title": "definition / collection"
+    },
+    "native:milvus:collection:key-definition": {
+      "reference": "SR-F-001010",
+      "title": "key-definition / collection"
+    },
+    "native:milvus:collection:partition": {
+      "reference": "SR-F-001011",
+      "title": "partition / collection"
+    },
+    "native:milvus:collection:scalar-index": {
+      "reference": "SR-F-001012",
+      "title": "scalar-index / collection"
+    },
+    "native:milvus:scalar-index:definition-property": {
+      "reference": "SR-F-001013",
+      "title": "definition-property / scalar-index"
+    },
+    "native:milvus:scalar-index:definition-option": {
+      "reference": "SR-F-001014",
+      "title": "definition-option / scalar-index"
+    },
+    "native:milvus:collection:vector-index": {
+      "reference": "SR-F-001015",
+      "title": "vector-index / collection"
+    },
+    "native:milvus:vector-index:definition-property": {
+      "reference": "SR-F-001016",
+      "title": "definition-property / vector-index"
+    },
+    "native:milvus:vector-index:definition-option": {
+      "reference": "SR-F-001017",
+      "title": "definition-option / vector-index"
+    },
+    "native:milvus:collection:schema-function": {
+      "reference": "SR-F-001018",
+      "title": "schema-function / collection"
+    },
+    "native:milvus:schema-function:definition-property": {
+      "reference": "SR-F-001019",
+      "title": "definition-property / schema-function"
+    },
+    "native:milvus:schema-function:definition-option": {
+      "reference": "SR-F-001020",
+      "title": "definition-option / schema-function"
+    },
+    "native:milvus:collection:data": {
+      "reference": "SR-F-001021",
+      "title": "data / collection"
+    },
+    "native:milvus:database:alias": {
+      "reference": "SR-F-001022",
+      "title": "alias / database"
+    },
+    "native:milvus:alias:reference": {
+      "reference": "SR-F-001023",
+      "title": "reference / alias"
+    },
+    "native:clickhouse:endpoint:engine": {
+      "reference": "SR-F-001024",
+      "title": "engine / endpoint"
+    },
+    "native:clickhouse:engine:endpoint": {
+      "reference": "SR-F-001025",
+      "title": "endpoint / engine"
+    },
+    "native:clickhouse:endpoint:folder": {
+      "reference": "SR-F-001026",
+      "title": "folder / endpoint"
+    },
+    "native:clickhouse:endpoint:user": {
+      "reference": "SR-F-001027",
+      "title": "user / endpoint"
+    },
+    "native:clickhouse:user:security-definition": {
+      "reference": "SR-F-001028",
+      "title": "security-definition / user"
+    },
+    "native:clickhouse:endpoint:role": {
+      "reference": "SR-F-001029",
+      "title": "role / endpoint"
+    },
+    "native:clickhouse:role:role-membership": {
+      "reference": "SR-F-001030",
+      "title": "role-membership / role"
+    },
+    "native:clickhouse:role:privilege": {
+      "reference": "SR-F-001031",
+      "title": "privilege / role"
+    },
+    "native:clickhouse:endpoint:quota": {
+      "reference": "SR-F-001032",
+      "title": "quota / endpoint"
+    },
+    "native:clickhouse:endpoint:settings-profile": {
+      "reference": "SR-F-001033",
+      "title": "settings-profile / endpoint"
+    },
+    "native:clickhouse:endpoint:row-policy": {
+      "reference": "SR-F-001034",
+      "title": "row-policy / endpoint"
+    },
+    "native:clickhouse:endpoint:masking-policy": {
+      "reference": "SR-F-001035",
+      "title": "masking-policy / endpoint"
+    },
+    "native:clickhouse:endpoint:workload": {
+      "reference": "SR-F-001036",
+      "title": "workload / endpoint"
+    },
+    "native:clickhouse:endpoint:resource": {
+      "reference": "SR-F-001037",
+      "title": "resource / endpoint"
+    },
+    "native:clickhouse:endpoint:function": {
+      "reference": "SR-F-001038",
+      "title": "function / endpoint"
+    },
+    "native:clickhouse:endpoint:external-function": {
+      "reference": "SR-F-001039",
+      "title": "external-function / endpoint"
+    },
+    "native:clickhouse:endpoint:named-collection": {
+      "reference": "SR-F-001040",
+      "title": "named-collection / endpoint"
+    },
+    "native:clickhouse:endpoint:cluster-definition": {
+      "reference": "SR-F-001041",
+      "title": "cluster-definition / endpoint"
+    },
+    "native:clickhouse:endpoint:database": {
+      "reference": "SR-F-001042",
+      "title": "database / endpoint"
+    },
+    "native:clickhouse:database:folder": {
+      "reference": "SR-F-001043",
+      "title": "folder / database"
+    },
+    "native:clickhouse:database:table": {
+      "reference": "SR-F-001044",
+      "title": "table / database"
+    },
+    "native:clickhouse:table:folder": {
+      "reference": "SR-F-001045",
+      "title": "folder / table"
+    },
+    "native:clickhouse:table:column": {
+      "reference": "SR-F-001046",
+      "title": "column / table"
+    },
+    "native:clickhouse:table:definition": {
+      "reference": "SR-F-001047",
+      "title": "definition / table"
+    },
+    "native:clickhouse:table:key-definition": {
+      "reference": "SR-F-001048",
+      "title": "key-definition / table"
+    },
+    "native:clickhouse:table:constraint": {
+      "reference": "SR-F-001049",
+      "title": "constraint / table"
+    },
+    "native:clickhouse:table:index": {
+      "reference": "SR-F-001050",
+      "title": "index / table"
+    },
+    "native:clickhouse:table:projection": {
+      "reference": "SR-F-001051",
+      "title": "projection / table"
+    },
+    "native:clickhouse:projection:definition-property": {
+      "reference": "SR-F-001052",
+      "title": "definition-property / projection"
+    },
+    "native:clickhouse:projection:definition-option": {
+      "reference": "SR-F-001053",
+      "title": "definition-option / projection"
+    },
+    "native:clickhouse:table:ttl-definition": {
+      "reference": "SR-F-001054",
+      "title": "ttl-definition / table"
+    },
+    "native:clickhouse:table:partition": {
+      "reference": "SR-F-001055",
+      "title": "partition / table"
+    },
+    "native:clickhouse:table:data": {
+      "reference": "SR-F-001056",
+      "title": "data / table"
+    },
+    "native:clickhouse:table:definition-property": {
+      "reference": "SR-F-001057",
+      "title": "definition-property / table"
+    },
+    "native:clickhouse:table:definition-option": {
+      "reference": "SR-F-001058",
+      "title": "definition-option / table"
+    },
+    "native:clickhouse:database:view": {
+      "reference": "SR-F-001059",
+      "title": "view / database"
+    },
+    "native:clickhouse:view:folder": {
+      "reference": "SR-F-001060",
+      "title": "folder / view"
+    },
+    "native:clickhouse:view:column": {
+      "reference": "SR-F-001061",
+      "title": "column / view"
+    },
+    "native:clickhouse:view:definition": {
+      "reference": "SR-F-001062",
+      "title": "definition / view"
+    },
+    "native:clickhouse:database:materialized-view": {
+      "reference": "SR-F-001063",
+      "title": "materialized-view / database"
+    },
+    "native:clickhouse:materialized-view:definition": {
+      "reference": "SR-F-001064",
+      "title": "definition / materialized-view"
+    },
+    "native:clickhouse:materialized-view:reference": {
+      "reference": "SR-F-001065",
+      "title": "reference / materialized-view"
+    },
+    "native:clickhouse:materialized-view:definition-property": {
+      "reference": "SR-F-001066",
+      "title": "definition-property / materialized-view"
+    },
+    "native:clickhouse:materialized-view:definition-option": {
+      "reference": "SR-F-001067",
+      "title": "definition-option / materialized-view"
+    },
+    "native:clickhouse:database:dictionary": {
+      "reference": "SR-F-001068",
+      "title": "dictionary / database"
+    },
+    "native:clickhouse:dictionary:definition": {
+      "reference": "SR-F-001069",
+      "title": "definition / dictionary"
+    },
+    "native:clickhouse:endpoint:system-catalog": {
+      "reference": "SR-F-001070",
+      "title": "system-catalog / endpoint"
+    },
+    "native:clickhouse:system-catalog:database": {
+      "reference": "SR-F-001071",
+      "title": "database / system-catalog"
+    },
+    "native:influxdb:endpoint:engine": {
+      "reference": "SR-F-001072",
+      "title": "engine / endpoint"
+    },
+    "native:influxdb:engine:endpoint": {
+      "reference": "SR-F-001073",
+      "title": "endpoint / engine"
+    },
+    "native:influxdb:endpoint:token": {
+      "reference": "SR-F-001074",
+      "title": "token / endpoint"
+    },
+    "native:influxdb:endpoint:folder": {
+      "reference": "SR-F-001075",
+      "title": "folder / endpoint"
+    },
+    "native:influxdb:endpoint:database": {
+      "reference": "SR-F-001076",
+      "title": "database / endpoint"
+    },
+    "native:influxdb:database:retention-policy": {
+      "reference": "SR-F-001077",
+      "title": "retention-policy / database"
+    },
+    "native:influxdb:database:folder": {
+      "reference": "SR-F-001078",
+      "title": "folder / database"
+    },
+    "native:influxdb:database:table": {
+      "reference": "SR-F-001079",
+      "title": "table / database"
+    },
+    "native:influxdb:table:column": {
+      "reference": "SR-F-001080",
+      "title": "column / table"
+    },
+    "native:influxdb:table:tag": {
+      "reference": "SR-F-001081",
+      "title": "tag / table"
+    },
+    "native:influxdb:table:field": {
+      "reference": "SR-F-001082",
+      "title": "field / table"
+    },
+    "native:influxdb:table:last-cache": {
+      "reference": "SR-F-001083",
+      "title": "last-cache / table"
+    },
+    "native:influxdb:last-cache:definition-property": {
+      "reference": "SR-F-001084",
+      "title": "definition-property / last-cache"
+    },
+    "native:influxdb:last-cache:definition-option": {
+      "reference": "SR-F-001085",
+      "title": "definition-option / last-cache"
+    },
+    "native:influxdb:table:distinct-cache": {
+      "reference": "SR-F-001086",
+      "title": "distinct-cache / table"
+    },
+    "native:influxdb:distinct-cache:definition-property": {
+      "reference": "SR-F-001087",
+      "title": "definition-property / distinct-cache"
+    },
+    "native:influxdb:distinct-cache:definition-option": {
+      "reference": "SR-F-001088",
+      "title": "definition-option / distinct-cache"
+    },
+    "native:influxdb:table:data": {
+      "reference": "SR-F-001089",
+      "title": "data / table"
+    },
+    "native:influxdb:database:trigger": {
+      "reference": "SR-F-001090",
+      "title": "trigger / database"
+    },
+    "native:influxdb:trigger:definition-property": {
+      "reference": "SR-F-001091",
+      "title": "definition-property / trigger"
+    },
+    "native:influxdb:trigger:definition-option": {
+      "reference": "SR-F-001092",
+      "title": "definition-option / trigger"
+    },
+    "native:influxdb:endpoint:plugin": {
+      "reference": "SR-F-001093",
+      "title": "plugin / endpoint"
+    },
+    "native:influxdb:endpoint:system-catalog": {
+      "reference": "SR-F-001094",
+      "title": "system-catalog / endpoint"
+    },
+    "native:influxdb:system-catalog:schema": {
+      "reference": "SR-F-001095",
+      "title": "schema / system-catalog"
+    },
+    "native:influxdb:schema:view": {
+      "reference": "SR-F-001096",
+      "title": "view / schema"
+    },
+    "native:influxdb:view:folder": {
+      "reference": "SR-F-001097",
+      "title": "folder / view"
+    },
+    "native:influxdb:view:column": {
+      "reference": "SR-F-001098",
+      "title": "column / view"
+    },
+    "native:neo4j:endpoint:engine": {
+      "reference": "SR-F-001099",
+      "title": "engine / endpoint"
+    },
+    "native:neo4j:engine:endpoint": {
+      "reference": "SR-F-001100",
+      "title": "endpoint / engine"
+    },
+    "native:neo4j:endpoint:user": {
+      "reference": "SR-F-001101",
+      "title": "user / endpoint"
+    },
+    "native:neo4j:endpoint:role": {
+      "reference": "SR-F-001102",
+      "title": "role / endpoint"
+    },
+    "native:neo4j:endpoint:alias": {
+      "reference": "SR-F-001103",
+      "title": "alias / endpoint"
+    },
+    "native:neo4j:alias:definition-property": {
+      "reference": "SR-F-001104",
+      "title": "definition-property / alias"
+    },
+    "native:neo4j:alias:definition-option": {
+      "reference": "SR-F-001105",
+      "title": "definition-option / alias"
+    },
+    "native:neo4j:endpoint:composite-database": {
+      "reference": "SR-F-001106",
+      "title": "composite-database / endpoint"
+    },
+    "native:neo4j:endpoint:folder": {
+      "reference": "SR-F-001107",
+      "title": "folder / endpoint"
+    },
+    "native:neo4j:endpoint:database": {
+      "reference": "SR-F-001108",
+      "title": "database / endpoint"
+    },
+    "native:neo4j:database:folder": {
+      "reference": "SR-F-001109",
+      "title": "folder / database"
+    },
+    "native:neo4j:database:label": {
+      "reference": "SR-F-001110",
+      "title": "label / database"
+    },
+    "native:neo4j:label:property": {
+      "reference": "SR-F-001111",
+      "title": "property / label"
+    },
+    "native:neo4j:label:data": {
+      "reference": "SR-F-001112",
+      "title": "data / label"
+    },
+    "native:neo4j:database:relationship-type": {
+      "reference": "SR-F-001113",
+      "title": "relationship-type / database"
+    },
+    "native:neo4j:relationship-type:property": {
+      "reference": "SR-F-001114",
+      "title": "property / relationship-type"
+    },
+    "native:neo4j:relationship-type:data": {
+      "reference": "SR-F-001115",
+      "title": "data / relationship-type"
+    },
+    "native:neo4j:database:index": {
+      "reference": "SR-F-001116",
+      "title": "index / database"
+    },
+    "native:neo4j:database:constraint": {
+      "reference": "SR-F-001117",
+      "title": "constraint / database"
+    },
+    "native:neo4j:database:routine-registration": {
+      "reference": "SR-F-001118",
+      "title": "routine-registration / database"
+    },
+    "native:neo4j:endpoint:system-catalog": {
+      "reference": "SR-F-001119",
+      "title": "system-catalog / endpoint"
+    },
+    "native:neo4j:system-catalog:database": {
+      "reference": "SR-F-001120",
+      "title": "database / system-catalog"
+    },
+    "native:neo4j:database:data": {
+      "reference": "SR-F-001121",
+      "title": "data / database"
+    },
+    "native:opensearch:endpoint:engine": {
+      "reference": "SR-F-001122",
+      "title": "engine / endpoint"
+    },
+    "native:opensearch:engine:endpoint": {
+      "reference": "SR-F-001123",
+      "title": "endpoint / engine"
+    },
+    "native:opensearch:endpoint:interface": {
+      "reference": "SR-F-001124",
+      "title": "interface / endpoint"
+    },
+    "native:opensearch:interface:folder": {
+      "reference": "SR-F-001125",
+      "title": "folder / interface"
+    },
+    "native:opensearch:interface:index": {
+      "reference": "SR-F-001126",
+      "title": "index / interface"
+    },
+    "native:opensearch:index:mapping": {
+      "reference": "SR-F-001127",
+      "title": "mapping / index"
+    },
+    "native:opensearch:mapping:field": {
+      "reference": "SR-F-001128",
+      "title": "field / mapping"
+    },
+    "native:opensearch:index:analysis-definition": {
+      "reference": "SR-F-001129",
+      "title": "analysis-definition / index"
+    },
+    "native:opensearch:analysis-definition:analyzer": {
+      "reference": "SR-F-001130",
+      "title": "analyzer / analysis-definition"
+    },
+    "native:opensearch:analysis-definition:normalizer": {
+      "reference": "SR-F-001131",
+      "title": "normalizer / analysis-definition"
+    },
+    "native:opensearch:analysis-definition:tokenizer": {
+      "reference": "SR-F-001132",
+      "title": "tokenizer / analysis-definition"
+    },
+    "native:opensearch:analysis-definition:analysis-filter": {
+      "reference": "SR-F-001133",
+      "title": "analysis-filter / analysis-definition"
+    },
+    "native:opensearch:index:settings": {
+      "reference": "SR-F-001134",
+      "title": "settings / index"
+    },
+    "native:opensearch:index:reference": {
+      "reference": "SR-F-001135",
+      "title": "reference / index"
+    },
+    "native:opensearch:index:shard": {
+      "reference": "SR-F-001136",
+      "title": "shard / index"
+    },
+    "native:opensearch:index:data": {
+      "reference": "SR-F-001137",
+      "title": "data / index"
+    },
+    "native:opensearch:interface:data-stream": {
+      "reference": "SR-F-001138",
+      "title": "data-stream / interface"
+    },
+    "native:opensearch:data-stream:reference": {
+      "reference": "SR-F-001139",
+      "title": "reference / data-stream"
+    },
+    "native:opensearch:data-stream:definition-property": {
+      "reference": "SR-F-001140",
+      "title": "definition-property / data-stream"
+    },
+    "native:opensearch:data-stream:definition-option": {
+      "reference": "SR-F-001141",
+      "title": "definition-option / data-stream"
+    },
+    "native:opensearch:interface:alias": {
+      "reference": "SR-F-001142",
+      "title": "alias / interface"
+    },
+    "native:opensearch:interface:index-template": {
+      "reference": "SR-F-001143",
+      "title": "index-template / interface"
+    },
+    "native:opensearch:index-template:definition-property": {
+      "reference": "SR-F-001144",
+      "title": "definition-property / index-template"
+    },
+    "native:opensearch:index-template:definition-option": {
+      "reference": "SR-F-001145",
+      "title": "definition-option / index-template"
+    },
+    "native:opensearch:interface:component-template": {
+      "reference": "SR-F-001146",
+      "title": "component-template / interface"
+    },
+    "native:opensearch:interface:ingest-pipeline": {
+      "reference": "SR-F-001147",
+      "title": "ingest-pipeline / interface"
+    },
+    "native:opensearch:ingest-pipeline:ingest-processor": {
+      "reference": "SR-F-001148",
+      "title": "ingest-processor / ingest-pipeline"
+    },
+    "native:opensearch:ingest-processor:definition-property": {
+      "reference": "SR-F-001149",
+      "title": "definition-property / ingest-processor"
+    },
+    "native:opensearch:ingest-processor:definition-option": {
+      "reference": "SR-F-001150",
+      "title": "definition-option / ingest-processor"
+    },
+    "native:opensearch:ingest-pipeline:definition-property": {
+      "reference": "SR-F-001151",
+      "title": "definition-property / ingest-pipeline"
+    },
+    "native:opensearch:ingest-pipeline:definition-option": {
+      "reference": "SR-F-001152",
+      "title": "definition-option / ingest-pipeline"
+    },
+    "native:opensearch:interface:script": {
+      "reference": "SR-F-001153",
+      "title": "script / interface"
+    },
+    "native:opensearch:interface:persistent-setting": {
+      "reference": "SR-F-001154",
+      "title": "persistent-setting / interface"
+    },
+    "native:opensearch:interface:repository": {
+      "reference": "SR-F-001155",
+      "title": "repository / interface"
+    },
+    "native:opensearch:repository:snapshot": {
+      "reference": "SR-F-001156",
+      "title": "snapshot / repository"
+    },
+    "native:opensearch:interface:policy": {
+      "reference": "SR-F-001157",
+      "title": "policy / interface"
+    },
+    "native:opensearch:interface:user": {
+      "reference": "SR-F-001158",
+      "title": "user / interface"
+    },
+    "native:opensearch:interface:role": {
+      "reference": "SR-F-001159",
+      "title": "role / interface"
+    },
+    "native:opensearch:interface:role-mapping": {
+      "reference": "SR-F-001160",
+      "title": "role-mapping / interface"
+    },
+    "native:opensearch:interface:tenant": {
+      "reference": "SR-F-001161",
+      "title": "tenant / interface"
+    },
+    "native:opensearch:interface:action-group": {
+      "reference": "SR-F-001162",
+      "title": "action-group / interface"
+    },
+    "native:opensearch:interface:security-configuration": {
+      "reference": "SR-F-001163",
+      "title": "security-configuration / interface"
+    },
+    "native:opensearch:interface:system-catalog": {
+      "reference": "SR-F-001164",
+      "title": "system-catalog / interface"
+    },
+    "native:opensearch:system-catalog:index": {
+      "reference": "SR-F-001165",
+      "title": "index / system-catalog"
+    },
+    "native:opensearch:interface:data-source": {
+      "reference": "SR-F-001166",
+      "title": "data-source / interface"
+    },
+    "native:opensearch:interface:reference": {
+      "reference": "SR-F-001167",
+      "title": "reference / interface"
+    },
+    "native:opensearch:interface:language-settings": {
+      "reference": "SR-F-001168",
+      "title": "language-settings / interface"
+    },
+    "native:opensearch:interface:action": {
+      "reference": "SR-F-001169",
+      "title": "action / interface"
+    },
+    "native:immudb:endpoint:engine": {
+      "reference": "SR-F-001170",
+      "title": "engine / endpoint"
+    },
+    "native:immudb:engine:endpoint": {
+      "reference": "SR-F-001171",
+      "title": "endpoint / engine"
+    },
+    "native:immudb:endpoint:user": {
+      "reference": "SR-F-001172",
+      "title": "user / endpoint"
+    },
+    "native:immudb:endpoint:folder": {
+      "reference": "SR-F-001173",
+      "title": "folder / endpoint"
+    },
+    "native:immudb:endpoint:database": {
+      "reference": "SR-F-001174",
+      "title": "database / endpoint"
+    },
+    "native:immudb:database:folder": {
+      "reference": "SR-F-001175",
+      "title": "folder / database"
+    },
+    "native:immudb:database:table": {
+      "reference": "SR-F-001176",
+      "title": "table / database"
+    },
+    "native:immudb:table:folder": {
+      "reference": "SR-F-001177",
+      "title": "folder / table"
+    },
+    "native:immudb:table:column": {
+      "reference": "SR-F-001178",
+      "title": "column / table"
+    },
+    "native:immudb:table:primary-key": {
+      "reference": "SR-F-001179",
+      "title": "primary-key / table"
+    },
+    "native:immudb:table:check-constraint": {
+      "reference": "SR-F-001180",
+      "title": "check-constraint / table"
+    },
+    "native:immudb:table:foreign-key": {
+      "reference": "SR-F-001181",
+      "title": "foreign-key / table"
+    },
+    "native:immudb:foreign-key:definition-property": {
+      "reference": "SR-F-001182",
+      "title": "definition-property / foreign-key"
+    },
+    "native:immudb:foreign-key:definition-option": {
+      "reference": "SR-F-001183",
+      "title": "definition-option / foreign-key"
+    },
+    "native:immudb:table:reference": {
+      "reference": "SR-F-001184",
+      "title": "reference / table"
+    },
+    "native:immudb:table:index": {
+      "reference": "SR-F-001185",
+      "title": "index / table"
+    },
+    "native:immudb:index:index-key": {
+      "reference": "SR-F-001186",
+      "title": "index-key / index"
+    },
+    "native:immudb:index:index-options": {
+      "reference": "SR-F-001187",
+      "title": "index-options / index"
+    },
+    "native:immudb:index:definition-property": {
+      "reference": "SR-F-001188",
+      "title": "definition-property / index"
+    },
+    "native:immudb:index:definition-option": {
+      "reference": "SR-F-001189",
+      "title": "definition-option / index"
+    },
+    "native:immudb:table:data": {
+      "reference": "SR-F-001190",
+      "title": "data / table"
+    },
+    "native:immudb:database:view": {
+      "reference": "SR-F-001191",
+      "title": "view / database"
+    },
+    "native:immudb:view:folder": {
+      "reference": "SR-F-001192",
+      "title": "folder / view"
+    },
+    "native:immudb:view:column": {
+      "reference": "SR-F-001193",
+      "title": "column / view"
+    },
+    "native:immudb:view:definition": {
+      "reference": "SR-F-001194",
+      "title": "definition / view"
+    },
+    "native:immudb:view:reference": {
+      "reference": "SR-F-001195",
+      "title": "reference / view"
+    },
+    "native:immudb:database:sequence": {
+      "reference": "SR-F-001196",
+      "title": "sequence / database"
+    },
+    "native:immudb:database:key": {
+      "reference": "SR-F-001197",
+      "title": "key / database"
+    },
+    "native:immudb:key:revision": {
+      "reference": "SR-F-001198",
+      "title": "revision / key"
+    },
+    "native:immudb:revision:definition-property": {
+      "reference": "SR-F-001199",
+      "title": "definition-property / revision"
+    },
+    "native:immudb:revision:definition-option": {
+      "reference": "SR-F-001200",
+      "title": "definition-option / revision"
+    },
+    "native:immudb:database:key-reference": {
+      "reference": "SR-F-001201",
+      "title": "key-reference / database"
+    },
+    "native:immudb:database:sorted-set": {
+      "reference": "SR-F-001202",
+      "title": "sorted-set / database"
+    },
+    "native:immudb:database:collection": {
+      "reference": "SR-F-001203",
+      "title": "collection / database"
+    },
+    "native:immudb:collection:field": {
+      "reference": "SR-F-001204",
+      "title": "field / collection"
+    },
+    "native:immudb:collection:collection-index": {
+      "reference": "SR-F-001205",
+      "title": "collection-index / collection"
+    },
+    "native:immudb:collection:data": {
+      "reference": "SR-F-001206",
+      "title": "data / collection"
+    },
+    "native:immudb:database:configuration": {
+      "reference": "SR-F-001207",
+      "title": "configuration / database"
+    },
+    "native:immudb:database:transaction-history": {
+      "reference": "SR-F-001208",
+      "title": "transaction-history / database"
+    },
+    "native:immudb:database:permission": {
+      "reference": "SR-F-001209",
+      "title": "permission / database"
+    },
+    "native:xtdb:endpoint:engine": {
+      "reference": "SR-F-001210",
+      "title": "engine / endpoint"
+    },
+    "native:xtdb:engine:endpoint": {
+      "reference": "SR-F-001211",
+      "title": "endpoint / engine"
+    },
+    "native:xtdb:endpoint:user": {
+      "reference": "SR-F-001212",
+      "title": "user / endpoint"
+    },
+    "native:xtdb:endpoint:folder": {
+      "reference": "SR-F-001213",
+      "title": "folder / endpoint"
+    },
+    "native:xtdb:endpoint:database": {
+      "reference": "SR-F-001214",
+      "title": "database / endpoint"
+    },
+    "native:xtdb:database:folder": {
+      "reference": "SR-F-001215",
+      "title": "folder / database"
+    },
+    "native:xtdb:database:schema": {
+      "reference": "SR-F-001216",
+      "title": "schema / database"
+    },
+    "native:xtdb:schema:folder": {
+      "reference": "SR-F-001217",
+      "title": "folder / schema"
+    },
+    "native:xtdb:schema:table": {
+      "reference": "SR-F-001218",
+      "title": "table / schema"
+    },
+    "native:xtdb:table:column": {
+      "reference": "SR-F-001219",
+      "title": "column / table"
+    },
+    "native:xtdb:table:identity-definition": {
+      "reference": "SR-F-001220",
+      "title": "identity-definition / table"
+    },
+    "native:xtdb:table:history": {
+      "reference": "SR-F-001221",
+      "title": "history / table"
+    },
+    "native:xtdb:history:definition-property": {
+      "reference": "SR-F-001222",
+      "title": "definition-property / history"
+    },
+    "native:xtdb:history:definition-option": {
+      "reference": "SR-F-001223",
+      "title": "definition-option / history"
+    },
+    "native:xtdb:table:data": {
+      "reference": "SR-F-001224",
+      "title": "data / table"
+    },
+    "native:xtdb:database:system-catalog": {
+      "reference": "SR-F-001225",
+      "title": "system-catalog / database"
+    },
+    "native:xtdb:system-catalog:schema": {
+      "reference": "SR-F-001226",
+      "title": "schema / system-catalog"
+    },
+    "native:xtdb:schema:view": {
+      "reference": "SR-F-001227",
+      "title": "view / schema"
+    },
+    "native:xtdb:view:folder": {
+      "reference": "SR-F-001228",
+      "title": "folder / view"
+    },
+    "native:xtdb:view:column": {
+      "reference": "SR-F-001229",
+      "title": "column / view"
+    },
+    "native:xtdb:database:configuration": {
+      "reference": "SR-F-001230",
+      "title": "configuration / database"
+    },
+    "native:xtdb:database:definition-property": {
+      "reference": "SR-F-001231",
+      "title": "definition-property / database"
+    },
+    "native:xtdb:database:definition-option": {
+      "reference": "SR-F-001232",
+      "title": "definition-option / database"
+    },
+    "native:xtdb:endpoint:module": {
+      "reference": "SR-F-001233",
+      "title": "module / endpoint"
+    },
+    "native:scratchbird:endpoint:engine": {
+      "reference": "SR-F-001234",
+      "title": "engine / endpoint"
+    },
+    "native:scratchbird:engine:endpoint": {
+      "reference": "SR-F-001235",
+      "title": "endpoint / engine"
+    },
+    "native:scratchbird:endpoint:folder": {
+      "reference": "SR-F-001236",
+      "title": "folder / endpoint"
+    },
+    "native:scratchbird:endpoint:user": {
+      "reference": "SR-F-001237",
+      "title": "user / endpoint"
+    },
+    "native:scratchbird:endpoint:role": {
+      "reference": "SR-F-001238",
+      "title": "role / endpoint"
+    },
+    "native:scratchbird:endpoint:group": {
+      "reference": "SR-F-001239",
+      "title": "group / endpoint"
+    },
+    "native:scratchbird:endpoint:privilege": {
+      "reference": "SR-F-001240",
+      "title": "privilege / endpoint"
+    },
+    "native:scratchbird:endpoint:security-policy": {
+      "reference": "SR-F-001241",
+      "title": "security-policy / endpoint"
+    },
+    "native:scratchbird:endpoint:audit-policy": {
+      "reference": "SR-F-001242",
+      "title": "audit-policy / endpoint"
+    },
+    "native:scratchbird:endpoint:filespace": {
+      "reference": "SR-F-001243",
+      "title": "filespace / endpoint"
+    },
+    "native:scratchbird:filespace:definition": {
+      "reference": "SR-F-001244",
+      "title": "definition / filespace"
+    },
+    "native:scratchbird:filespace:filespace-snapshot": {
+      "reference": "SR-F-001245",
+      "title": "filespace-snapshot / filespace"
+    },
+    "native:scratchbird:endpoint:domain": {
+      "reference": "SR-F-001246",
+      "title": "domain / endpoint"
+    },
+    "native:scratchbird:endpoint:database": {
+      "reference": "SR-F-001247",
+      "title": "database / endpoint"
+    },
+    "native:scratchbird:database:folder": {
+      "reference": "SR-F-001248",
+      "title": "folder / database"
+    },
+    "native:scratchbird:database:schema": {
+      "reference": "SR-F-001249",
+      "title": "schema / database"
+    },
+    "native:scratchbird:schema:schema": {
+      "reference": "SR-F-001250",
+      "title": "schema / schema"
+    },
+    "native:scratchbird:schema:folder": {
+      "reference": "SR-F-001251",
+      "title": "folder / schema"
+    },
+    "native:scratchbird:schema:table": {
+      "reference": "SR-F-001252",
+      "title": "table / schema"
+    },
+    "native:scratchbird:table:folder": {
+      "reference": "SR-F-001253",
+      "title": "folder / table"
+    },
+    "native:scratchbird:table:column": {
+      "reference": "SR-F-001254",
+      "title": "column / table"
+    },
+    "native:scratchbird:table:primary-key": {
+      "reference": "SR-F-001255",
+      "title": "primary-key / table"
+    },
+    "native:scratchbird:table:unique-constraint": {
+      "reference": "SR-F-001256",
+      "title": "unique-constraint / table"
+    },
+    "native:scratchbird:table:check-constraint": {
+      "reference": "SR-F-001257",
+      "title": "check-constraint / table"
+    },
+    "native:scratchbird:table:foreign-key": {
+      "reference": "SR-F-001258",
+      "title": "foreign-key / table"
+    },
+    "native:scratchbird:table:reference": {
+      "reference": "SR-F-001259",
+      "title": "reference / table"
+    },
+    "native:scratchbird:table:index": {
+      "reference": "SR-F-001260",
+      "title": "index / table"
+    },
+    "native:scratchbird:index:index-key": {
+      "reference": "SR-F-001261",
+      "title": "index-key / index"
+    },
+    "native:scratchbird:index:index-options": {
+      "reference": "SR-F-001262",
+      "title": "index-options / index"
+    },
+    "native:scratchbird:index:definition-property": {
+      "reference": "SR-F-001263",
+      "title": "definition-property / index"
+    },
+    "native:scratchbird:index:definition-option": {
+      "reference": "SR-F-001264",
+      "title": "definition-option / index"
+    },
+    "native:scratchbird:table:trigger": {
+      "reference": "SR-F-001265",
+      "title": "trigger / table"
+    },
+    "native:scratchbird:trigger:definition-property": {
+      "reference": "SR-F-001266",
+      "title": "definition-property / trigger"
+    },
+    "native:scratchbird:trigger:definition-option": {
+      "reference": "SR-F-001267",
+      "title": "definition-option / trigger"
+    },
+    "native:scratchbird:table:partition": {
+      "reference": "SR-F-001268",
+      "title": "partition / table"
+    },
+    "native:scratchbird:partition:partition-definition": {
+      "reference": "SR-F-001269",
+      "title": "partition-definition / partition"
+    },
+    "native:scratchbird:table:policy": {
+      "reference": "SR-F-001270",
+      "title": "policy / table"
+    },
+    "native:scratchbird:table:identity-definition": {
+      "reference": "SR-F-001271",
+      "title": "identity-definition / table"
+    },
+    "native:scratchbird:table:privilege": {
+      "reference": "SR-F-001272",
+      "title": "privilege / table"
+    },
+    "native:scratchbird:table:data": {
+      "reference": "SR-F-001273",
+      "title": "data / table"
+    },
+    "native:scratchbird:schema:view": {
+      "reference": "SR-F-001274",
+      "title": "view / schema"
+    },
+    "native:scratchbird:view:folder": {
+      "reference": "SR-F-001275",
+      "title": "folder / view"
+    },
+    "native:scratchbird:view:column": {
+      "reference": "SR-F-001276",
+      "title": "column / view"
+    },
+    "native:scratchbird:view:trigger": {
+      "reference": "SR-F-001277",
+      "title": "trigger / view"
+    },
+    "native:scratchbird:view:definition": {
+      "reference": "SR-F-001278",
+      "title": "definition / view"
+    },
+    "native:scratchbird:view:privilege": {
+      "reference": "SR-F-001279",
+      "title": "privilege / view"
+    },
+    "native:scratchbird:view:reference": {
+      "reference": "SR-F-001280",
+      "title": "reference / view"
+    },
+    "native:scratchbird:schema:materialized-view": {
+      "reference": "SR-F-001281",
+      "title": "materialized-view / schema"
+    },
+    "native:scratchbird:materialized-view:folder": {
+      "reference": "SR-F-001282",
+      "title": "folder / materialized-view"
+    },
+    "native:scratchbird:materialized-view:column": {
+      "reference": "SR-F-001283",
+      "title": "column / materialized-view"
+    },
+    "native:scratchbird:materialized-view:index": {
+      "reference": "SR-F-001284",
+      "title": "index / materialized-view"
+    },
+    "native:scratchbird:materialized-view:definition": {
+      "reference": "SR-F-001285",
+      "title": "definition / materialized-view"
+    },
+    "native:scratchbird:materialized-view:privilege": {
+      "reference": "SR-F-001286",
+      "title": "privilege / materialized-view"
+    },
+    "native:scratchbird:schema:sequence": {
+      "reference": "SR-F-001287",
+      "title": "sequence / schema"
+    },
+    "native:scratchbird:schema:type": {
+      "reference": "SR-F-001288",
+      "title": "type / schema"
+    },
+    "native:scratchbird:schema:procedure": {
+      "reference": "SR-F-001289",
+      "title": "procedure / schema"
+    },
+    "native:scratchbird:procedure:folder": {
+      "reference": "SR-F-001290",
+      "title": "folder / procedure"
+    },
+    "native:scratchbird:procedure:parameter": {
+      "reference": "SR-F-001291",
+      "title": "parameter / procedure"
+    },
+    "native:scratchbird:procedure:return-definition": {
+      "reference": "SR-F-001292",
+      "title": "return-definition / procedure"
+    },
+    "native:scratchbird:procedure:privilege": {
+      "reference": "SR-F-001293",
+      "title": "privilege / procedure"
+    },
+    "native:scratchbird:procedure:definition-property": {
+      "reference": "SR-F-001294",
+      "title": "definition-property / procedure"
+    },
+    "native:scratchbird:procedure:definition-option": {
+      "reference": "SR-F-001295",
+      "title": "definition-option / procedure"
+    },
+    "native:scratchbird:procedure:trigger": {
+      "reference": "SR-F-001296",
+      "title": "trigger / procedure"
+    },
+    "native:scratchbird:schema:function": {
+      "reference": "SR-F-001297",
+      "title": "function / schema"
+    },
+    "native:scratchbird:function:folder": {
+      "reference": "SR-F-001298",
+      "title": "folder / function"
+    },
+    "native:scratchbird:function:parameter": {
+      "reference": "SR-F-001299",
+      "title": "parameter / function"
+    },
+    "native:scratchbird:function:return-definition": {
+      "reference": "SR-F-001300",
+      "title": "return-definition / function"
+    },
+    "native:scratchbird:function:privilege": {
+      "reference": "SR-F-001301",
+      "title": "privilege / function"
+    },
+    "native:scratchbird:schema:package": {
+      "reference": "SR-F-001302",
+      "title": "package / schema"
+    },
+    "native:scratchbird:package:definition": {
+      "reference": "SR-F-001303",
+      "title": "definition / package"
+    },
+    "native:scratchbird:package:folder": {
+      "reference": "SR-F-001304",
+      "title": "folder / package"
+    },
+    "native:scratchbird:package:procedure": {
+      "reference": "SR-F-001305",
+      "title": "procedure / package"
+    },
+    "native:scratchbird:package:function": {
+      "reference": "SR-F-001306",
+      "title": "function / package"
+    },
+    "native:scratchbird:schema:module": {
+      "reference": "SR-F-001307",
+      "title": "module / schema"
+    },
+    "native:scratchbird:module:folder": {
+      "reference": "SR-F-001308",
+      "title": "folder / module"
+    },
+    "native:scratchbird:module:procedure": {
+      "reference": "SR-F-001309",
+      "title": "procedure / module"
+    },
+    "native:scratchbird:module:function": {
+      "reference": "SR-F-001310",
+      "title": "function / module"
+    },
+    "native:scratchbird:schema:udr": {
+      "reference": "SR-F-001311",
+      "title": "udr / schema"
+    },
+    "native:scratchbird:schema:exception": {
+      "reference": "SR-F-001312",
+      "title": "exception / schema"
+    },
+    "native:scratchbird:schema:synonym": {
+      "reference": "SR-F-001313",
+      "title": "synonym / schema"
+    },
+    "native:scratchbird:schema:foreign-table": {
+      "reference": "SR-F-001314",
+      "title": "foreign-table / schema"
+    },
+    "native:scratchbird:schema:document-collection": {
+      "reference": "SR-F-001315",
+      "title": "document-collection / schema"
+    },
+    "native:scratchbird:document-collection:definition": {
+      "reference": "SR-F-001316",
+      "title": "definition / document-collection"
+    },
+    "native:scratchbird:document-collection:data": {
+      "reference": "SR-F-001317",
+      "title": "data / document-collection"
+    },
+    "native:scratchbird:schema:graph": {
+      "reference": "SR-F-001318",
+      "title": "graph / schema"
+    },
+    "native:scratchbird:graph:graph-schema": {
+      "reference": "SR-F-001319",
+      "title": "graph-schema / graph"
+    },
+    "native:scratchbird:graph:definition": {
+      "reference": "SR-F-001320",
+      "title": "definition / graph"
+    },
+    "native:scratchbird:graph:data": {
+      "reference": "SR-F-001321",
+      "title": "data / graph"
+    },
+    "native:scratchbird:schema:vector-collection": {
+      "reference": "SR-F-001322",
+      "title": "vector-collection / schema"
+    },
+    "native:scratchbird:vector-collection:vector-index": {
+      "reference": "SR-F-001323",
+      "title": "vector-index / vector-collection"
+    },
+    "native:scratchbird:schema:time-series": {
+      "reference": "SR-F-001324",
+      "title": "time-series / schema"
+    },
+    "native:scratchbird:schema:search-index": {
+      "reference": "SR-F-001325",
+      "title": "search-index / schema"
+    },
+    "native:scratchbird:schema:cube": {
+      "reference": "SR-F-001326",
+      "title": "cube / schema"
+    },
+    "native:scratchbird:schema:materialization": {
+      "reference": "SR-F-001327",
+      "title": "materialization / schema"
+    },
+    "native:scratchbird:schema:pipeline": {
+      "reference": "SR-F-001328",
+      "title": "pipeline / schema"
+    },
+    "native:scratchbird:database:system-catalog": {
+      "reference": "SR-F-001329",
+      "title": "system-catalog / database"
+    },
+    "native:scratchbird:system-catalog:schema": {
+      "reference": "SR-F-001330",
+      "title": "schema / system-catalog"
+    },
+    "native:scratchbird:database:history": {
+      "reference": "SR-F-001331",
+      "title": "history / database"
+    },
+    "native:scratchbird:database:trigger": {
+      "reference": "SR-F-001332",
+      "title": "trigger / database"
+    },
+    "native:scratchbird:database:event-trigger": {
+      "reference": "SR-F-001333",
+      "title": "event-trigger / database"
+    },
+    "native:scratchbird:event-trigger:definition-property": {
+      "reference": "SR-F-001334",
+      "title": "definition-property / event-trigger"
+    },
+    "native:scratchbird:event-trigger:definition-option": {
+      "reference": "SR-F-001335",
+      "title": "definition-option / event-trigger"
+    },
+    "native:scratchbird:endpoint:listener": {
+      "reference": "SR-F-001336",
+      "title": "listener / endpoint"
+    },
+    "native:scratchbird:endpoint:parser-profile": {
+      "reference": "SR-F-001337",
+      "title": "parser-profile / endpoint"
+    },
+    "native:scratchbird:endpoint:provider": {
+      "reference": "SR-F-001338",
+      "title": "provider / endpoint"
+    },
+    "native:scratchbird:endpoint:route": {
+      "reference": "SR-F-001339",
+      "title": "route / endpoint"
+    },
+    "native:scratchbird:endpoint:agent": {
+      "reference": "SR-F-001340",
+      "title": "agent / endpoint"
+    },
+    "native:scratchbird:endpoint:cluster": {
+      "reference": "SR-F-001341",
+      "title": "cluster / endpoint"
+    },
+    "native:scratchbird:endpoint:node": {
+      "reference": "SR-F-001342",
+      "title": "node / endpoint"
+    },
+    "native:scratchbird:endpoint:policy": {
+      "reference": "SR-F-001343",
+      "title": "policy / endpoint"
+    },
+    "native:scratchbird:endpoint:backup": {
+      "reference": "SR-F-001344",
+      "title": "backup / endpoint"
+    },
+    "native:scratchbird:endpoint:compatibility-profile": {
+      "reference": "SR-F-001345",
+      "title": "compatibility-profile / endpoint"
+    },
+    "scoped-creation": {
+      "reference": "SR-F-001346",
+      "title": "Scoped native creation"
+    },
+    "metadata-extraction": {
+      "reference": "SR-F-001347",
+      "title": "Metadata extraction"
+    }
+  }
+}

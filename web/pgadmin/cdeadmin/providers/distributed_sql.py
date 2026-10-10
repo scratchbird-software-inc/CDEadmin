@@ -83,6 +83,8 @@ def resource(kind, path, name, generation, native=None):
 
 def optional_rows(cursor, source, parameters=()):
     """Read an optional catalog surface without widening its permissions."""
+    if getattr(cursor, '_cde_catalog_isolated', False) is True:
+        return cursor.cde_optional_rows(source, parameters)
     try:
         cursor.execute(source, parameters)
         return list(cursor.fetchall())
@@ -334,13 +336,19 @@ def postgresql_catalog(connection, request, engine_name, extras=None):
         def __getattr__(self, key):
             return getattr(native_cursor, key)
 
-        def execute(self, source, parameters=()):
-            # These catalogs are native readable metadata, not user schemas.
-            # Preserve every other query predicate and the caller's rights.
-            source = re.sub(
+        @staticmethod
+        def _source(source):
+            # Preserve native system catalogs and the caller's rights.
+            return re.sub(
                 r"[A-Za-z_.]+ NOT IN \('pg_catalog', 'information_schema'"
                 r"(?:, 'crdb_internal')?\)", 'TRUE', source)
-            return native_cursor.execute(source, parameters)
+
+        def execute(self, source, parameters=()):
+            return native_cursor.execute(self._source(source), parameters)
+
+        def cde_optional_rows(self, source, parameters=()):
+            return native_cursor.cde_optional_rows(
+                self._source(source), parameters)
 
     cursor = CatalogCursor()
     try:
