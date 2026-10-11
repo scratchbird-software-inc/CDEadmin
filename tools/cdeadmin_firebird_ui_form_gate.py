@@ -547,6 +547,15 @@ def assert_field_label_geometry(driver, control):
     return geometry
 
 
+def visible_native_field(driver, field):
+    """Native choice fields may be named checkbox/radio fieldsets."""
+    if field.get('control') in {'select', 'multiselect'}:
+        for group in driver.find_elements(By.TAG_NAME, 'fieldset'):
+            if group.is_displayed() and group.accessible_name == field['label']:
+                return group
+    return visible_named_control(driver, field['label'])
+
+
 def assert_form_controls(wait, fields, draft=None):
     """Verify visible controls and the absence of inactive controls.
 
@@ -579,7 +588,7 @@ def assert_form_controls(wait, fields, draft=None):
                 present = any(item.is_displayed() for item in
                               driver.find_elements(By.CSS_SELECTOR, selector))
             else:
-                present = visible_named_control(driver, label) is not None
+                present = visible_native_field(driver, field) is not None
             if present:
                 raise RuntimeError(
                     f'inactive field {field["field_id"]!r} is displayed')
@@ -596,8 +605,8 @@ def assert_form_controls(wait, fields, draft=None):
                     expected.visibility_of_element_located(
                         (By.CSS_SELECTOR, selector)))
             else:
-                control = wait.until(lambda driver, name=label:
-                                     visible_named_control(driver, name))
+                control = wait.until(lambda driver, declared=field:
+                                     visible_native_field(driver, declared))
         except TimeoutException as exc:
             raise RuntimeError(
                 f'field {field["field_id"]!r} did not render with '
@@ -1611,14 +1620,14 @@ def main():
             for item in results
         ),
         'provider_completed_form_count': sum(
-            item.get('completion', {}).get('server_completed') is True
+            (item.get('completion') or {}).get('server_completed') is True
             for item in results
         ),
         'complete': (
             len(results) == len(operations) and not failures and
             (
                 not options.apply_live or
-                all(item.get('completion', {}).get(
+                all((item.get('completion') or {}).get(
                     'server_completed'
                 ) is True for item in results)
             )

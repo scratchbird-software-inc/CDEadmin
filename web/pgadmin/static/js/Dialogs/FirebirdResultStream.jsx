@@ -14,11 +14,12 @@ function streamOwnerId() {
 
 // Keep only the visible page and one BLOB chunk. No background fetch loop.
 export default function FirebirdResultStream({post, ensureSession, databaseTargetId,
-  source, parameters, dialect, disabled, downloadUrl}) {
+  source, parameters, dialect, disabled, downloadUrl, bufferRows=100, onActiveChange}) {
   const [page, setPage] = useState(null);
   const [chunk, setChunk] = useState(null);
   const [busy, setBusy] = useState(false);
   const [owned, setOwned] = useState(false);
+  useEffect(() => {onActiveChange?.(owned); return () => onActiveChange?.(false);}, [owned, onActiveChange]);
   const [error, setError] = useState(null);
   const [upload, setUpload] = useState(null);
   const [download, setDownload] = useState(null);
@@ -59,7 +60,7 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
         const id = session.current;
         ownCleanup(id);
         const result = await call(id, {stream_action: 'open', source,
-          parameters: parsed, client_sql_dialect: dialect});
+          parameters: parsed, client_sql_dialect: dialect, page_rows: bufferRows});
         if (mounted.current) setPage(result);
         else cleanup.current?.();
       } else if (action === 'close') {
@@ -355,7 +356,7 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
   </Box>;
 }
 FirebirdResultStream.propTypes = {
-  downloadUrl: PropTypes.string,
+  bufferRows: PropTypes.number, onActiveChange: PropTypes.func, downloadUrl: PropTypes.string,
   post: PropTypes.func.isRequired, ensureSession: PropTypes.func.isRequired,
   databaseTargetId: PropTypes.string, source: PropTypes.string.isRequired,
   parameters: PropTypes.string, dialect: PropTypes.number, disabled: PropTypes.bool,

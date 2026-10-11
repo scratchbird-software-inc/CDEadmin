@@ -1535,7 +1535,7 @@ class ProviderWorkspaceService:
             server, database_target_id=database_target_id
         )
         if session_purpose is not None:
-            if (session_purpose not in {'firebird-test-data', 'firebird-data-export', 'firebird-data-import'} or
+            if (session_purpose not in {'firebird-test-data', 'firebird-data-export', 'firebird-data-import', 'firebird-row-grid'} or
                     context.profile_id not in {'firebird-native', 'firebird-embedded'} or
                     language_profile != 'firebird-sql'):
                 raise ProviderWorkspaceError('Session purpose is not admitted for this engine')
@@ -1568,6 +1568,8 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
+        if context.provider_id in {'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'} and not script_mode and not plan_mode:
+            policy['firebird_statement_metrics'] = True
         if type(profile_mode) is not bool or profile_mode and (script_mode or plan_mode or context.provider_id not in {
                 'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
             raise ProviderWorkspaceError('Native profiling requires one Firebird statement')
@@ -1670,7 +1672,9 @@ class ProviderWorkspaceService:
                 '). Close the stream before retrying; no rollback or '
                 'commit is implied.') from None
 
-    def poll(self, server, occurrence_id, database_target_id=Ellipsis):
+    def poll(self, server, occurrence_id, database_target_id=Ellipsis, *, buffer_rows=None):
+        if buffer_rows is not None and (type(buffer_rows) is not int or not 1 <= buffer_rows <= 500):
+            raise ProviderWorkspaceError('Result buffer rows must be an integer from 1 to 500')
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -1694,7 +1698,8 @@ class ProviderWorkspaceService:
                 context, occurrence_id, capabilities
             )
             response['rendered_result'] = self.result_service.render(
-                descriptor['result_id'], page_size=500,
+                descriptor['result_id'], page_size=min(buffer_rows or 500,
+                    descriptor.get('limits', {}).get('max_page_size', 500)),
                 endpoint_id=context.endpoint_id,
             )
             with self._semantic_lock:
@@ -1725,6 +1730,30 @@ class ProviderWorkspaceService:
                     'exact_data_replay_requires_provider_snapshot': True,
                     'common_layer_infers_snapshot_or_finality': False,
                 }
+        if buffer_rows is not None and response['rendered_result'] is not None:
+            # Keep the original admitted result on the server. Do not duplicate
+            # its native row arrays alongside the bounded browser page.
+            response['occurrence'] = copy.deepcopy(occurrence)
+            native_result = response['occurrence'].get('result') or {}
+            fields = {'rows', 'records', 'entries', 'documents', 'points', 'graphs', 'matches', 'hits'}
+            profile = getattr(binding.instance, 'profile', None)
+            record_field = getattr(profile, 'result_records_field', None)
+            if record_field:
+                fields.add(record_field)
+            page = response['rendered_result']['page']
+            count = min(page['page_size'], max(0, page['sampled_count'] - page['offset']))
+            for extension in (native_result.get('extensions') or {}).values():
+                if not isinstance(extension, dict):
+                    continue
+                payload = extension.get('payload')
+                if isinstance(payload, dict):
+                    for field in fields:
+                        if isinstance(payload.get(field), list):
+                            payload.pop(field)
+                    payload['buffered_row_count'] = count
+                elif isinstance(payload, list):
+                    extension['payload'] = []
+            response['buffered_rows_only'] = True
         return response
 
     def result_page(self, server, request):

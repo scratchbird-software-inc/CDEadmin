@@ -12,7 +12,7 @@ import {ResourcePicker, TreeRow} from '../../navigation/AdvancedNavigation';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import {exportAsyncAPI, exportOpenAPI} from './APIEngine';
 
 export const API_SURFACES = Object.freeze([
@@ -244,7 +244,7 @@ export function APIWorkspace({service, sessionId, surface='api_explorer', execut
     [onStateChange, session]); const Component = COMPONENTS[active] ?? Explorer;
   const navigate = (next) => { setActive(next); service.select(sessionId, {surface: next}); };
   return <Box data-testid="api-workspace" sx={{height: '100%', display: 'grid',
-    gridTemplateColumns: '288px minmax(0, 1fr) 340px'}}><Box component="nav"
+    gridTemplateColumns: {xs: 'minmax(0, 1fr)', lg: '240px minmax(0, 1fr) 300px'}}}><Box component="nav"
       aria-label="API Designer surfaces" sx={{overflow: 'auto'}}>{API_SURFACES.map((item) =>
         <TreeRow key={item.id} label={item.title} selected={active === item.id}
           onSelect={() => navigate(item.id)} />)}</Box><Box component="main" sx={{minWidth: 0,

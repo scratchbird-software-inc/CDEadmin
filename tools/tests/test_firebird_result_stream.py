@@ -411,3 +411,19 @@ def test_fss_bmp_validation_retains_multibyte_chunk_boundaries():
     assert (base64.b64decode(first['data']) +
             base64.b64decode(last['data'])) == payload
     result.close()
+
+
+def test_selected_stream_page_rows_bound_native_fetches():
+    cursor = Mock()
+    cursor.fetchone.side_effect = iter([(i,) for i in range(8)] + [None])
+    result = ResultStream(cursor, [{'name': 'V'}], Blob, page_rows=3)
+    assert result.fetch(0)['rows'] == [[0], [1], [2]]
+    assert cursor.fetchone.call_count == 3
+    assert result.fetch(1)['rows'] == [[3], [4], [5]]
+    result.close()
+
+
+@pytest.mark.parametrize('value', [True, 0, -1, 501, 1.5, '25'])
+def test_invalid_stream_page_rows_rejected(value):
+    with pytest.raises(RelationalClientError, match='Stream page rows'):
+        ResultStream(Mock(), [], Blob, page_rows=value)

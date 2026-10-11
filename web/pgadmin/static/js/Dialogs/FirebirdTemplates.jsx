@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField} from '@mui/material';
@@ -32,7 +33,7 @@ export default function FirebirdTemplates({post, resource, generation, databaseT
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'firebird-template.json'; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <Box sx={{p: 2, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-code-templates" />
     <Alert severity="info">Native context: {resource.display_name}. Templates do not execute SQL. Review names, native permissions and parameters. PSQL and multi-statement definitions use native script controls. UPDATE/DELETE default to FALSE until you supply a row-key predicate.</Alert>
     {error && <Alert severity="error">{error}</Alert>}

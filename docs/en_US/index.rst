@@ -24,6 +24,7 @@ upstream attribution.
    mysql_driver_development
    mariadb_driver_development
    postgresql_driver_development
+   postgresql_functional_completion
    sqlite_driver_development
    duckdb_driver_development
    cockroachdb_driver_development
@@ -70,6 +71,7 @@ upstream attribution.
 .. toctree::
    :hidden:
 
+   compact_forms
    native_navigation_forms
    firebird_functional_completion
    firebird_form_parity

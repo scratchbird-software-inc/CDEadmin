@@ -5509,6 +5509,14 @@
     "firebird-statement-details": {
       "reference": "SR-F-001372",
       "title": "Firebird native statement SQL and plan inspection"
+    },
+    "postgresql-dashboard": {
+      "reference": "SR-F-001378",
+      "title": "PostgreSQL native DDN dashboard"
+    },
+    "postgresql-monitoring-policy": {
+      "reference": "SR-F-001379",
+      "title": "PostgreSQL dedicated monitoring credentials and policy"
     }
   }
 }

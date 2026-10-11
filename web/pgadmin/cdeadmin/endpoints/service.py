@@ -582,6 +582,11 @@ class EndpointService:
             db.session.commit()
 
     @_connection_change
+    def release_native_connections(self, server, release):
+        """Protect shared SQL ownership while releasing preserved native handles."""
+        return release()
+
+    @_connection_change
     def disconnect_server(self, server):
         """Disconnect provider state without entering PostgreSQL drivers.
 
@@ -634,7 +639,7 @@ class EndpointService:
         if endpoint is not None and endpoint.provider_version is None and (
             endpoint.provider_id == 'org.pgadmin.postgresql'
         ):
-            return self._postgresql_workspace(server, endpoint)
+            return self._postgresql_workspace(server, endpoint, database_target_id)
         if endpoint is None or endpoint.provider_version is None:
             raise EndpointRegistrationError(
                 'server is not a provider-managed endpoint'
@@ -748,6 +753,19 @@ class EndpointService:
 
     def route_catalog(self, server):
         """Return owner-safe, credential-free persistent route definitions."""
+        if self._is_preserved_postgresql(server):
+            endpoint = server.endpoint_profile
+            return {
+                'endpoint_id': endpoint.id, 'profile_id': endpoint.profile_id,
+                'supports_multiple_routes': False, 'default_port': 5432,
+                'connection_fields': [], 'database_targeting': {},
+                'server_forms': {'forms': {}}, 'database_forms': {'forms': {}},
+                'routes': [{'route_id': f'postgresql-server:{server.id}',
+                            'route_kind': 'network', 'priority': 0,
+                            'configuration': {'host': server.host, 'port': server.port,
+                                              'user': server.username}, 'health': {}}],
+            }
+
         endpoint, profile = self._managed_endpoint(server)
         routes = []
         for model in sorted(
@@ -780,6 +798,28 @@ class EndpointService:
 
     def database_catalog(self, server):
         """Return database targets without confusing them with routes."""
+        if self._is_preserved_postgresql(server):
+            from pgadmin.utils.driver.registry import DriverRegistry
+            manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
+            connection = manager.connection()
+            if not connection.connected():
+                raise EndpointRegistrationError('PostgreSQL must be connected before reading databases')
+            status, result = connection.execute_dict(
+                'SELECT oid AS did, datname, datallowconn FROM pg_catalog.pg_database ORDER BY datname')
+            if not status:
+                raise EndpointRegistrationError('PostgreSQL database catalog could not be read')
+            targets = [{'target_id': f"postgresql-database:{row['did']}",
+                        'database': row['datname'], 'display_name': row['datname'],
+                        'active': row['datname'] == connection.db,
+                        'allow_connection': row['datallowconn'], 'configuration': {}}
+                       for row in result['rows']]
+            return {'endpoint_id': server.endpoint_profile.id, 'mode': 'required',
+                    'multiple': True, 'target_management': False,
+                    'server_verification': False, 'create_and_activate': False,
+                    'active_target_id': next((t['target_id'] for t in targets if t['active']), None),
+                    'legacy_route_database': None, 'targets': targets,
+                    'forms': {'forms': {}}}
+
         endpoint, profile = self._managed_endpoint(server)
         targeting = profile.get('database_targeting', {})
         targets = [self._database_target_value(item) for item in sorted(
@@ -1222,6 +1262,12 @@ class EndpointService:
         self._stale(endpoint)
         db.session.commit()
         return self.route_catalog(server)
+
+    @staticmethod
+    def _is_preserved_postgresql(server):
+        endpoint = getattr(server, 'endpoint_profile', None)
+        return (endpoint is not None and endpoint.provider_version is None and
+                endpoint.provider_id == 'org.pgadmin.postgresql')
 
     @staticmethod
     def _managed_endpoint(server):
@@ -1669,20 +1715,28 @@ class EndpointService:
         runtime.verification_evidence_reference = None
         runtime.verified_at = None
 
-    def _postgresql_workspace(self, server, endpoint):
+    def _postgresql_workspace(self, server, endpoint, database_target_id=Ellipsis):
         """Bridge a connected preserved PostgreSQL server to shared studios."""
         from pgadmin.cdeadmin.providers.postgresql.provider import (
             PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION,
         )
         from pgadmin.utils.driver.registry import DriverRegistry
 
+        from pgadmin.cdeadmin.providers.postgresql.connection_target import database_oid
+        try:
+            selected_oid = database_oid(database_target_id)
+        except ValueError as exc:
+            raise EndpointRegistrationError(str(exc)) from None
         manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
-        connection = manager.connection()
+        connection = manager.connection(did=selected_oid) if selected_oid is not None else manager.connection()
         if not connection.connected():
             raise EndpointRegistrationError(
                 'PostgreSQL must be connected before opening shared studios'
             )
-        observed = str(manager.ver or '')
+        native_version = manager.version
+        observed = (f'{native_version // 10000}.{native_version % 10000}'
+                    if type(native_version) is int and native_version >= 100000
+                    else str(native_version))
         if observed != PROFILE_VERSION:
             raise EndpointRegistrationError(
                 'connected PostgreSQL runtime does not match profile 18.3'
@@ -1707,6 +1761,10 @@ class EndpointService:
             'runtime_verification_state': 'verified',
             'runtime_evidence_reference': 'preserved-postgresql-connection',
         }
+        if selected_oid is not None:
+            for namespace in ('cache_namespace', 'session_namespace'):
+                identity[namespace] = str(uuid.uuid5(uuid.UUID(identity[namespace]),
+                                                    f'postgresql-database:{selected_oid}'))
         identity_context = EndpointContext.from_identity(identity)
         admitted_permissions = self.provider_registry.admitted_permissions(
             identity_context
@@ -1724,6 +1782,8 @@ class EndpointService:
             'server_id': server.id,
             'principal_reference': f'user:{server.user_id}',
         }
+        if selected_oid is not None:
+            route['database_id'] = selected_oid
         endpoint_payload = {
             'identity': provider_identity, 'endpoint_id': endpoint.id,
             'mode': 'legacy_native',

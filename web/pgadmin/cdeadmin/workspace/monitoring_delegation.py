@@ -1,4 +1,4 @@
-"""Scope-bound, volatile credentials for dedicated Firebird collectors.
+"""Scope-bound, volatile credentials for dedicated native collectors.
 
 The host authenticates the owner at issue time and supplies a current scope
 authorizer. Workers use sealed leases, never a captured Flask login/session.
@@ -36,7 +36,10 @@ class MonitoringGrant:
 
     @classmethod
     def issue(cls, policy, route, generation, permissions, key_ring,
-              authorize, *, clock=time.monotonic, credentials=None):
+              authorize, *, clock=time.monotonic, credentials=None,
+              engine='firebird'):
+        if engine not in ('firebird', 'postgresql'):
+            raise MonitoringGrantError('Unsupported monitoring engine')
         if not key_ring.available:
             raise MonitoringGrantError('Monitoring worker key authority is unavailable')
         if not isinstance(generation, str) or not generation:
@@ -45,7 +48,15 @@ class MonitoringGrant:
             raise MonitoringGrantError('This grant requires a network attachment')
         if any(key in route for key in ('password', 'passwd', 'secret', 'token')):
             raise MonitoringGrantError('Monitoring route must use secret references')
-        if (policy.target_id is not None) != bool(route.get('database')):
+        if engine == 'postgresql':
+            if not route.get('database'):
+                raise MonitoringGrantError('PostgreSQL requires a connection database')
+            if policy.target_id is not None:
+                from pgadmin.cdeadmin.providers.postgresql.connection_target import database_oid
+                oid = database_oid(policy.target_id)
+                if type(route.get('database_oid')) is not int or route['database_oid'] != oid:
+                    raise MonitoringGrantError('Monitoring database identity does not match')
+        elif (policy.target_id is not None) != bool(route.get('database')):
             raise MonitoringGrantError('Monitoring database scope does not match')
         original = copy.deepcopy(route)
         digest = route_fingerprint(original)
@@ -72,11 +83,12 @@ class MonitoringGrant:
         if credentials is not None:
             references = {'database_password': 'dedicated'}
         if set(references) != {'database_password'}:
-            raise MonitoringGrantError('A Firebird password reference is required')
+            raise MonitoringGrantError('A database password reference is required')
         principal = original.get('principal_reference')
         if not isinstance(principal, str) or not principal:
             raise MonitoringGrantError('Monitoring credential principal is unavailable')
         grant = cls()
+        grant.engine = engine
         grant.policy = policy
         grant.generation = generation
         grant.route_digest = digest
@@ -125,6 +137,7 @@ class MonitoringGrant:
     def _aad(self, identifier, kind):
         return {
             'schema': 'cdeadmin.monitoring-grant.v1', 'grant_id': self.id,
+            'engine': self.engine,
             'policy': asdict(self.policy), 'generation': self.generation,
             'route_digest': self.route_digest, 'credential_id': identifier,
             'secret_kind': kind, 'authentication': dict(self.authentication),
@@ -173,8 +186,14 @@ class MonitoringGrant:
         with self._lock:
             self.require(policy, 'collect')
             if source_factory is None:
-                from pgadmin.cdeadmin.providers.firebird.monitoring import FirebirdMonitor
-                source_factory = FirebirdMonitor
+                if self.engine == 'postgresql':
+                    from pgadmin.cdeadmin.providers.postgresql.monitoring import PostgreSQLMonitor
+                    source_factory = PostgreSQLMonitor
+                elif self.engine == 'firebird':
+                    from pgadmin.cdeadmin.providers.firebird.monitoring import FirebirdMonitor
+                    source_factory = FirebirdMonitor
+                else:
+                    raise MonitoringGrantError('Unsupported monitoring engine')
             source = source_factory(
                 SimpleNamespace(acquire_secret=self._acquire),
                 copy.deepcopy(self._route),

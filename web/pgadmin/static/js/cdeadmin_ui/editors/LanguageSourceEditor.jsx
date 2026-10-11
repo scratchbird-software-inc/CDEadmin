@@ -1,3 +1,4 @@
+import {SQLDialect, MySQL, PostgreSQL, SQLite, StandardSQL} from '@codemirror/lang-sql';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, TextField} from '@mui/material';
@@ -8,7 +9,7 @@ import {firebirdSQLConfig} from './firebirdSyntax';
 import {firebirdExecution} from './firebirdExecution';
 
 export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute}) {
-  const [syntax, setSyntax] = useState(false);
+  const [syntax, setSyntax] = useState(true);
   const [completion, setCompletion] = useState(null);
   const [prepared, setPrepared] = useState(null);
   const plainEditor = useRef(null);
@@ -16,6 +17,12 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const firebird = language?.language_profile === 'firebird-sql';
   const sqlConfig = useMemo(() => firebirdSQLConfig(language?.editor?.keywords || '', clientSqlDialect, completion?.resources || resources, language?.editor?.reserved_words),
     [language?.editor, clientSqlDialect, resources, completion]);
+  const nativeProfile = language?.language_profile || '';
+  const jsonLanguage = /json|keyvalue|query-api|query-search-api|query-dsl|resp3/.test(nativeProfile);
+  const nativeDialect = /mysql|maria|tidb|vitess|dolt/.test(nativeProfile) ? MySQL :
+    /postgres|cockroach|ysql|xtdb/.test(nativeProfile) ? PostgreSQL : /sqlite/.test(nativeProfile) ? SQLite : StandardSQL;
+  const nativeConfig = useMemo(() => ({dialect: language?.editor?.keywords ?
+    SQLDialect.define({keywords: language.editor.keywords}) : nativeDialect}), [language?.editor, nativeDialect]);
   const [validation, setValidation] = useState(null);
   const [plan, setPlan] = useState(null);
   const [preparedSource, setPreparedSource] = useState(null);
@@ -100,20 +107,45 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     } catch(e){if(mounted.current)setError(e.message);}
   };
   return <FormReference formKey="query-editor">
-    {firebird && <Box>
-      <Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
-      <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button>
-      {['selection', 'current', 'from-cursor'].map(mode => <Button key={mode}
-        disabled={disabled || running || !onExecute || Boolean(plan?.occurrence_id)}
-        onClick={() => prepareExecution(mode)}>{({'selection': 'Prepare selection', 'current': 'Prepare current statement', 'from-cursor': 'Prepare from cursor'})[mode]}</Button>)}
-    </Box>}
-    {firebird && syntax ? <>
-      <Box sx={{height: 240}}><CodeEditor label="Firebird syntax editor" value={source} onChange={onChange}
-        language="firebird" sqlConfig={sqlConfig} autocomplete autocompleteOnKeyPress
+    <Box component="details"><summary>Source tools</summary>
+      {firebird && <Box>
+        <Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
+        <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button>
+        {['selection', 'current', 'from-cursor'].map(mode => <Button key={mode}
+          disabled={disabled || running || !onExecute || Boolean(plan?.occurrence_id)}
+          onClick={() => prepareExecution(mode)}>{({'selection': 'Prepare selection', 'current': 'Prepare current statement', 'from-cursor': 'Prepare from cursor'})[mode]}</Button>)}
+      </Box>}
+      {firebird && prepared?.original === source && <Box sx={{my: 1}}>
+        <Alert severity="info">Review the prepared {prepared.scriptMode ? 'script, including inherited client settings and any transaction commands' : 'native statement'}.
+          {prepared.scriptMode ? ' Scripts require an empty parameter array.' : ' Existing ordered parameters apply.'}
+        No SQL has been executed by preparing this source.</Alert>
+        <TextField multiline fullWidth minRows={3} maxRows={10} label="Prepared execution source"
+          value={prepared.source} InputProps={{readOnly: true}} />
+        <Button disabled={disabled || running || !onExecute} onClick={() => {
+          const value = prepared; setPrepared(null); onExecute(value.source, value.scriptMode);
+        }}>Run prepared source</Button>
+      </Box>}
+      <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(false)}>Check source</Button>
+      {language?.tooling?.script_framing && <FormReference formKey="script">
+        <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(true)}>Preview script</Button>
+        <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled}
+          onClick={() => {setRunning(true);onScriptLock(true);}}>Run / resume retained script</Button>
+        <Button disabled={!plan?.plan_id || ['stopped','complete'].includes(plan.state)} onClick={stop}>Stop after current statement</Button>
+        {plan && <Box component="pre" aria-label="Script progress" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({plan_id:plan.plan_id,state:plan.state,next_statement:plan.next_statement,statements:plan.statements?.map(s=>({ordinal:s.ordinal,source:s.source})),history:plan.history,stop_reason:plan.stop_reason},null,2)}</Box>}
+      </FormReference>}
+      {error && <Alert severity="error">{error}</Alert>}
+      {validation && <Box role="status">
+        <Alert severity={validation.diagnostics?.length ? 'warning' : 'info'}>{validation.scope || validation.authority} Full grammar validation: {validation.grammar_valid===true ? 'confirmed by native validator' : 'not certified'}.</Alert>
+        {(validation.diagnostics || []).map((d,i)=><Alert key={i} severity="error">{d.line}:{d.column} — {d.message}</Alert>)}
+      </Box>}
+    </Box>
+    {syntax ? <>
+      <Box sx={{height: 'clamp(120px, 22vh, 220px)', minHeight: 100, maxHeight: '60vh', resize: 'vertical', overflow: 'auto'}}><CodeEditor label="Query source" value={source} onChange={onChange}
+        language={jsonLanguage ? 'json' : firebird ? 'firebird' : 'sql'} sqlConfig={firebird ? sqlConfig : nativeConfig} autocomplete autocompleteOnKeyPress
         currEditor={editor => {syntaxEditor.current = editor;}}
-        formatOverride={format} disabled={disabled || running || Boolean(plan?.occurrence_id)} /></Box>
-      <Button disabled={disabled || checking || running} onClick={loadCompletion}>Refresh metadata completion</Button>
-      <Alert severity="info">Completion covers loaded table/view metadata only. Unloaded or inaccessible objects are absent. Display highlighting is not native SQL validation.</Alert>
+        formatOverride={firebird ? format : undefined} disabled={disabled || running || Boolean(plan?.occurrence_id)} /></Box>
+      {firebird && <Button disabled={disabled || checking || running} onClick={loadCompletion}>Refresh metadata completion</Button>}
+
       {completion && <Alert severity={completion.truncated ? 'warning' : 'info'}>{completion.coverage}.
         {completion.resources.length} of {completion.visible_resource_count} visible resources loaded.
         {completion.truncated ? ' Completion is truncated.' : ''}</Alert>}
@@ -122,29 +154,6 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       onChange={event => onChange(event.target.value)} inputProps={{'aria-label':'Query source'}}
       label="Query source"
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
-    {firebird && prepared?.original === source && <Box sx={{my: 1}}>
-      <Alert severity="info">Review the prepared {prepared.scriptMode ? 'script, including inherited client settings and any transaction commands' : 'native statement'}.
-        {prepared.scriptMode ? ' Scripts require an empty parameter array.' : ' Existing ordered parameters apply.'}
-        No SQL has been executed by preparing this source.</Alert>
-      <TextField multiline fullWidth minRows={3} maxRows={10} label="Prepared execution source"
-        value={prepared.source} InputProps={{readOnly: true}} />
-      <Button disabled={disabled || running || !onExecute} onClick={() => {
-        const value = prepared; setPrepared(null); onExecute(value.source, value.scriptMode);
-      }}>Run prepared source</Button>
-    </Box>}
-    <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(false)}>Check source</Button>
-    {language?.tooling?.script_framing && <FormReference formKey="script">
-      <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(true)}>Preview script</Button>
-      <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled}
-        onClick={() => {setRunning(true);onScriptLock(true);}}>Run / resume retained script</Button>
-      <Button disabled={!plan?.plan_id || ['stopped','complete'].includes(plan.state)} onClick={stop}>Stop after current statement</Button>
-      {plan && <Box component="pre" aria-label="Script progress" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({plan_id:plan.plan_id,state:plan.state,next_statement:plan.next_statement,statements:plan.statements?.map(s=>({ordinal:s.ordinal,source:s.source})),history:plan.history,stop_reason:plan.stop_reason},null,2)}</Box>}
-    </FormReference>}
-    {error && <Alert severity="error">{error}</Alert>}
-    {validation && <Box role="status">
-      <Alert severity={validation.diagnostics?.length ? 'warning' : 'info'}>{validation.scope || validation.authority} Full grammar validation: {validation.grammar_valid===true ? 'confirmed by native validator' : 'not certified'}.</Alert>
-      {(validation.diagnostics || []).map((d,i)=><Alert key={i} severity="error">{d.line}:{d.column} — {d.message}</Alert>)}
-    </Box>}
   </FormReference>;
 }
 LanguageSourceEditor.propTypes={onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};

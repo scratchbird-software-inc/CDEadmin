@@ -17,13 +17,15 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
 
 describe('Firebird monitoring destinations', () => {
   const Component = withTheme(FirebirdMonitoring);
-  let api;
+  let api, originalHeight;
   beforeEach(() => {
+    originalHeight = window.innerHeight; window.innerHeight = 1200;
     api = {get: jest.fn(async () => ({data: {data: {state: 'disabled', samples: []}}})),
       post: jest.fn(async () => ({data: {data: {state: 'starting'}}})),
       delete: jest.fn(async () => ({data: {data: {state: 'disabled'}}}))};
     getApiInstance.mockReturnValue(api);
   });
+  afterEach(() => {window.innerHeight = originalHeight;});
   it('viewer reads only and exposes no policy or layout mutation controls', async () => {
     const {unmount} = render(<Component serverId={7} targetId="target" />);
     await screen.findAllByTestId('read-only-ddn');
@@ -55,7 +57,7 @@ describe('Firebird monitoring destinations', () => {
     expect(mockViewerProps.presentation).toBe(true);
     expect(mockViewerProps.snapshot.files['dashboard.ddn']).toContain('Live Firebird 5');
     expect(mockViewerProps.snapshot.files['dashboard.ddn']).toContain('Saved custom server layout');
-    expect(screen.getByRole('button', {name: 'View recent observations'})).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', {name: 'Recent observations'})).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
     expect(published.files['dashboard.ddn']).not.toContain('Live Firebird 5');
     unmount();
@@ -65,9 +67,11 @@ describe('Firebird monitoring destinations', () => {
     api.get.mockResolvedValue({data: {data: {state: 'disabled', servers: [{server_id: 7, name: 'Instance',
       databases: [{target_id: 'registered-id', name: 'Database alias'}]}]}}});
     const {unmount} = render(<Component engineMode onNavigate={navigate} />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Database alias'}));
+    fireEvent.mouseDown(await screen.findByRole('combobox', {name: 'Open dashboard'}));
+    fireEvent.click(screen.getByRole('option', {name: /Database alias/}));
     expect(navigate).toHaveBeenCalledWith(7, 'registered-id', 'Database alias');
-    fireEvent.click(screen.getByRole('button', {name: 'Instance'}));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Open dashboard'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Instance'}));
     expect(navigate).toHaveBeenCalledWith(7, undefined, 'Instance');
     expect(api.post).not.toHaveBeenCalled();
     unmount();
@@ -75,7 +79,7 @@ describe('Firebird monitoring destinations', () => {
   it('opens retained observations without a policy mutation', async () => {
     api.get.mockResolvedValue({data: {data: {state: 'stopped', samples: [{status: 'unavailable', scope: 'server'}]}}});
     const {unmount} = render(<Component serverId={7} />);
-    fireEvent.click(await screen.findByRole('button', {name: 'View recent observations'}));
+    fireEvent.click(await screen.findByRole('checkbox', {name: 'Recent observations'}));
     await screen.findByText('SR-F-001354');
     expect(screen.getByText(/Past observations from this process only/)).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
@@ -93,12 +97,27 @@ describe('Firebird monitoring destinations', () => {
       metadata_interval_seconds: 60,
       max_transaction_age_seconds: 0, max_backup_state_seconds: 0,
       require_wire_encryption: false, expected_encryption_state: null,
-      heartbeat_enabled: true,
+      heartbeat_enabled: true, heartbeat_timeout_seconds: null,
     }));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Stop collection'})).toBeEnabled());
     fireEvent.click(screen.getByRole('button', {name: 'Stop collection'}));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/monitoring/7'));
     expect(screen.getByText('SR-F-001352')).toBeInTheDocument();
+    unmount();
+  });
+  it('admits an explicit heartbeat threshold and rejects values below the sampling interval plus five', async () => {
+    const {unmount} = render(<Component serverId={7} policyMode />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Heartbeat overdue after (seconds)')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Use completed refreshes as availability heartbeats'));
+    const threshold = screen.getByLabelText('Heartbeat overdue after (seconds)');
+    fireEvent.change(threshold, {target: {value: '19'}});
+    expect(screen.getByRole('button', {name: 'Start collection'})).toBeDisabled();
+    fireEvent.change(threshold, {target: {value: '60'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Start collection'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/monitoring/7', expect.objectContaining({
+      heartbeat_enabled: true, heartbeat_timeout_seconds: 60,
+    })));
     unmount();
   });
   it('submits a dedicated account only on explicit start and clears the password', async () => {
@@ -119,7 +138,7 @@ describe('Firebird monitoring destinations', () => {
   });
   it('opens activity details using only the authorized snapshot', async () => {
     const {unmount} = render(<Component serverId={7} targetId="target" />);
-    fireEvent.click(await screen.findByRole('button', {name: 'View activity details'}));
+    fireEvent.click(await screen.findByRole('checkbox', {name: 'Activity details'}));
     expect(screen.getByText('SR-F-001355')).toBeInTheDocument();
     expect(screen.getByText(/Past or unavailable collector snapshot/)).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();

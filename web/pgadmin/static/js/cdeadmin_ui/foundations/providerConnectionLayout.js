@@ -9,8 +9,8 @@
 // remain readable rather than becoming ellipses inside a fixed-pixel cell.
 export const providerConnectionFieldGridSx = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 17.5rem), 1fr))',
-  gap: 2,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 15rem), 24rem))',
+  gap: 1,
   minWidth: 0,
   alignItems: 'start',
   '& .MuiFormControl-root': {minWidth: 0},

@@ -19,7 +19,7 @@ from __future__ import annotations
 import copy
 import uuid
 import threading
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from functools import wraps
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -1257,6 +1257,17 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL operation is unavailable'
             ) from exc
+
+    @contextmanager
+    def profile_change_guard(self):
+        """Keep routing/credentials alive until explicitly owned work is closed."""
+        with self._state_lock:
+            if self._sessions:
+                raise PostgreSQLProviderError('Close PostgreSQL SQL sessions before disconnecting')
+            yield
+
+    def release_for_profile_change(self):
+        self.close()
 
     @_provider_serialized
     def close(self):

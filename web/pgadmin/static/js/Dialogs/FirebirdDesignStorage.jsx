@@ -1,3 +1,4 @@
+import {compactActionsSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, TextField} from '@mui/material';
@@ -31,7 +32,7 @@ export default function FirebirdDesignStorage({post, databaseTargetId, kind, cap
     finally {if (serial === epoch.current) {running.current = false; setBusy(false);}}
   };
   if (!post || !databaseTargetId) return null;
-  return <Box>
+  return <Box sx={compactActionsSx}>
     <Button disabled={disabled || busy} onClick={() => act('check')}>Check saved {family} design</Button>
     <Button disabled={disabled || busy || !reference} onClick={() => act('save')}>Save {family} design revision</Button>
     <TextField size="small" label={`${family === 'catalog' ? 'Catalog' : 'Relational'} design revision (blank for latest)`} value={revision}

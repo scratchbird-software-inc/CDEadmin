@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
@@ -90,7 +91,7 @@ export default function FirebirdDataImport({post, generation, databaseTargetId, 
     } catch {if(mounted.current) setError('Native outcome was not received. Keep this session and inspect its state; do not replay the import.');}
     finally {if(mounted.current) setBusy(false);}
   };
-  return <Box sx={{my: 2}}>
+  return <Box data-cde-compact-form sx={{my: 2, ...compactFormSx}}>
     <FormReference formKey="firebird-data-import" />
     <Alert severity="warning">Import data into this selected database using a separate native transaction. Preview checks exact destination types; embedded metadata and SQL are not executed. Constraints and triggers remain active. Staged rows need explicit commit or rollback. Closing requests session release without claiming an outcome.</Alert>
     <Button component="label" disabled={disabled || busy || pending}>Read data archive

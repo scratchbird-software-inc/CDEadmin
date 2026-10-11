@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
@@ -27,7 +28,7 @@ export default function FirebirdRegistration({post, targetId, operation='clone',
       ' Inspect and refresh both server registrations before trying again. No native database operation was requested.');}
     finally {setBusy(false);}
   };
-  return <Box sx={{p: 1, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-registration" />
     <Alert severity="info">{operation === 'clone' ? 'Clone' : 'Move'} registration metadata only. The native database is not copied, moved, created or dropped. Close open sessions first. The resulting registration is inactive and must be verified separately.</Alert>
     {error && <Alert severity="error">{error}</Alert>}

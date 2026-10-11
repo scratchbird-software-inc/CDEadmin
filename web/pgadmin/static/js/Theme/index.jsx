@@ -78,6 +78,7 @@ basicSettings = createTheme(basicSettings, {
   components: {
     MuiTextField: {
       defaultProps: {
+        size: 'small',
         variant: 'outlined',
         // Compact input padding cannot accommodate MUI's full-height inline
         // label. Keep a stable, visible label for empty and populated fields.
@@ -108,9 +109,15 @@ basicSettings = createTheme(basicSettings, {
       defaultProps: {
         disableTouchRipple: true,
         variant: 'outlined',
+        size: 'small',
       },
       styleOverrides: {
         root: {
+          alignSelf: 'flex-start',
+          justifySelf: 'start',
+          flexShrink: 0,
+          maxWidth: '100%',
+          '&:not(.MuiButton-fullWidth)': {width: 'fit-content'},
           textTransform: 'none',
           padding: '2px 10px',
           fontSize: 'inherit',
@@ -118,7 +125,8 @@ basicSettings = createTheme(basicSettings, {
             opacity: 0.60,
           },
           '&.MuiButton-sizeSmall, &.MuiButton-outlined.MuiButton-sizeSmall, &.MuiButton-contained.MuiButton-sizeSmall': {
-            height: '28px',
+            minHeight: '28px',
+            height: 'auto',
             fontSize: '0.875rem',
             '& .MuiSvgIcon-root': {
               height: '1.2rem',
@@ -155,6 +163,9 @@ basicSettings = createTheme(basicSettings, {
         }
       }
     },
+    MuiTable: {defaultProps: {size: 'small'}},
+    MuiTablePagination: {defaultProps: {showFirstButton: true, showLastButton: true}},
+    MuiDialogActions: {styleOverrides: {root: {flexWrap: 'wrap', gap: '0.25rem'}}},
     MuiTab: {
       defaultProps: {
         textColor: 'inherit',
@@ -186,6 +197,7 @@ basicSettings = createTheme(basicSettings, {
     },
     MuiCheckbox: {
       defaultProps: {
+        size: 'small',
         disableTouchRipple: true,
       }
     },

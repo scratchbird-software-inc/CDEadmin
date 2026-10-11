@@ -26,7 +26,7 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
   const [credentialMode, setCredentialMode] = useState('registration');
   const [credentials, setCredentials] = useState({username: '', password: '', role: ''});
   const [policy, setPolicy] = useState({interval_seconds: targetId ? 5 : 15,
-    retain_samples: 120, lease_seconds: 3600, heartbeat_enabled: false, metadata_interval_seconds: 60,
+    retain_samples: 120, lease_seconds: 3600, heartbeat_enabled: false, heartbeat_timeout_seconds: null, metadata_interval_seconds: 60,
     max_transaction_age_seconds: 0, max_backup_state_seconds: 0,
     require_wire_encryption: false, expected_encryption_state: null});
   const endpoint = useMemo(() => engineMode ? url_for('cdeadmin_monitoring.fleet') : url_for('cdeadmin_monitoring.monitoring', {sid: serverId}) +
@@ -73,11 +73,15 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
     targetId ? 'Firebird database dashboard' : 'Firebird server dashboard',
     targetId ? 'database' : 'server'), [snapshot, targetId, engineMode]);
   const databaseFiles = useMemo(() => firebirdServerDatabaseFiles(snapshot), [snapshot]);
+  const heartbeatValid = !policy.heartbeat_enabled || policy.heartbeat_timeout_seconds === null ||
+    (Number.isInteger(policy.heartbeat_timeout_seconds) &&
+      policy.heartbeat_timeout_seconds >= policy.interval_seconds + 5 && policy.heartbeat_timeout_seconds <= 3600);
   const changePolicy = async (remove=false) => {
     setBusy(true); setError('');
     try {
       const response = remove ? await getApiInstance().delete(endpoint) :
         await getApiInstance().post(endpoint, {...policy,
+          heartbeat_timeout_seconds: policy.heartbeat_enabled ? policy.heartbeat_timeout_seconds : null,
           ...(credentialMode === 'dedicated' ? {credentials} : {})});
       setSnapshot(response.data.data);
     } catch(err) {
@@ -90,22 +94,28 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
     {!showPolicy && publishedVersion > 0 && <Box>Published layout revision {publishedVersion}</Box>}
     {error && <Alert severity="error">{error}</Alert>}
     {!showPolicy && snapshot && onNavigate && <Box aria-label="Dashboard navigation">
-      {engineMode ? (snapshot.servers || []).map((server) => <Box key={server.server_id}>
-        <Button onClick={() => onNavigate(server.server_id, undefined, server.name)}>{server.name}</Button>
-        {server.databases.map((database) => <Button key={database.target_id}
-          onClick={() => onNavigate(server.server_id, database.target_id, database.name)}>{database.name}</Button>)}
-      </Box>) : <>
-        {targetId && <Button onClick={() => onNavigate(serverId, undefined, snapshot.navigation?.name)}>Server dashboard</Button>}
-        {!targetId && (snapshot.navigation?.databases || []).map((database) => <Button key={database.target_id}
-          onClick={() => onNavigate(serverId, database.target_id, database.name)}>{database.name}</Button>)}
-      </>}
+      <TextField select size="small" label={gettext('Open dashboard')} value=""
+        sx={{width: '24rem', maxWidth: '100%'}} onChange={(event) => {
+          const destination = JSON.parse(event.target.value);
+          onNavigate(destination[0], destination[1] ?? undefined, destination[2]);
+        }}>
+        {engineMode ? (snapshot.servers || []).flatMap((server) => [
+          <MenuItem key={`server:${server.server_id}`} value={JSON.stringify([server.server_id, null, server.name])}>{server.name}</MenuItem>,
+          ...server.databases.map((database) => <MenuItem key={`${server.server_id}:${database.target_id}`}
+            value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
+        ]) : [
+          ...(targetId ? [<MenuItem key="server" value={JSON.stringify([serverId, null, snapshot.navigation?.name])}>{gettext('Server dashboard')}</MenuItem>] : []),
+          ...(!targetId ? (snapshot.navigation?.databases || []).map((database) => <MenuItem key={database.target_id}
+            value={JSON.stringify([serverId, database.target_id, database.name])}>{database.name}</MenuItem>) : []),
+        ]}
+      </TextField>
     </Box>}
-    {!showPolicy && !engineMode && snapshot?.samples?.length > 0 && <Button
-      onClick={() => setShowTrends(!showTrends)}>{showTrends ? 'Hide recent observations' : 'View recent observations'}</Button>}
+    {!showPolicy && !engineMode && snapshot?.samples?.length > 0 && <FormControlLabel label={gettext('Recent observations')}
+      control={<Checkbox checked={showTrends} onChange={(event) => setShowTrends(event.target.checked)} />} />}
     {!showPolicy && !engineMode && snapshot && showTrends && <FirebirdTrendView
       key={`${serverId}:${targetId || ''}`} snapshot={snapshot} scope={targetId ? 'database' : 'server'} />}
     {!showPolicy && !engineMode && targetId && snapshot && <>
-      <Button onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Hide activity details' : 'View activity details'}</Button>
+      <FormControlLabel label={gettext('Activity details')} control={<Checkbox checked={showActivity} onChange={(event) => setShowActivity(event.target.checked)} />} />
       {showActivity && <FirebirdActivityView snapshot={snapshot} serverId={serverId} targetId={targetId} />}
     </>}
     {!showPolicy && !engineMode && !targetId && snapshot && <DDNViewerSurface
@@ -115,15 +125,15 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
     {!showPolicy && !engineMode && snapshot && <FirebirdMonitoringDetails
       key={`details:${serverId}:${targetId || ''}`} serverId={serverId} targetId={targetId}
       sample={snapshot.samples?.at(-1)} />}
-    {showPolicy ? <>
+    {showPolicy ? <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))', '& > .MuiAlert-root, & > .MuiFormGroup-root': {gridColumn: '1 / -1'}}}>
       <Alert severity="info">{gettext('Collection uses a dedicated connection and continues without an open dashboard. This policy and its samples last only for this application process. Stop the current policy before changing it.')}</Alert>
       {snapshot?.authentication && <Alert severity="info">
         {gettext('Active monitoring account')}: {snapshot.authentication.username || gettext('Registration authentication')}
         {snapshot.authentication.role ? ` (${snapshot.authentication.role})` : ''}
       </Alert>}
-      <RadioGroup aria-label={gettext('Monitoring authentication')} value={credentialMode}
+      <RadioGroup row aria-label={gettext('Monitoring authentication')} value={credentialMode}
         onChange={(event) => { setCredentialMode(event.target.value); setCredentials((value) => ({...value, password: ''})); }}>
-        <FormControlLabel value="registration" control={<Radio />} label={gettext('Use registration credentials')} />
+        <FormControlLabel value="registration" control={<Radio />} label={gettext('Use current connection credentials')} />
         <FormControlLabel value="dedicated" control={<Radio />} label={gettext('Use dedicated monitoring account')} />
       </RadioGroup>
       {credentialMode === 'dedicated' && <>
@@ -142,6 +152,14 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
           value={policy[key]} onChange={(event) => setPolicy({...policy, [key]: Number(event.target.value)})} />)}
       <FormControlLabel label={gettext('Use completed refreshes as availability heartbeats')}
         control={<Checkbox checked={policy.heartbeat_enabled} onChange={(event) => setPolicy({...policy, heartbeat_enabled: event.target.checked})} />} />
+      {policy.heartbeat_enabled && <TextField size="small" type="number"
+        label={gettext('Heartbeat overdue after (seconds)')}
+        value={policy.heartbeat_timeout_seconds ?? ''} error={!heartbeatValid}
+        inputProps={{min: policy.interval_seconds + 5, max: 3600}}
+        helperText={gettext('Blank uses %s seconds; an explicit value must be between %s and 3600.',
+          Math.max(15, policy.interval_seconds * 3), policy.interval_seconds + 5)}
+        onChange={(event) => setPolicy({...policy, heartbeat_timeout_seconds:
+          event.target.value === '' ? null : Number(event.target.value)})} />}
       {targetId && <>
         {['max_transaction_age_seconds', 'max_backup_state_seconds'].map((key, index) =>
           <TextField key={key} size="small" type="number" value={policy[key]}
@@ -159,11 +177,11 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
         </TextField>
       </>}
       <Box>
-        <Button disabled={busy || Boolean(snapshot?.authentication) || snapshot?.collection_available === false ||
+        <Button disabled={busy || !heartbeatValid || Boolean(snapshot?.authentication) || snapshot?.collection_available === false ||
           (credentialMode === 'dedicated' && (!credentials.username || !credentials.password))} onClick={() => changePolicy()}>{gettext('Start collection')}</Button>
         <Button disabled={busy} onClick={() => changePolicy(true)}>{gettext('Stop collection')}</Button>
       </Box>
-    </> : snapshot && <DDNViewerSurface files={files} snapshot={publishedView || undefined} entry="dashboard.ddn"
+    </Box> : snapshot && <DDNViewerSurface files={files} snapshot={publishedView || undefined} entry="dashboard.ddn"
       view="dashboard" presentation />}
   </Box>;
 }

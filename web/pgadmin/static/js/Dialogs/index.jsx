@@ -24,7 +24,9 @@ import { BROWSER_PANELS } from '../../../browser/static/js/constants';
 import ErrorBoundary from '../helpers/ErrorBoundary';
 import QuickSearch from '../QuickSearch';
 import ProviderWorkspaceContent from './ProviderWorkspaceContent';
+import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
+import PostgresqlMonitoring from './PostgresqlMonitoring';
 import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
@@ -160,6 +162,16 @@ export function showFirebirdDashboardEditor(serverId, targetId) {
   return panelId;
 }
 
+export function showPostgresqlMonitor(serverId, targetId, name='PostgreSQL', policyMode=false) {
+  const panelId = `id-postgresql-monitor-${serverId}-${targetId || 'server'}-${policyMode ? 'policy' : 'viewer'}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,
+    title: `${name} — ${policyMode ? 'monitoring settings' : 'dashboard'}`, closable: true, floatable: true,
+    content: <ErrorBoundary><PostgresqlMonitoring serverId={Number(serverId)} targetId={targetId}
+      policyMode={policyMode} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
 export function showFirebirdMonitor(serverId, targetId, name='Firebird') {
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-firebird-monitor-${serverId}-${targetId || 'server'}`;
@@ -192,7 +204,7 @@ export function showFirebirdFleet() {
 
 export function showProviderWorkspace(
   title, nodeObj, nodeData, itemNodeData, initialTab='resources',
-  initialContext={}, onEndpointRemoved,
+  initialContext={}, onEndpointRemoved, registerOnly=false,
 ) {
   const generatedUrl = nodeObj.generate_url(
     itemNodeData, 'cde_workspace', nodeData, true
@@ -213,10 +225,17 @@ export function showProviderWorkspace(
   const endpointUrl = parameters.size ?
     `${generatedUrl}${generatedUrl.includes('?') ? '&' : '?'}${parameters}` :
     generatedUrl;
+  const connection = {id: endpointUrl, serverId: nodeData._id, databaseTargetId,
+    label: `${nodeData.label || nodeData._label || title} / ${initialContext.display_name || databaseTargetId || 'server'}`};
+  if (registerOnly) {
+    registerSQLConnection({...connection, open: () => showProviderWorkspace(
+      title, nodeObj, nodeData, itemNodeData, 'studio', initialContext, onEndpointRemoved)});
+    return;
+  }
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const onClose = () => workspace.close(panelId);
-  workspace.openTab({
+  const panel = {
     id: panelId,
     title,
     closable: true,
@@ -266,7 +285,13 @@ export function showProviderWorkspace(
             });
           }}
         />}</ErrorBoundary>,
-  }, BROWSER_PANELS.MAIN, 'middle');
+  };
+  if (initialTab === 'studio') {
+    activateSQLConnection({...connection, content: panel.content});
+    workspace.focus(BROWSER_PANELS.SQL);
+    return BROWSER_PANELS.SQL;
+  }
+  workspace.openTab(panel, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
 }
 

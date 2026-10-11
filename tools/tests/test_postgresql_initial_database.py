@@ -30,3 +30,17 @@ def test_initial_database(maintenance, profile, targets, expected):
         ]) if profile else None))
     assert module.initial_database(server) == expected
     assert server.maintenance_db == maintenance
+
+
+@pytest.mark.parametrize('target,expected', [(None,None), (Ellipsis,None),
+    ('postgresql-database:1',1), ('postgresql-database:4294967295',4294967295)])
+def test_database_oid(target, expected):
+    assert module.database_oid(target) == expected
+
+
+@pytest.mark.parametrize('target', ['', 'postgres', 42, True, 'postgresql-database:0',
+    'postgresql-database:01', 'postgresql-database:-1', 'postgresql-database:4294967296',
+    'postgresql-database:١', 'postgresql-database:1 OR 1=1', 'postgresql-database: 1'])
+def test_database_oid_never_falls_back(target):
+    with pytest.raises(ValueError):
+        module.database_oid(target)

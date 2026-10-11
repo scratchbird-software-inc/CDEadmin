@@ -119,6 +119,9 @@ class BrowserModule(PgAdminModule):
             list: a list of url endpoints exposed to the client.
         """
         return [BROWSER_INDEX, 'browser.nodes',
+                'cdeadmin_monitoring.monitoring', 'cdeadmin_monitoring.fleet',
+                'cdeadmin_monitoring.definition', 'cdeadmin_monitoring.statement',
+                'cdeadmin_monitoring.details', 'cdeadmin_postgresql_monitoring.monitoring',
                 'browser.check_corrupted_db_file',
                 'browser.check_master_password',
                 'browser.set_master_password',

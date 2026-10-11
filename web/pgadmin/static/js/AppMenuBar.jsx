@@ -8,7 +8,7 @@
 //////////////////////////////////////////////////////////////
 import { Box } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { PrimaryButton } from './components/Buttons';
 import { PgMenu, PgMenuDivider, PgMenuItem, PgSubMenu } from './components/Menu';
@@ -25,9 +25,9 @@ const StyledBox = styled(Box)(({theme}) => ({
   color: theme.palette.primary.contrastText,
   padding: '0 0.5rem',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'center', flexWrap: 'wrap', minWidth: 0,
   '& .AppMenuBar-logo': {
-    minWidth: '136px',
+    minWidth: '136px', flexShrink: 0,
     height: '100%',
     backgroundPositionY: 'center',
     background: 'none',
@@ -49,7 +49,7 @@ const StyledBox = styled(Box)(({theme}) => ({
   '& .AppMenuBar-menus': {
     display: 'flex',
     alignItems: 'center',
-    gap: '2px',
+    gap: '2px', flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0,
     marginLeft: '16px',
 
     '& .MuiButton-containedPrimary': {
@@ -57,7 +57,8 @@ const StyledBox = styled(Box)(({theme}) => ({
     }
   },
   '& .AppMenuBar-userMenu': {
-    marginLeft: 'auto',
+    marginLeft: 'auto', maxWidth: '100%',
+    '& button': {overflowWrap: 'anywhere'},
     '& .MuiButton-containedPrimary': {
       fontSize: '0.825rem',
     },
@@ -98,6 +99,17 @@ export default function AppMenuBar() {
 
   const forceUpdate = useForceUpdate();
   const pgAdmin = usePgAdmin();
+  const menuRef = useRef(null);
+  useEffect(() => {
+    const element = menuRef.current;
+    if (!element) return;
+    const update = () => document.documentElement.style.setProperty(
+      '--cde-actual-menu-height', `${element.getBoundingClientRect().height}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {observer.disconnect(); document.documentElement.style.removeProperty('--cde-actual-menu-height');};
+  }, []);
 
   useEffect(()=>{
     pgAdmin.Browser.Events.on('pgadmin:enable-disable-menu-items', _.debounce(()=>{
@@ -154,7 +166,7 @@ export default function AppMenuBar() {
   };
 
   return (
-    <StyledBox data-test="app-menu-bar">
+    <StyledBox ref={menuRef} data-test="app-menu-bar">
       <div className='AppMenuBar-logo'
         data-cdeadmin-qa-key='application.brand.scratchrobin'
         aria-label='ScratchRobin CDE Administrator'>

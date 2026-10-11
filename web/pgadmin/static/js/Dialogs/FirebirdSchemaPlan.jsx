@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
@@ -85,7 +86,7 @@ export default function FirebirdSchemaPlan({baseline, post, generation, onCatalo
   };
   const rows = plan ? [...plan.blockers.map((item) => ({...item, state: 'blocked', detail: `${item.reason} ${item.fields.join(', ')}`})),
     ...plan.operations.map((item) => ({...item, state: item.operation, detail: item.statements.join(';\n') + (item.deferred_statements?.length ? '\n-- Final definition phase (after primary definitions):\n' + item.deferred_statements.join(';\n') : '')}))] : [];
-  return <Box sx={{display: 'flex', flexDirection: 'column', gap: 1}}>
+  return <Box data-cde-compact-form sx={{display: 'flex', flexDirection: 'column', gap: 1, ...compactFormSx}}>
     <FormReference formKey="firebird-schema-plan" />
     <Alert severity="info">{gettext('Load an edited DDN document to compare with the captured baseline and current database. Review generated statements before preparing an application.')}</Alert>
     <Box component="details">

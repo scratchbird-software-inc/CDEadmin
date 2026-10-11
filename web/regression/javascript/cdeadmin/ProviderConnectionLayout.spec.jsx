@@ -15,7 +15,7 @@ jest.mock('../../../pgadmin/static/js/api_instance');
 describe('font-relative provider connection fields', () => {
   it('uses root-font units and caps minimum width to the available task width', () => {
     expect(providerConnectionFieldGridSx.gridTemplateColumns).toBe(
-      'repeat(auto-fit, minmax(min(100%, 17.5rem), 1fr))');
+      'repeat(auto-fit, minmax(min(100%, 15rem), 24rem))');
     expect(providerConnectionFieldGridSx.minWidth).toBe(0);
   });
 

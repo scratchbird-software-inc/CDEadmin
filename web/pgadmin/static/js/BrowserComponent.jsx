@@ -412,7 +412,7 @@ function Layouts({browser, platform}) {
   return (
     <ApplicationStateProvider>
       <div style={{height: (browser != 'Electron' ?
-        'calc(100% - var(--cde-menu-row-height, 30px))' : '100%')}}>
+        'calc(100% - var(--cde-actual-menu-height, var(--cde-menu-row-height, 30px)))' : '100%')}}>
         <WorkbenchShell activities={shellActivities}
           startCollapsed
           activeActivityOverride={activeWorkspaceActivity} initialLayout={{

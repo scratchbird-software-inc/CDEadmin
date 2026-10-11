@@ -692,6 +692,14 @@ aggregate and introduces no ScratchBird connection.
 Dedicated monitoring account configuration
 -------------------------------------------
 
+Open the server or database context menu, then Availability > Configure
+monitoring collection. Enable "Use completed refreshes as availability heartbeats"
+to admit heartbeats. Sampling interval controls their scheduled frequency. The
+optional Heartbeat overdue after field accepts an explicit threshold from sampling
+interval plus five seconds through 3600 seconds. Blank uses the native collector
+policy default: the greater of 15 seconds and three sampling intervals. These
+controls belong to the policy form, never the display-only dashboard.
+
 The separate collection-policy form offers registration credentials or a
 dedicated monitoring username, password and optional role. Dedicated credentials
 authenticate only the independent native collector; they never update the server

@@ -527,6 +527,28 @@ class ProviderWorkspaceTests(unittest.TestCase):
                 'endpoint_id': 'forged',
             })
 
+    def test_buffered_poll_omits_duplicate_native_rows_without_losing_retained_result(self):
+        server = SimpleNamespace()
+        original = self.client.describe_result
+        def describe(token):
+            result = original(token)
+            result['payload']['rows'] = [(index,) for index in range(8)]
+            return result
+        self.client.describe_result = describe
+        session = self.workspace.open_session(server, 'mysql-sql', 'target-one')
+        occurrence = self.workspace.execute(server, session['session_id'], 'SELECT 42',
+                                            database_target_id='target-one')
+        response = self.workspace.poll(server, occurrence['occurrence_id'],
+                                       database_target_id='target-one', buffer_rows=3)
+        rendered = response['rendered_result']
+        self.assertEqual([{'answer': 0}, {'answer': 1}, {'answer': 2}], rendered['view_model']['rows'])
+        payload = response['occurrence']['result']['extensions']['mysql']['payload']
+        self.assertNotIn('rows', payload)
+        self.assertEqual(3, payload['buffered_row_count'])
+        next_page = self.workspace.result_page(server, {'result_id': rendered['descriptor']['result_id'],
+            'cursor': rendered['page']['next_cursor'], 'page_size': 3})
+        self.assertEqual([{'answer': 3}, {'answer': 4}, {'answer': 5}], next_page['view_model']['rows'])
+
     def test_data_studio_executes_and_renders_provider_rows(self):
         server = SimpleNamespace()
         session = self.workspace.open_session(

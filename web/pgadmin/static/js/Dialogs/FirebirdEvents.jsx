@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 /* global BigInt */
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
@@ -49,7 +50,7 @@ export default function FirebirdEvents({post, databaseTargetId}) {
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename;
     anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <Box sx={{p: 2, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-event-monitor" />
     <Alert severity="info">Dedicated event attachment. Counts cover this subscription only. Events are published at commit; disconnected intervals cannot be replayed. Reconnect starts a new observation interval. Idle subscriptions expire after 120 seconds; this workflow requires server process affinity. Network events also require a reachable Firebird auxiliary event port.</Alert>
     <TextField multiline minRows={3} fullWidth label="Event names (one per line)" value={names} disabled={busy || (report && !report.cleanup_confirmed)} onChange={event => setNames(event.target.value)} />

@@ -18,7 +18,7 @@ import {Banner, EnvironmentIndicator, Skeleton,
   ValidationMessage} from '../feedback/Indicators';
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
-import DataGrid from '../data/DataGrid';
+import DataGrid from '../data/PagedDataGrid';
 import {evaluateContractCondition, initialContractFormValues,
   isContractFormActionEnabled, redactedContractFormValues,
   transientContractFormSubmission, validateContractFormValues} from
@@ -331,8 +331,8 @@ export function ContractForm({form: formInput, initialValues=EMPTY_VALUES,
       {visibleSections.map((section) => <FormSection key={section.id}
         title={section.title}>
         {section.help && <Box sx={{mb: 1, color: 'text.secondary'}}>{section.help}</Box>}
-        <Box sx={{display: 'grid', gap: 1.5,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))'}}>
+        <Box sx={{display: 'grid', gap: 1,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))'}}>
           {section.fields.filter((field) => evaluateContractCondition(
             field.visibility, values, runtimeContext)).map((field) =>
             <Box key={field.id} {...{[`data-${namespace}-field`]: field.id}}

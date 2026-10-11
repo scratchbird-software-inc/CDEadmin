@@ -1,3 +1,4 @@
+import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 /////////////////////////////////////////////////////////////
 //
 // CDEadmin - Multi-engine Database Administration
@@ -7,6 +8,11 @@
 //
 //////////////////////////////////////////////////////////////
 
+import GridNavigation, {GridAction} from '../cdeadmin_ui/data/GridNavigation';
+import SaveIcon from '@mui/icons-material/Save';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import UndoIcon from '@mui/icons-material/Undo';
+import CheckIcon from '@mui/icons-material/Check';
 import FirebirdTemplates from './FirebirdTemplates';
 import FirebirdPrivilegeQueue from './FirebirdPrivilegeQueue';
 import FirebirdParameters from './FirebirdParameters';
@@ -20,12 +26,13 @@ import FirebirdExport from './FirebirdExport';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
+import {labelSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
 import {
-  Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
+  Fragment, createContext, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import PropTypes from 'prop-types';
 import {useTheme} from '@mui/material/styles';
@@ -71,13 +78,14 @@ function errorMessage(error) {
     gettext('The provider workspace request failed.');
 }
 
-function GridActivationStatus({contract}) {
+function GridActivationStatus({contract, hidePassed=false}) {
   if (!contract) return null;
   const blocked = (contract.activation_gates || []).filter(
     (gate) => gate.state !== 'passed'
   );
   const runtimeReady = contract.runtime_gate?.state === 'passed';
   if (!blocked.length && runtimeReady) {
+    if (hidePassed) return null;
     return <Box component="details" sx={{m: 1, flexShrink: 0}}
       aria-label={gettext('Provider grid activation status')}>
       <Box component="summary" sx={{cursor: 'pointer'}}>
@@ -95,7 +103,7 @@ function GridActivationStatus({contract}) {
   </Alert>;
 }
 
-GridActivationStatus.propTypes = {contract: PropTypes.object};
+GridActivationStatus.propTypes = {contract: PropTypes.object, hidePassed: PropTypes.bool};
 
 function EngineContractStatus({contract}) {
   if (!contract || contract.state === 'passed') return null;
@@ -1452,45 +1460,27 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       {gettext('native operations have provider-owned form definitions. Full option coverage and live behavior require separate verification.')}
     </Alert>}
     <Box sx={{display: 'grid', gridTemplateColumns: focused || objectEditor ? 'minmax(0, 1fr)' :
-      'minmax(240px, 320px) minmax(420px, 1fr)', gap: 2,
+      {xs: 'minmax(0, 1fr)', md: 'minmax(180px, 240px) minmax(0, 1fr)'}, gap: 1,
     alignItems: 'start'}}>
       {!focused && !objectEditor && <Box component="nav"
         aria-label={gettext('Engine administration tasks')}
         sx={{border: 1, borderColor: 'divider', maxHeight: '72vh',
-          overflow: 'auto'}}>
-        {groupedObjects.map((group) => <Box key={group.group_id}
-          sx={{borderBottom: 1, borderColor: 'divider', p: 1}}>
-          <Box component="h3" sx={{m: 0, mb: 0.5, fontSize: '0.85rem',
-            textTransform: 'uppercase', color: 'text.secondary'}}>
-            {group.title}
-          </Box>
-          {group.objects.map((item) => <Box key={item.resource_kind}
-            sx={{mb: 1}}>
-            <Button fullWidth size="small" disabled={working} variant={
-              resourceKind === item.resource_kind ? 'contained' : 'text'
-            } sx={{justifyContent: 'flex-start'}} onClick={() => {
-              setResourceKind(item.resource_kind);
-              setOperationId(item.operations?.[0]?.operation_id || '');
-            }}>
-              {item.title}
-            </Button>
-            {resourceKind === item.resource_kind && <Box sx={{display: 'flex',
-              flexWrap: 'wrap', gap: 0.5, pl: 1, pt: 0.5}}>
-              {(item.operations || []).map((itemOperation) => <Button
-                key={itemOperation.operation_id} size="small" disabled={working}
-                variant={operationId === itemOperation.operation_id ?
-                  'outlined' : 'text'}
-                color={itemOperation.graphical_ready !== false ?
-                  'primary' : 'warning'}
-                title={itemOperation.graphical_ready !== false ?
-                  gettext('Engine-owned graphical form') :
-                  gettext('Blocked: engine-owned graphical form is missing')}
-                onClick={() => setOperationId(itemOperation.operation_id)}>
-                {itemOperation.title}
-              </Button>)}
-            </Box>}
-          </Box>)}
-        </Box>)}
+          overflow: 'auto', p: 1}}>
+        <TextField select fullWidth size="small" label={gettext('Object type')}
+          value={resourceKind} disabled={working} onChange={(event) => {
+            const kind = event.target.value;
+            const item = groupedObjects.flatMap((group) => group.objects).find((entry) => entry.resource_kind === kind);
+            setResourceKind(kind); setOperationId(item?.operations?.[0]?.operation_id || '');
+          }}>
+          {groupedObjects.flatMap((group) => group.objects.map((item) =>
+            <MenuItem key={item.resource_kind} value={item.resource_kind}>{group.title} — {item.title}</MenuItem>))}
+        </TextField>
+        <TextField select fullWidth size="small" label={gettext('Operation')}
+          value={operationId} disabled={working} sx={{mt: 1}}
+          onChange={(event) => setOperationId(event.target.value)}>
+          {(objectDescriptor?.operations || []).map((item) =>
+            <MenuItem key={item.operation_id} value={item.operation_id}>{item.title}</MenuItem>)}
+        </TextField>
       </Box>}
       <Box component="section" aria-label={gettext('Engine task form')}
         sx={{minWidth: 0, '& .MuiFormHelperText-root': {
@@ -1589,12 +1579,18 @@ export function VisualAdministration({catalog, resources, selectedResource, post
                 onChange={(value) => {
                   if (!working && !inspecting) setDraft((current) =>
                     changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
-                }} />} /> : fields.map((field) => <VisualAdminField disabled={working || inspecting} key={field.field_id}
-              field={field} value={draft[field.field_id]}
-              onChange={(value) => {
-                if (!working && !inspecting) setDraft((current) =>
-                  changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
-              }} />)}
+                }} />} /> : <Box sx={{display: 'grid', gap: 1,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))'}}>
+              {fields.map((field) => <Box key={field.field_id} sx={{minWidth: 0,
+                gridColumn: field.array_editor || field.object_editor ||
+                    ['code', 'multiline', 'json', 'multiselect'].includes(field.control) ? '1 / -1' : undefined}}>
+                <VisualAdminField disabled={working || inspecting} field={field} value={draft[field.field_id]}
+                  onChange={(value) => {
+                    if (!working && !inspecting) setDraft((current) =>
+                      changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
+                  }} />
+              </Box>)}
+            </Box>}
           </Box>
           {(operation?.blockers || []).length > 0 && <Alert severity="info" sx={{mt: 2}}>
             {gettext('Execution readiness')}: {operation.blockers.join(', ')}
@@ -1737,11 +1733,17 @@ function KeyValueDataGrid({catalog, resources, post, setError,
   );
   const [targetId, setTargetId] = useState(() =>
     preferredResourceId(keys, initialResource) || keys[0]?.resource_id || '');
-  const [page, setPage] = useState(null);
+  const paging = useNativeRowPages(post);
+  const page = paging.page;
+  const [editMode, setEditMode] = useState(false);
+  const [editIndex, setEditIndex] = useState(0);
   const [edits, setEdits] = useState({});
   const [newValue, setNewValue] = useState('{}');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [working, setWorking] = useState(false);
+  const hasInsertDraft = newValue !== '{}';
+  const hasDrafts = Object.keys(edits).length > 0 || hasInsertDraft;
+  useModalCloseGuard(() => !working && !hasDrafts);
   const target = keys.find((item) => item.resource_id === targetId);
   const descriptor = (catalog?.objects || []).find(
     (item) => item.resource_kind === target?.resource_kind
@@ -1754,12 +1756,12 @@ function KeyValueDataGrid({catalog, resources, post, setError,
     const preferredId = preferredResourceId(keys, initialResource);
     if (preferredId && preferredId !== targetId) {
       setTargetId(preferredId);
-      setPage(null);
+      paging.reset();
       return;
     }
     if (!keys.some((item) => item.resource_id === targetId)) {
       setTargetId(keys[0]?.resource_id || '');
-      setPage(null);
+      paging.reset();
     }
   }, [initialResource, keys, targetId]);
 
@@ -1768,12 +1770,8 @@ function KeyValueDataGrid({catalog, resources, post, setError,
     setWorking(true);
     setError(null);
     try {
-      const nextPage = await post({
-        action: 'visual_admin_rows',
-        request: {target_resource: target, limit: 200, continuation},
-      });
-      setPage(nextPage);
-      setEdits({});
+      await paging.read({target_resource: target, continuation});
+      setEdits({}); setNewValue('{}');
       setDeleteCandidate(null);
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -1862,16 +1860,28 @@ function KeyValueDataGrid({catalog, resources, post, setError,
   };
 
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+    {paging.controls(load, working || hasDrafts)}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, my: 1}}>
+      <TextField select size="small" label={gettext('Data mode')} value={editMode ? 'edit' : 'view'}
+        disabled={working || hasDrafts || !page} onChange={event => setEditMode(event.target.value === 'edit')}>
+        <MenuItem value="view">{gettext('View')}</MenuItem><MenuItem value="edit" disabled={!admitted('insert') && !admitted('update') && !admitted('delete')}>{gettext('Edit')}</MenuItem>
+      </TextField>
+      {editMode && (page?.rows || []).length > 0 && <TextField select size="small" label={gettext('Record to edit')} value={Math.min(editIndex, (page?.rows || []).length - 1)}
+        disabled={working || hasDrafts} onChange={event => setEditIndex(Number(event.target.value))}>
+        {(page?.rows || []).map((_, index) => <MenuItem key={index} value={index}>{index + 1}</MenuItem>)}
+      </TextField>}
+      {hasDrafts && <Button disabled={working} onClick={() => {setEdits({}); setNewValue('{}');}}>{gettext('Discard unsubmitted edits')}</Button>}
+    </Box>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
       <TextField select sx={{minWidth: 320}}
-        label={gettext('Key and native data type')} value={targetId}
+        label={gettext('Key and native data type')} value={targetId} disabled={working || hasDrafts}
         onChange={(event) => {
-          setTargetId(event.target.value); setPage(null);
+          setTargetId(event.target.value); paging.reset();
         }}>
         {keys.map((item) => <MenuItem key={item.resource_id}
           value={item.resource_id}>{item.resource_kind}: {item.display_name}</MenuItem>)}
       </TextField>
-      <Button variant="contained" disabled={working || !target}
+      <Button variant="contained" disabled={working || hasDrafts || !target}
         onClick={() => load()}>{gettext('Load values')}</Button>
       {working && <CircularProgress size={24} />}
     </Box>
@@ -1887,35 +1897,32 @@ function KeyValueDataGrid({catalog, resources, post, setError,
       <Alert severity="info" sx={{mt: 2}}>
         {gettext('Edits retain Redis native types and use route-bound, single-use value identities with optimistic concurrency checks.')}
       </Alert>
-      {(page.rows || []).map((row, index) => <Box key={row.identity_token}
+      {!editMode && <ProviderDataGrid rows={page.rows.map(row => row.values)} paginate={false} ariaLabel={gettext('Native key values')} />}
+      {editMode && (page.rows || []).map((row, index) => index === Math.min(editIndex, page.rows.length - 1) && <Box key={row.identity_token}
         sx={{mt: 1, p: 1, border: 1, borderColor: 'divider'}}>
         <Box component="code">{JSON.stringify(row.values.selector)}</Box>
         <TextField fullWidth multiline minRows={2} maxRows={10} sx={{mt: 1}}
-          disabled={working || !admitted('update')}
+          disabled={working || hasInsertDraft || !admitted('update')}
           value={edits[index] ?? JSON.stringify(row.values.value, null, 2)}
           onChange={(event) => setEdits((current) => ({
             ...current, [index]: event.target.value,
           }))} />
         <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-          <Button disabled={working || !admitted('update')}
+          <Button disabled={working || hasInsertDraft || !admitted('update')}
             onClick={() => saveValue(row, index)}>{gettext('Save')}</Button>
-          <Button color="warning" disabled={working || !admitted('delete')}
+          <Button color="warning" disabled={working || hasDrafts || !admitted('delete')}
             onClick={() => deleteValue(row)}>
             {deleteCandidate === row.identity_token ?
               gettext('Confirm delete') : gettext('Delete')}
           </Button>
         </Box>
       </Box>)}
-      {page.continuation && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-        <Button onClick={() => load(page.continuation)}>
-          {gettext('Next value page')}
-        </Button>
-      </Box>}
-      {admitted('insert') && <Box sx={{mt: 2}}>
+      {editMode && admitted('insert') && <Box sx={{mt: 2}}>
         <TextField fullWidth multiline minRows={3}
           label={gettext('Native insert value (JSON)')} value={newValue}
+          disabled={working || Object.keys(edits).length > 0}
           onChange={(event) => setNewValue(event.target.value)} />
-        <Button sx={{mt: 1}} onClick={insertValue} disabled={working}>
+        <Button sx={{mt: 1}} onClick={insertValue} disabled={working || Object.keys(edits).length > 0}>
           {gettext('Insert value')}
         </Button>
       </Box>}
@@ -1931,7 +1938,7 @@ KeyValueDataGrid.propTypes = {
   initialResource: PropTypes.object,
 };
 
-function StructuredDataGrid({catalog, resources, post, setError,
+export function StructuredDataGrid({catalog, resources, post, setError,
   languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled}) {
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
@@ -1961,13 +1968,34 @@ function StructuredDataGrid({catalog, resources, post, setError,
       initialResourceId : (relations[0]?.resource_id || '')
   );
   const [page, setPage] = useState(null);
+  const [pages, setPages] = useState([]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [pageSize, setPageSize] = useState(200);
+  const [maximumRows, setMaximumRows] = useState(1000);
+  const cursorRef = useRef(null);
+
   const [edits, setEdits] = useState({});
   const [newValues, setNewValues] = useState({});
   const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const hasDrafts = Object.keys(edits).length > 0 || Object.keys(newValues).length > 0;
+  const retrievedRows = pages.reduce((count, item) => count + (item.rows?.length || 0), 0);
+  const limitsValid = Number.isInteger(maximumRows) && maximumRows >= 1 && maximumRows <= 100000;
+  const cancelCursor = async () => {
+    if (!cursorRef.current) return;
+    await post({action: 'visual_admin_rows_cancel', request: {continuation: cursorRef.current}});
+    cursorRef.current = null;
+  };
+  const showPage = (index) => {
+    if (working || hasDrafts || !pages[index]) return;
+    setPageIndex(index); setPage(pages[index]); setDeleteCandidate(null);
+  };
   const [working, setWorking] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [stagedMutationCount, setStagedMutationCount] = useState(0);
+  const [autoCommit, setAutoCommit] = useState(false);
+  useModalCloseGuard(() => !working && !hasDrafts && stagedMutationCount === 0);
   const sessionIdRef = useRef(null);
   const databaseTargetIdRef = useRef(null);
   const target = relations.find((item) => item.resource_id === targetId);
@@ -2004,11 +2032,10 @@ function StructuredDataGrid({catalog, resources, post, setError,
 
   useEffect(() => {
     if (!relations.some((item) => item.resource_id === targetId)) {
+      if (sessionIdRef.current) return;
       setTargetId(relations[0]?.resource_id || '');
-      setPage(null);
-      setSessionId(null);
+      setPage(null); setPages([]); setPageIndex(0);
       setTransaction(null);
-      setStagedMutationCount(0);
     }
   }, [relations, targetId]);
 
@@ -2019,6 +2046,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
     }
     const opened = await post({
       action: 'open_session', language_profile: languageProfile,
+      ...(languageProfile === 'firebird-sql' ? {session_purpose: 'firebird-row-grid'} : {}),
       database_target_id: selectedDatabaseTargetId,
     });
     sessionIdRef.current = opened.session_id;
@@ -2028,19 +2056,37 @@ function StructuredDataGrid({catalog, resources, post, setError,
   };
 
   const load = async (continuation=null) => {
-    if (!target) return;
+    if (!target || !limitsValid) return;
     setWorking(true);
     setError(null);
     try {
+      if (!continuation) await cancelCursor();
       const activeSession = await ensureSession();
+      const remaining = maximumRows - (continuation ? retrievedRows : 0);
+      if (remaining <= 0) return;
       const nextPage = await post({
         action: 'visual_admin_rows',
         request: {
-          target_resource: target, limit: 200, continuation,
+          target_resource: target, limit: Math.min(pageSize, maximumRows), continuation,
           session_id: activeSession,
           database_target_id: selectedDatabaseTargetId,
         },
       });
+      if (nextPage.rows?.length > remaining) {
+        nextPage.prefetched_excess_rows = nextPage.rows.length - remaining;
+        nextPage.rows = nextPage.rows.slice(0, remaining);
+        nextPage.retrieval_limited = true;
+      }
+      cursorRef.current = nextPage.continuation || null;
+      const nextPages = continuation ? [...pages, nextPage] : [nextPage];
+      const count = nextPages.reduce((sum, item) => sum + (item.rows?.length || 0), 0);
+      if (count >= maximumRows && cursorRef.current) {
+        await cancelCursor();
+        nextPage.continuation = null;
+        nextPage.retrieval_limited = true;
+      }
+      setPages(nextPages);
+      setPageIndex(nextPages.length - 1);
       setPage(nextPage);
       setEdits({});
       setNewValues({});
@@ -2071,6 +2117,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
         plan.blockers?.join(', ') || gettext('The row plan is blocked.')
       );
     }
+    await cancelCursor();
+    setPages([]); setPageIndex(0);
     const applied = await post({
       action: 'visual_admin_apply',
       request: {
@@ -2085,6 +2133,20 @@ function StructuredDataGrid({catalog, resources, post, setError,
       ));
     }
     setStagedMutationCount((count) => count + 1);
+    // The mutation is already staged: never offer to replay its draft if commit fails.
+    setEdits({}); setNewValues({}); setDeleteCandidate(null);
+    if (autoCommit) {
+      try {
+        setTransaction(await post({
+          action: 'transaction_action', session_id: activeSession,
+          transaction_action: 'commit', database_target_id: selectedDatabaseTargetId,
+        }));
+        setStagedMutationCount(0);
+      } catch (error) {
+        setAutoCommit(false);
+        throw error;
+      }
+    }
   };
 
   const controlTransaction = async (action) => {
@@ -2092,6 +2154,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
     setWorking(true);
     setError(null);
     try {
+      await cancelCursor();
       setTransaction(await post({
         action: 'transaction_action', session_id: sessionId,
         transaction_action: action,
@@ -2132,6 +2195,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
         database_target_id: selectedDatabaseTargetId,
       });
       sessionIdRef.current = null;
+      cursorRef.current = null;
+      setPage(null); setPages([]); setPageIndex(0);
       setSessionId(null);
       setTransaction(null);
     } catch (requestError) {
@@ -2212,7 +2277,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
       __identityToken: row.identity_token,
       __providerRow: row,
     })),
-    ...(admitted('insert') ? [{
+    ...(editMode && admitted('insert') ? [{
       ...newValues, __rowIndex: -1, __insert: true,
       __identityToken: '__new__',
     }] : []),
@@ -2221,18 +2286,19 @@ function StructuredDataGrid({catalog, resources, post, setError,
     ...column,
     // Inline editors contain a NULL/value selector as well as the value.
     // Keep them usable at enlarged text sizes; scroll rather than compress.
-    minWidth: Math.max(column.minWidth || 0, Math.ceil(360 * editorScale)),
+    minWidth: Math.max(column.minWidth || 0, Math.ceil((editMode ? 360 : 140) * editorScale)),
     key: typeof column.key === 'string' ? column.key : column.name,
     name: `${column.name}${(column.identity_key || column.key === true) ? ' 🔑' : ''}`,
     editable: false,
-    renderCell: ({row}) => <Box sx={{display: 'flex', alignItems: 'center'}}>
+    renderCell: ({row}) => !editMode ? <span title={editorValue(row[column.name])}>{row[column.name] === null ? 'NULL' : editorValue(row[column.name])}</span> : <Box sx={{display: 'flex', alignItems: 'center'}}>
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
         spec={column.array_spec}
         firebirdBlob={languageProfile?.startsWith('firebird-') && column.native_type === 'BLOB' && ['text', 'binary'].includes(column.input_kind)}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
         draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
           (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name], column.input_kind))}
-        disabled={working || (row.__insert ?
+        disabled={working || (Object.keys(newValues).length > 0 && !row.__insert) ||
+          Object.keys(edits).some((index) => Number(index) !== row.__rowIndex) || (row.__insert ?
           (column.insertable ?? column.editable) === false :
           column.editable === false || !page.editable)}
         onChange={(value) => row.__insert ?
@@ -2246,7 +2312,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
         value={row.__insert ? (newValues[column.name] || '') :
           (edits[row.__rowIndex]?.[column.name] ??
           editorValue(row[column.name]))}
-        disabled={working || (row.__insert ?
+        disabled={working || (Object.keys(newValues).length > 0 && !row.__insert) ||
+          Object.keys(edits).some((index) => Number(index) !== row.__rowIndex) || (row.__insert ?
           (column.insertable ?? column.editable) === false : column.editable === false) ||
         (!row.__insert && !page.editable)}
         onChange={(event) => row.__insert ?
@@ -2268,10 +2335,10 @@ function StructuredDataGrid({catalog, resources, post, setError,
         })}>{gettext('Omit')}</Button>}
     </Box>,
   }));
-  if (page) {
+  if (page && editMode) {
     gridColumns.push({
-      key: '__actions', name: gettext('Actions'), width: '18rem',
-      minWidth: Math.ceil(320 * editorScale),
+      key: '__actions', name: gettext('Actions'), width: '10rem',
+      minWidth: Math.ceil(150 * editorScale),
       exportable: false, editable: false,
       renderCell: ({row}) => row.__insert ?
         <Button disabled={working || (Object.keys(newValues).length === 0 &&
@@ -2280,50 +2347,87 @@ function StructuredDataGrid({catalog, resources, post, setError,
           Object.keys(newValues).length === 0 ?
             gettext('Insert default row') : gettext('Insert row')}</Button> :
         <Box sx={{display: 'flex', gap: 1, width: 'max-content'}}>
-          <Button disabled={working || !row.__identityToken ||
-            !admitted('update')}
+          <GridAction label={gettext('Save')} disabled={working || !row.__identityToken ||
+            !admitted('update') || !Object.keys(edits[row.__rowIndex] || {}).length}
           onClick={() => saveRow(row.__providerRow, row.__rowIndex)}>
-            {gettext('Save')}</Button>
-          <Button color="warning" disabled={working || !row.__identityToken ||
+            <SaveIcon fontSize="small" /></GridAction>
+          <GridAction label={deleteCandidate === row.__identityToken ? gettext('Confirm delete') : gettext('Delete')} color="warning" disabled={working || hasDrafts || !row.__identityToken ||
             !admitted('delete')} onClick={() => deleteRow(row.__providerRow)}>
-            {deleteCandidate && deleteCandidate === row.__identityToken ?
-              gettext('Confirm delete') : gettext('Delete')}</Button>
+            <DeleteOutlineIcon fontSize="small" /></GridAction>
         </Box>,
     });
   }
 
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
-      <TextField select sx={{minWidth: 260}}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
+      <TextField select size="small" sx={{width: '20rem', maxWidth: '100%'}}
         label={gettext('Table or view')}
-        value={targetId} disabled={working || stagedMutationCount > 0}
-        onChange={(event) => {
-          setTargetId(event.target.value); setPage(null);
-          setTransaction(null);
+        value={targetId} disabled={working || hasDrafts || stagedMutationCount > 0}
+        onChange={async (event) => {
+          const nextTarget = event.target.value;
+          try {
+            await cancelCursor();
+            if (sessionId) await post({action: 'close_session', session_id: sessionId,
+              database_target_id: selectedDatabaseTargetId});
+            sessionIdRef.current = null; setSessionId(null);
+            setTargetId(nextTarget); setPage(null); setPages([]); setPageIndex(0);
+            setTransaction(null); setEditMode(false);
+          } catch (error) { setError(errorMessage(error)); }
         }}>
         {relations.map((item) => <MenuItem key={item.resource_id}
           value={item.resource_id}>{(item.display_path || [item.display_name]).join('.')}</MenuItem>)}
       </TextField>
-      <Button variant="contained" disabled={working || !target}
+      <TextField size="small" select label={gettext('Rows per page')} value={pageSize}
+        disabled={working || Boolean(page)} onChange={(event) => setPageSize(Number(event.target.value))}
+        sx={{width: '8rem'}}>{[25, 50, 100, 200, 500].map((value) =>
+          <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>
+      <TextField size="small" type="number" label={gettext('Maximum rows retrieved')}
+        value={maximumRows} disabled={working || Boolean(page)} error={!limitsValid}
+        inputProps={{min: 1, max: 100000}} sx={{width: '12rem'}}
+        onChange={(event) => setMaximumRows(Number(event.target.value))} />
+      <TextField select size="small" label={gettext('Grid mode')} value={editMode ? 'edit' : 'view'}
+        disabled={working || hasDrafts || !page} sx={{width: '8rem'}}
+        onChange={(event) => setEditMode(event.target.value === 'edit')}>
+        <MenuItem value="view">{gettext('View')}</MenuItem>
+        <MenuItem value="edit" disabled={!admitted('insert') && !admitted('update') && !admitted('delete')}>
+          {gettext('Edit')}</MenuItem>
+      </TextField>
+      <Button variant="contained" disabled={working || !target || hasDrafts || !limitsValid}
         onClick={() => load()}>{gettext('Load rows')}</Button>
-      <Button disabled={working || stagedMutationCount === 0}
-        onClick={() => controlTransaction('commit')}>
-        {gettext('Commit changes')}</Button>
-      <Button color="warning"
-        disabled={working || stagedMutationCount === 0}
-        onClick={() => controlTransaction('rollback')}>
-        {gettext('Rollback changes')}</Button>
+      <FormControlLabel label={gettext('Autocommit')} control={<Checkbox size="small"
+        checked={autoCommit} disabled={working || hasDrafts || stagedMutationCount > 0}
+        onChange={(event) => setAutoCommit(event.target.checked)} />} />
+      <GridAction label={gettext('Commit changes')} disabled={autoCommit || working || hasDrafts || stagedMutationCount === 0}
+        onClick={() => controlTransaction('commit')}><CheckIcon fontSize="small" /></GridAction>
+      <GridAction label={gettext('Rollback changes')} color="warning"
+        disabled={autoCommit || working || hasDrafts || stagedMutationCount === 0}
+        onClick={() => controlTransaction('rollback')}><UndoIcon fontSize="small" /></GridAction>
       <Button disabled={working || !sessionId}
         onClick={refreshTransaction}>
         {gettext('Provider transaction state')}</Button>
-      <Button disabled={working || !sessionId || stagedMutationCount > 0}
+      <Button disabled={working || hasDrafts || !sessionId || stagedMutationCount > 0}
         onClick={releaseSession}>{gettext('Close data session')}</Button>
       {working && <CircularProgress size={24} />}
     </Box>
     {relations.length === 0 && <Alert severity="info" sx={{mt: 2}}>
       {gettext('No discovered table or view is available.')}
     </Alert>}
+    {hasDrafts && <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
+      <span>{gettext('Save or discard unsubmitted edits before navigating.')}</span>
+      <Button disabled={working} onClick={() => {setEdits({}); setNewValues({}); setDeleteCandidate(null);}}>
+        {gettext('Discard unsubmitted edits')}</Button>
+    </Box>}
     {page && <>
+      <GridNavigation page={pageIndex} pages={pages.length} busy={working || hasDrafts}
+        canNext={pageIndex < pages.length - 1 || Boolean(cursorRef.current)}
+        endKnown={!cursorRef.current}
+        onFirst={() => showPage(0)} onPrevious={() => showPage(pageIndex - 1)}
+        onNext={() => pageIndex < pages.length - 1 ? showPage(pageIndex + 1) : load(cursorRef.current)}
+        onLast={() => showPage(pages.length - 1)}>
+        <span>{gettext('%s rows retained', retrievedRows)}</span>
+        {pages.at(-1)?.retrieval_limited && <span>{gettext('Retrieval limit reached')}</span>}
+        {pages.at(-1)?.prefetched_excess_rows > 0 && <span>{gettext('%s excess rows from the final native batch discarded', pages.at(-1).prefetched_excess_rows)}</span>}
+      </GridNavigation>
       {stagedMutationCount > 0 && <Alert severity="warning" sx={{mt: 2}}
         aria-label={gettext('Staged provider grid changes')}>
         {gettext('%s grid change(s) are staged in the provider session. Commit or roll back before changing tables or closing this workspace.', stagedMutationCount)}
@@ -2336,26 +2440,27 @@ function StructuredDataGrid({catalog, resources, post, setError,
               gettext('This table is read-only because the provider did not admit a stable row identity.') :
               gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
-      {languageProfile?.startsWith('firebird-') && <FirebirdRowSql page={page} table={target?.display_name || ''}
-        onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />}
-      <ProviderDataGrid columns={gridColumns} rows={gridRows}
+      {languageProfile?.startsWith('firebird-') && <Box component="details" sx={{my: 1}}>
+        <Box component="summary" sx={{cursor: 'pointer'}}>{gettext('Generate SQL from fetched rows')}</Box>
+        <FirebirdRowSql page={page} table={target?.display_name || ''}
+          onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />
+      </Box>}
+      <ProviderDataGrid columns={gridColumns} rows={gridRows} paginate={false}
         contract={page.grid || {}}
         gridId={page.grid?.grid_id || `provider/admin/${targetId}`}
-        readOnly={!page.editable}
+        readOnly={!editMode || !page.editable}
         rowKeyGetter={(row) => row.__identityToken ?? `display-row-${row.__rowIndex}`}
         ariaLabel={gettext('Provider table or view rows')} />
       {transaction && <ProviderTransactionObservation transaction={transaction}
         label={gettext('Provider grid transaction state')} />}
     </>}
-    {page?.continuation && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-      <Button disabled={working} onClick={() => load(page.continuation)}>
-        {gettext('Next row page')}</Button>
-      <Button disabled={working} onClick={async () => {
-        await post({action: 'visual_admin_rows_cancel', request: {
-          continuation: page.continuation,
-        }}); setPage({...page, continuation: null, complete: true});
-      }}>{gettext('Cancel row cursor')}</Button>
-    </Box>}
+    {cursorRef.current && <Button disabled={working || hasDrafts} onClick={async () => {
+      try {
+        await cancelCursor();
+        const closed = pages.map((item) => ({...item, continuation: null}));
+        setPages(closed); setPage(closed[pageIndex]);
+      } catch (error) {setError(errorMessage(error));}
+    }}>{gettext('Cancel row cursor')}</Button>}
   </Box>;
 }
 
@@ -2391,7 +2496,8 @@ function AnalyticDataBrowser({modelFamily, resources, post, setError,
     preferredResourceId(containers, initialResource) ||
       containers[0]?.resource_id || '');
   const [filterSource, setFilterSource] = useState('{}');
-  const [page, setPage] = useState(null);
+  const paging = useNativeRowPages(post);
+  const page = paging.page;
   const [working, setWorking] = useState(false);
   const target = containers.find((item) => item.resource_id === targetId);
 
@@ -2399,12 +2505,12 @@ function AnalyticDataBrowser({modelFamily, resources, post, setError,
     const preferredId = preferredResourceId(containers, initialResource);
     if (preferredId && preferredId !== targetId) {
       setTargetId(preferredId);
-      setPage(null);
+      paging.reset();
       return;
     }
     if (!containers.some((item) => item.resource_id === targetId)) {
       setTargetId(containers[0]?.resource_id || '');
-      setPage(null);
+      paging.reset();
     }
   }, [containers, initialResource, targetId]);
 
@@ -2418,7 +2524,7 @@ function AnalyticDataBrowser({modelFamily, resources, post, setError,
         'search-document-analytic'].includes(modelFamily)) {
         request.filter = JSON.parse(filterSource || '{}');
       }
-      setPage(await post({action: 'visual_admin_rows', request}));
+      await paging.read(request);
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -2448,15 +2554,16 @@ function AnalyticDataBrowser({modelFamily, resources, post, setError,
     component_reference: components[modelFamily],
     descriptor: {
       result_kind: page.grid?.result_kind,
-      grid: page.grid || {},
+      grid: {...page.grid, native_page: true},
     },
     view_model: viewModel,
   } : null;
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+    {paging.controls(load, working)}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
       <TextField select sx={{minWidth: 280}}
         label={gettext('Analytic data container')} value={targetId}
-        onChange={(event) => {setTargetId(event.target.value); setPage(null);}}>
+        onChange={(event) => {setTargetId(event.target.value); paging.reset();}}>
         {containers.map((item) => <MenuItem key={item.resource_id}
           value={item.resource_id}>
           {(item.display_path || [item.display_name]).join('.')}
@@ -2479,8 +2586,7 @@ function AnalyticDataBrowser({modelFamily, resources, post, setError,
       {gettext('Use the Administration tab for provider-validated inserts, updates, deletes, schema changes, indexes, retention, and security operations.')}
     </Alert>}
     {specializedResult && <ResultView rendered={specializedResult} />}
-    {page?.continuation && <Button sx={{mt: 1}} disabled={working}
-      onClick={() => load(page.continuation)}>{gettext('Next data page')}</Button>}
+
   </Box>;
 }
 
@@ -2537,8 +2643,17 @@ function providerGridColumns(columns=[]) {
   }));
 }
 
+const ServerPagedResultContext = createContext(false);
+
 function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
-  readOnly=true, gridId, ...props}) {
+  readOnly=true, gridId, paginate: requestedPagination=contract.native_page !== true, ...props}) {
+  const serverPaged = useContext(ServerPagedResultContext);
+  const paginate = requestedPagination && !serverPaged;
+  const [localPage, setLocalPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
+  useEffect(() => {setLocalPage(0);}, [gridId]);
+  const pageCount = Math.ceil(rows.length / rowsPerPage);
+  const selectedPage = Math.min(localPage, Math.max(0, pageCount - 1));
   const gridRows = rows.map((row) => row && typeof row === 'object' &&
     !Array.isArray(row) ? row : {value: row});
   const inferredColumns = columns.length || !gridRows.length ? columns :
@@ -2562,30 +2677,43 @@ function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   const finalColumns = providerGridColumns(
     suppliedColumns.length ? suppliedColumns : contractColumns
   );
-  return <Box sx={{height: 'min(52vh, 34rem)', minHeight: 180, mt: 1}}
-    onMouseDownCapture={(event) => {
-      const button = event.target.closest?.('button');
-      if (event.button !== 0 || !button || button.disabled ||
+  return <Box sx={{minWidth: 0, mt: 1}}>
+    {paginate && rows.length > 0 && <GridNavigation page={selectedPage} pages={pageCount} endKnown
+      canNext={selectedPage < pageCount - 1} onFirst={() => setLocalPage(0)}
+      onPrevious={() => setLocalPage(selectedPage - 1)} onNext={() => setLocalPage(selectedPage + 1)}
+      onLast={() => setLocalPage(pageCount - 1)}>
+      <TextField select size="small" label={gettext('Rows per page')} value={rowsPerPage}
+        onChange={(event) => {setRowsPerPage(Number(event.target.value)); setLocalPage(0);}}>
+        {[25, 50, 100, 200, 500].map((count) => <MenuItem key={count} value={count}>{count}</MenuItem>)}
+      </TextField>
+      <span>{gettext('%s rows in this result', rows.length)}</span>
+    </GridNavigation>}
+    <Box sx={{height: 'min(52vh, 34rem)', minHeight: 180, minWidth: 0, overflow: 'auto'}}
+      onMouseDownCapture={(event) => {
+        const button = event.target.closest?.('button');
+        if (event.button !== 0 || !button || button.disabled ||
           !event.currentTarget.contains(button)) return;
-      // Browser focus can scroll an action out from under the pointer between
-      // mousedown and mouseup. Preserve focus without moving the click target.
-      event.preventDefault();
-      button.focus({preventScroll: true});
-    }}>
-    <DataGrid columns={finalColumns} rows={gridRows}
-      gridId={gridId || contract.grid_id || 'provider/result'}
-      persistColumnState selectionMode={contract.selection_mode || 'row'}
-      enableCellSelect={contract.selection_mode === 'cell' ||
+        // Browser focus can scroll an action out from under the pointer between
+        // mousedown and mouseup. Preserve focus without moving the click target.
+        event.preventDefault();
+        button.focus({preventScroll: true});
+      }}>
+      <DataGrid columns={finalColumns} rows={paginate ? gridRows.slice(selectedPage * rowsPerPage, (selectedPage + 1) * rowsPerPage) : gridRows}
+        gridId={gridId || contract.grid_id || 'provider/result'}
+        persistColumnState selectionMode={contract.selection_mode || 'row'}
+        enableCellSelect={contract.selection_mode === 'cell' ||
         contract.selection_mode === 'range'}
-      readOnly={readOnly || contract.read_only !== false}
-      aria-label={ariaLabel || contract.accessible_name ||
+        readOnly={readOnly || contract.read_only !== false}
+        aria-label={ariaLabel || contract.accessible_name ||
         gettext('Provider data grid')}
-      noRowsText={gettext('Query completed without rows.')}
-      {...props} />
+        noRowsText={gettext('Query completed without rows.')}
+        {...props} />
+    </Box>
   </Box>;
 }
 
 ProviderDataGrid.propTypes = {
+  paginate: PropTypes.bool,
   columns: PropTypes.array,
   rows: PropTypes.array,
   contract: PropTypes.object,
@@ -2672,7 +2800,7 @@ function CubePivotView({rendered}) {
   };
   return <Box aria-label={gettext('Cube pivot results')}
     sx={{overflow: 'auto', mt: 1, flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center', mb: 1}}>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1}}>
       <Button onClick={() => setTransposed((value) => !value)}>
         {gettext('Transpose axes')}</Button>
       <Button disabled={drillDepth >= (view.levels || []).length}
@@ -2833,7 +2961,7 @@ function graphEntities(records) {
   return {nodes: [...nodes.values()], relationships: [...relationships.values()]};
 }
 
-function GraphView({rendered, records: suppliedRecords}) {
+function GraphView({rendered, records: suppliedRecords, nativePage=false}) {
   const records = suppliedRecords || rendered?.view_model?.records || [];
   const graph = useMemo(() => graphEntities(records), [records]);
   const positions = useMemo(() => new Map(graph.nodes.map((node, index) => {
@@ -2868,7 +2996,7 @@ function GraphView({rendered, records: suppliedRecords}) {
         </g>;
       })}
     </Box>
-    <ProviderDataGrid columns={[
+    <ProviderDataGrid paginate={!nativePage} columns={[
       {key: 'element_id', name: gettext('Element')},
       {key: 'entity_type', name: gettext('Type')},
       {key: 'properties', name: gettext('Properties'), cell_type: 'json'},
@@ -2887,6 +3015,7 @@ function GraphView({rendered, records: suppliedRecords}) {
 }
 
 GraphView.propTypes = {
+  nativePage: PropTypes.bool,
   rendered: PropTypes.object,
   records: PropTypes.array,
 };
@@ -3011,8 +3140,26 @@ SemanticChartView.propTypes = {
 };
 
 export function ResultControls({rendered, history, post, onRendered, setError,
-  setBusy, onProviderContinuation, allowedFormats, deliveryProfiles=[]}) {
+  setBusy, onProviderContinuation, allowedFormats, deliveryProfiles=[], bufferRows}) {
   const [comparison, setComparison] = useState(null);
+  const [visited, setVisited] = useState([]);
+  const [position, setPosition] = useState(0);
+  const [pending, setPending] = useState(false);
+  const pageCursors = useRef(new Map());
+  useEffect(() => {
+    const id = rendered?.descriptor?.result_id;
+    if (!id) return;
+    const offset = rendered.page?.offset || 0;
+    const key = `${id}:${offset}`;
+    const found = visited.findIndex(page => page.key === key);
+    if (found >= 0) {setPosition(found); return;}
+    setPosition(visited.length);
+    setVisited([...visited, {key, resultId: id, cursor: pageCursors.current.get(key) || null,
+      pageSize: rendered.page?.page_size || bufferRows || 500,
+      next: rendered.page?.next_cursor,
+      continuation: rendered.descriptor?.provider_continuation || rendered.page?.provider_continuation}]);
+  }, [rendered]);
+
   const [deliveryProfileId, setDeliveryProfileId] = useState(
     deliveryProfiles[0]?.profile_id || '');
   const [deliveryTarget, setDeliveryTarget] = useState('');
@@ -3030,34 +3177,44 @@ export function ResultControls({rendered, history, post, onRendered, setError,
   const previous = [...history].reverse().find((item) =>
     item.descriptor?.result_id !== resultId);
   const perform = async (callback) => {
-    setBusy(true);
+    setPending(true); setBusy(true);
     setError(null);
     try {
       await callback();
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
-      setBusy(false);
+      setPending(false); setBusy(false);
     }
+  };
+  const revisit = index => {
+    const page = visited[index];
+    if (!page || pending) return;
+    return perform(async () => onRendered(await post({action: 'result_page', request: {
+      result_id: page.resultId, cursor: page.cursor, page_size: page.pageSize,
+    }})));
   };
   if (!resultId) return null;
   return <Box sx={{mt: 1}}>
     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap'}}
       aria-label={gettext('Result actions')}>
-      <Button disabled={!rendered.page?.next_cursor && (
-        !rendered.descriptor?.provider_continuation ||
-        !onProviderContinuation
-      )}
-      onClick={() => perform(async () => {
-        if (rendered.page?.next_cursor) {
-          onRendered(await post({action: 'result_page', request: {
-            result_id: resultId, cursor: rendered.page.next_cursor,
-            page_size: rendered.page.page_size || 500,
-          }}));
-        } else if (onProviderContinuation) {
-          await onProviderContinuation();
-        }
-      })}>{gettext('Next result page')}</Button>
+      <GridNavigation page={position} pages={visited.length} busy={pending}
+        nextLabel={gettext('Next result page')}
+        endKnown={visited.length > 0 && !visited.at(-1).next && !visited.at(-1).continuation}
+        canNext={position < visited.length - 1 || Boolean(rendered.page?.next_cursor) ||
+          Boolean((rendered.descriptor?.provider_continuation || rendered.page?.provider_continuation) && onProviderContinuation)}
+        onFirst={() => revisit(0)} onPrevious={() => revisit(position - 1)}
+        onLast={() => revisit(visited.length - 1)}
+        onNext={() => position < visited.length - 1 ? revisit(position + 1) : perform(async () => {
+          if (rendered.page?.next_cursor) {
+            const cursor = rendered.page.next_cursor;
+            const next = await post({action: 'result_page', request: {
+              result_id: resultId, cursor, page_size: Math.min(bufferRows || 500, rendered.descriptor?.limits?.max_page_size || rendered.page.page_size || 500),
+            }});
+            pageCursors.current.set(`${next.descriptor?.result_id}:${next.page?.offset || 0}`, cursor);
+            onRendered(next);
+          } else if (onProviderContinuation) await onProviderContinuation();
+        })} />
       {exportFormats.map((format) =>
         <Button key={format} onClick={() => perform(async () => downloadBase64(
           await post({action: 'result_export', request: {
@@ -3123,6 +3280,7 @@ export function ResultControls({rendered, history, post, onRendered, setError,
 }
 
 ResultControls.propTypes = {
+  bufferRows: PropTypes.number,
   rendered: PropTypes.object,
   history: PropTypes.array.isRequired,
   post: PropTypes.func.isRequired,
@@ -3149,7 +3307,10 @@ function DocumentDataGrid({catalog, resources, post, setError,
   const [targetId, setTargetId] = useState(() =>
     preferredResourceId(collections, initialResource) ||
       collections[0]?.resource_id || '');
-  const [page, setPage] = useState(null);
+  const paging = useNativeRowPages(post);
+  const page = paging.page;
+  const [editMode, setEditMode] = useState(false);
+  const [editIndex, setEditIndex] = useState(0);
   const [edits, setEdits] = useState({});
   const [newDocument, setNewDocument] = useState('{}');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -3159,18 +3320,21 @@ function DocumentDataGrid({catalog, resources, post, setError,
   const [unsetPaths, setUnsetPaths] = useState('');
   const [diff, setDiff] = useState(null);
   const [working, setWorking] = useState(false);
+  const hasInsertDraft = newDocument !== '{}';
+  const hasDrafts = Object.keys(edits).length > 0 || hasInsertDraft;
+  useModalCloseGuard(() => !working && !hasDrafts);
   const target = collections.find((item) => item.resource_id === targetId);
 
   useEffect(() => {
     const preferredId = preferredResourceId(collections, initialResource);
     if (preferredId && preferredId !== targetId) {
       setTargetId(preferredId);
-      setPage(null);
+      paging.reset();
       return;
     }
     if (!collections.some((item) => item.resource_id === targetId)) {
       setTargetId(collections[0]?.resource_id || '');
-      setPage(null);
+      paging.reset();
     }
   }, [collections, initialResource, targetId]);
 
@@ -3179,17 +3343,10 @@ function DocumentDataGrid({catalog, resources, post, setError,
     setWorking(true);
     setError(null);
     try {
-      const nextPage = await post({
-        action: 'visual_admin_rows',
-        request: {
-          target_resource: target, limit: 200, continuation,
-          filter: JSON.parse(filterSource || '{}'),
-          projection: JSON.parse(projectionSource || '{}'),
-          sort: JSON.parse(sortSource || '[]'),
-        },
-      });
-      setPage(nextPage);
-      setEdits({});
+      await paging.read({target_resource: target, continuation,
+        filter: JSON.parse(filterSource || '{}'), projection: JSON.parse(projectionSource || '{}'),
+        sort: JSON.parse(sortSource || '[]')});
+      setEdits({}); setNewDocument('{}');
       setDeleteCandidate(null);
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -3289,19 +3446,31 @@ function DocumentDataGrid({catalog, resources, post, setError,
   };
 
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+    {paging.controls(load, working || hasDrafts)}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, my: 1}}>
+      <TextField select size="small" label={gettext('Data mode')} value={editMode ? 'edit' : 'view'}
+        disabled={working || hasDrafts || !page} onChange={event => setEditMode(event.target.value === 'edit')}>
+        <MenuItem value="view">{gettext('View')}</MenuItem><MenuItem value="edit" disabled={!admitted('insert') && !admitted('update') && !admitted('delete')}>{gettext('Edit')}</MenuItem>
+      </TextField>
+      {editMode && (page?.documents || []).length > 0 && <TextField select size="small" label={gettext('Record to edit')} value={Math.min(editIndex, (page?.documents || []).length - 1)}
+        disabled={working || hasDrafts} onChange={event => setEditIndex(Number(event.target.value))}>
+        {(page?.documents || []).map((_, index) => <MenuItem key={index} value={index}>{index + 1}</MenuItem>)}
+      </TextField>}
+      {hasDrafts && <Button disabled={working} onClick={() => {setEdits({}); setNewDocument('{}');}}>{gettext('Discard unsubmitted edits')}</Button>}
+    </Box>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
       <TextField select sx={{minWidth: 260}} label={gettext('Collection')}
-        value={targetId} onChange={(event) => {
-          setTargetId(event.target.value); setPage(null);
+        value={targetId} disabled={working || hasDrafts} onChange={(event) => {
+          setTargetId(event.target.value); paging.reset();
         }}>
         {collections.map((item) => <MenuItem key={item.resource_id}
           value={item.resource_id}>{(item.display_path || [item.display_name]).join('.')}</MenuItem>)}
       </TextField>
-      <Button variant="contained" disabled={working || !target}
+      <Button variant="contained" disabled={working || hasDrafts || !target}
         onClick={() => load()}>{gettext('Load documents')}</Button>
       {working && <CircularProgress size={24} />}
     </Box>
-    <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, mt: 2}}>
+    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 1, mt: 2}}>
       <TextField multiline minRows={2} label={gettext('Filter builder (Extended JSON)')}
         value={filterSource} onChange={(event) => setFilterSource(event.target.value)} />
       <TextField multiline minRows={2} label={gettext('Projection builder')}
@@ -3315,19 +3484,20 @@ function DocumentDataGrid({catalog, resources, post, setError,
     {collections.length === 0 && <Alert severity="info" sx={{mt: 2}}>
       {gettext('No discovered collection is available.')}
     </Alert>}
-    {page?.documents?.map((document, index) => <Box key={index}
+    {page && !editMode && <ProviderDataGrid rows={page.documents || []} paginate={false} ariaLabel={gettext('Native documents')} />}
+    {editMode && page?.documents?.map((document, index) => index === Math.min(editIndex, page.documents.length - 1) && <Box key={index}
       sx={{mt: 2, display: 'flex', gap: 1, alignItems: 'flex-start'}}>
       <TextField fullWidth multiline minRows={4} maxRows={14}
         inputProps={{'aria-label': gettext('Document JSON')}}
         value={edits[index] ?? JSON.stringify(document, null, 2)}
-        disabled={working}
+        disabled={working || hasInsertDraft}
         onChange={(event) => setEdits((current) => ({
           ...current, [index]: event.target.value,
         }))} />
       <Box sx={{display: 'flex', flexDirection: 'column', gap: 1}}>
-        <Button disabled={working || !admitted('update')}
+        <Button disabled={working || hasInsertDraft || !admitted('update')}
           onClick={() => saveDocument(document, index)}>{gettext('Save')}</Button>
-        <Button color="warning" disabled={working || !admitted('delete')}
+        <Button color="warning" disabled={working || hasDrafts || !admitted('delete')}
           onClick={() => deleteDocument(document, index)}>
           {deleteCandidate === index ? gettext('Confirm delete') : gettext('Delete')}
         </Button>
@@ -3345,21 +3515,12 @@ function DocumentDataGrid({catalog, resources, post, setError,
     </Box>}
     {diff && <Box component="pre" aria-label={gettext('Nested document diff')}
       sx={{mt: 2, maxHeight: 220, overflow: 'auto'}}>{JSON.stringify(diff, null, 2)}</Box>}
-    {page?.continuation && <Box sx={{display: 'flex', gap: 1, mt: 2}}>
-      <Button disabled={working} onClick={() => load(page.continuation)}>
-        {gettext('Next document batch')}
-      </Button>
-      <Button disabled={working} onClick={async () => {
-        await post({action: 'visual_admin_rows_cancel', request: {
-          continuation: page.continuation,
-        }}); setPage({...page, continuation: null, complete: true});
-      }}>{gettext('Cancel document cursor')}</Button>
-    </Box>}
-    {page && admitted('insert') && <Box sx={{mt: 2, display: 'flex', gap: 1}}>
+    {editMode && page && admitted('insert') && <Box sx={{mt: 2, display: 'flex', gap: 1}}>
       <TextField fullWidth multiline minRows={4}
         label={gettext('New document JSON')} value={newDocument}
+        disabled={working || Object.keys(edits).length > 0}
         onChange={(event) => setNewDocument(event.target.value)} />
-      <Button disabled={working || !newDocument.trim()}
+      <Button disabled={working || Object.keys(edits).length > 0 || !newDocument.trim()}
         onClick={insertDocument}>{gettext('Insert document')}</Button>
     </Box>}
   </Box>;
@@ -3387,7 +3548,10 @@ function GraphDataStudio({catalog, resources, post, setError,
   );
   const [targetId, setTargetId] = useState(() =>
     preferredResourceId(graphs, initialResource) || graphs[0]?.resource_id || '');
-  const [page, setPage] = useState(null);
+  const paging = useNativeRowPages(post);
+  const page = paging.page;
+  const [editMode, setEditMode] = useState(false);
+  const [editIndex, setEditIndex] = useState(0);
   const [labels, setLabels] = useState('Node');
   const [properties, setProperties] = useState('{}');
   const [edits, setEdits] = useState({});
@@ -3397,18 +3561,21 @@ function GraphDataStudio({catalog, resources, post, setError,
   const [relationshipProperties, setRelationshipProperties] = useState('{}');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [working, setWorking] = useState(false);
+  const hasInsertDraft = labels !== 'Node' || properties !== '{}' || relationshipType !== 'RELATED_TO' || Boolean(relationshipStart || relationshipEnd) || relationshipProperties !== '{}';
+  const hasDrafts = Object.keys(edits).length > 0 || hasInsertDraft;
+  useModalCloseGuard(() => !working && !hasDrafts);
   const target = graphs.find((item) => item.resource_id === targetId);
 
   useEffect(() => {
     const preferredId = preferredResourceId(graphs, initialResource);
     if (preferredId && preferredId !== targetId) {
       setTargetId(preferredId);
-      setPage(null);
+      paging.reset();
       return;
     }
     if (!graphs.some((item) => item.resource_id === targetId)) {
       setTargetId(graphs[0]?.resource_id || '');
-      setPage(null);
+      paging.reset();
     }
   }, [graphs, initialResource, targetId]);
 
@@ -3416,9 +3583,7 @@ function GraphDataStudio({catalog, resources, post, setError,
     if (!target) return;
     setWorking(true); setError(null);
     try {
-      setPage(await post({action: 'visual_admin_rows', request: {
-        target_resource: target, limit: 200, filter: {}, continuation,
-      }}));
+      await paging.read({target_resource: target, filter: {}, continuation});
       setEdits({});
       setDeleteCandidate(null);
     } catch (requestError) {
@@ -3452,6 +3617,7 @@ function GraphDataStudio({catalog, resources, post, setError,
         labels: labels.split(',').map((item) => item.trim()).filter(Boolean),
         properties: JSON.parse(properties || '{}'),
       }, options: {}});
+      setLabels('Node'); setProperties('{}');
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -3514,6 +3680,7 @@ function GraphDataStudio({catalog, resources, post, setError,
         end_node_element_id: relationshipEnd,
         properties: JSON.parse(relationshipProperties || '{}'),
       }, options: {}});
+      setRelationshipType('RELATED_TO'); setRelationshipStart(''); setRelationshipEnd(''); setRelationshipProperties('{}');
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -3524,94 +3691,100 @@ function GraphDataStudio({catalog, resources, post, setError,
 
   const entities = graphEntities(page?.records || []);
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+    {paging.controls(load, working || hasDrafts)}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, my: 1}}>
+      <TextField select size="small" label={gettext('Data mode')} value={editMode ? 'edit' : 'view'}
+        disabled={working || hasDrafts || !page} onChange={event => setEditMode(event.target.value === 'edit')}>
+        <MenuItem value="view">{gettext('View')}</MenuItem><MenuItem value="edit" disabled={![nodeDescriptor, relationshipDescriptor].some(descriptor => ['insert', 'update', 'delete'].some(operation => admitted(descriptor, operation)))}>{gettext('Edit')}</MenuItem>
+      </TextField>
+      {editMode && [...entities.nodes, ...entities.relationships].length > 0 && <TextField select size="small" label={gettext('Record to edit')} value={Math.min(editIndex, [...entities.nodes, ...entities.relationships].length - 1)}
+        disabled={working || hasDrafts} onChange={event => setEditIndex(Number(event.target.value))}>
+        {[...entities.nodes, ...entities.relationships].map((_, index) => <MenuItem key={index} value={index}>{index + 1}</MenuItem>)}
+      </TextField>}
+      {hasDrafts && <Button disabled={working} onClick={() => {setEdits({}); setLabels('Node'); setProperties('{}'); setRelationshipType('RELATED_TO'); setRelationshipStart(''); setRelationshipEnd(''); setRelationshipProperties('{}');}}>{gettext('Discard unsubmitted edits')}</Button>}
+    </Box>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
       <TextField select sx={{minWidth: 260}} label={gettext('Graph database')}
-        value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+        value={targetId} disabled={working || hasDrafts} onChange={(event) => setTargetId(event.target.value)}>
         {graphs.map((item) => <MenuItem key={item.resource_id}
           value={item.resource_id}>{item.display_name}</MenuItem>)}
       </TextField>
-      <Button variant="contained" disabled={working || !target}
-        onClick={load}>{gettext('Load graph')}</Button>
+      <Button variant="contained" disabled={working || hasDrafts || !target}
+        onClick={() => load()}>{gettext('Load graph')}</Button>
       {working && <CircularProgress size={24} />}
     </Box>
-    {page && <GraphView records={page.records || []} />}
-    {entities.nodes.map((node) => <Box key={node.element_id}
-      sx={{display: 'grid', gridTemplateColumns: '1fr 2fr auto auto', gap: 1,
-        alignItems: 'center', mt: 1}}>
-      <Box>{node.labels?.join(':')} — {node.element_id}</Box>
-      <TextField multiline minRows={2} label={gettext('Node properties')}
-        value={edits[`node:${node.element_id}`] ??
+    {page && <GraphView records={page.records || []} nativePage />}
+    {editMode && <>
+      {entities.nodes.map((node, index) => index === Math.min(editIndex, entities.nodes.length + entities.relationships.length - 1) && <Box key={node.element_id}
+        sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1,
+          alignItems: 'center', mt: 1}}>
+        <Box>{node.labels?.join(':')} — {node.element_id}</Box>
+        <TextField multiline minRows={2} label={gettext('Node properties')} disabled={working || hasInsertDraft}
+          value={edits[`node:${node.element_id}`] ??
           JSON.stringify(node.properties || {}, null, 2)}
-        onChange={(event) => setEdits((current) => ({...current,
-          [`node:${node.element_id}`]: event.target.value}))} />
-      <Button disabled={working || !admitted(nodeDescriptor, 'update')}
-        onClick={() => saveEntity('node', node)}>{gettext('Save')}</Button>
-      <Button color="warning"
-        disabled={working || !admitted(nodeDescriptor, 'delete')}
-        onClick={() => deleteEntity('node', node)}>{deleteCandidate ===
+          onChange={(event) => setEdits((current) => ({...current,
+            [`node:${node.element_id}`]: event.target.value}))} />
+        <Button disabled={working || hasInsertDraft || !admitted(nodeDescriptor, 'update')}
+          onClick={() => saveEntity('node', node)}>{gettext('Save')}</Button>
+        <Button color="warning"
+          disabled={working || hasDrafts || !admitted(nodeDescriptor, 'delete')}
+          onClick={() => deleteEntity('node', node)}>{deleteCandidate ===
           `node:${node.element_id}` ? gettext('Confirm delete node') :
-          gettext('Delete node')}</Button>
-    </Box>)}
-    <Box sx={{display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: 1, mt: 2}}>
-      <TextField label={gettext('Labels (comma separated)')} value={labels}
-        onChange={(event) => setLabels(event.target.value)} />
-      <TextField multiline minRows={3} label={gettext('Node properties JSON')}
-        value={properties} onChange={(event) => setProperties(event.target.value)} />
-      <Button disabled={working || !target || !admitted(nodeDescriptor, 'insert')}
-        onClick={insertNode}>{gettext('Create node')}</Button>
-    </Box>
-    {entities.relationships.map((relationship) => <Box
-      key={relationship.element_id}
-      sx={{display: 'grid', gridTemplateColumns: '1fr 2fr auto auto', gap: 1,
-        alignItems: 'center', mt: 1}}>
-      <Box>{relationship.type} — {relationship.element_id}</Box>
-      <TextField multiline minRows={2} label={gettext('Relationship properties')}
-        value={edits[`relationship:${relationship.element_id}`] ??
+            gettext('Delete node')}</Button>
+      </Box>)}
+      <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1, mt: 2}}>
+        <TextField label={gettext('Labels (comma separated)')} disabled={working || Object.keys(edits).length > 0} value={labels}
+          onChange={(event) => setLabels(event.target.value)} />
+        <TextField multiline minRows={3} label={gettext('Node properties JSON')} disabled={working || Object.keys(edits).length > 0}
+          value={properties} onChange={(event) => setProperties(event.target.value)} />
+        <Button disabled={working || Object.keys(edits).length > 0 || !target || !admitted(nodeDescriptor, 'insert')}
+          onClick={insertNode}>{gettext('Create node')}</Button>
+      </Box>
+      {entities.relationships.map((relationship, index) => index + entities.nodes.length === Math.min(editIndex, entities.nodes.length + entities.relationships.length - 1) && <Box
+        key={relationship.element_id}
+        sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1,
+          alignItems: 'center', mt: 1}}>
+        <Box>{relationship.type} — {relationship.element_id}</Box>
+        <TextField multiline minRows={2} label={gettext('Relationship properties')} disabled={working || hasInsertDraft}
+          value={edits[`relationship:${relationship.element_id}`] ??
           JSON.stringify(relationship.properties || {}, null, 2)}
-        onChange={(event) => setEdits((current) => ({...current,
-          [`relationship:${relationship.element_id}`]: event.target.value}))} />
-      <Button disabled={working || !admitted(relationshipDescriptor, 'update')}
-        onClick={() => saveEntity('relationship', relationship)}>{gettext('Save')}</Button>
-      <Button color="warning"
-        disabled={working || !admitted(relationshipDescriptor, 'delete')}
-        onClick={() => deleteEntity('relationship', relationship)}>
-        {deleteCandidate === `relationship:${relationship.element_id}` ?
-          gettext('Confirm delete relationship') :
-          gettext('Delete relationship')}</Button>
-    </Box>)}
-    <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr auto',
-      gap: 1, mt: 2}}>
-      <TextField label={gettext('Relationship type')} value={relationshipType}
-        onChange={(event) => setRelationshipType(event.target.value)} />
-      <TextField select label={gettext('Start node')} value={relationshipStart}
-        onChange={(event) => setRelationshipStart(event.target.value)}>
-        {entities.nodes.map((node) => <MenuItem key={node.element_id}
-          value={node.element_id}>{node.element_id}</MenuItem>)}
-      </TextField>
-      <TextField select label={gettext('End node')} value={relationshipEnd}
-        onChange={(event) => setRelationshipEnd(event.target.value)}>
-        {entities.nodes.map((node) => <MenuItem key={node.element_id}
-          value={node.element_id}>{node.element_id}</MenuItem>)}
-      </TextField>
-      <TextField multiline minRows={3} label={gettext('Relationship properties JSON')}
-        value={relationshipProperties}
-        onChange={(event) => setRelationshipProperties(event.target.value)} />
-      <Button disabled={working || !target || !relationshipStart ||
+          onChange={(event) => setEdits((current) => ({...current,
+            [`relationship:${relationship.element_id}`]: event.target.value}))} />
+        <Button disabled={working || hasInsertDraft || !admitted(relationshipDescriptor, 'update')}
+          onClick={() => saveEntity('relationship', relationship)}>{gettext('Save')}</Button>
+        <Button color="warning"
+          disabled={working || hasDrafts || !admitted(relationshipDescriptor, 'delete')}
+          onClick={() => deleteEntity('relationship', relationship)}>
+          {deleteCandidate === `relationship:${relationship.element_id}` ?
+            gettext('Confirm delete relationship') :
+            gettext('Delete relationship')}</Button>
+      </Box>)}
+      <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))',
+        gap: 1, mt: 2}}>
+        <TextField label={gettext('Relationship type')} disabled={working || Object.keys(edits).length > 0} value={relationshipType}
+          onChange={(event) => setRelationshipType(event.target.value)} />
+        <TextField select label={gettext('Start node')} disabled={working || Object.keys(edits).length > 0} value={relationshipStart}
+          onChange={(event) => setRelationshipStart(event.target.value)}>
+          {entities.nodes.map((node) => <MenuItem key={node.element_id}
+            value={node.element_id}>{node.element_id}</MenuItem>)}
+        </TextField>
+        <TextField select label={gettext('End node')} disabled={working || Object.keys(edits).length > 0} value={relationshipEnd}
+          onChange={(event) => setRelationshipEnd(event.target.value)}>
+          {entities.nodes.map((node) => <MenuItem key={node.element_id}
+            value={node.element_id}>{node.element_id}</MenuItem>)}
+        </TextField>
+        <TextField multiline minRows={3} label={gettext('Relationship properties JSON')} disabled={working || Object.keys(edits).length > 0}
+          value={relationshipProperties}
+          onChange={(event) => setRelationshipProperties(event.target.value)} />
+        <Button disabled={working || Object.keys(edits).length > 0 || !target || !relationshipStart ||
         !relationshipEnd || !admitted(relationshipDescriptor, 'insert')}
-      onClick={insertRelationship}>{gettext('Create relationship')}</Button>
-    </Box>
+        onClick={insertRelationship}>{gettext('Create relationship')}</Button>
+      </Box>
+    </>}
     {graphs.length === 0 && <Alert severity="info" sx={{mt: 2}}>
       {gettext('No discovered graph database is available.')}
     </Alert>}
-    {page?.continuation && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-      <Button disabled={working} onClick={() => load(page.continuation)}>
-        {gettext('Next graph page')}</Button>
-      <Button disabled={working} onClick={async () => {
-        await post({action: 'visual_admin_rows_cancel', request: {
-          continuation: page.continuation,
-        }}); setPage({...page, continuation: null, complete: true});
-      }}>{gettext('Cancel graph cursor')}</Button>
-    </Box>}
+
   </Box>;
 }
 
@@ -3717,7 +3890,7 @@ function ChangeStreamViewer({resources, languageProfile, post, setError,
   };
 
   return <Box sx={{p: 2, overflow: 'auto', flex: 1}}>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
       <TextField select sx={{minWidth: 280}} label={gettext('Collection')}
         value={targetId} onChange={(event) => setTargetId(event.target.value)}>
         {collections.map((item) => <MenuItem key={item.resource_id}
@@ -4526,7 +4699,7 @@ function SemanticModelWorkspace({semantic, resources, post, setError}) {
         {gettext('The diagram uses declared model relationships. Native graph, document, search, vector, and temporal relationships remain provider-described metadata.')}
       </Alert>
       <Box aria-label={gettext('Semantic relationship diagram')}
-        sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap',
+        sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center',
           mt: 2, p: 2, border: 1, borderColor: 'divider'}}>
         {definition.sources.map((source) => <Box key={source.id}
           sx={{p: 1, border: 1, borderColor: 'primary.main'}}>
@@ -4791,7 +4964,7 @@ function SemanticModelWorkspace({semantic, resources, post, setError}) {
               }).filter((item) => item.source_id && item.field)}});
           }} />
       </Box>
-      <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1}}>
+      <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 1}}>
         {['rows', 'columns', 'pages'].map((axis) => <TextField select key={axis}
           SelectProps={{multiple: true}} label={axis} value={query.axes[axis]}
           onChange={(event) => setQuery({...query, axes: {...query.axes,
@@ -4803,7 +4976,7 @@ function SemanticModelWorkspace({semantic, resources, post, setError}) {
         onChange={(event) => setQuery({...query, measures: event.target.value})}>
         {definition.measures.map((item) => <MenuItem key={item.id}
           value={item.id}>{item.name}</MenuItem>)}</TextField>
-      <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr auto', gap: 1, mt: 1}}>
+      <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1, mt: 1}}>
         <TextField select label={gettext('Slice source')} value={filterDraft.source_id}
           onChange={(event) => setFilterDraft({...filterDraft,
             source_id: event.target.value})}>{definition.sources.map((source) =>
@@ -5000,7 +5173,7 @@ function SemanticModelWorkspace({semantic, resources, post, setError}) {
         {gettext('Security filters are structured model policy and are compiled by the provider. Tenant values come only from trusted server-side principal claims.')}
       </Alert>
       <Box sx={{display: 'grid', mt: 1,
-        gridTemplateColumns: '1fr 1fr 1fr 2fr auto', gap: 1}}>
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1}}>
         <TextField select label={gettext('Policy source')}
           value={definition.sources.some((source) =>
             source.id === securityDraft.source_id) ?
@@ -5556,45 +5729,33 @@ function OperationalWorkspace({workspace, endpoint, catalog, resources,
     })).filter((objectItem) => objectItem.operations.length > 0);
     return objects.length > 0 ? {...catalog, objects} : null;
   }, [catalog, operationKeys]);
-  const categories = workspace?.categories || [];
 
   if (!workspace) return <Alert severity="info">
     {gettext('This provider does not publish an operational workspace.')}
   </Alert>;
 
   return <Box sx={{display: 'grid', gridTemplateColumns:
-    'minmax(220px, 300px) minmax(0, 1fr)', flex: 1, minHeight: 0}}>
+    {xs: 'minmax(0, 1fr)', md: 'minmax(180px, 260px) minmax(0, 1fr)'}, flex: 1, minHeight: 0}}>
     <Box sx={{borderRight: 1, borderColor: 'divider', p: 1,
       overflow: 'auto'}}>
       <Box component="h3" sx={{m: 1}}>{gettext('Operational workspaces')}</Box>
-      {categories.map((category) => <Box key={category} sx={{mb: 1}}>
-        <Box sx={{px: 1, py: 0.5, textTransform: 'uppercase',
-          fontSize: '0.72em', color: 'text.secondary'}}>
-          {category.replaceAll('-', ' ')}
-        </Box>
-        {facets.filter((item) => item.category === category).map((item) =>
-          <Button key={item.facet_id} fullWidth
-            variant={item.facet_id === facet?.facet_id ? 'contained' : 'text'}
-            color={item.catalog_state === 'unavailable' ? 'inherit' : 'primary'}
-            onClick={() => {setFacetId(item.facet_id); setShowHistory(false);}}
-            sx={{justifyContent: 'space-between', textAlign: 'left'}}>
-            <span>{item.title}</span>
-            <span>{item.catalog_state === 'unavailable' ? '—' :
-              (resources || []).filter((resource) =>
-                item.resource_kinds.includes(resource.resource_kind)
-              ).length}</span>
-          </Button>)}
-      </Box>)}
-      <Button fullWidth variant={showHistory ? 'contained' : 'outlined'}
-        onClick={() => setShowHistory(true)}>
-        {gettext('Operation progress and history')}
-      </Button>
+      <TextField select fullWidth size="small" label={gettext('Workspace')}
+        value={showHistory ? '__history' : (facet?.facet_id || '')}
+        onChange={(event) => {
+          setShowHistory(event.target.value === '__history');
+          if (event.target.value !== '__history') setFacetId(event.target.value);
+        }}>
+        {facets.map((item) => <MenuItem key={item.facet_id} value={item.facet_id}>
+          {item.category.replaceAll('-', ' ')} — {item.title} ({item.catalog_state === 'unavailable' ? '—' :
+            (resources || []).filter((resource) => item.resource_kinds.includes(resource.resource_kind)).length})
+        </MenuItem>)}
+        <MenuItem value="__history">{gettext('Operation progress and history')}</MenuItem>
+      </TextField>
     </Box>
     <Box sx={{overflow: 'auto', minWidth: 0}}>
       {showHistory ? <OperationHistory post={post} setError={setError} /> : <>
         <Box sx={{p: 2, pb: 0}}>
-          <Box sx={{display: 'flex', gap: 1, alignItems: 'center',
-            flexWrap: 'wrap'}}>
+          <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
             <Box component="h2" sx={{m: 0}}>{facet?.title}</Box>
             <Button disabled={refreshing || !resourceGeneration}
               onClick={onRefresh}>{gettext('Refresh provider state')}</Button>
@@ -6862,6 +7023,8 @@ export default function ProviderWorkspaceContent({
   const [languageProfile, setLanguageProfile] = useState('');
   const [parameterSource, setParameterSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
+  const [bufferRows, setBufferRows] = useState(500);
+  const [queryStreamActive, setQueryStreamActive] = useState(false);
   const [clientSqlDialect, setClientSqlDialect] = useState(3);
   const [historySensitive, setHistorySensitive] = useState(false);
   const [historyNotice, setHistoryNotice] = useState('');
@@ -7218,7 +7381,7 @@ export default function ProviderWorkspaceContent({
     setError(null);
     try {
       const response = await post({
-        action: 'poll', occurrence_id: id,
+        action: 'poll', occurrence_id: id, buffer_rows: bufferRows,
         database_target_id: queryDatabaseTargetId,
       });
       const opensearch = response.occurrence?.result?.extensions?.opensearch?.payload;
@@ -7272,6 +7435,7 @@ export default function ProviderWorkspaceContent({
       setScriptResult(native?.script || null);
       setProfileReport(native?.profiling || null);
       setQueryStatistics(native?.query_statistics || null);
+      if (native?.statement_metrics) setNativePage(native);
       setFirebirdPlan(native?.query_plan || null);
       if (native?.error) {
         const codes = (native.error.native_status_codes || []).join(', ');
@@ -7289,7 +7453,7 @@ export default function ProviderWorkspaceContent({
           setError(gettext('This Firebird query session cannot be reused. Close it and explicitly reconnect.'));
         }
       }
-      setQueryPollingPaused(false);
+      setQueryPollingPaused(Boolean(mysql?.has_page));
       setOccurrenceId(response.occurrence?.operation?.terminal ? null : id);
     } catch (requestError) {
       setQueryPollingPaused(true);
@@ -7297,7 +7461,7 @@ export default function ProviderWorkspaceContent({
     } finally {
       setBusy(false);
     }
-  }, [acceptRendered, languageProfile, post, queryDatabaseTargetId]);
+  }, [acceptRendered, bufferRows, languageProfile, post, queryDatabaseTargetId]);
 
   useEffect(() => {
     if (!workspace?.languages?.some(item => item.language_profile === languageProfile) ||
@@ -7307,7 +7471,10 @@ export default function ProviderWorkspaceContent({
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll, workspace]);
 
   const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false) => {
-    if (querySessionBlocked || scriptLocked) return;
+    if (querySessionBlocked || scriptLocked || queryStreamActive) return;
+    if (!Number.isInteger(bufferRows) || bufferRows < 1 || bufferRows > 500) {
+      setError(gettext('Result buffer rows must be an integer from 1 to 500.')); return;
+    }
     if (sessionCommand && (languageProfile !== 'firebird-sql' || !sessionId || busy || occurrenceId)) return;
     setBusy(true);
     setError(null);
@@ -7426,7 +7593,7 @@ export default function ProviderWorkspaceContent({
       setScriptLocked(false);
       setScriptEditorGeneration(value => value + 1);
       setQuerySessionBlocked(false);
-      setTransaction(null);
+      setTransaction(null); setRendered(null); setResultHistory([]);
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -7506,6 +7673,14 @@ export default function ProviderWorkspaceContent({
   const activeLanguage = workspace?.languages?.find((item) =>
     item.language_profile === languageProfile) || workspace?.languages?.[0];
   const activePlanTemplates = queryPlanTemplates(activeLanguage);
+  const queryRoute = workspace?.endpoint_registration?.primary_route?.configuration || {};
+  const queryTarget = workspace?.database_targets?.targets?.find(target => target.target_id === queryDatabaseTargetId);
+  useEffect(() => {
+    if (workspace?.endpoint) labelSQLConnection(endpointUrl,
+      `${workspace.endpoint.display_name || workspace.endpoint.endpoint_id} / ${queryTarget?.display_name || queryDatabaseTargetId || 'server'} — ${workspace.endpoint.verified_runtime_family || workspace.endpoint.profile_id}`);
+  }, [endpointUrl, workspace?.endpoint, queryTarget, queryDatabaseTargetId]);
+  const bufferValid = Number.isInteger(bufferRows) && bufferRows >= 1 && bufferRows <= 500;
+
 
   const focusedDatabaseForm = initialTab === 'connections' && Boolean(
     initialContext.database_mode
@@ -7578,7 +7753,7 @@ export default function ProviderWorkspaceContent({
         {workspace?.visual_admin?.model_family === 'document' &&
           <Tab value="streams" label={gettext('Change streams')} />}
       </Tabs>}
-      {!composedWorkspace && workspace && <Box sx={{display: 'flex',
+      {!composedWorkspace && workspace && tab !== 'studio' && <Box sx={{display: 'flex',
         alignItems: 'center', gap: 1, px: 2, py: 1,
         borderBottom: 1, borderColor: 'divider'}}>
         <Box component="strong">{{
@@ -7609,13 +7784,15 @@ export default function ProviderWorkspaceContent({
         {tab !== initialTab && <Button size="small" sx={{ml: 'auto'}}
           onClick={() => setTab(initialTab)}>{gettext('Back')}</Button>}
       </Box>}
-      {workspace && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+      <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+        {workspace && tab !== 'studio' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('metadata-search')}>Search database metadata</Button>}
-      {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        {workspace && tab !== 'studio' && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('firebird-events')}>Monitor database events</Button>}
-      {workspace && tab === 'firebird-events' && <FirebirdEvents key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
-      {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        {workspace && tab === 'firebird-events' && <FirebirdEvents key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+        {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('firebird-templates')}>Object code templates</Button>}
+      </Box>
       {workspace && selectedResource && tab === 'firebird-templates' && <FirebirdTemplates post={post}
         resource={selectedResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}
         disabled={busy || !!occurrenceId || scriptLocked}
@@ -7639,7 +7816,7 @@ export default function ProviderWorkspaceContent({
         {error && <Alert severity="error">{error}</Alert>}
         {workspace && <EngineContractStatus
           contract={workspace.engine_contracts} />}
-        {workspace && <GridActivationStatus contract={workspace.grid_workspace} />}
+        {workspace && <GridActivationStatus hidePassed={tab === 'studio'} contract={workspace.grid_workspace} />}
       </Box>}
       {busy && !workspace && <Box p={3}><CircularProgress /></Box>}
       {workspace && tab === 'resources' && <NativeNavigation
@@ -7664,19 +7841,40 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'firebird-recovery' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdRecoveryGroup post={post} />}
+      {workspace && tab === 'studio' && <Box role="status" aria-label={gettext('SQL editor connection')}
+        sx={{px: 2, py: 1, flexShrink: 0, borderBottom: 1, borderColor: 'divider', overflowWrap: 'anywhere'}}>
+        <strong>{workspace.endpoint?.display_name || workspace.endpoint?.endpoint_id || gettext('Unnamed connection')}</strong>
+        {queryRoute.host && <> ({queryRoute.host}{queryRoute.port ? `:${queryRoute.port}` : ''})</>}
+        {' — '}{queryTarget?.display_name || queryTarget?.name || queryDatabaseTargetId || gettext('No database selected')}
+        {' — '}{workspace.endpoint?.verified_runtime_family || workspace.endpoint?.profile_id}
+        {' — '}{activeLanguage?.title || languageProfile}
+        {languageProfile === 'firebird-sql' && ` / SQL ${clientSqlDialect}`}
+        {' — '}{querySessionBlocked ? gettext('Session requires reconnect') : sessionId ? gettext('Session open') : gettext('Session not open')}
+        <Box component="small" sx={{display: 'block'}}>
+          {gettext('Connection')}: {workspace.endpoint?.endpoint_id}
+          {queryDatabaseTargetId && <> · {gettext('Database')}: {queryDatabaseTargetId}</>}
+        </Box>
+      </Box>}
       {workspace && <Box role="region"
         aria-label={gettext('Provider query workspace')}
         sx={{p: 2, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
-          minHeight: 0, minWidth: 0, overflow: 'auto'}}>
-        <TextField select size="small" sx={{mb: 1, maxWidth: 360}}
-          label={gettext('Provider language')} value={languageProfile}
-          disabled={busy || !!occurrenceId || scriptLocked}
-          onChange={(event) => selectLanguage(event.target.value)}>
-          {(workspace.languages || []).map((language) => <MenuItem
-            key={language.language_profile} value={language.language_profile}>
-            {language.title}
-          </MenuItem>)}
-        </TextField>
+          minHeight: 0, minWidth: 0, overflow: 'hidden'}}>
+        <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
+          <TextField select size="small" sx={{mb: 1, maxWidth: 360}}
+            label={gettext('Provider language')} value={languageProfile}
+            disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked}
+            onChange={(event) => selectLanguage(event.target.value)}>
+            {(workspace.languages || []).map((language) => <MenuItem
+              key={language.language_profile} value={language.language_profile}>
+              {language.title}
+            </MenuItem>)}
+          </TextField>
+          <TextField type="number" size="small" label={gettext('Maximum rows per fetch')}
+            value={bufferRows} disabled={busy || queryStreamActive || !!occurrenceId || Boolean(rendered) || scriptLocked}
+            error={!bufferValid} inputProps={{min: 1, max: 500, step: 1}}
+            sx={{mb: 1, maxWidth: '16rem'}} onChange={event => setBufferRows(Number(event.target.value))}
+            title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
+        </Box>
         <Box sx={{display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap'}}
           aria-label={gettext('Provider language examples')}>
           {sourcePresets(activeLanguage).map(([label, example]) =>
@@ -7688,6 +7886,32 @@ export default function ProviderWorkspaceContent({
           <Alert severity="info" sx={{mb: 1}}>
             {gettext('This provider has not supplied an evidence-bound query template. The editor is intentionally empty.')}
           </Alert>}
+        <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
+          <Button variant="contained" disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
+            onClick={() => execute()}>{gettext('Run')}</Button>
+          {languageProfile === 'firebird-sql' && <Button
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
+            onClick={() => execute(source, 'native', false, false, true)}>
+            {gettext('Explain / query plan')}</Button>}
+          {activePlanTemplates.map((template, index) =>
+            <Button key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
+              onClick={() => execute(
+                template.source_template.replace('{source}', source), 'plan'
+              )}>
+              {index === 0 ? gettext('Explain / query plan') : template.label}
+            </Button>)}
+          <Button disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)}>{gettext('Poll')}</Button>
+          <Button disabled={busy || !occurrenceId} onClick={cancel}>{gettext('Cancel request')}</Button>
+          <Button disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction}>{gettext('Provider transaction state')}</Button>
+          {(activeLanguage?.transaction_actions || []).map((action) =>
+            <Button key={action} color={action === 'rollback' ? 'warning' : 'primary'}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId} onClick={() => controlTransaction(action)}>
+              {gettext(action)}</Button>)}
+          <Button disabled={busy || !!occurrenceId || !sessionId}
+            onClick={releaseQuerySession}>
+            {gettext('Close query session')}</Button>
+          {busy && <CircularProgress size={24} />}
+        </Box>
         <LanguageSourceEditor key={languageProfile + ':' + queryDatabaseTargetId + ':' + scriptEditorGeneration}
           language={activeLanguage} source={source} onChange={setSource}
           resources={resourcePage?.items}
@@ -7695,150 +7919,134 @@ export default function ProviderWorkspaceContent({
           post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId}
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
-        {languageProfile === 'firebird-sql' && <>
-          <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
-            checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-            onChange={(event) => setHistorySensitive(event.target.checked)} />} />
-          <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
-            onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
-          <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
-            control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-              onChange={event => setProfileConfirmed(event.target.checked)} />} />
-          <Button disabled={!profileConfirmed || busy || scriptLocked || querySessionBlocked || Boolean(occurrenceId)}
-            onClick={() => {setProfileConfirmed(false); execute(source, 'native', false, false, false, true);}}>
-            {gettext('Run with native profiling')}</Button>
-          <FormControlLabel label={gettext('Collect fresh attachment query statistics')} control={<Checkbox
-            checked={statisticsEnabled} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-            onChange={event => setStatisticsEnabled(event.target.checked)} />} />
-          <FirebirdProfiler report={profileReport} statistics={queryStatistics} />
-        </>}
-        {languageProfile === 'firebird-sql' && <FirebirdParameters source={source} dialect={clientSqlDialect}
-          plan={firebirdPlan} parameters={parameterSource} onChange={setParameterSource}
-          onPrepare={() => execute(source, 'native', false, false, true)}
-          disabled={busy || querySessionBlocked || scriptLocked || Boolean(occurrenceId)} />}
-        <TextField multiline minRows={2} maxRows={6} value={parameterSource}
-          sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
-            gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
-              gettext('Query parameters (JSON object or array)') : gettext('Query parameters (JSON)')}
-          helperText={activeLanguage?.parameter_hint ||
+        <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
+          <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
+            {languageProfile === 'firebird-sql' && <>
+              <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
+                checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+                onChange={(event) => setHistorySensitive(event.target.checked)} />} />
+              <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
+                onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
+              <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
+                control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+                  onChange={event => setProfileConfirmed(event.target.checked)} />} />
+              <Button disabled={!profileConfirmed || busy || scriptLocked || querySessionBlocked || Boolean(occurrenceId)}
+                onClick={() => {setProfileConfirmed(false); execute(source, 'native', false, false, false, true);}}>
+                {gettext('Run with native profiling')}</Button>
+              <FormControlLabel label={gettext('Collect fresh attachment query statistics')} control={<Checkbox
+                checked={statisticsEnabled} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+                onChange={event => setStatisticsEnabled(event.target.checked)} />} />
+              <FirebirdProfiler report={profileReport} statistics={queryStatistics} />
+            </>}
+            {languageProfile === 'firebird-sql' && <FirebirdParameters source={source} dialect={clientSqlDialect}
+              plan={firebirdPlan} parameters={parameterSource} onChange={setParameterSource}
+              onPrepare={() => execute(source, 'native', false, false, true)}
+              disabled={busy || querySessionBlocked || scriptLocked || Boolean(occurrenceId)} />}
+            <TextField multiline minRows={2} maxRows={6} value={parameterSource}
+              sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
+                gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
+                  gettext('Query parameters (JSON object or array)') : gettext('Query parameters (JSON)')}
+              helperText={activeLanguage?.parameter_hint ||
             gettext('Use a JSON object of parameter names and values.')}
-          onChange={(event) => setParameterSource(event.target.value)} />
-        {languageProfile === 'firebird-sql' && <TextField select
-          size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
-          value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
-          onChange={(event) => setClientSqlDialect(Number(event.target.value))}
-          helperText={gettext('Applies to the next user-written statement only. Does not change the database dialect, attachment default, or pending transaction. Generated administration SQL keeps its own dialect.')}>
-          <MenuItem value={3}>{gettext('3 — modern SQL')}</MenuItem>
-          <MenuItem value={1}>{gettext('1 — legacy SQL')}</MenuItem>
-          <MenuItem value={2}>{gettext('2 — transition diagnostics')}</MenuItem>
-        </TextField>}
-        {languageProfile === 'firebird-sql' && <TextField
-          type="number" size="small" sx={{mt: 1}}
-          label={gettext('Maximum fetched rows')} value={maximumRows}
-          disabled={busy || !!occurrenceId || scriptLocked}
-          inputProps={{min: 0, max: 1000000, step: 1}}
-          onChange={(event) => setMaximumRows(event.target.value)}
-          helperText={gettext('0 removes the row-count limit; ordinary results still have a memory budget. Use Run streaming for large results. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
-        {languageProfile === 'firebird-sql' && <FirebirdResultStream
-          key={queryDatabaseTargetId}
-          post={post} ensureSession={ensureSession} downloadUrl={endpointUrl}
-          databaseTargetId={queryDatabaseTargetId} source={source}
-          parameters={parameterSource} dialect={clientSqlDialect}
-          disabled={busy || querySessionBlocked || !!occurrenceId} />}
-        {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
-          {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}
-        </Alert>}
-        {languageProfile === 'vitess-sql' && <Alert severity="info" sx={{mt: 1}}>
-          {gettext('Cancelling a Vitess query aborts this connection. Its outcome may be unknown; close the session and verify the result before retrying.')}
-        </Alert>}
-        {['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql', 'cockroachdb-sql', 'ysql', 'ycql', 'tidb-sql', 'vitess-sql', 'dolt-sql', 'xtdb-sql-2.1', 'immudb-sql', 'ignite-sql-keyvalue', 'cql-3', 'foundationdb-keyvalue-json', 'tikv-keyvalue-json', 'redis-resp3-command', 'mongodb-query-api-json', 'clickhouse-sql', 'influxdb3-sql-influxql', 'cypher', 'milvus-query-search-api', 'opensearch-query-dsl', 'opensearch-sql-ppl', 'opensearch-sql', 'opensearch-ppl', 'influxdb3-sql', 'influxdb3-influxql'].includes(languageProfile) && nativePage && <Alert severity="info"
-          sx={{mt: 1}} aria-label={languageProfile === 'opensearch-sql-ppl' ? gettext('OpenSearch SQL/PPL result page') : languageProfile === 'opensearch-query-dsl' ? gettext('OpenSearch result page') : languageProfile === 'milvus-query-search-api' ? gettext('Milvus result page') : languageProfile === 'cypher' ? gettext('Neo4j result page') : languageProfile === 'influxdb3-sql-influxql' ? gettext('InfluxDB result page') : languageProfile === 'clickhouse-sql' ? gettext('ClickHouse result page') : languageProfile === 'mongodb-query-api-json' ? gettext('MongoDB result page') : languageProfile === 'redis-resp3-command' ? gettext('Redis result page') : languageProfile === 'tikv-keyvalue-json' ? gettext('TiKV result page') : languageProfile === 'foundationdb-keyvalue-json' ? gettext('FoundationDB result page') : languageProfile === 'cql-3' ? gettext('Cassandra result page') : languageProfile === 'ignite-sql-keyvalue' ? gettext('Ignite result page') : languageProfile === 'immudb-sql' ? gettext('immudb result page') : languageProfile === 'xtdb-sql-2.1' ? gettext('XTDB result page') : languageProfile === 'dolt-sql' ? gettext('Dolt result page') : languageProfile === 'vitess-sql' ? gettext('Vitess result page') : languageProfile === 'tidb-sql' ? gettext('TiDB result page') : languageProfile === 'ycql' ? gettext('YugabyteDB YCQL result page') : languageProfile === 'ysql' ? gettext('YugabyteDB YSQL result page') : languageProfile === 'cockroachdb-sql' ? gettext('CockroachDB result page') : languageProfile === 'duckdb-sql' ? gettext('DuckDB result page') : languageProfile === 'sqlite-sql' ? gettext('SQLite result page') : languageProfile === 'postgresql-sql' ? gettext('PostgreSQL result page') : languageProfile === 'mariadb-sql' ? gettext('MariaDB result page') : gettext('MySQL result page')}>
-          {gettext('Result set:')} {(nativePage.result_set_index ?? 0) + 1}
-          {' '}{gettext('Row offset:')} {nativePage.row_offset}
-          {' '}{gettext('Rows on this page:')} {(nativePage.rows || nativePage.entries || nativePage.documents || nativePage.points || nativePage.graphs || nativePage.matches || nativePage.hits || []).length}
-          {nativePage.result_set_end && ' ' + gettext('End of result set.')}
-        </Alert>}
-        {nativePage?.native?.server_limit_applies && <Alert severity="info">
-          {gettext('Native server result limits apply. Cursor exhaustion does not establish that every matching record was returned.')}
-        </Alert>}
-        {nativePage?.native?.partial && <Alert severity="warning">
-          {gettext('OpenSearch returned a partial result. Review shard failures and timeout status before using it.')}
-        </Alert>}
-        {nativePage?.native?.bulk_errors && <Alert severity="warning">
-          {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
-        </Alert>}
-        {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
-          sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
-          {fetchObservation.limit_reached ?
-            gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback. Driver prefetch may execute more procedure work than the displayed rows.') :
-            gettext('The end of this result cursor was observed. No commit or rollback was requested.')}
-          {' '}{gettext('Rows returned:')} {fetchObservation.rows_returned}
-        </Alert>}
-        <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
-          <Button variant="contained" disabled={busy || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute()}>{gettext('Run')}</Button>
-          {languageProfile === 'firebird-sql' && <Button
-            disabled={busy || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute(source, 'native', false, false, true)}>
-            {gettext('Explain / query plan')}</Button>}
-          {activePlanTemplates.map((template, index) =>
-            <Button key={template.label} disabled={busy || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-              onClick={() => execute(
-                template.source_template.replace('{source}', source), 'plan'
-              )}>
-              {index === 0 ? gettext('Explain / query plan') : template.label}
-            </Button>)}
-          <Button disabled={busy || !occurrenceId} onClick={() => poll(occurrenceId)}>{gettext('Poll')}</Button>
-          <Button disabled={busy || !occurrenceId} onClick={cancel}>{gettext('Cancel request')}</Button>
-          <Button disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction}>{gettext('Provider transaction state')}</Button>
-          {(activeLanguage?.transaction_actions || []).map((action) =>
-            <Button key={action} color={action === 'rollback' ? 'warning' : 'primary'}
-              disabled={busy || scriptLocked || querySessionBlocked || !!occurrenceId} onClick={() => controlTransaction(action)}>
-              {gettext(action)}</Button>)}
-          <Button disabled={busy || !!occurrenceId || !sessionId}
-            onClick={releaseQuerySession}>
-            {gettext('Close query session')}</Button>
-          {busy && <CircularProgress size={24} />}
-        </Box>
-        {languageProfile === 'firebird-sql' && <FirebirdScript
-          key={'script:' + queryDatabaseTargetId}
-          source={source} result={scriptResult} onSourceChange={setSource}
-          disabled={busy || querySessionBlocked || !!occurrenceId}
-          onPreview={async (scriptSource) => {
-            setBusy(true);
-            try { return await post({action: 'script_preview',
-              session_id: await ensureSession(), source: scriptSource,
-              database_target_id: queryDatabaseTargetId}); }
-            finally { setBusy(false); }
-          }}
-          onRun={(scriptSource) => execute(scriptSource, 'native', false, true)} />}
-        {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
-          key={sessionId || 'no-session'} sessionId={sessionId}
-          disabled={busy || querySessionBlocked || !!occurrenceId}
-          onExecute={(command) => execute(command, 'native', true)} />}
-        {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
-          {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
-        </Alert>}
-        {transaction && <ProviderTransactionObservation transaction={transaction}
-          label={gettext('Provider query transaction state')} />}
-        {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
-        {rendered && <ResultControls rendered={rendered} history={resultHistory}
-          post={post} onRendered={acceptRendered} setError={setError}
-          setBusy={setBusy}
-          onProviderContinuation={() => poll(occurrenceId)} />}
-        {rendered && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-          <Button variant={resultPresentation === 'native' ? 'contained' : 'text'}
-            onClick={() => setResultPresentation('native')}>
-            {gettext('Native result view')}</Button>
-          {activePlanTemplates.length > 0 &&
+              onChange={(event) => setParameterSource(event.target.value)} />
+            {languageProfile === 'firebird-sql' && <TextField select
+              size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
+              value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
+              onChange={(event) => setClientSqlDialect(Number(event.target.value))}
+              helperText={gettext('Applies to the next user-written statement only. Does not change the database dialect, attachment default, or pending transaction. Generated administration SQL keeps its own dialect.')}>
+              <MenuItem value={3}>{gettext('3 — modern SQL')}</MenuItem>
+              <MenuItem value={1}>{gettext('1 — legacy SQL')}</MenuItem>
+              <MenuItem value={2}>{gettext('2 — transition diagnostics')}</MenuItem>
+            </TextField>}
+            {languageProfile === 'firebird-sql' && <TextField
+              type="number" size="small" sx={{mt: 1}}
+              label={gettext('Maximum fetched rows')} value={maximumRows}
+              disabled={busy || !!occurrenceId || scriptLocked}
+              inputProps={{min: 0, max: 1000000, step: 1}}
+              onChange={(event) => setMaximumRows(event.target.value)}
+              helperText={gettext('0 removes the row-count limit; ordinary results still have a memory budget. Use Run streaming for large results. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
+            {languageProfile === 'firebird-sql' && <FirebirdResultStream
+              key={`${queryDatabaseTargetId}:${scriptEditorGeneration}`} bufferRows={bufferRows} onActiveChange={setQueryStreamActive}
+              post={post} ensureSession={ensureSession} downloadUrl={endpointUrl}
+              databaseTargetId={queryDatabaseTargetId} source={source}
+              parameters={parameterSource} dialect={clientSqlDialect}
+              disabled={busy || querySessionBlocked || !!occurrenceId} />}
+            {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
+              {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}
+            </Alert>}
+            {languageProfile === 'vitess-sql' && <Alert severity="info" sx={{mt: 1}}>
+              {gettext('Cancelling a Vitess query aborts this connection. Its outcome may be unknown; close the session and verify the result before retrying.')}
+            </Alert>}
+            {['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql', 'cockroachdb-sql', 'ysql', 'ycql', 'tidb-sql', 'vitess-sql', 'dolt-sql', 'xtdb-sql-2.1', 'immudb-sql', 'ignite-sql-keyvalue', 'cql-3', 'foundationdb-keyvalue-json', 'tikv-keyvalue-json', 'redis-resp3-command', 'mongodb-query-api-json', 'clickhouse-sql', 'influxdb3-sql-influxql', 'cypher', 'milvus-query-search-api', 'opensearch-query-dsl', 'opensearch-sql-ppl', 'opensearch-sql', 'opensearch-ppl', 'influxdb3-sql', 'influxdb3-influxql'].includes(languageProfile) && nativePage && <Alert severity="info"
+              sx={{mt: 1}} aria-label={languageProfile === 'opensearch-sql-ppl' ? gettext('OpenSearch SQL/PPL result page') : languageProfile === 'opensearch-query-dsl' ? gettext('OpenSearch result page') : languageProfile === 'milvus-query-search-api' ? gettext('Milvus result page') : languageProfile === 'cypher' ? gettext('Neo4j result page') : languageProfile === 'influxdb3-sql-influxql' ? gettext('InfluxDB result page') : languageProfile === 'clickhouse-sql' ? gettext('ClickHouse result page') : languageProfile === 'mongodb-query-api-json' ? gettext('MongoDB result page') : languageProfile === 'redis-resp3-command' ? gettext('Redis result page') : languageProfile === 'tikv-keyvalue-json' ? gettext('TiKV result page') : languageProfile === 'foundationdb-keyvalue-json' ? gettext('FoundationDB result page') : languageProfile === 'cql-3' ? gettext('Cassandra result page') : languageProfile === 'ignite-sql-keyvalue' ? gettext('Ignite result page') : languageProfile === 'immudb-sql' ? gettext('immudb result page') : languageProfile === 'xtdb-sql-2.1' ? gettext('XTDB result page') : languageProfile === 'dolt-sql' ? gettext('Dolt result page') : languageProfile === 'vitess-sql' ? gettext('Vitess result page') : languageProfile === 'tidb-sql' ? gettext('TiDB result page') : languageProfile === 'ycql' ? gettext('YugabyteDB YCQL result page') : languageProfile === 'ysql' ? gettext('YugabyteDB YSQL result page') : languageProfile === 'cockroachdb-sql' ? gettext('CockroachDB result page') : languageProfile === 'duckdb-sql' ? gettext('DuckDB result page') : languageProfile === 'sqlite-sql' ? gettext('SQLite result page') : languageProfile === 'postgresql-sql' ? gettext('PostgreSQL result page') : languageProfile === 'mariadb-sql' ? gettext('MariaDB result page') : gettext('MySQL result page')}>
+              {gettext('Result set:')} {(nativePage.result_set_index ?? 0) + 1}
+              {' '}{gettext('Row offset:')} {nativePage.row_offset}
+              {' '}{gettext('Rows on this page:')} {nativePage.buffered_row_count ?? (nativePage.rows || nativePage.entries || nativePage.documents || nativePage.points || nativePage.graphs || nativePage.matches || nativePage.hits || []).length}
+              {nativePage.result_set_end && ' ' + gettext('End of result set.')}
+            </Alert>}
+            {nativePage?.native?.server_limit_applies && <Alert severity="info">
+              {gettext('Native server result limits apply. Cursor exhaustion does not establish that every matching record was returned.')}
+            </Alert>}
+            {nativePage?.native?.partial && <Alert severity="warning">
+              {gettext('OpenSearch returned a partial result. Review shard failures and timeout status before using it.')}
+            </Alert>}
+            {nativePage?.native?.bulk_errors && <Alert severity="warning">
+              {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
+            </Alert>}
+            {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
+              sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
+              {fetchObservation.limit_reached ?
+                gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback. Driver prefetch may execute more procedure work than the displayed rows.') :
+                gettext('The end of this result cursor was observed. No commit or rollback was requested.')}
+              {' '}{gettext('Rows returned:')} {fetchObservation.rows_returned}
+            </Alert>}
+            {languageProfile === 'firebird-sql' && <FirebirdScript
+              key={'script:' + queryDatabaseTargetId}
+              source={source} result={scriptResult} onSourceChange={setSource}
+              disabled={busy || querySessionBlocked || !!occurrenceId}
+              onPreview={async (scriptSource) => {
+                setBusy(true);
+                try { return await post({action: 'script_preview',
+                  session_id: await ensureSession(), source: scriptSource,
+                  database_target_id: queryDatabaseTargetId}); }
+                finally { setBusy(false); }
+              }}
+              onRun={(scriptSource) => execute(scriptSource, 'native', false, true)} />}
+            {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
+              key={sessionId || 'no-session'} sessionId={sessionId}
+              disabled={busy || querySessionBlocked || !!occurrenceId}
+              onExecute={(command) => execute(command, 'native', true)} />}
+          </Box>
+          {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
+            {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
+          </Alert>}
+          {transaction && <ProviderTransactionObservation transaction={transaction}
+            label={gettext('Provider query transaction state')} />}
+          {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
+          {rendered && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
+          Buffered rows: {rendered.page?.page_size ?? 0} · Server-retained rows: {rendered.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+            <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>Plan used: {nativePage?.statement_metrics?.plan || 'Unavailable'}</Box>
+          </Box>}
+          {rendered && <ResultControls rendered={rendered} history={resultHistory}
+            post={post} onRendered={acceptRendered} setError={setError}
+            bufferRows={bufferRows} setBusy={setBusy}
+            onProviderContinuation={() => poll(occurrenceId)} />}
+          {rendered && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
+            <Button variant={resultPresentation === 'native' ? 'contained' : 'text'}
+              onClick={() => setResultPresentation('native')}>
+              {gettext('Native result view')}</Button>
+            {activePlanTemplates.length > 0 &&
             <Button variant={resultPresentation === 'plan' ? 'contained' : 'text'}
               onClick={() => setResultPresentation('plan')}>
               {gettext('Explain / query plan view')}</Button>}
-        </Box>}
-        {rendered && resultPresentation === 'native' &&
-          <ResultView rendered={rendered} />}
-        {rendered && resultPresentation === 'plan' &&
+          </Box>}
+          {rendered && resultPresentation === 'native' &&
+          <ServerPagedResultContext.Provider value={true}>
+            <ResultView rendered={rendered} />
+          </ServerPagedResultContext.Provider>}
+          {rendered && resultPresentation === 'plan' &&
           <QueryPlanView rendered={rendered} />}
+        </Box>
       </Box>}
       {workspace && tab === 'object' &&
         workspace.visual_admin?.objects?.find((item) =>
@@ -7954,8 +8162,8 @@ export default function ProviderWorkspaceContent({
           languageProfile={workspace.languages?.[0]?.language_profile}
           post={post} setError={setError}
           initialResource={selectedResource} />}
-      <ModalFooter sx={{flexShrink: 0}}>
-        <Button onClick={closeModal}>{gettext('Close')}</Button></ModalFooter>
+      {tab !== 'studio' && <ModalFooter sx={{flexShrink: 0}}>
+        <Button onClick={closeModal}>{gettext('Close')}</Button></ModalFooter>}
     </ModalContent>
   );
 }

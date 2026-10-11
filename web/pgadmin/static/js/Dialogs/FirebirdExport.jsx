@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
@@ -78,7 +79,7 @@ export default function FirebirdExport({post, generation, selectedResource, reso
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <Box sx={{p: 2, display: 'flex', flexDirection: 'column', gap: 1, height: '100%', overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, display: 'flex', flexDirection: 'column', gap: 1, height: '100%', overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-export" />
     <Alert severity="info">{gettext('Choose documentary DDN metadata, native metadata SQL, or a lossless data archive. Data capture uses a separate read-only snapshot and is limited to 100,000 rows and 8 MiB; exceeding a limit produces no partial download. DDN inventory pages show up to 100 objects.')}</Alert>
     <TextField select size="small" label={gettext('Metadata scope')} value={scope} disabled={busy}

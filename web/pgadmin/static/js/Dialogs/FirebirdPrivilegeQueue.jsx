@@ -1,3 +1,6 @@
+import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
+import {GridAction} from '../cdeadmin_ui/data/GridNavigation';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {useLayoutEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel} from '@mui/material';
@@ -86,16 +89,23 @@ export default function FirebirdPrivilegeQueue({post, candidate, disabled,
     <Alert severity="info">{gettext('Ordered GRANT/REVOKE plans. No batch atomicity or automatic retry. Review native receipts; staged work still requires its session owner to commit or roll back.')}</Alert>
     <Button disabled={disabled || !candidate || items.length >= 500} onClick={add}>
       {gettext('Add to statement list')}</Button>
-    {items.map((item, index) => <Box key={item.plan.plan_id} sx={{mt: 1}}>
-      <Box>{index + 1}. {item.title} — {item.target?.display_name}</Box>
-      <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>{
-        item.plan.command_preview?.statements?.map((statement) => statement.source).join('\n')
-      }</Box>
-      <Button disabled={disabled} onClick={() => {
-        setQueue({post, items: items.filter((_, position) => position !== index)});
-        setConfirmed(false);
-      }}>{gettext('Remove statement')} {index + 1}</Button>
-    </Box>)}
+    {items.length > 0 && <Box sx={{height: 320, minWidth: 0, overflow: 'auto'}}>
+      <PagedDataGrid readOnly gridId="firebird/privilege-queue" aria-label={gettext('Queued privilege statements')}
+        rows={items.map((item, index) => ({...item, __index: index}))}
+        rowKeyGetter={row => row.plan.plan_id} rowHeight={90} columns={[
+          {key: 'title', name: gettext('Statement'), width: 240,
+            renderCell: ({row}) => `${row.__index + 1}. ${row.title} — ${row.target?.display_name || ''}`},
+          {key: 'sql', name: gettext('SQL'), minWidth: 360,
+            renderCell: ({row}) => <Box component="pre" sx={{m: 0, maxHeight: 80, overflow: 'auto', whiteSpace: 'pre-wrap'}}>{
+              row.plan.command_preview?.statements?.map(statement => statement.source).join('\n')}</Box>},
+          {key: 'remove', name: gettext('Remove'), width: 70, renderCell: ({row}) =>
+            <GridAction label={`${gettext('Remove statement')} ${row.__index + 1}`} disabled={disabled}
+              onClick={() => {
+                setQueue({post, items: items.filter((_, position) => position !== row.__index)});
+                setConfirmed(false);
+              }}><DeleteOutlineIcon fontSize="small" /></GridAction>},
+        ]} />
+    </Box>}
     {items.length > 0 && <>
       <FormControlLabel control={<Checkbox checked={confirmed} disabled={disabled}
         onChange={(event) => setConfirmed(event.target.checked)} />}

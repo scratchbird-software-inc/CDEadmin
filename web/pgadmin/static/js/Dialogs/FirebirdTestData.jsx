@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
@@ -113,7 +114,7 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
     } catch {setError('Native transaction outcome was not received. Keep this session open and inspect its state before further work.');}
     finally {setBusy(false);}
   };
-  return <Box sx={{p: 1, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-test-data" />
     <Alert severity="warning">Generate test rows only in the selected database. This form uses its own native transaction. Preview does not execute. Staged rows require explicit commit or rollback; closing requests session release, without claiming a confirmed outcome.</Alert>
     <Box>{tables.map(table => <FormControlLabel key={table.resource_id} label={table.display_name}

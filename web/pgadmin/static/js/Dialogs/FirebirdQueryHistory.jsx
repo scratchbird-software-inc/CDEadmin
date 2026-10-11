@@ -1,6 +1,9 @@
+import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
+import {GridAction} from '../cdeadmin_ui/data/GridNavigation';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, TextField, Table, TableHead, TableBody, TableRow, TableCell} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
@@ -64,15 +67,21 @@ export default function FirebirdQueryHistory({post, databaseTargetId, dialect, o
         <Button disabled={disabled || busy || previous < 0} onClick={() => load(previous)}>{gettext('Previous history entry')}</Button>
         <Button disabled={disabled || busy || next < 0} onClick={() => load(next)}>{gettext('Next history entry')}</Button>
       </Box>
-      {data && <Box sx={{maxHeight: 320, overflow: 'auto'}}><Table size="small" aria-label={gettext('Retained SQL history')}>
-        <TableHead><TableRow>{['Time', 'Request state', 'SQL source', 'Action'].map((label) => <TableCell key={label}>{gettext(label)}</TableCell>)}</TableRow></TableHead>
-        <TableBody>{data.entries.map((entry, index) => <TableRow key={entry.entry_id} selected={selected === index}>
-          <TableCell>{new Date(entry.created_at * 1000).toLocaleString()}</TableCell>
-          <TableCell>{entry.kind}: {entry.request_state}</TableCell>
-          <TableCell sx={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{entry.source ?? entry.source_omitted_reason}</TableCell>
-          <TableCell><Button disabled={disabled || busy || typeof entry.source !== 'string'} onClick={() => load(index)}>{gettext('Load into editor')}</Button></TableCell>
-        </TableRow>)}</TableBody>
-      </Table></Box>}
+      {data && <Box sx={{height: 360, minWidth: 0, overflow: 'auto'}}>
+        <PagedDataGrid readOnly gridId="firebird/sql-history" aria-label={gettext('Retained SQL history')}
+          rows={data.entries.map((entry, index) => ({...entry, __index: index}))}
+          rowKeyGetter={row => row.entry_id} columns={[
+            {key: 'created_at', name: gettext('Time'), width: 180,
+              renderCell: ({row}) => new Date(row.created_at * 1000).toLocaleString()},
+            {key: 'request_state', name: gettext('Request state'), width: 180,
+              renderCell: ({row}) => `${row.kind}: ${row.request_state}`},
+            {key: 'source', name: gettext('SQL source'), minWidth: 300,
+              renderCell: ({row}) => <span title={row.source ?? row.source_omitted_reason}>{row.source ?? row.source_omitted_reason}</span>},
+            {key: 'action', name: gettext('Action'), width: 70, renderCell: ({row}) =>
+              <GridAction label={gettext('Load into editor')} disabled={disabled || busy || typeof row.source !== 'string'}
+                onClick={() => load(row.__index)}><OpenInNewIcon fontSize="small" /></GridAction>},
+          ]} />
+      </Box>}
       <FormControlLabel label={gettext('Confirm clearing this database and dialect history')}
         control={<Checkbox checked={clearConfirmed} disabled={disabled || busy} onChange={(event) => setClearConfirmed(event.target.checked)} />} />
       <Button disabled={disabled || busy || !clearConfirmed} onClick={() => call('query_history_clear')}>{gettext('Clear SQL history')}</Button>

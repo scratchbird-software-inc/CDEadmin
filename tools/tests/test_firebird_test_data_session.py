@@ -19,10 +19,11 @@ def service(profile_id='firebird-native'):
 
 
 @pytest.mark.parametrize('profile_id', ['firebird-native', 'firebird-embedded'])
-def test_generator_session_overrides_only_its_native_transaction_defaults(profile_id):
+@pytest.mark.parametrize('purpose', ['firebird-test-data', 'firebird-row-grid'])
+def test_generator_session_overrides_only_its_native_transaction_defaults(profile_id, purpose):
     owner, endpoint = service(profile_id)
     before = deepcopy(endpoint)
-    result = owner.open_session('server', 'firebird-sql', 'target', session_purpose='firebird-test-data')
+    result = owner.open_session('server', 'firebird-sql', 'target', session_purpose=purpose)
     assert result['session_id'] == 'separate'
     route = owner.studio_service.open_session.call_args.args[1]['route']
     assert route['transaction_auto_commit'] is False and route['transaction_access'] == 'WRITE'
@@ -34,6 +35,8 @@ def test_generator_session_overrides_only_its_native_transaction_defaults(profil
 
 @pytest.mark.parametrize('profile_id, language, purpose', [
     ('mysql-native', 'mysql-sql', 'firebird-test-data'),
+    ('mysql-native', 'mysql-sql', 'firebird-row-grid'),
+    ('firebird-native', 'postgresql-sql', 'firebird-row-grid'),
     ('firebird-native', 'firebird-sql', 'unrecognized'),
     ('firebird-native', 'postgresql-sql', 'firebird-test-data')])
 def test_other_engine_language_and_unknown_purpose_are_refused(profile_id, language, purpose):

@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, TextField} from '@mui/material';
@@ -60,7 +61,7 @@ export default function FirebirdParameters({source, dialect, plan, parameters, o
       onChange(JSON.stringify(values));
     } catch (failure) {setError(failure.message);}
   };
-  return <Box sx={{my: 1}} aria-label="Firebird prepared parameters">
+  return <Box data-cde-compact-form sx={{my: 1, ...compactFormSx}} aria-label="Firebird prepared parameters">
     <FormReference formKey="firebird-parameters" />
     <Button disabled={disabled || !source.trim()} onClick={onPrepare}>Prepare parameter metadata</Button>
     {!current && <Alert severity="info">Prepare this exact statement and SQL dialect to inspect its positional parameters. Preparation does not execute the statement or end your transaction.</Alert>}

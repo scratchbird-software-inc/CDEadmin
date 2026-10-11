@@ -1,3 +1,7 @@
+import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
+import {GridAction} from '../cdeadmin_ui/data/GridNavigation';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField, Typography} from '@mui/material';
@@ -28,7 +32,7 @@ export default function FirebirdMetadataSearch({targets, post, onOpen}) {
       }
     } finally {if (mounted.current) {setBusy(false); setStopped(stop.current);}}
   };
-  return <Box sx={{p: 2, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-metadata-search" />
     <Alert severity="info">Search registered databases on this server using their authorized catalog connections. User SQL transactions are unchanged. Results cover only visible metadata.</Alert>
     <Box>{targets.map(target => <FormControlLabel key={target.target_id} label={target.label || target.database || target.target_id}
@@ -47,11 +51,21 @@ export default function FirebirdMetadataSearch({targets, post, onOpen}) {
         {result.truncated && <Alert severity="warning">Only the first 500 matches are shown. Narrow the search.</Alert>}
         {result.missing_ddl_count > 0 && <Alert severity="warning">Native DDL unavailable for {result.missing_ddl_count} objects.</Alert>}
         {(result.catalog_observations || []).filter(item => !item.available).map((item, index) => <Alert severity="warning" key={index}>{item.section}: unavailable ({item.error_type}).</Alert>)}
-        {result.matches.map(match => <Box key={match.resource_id} sx={{borderBottom: 1, borderColor: 'divider', py: 1}}>
-          <Button disabled={!onOpen} onClick={() => onOpen(result.target.target_id, match)}>{match.resource_kind}: {(match.display_path || [match.display_name]).join(' / ')}</Button>
-          <Typography variant="caption">{match.matched_fields.join(', ')}</Typography>
-          <Box component="pre" sx={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{match.snippet}{match.snippet_truncated ? ' …' : ''}</Box>
-        </Box>)}
+        <Box sx={{height: 360, minWidth: 0, overflow: 'auto'}}>
+          <PagedDataGrid readOnly rows={result.matches} rowKeyGetter={row => row.resource_id}
+            gridId="firebird/metadata-search" aria-label="Metadata search matches" columns={[
+              {key: 'resource_kind', name: 'Kind', width: 120},
+              {key: 'display_name', name: 'Object', minWidth: 200,
+                renderCell: ({row}) => (row.display_path || [row.display_name]).join(' / ')},
+              {key: 'matched_fields', name: 'Matched fields', width: 160,
+                renderCell: ({row}) => row.matched_fields.join(', ')},
+              {key: 'snippet', name: 'Match', minWidth: 300,
+                renderCell: ({row}) => <span title={row.snippet}>{row.snippet}{row.snippet_truncated ? ' …' : ''}</span>},
+              {key: 'open', name: 'Open', width: 70, renderCell: ({row}) =>
+                <GridAction label={`${row.resource_kind}: ${(row.display_path || [row.display_name]).join(' / ')}`}
+                  disabled={!onOpen} onClick={() => onOpen(result.target.target_id, row)}><OpenInNewIcon fontSize="small" /></GridAction>},
+            ]} />
+        </Box>
       </>}
     </Box>)}
   </Box>;

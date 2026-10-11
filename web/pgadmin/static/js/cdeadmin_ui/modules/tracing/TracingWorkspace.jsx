@@ -13,7 +13,7 @@ import {TreeRow} from '../../navigation/AdvancedNavigation';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {criticalPath, traceDuration} from './TracingEngine';
 
@@ -295,7 +295,7 @@ export function TracingWorkspace({service, sessionId, surface='trace_search', ex
   const Component = SURFACE_COMPONENTS[active] ?? TraceSearch;
   const navigate = (next) => { setActive(next); service.select(sessionId, {surface: next}); };
   return <Box data-testid="tracing-workspace" sx={{height: '100%', display: 'grid',
-    gridTemplateColumns: '288px minmax(0, 1fr) 340px'}}>
+    gridTemplateColumns: {xs: 'minmax(0, 1fr)', lg: '240px minmax(0, 1fr) 300px'}}}>
     <Box component="nav" aria-label="Tracing surfaces" sx={{overflow: 'auto'}}>
       {TRACING_SURFACES.map((item) => <TreeRow key={item.id} label={item.title}
         selected={active === item.id} onSelect={() => navigate(item.id)} />)}

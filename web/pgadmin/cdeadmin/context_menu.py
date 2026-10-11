@@ -676,7 +676,7 @@ def endpoint_context_actions(
     create_form = database_forms['forms']['create']
     actions = [_action(
         f'endpoint.{engine_id}.verify',
-        f'Verify {display} endpoint...', 'verify_endpoint',
+        f'Connect to {display} server...', 'verify_endpoint',
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
@@ -968,7 +968,18 @@ def database_target_context_actions(
             disabled_reason=form['disabled_reason'] or '',
             confirmation=False,
         ))
+    actions.append(_action(
+        f'database.{engine_id}.connect', 'Connect database...',
+        'verify_endpoint', icon='action.connect', group='connection',
+        priority=10, arguments=base,
+    ))
     if engine_id == 'firebird':
+        actions.append(_action(
+            'database.firebird.disconnect',
+            'Disconnect server (all databases)...', 'disconnect_endpoint',
+            icon='action.disconnect', group='connection', priority=11,
+            mutation='admin', arguments=base,
+        ))
         if contract['forms'].get('drop', {}).get('supported') and contract['forms'].get(
                 'create', {}).get('supported'):
             actions.append(_action(

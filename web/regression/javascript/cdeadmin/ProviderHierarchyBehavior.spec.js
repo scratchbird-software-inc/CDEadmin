@@ -144,7 +144,7 @@ describe('CDEadmin provider hierarchy behavior', () => {
       cde_endpoint: true,
       runtime_verification_state: 'verified',
       is_password_saved: true,
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it.each([[], [{id: 'table-group'}], null])(

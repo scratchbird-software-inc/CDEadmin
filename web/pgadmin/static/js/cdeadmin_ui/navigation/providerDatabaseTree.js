@@ -7,12 +7,13 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {removeSQLConnections} from '../editors/SQLConnections';
+
 export function providerEndpointSessionReady(serverData) {
   return Boolean(
     serverData?.cde_endpoint &&
     serverData.runtime_verification_state === 'verified' &&
-    (serverData.is_password_saved ||
-      serverData.cde_session_authenticated)
+    serverData.cde_session_authenticated
   );
 }
 
@@ -26,6 +27,7 @@ export function isProviderRegistrationWorkspace(tab, context={}) {
 export function invalidateProviderEndpointProfile(tree, item, result={}) {
   const data = tree?.itemData?.(item);
   if (!data?.cde_endpoint) return false;
+  removeSQLConnections(data._id);
   data.runtime_verification_state = 'stale';
   data.cde_session_authenticated = false;
   data.connected = false;
@@ -57,6 +59,7 @@ export function beforeOpenProviderDatabase(tree, serverNode, item) {
     // an earlier request failed before endpoint verification. A deliberate
     // reopen must retry that read, not permanently present an empty catalog.
     // Preserve populated branches and never load before verification.
+    serverNode.callbacks?.register_cde_sql_connection?.call(serverNode, {item: serverItem, databaseItem: item});
     if (item.children?.length === 0) item._children = null;
     return true;
   }

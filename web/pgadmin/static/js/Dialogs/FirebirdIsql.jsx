@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField} from '@mui/material';
@@ -25,7 +26,7 @@ export default function FirebirdIsql({post, databaseTargetId, bridge=window.elec
     } catch (reason) {if (serial === generation.current) setError(reason.message);}
     finally {if (serial === generation.current) setBusy(false);}
   };
-  return <Box sx={{p: 2, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-external-isql" />
     <Alert severity="info">Execution host: this Linux desktop. ISQL opens a separate terminal and owns its own native connection and transactions. Existing editor sessions are unaffected.</Alert>
     {!bridge?.available && <Alert severity="warning">Open this database in the Linux desktop application to launch ISQL. The web server cannot launch a local terminal for your browser.</Alert>}

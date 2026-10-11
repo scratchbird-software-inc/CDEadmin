@@ -18,10 +18,11 @@ from pgadmin.cdeadmin.workspace.monitoring_delegation import (
 
 
 def setup_grant(**options):
-    policy = MonitoringPolicy(1, 'endpoint', 'database')
+    policy = options.pop('policy', MonitoringPolicy(1, 'endpoint', 'database'))
     route = {'database': 'demo.fdb', 'host': 'localhost', 'port': 3050,
              'credential_reference_id': 'owner-reference',
              'principal_reference': 'owner:1'}
+    route.update(options.pop('route', {}))
     keys = WorkerKeyRing({'key': base64.b64encode(os.urandom(32)).decode()}, 'key')
     leases = []
 
@@ -55,7 +56,7 @@ def test_capture_lease_is_closed_and_worker_uses_only_its_sealed_grant():
     source.close()
 
 
-@pytest.mark.parametrize('change', ['owner', 'target', 'generation', 'envelope'])
+@pytest.mark.parametrize('change', ['owner', 'target', 'generation', 'envelope', 'engine'])
 def test_scope_changes_or_envelope_tampering_cannot_reuse_credentials(change):
     grant, policy, _, _, _ = setup_grant()
     reference = next(iter(grant._credentials))
@@ -65,6 +66,8 @@ def test_scope_changes_or_envelope_tampering_cannot_reuse_credentials(change):
         grant.policy = replace(policy, target_id='other')
     elif change == 'generation':
         grant.generation = 'other'
+    elif change == 'engine':
+        grant.engine = 'postgresql'
     else:
         grant._credentials[reference] = ('database_password', '{}')
     with pytest.raises(MonitoringGrantError):
@@ -152,3 +155,32 @@ def test_dedicated_account_is_sealed_without_accessing_registration_password():
 def test_invalid_dedicated_credentials_are_refused(credentials):
     with pytest.raises(ValueError):
         setup_grant(credentials=credentials)
+
+
+@pytest.mark.parametrize('target', [None, 'postgresql-database:42'])
+def test_postgresql_grant_uses_explicit_database_for_both_scopes(target):
+    policy = MonitoringPolicy(1, 'endpoint', target, interval_seconds=15)
+    grant, _, permissions, leases, _ = setup_grant(
+        policy=policy, engine='postgresql',
+        route={'database': 'postgres', 'database_oid': 42, 'port': 5432})
+    permissions.acquire_secret.side_effect = AssertionError('No browser in worker')
+    source = grant.open_source(policy)
+    assert source._source.__class__.__name__ == 'PostgreSQLMonitor'
+    assert source._source.scope == ('server' if target is None else 'database')
+    assert all(lease.closed for lease in leases)
+    source.close()
+
+
+@pytest.mark.parametrize('route', [
+    {'database': ''}, {'database_oid': None}, {'database_oid': 43},
+    {'database_oid': '42'}, {'database_oid': True},
+])
+def test_postgresql_grant_refuses_missing_or_mismatched_database_identity(route):
+    with pytest.raises(MonitoringGrantError):
+        setup_grant(engine='postgresql', policy=MonitoringPolicy(1, 'endpoint', 'postgresql-database:42'),
+                    route=route)
+
+
+def test_firebird_server_grant_still_refuses_database_route():
+    with pytest.raises(MonitoringGrantError):
+        setup_grant(policy=MonitoringPolicy(1, 'endpoint', None, interval_seconds=15))

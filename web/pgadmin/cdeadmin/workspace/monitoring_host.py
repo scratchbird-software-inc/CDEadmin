@@ -62,6 +62,8 @@ class ProcessOwnership:
 
 
 class MonitoringHost:
+    engine = 'firebird'
+    policy_fields = POLICY_FIELDS
     def __init__(self, app, endpoint_service):
         self.app = app
         self.endpoints = endpoint_service
@@ -113,7 +115,7 @@ class MonitoringHost:
         return authorize
 
     def enable(self, owner, sid, target, body):
-        if not isinstance(body, dict) or set(body) - (POLICY_FIELDS | {'credentials'}):
+        if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
             raise ValueError('Unsupported monitoring policy fields')
         if 'credentials' in body and not isinstance(body['credentials'], dict):
             raise ValueError('Invalid monitoring credentials')
@@ -140,7 +142,7 @@ class MonitoringHost:
             grant = MonitoringGrant.issue(
                 policy, scope['route'], scope['generation'], scope['permissions'],
                 self.keys, self._authorizer(owner, sid, target),
-                credentials=body.get('credentials'))
+                credentials=body.get('credentials'), engine=self.engine)
             try:
                 self.runtime.enable(policy, grant.open_source, grant.require)
             except BaseException:
@@ -288,9 +290,12 @@ class MonitoringHost:
 
     def close(self):
         with self._lock:
+            postgres = self.app.extensions.get('cdeadmin_postgresql_monitoring_host')
+            postgres_released = postgres.close() if postgres is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
+            released = released and postgres_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -418,4 +423,6 @@ def init_app(app, endpoint_service):
             return jsonify(success=0, errormsg='Monitoring details are unavailable'), 503
 
     app.register_blueprint(api)
+    from .postgresql_monitoring_host import init_app as init_postgresql
+    init_postgresql(app, host)
     return host

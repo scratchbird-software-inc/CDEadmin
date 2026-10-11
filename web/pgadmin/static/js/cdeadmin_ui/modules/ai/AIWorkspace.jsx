@@ -12,7 +12,7 @@ import {TreeRow} from '../../navigation/AdvancedNavigation';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 
 export const AI_SURFACES = Object.freeze([
   {id: 'assistant_dock', title: 'Assistant Dock'},
@@ -86,7 +86,7 @@ function AssistantDock({session, execute, currentUser}) {
     <Banner status="info">Only explicitly attached context is shared. Metadata is the default;
       database content requires a separate permission. Context remains untrusted data, never instructions.</Banner>
     {error && <Banner status="error">{error}</Banner>}
-    <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 1}}>
+    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1}}>
       <TextField label="Context name" value={scopeName} onChange={(event) => setScopeName(event.target.value)} />
       <TextField label="Provider ID" value={providerId} onChange={(event) => setProviderId(event.target.value)} />
       <TextField label="Canonical resource reference" value={scopeRef}
@@ -112,7 +112,7 @@ function AssistantDock({session, execute, currentUser}) {
       onChange={(event) => setPrompt(event.target.value)} />
     <Button disabled={!active || !prompt || !permitted(currentUser, 'ai.use')} onClick={() => invoke(execute,
       'ai.ask', {prompt, mode}, setError)}>Ask</Button>
-    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) auto', gap: 1}}>
+    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1}}>
       <TextField label="Output project ID" value={projectId}
         onChange={(event) => setProjectId(event.target.value)} />
       <TextField label="Output asset type" value={assetType}
@@ -181,7 +181,7 @@ function PlanReview({session, execute, currentUser}) {
         {key: 'target', name: 'Target'}, {key: 'effectsText', name: 'Effects'},
         {key: 'permissionsText', name: 'Permissions'}, {key: 'valid', name: 'Validation'},
       ]} />}
-    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1}}>
+    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 24rem))', gap: 1}}>
       <TextField label="Current target revision" value={revision}
         onChange={(event) => setRevision(event.target.value)} />
       <TextField label="Environment" value={environment}
@@ -266,7 +266,7 @@ export function AIWorkspace({service, sessionId, surface='assistant_dock', execu
     [onStateChange, session]); const Component = COMPONENTS[active] ?? AssistantDock;
   const navigate = (next) => { setActive(next); service.select(sessionId, {surface: next}); };
   return <Box data-testid="ai-workspace" sx={{height: '100%', display: 'grid',
-    gridTemplateColumns: '288px minmax(0, 1fr) 340px'}}>
+    gridTemplateColumns: {xs: 'minmax(0, 1fr)', lg: '240px minmax(0, 1fr) 300px'}}}>
     <Box component="nav" aria-label="AI Assistant surfaces" sx={{overflow: 'auto'}}>{AI_SURFACES.map((item) =>
       <TreeRow key={item.id} label={item.title} selected={active === item.id}
         onSelect={() => navigate(item.id)} />)}</Box>

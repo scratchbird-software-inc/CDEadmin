@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField} from '@mui/material';
@@ -34,7 +35,7 @@ export default function FirebirdBlobEditor({value, kind, label, readOnly, onAppl
   };
   return <Dialog open maxWidth="md" fullWidth onClose={busy ? undefined : onClose}>
     <DialogTitle>{label} — BLOB</DialogTitle>
-    <DialogContent>
+    <DialogContent sx={compactFormSx}>
       <FormReference formKey="firebird-blob-editor" />
       <Alert severity="info">Apply stages this value in the row editor. Save the row separately. Text files use UTF-8. Editor limit: 1 MiB; use chunked transfer for larger values.</Alert>
       {error && <Alert severity="error">{error}</Alert>}

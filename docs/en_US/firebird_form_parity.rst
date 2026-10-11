@@ -370,3 +370,11 @@ read-only dashboards. It offers explicit server path/log reads or native-visible
 security account inspection according to scope. SQL/plan inspection, including
 compiled statements, shares ``SR-F-001372`` and remains a separate request from
 periodic collection. These forms contain no execution or administration actions.
+
+Compact grid refinement
+-----------------------
+
+See :doc:`compact_forms` for the shared layout and paging contract. Firebird row
+editing uses a dedicated non-auto-commit grid session, including when the saved
+registration enables native auto-commit. Optional generated-row SQL tools are
+collapsible, keeping the primary grid and transaction toolbar visible.

@@ -142,6 +142,7 @@ class ResultDescriptor:
             'renderer_id': self.renderer_id,
             'component_reference': self.component_reference,
             'grid': copy.deepcopy(dict(self.grid)),
+            'limits': {'max_page_size': self.limits.max_page_size},
             'export_formats': sorted(self.export_policy.formats)
             if self.export_policy.enabled else [],
             'production': self.production,

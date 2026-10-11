@@ -2767,7 +2767,7 @@ class ServerNode(PGChildNodeView):
                 elif action == 'poll':
                     payload = service.poll(
                         server, data.get('occurrence_id'),
-                        data.get('database_target_id'),
+                        data.get('database_target_id'), buffer_rows=data.get('buffer_rows'),
                     )
                 elif action == 'cancel':
                     payload = service.cancel(
@@ -3341,19 +3341,22 @@ class ServerNode(PGChildNodeView):
 
         # Release Connection
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        # Check if any psql terminal is running for the current disconnecting
-        # server. If any terminate the psql tool connection.
-        if 'sid_soid_mapping' in current_app.config and str(sid) in \
-                current_app.config['sid_soid_mapping'] and \
-                str(sid) in current_app.config['sid_soid_mapping']:
-            for i in current_app.config['sid_soid_mapping'][str(sid)]:
-                sio.emit('disconnect-psql', namespace='/pty', to=i)
-
-        status = manager.release()
+        try:
+            status = endpoint_service_for_app(current_app).release_native_connections(
+                server, manager.release)
+        except EndpointRegistrationError as exc:
+            return make_json_response(status=409, success=0, errormsg=str(exc))
 
         if not status:
             return unauthorized(gettext("Server could not be disconnected."))
         else:
+            # Check if any psql terminal is running for the current disconnecting
+            # server. If any terminate the psql tool connection.
+            if 'sid_soid_mapping' in current_app.config and str(sid) in \
+                    current_app.config['sid_soid_mapping'] and \
+                    str(sid) in current_app.config['sid_soid_mapping']:
+                for i in current_app.config['sid_soid_mapping'][str(sid)]:
+                    sio.emit('disconnect-psql', namespace='/pty', to=i)
             return make_json_response(
                 success=1,
                 info=gettext("Server disconnected."),

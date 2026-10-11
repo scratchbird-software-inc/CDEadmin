@@ -14,7 +14,7 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Banner, Badge, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 
 export const SCHEMA_COMPARE_SURFACES = Object.freeze([
   {id: 'compare_setup', title: 'Compare Setup'},

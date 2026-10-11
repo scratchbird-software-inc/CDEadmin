@@ -17,7 +17,7 @@ describe('Firebird multi-database search', () => {
     expect(post.mock.calls.map(call => call[0].request.target_id)).toEqual(['a', 'b']);
     expect(await screen.findByText(/Database search unavailable/)).toBeVisible();
     expect(screen.queryByText('credential secret')).toBeNull();
-    fireEvent.click(screen.getByText('procedure: P')); expect(onOpen).toHaveBeenCalledWith('a', match);
+    fireEvent.click(screen.getByRole('button', {name: 'procedure: P'})); expect(onOpen).toHaveBeenCalledWith('a', match);
   });
   it('stops between catalogs without claiming to cancel the active request', async () => {
     let resolve;

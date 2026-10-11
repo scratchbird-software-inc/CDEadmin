@@ -137,7 +137,10 @@ class BlobUpload:
 
 class ResultStream:
     def __init__(self, cursor, columns, blob_type, array_type=(), *,
-                 validate_text_encoding=None):
+                 validate_text_encoding=None, page_rows=PAGE_ROWS):
+        if type(page_rows) is not int or not 1 <= page_rows <= 500:
+            raise RelationalClientError('Stream page rows must be an integer from 1 to 500')
+        self.page_rows = page_rows
         self.cursor = cursor
         self.columns = list(columns)
         self.blob_type = blob_type
@@ -211,7 +214,7 @@ class ResultStream:
         try:
             self._release_blobs()
             rows, size = [], 0
-            while len(rows) < PAGE_ROWS and size < PAGE_BYTES:
+            while len(rows) < self.page_rows and size < PAGE_BYTES:
                 row = self.cursor.fetchone()
                 if row is None:
                     self.eof = True

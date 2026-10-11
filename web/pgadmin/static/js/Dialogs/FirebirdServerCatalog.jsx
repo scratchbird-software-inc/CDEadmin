@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
@@ -74,7 +75,7 @@ export default function FirebirdServerCatalog({endpoint, targets, post}) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const chosen = entries.find(item => item.target_id === view);
-  return <Box sx={{p: 2, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-server-catalog" />
     <Alert severity="info">Capture metadata from registered databases on this endpoint. Each uses its authorized catalog connection. These are independent observations, not an atomic server backup. Unregistered database files and row data are not captured.</Alert>
     <Button disabled={busy} onClick={() => setSelected(targets.map(item => item.target_id))}>Select all registered databases</Button>

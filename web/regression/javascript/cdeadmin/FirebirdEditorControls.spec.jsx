@@ -13,6 +13,7 @@ describe('Firebird prepared execution controls', () => {
     const props = {language: {language_profile: 'firebird-sql'}, source: 'select 1; select 2;',
       onChange: jest.fn(), post, ensureSession: jest.fn(), onScriptLock: jest.fn(), onExecute};
     const {rerender} = render(<Component {...props} />);
+    fireEvent.click(screen.getByText('Plain text editor'));
     const source = screen.getByLabelText('Query source');
     source.setSelectionRange(11, 13);
     fireEvent.click(screen.getByText('Prepare current statement'));

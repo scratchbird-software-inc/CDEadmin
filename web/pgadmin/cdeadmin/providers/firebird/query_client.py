@@ -583,6 +583,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         command = transaction_command(request.get('source'))
         if command is None:
             token = super().execute(handle, request)
+            token.firebird_statement_metrics = copy.deepcopy(
+                getattr(token.cursor, 'statement_metrics', None))
             if dialect is not None:
                 token.firebird_statement_dialect = dialect
             if limit is not None and token.columns:
@@ -617,10 +619,11 @@ class FirebirdQueryClient(RelationalDBAPIClient):
 
     def _ordinary_query_cursor(self, handle, request):
         dialect = requested_dialect(request)
-        if dialect is None or dialect == handle.sql_dialect:
+        if ((dialect is None or dialect == handle.sql_dialect) and
+                not (request.get('output_policy') or {}).get('firebird_statement_metrics')):
             from .temporal_arrays import cursor
             return cursor(handle)
-        return DialectCursor(handle, dialect)
+        return DialectCursor(handle, dialect if dialect is not None else handle.sql_dialect)
 
     def _fetch_query_rows(self, cursor, request):
         limit = query_row_limit(request)
@@ -726,6 +729,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise error from None
             token.closed = True
         result = super().describe_result(token)
+        metrics = getattr(token, 'firebird_statement_metrics', None)
+        if metrics is not None:
+            result['payload']['statement_metrics'] = copy.deepcopy(metrics)
         receipt = getattr(token, 'firebird_transaction_receipt', None)
         if receipt is not None:
             result['payload']['transaction_action'] = copy.deepcopy(receipt)
@@ -954,6 +960,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 upload.finish()
                 return {upload.kind + '_upload': upload.reference, 'ready': True}
             if action == 'open':
+                page_rows = request.get('page_rows', 100)
+                if type(page_rows) is not int or not 1 <= page_rows <= 500:
+                    raise RelationalClientError('Stream page rows must be an integer from 1 to 500')
                 if state.result_stream is not None:
                     raise RelationalClientError('Close the previous stream')
                 source = request.get('source')
@@ -991,7 +1000,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 native_cursor.stream_blob_threshold = -1
                 native_cursor.stream_arrays = True
                 state.result_stream = ResultStream(
-                    cursor, [], BlobReader, ArrayReader,
+                    cursor, [], BlobReader, ArrayReader, page_rows=page_rows,
                     validate_text_encoding=(
                         'utf8' if getattr(handle, 'charset', None) ==
                         'UNICODE_FSS' else None))

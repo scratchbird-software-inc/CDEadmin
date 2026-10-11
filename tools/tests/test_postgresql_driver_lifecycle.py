@@ -239,3 +239,16 @@ def test_sql_ascii_bytes_are_preserved_without_replacement():
         'native_encoding': 'SQL_ASCII'}
     with pytest.raises(UnicodeDecodeError):
         value(b'\xff', 'utf-8')
+
+
+def test_profile_change_refuses_open_owned_sessions(provider):
+    session = open_session(provider)
+    with pytest.raises(RuntimeError, match='Close PostgreSQL SQL sessions'):
+        with provider.profile_change_guard():
+            pytest.fail('active session admitted a profile change')
+    assert session['session_id'] in provider._sessions
+    with patch(PROVIDER + '.native_control', return_value=(True, 'ROLLBACK')):
+        provider.close_session(session)
+    with provider.profile_change_guard():
+        provider.release_for_profile_change()
+    assert provider._closed

@@ -114,6 +114,8 @@ function dispatch(action, args, context) {
   case 'verify_endpoint':
     return serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
       item: endpoint.item,
+      databaseTargetId: args.database_target_id,
+      ...(args.database_target_id ? {openOnSuccess: true, openOnSuccessItem: item} : {}),
     });
   case 'disconnect_endpoint':
     return serverNode.callbacks.disconnect_server.call(serverNode, {

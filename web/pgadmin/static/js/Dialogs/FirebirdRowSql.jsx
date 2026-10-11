@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
@@ -19,7 +20,7 @@ export default function FirebirdRowSql({page, table, onLoad, disabled}) {
     try {setPlans(generateRowSql({table, columns: page.columns, rows: page.rows.filter((_row, index) => selected.includes(index)), operation, keys, inColumn, inline})); setError(null);}
     catch (failure) {setError(failure.message); setPlans([]);}
   };
-  return <Box sx={{my: 2}}>
+  return <Box data-cde-compact-form sx={{my: 2, ...compactFormSx}}>
     <FormReference formKey="firebird-row-sql" />
     <Alert severity="info">Generate SQL from fetched rows, excluding unsaved drafts. Preview does not execute. Executing generated statements may duplicate or change data. User-selected matching columns must identify the intended rows.</Alert>
     <TextField select label="Row SQL operation" value={operation} onChange={event => change(() => setOperation(event.target.value))}>

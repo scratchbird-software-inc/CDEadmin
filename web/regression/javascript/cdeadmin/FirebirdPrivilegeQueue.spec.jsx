@@ -61,7 +61,7 @@ describe('Firebird privilege statement queue', () => {
     rerender(<Component {...props} candidate={item('b')} />);
     fireEvent.click(screen.getByText('Add to statement list'));
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByText('Remove statement 1'));
+    fireEvent.click(screen.getByRole('button', {name: 'Remove statement 1'}));
     expect(screen.getByRole('checkbox')).not.toBeChecked();
     rerender(<Component {...props} candidate={null} post={jest.fn()} />);
     expect(screen.queryByText('Execute all statements')).toBeNull();

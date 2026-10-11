@@ -1,3 +1,4 @@
+import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
@@ -41,7 +42,7 @@ export default function FirebirdDocker({onRegister, bridge=window.electronUI?.fi
     catch {setError('The local receipt is unavailable. Inspect the named resources in the selected Docker context.');}
     finally {setBusy(false);}
   };
-  return <Box sx={{p: 1, overflow: 'auto'}}>
+  return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-docker" />
     <Alert severity="info">Execution host: the Linux desktop Docker CLI and the explicitly selected Docker context. Preparation selects the CLI, inspects that daemon and may pull the official image; it does not create containers or storage. Confirm the resolved daemon and image before creation.</Alert>
     {!bridge?.available && <Alert severity="warning">Docker provisioning requires the Linux desktop application. The web server does not start Docker for browser clients.</Alert>}

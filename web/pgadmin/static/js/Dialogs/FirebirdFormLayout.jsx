@@ -48,7 +48,7 @@ function NativeChoices({field, value, disabled, onChange, single=false}) {
     aria-describedby={help ? helpId : undefined}
     sx={{m: 0, p: 1, border: 1, borderColor: 'divider', minWidth: 0}}>
     <Box component="legend">{field.label}</Box>
-    {single ? <RadioGroup value={value ?? field.default ?? ''}
+    {single ? <RadioGroup row value={value ?? field.default ?? ''}
       onChange={(event) => onChange(event.target.value)}>{choices}</RadioGroup> :
       <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))'}}>
         {choices}
@@ -72,8 +72,8 @@ export default function FirebirdFormLayout({fields, draft, disabled, onChange, r
       disabled={disabled} key={group.title} sx={{m: 0, p: 1, minWidth: 0,
         border: 1, borderColor: 'divider'}}>
       <Box component="legend" sx={{px: 0.5, fontWeight: 600}}>{gettext(group.title)}</Box>
-      <Box sx={{display: 'grid', gap: 1.5,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))'}}>
+      <Box sx={{display: 'grid', gap: 1,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))'}}>
         {group.fields.map((field) => {
           const single = field.control === 'select' && ['mode', 'method', 'access_mode'].includes(field.field_id);
           const choices = field.control === 'multiselect' || single;
