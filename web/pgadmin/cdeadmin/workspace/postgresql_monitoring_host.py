@@ -125,6 +125,49 @@ class PostgreSQLMonitoringHost(MonitoringHost):
                 self._admissions.pop((owner, sid, target), None)
             return result
 
+    def _registrations(self, owner):
+        from pgadmin.model import Server, User
+        with self.app.app_context():
+            if User.query.filter_by(id=owner, active=True).first() is None:
+                raise PermissionError('Monitoring owner is unavailable')
+            return sorted([{'server_id': server.id, 'name': server.name}
+                for server in Server.query.filter_by(user_id=owner).all()
+                if server.endpoint_profile is not None and
+                self.endpoints._is_preserved_postgresql(server)],
+                key=lambda row: (row['name'].casefold(), row['server_id']))
+
+    def fleet(self, owner):
+        def observation(sid, target):
+            try:
+                snapshot = self.snapshot(owner, sid, target)
+                # Engine inventory needs only the current observation, not a
+                # second copy of every collector's retained history.
+                return {key: value for key, value in {
+                    **snapshot, 'samples': snapshot.get('samples', [])[-1:],
+                }.items() if key not in ('authentication', 'navigation')}
+            except PermissionError:
+                return {'state': 'authorization-denied', 'samples': []}
+            except Exception:
+                return {'state': 'scope-unavailable', 'samples': []}
+
+        servers = []
+        for registered in self._registrations(owner):
+            sid = registered['server_id']
+            with self._lock:
+                targets = sorted([(key[2], item['route']['database'])
+                    for key, item in self._admissions.items()
+                    if key[:2] == (owner, sid) and key[2] is not None],
+                    key=lambda row: (row[1].casefold(), row[0]))
+            databases = []
+            for target, name in targets:
+                current = observation(sid, target)
+                databases.append({'target_id': target,
+                    'name': name if current['state'] not in ('authorization-denied', 'scope-unavailable') else 'Unavailable target',
+                    'snapshot': current})
+            servers.append({**registered, 'snapshot': observation(sid, None), 'databases': databases})
+        return {'registered_endpoints': len(servers), 'servers': servers,
+                'history': 'volatile', 'inventory': 'owner-registrations-and-configured-collectors'}
+
     def close(self):
         with self._lock:
             for grant in self._grants.values():
@@ -144,6 +187,18 @@ def init_app(app, shared_host):
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint('cdeadmin_postgresql_monitoring', __name__)
+
+    @api.route('/cdeadmin/api/monitoring/postgresql', methods=['GET'])
+    @pga_login_required
+    def fleet():
+        try:
+            response = jsonify(success=1, data=host.fleet(current_user.id))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except PermissionError:
+            return jsonify(success=0, errormsg='Monitoring scope is not authorized'), 403
+        except Exception:
+            return jsonify(success=0, errormsg='Monitoring inventory is unavailable'), 503
 
     @api.route('/cdeadmin/api/monitoring/postgresql/<int:sid>', methods=['GET', 'POST', 'DELETE'])
     @pga_login_required

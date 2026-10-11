@@ -1,5 +1,37 @@
 import {dashboardPanelFiles} from './dashboardPanels';
 
+export function postgresqlFleetFiles(fleet) {
+  const panels = [{id: 'inventory', title: 'PostgreSQL owner registrations', rows: [
+    ['Registered servers', fleet?.registered_endpoints, 'Registrations, not discovered cluster members'],
+    ['Database inventory', 'Configured collectors, not the complete database catalog'],
+    ['History', 'Volatile process buffer'],
+  ]}];
+  const observation = (id, title, snapshot, scope) => {
+    const last = snapshot?.samples?.at(-1);
+    const fresh = snapshot?.state === 'collecting' && Number.isFinite(snapshot?.sample_age_seconds) &&
+      snapshot.sample_age_seconds >= 0 && Number.isFinite(snapshot?.stale_after_seconds) &&
+      snapshot.sample_age_seconds <= snapshot.stale_after_seconds;
+    const sample = fresh && last?.transaction_completed === true && last?.scope === scope &&
+      ['available', 'partial'].includes(last.status) ? last : null;
+    panels.push({id, title, rows: [
+      ['Collection', snapshot?.state || 'Unknown'], ['Latest probe', last?.status || 'Not sampled'],
+      ['Freshness', sample ? 'Current' : 'No current observation'],
+      ['Sample age', snapshot?.sample_age_seconds, 'seconds'],
+      ['Heartbeat', snapshot?.heartbeat?.status || 'Disabled'],
+      ['Connection database', sample?.identity?.database],
+      ['Statistics visibility', sample?.identity?.statistics_visibility],
+      ['Recovery mode', sample?.identity?.in_recovery, 'Does not prove replication freshness'],
+      ['Postmaster started', sample?.identity?.postmaster_started_at, 'UTC'],
+    ]});
+  };
+  (fleet?.servers || []).forEach((server, index) => {
+    observation(`server_${index}`, server.name, server.snapshot, 'server');
+    (server.databases || []).forEach((database, dbIndex) => observation(
+      `database_${index}_${dbIndex}`, `${server.name} / ${database.name}`, database.snapshot, 'database'));
+  });
+  return dashboardPanelFiles(panels, 'PostgreSQL engine dashboard', 'scratchrobin.postgresql.monitoring');
+}
+
 // Fixed native bindings only. Database names are values, never DDN identifiers.
 const counters = [
   ['xact_commit', 'Commits', 'transactions'], ['xact_rollback', 'Rollbacks', 'transactions'],

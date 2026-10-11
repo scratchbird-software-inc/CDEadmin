@@ -14,7 +14,7 @@ import pgAdmin from 'sources/pgadmin';
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
-  'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
+  'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_postgresql_fleet', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -95,6 +95,8 @@ function dispatch(action, args, context) {
   case 'open_firebird_docker':
     return import('sources/Dialogs').then(({showFirebirdDocker}) => showFirebirdDocker(
       registrationContext => serverNode.callbacks.register_engine_server.call(serverNode, {item, registrationContext})));
+  case 'open_postgresql_fleet':
+    return import('sources/Dialogs').then(({showPostgresqlFleet}) => showPostgresqlFleet());
   case 'open_firebird_fleet':
     return import('sources/Dialogs').then(({showFirebirdFleet}) => showFirebirdFleet());
   case 'register_endpoint':

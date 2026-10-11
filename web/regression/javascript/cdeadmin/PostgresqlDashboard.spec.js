@@ -1,5 +1,5 @@
 import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
-import {postgresqlDashboardFiles} from 'sources/cdeadmin_ui/integrations/ddn/postgresqlDashboard';
+import {postgresqlDashboardFiles, postgresqlFleetFiles} from 'sources/cdeadmin_ui/integrations/ddn/postgresqlDashboard';
 
 describe('PostgreSQL native DDN dashboard', () => {
   beforeAll(() => viewer.setTextProvider((text, size) => ({
@@ -22,6 +22,21 @@ describe('PostgreSQL native DDN dashboard', () => {
     }};
   const snapshot = (last=sample) => ({state: 'collecting', sample_age_seconds: 1,
     stale_after_seconds: 15, samples: [last]});
+  it('renders owner inventory with isolated server/database observations', () => {
+    const files = postgresqlFleetFiles({registered_endpoints: 2, servers: [
+      {server_id: 7, name: 'Same name', snapshot: snapshot({...sample, scope: 'server'}),
+        databases: [{target_id: 'postgresql-database:42', name: 'qa', snapshot: snapshot()}]},
+      {server_id: 8, name: 'Same name', snapshot: {state: 'disabled'}, databases: []},
+    ]});
+    const workspace = viewer.createWorkspace(files);
+    try {
+      const rendered = workspace.renderSync({entry: 'dashboard.ddn', view: 'dashboard'});
+      expect(rendered.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
+      expect(rendered.svg).toContain('Same name / qa');
+      expect(rendered.svg).toContain('No current observation');
+      expect(rendered.svg).toContain('permission-limited');
+    } finally { workspace.destroy(); }
+  });
   it.each(['server', 'database'])('renders native %s data using the actual DDN runtime', (scope) => {
     const files = postgresqlDashboardFiles(snapshot({...sample, scope}), 'PostgreSQL dashboard', scope);
     const workspace = viewer.createWorkspace(files);

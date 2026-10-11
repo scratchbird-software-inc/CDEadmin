@@ -33,6 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_firebird_fleet',
+    'open_postgresql_fleet',
     'open_firebird_docker',
     'open_firebird_dashboard_editor',
     'refresh_node',
@@ -238,6 +239,12 @@ def connector_context_actions(
                         disabled_reason=unavailable_reason,
                     ),
                 ])
+    if engine_id == 'postgresql' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.postgresql.monitoring', 'PostgreSQL engine dashboard...',
+            'open_postgresql_fleet', icon='tool.dashboard', group='information',
+            priority=70,
+        ))
     if engine_id == 'firebird' and not localhost_placeholder:
         actions.append(_action(
             'connector.firebird.docker', 'Provision Firebird in Docker...',

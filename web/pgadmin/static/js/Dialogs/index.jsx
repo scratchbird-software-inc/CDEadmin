@@ -162,6 +162,15 @@ export function showFirebirdDashboardEditor(serverId, targetId) {
   return panelId;
 }
 
+export function showPostgresqlFleet() {
+  const panelId = 'id-postgresql-fleet';
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,
+    title: gettext('PostgreSQL engine dashboard'), closable: true, floatable: true,
+    content: <ErrorBoundary><PostgresqlMonitoring engineMode onNavigate={showPostgresqlMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
 export function showPostgresqlMonitor(serverId, targetId, name='PostgreSQL', policyMode=false) {
   const panelId = `id-postgresql-monitor-${serverId}-${targetId || 'server'}-${policyMode ? 'policy' : 'viewer'}`;
   pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,

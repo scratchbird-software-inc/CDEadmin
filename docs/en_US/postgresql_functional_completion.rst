@@ -161,3 +161,12 @@ be 1–30 seconds. Those unsupported admission paths remain qualification work,
 not a claim of complete native transport parity. The application shares one
 process-ownership lock across Firebird and PostgreSQL and releases it only after
 both runtimes confirm attachment cleanup.
+
+The PostgreSQL engine dashboard lists only the current owner's native PostgreSQL
+registrations. Server registration inventory is distinct from configured volatile
+database collectors and from the native database catalog. Viewing inventory never
+starts a collector. Each server and database observation is reauthorized; revoked,
+failed, stale or missing sources remain explicitly unavailable. Fleet output is
+bounded to the latest sample per collector, with no credentials or SQL text.
+Metrics from different scopes are not summed. Navigation selects a registered
+server or an admitted database target; it does not change or start a policy.

@@ -5,9 +5,9 @@ import getApiInstance from '../api_instance';
 import url_for from 'sources/url_for';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
-import {postgresqlDashboardFiles} from '../cdeadmin_ui/integrations/ddn/postgresqlDashboard';
+import {postgresqlDashboardFiles, postgresqlFleetFiles} from '../cdeadmin_ui/integrations/ddn/postgresqlDashboard';
 
-export default function PostgresqlMonitoring({serverId, targetId, policyMode=false}) {
+export default function PostgresqlMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate}) {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,8 +16,8 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
   const [policy, setPolicy] = useState({interval_seconds: targetId ? 5 : 15,
     retain_samples: 120, lease_seconds: 3600, metadata_interval_seconds: 60,
     heartbeat_enabled: false, heartbeat_timeout_seconds: null});
-  const endpoint = useMemo(() => url_for('cdeadmin_postgresql_monitoring.monitoring', {sid: serverId}) +
-    (targetId ? `?target_id=${encodeURIComponent(targetId)}` : ''), [serverId, targetId]);
+  const endpoint = useMemo(() => engineMode ? url_for('cdeadmin_postgresql_monitoring.fleet') : url_for('cdeadmin_postgresql_monitoring.monitoring', {sid: serverId}) +
+    (targetId ? `?target_id=${encodeURIComponent(targetId)}` : ''), [serverId, targetId, engineMode]);
   useEffect(() => {
     let active = true, pending = false;
     const read = async () => {
@@ -45,9 +45,9 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
     } catch(err) { setError(err.response?.data?.errormsg || 'Monitoring policy change failed'); }
     finally { setBusy(false); setCredentials((value) => ({...value, password: ''})); }
   };
-  const files = useMemo(() => postgresqlDashboardFiles(snapshot,
+  const files = useMemo(() => engineMode ? postgresqlFleetFiles(snapshot) : postgresqlDashboardFiles(snapshot,
     targetId ? 'PostgreSQL database dashboard' : 'PostgreSQL server dashboard',
-    targetId ? 'database' : 'server'), [snapshot, targetId]);
+    targetId ? 'database' : 'server'), [snapshot, targetId, engineMode]);
   const active = snapshot && snapshot.state !== 'disabled';
   const valid = [['interval_seconds', targetId ? 5 : 15, 300], ['retain_samples', 1, 720],
     ['lease_seconds', 5, 86400], ['metadata_interval_seconds', 60, 3600]].every(([key, min, max]) =>
@@ -56,9 +56,20 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
       (Number.isInteger(policy.heartbeat_timeout_seconds) && policy.heartbeat_timeout_seconds >= policy.interval_seconds + 5 &&
        policy.heartbeat_timeout_seconds <= 3600));
   return <Box sx={{height: '100%', p: 1, overflow: 'auto'}}>
-    <FormReference formKey={policyMode ? 'postgresql-monitoring-policy' : 'postgresql-dashboard'} />
+    <FormReference formKey={policyMode && !engineMode ? 'postgresql-monitoring-policy' : 'postgresql-dashboard'} />
     {error && <Alert severity="error">{error}</Alert>}
-    {policyMode ? <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 20rem))'}}>
+    {engineMode && onNavigate && snapshot && <TextField select size="small" label="Open dashboard" value=""
+      sx={{width: '24rem', maxWidth: '100%', my: 1}} onChange={(event) => {
+        const [sid, target, name] = JSON.parse(event.target.value);
+        onNavigate(sid, target || undefined, name);
+      }}>
+      {(snapshot.servers || []).flatMap((server) => [
+        <MenuItem key={`server:${server.server_id}`} value={JSON.stringify([server.server_id, null, server.name])}>{server.name}</MenuItem>,
+        ...(server.databases || []).map((database) => <MenuItem key={`${server.server_id}:${database.target_id}`}
+          value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
+      ])}
+    </TextField>}
+    {policyMode && !engineMode ? <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 20rem))'}}>
       <Alert severity="info" sx={{gridColumn: '1 / -1'}}>Collection uses a separate connection and continues without an open dashboard. Stop collection before changing its policy. Samples and credentials last only for this process and lease.</Alert>
       {snapshot?.collection_available === false && <Alert severity="warning" sx={{gridColumn: '1 / -1'}}>
         Monitoring requires worker keys, single-process admission and a process lock.
@@ -94,4 +105,5 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
     </Box> : <DDNViewerSurface files={files} entry="dashboard.ddn" view="dashboard" presentation />}
   </Box>;
 }
-PostgresqlMonitoring.propTypes = {serverId: PropTypes.number.isRequired, targetId: PropTypes.string, policyMode: PropTypes.bool};
+PostgresqlMonitoring.propTypes = {serverId: PropTypes.number, targetId: PropTypes.string, policyMode: PropTypes.bool,
+  engineMode: PropTypes.bool, onNavigate: PropTypes.func};

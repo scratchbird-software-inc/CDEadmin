@@ -79,3 +79,26 @@ def test_only_native_policy_fields_and_owned_cleanup(tmp_path, monkeypatch):
         assert shared.close()
         assert host.ownership.fd is None
     finally: shared.close()
+
+
+def test_fleet_reads_only_owned_collectors_and_discards_revoked_samples(tmp_path, monkeypatch):
+    host, shared, server = make_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(host, '_registrations', lambda owner:
+        [{'server_id': 7, 'name': 'PG'}] if owner == 1 else [])
+    try:
+        assert host.fleet(1)['servers'][0]['snapshot']['state'] == 'disabled'
+        assert not host._grants and host.ownership.fd is None
+        host.enable(1, 7, 'postgresql-database:42', {})
+        fleet = host.fleet(1)
+        assert fleet['registered_endpoints'] == 1
+        database = fleet['servers'][0]['databases'][0]
+        assert database['name'] == 'qa'
+        assert database['target_id'] == 'postgresql-database:42'
+        assert len(database['snapshot']['samples']) <= 1
+        assert 'authentication' not in database['snapshot']
+        assert host.fleet(2)['servers'] == []
+        server.port = 6543
+        database = host.fleet(1)['servers'][0]['databases'][0]
+        assert database['name'] == 'Unavailable target'
+        assert database['snapshot'] == {'state': 'authorization-denied', 'samples': []}
+    finally: shared.close()

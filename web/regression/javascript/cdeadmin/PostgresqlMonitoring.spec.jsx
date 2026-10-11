@@ -19,6 +19,14 @@ describe('PostgreSQL monitoring controls', () => {
     getApiInstance.mockReturnValue(api);
   });
   afterEach(() => { window.innerHeight = originalHeight; });
+  it('engine scope stays read-only even when policyMode is supplied', async () => {
+    const {unmount} = render(<Component engineMode policyMode />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    expect(screen.getByTestId('viewer')).toHaveAttribute('data-read-only', 'true');
+    expect(screen.queryByRole('button', {name: 'Start collection'})).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+    unmount();
+  });
   it('keeps the viewer display-only and binds the selected database', async () => {
     const {unmount} = render(<Component serverId={7} targetId="postgresql-database:42" />);
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/monitoring/postgresql/7?target_id=postgresql-database%3A42'));

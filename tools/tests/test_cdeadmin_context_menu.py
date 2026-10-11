@@ -587,5 +587,13 @@ class ContextMenuTests(unittest.TestCase):
             self.assertEqual('database', action['arguments']['resource_kind'])
 
 
+def test_postgresql_engine_dashboard_is_native_and_read_only():
+    actions = connector_context_actions('postgresql', [])
+    action = next(item for item in actions if item['handler'] == 'open_postgresql_fleet')
+    assert action['mutation_class'] == 'read'
+    assert not any(item['handler'] == 'open_postgresql_fleet'
+                   for item in connector_context_actions('mysql', []))
+
+
 if __name__ == '__main__':
     unittest.main()
