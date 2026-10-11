@@ -1,6 +1,8 @@
 // Provider-declared scalar editors. Exact numbers stay text on the JSON wire.
+import {useState} from 'react';
+import FirebirdBlobEditor from './FirebirdBlobEditor';
 import PropTypes from 'prop-types';
-import {Box, MenuItem, TextField} from '@mui/material';
+import {Box, Button, MenuItem, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 import ProviderArrayInput, {arrayShape} from './ProviderArrayInput';
 
@@ -69,7 +71,8 @@ export function rowInputValue(draft, kind, spec) {
   return draft.text;
 }
 
-export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec}) {
+export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec, firebirdBlob}) {
+  const [blobOpen, setBlobOpen] = useState(false);
   if (kind === 'array') return <ProviderArrayInput {...{draft, label, disabled, onChange, spec}} />;
   return <Box sx={{display: 'flex', gap: 0.5, minWidth: '18rem'}}>
     <TextField size="small" select value={draft.isNull ? 'null' : 'value'}
@@ -93,12 +96,16 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
           ['float32', 'float64'].includes(kind) ? gettext('Approximate native FLOAT/DOUBLE value, NaN or signed Infinity') : undefined}
         disabled={disabled || draft.isNull} inputProps={{'aria-label': label}}
         onChange={(event) => onChange({...draft, text: event.target.value})} />}
+    {firebirdBlob && <Button onClick={() => setBlobOpen(true)}>BLOB editor</Button>}
+    {firebirdBlob && blobOpen && <FirebirdBlobEditor value={draft} kind={kind} label={label} readOnly={disabled}
+      onApply={onChange} onClose={() => setBlobOpen(false)} />}
   </Box>;
 }
 
 ProviderRowInput.propTypes = {
   kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary', 'array', 'firebird-time-tz', 'firebird-timestamp-tz']).isRequired,
   spec: PropTypes.object,
+  firebirdBlob: PropTypes.bool,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,

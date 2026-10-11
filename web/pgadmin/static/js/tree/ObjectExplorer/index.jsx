@@ -18,6 +18,7 @@ import {
   TreeModel as CDETreeModel,
 } from 'sources/cdeadmin_ui/navigation/Tree';
 import ContextMenu from 'sources/cdeadmin_ui/navigation/ContextMenu';
+import {compareFirebirdNodes} from 'sources/cdeadmin_ui/navigation/firebirdTreeOrder';
 import {
   descriptorFromTreeMetadata,
 } from 'sources/cdeadmin_ui/navigation/TreeNode';
@@ -135,7 +136,9 @@ export default function ObjectExplorer() {
         return mtree.readNode(path);
       },
       sortComparator: (a, b) => {
-        // No nee to sort columns
+        const firebirdOrder = compareFirebirdNodes(a, b);
+        if (firebirdOrder !== null) return firebirdOrder;
+        // No need to sort columns
         if (a._metadata && a._metadata.data._type == 'column') return 0;
         // Sort alphabetically
         if (a.constructor === b.constructor) {

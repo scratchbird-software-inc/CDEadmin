@@ -418,6 +418,9 @@ class ContextMenuTests(unittest.TestCase):
         self.assertEqual('properties', properties['arguments']['tab'])
         self.assertEqual('open_workspace', properties['handler'])
         edit = by_id['database.firebird.edit']
+        recreate = by_id['database.firebird.recreate_empty']
+        self.assertEqual('recreate_empty', recreate['arguments']['database_mode'])
+        self.assertEqual('database-one', recreate['arguments']['resource_id'])
         self.assertEqual('edit', edit['arguments']['database_mode'])
         self.assertEqual(
             'cdeadmin.firebird-native.database.edit.v1',
@@ -437,9 +440,25 @@ class ContextMenuTests(unittest.TestCase):
             self.assertEqual(
                 resource_kind, security['arguments']['resource_kind']
             )
+            self.assertNotIn('resource_id', security['arguments'])
+            self.assertEqual('database-one', security['arguments']['database_target_id'])
+            if resource_kind == 'privilege':
+                self.assertEqual('grant', security['arguments']['operation_id'])
+        self.assertNotIn('database.firebird.resources', by_id)
+        self.assertNotIn('database.firebird.data', by_id)
+        self.assertEqual('export', by_id[
+            'database.firebird.export']['arguments']['tab'])
+        server_actions = {item['command_id']: item for item in
+                          endpoint_context_actions(profile('firebird'),
+                                                   'verified')}
+        for restore in ('restore_logical', 'restore_physical'):
+            self.assertNotIn(f'database.firebird.{restore}', by_id)
+            action = server_actions[f'endpoint.firebird.{restore}']
+            self.assertIsNone(action['arguments']['database_target_id'])
+            self.assertEqual(restore, action['arguments']['operation_id'])
+            self.assertTrue(action['requires_confirmation'])
         expected_services = {
-            'backup_logical', 'restore_logical', 'backup_physical',
-            'restore_physical', 'database_statistics',
+            'backup_logical', 'backup_physical', 'database_statistics',
             'validate_database', 'repair_database', 'sweep_database',
             'shutdown_database', 'bring_online',
             'set_page_cache_size', 'set_sweep_interval',

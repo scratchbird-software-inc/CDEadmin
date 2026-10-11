@@ -53,6 +53,7 @@ class _AttachmentState:
     worker_interrupted: bool = False
     visual_task_state_unknown: bool = False
     attachment_liveness_failed: bool = False
+    profiler_state_unknown: bool = False
     failed_cursors: list = field(default_factory=list)
     result_stream: object = None
     blob_upload: object = None
@@ -302,6 +303,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird attachment liveness check failed; close this '
                     'session and explicitly reconnect')
+            if state.profiler_state_unknown and not closing:
+                raise RelationalClientError('Firebird profiler state is unknown; close this session and reconnect')
             yield state
         finally:
             state.lock.release()
@@ -323,6 +326,12 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             'firebird_plan', False)
         if type(plan_mode) is not bool:
             raise RelationalClientError('Firebird plan mode must be Boolean')
+        profile_mode = (payload.get('output_policy') or {}).get('firebird_profile', False)
+        if type(profile_mode) is not bool or profile_mode and (script or plan_mode):
+            raise RelationalClientError('Native profiling requires a single executed statement')
+        statistics_mode = (payload.get('output_policy') or {}).get('firebird_statistics', False)
+        if type(statistics_mode) is not bool or statistics_mode and (script or plan_mode):
+            raise RelationalClientError('Query statistics require a single executed statement')
         if plan_mode:
             if script or payload.get('parameters'):
                 raise RelationalClientError(
@@ -360,6 +369,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         with state.lock:
             if not query.dispatch_allowed or state.query is not query:
                 return
+        profiler = None
+        statistics = None
         try:
             if (request.get('output_policy') or {}).get('firebird_plan'):
                 from .query_plans import acquire
@@ -368,6 +379,16 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 from .script_execution import ScriptExecution
                 native = ScriptExecution(self, query, state, request).run()
             else:
+                if (request.get('output_policy') or {}).get('firebird_profile'):
+                    from .profiling import ProfileRun
+                    profiler = ProfileRun(query.handle)
+                    profiler.start()
+                if (request.get('output_policy') or {}).get('firebird_statistics'):
+                    from .query_statistics import QueryStatistics
+                    statistics = QueryStatistics(query.handle)
+                    statistics.start()
+                    if statistics.cleanup_failed:
+                        raise RelationalClientError('Statistics transaction cleanup failed before SQL dispatch')
                 token = self._execute_sql(query.handle, request)
                 native = self._describe_native_token(token)
                 native['payload']['execution_state'] = 'succeeded'
@@ -425,6 +446,28 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     },
                 },
             }
+        if statistics is not None:
+            try:
+                if not statistics.cleanup_failed:
+                    statistics.finish()
+            except BaseException:
+                statistics.cleanup_failed = True
+            native['payload']['query_statistics'] = statistics.receipt
+            if statistics.cleanup_failed:
+                state.result_cleanup_failed = True
+                native['payload']['session_reuse_blocked'] = True
+                native['payload']['session_reuse_blocked_reason'] = 'diagnostic_cleanup_failed'
+        if profiler is not None:
+            try:
+                profiler.finish()
+            except BaseException as error:
+                profiler.uncertain = True
+                profiler._error('finish-interrupted', error)
+            native['payload']['profiling'] = profiler.receipt
+            if profiler.uncertain:
+                state.profiler_state_unknown = True
+                native['payload']['session_reuse_blocked'] = True
+                native['payload']['session_reuse_blocked_reason'] = 'profiler_state_unknown'
         with state.lock:
             if (query.script_execution is not None and
                     'script' not in native['payload']):
@@ -526,9 +569,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
 
     def execute(self, handle, request):
         policy = request.get('output_policy') or {}
-        if policy.get('firebird_script') or policy.get('firebird_plan'):
+        if any(policy.get(key) for key in ('firebird_script', 'firebird_plan', 'firebird_profile', 'firebird_statistics')):
             raise RelationalClientError(
-                'Scripts and plans require the asynchronous execution channel')
+                'Scripts, plans, profiling and statistics require the asynchronous execution channel')
         with self._exclusive(handle):
             return self._execute_sql(handle, request)
 

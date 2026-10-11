@@ -1059,6 +1059,44 @@ def supplement_user_replacement(document, evidence, digest, artifact):
         digest, artifact, tasks, 'user-replacement')
 
 
+def supplement_column_order(document, evidence, digest, artifact):
+    """Admit whole-table ordering only from complete native transaction proof."""
+    validate_dialect_contract(document, PROFILE)
+    ordering = evidence.get('column_order', {})
+    if (evidence.get('schema') != 'scratchrobin.firebird.schema-plan-gate@1' or
+            not str(evidence.get('engine_version', '')).startswith('5.0.4.') or
+            any(evidence.get(key) is not True for key in
+                ('complete', 'owned_container_removed', 'database_removed')) or
+            any(ordering.get(key) is not True for key in
+                ('borrowed_rollback_verified', 'owned_commit_verified', 'data_and_identity_preserved',
+                 'stale_order_refused', 'temporary_user_removed')) or
+            335544352 not in ordering.get('permission_denial_codes', [])):
+        raise ValueError('Column ordering native qualification is incomplete')
+    statements = [item.get('source') for item in ordering.get('preview', {}).get('statements', [])]
+    if not statements or any(not isinstance(item, str) or not item for item in statements):
+        raise ValueError('Column ordering requires executed native statements')
+    value = copy.deepcopy(document)
+    proof_id, parser_id = 'firebird-5.0.4-column-order-live', 'firebird-5.0.4-column-order-parser'
+    value['proof_records'] = [item for item in value['proof_records']
+                             if item['evidence_id'] not in {proof_id, parser_id}]
+    for identity, kind in ((proof_id, 'live_execution'), (parser_id, 'parser_acceptance')):
+        value['proof_records'].append(_evidence(identity, kind, 'Firebird 5.0.4 runtime',
+            artifact, digest, evidence['schema'], 'PostgreSQL'))
+    task_id = 'visual_admin.table.reorder_columns'
+    value['task_templates'] = [item for item in value['task_templates'] if item['task_id'] != task_id]
+    value['task_templates'].append({'task_id': task_id, 'source': ';\n'.join(statements),
+        'source_format': 'ordered_native_statements', 'statements': statements,
+        'required_bindings': [], 'binding_style': 'positional_question_mark',
+        'proof_ids': ['firebird-5.0.4-grammar', parser_id, proof_id]})
+    value['task_templates'].sort(key=lambda item: item['task_id'])
+    ids = [item['task_id'] for item in value['task_templates']]
+    value['coverage'].update(authoritative_task_ids=ids, authoritative_task_count=len(ids),
+                             implemented_task_count=len(ids))
+    value['live_evidence_ids'] = sorted(set(value['live_evidence_ids'] + [proof_id]))
+    validate_dialect_contract(value, PROFILE, ADMINISTRATION.dialect_task_ids())
+    return value
+
+
 def supplement_table_replacement(document, evidence, digest, artifact):
     validate_dialect_contract(document, PROFILE)
     checks = evidence.get('table_replacement_checks', [])
@@ -1647,11 +1685,12 @@ def main(argv=None):
         'external-functions', 'blob-filters', 'object-privileges', 'packages',
         'sequences', 'shadows', 'database-storage', 'views', 'exceptions',
         'procedures', 'functions', 'triggers', 'table-replacement',
-        'user-replacement', 'view-grid', 'view-delete', 'view-insert'),
+        'user-replacement', 'view-grid', 'view-delete', 'view-insert', 'column-order'),
                         default='roles')
     options = parser.parse_args(argv)
     if options.existing_contract:
-        supplement = {'admin-mapping': supplement_admin_mapping,
+        supplement = {'column-order': supplement_column_order,
+                      'admin-mapping': supplement_admin_mapping,
                       'view-grid': supplement_view_grid,
                       'view-delete': supplement_view_delete,
                       'view-insert': supplement_view_insert,

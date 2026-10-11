@@ -113,17 +113,22 @@ export function ddnModuleDefinition() {
                 persistence: state.persistence,
                 sourceRevision: state.revision,
               }),
-              onReady: (_controller, toolbox) => context.setSurfaceState?.({
+              onReady: (controller, toolbox) => context.setSurfaceState?.({
                 ddnToolboxItems: toolbox.items,
                 insertToolboxItem: toolbox.insert,
+                ddnBeforeClose: () => controller.isDirty(),
               }),
               onExport: context.onExport,
               onError: context.onError,
             });
           },
-          canClose: async (_descriptor, context) => context.dirty ? {
-            allowed: false, reason: 'Save or discard the DDN changes first.',
-          } : {allowed: true, reason: ''},
+          canClose: async (_descriptor, context) => {
+            try {
+              return (context.ddnBeforeClose ? context.ddnBeforeClose() : context.dirty) ? {
+                allowed: false, reason: 'Save or discard the DDN changes first.',
+              } : {allowed: true, reason: ''};
+            } catch(error) { return {allowed: false, reason: error.message}; }
+          },
         },
       ],
       commands: [

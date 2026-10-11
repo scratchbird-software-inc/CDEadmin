@@ -100,7 +100,7 @@ describe('Firebird object-bound permission forms', () => {
       expect(screen.getByLabelText('Selected administration object')).toHaveTextContent(label);
     });
 
-  it('opens only admitted permission tasks from the security section', () => {
+  it('opens only admitted permission tasks from the security section', async () => {
     const onOperation = jest.fn();
     const descriptor = {operations: [
       {operation_id: 'grant', title: 'Grant table privileges', execution_available: true},
@@ -114,9 +114,9 @@ describe('Firebird object-bound permission forms', () => {
     expect(onOperation).toHaveBeenCalledWith('grant');
     expect(screen.getByRole('button', {name: 'Revoke table privileges'})).toBeDisabled();
     expect(screen.queryByRole('button', {name: 'Alter table'})).not.toBeInTheDocument();
-    rerender(<ObjectInspectorSection tabbed loading resource={resource('table', {
+    await act(async () => rerender(<ObjectInspectorSection tabbed loading resource={resource('table', {
       property_sections: ['privileges'],
-    })} descriptor={descriptor} onOperation={onOperation} />);
+    })} descriptor={descriptor} onOperation={onOperation} />));
     expect(screen.getByRole('button', {name: 'Grant table privileges'})).toBeDisabled();
   });
 

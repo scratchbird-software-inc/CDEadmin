@@ -39,6 +39,7 @@ from .profiles import (
     provider_route_options,
 )
 from .routing import RouteHealthRegistry, RouteSelectionError
+from .firebird_registration import secret_model, secret_models
 from .credential_storage import (
     encrypted_credentials, protected_configuration_write,
 )
@@ -167,6 +168,7 @@ def _credential_change(method):
         endpoint = getattr(server, 'endpoint_profile', None)
         with self._principal_lock:
             previous_override = (
+                self._principal_overrides.get((endpoint.id, database_target_id)) or
                 self._principal_overrides.get(endpoint.id)
                 if endpoint is not None else None)
         callback = (guarded if password or connect_as or previous_override
@@ -239,17 +241,29 @@ class ProtectedColumnResolver:
         from pgadmin.utils.crypto import decrypt
         from pgadmin.utils.master_password import get_crypt_key
 
-        source_type = Server if source_kind == 'server' else SharedServer
+        if source_kind == 'database_target':
+            from pgadmin.model import EndpointDatabaseTarget
+            source_type = EndpointDatabaseTarget
+        else:
+            source_type = Server if source_kind == 'server' else SharedServer
         source = source_type.query.filter_by(id=source_id).first()
-        endpoint = getattr(source, 'endpoint_profile', None)
+        endpoint = (getattr(source, 'endpoint', None)
+                    if source_kind == 'database_target'
+                    else getattr(source, 'endpoint_profile', None))
+        owner = (getattr(endpoint, 'legacy_server', None) or
+                 getattr(endpoint, 'legacy_shared_server', None)) if (
+                     source_kind == 'database_target') else source
+        if source_kind == 'database_target' and not getattr(
+                source, 'registration_credentials', False):
+            raise EndpointRegistrationError('registration credential is unavailable')
         expected_principal = (
-            f'user:{source.user_id}' if source is not None else None
+            f'user:{owner.user_id}' if owner is not None else None
         )
-        if source is None or endpoint is None or (
+        if source is None or endpoint is None or owner is None or (
             endpoint.id != context.endpoint_id or
             principal != expected_principal or
             not current_user.is_authenticated or
-            current_user.id != source.user_id
+            current_user.id != owner.user_id
         ):
             raise EndpointRegistrationError(
                 'protected endpoint credential is unavailable'
@@ -287,7 +301,7 @@ class ProtectedColumnResolver:
         if credential_kind is None:
             return value
         legacy_kind = (
-            'database_password' if column == 'password'
+            'database_password' if column in {'password', 'registration_password'}
             else 'tunnel_password'
         )
         return credential_from_protected_value(
@@ -301,15 +315,18 @@ class ProtectedColumnResolver:
             if len(parts) not in {3, 4}:
                 raise ValueError
             source_kind, raw_id, column = parts[:3]
-            credential_kind = parts[3] if len(parts) == 4 else None
-            source_id = int(raw_id)
+            credential_kind = (parts[3] if len(parts) == 4 else
+                               'database_password' if source_kind == 'database_target' else None)
+            source_id = (str(uuid.UUID(raw_id)) if source_kind == 'database_target'
+                         else int(raw_id))
         except (AttributeError, TypeError, ValueError) as exc:
             raise EndpointRegistrationError(
                 'protected endpoint credential locator is invalid'
             ) from exc
-        if source_kind not in {'server', 'sharedserver'} or column not in {
-            'password', 'tunnel_password'
-        }:
+        if (source_kind == 'database_target' and column != 'registration_password') or (
+            source_kind != 'database_target' and (
+                source_kind not in {'server', 'sharedserver'} or
+                column not in {'password', 'tunnel_password'})):
             raise EndpointRegistrationError(
                 'protected endpoint credential locator is invalid'
             )
@@ -395,10 +412,14 @@ class EndpointService:
             None if endpoint.profile_id == 'firebird-native' and
             database_target_id is None else Ellipsis)
         database_options = None
+        credential_target = None
         if database_target_id is not None:
             target = self._owned_database_target(endpoint, database_target_id)
             database_override = target.database
+            credential_target = target
             database_options = self._database_target_configuration(target)
+        principal_key = ((endpoint.id, credential_target.id) if
+                         secret_model(credential_target) else endpoint.id)
         connect_as = self._validated_principal_override(connect_as)
         if endpoint.profile_id == 'firebird-native' and not password:
             # A saved/default password must never be tried under a different
@@ -406,7 +427,7 @@ class EndpointService:
             # Windows/macOS teams must repeat saved/prompted/alternate flows
             # with their clients. Win_Sspi is a separate platform contract.
             with self._principal_lock:
-                previous_user = self._principal_overrides.get(endpoint.id)
+                previous_user = self._principal_overrides.get(principal_key)
             if connect_as or previous_user:
                 raise EndpointRegistrationError(
                     'Enter the password explicitly when changing the '
@@ -436,6 +457,7 @@ class EndpointService:
                 principal_override=connect_as,
                 database_override=database_override,
                 database_options=database_options,
+                credential_target=credential_target,
             )
             transient = self._transient_credentials(
                 endpoint, route, reference, password
@@ -474,13 +496,13 @@ class EndpointService:
             verified.get('evidence_reference'),
         )
         with self._principal_lock:
-            default_user = self._route_configuration(selected_route).get(
-                'user'
-            )
+            default_user = (credential_target.registration_user if
+                            secret_model(credential_target) else
+                            self._route_configuration(selected_route).get('user'))
             if connect_as and connect_as != default_user:
-                self._principal_overrides[endpoint.id] = connect_as
+                self._principal_overrides[principal_key] = connect_as
             else:
-                self._principal_overrides.pop(endpoint.id, None)
+                self._principal_overrides.pop(principal_key, None)
         return {
             'endpoint_id': endpoint.id,
             'profile_id': endpoint.profile_id,
@@ -525,7 +547,8 @@ class EndpointService:
         )
         reference_ids.add(primary.reference_id)
         models = {
-            item.id: item for item in endpoint.secret_references
+            item.id: item for item in [*endpoint.secret_references,
+                                      *secret_models(endpoint)]
         }
         for reference_id in sorted(reference_ids):
             model = models.get(reference_id)
@@ -539,9 +562,24 @@ class EndpointService:
         if endpoint is None:
             return
         with self._principal_lock:
-            self._principal_overrides.pop(endpoint.id, None)
-        for model in getattr(endpoint, 'secret_references', ()):
+            for key in list(self._principal_overrides):
+                if key == endpoint.id or (isinstance(key, tuple) and key[0] == endpoint.id):
+                    self._principal_overrides.pop(key, None)
+        for model in [*getattr(endpoint, 'secret_references', ()),
+                      *secret_models(endpoint)]:
             self.resolver.forget(model.secret_reference)
+
+    @_connection_change
+    def clear_saved_credentials(self, server):
+        """Clear this endpoint and its aliases after pending-work admission."""
+        from pgadmin.model import db
+        from .registration_credentials import clear
+        self.forget_server_credentials(server)
+        with protected_configuration_write(db.session):
+            server.password = None
+            server.save_password = 0
+            clear(server)
+            db.session.commit()
 
     @_connection_change
     def disconnect_server(self, server):
@@ -572,7 +610,8 @@ class EndpointService:
         )
         reference_ids.add(primary.reference_id)
         models = {
-            item.id: item for item in endpoint.secret_references
+            item.id: item for item in [*endpoint.secret_references,
+                                      *secret_models(endpoint)]
         }
         with ExitStack() as stack:
             for reference_id in sorted(reference_ids):
@@ -623,6 +662,7 @@ class EndpointService:
         )
         database_override = Ellipsis
         database_options = None
+        credential_target = None
         target_cache_id = None
         if database_target_id is not Ellipsis:
             if database_target_id is None:
@@ -633,6 +673,7 @@ class EndpointService:
                     endpoint, database_target_id
                 )
                 database_override = target.database
+                credential_target = target
                 database_options = self._database_target_configuration(
                     target
                 )
@@ -641,12 +682,14 @@ class EndpointService:
             server, endpoint, profile, route_model=candidates[0],
             database_override=database_override,
             database_options=database_options,
+            credential_target=credential_target,
         )
         route_candidates = [
             self._route_and_reference(
                 server, endpoint, profile, route_model=item,
                 database_override=database_override,
                 database_options=database_options,
+                credential_target=credential_target,
             )[0]
             for item in candidates
         ]
@@ -784,13 +827,10 @@ class EndpointService:
         configuration = self._database_form_values(
             profile, 'define', data
         )
-        existing = next((
-            item for item in endpoint.database_targets
-            if item.database == database
-        ), None)
+        existing = self._unambiguous_database_target(endpoint, database)
         self._verify_database_target(
             server, endpoint, profile, database,
-            database_options=configuration,
+            database_options=configuration, credential_target=existing,
         )
         for item in endpoint.database_targets:
             item.active = False
@@ -835,7 +875,7 @@ class EndpointService:
         )
         self._verify_database_target(
             server, endpoint, profile, target.database,
-            database_options=configuration,
+            database_options=configuration, credential_target=target,
         )
         target.display_name = display_name.strip()
         target.configuration = self._encoded_route(configuration)
@@ -860,7 +900,7 @@ class EndpointService:
         configuration.update(connect_values)
         self._verify_database_target(
             server, endpoint, profile, target.database,
-            database_options=configuration,
+            database_options=configuration, credential_target=target,
         )
         for item in endpoint.database_targets:
             item.active = item.id == target.id
@@ -956,10 +996,7 @@ class EndpointService:
         with self._database_catalog_transaction():
             for item in endpoint.database_targets:
                 item.active = False
-            model = next((
-                item for item in endpoint.database_targets
-                if item.database == database
-            ), None)
+            model = self._unambiguous_database_target(endpoint, database)
             if model is None:
                 model = EndpointDatabaseTarget(
                     id=str(uuid.uuid4()), endpoint_id=endpoint.id,
@@ -1249,6 +1286,9 @@ class EndpointService:
             'database': target.database,
             'configuration': configuration,
             'active': bool(target.active),
+            'registration_credentials': bool(getattr(target, 'registration_credentials', False)),
+            'registration_user': getattr(target, 'registration_user', None),
+            'has_saved_registration_password': bool(getattr(target, 'registration_password', None)),
         }
 
     @staticmethod
@@ -1451,6 +1491,15 @@ class EndpointService:
                 route_model.configuration = cls._encoded_route(configuration)
 
     @staticmethod
+    def _unambiguous_database_target(endpoint, database):
+        matches = [item for item in endpoint.database_targets
+                   if item.database == database]
+        if len(matches) > 1:
+            raise EndpointRegistrationError(
+                'multiple registrations use this filename; select the exact registration')
+        return matches[0] if matches else None
+
+    @staticmethod
     def _owned_database_target(endpoint, target_id):
         target_id = str(target_id or '')
         target = next((
@@ -1464,7 +1513,7 @@ class EndpointService:
         return target
 
     def _verify_database_target(self, server, endpoint, profile, database,
-                                database_options=None):
+                                database_options=None, credential_target=None):
         embedded = profile['route_kind'] == 'embedded_file'
         context = self._context(
             endpoint,
@@ -1479,6 +1528,7 @@ class EndpointService:
                 server, endpoint, profile, route_model=route_model,
                 database_override=database,
                 database_options=database_options,
+                credential_target=credential_target,
             )
             try:
                 self.provider_registry.resolve(
@@ -1737,7 +1787,7 @@ class EndpointService:
     def _route_and_reference(
         self, server, endpoint, profile=True, requires_secret=None,
         route_model=None, database_override=Ellipsis,
-        database_options=None, principal_override=Ellipsis,
+        database_options=None, principal_override=Ellipsis, credential_target=None,
     ):
         if requires_secret is not None:
             profile = requires_secret
@@ -1750,10 +1800,18 @@ class EndpointService:
                 'endpoint route or credential reference is unavailable'
             )
         route = json.loads(route_model.configuration)
+        if credential_target is None and database_override is Ellipsis:
+            credential_target = next((item for item in getattr(
+                endpoint, 'database_targets', ()) if item.active), None)
+        registration_secret = secret_model(credential_target)
+        principal_key = ((endpoint.id, credential_target.id)
+                         if registration_secret else getattr(endpoint, 'id', None))
         if principal_override is Ellipsis:
-            endpoint_id = getattr(endpoint, 'id', None)
             with self._principal_lock:
-                principal_override = self._principal_overrides.get(endpoint_id)
+                principal_override = self._principal_overrides.get(principal_key)
+        if registration_secret:
+            route['user'] = credential_target.registration_user
+            route['trusted_auth'] = False
         if principal_override:
             route['user'] = principal_override
         if database_override is not Ellipsis:
@@ -1795,7 +1853,9 @@ class EndpointService:
                 item.secret_kind: item
                 for item in endpoint.secret_references
             }
-            present = route.get('credential_kinds')
+            if registration_secret:
+                models['database_password'] = registration_secret
+            present = None if registration_secret else route.get('credential_kinds')
             if present is not None:
                 if not isinstance(present, list) or not all(
                     isinstance(item, str) for item in present

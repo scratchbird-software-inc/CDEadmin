@@ -13,6 +13,8 @@ import fs from 'fs';
 import path from 'path';
 import * as misc from './misc.js';
 import { spawn } from 'child_process';
+import { setupFirebirdIsql } from './firebirdIsql.js';
+import { FirebirdDocker, setupFirebirdDocker } from './firebirdDocker.js';
 import { fileURLToPath } from 'url';
 import { setupMenu } from './menu.js';
 import contextMenu from 'electron-context-menu';
@@ -486,6 +488,9 @@ function notifyUpdateInstalled() {
 }
 
 // setup preload events.
+setupFirebirdIsql({ipcMain, BrowserWindow, dialog, getOrigin: () => baseUrl});
+setupFirebirdDocker({ipcMain, BrowserWindow, dialog, getOrigin: () => baseUrl,
+  service: new FirebirdDocker({root: () => path.join(app.getPath('userData'), 'firebird-docker-receipts')})});
 ipcMain.handle('showOpenDialog', (e, options) => dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), options));
 ipcMain.handle('showSaveDialog', (e, options) => dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), options));
 ipcMain.handle('showMessageBox', (e, options) => dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), options));

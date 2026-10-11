@@ -998,7 +998,7 @@ def test_provider_publishes_operation_before_completion_and_keeps_busy_handles(
     from tools.tests.test_cdeadmin_actual_engine_pilots import context
     from pgadmin.cdeadmin.providers.firebird.provider import FirebirdProvider
     provider = FirebirdProvider(context(PROFILE), Mock(), rig.client)
-    provider._sessions['owned-session'] = SimpleNamespace(handle=rig.handle)
+    provider._sessions['owned-session'] = SimpleNamespace(handle=rig.handle, language_profile='firebird-sql')
     operation = provider.execute({'session_id': 'owned-session',
                                   'execution_id': 'owned-execution',
                                   'source': 'SELECT 1 FROM RDB$DATABASE'})

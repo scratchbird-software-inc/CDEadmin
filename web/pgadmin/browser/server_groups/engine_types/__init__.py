@@ -168,7 +168,16 @@ def disambiguate_server_interfaces(server_nodes, profiles):
             if interface_label:
                 node['server_host_label'] = label
                 node['cde_interface_id'] = interface_id
-                node['label'] = f'{label} ({interface_label})'
+                peers = [item for item in duplicates if item.get(
+                    'cde_profile_id') == node.get('cde_profile_id')]
+                address = label
+                if len(peers) > 1:
+                    port = node.get('port')
+                    if isinstance(port, int) and not isinstance(port, bool):
+                        address = f'{label}:{port}'
+                    if sum(item.get('port') == port for item in peers) > 1:
+                        address += f" [registration {node.get('_id', node.get('id'))}]"
+                node['label'] = f'{address} ({interface_label})'
     return server_nodes
 
 

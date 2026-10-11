@@ -71,3 +71,7 @@ upstream attribution.
    :hidden:
 
    native_navigation_forms
+   firebird_functional_completion
+   firebird_form_parity
+   firebird_dashboards
+   ddn_database_roundtrip

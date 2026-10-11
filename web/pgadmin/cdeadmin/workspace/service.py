@@ -56,6 +56,8 @@ class ProviderWorkspaceService:
         self.operation_bus = operation_bus
         self.report_delivery_service = report_delivery_service
         self.report_scheduler_service = report_scheduler_service
+        from ..providers.firebird.events import EventSubscriptions
+        self.firebird_events = EventSubscriptions()
         self._semantic_executions = {}
         self._semantic_lock = threading.RLock()
         from pgadmin.cdeadmin.providers.firebird.recovery_groups import (
@@ -159,6 +161,7 @@ class ProviderWorkspaceService:
         self, server, database_target_id=Ellipsis,
         focused_operation_id=None,
     ):
+        from .firebird_editor import languages as editor_languages
         context, endpoint, root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -250,7 +253,7 @@ class ProviderWorkspaceService:
                     if route_catalog['routes'] else None
                 ),
             },
-            'languages': list(self.studio_service.languages(context)),
+            'languages': editor_languages(self.studio_service.languages(context)),
             'engine_contracts': engine_contracts,
             'database_targets': self.endpoint_service.database_catalog(
                 server
@@ -374,6 +377,12 @@ class ProviderWorkspaceService:
             )
         if action == 'database_target_list':
             return self.endpoint_service.database_catalog(server)
+        if action == 'database_target_transfer_catalog':
+            from ..endpoints.firebird_registration import catalog
+            return catalog(self.endpoint_service, server, request.get('target_id'))
+        if action == 'database_target_transfer':
+            from ..endpoints.firebird_registration import transfer
+            return transfer(self.endpoint_service, server, request)
         if action == 'database_target_attach':
             result = self.endpoint_service.attach_database(server, request)
         elif action == 'database_target_activate':
@@ -583,6 +592,253 @@ class ProviderWorkspaceService:
             context, root, page_size=500,
             provider_route=endpoint['route'],
         ).to_dict()
+
+    def export_firebird_catalog(self, server, request, *, _native_model=False):
+        """Capture one admitted catalog generation into documentary DDN."""
+        from .firebird_catalog_export import build_export, MAX_RESOURCES
+        if (not isinstance(request, dict) or set(request) - {
+                'generation', 'database_target_id', 'resource_id',
+                'include_system', 'refresh'}):
+            raise ProviderWorkspaceError('Invalid Firebird catalog export request')
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Select a native Firebird endpoint')
+        generation = request.get('generation')
+        if not isinstance(generation, str) or not generation:
+            raise ProviderWorkspaceError('Catalog generation is required')
+        for name in ('include_system', 'refresh'):
+            if name in request and type(request[name]) is not bool:
+                raise ProviderWorkspaceError('Invalid catalog export option')
+        resource_id = request.get('resource_id')
+        if resource_id is not None and (not isinstance(resource_id, str) or not resource_id):
+            raise ProviderWorkspaceError('Invalid catalog export resource')
+        target = request.get('database_target_id', Ellipsis)
+        context, endpoint, root = self.endpoint_service.workspace(server, database_target_id=target)
+        if not endpoint['route'].get('database'):
+            raise ProviderWorkspaceError('Select a registered Firebird database')
+        resolved_target = target
+        if target is Ellipsis:
+            # Bind provenance to the route actually captured above, not whichever
+            # target may have become active by the time export completes.
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item['target_id'] for item in targets
+                       if item['database'] == endpoint['route']['database']]
+            if len(matches) != 1:
+                raise ProviderWorkspaceError('Select an unambiguous registered database target')
+            resolved_target = matches[0]
+        first = self.resource_service.list_page(
+            context, root, page_size=500, expected_generation=generation,
+            provider_route=endpoint['route']).to_dict()
+        # Reject stale/foreign selections before an explicit invalidation.
+        if resource_id is not None:
+            self.resource_service.inspect(context, ResourceRef(context.endpoint_id, resource_id),
+                expected_generation=generation, provider_route=endpoint['route'])
+        if request.get('refresh', False):
+            self.resource_service.invalidate(context)
+            first = self.resource_service.list_page(
+                context, root, page_size=500, provider_route=endpoint['route']).to_dict()
+        generation = first['generation']
+        resources = list(first['items'])
+        continuation = first.get('next_cursor')
+        while continuation is not None:
+            if len(resources) >= MAX_RESOURCES:
+                raise ProviderWorkspaceError('Catalog exceeds the export resource limit')
+            page = self.resource_service.list_page(
+                context, root, page_size=500, cursor=continuation,
+                expected_generation=generation, provider_route=endpoint['route']).to_dict()
+            resources.extend(page['items'])
+            continuation = page.get('next_cursor')
+        try:
+            return build_export(resources, endpoint_id=context.endpoint_id,
+                target_id=resolved_target,
+                generation=generation, resource_id=resource_id,
+                include_system=request.get('include_system', False),
+                refreshed=request.get('refresh', False), native_model=_native_model)
+        except (ValueError, TypeError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def capture_firebird_registered_catalog(self, server, request):
+        """Capture an explicitly selected registration without activating it."""
+        if (not isinstance(request, dict) or set(request) - {
+                'target_id', 'include_system', 'refresh'} or
+                not isinstance(request.get('target_id'), str) or
+                not request['target_id'] or len(request['target_id']) > 1024):
+            raise ProviderWorkspaceError('Select a registered Firebird database')
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Select a native Firebird endpoint')
+        for key in ('include_system', 'refresh'):
+            if key in request and type(request[key]) is not bool:
+                raise ProviderWorkspaceError('Invalid catalog capture option')
+        target = request['target_id']
+        if not any(item['target_id'] == target for item in
+                   self.endpoint_service.database_catalog(server)['targets']):
+            raise ProviderWorkspaceError('Database registration is unavailable')
+        snapshot = self.navigator_snapshot(server, database_target_id=target)
+        result = self.export_firebird_catalog(server, {
+            'generation': snapshot['generation'], 'database_target_id': target,
+            'include_system': request.get('include_system', False),
+            'refresh': request.get('refresh', False)})
+        return {'target_id': target, **result}
+
+    def firebird_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if (not isinstance(request, dict) or
+                getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
+                not in {'firebird-native', 'firebird-embedded'}):
+            raise ProviderWorkspaceError('Select a registered Firebird design scope')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target or not any(
+                item['target_id'] == target for item in
+                self.endpoint_service.database_catalog(server)['targets']):
+            raise ProviderWorkspaceError('Design database registration is unavailable')
+        context, _endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        try:
+            return self.firebird_design_assets.apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': target}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            self.firebird_design_assets.assets.repository.rollback()
+            raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
+
+    def firebird_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or not {'original', 'snapshot'} <= request.keys():
+            raise ProviderWorkspaceError('Original and edited relational designs are required')
+        options = dict(request)
+        original, snapshot = options.pop('original'), options.pop('snapshot')
+        options['refresh'] = True
+        catalog = self.export_firebird_catalog(server, options)
+        try:
+            return handoff(catalog['snapshot'], original, snapshot)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def plan_firebird_data_import(self, server, request):
+        from .firebird_data_import import preview
+        if not isinstance(request, dict) or 'source' not in request:
+            raise ProviderWorkspaceError('Data archive source is required')
+        options = dict(request)
+        source = options.pop('source')
+        row_order = options.pop('row_order', None)
+        model = self.export_firebird_catalog(server, options, _native_model=True)
+        try:
+            return preview(source, model, row_order=row_order)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def export_firebird_data(self, server, request):
+        from .firebird_data_export import capture
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid data export request')
+        options = dict(request)
+        contents = options.pop('contents', 'data')
+        if options.get('include_system'):
+            raise ProviderWorkspaceError('System rows are not portable user data')
+        model = self.export_firebird_catalog(server, options, _native_model=True)
+        try:
+            return capture(self, server, model, contents=contents)
+        except (ValueError, TypeError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def export_firebird_sql(self, server, request):
+        from .firebird_sql_export import build_metadata
+        model = self.export_firebird_catalog(server, request, _native_model=True)
+        try:
+            return build_metadata(model)
+        except (ValueError, TypeError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def compare_firebird_catalog(self, server, request):
+        """Compare an untrusted document with an authorized catalog capture."""
+        from .firebird_catalog_import import read_catalog, compare_catalogs
+        if not isinstance(request, dict) or 'source' not in request:
+            raise ProviderWorkspaceError('Catalog document source is required')
+        options = {key: value for key, value in request.items() if key != 'source'}
+        # The existing exporter validates scope and authorizes access before the
+        # document parser is admitted. Document provenance cannot select routes.
+        current = self.export_firebird_catalog(server, options, _native_model=True)
+        try:
+            document = read_catalog(request['source'])
+            return compare_catalogs(document, current)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def plan_firebird_schema(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_schema_plan import build_plan
+        if (not isinstance(request, dict) or set(request) - {
+                'generation', 'database_target_id', 'baseline', 'desired', 'refresh'} or
+                not {'baseline', 'desired'} <= request.keys()):
+            raise ProviderWorkspaceError('Invalid Firebird schema planning request')
+        options = {key: value for key, value in request.items() if key not in {'baseline', 'desired'}}
+        options['include_system'] = True  # Index names share the database-wide namespace.
+        # Current metadata and endpoint/version context always come from the
+        # authorized provider, not imported document provenance.
+        current = self.export_firebird_catalog(server, options, _native_model=True)
+        try:
+            return build_plan(read_catalog(request['baseline']), read_catalog(request['desired']), current)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def firebird_schema_application(self, server, action, request):
+        from .firebird_schema_apply import SchemaApplications, SchemaApplyError
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        from ..providers.firebird.provider import FirebirdProvider
+        from ..providers.firebird.schema_application import apply_review
+        from dataclasses import asdict
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Schema application request must be an object')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select an explicit registered database target')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Native schema application requires Firebird')
+        provider._admit_transport({'route': endpoint['route']})
+        provider.permissions.require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native schema application requires durable operation storage')
+        applications = SchemaApplications(str(store.path) + '.schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'firebird_schema_review':
+                if set(request) - {'baseline', 'desired', 'generation', 'execution_sha256', 'database_target_id'} or not {
+                        'baseline', 'desired', 'execution_sha256'} <= request.keys():
+                    raise SchemaApplyError('Invalid schema review request')
+                plan = self.plan_firebird_schema(server, {key: value for key, value in {
+                    **request, 'refresh': True}.items() if key != 'execution_sha256'})
+                if plan['execution_sha256'] != request['execution_sha256']:
+                    raise SchemaApplyError('The displayed plan changed; preview native changes again')
+                return applications.review(plan, read_catalog(request['baseline']), read_catalog(request['desired']),
+                                           owner, binding, endpoint['route']['database'])
+            if action == 'firebird_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise SchemaApplyError('Invalid schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'firebird_schema_apply':
+                raise SchemaApplyError('Unknown schema application action')
+            def execute(record):
+                result = apply_review(provider, endpoint['route'], record)
+                try:
+                    self.resource_service.invalidate(context)
+                    result['explorer_invalidated'] = True
+                except Exception as error:
+                    result['explorer_invalidated'] = False
+                    result['refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items()
+                                       if key != 'database_target_id'}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
 
     def inspect_resource(self, server, request):
         """Inspect one cached resource without trusting browser identity."""
@@ -1087,12 +1343,207 @@ class ProviderWorkspaceService:
     def _operation_principal(self, server):
         return f'user:{self._principal_id(server)}'
 
+    def _history_context(self, server, target, dialect):
+        from .query_history import HistoryScope
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('This SQL history workflow requires Firebird')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        if not isinstance(target, str) or not target:
+            matches = [item['target_id'] for item in self.endpoint_service.database_catalog(server)['targets']
+                       if item['database'] == endpoint['route']['database']]
+            if len(matches) != 1:
+                raise ProviderWorkspaceError('Select a registered database target for SQL history')
+            target = matches[0]
+        return HistoryScope(self._principal_id(server), server.id, target, 3 if dialect is None else dialect)
+
+    def firebird_object_templates(self, server, request):
+        from .firebird_templates import context as template_context, render
+        if not isinstance(request, dict) or set(request) - {
+                'resource_id', 'generation', 'database_target_id', 'template', 'new_name'}:
+            raise ProviderWorkspaceError('Invalid object-template request')
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Native templates require Firebird')
+        target = request.get('database_target_id')
+        snapshot = self.navigator_snapshot(server, database_target_id=target)
+        if request.get('generation') != snapshot['generation']:
+            raise ProviderWorkspaceError('Catalog changed; refresh the object before rendering a template')
+        try:
+            result = template_context(snapshot, request.get('resource_id'))
+            if 'template' in request:
+                return render(result, request['template'], request.get('new_name'))
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from error
+
+    def firebird_isql_context(self, server, request):
+        """Describe an owned TCP target; never launch or export its secrets."""
+        from ..providers.firebird.connection_strings import database_dsn
+        if not isinstance(request, dict) or set(request) != {'database_target_id'}:
+            raise ProviderWorkspaceError('Select one registered Firebird database')
+        target = request['database_target_id']
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select one registered Firebird database')
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'firebird-native':
+            raise ProviderWorkspaceError('Desktop ISQL requires a Firebird TCP registration')
+        _context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        route = endpoint['route']
+        if not route.get('host') or route.get('protocol') == 'XNET':
+            raise ProviderWorkspaceError('Desktop ISQL requires an explicit TCP host')
+        dialect = route.get('sql_dialect', 3)
+        if type(dialect) not in (int, str) or str(dialect) not in {'1', '3'}:
+            raise ProviderWorkspaceError('Native client SQL dialect must be 1 or 3')
+        return {'schema': 'scratchrobin.firebird.isql-context@1',
+                'database_target_id': target,
+                'dsn': database_dsn(route['database'], route['host'], route.get('port'), route.get('protocol') or 'INET'),
+                'user': route.get('user') or '', 'role': route.get('role') or '',
+                'charset': route.get('charset') or 'UTF8', 'sql_dialect': int(dialect)}
+
+    def firebird_event_action(self, server, request):
+        from ..providers.firebird.provider import FirebirdProvider
+        from .firebird_schema_plan import digest
+        from dataclasses import asdict
+        if not isinstance(request, dict) or set(request) - {
+                'action', 'database_target_id', 'names', 'subscription_id'}:
+            raise ProviderWorkspaceError('Invalid native event request')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select a registered database for events')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Native event monitoring requires Firebird')
+        provider._admit_transport({'route': endpoint['route']})
+        owner = self._operation_principal(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        action = request.get('action')
+        try:
+            if action == 'start':
+                if set(request) != {'action', 'database_target_id', 'names'}:
+                    raise ValueError('Invalid event start request')
+                route = copy.deepcopy(endpoint['route'])
+                native_session = {}
+                def connect():
+                    opened = provider.open_session({'route': route})
+                    native_session['id'] = opened['session_id']
+                    return provider._sessions[opened['session_id']].handle
+                def close(_handle):
+                    provider.close_session({'session_id': native_session['id']})
+                return self.firebird_events.start(owner, binding, request['names'], connect, close)
+            if action in {'poll', 'stop'}:
+                if set(request) != {'action', 'database_target_id', 'subscription_id'} or not isinstance(request['subscription_id'], str):
+                    raise ValueError('Invalid event subscription request')
+                return self.firebird_events.action(owner, binding, request['subscription_id'], stop=action == 'stop')
+            raise ValueError('Unknown native event action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from error
+
+    def firebird_metadata_search(self, server, request):
+        from .firebird_search import validate, search
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Metadata search requires a Firebird endpoint')
+        try:
+            target, query, fields, kind = validate(request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from error
+        registered = self.endpoint_service.database_catalog(server)['targets']
+        if not any(item['target_id'] == target for item in registered):
+            raise ProviderWorkspaceError('Database registration is unavailable')
+        snapshot = self.navigator_snapshot(server, database_target_id=target)
+        return {'target_id': target, **search(snapshot, query, fields, kind)}
+
+    def firebird_editor_metadata(self, server, database_target_id):
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
+                'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Firebird editor metadata requires a Firebird endpoint')
+        snapshot = self.navigator_snapshot(server, database_target_id=database_target_id)
+        resources = []
+        total = 0
+        for item in snapshot['resources']:
+            if item['resource_kind'] not in {'table', 'view', 'column'}:
+                continue
+            total += 1
+            if len(resources) < 25000:
+                resources.append({key: item.get(key) for key in (
+                    'resource_id', 'resource_kind', 'display_name', 'display_path')})
+        return {'resources': resources, 'generation': snapshot['generation'],
+                'truncated': total > len(resources), 'visible_resource_count': total,
+                'coverage': 'Native visible table/view/column catalog; inaccessible metadata is not inferred'}
+
+    def query_history_action(self, server, action, request):
+        from .query_history import HistoryError
+        factory = getattr(self, 'query_history_factory', None)
+        if factory is None:
+            raise ProviderWorkspaceError('SQL history persistence is unavailable')
+        if not isinstance(request, dict) or set(request) - {
+                'database_target_id', 'client_sql_dialect', 'search', 'policy', 'confirmed'}:
+            raise ProviderWorkspaceError('Invalid SQL history request')
+        scope = self._history_context(server, request.get('database_target_id'), request.get('client_sql_dialect'))
+        try:
+            history = factory()
+            if action == 'query_history_read':
+                return history.read(scope, request.get('search', ''))
+            if action == 'query_history_configure':
+                return {'policy': history.configure(scope, request.get('policy'))}
+            if action == 'query_history_clear' and request.get('confirmed') is True:
+                return history.clear(scope)
+            raise HistoryError('Unknown SQL history action or missing clear confirmation')
+        except HistoryError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def _record_query_request(self, server, target, dialect, source, sensitive, kind, execute):
+        factory = getattr(self, 'query_history_factory', None)
+        firebird = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
+            'firebird-native', 'firebird-embedded'}
+        if factory is None or not firebird:
+            return execute()
+        history = scope = entry = None
+        notice = None
+        try:
+            scope = self._history_context(server, target, dialect)
+            history = factory()
+            entry = history.record(scope, source, sensitive=sensitive, kind=kind)
+        except Exception as error:
+            notice = 'SQL history recording unavailable (' + type(error).__name__ + ')'
+        try:
+            result = execute()
+        except Exception:
+            if entry and entry.get('recorded'):
+                try:
+                    history.observation(scope, entry['entry_id'], 'request-error')
+                except Exception:
+                    pass  # Preserve the original native request error.
+            raise
+        if entry and entry.get('recorded'):
+            try:
+                state = 'accepted'
+                if kind == 'script-prepared':
+                    state = 'preparation-rejected' if result.get('state') == 'invalid' else 'prepared'
+                history.observation(scope, entry['entry_id'], state)
+            except Exception as error:
+                notice = 'SQL history observation unavailable (' + type(error).__name__ + ')'
+        if isinstance(result, dict):
+            result = {**result, 'sql_history': {**(entry or {}), 'warning': notice}}
+        return result
+
     def open_session(
-        self, server, language_profile, database_target_id=None,
+        self, server, language_profile, database_target_id=None, *, session_purpose=None,
     ):
         context, endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
+        if session_purpose is not None:
+            if (session_purpose not in {'firebird-test-data', 'firebird-data-export', 'firebird-data-import'} or
+                    context.profile_id not in {'firebird-native', 'firebird-embedded'} or
+                    language_profile != 'firebird-sql'):
+                raise ProviderWorkspaceError('Session purpose is not admitted for this engine')
+            endpoint = {**endpoint, 'route': {**endpoint['route'],
+                'transaction_isolation': 'SNAPSHOT',
+                'transaction_access': 'READ' if session_purpose == 'firebird-data-export' else 'WRITE',
+                'transaction_lock_timeout': 10, 'transaction_auto_commit': False,
+                'transaction_no_auto_undo': False, 'transaction_ignore_limbo': False}}
         opened = self.studio_service.open_session(
             context, endpoint, language_profile
         )
@@ -1104,17 +1555,29 @@ class ProviderWorkspaceService:
     def execute(
         self, server, session_id, source, parameters=None,
         database_target_id=Ellipsis, *, max_rows=None, client_sql_dialect=None,
-        script_mode=False, plan_mode=False,
+        script_mode=False, plan_mode=False, history_sensitive=False, profile_mode=False, statistics_mode=False,
     ):
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
+        if type(history_sensitive) is not bool:
+            raise ProviderWorkspaceError('History sensitive flag must be boolean')
         if not isinstance(source, str) or not source.strip():
             raise ProviderWorkspaceError('query source must not be empty')
         if parameters is not None and not isinstance(parameters, (dict, list)):
             raise ProviderWorkspaceError(
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
+        if type(profile_mode) is not bool or profile_mode and (script_mode or plan_mode or context.provider_id not in {
+                'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
+            raise ProviderWorkspaceError('Native profiling requires one Firebird statement')
+        if profile_mode:
+            policy['firebird_profile'] = True
+        if type(statistics_mode) is not bool or statistics_mode and (script_mode or plan_mode or context.provider_id not in {
+                'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
+            raise ProviderWorkspaceError('Query statistics require one Firebird statement')
+        if statistics_mode:
+            policy['firebird_statistics'] = True
         if type(script_mode) is not bool:
             raise ProviderWorkspaceError('script mode must be boolean')
         if script_mode:
@@ -1153,13 +1616,13 @@ class ProviderWorkspaceService:
                     'maximum fetched rows must be an integer from 1 to '
                     '1000000')
             policy['max_rows'] = max_rows
-        return self.studio_service.execute(
-            context,
-            session_id,
-            source,
-            parameters=copy.deepcopy(parameters),
-            output_policy=policy,
-        )
+        def execute():
+            return self.studio_service.execute(context, session_id, source,
+                parameters=copy.deepcopy(parameters), output_policy=policy)
+        if plan_mode:
+            return execute()
+        return self._record_query_request(server, database_target_id, client_sql_dialect,
+            source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
         context, _endpoint, _root = self.endpoint_service.workspace(
@@ -1169,7 +1632,9 @@ class ProviderWorkspaceService:
             if action == 'source_validate':
                 return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
             if action == 'native_script_prepare':
-                return self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source'))
+                return self._record_query_request(server, data.get('database_target_id'), data.get('client_sql_dialect'),
+                    data.get('source'), data.get('history_sensitive', False), 'script-prepared',
+                    lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source')))
             if action == 'native_script_advance':
                 return self.studio_service.scripts.advance(context, data.get('plan_id'), data.get('revision'))
             if action == 'native_script_stop':
@@ -1452,9 +1917,11 @@ def init_app(
 ):
     from .transfer import init_app as init_transfer_app
     from .assets import init_app as init_project_assets
+    from .monitoring_host import init_app as init_monitoring
 
     init_transfer_app(app)
     init_project_assets(app)
+    init_monitoring(app, endpoint_service)
     existing = app.extensions.get(APP_EXTENSION_KEY)
     if existing is not None:
         return existing
@@ -1463,6 +1930,13 @@ def init_app(
         semantic_model_service, operation_bus, report_delivery_service,
         report_scheduler_service,
     )
+    from .query_history import repository as query_history_repository
+    service.query_history_factory = query_history_repository
+    from .firebird_design_assets import FirebirdDesignAssets
+    from .assets import service_for_app as asset_service
+    service.firebird_design_assets = FirebirdDesignAssets(asset_service(app))
+    import atexit
+    atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
     return service
 

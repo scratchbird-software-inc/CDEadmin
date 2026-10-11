@@ -7,9 +7,22 @@
 //
 //////////////////////////////////////////////////////////////
 
+import FirebirdTemplates from './FirebirdTemplates';
+import FirebirdPrivilegeQueue from './FirebirdPrivilegeQueue';
+import FirebirdParameters from './FirebirdParameters';
+import FirebirdIsql from './FirebirdIsql';
+import FirebirdEvents from './FirebirdEvents';
+import FirebirdRowSql from './FirebirdRowSql';
+import FirebirdTestData from './FirebirdTestData';
+import FirebirdMetadataSearch from './FirebirdMetadataSearch';
+import FirebirdServerCatalog from './FirebirdServerCatalog';
+import FirebirdExport from './FirebirdExport';
+import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import FirebirdQueryHistory from './FirebirdQueryHistory';
+import FirebirdProfiler from './FirebirdProfiler';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
 import {
   Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
@@ -43,7 +56,9 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
-  'resource_page', 'resource_refresh', 'resource_inspect',
+  'firebird_design_read', 'firebird_design_save',
+  'firebird_relational_review',
+  'resource_page', 'resource_refresh', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',
   'visual_admin_validate', 'visual_admin_plan', 'visual_admin_apply',
   'visual_admin_bulk_plan', 'visual_admin_bulk_apply',
   'visual_admin_operation_list', 'visual_admin_operation_get',
@@ -696,12 +711,12 @@ export function RecordListAdminField({field, value, onChange, singleRecord = fal
         <Button size="small" disabled={disabled || index === items.length - 1}
           aria-label={`${field.label} ${index + 1}: ${gettext('Move down')}`}
           onClick={() => move(index, 1)}>{gettext('Move down')}</Button>
-        <Button size="small" color="warning" disabled={disabled}
+        {!schema.fixed_items && <Button size="small" color="warning" disabled={disabled}
           aria-label={`${field.label} ${index + 1}: ${gettext('Remove')}`}
           onClick={() => onChange(items.filter((_, current) => current !== index))}>
-          {gettext('Remove')}</Button>
+          {gettext('Remove')}</Button>}
       </Box>}
-      {schema.item_kind === 'string' ? <TextField disabled={disabled} fullWidth
+      {schema.item_kind === 'string' ? <TextField disabled={disabled || schema.fixed_items} fullWidth
         label={`${field.label} ${index + 1}`} value={item}
         onChange={(event) => setItem(index, event.target.value)} /> :
         <Box sx={{display: 'grid', gridTemplateColumns: {
@@ -714,7 +729,7 @@ export function RecordListAdminField({field, value, onChange, singleRecord = fal
                 changedFieldDraft(children, item, child.field_id, next))} />)}
         </Box>}
     </Box>)}
-    {!singleRecord && <Button disabled={disabled} onClick={() => onChange([...items, schema.item_kind === 'string' ? '' :
+    {!singleRecord && !schema.fixed_items && <Button disabled={disabled} onClick={() => onChange([...items, schema.item_kind === 'string' ? '' :
       Object.fromEntries(children.map((child) =>
         [child.field_id, initialFieldValue(child)]))])}>
       {gettext('Add %s item', field.label)}</Button>}
@@ -750,6 +765,9 @@ function sectionPayload(section, resource, descriptor) {
   if (section === 'definition') {
     return native.definition ?? native.metadata_source ?? native;
   }
+  if (section === 'comments') return native.description ?? native.comments ?? null;
+  if (section === 'calculations') return native.computed_source ?? native.computed_expression ?? null;
+  if (section === 'grants') return native.privileges ?? native.grants ?? native.security ?? [];
   if (section === 'ddl') return native.ddl ?? null;
   if (section === 'dependencies') {
     return native.dependencies ?? [];
@@ -791,6 +809,9 @@ function sectionPayload(section, resource, descriptor) {
 }
 
 const INSPECTOR_SECTION_TITLES = {
+  comments: gettext('Comments'),
+  calculations: gettext('Calculations'),
+  grants: gettext('Grants'),
   properties: gettext('Summary'),
   definition: gettext('Native definition/source'),
   ddl: gettext('Creation statement (DDL)'),
@@ -811,6 +832,9 @@ const INSPECTOR_SECTION_TITLES = {
 };
 
 const INFERRED_PROPERTY_KEYS = {
+  comments: ['description', 'comments'],
+  calculations: ['computed_source', 'computed_expression'],
+  grants: ['privileges', 'grants', 'security'],
   definition: ['definition', 'metadata_source'],
   ddl: ['ddl'],
   dependencies: ['dependencies'],
@@ -831,7 +855,9 @@ const INFERRED_PROPERTY_KEYS = {
 export function inspectorSections(resource, descriptor) {
   const native = providerNative(resource);
   if (Array.isArray(native.property_sections)) {
-    return native.property_sections.filter((section, index, values) =>
+    const aliases = Object.entries(INFERRED_PROPERTY_KEYS).filter(([section, keys]) =>
+      ['comments', 'calculations', 'grants'].includes(section) && keys.some(key => Object.hasOwn(native, key))).map(([section]) => section);
+    return [...native.property_sections, ...aliases].filter((section, index, values) =>
       Object.hasOwn(INSPECTOR_SECTION_TITLES, section) &&
       values.indexOf(section) === index
     );
@@ -1072,6 +1098,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   const [outcome, setOutcome] = useState(null);
   const [confirmedPlan, setConfirmedPlan] = useState(null);
   const [working, setWorking] = useState(false);
+  const [nativeFormValid, setNativeFormValid] = useState(true);
   const [closeBlocked, setCloseBlocked] = useState(false);
   // Set synchronously at admission, before React renders disabled controls.
   // Closing a service task is not a native cancellation or rollback request.
@@ -1104,6 +1131,8 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   [objectDescriptor, objectEditor, selectedResource, nativeAdministration]);
   const operation = operations.find((item) => item.operation_id === operationId);
   const allFields = operation?.form?.fields || [];
+  const compactFirebird = catalog?.engine_id === 'firebird' ||
+    /^firebird[._]/.test(operation?.form_id || '');
   const fields = allFields.filter((field) => fieldVisible(field, draft)).map(
     (field) => visibleFieldOptions(field, draft, inspectedResource));
   const targetKinds = operation?.target_resource_kinds || [resourceKind];
@@ -1548,7 +1577,19 @@ export function VisualAdministration({catalog, resources, selectedResource, post
             sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 2,
               p: 0, border: 0, minWidth: 0}}>
             <FormReference formKey={'operation:' + operation?.form_id} />
-            {fields.map((field) => <VisualAdminField disabled={working || inspecting} key={field.field_id}
+            {compactFirebird ? <FirebirdFormLayout fields={fields} draft={draft}
+              key={resourceKind + ':' + operationId + ':' + (targetResource?.resource_id || '')}
+              onValidityChange={setNativeFormValid}
+              disabled={working || inspecting}
+              onChange={(id, value) => {
+                if (!working && !inspecting) setDraft((current) =>
+                  changedFieldDraft(allFields, current, id, value, inspectedResource));
+              }} renderField={(field) => <VisualAdminField
+                disabled={working || inspecting} field={field} value={draft[field.field_id]}
+                onChange={(value) => {
+                  if (!working && !inspecting) setDraft((current) =>
+                    changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
+                }} />} /> : fields.map((field) => <VisualAdminField disabled={working || inspecting} key={field.field_id}
               field={field} value={draft[field.field_id]}
               onChange={(value) => {
                 if (!working && !inspecting) setDraft((current) =>
@@ -1581,16 +1622,46 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       label={gettext('I confirm this provider-planned operation.')} />}
           <Box sx={{display: 'flex', gap: 1, mt: 2}}>
             <Button variant="contained" disabled={working || inspecting || !operation ||
+        (compactFirebird && !nativeFormValid) ||
         operation.graphical_ready === false ||
         targetUnavailable} onClick={preview}>
               {gettext('Validate and preview')}
             </Button>
             <Button color="warning" disabled={working || inspecting || targetUnavailable || plan?.state !== 'ready' ||
+        (compactFirebird && !nativeFormValid) ||
         !plan?.execution_available || (operation?.confirmation_required && !confirmed)}
             onClick={apply}>{gettext('Apply provider plan')}</Button>
             {working && <CircularProgress size={24} />}
           </Box>
         </>}
+        {compactFirebird && <FirebirdPrivilegeQueue post={post}
+          candidate={['grant', 'revoke'].includes(operationId) &&
+            plan?.state === 'ready' && plan.execution_available &&
+            plan.command_preview?.engine_id === 'firebird' ? {
+              plan, title: operation?.title, target: targetResource,
+              operationId, databaseTargetId: resourceDatabaseTargetId(targetResource),
+            } : null}
+          disabled={working || inspecting}
+          consumePlan={() => setPlan(null)}
+          beginExecution={() => {
+            if (operationInFlight.current) return false;
+            operationInFlight.current = true;
+            setCloseBlocked(false);
+            setWorking(true);
+            setPlan(null);
+            return true;
+          }}
+          endExecution={() => {
+            operationInFlight.current = false;
+            setWorking(false);
+          }}
+          onApplied={async (item) => {
+            if (onMutationApplied) await onMutationApplied({
+              targetResource: item.target, operationId: item.operationId,
+              result: item.result,
+            });
+            else setInspectionRevision((revision) => revision + 1);
+          }} />}
       </Box>
     </Box>
   </Box>;
@@ -1861,7 +1932,7 @@ KeyValueDataGrid.propTypes = {
 };
 
 function StructuredDataGrid({catalog, resources, post, setError,
-  languageProfile, databaseTargetId, initialResourceId}) {
+  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled}) {
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
   const themeScale = theme.cdeadminPresentation?.scale ?? 100;
@@ -2157,6 +2228,7 @@ function StructuredDataGrid({catalog, resources, post, setError,
     renderCell: ({row}) => <Box sx={{display: 'flex', alignItems: 'center'}}>
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
         spec={column.array_spec}
+        firebirdBlob={languageProfile?.startsWith('firebird-') && column.native_type === 'BLOB' && ['text', 'binary'].includes(column.input_kind)}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
         draft={row.__insert ? (newValues[column.name] ?? rowInputDraft('')) :
           (edits[row.__rowIndex]?.[column.name] ?? rowInputDraft(row[column.name], column.input_kind))}
@@ -2264,6 +2336,8 @@ function StructuredDataGrid({catalog, resources, post, setError,
               gettext('This table is read-only because the provider did not admit a stable row identity.') :
               gettext('This grid is read-only because CDEadmin has no admitted view row-mutation contract. The engine may support writes to this view through native commands; this message does not classify the view as read-only in the engine.')}
       </Alert>
+      {languageProfile?.startsWith('firebird-') && <FirebirdRowSql page={page} table={target?.display_name || ''}
+        onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />}
       <ProviderDataGrid columns={gridColumns} rows={gridRows}
         contract={page.grid || {}}
         gridId={page.grid?.grid_id || `provider/admin/${targetId}`}
@@ -2293,6 +2367,8 @@ StructuredDataGrid.propTypes = {
   languageProfile: PropTypes.string,
   databaseTargetId: PropTypes.string,
   initialResourceId: PropTypes.string,
+  onLoadSql: PropTypes.func,
+  sqlLoadDisabled: PropTypes.bool,
 };
 
 const ANALYTIC_CONTAINER_KINDS = {
@@ -5873,7 +5949,11 @@ function databaseFormRequest(form, draft, preserveEmpty=false) {
 
 export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
   resources, post, setError, onRefresh, initialMode='create',
-  initialTargetId='', focused=false}) {
+  initialTargetId='', focused=false, initialCreatePath='', onRecreateEmpty,
+  approvedCreationRoot='', onTargetCatalogChanged}) {
+  const recreateEmpty = initialMode === 'recreate_empty';
+  const [dropAttempted, setDropAttempted] = useState(false);
+  const [droppedPath, setDroppedPath] = useState('');
   const [catalog, setCatalog] = useState(initialCatalog);
   const databaseContract = catalog?.forms;
   const forms = databaseContract?.forms || {};
@@ -5886,7 +5966,8 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
     (lifecycleObject?.operations || []).map((operation) =>
       [operation.operation_id, operation])
   );
-  const requestedMode = initialMode === 'attach' ? 'define' : initialMode;
+  const requestedMode = recreateEmpty ? 'drop' :
+    (initialMode === 'attach' ? 'define' : initialMode);
   const [mode, setMode] = useState(
     ['define', 'connect', 'create', 'edit', 'alter', 'drop', 'remove']
       .includes(requestedMode) ? requestedMode : 'define'
@@ -5949,13 +6030,15 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         database: String(catalog.legacy_route_database),
         display_name: String(catalog.legacy_route_database).split('/').pop(),
       } : null;
-    setDraft(databaseFormDraft(activeForm, selectedTarget || legacyTarget));
+    setDraft({...databaseFormDraft(activeForm, selectedTarget || legacyTarget),
+      ...(mode === 'create' && initialCreatePath ?
+        {database_path: initialCreatePath} : {})});
     setValidation(null);
     setPlan(null);
     setResult(null);
     setConfirmed(false);
   }, [activeForm?.form_id, selectedTarget?.target_id,
-    catalog?.legacy_route_database, mode, isLifecycle, result]);
+    catalog?.legacy_route_database, mode, isLifecycle, result, initialCreatePath]);
 
   useEffect(() => {
     if (result) return;
@@ -5969,6 +6052,7 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
     try {
       const value = await post({action, request});
       setCatalog(value);
+      onTargetCatalogChanged?.(value);
       setSelected(value.active_target_id || '');
       if (action === 'database_target_attach' &&
           value.forms?.forms?.connect && value.active_target_id) {
@@ -6005,6 +6089,10 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
 
   const applyLifecycle = async () => {
     setWorking(true); setError(null);
+    if (recreateEmpty) {
+      setDropAttempted(true);
+      setDroppedPath(selectedTarget?.database || '');
+    }
     try {
       const value = await post({
         action: 'visual_admin_apply', request: {
@@ -6016,6 +6104,7 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
       setResult(value);
       if (value.database_targets) {
         setCatalog(value.database_targets);
+        onTargetCatalogChanged?.(value.database_targets);
       }
       setPlan(null);
       if (mode !== 'drop') onRefresh?.();
@@ -6062,6 +6151,15 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
     sx={{p: 2, borderBottom: focused ? 0 : 1,
       borderColor: 'divider'}}>
     <FormReference formKey="database-target" />
+    {recreateEmpty && <Alert severity="warning" sx={{mb: 2}}>
+      {gettext('Recreate empty: drop this database, then separately review creation of a new empty database. Schema, data and database identity are not preserved. Closing after drop leaves the database absent.')}
+    </Alert>}
+    {recreateEmpty && !approvedCreationRoot && <Alert severity="warning" sx={{mb: 2}}>
+      {gettext('Configure an approved database creation root in the server connection before recreating a database. The database registration is removed after drop, so its inferred creation directory cannot authorize the next step.')}
+    </Alert>}
+    {initialCreatePath && <Alert severity="warning" sx={{mb: 2}}>
+      {gettext('The original database was dropped. This creates a new empty database; a creation failure does not restore the original.')}
+    </Alert>}
     <Box component="h2" sx={{mt: 0}}>
       {activeForm?.title || databaseContract.form_set_id}
     </Box>
@@ -6124,15 +6222,26 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         key={item.action} sx={{mt: 2}}>
         {item.message}
       </Alert>)}
+      {recreateEmpty && dropAttempted && !working &&
+        !result && <Alert severity="warning" sx={{mt: 2}}>
+        {gettext('The drop outcome requires review. Inspect the operation receipt and server state before opening another workflow; creation and automatic retry are disabled.')}
+      </Alert>}
+      {recreateEmpty && result?.provider_result?.driver_observation?.driver_returned === true &&
+        result?.provider_result?.dropped_endpoint_database_target && droppedPath &&
+        !(result.workspace_follow_up || []).some(item => item.state === 'failed') &&
+        onRecreateEmpty && <Button sx={{mt: 2}} variant="contained"
+        onClick={() => onRecreateEmpty(droppedPath)}>
+        {gettext('Review creation of empty database')}
+      </Button>}
       {lifecycleOperation?.confirmation_required && plan?.state === 'ready' &&
         <FormControlLabel control={<Checkbox checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)} />}
         label={gettext('I confirm this provider-planned database operation.')} />}
       <Box sx={{display: 'flex', gap: 1, mt: 2}}>
-        <Button variant="contained" disabled={working ||
+        <Button variant="contained" disabled={working || (recreateEmpty && (dropAttempted || !approvedCreationRoot)) ||
           !lifecycleOperation || (targetRequired && !selectedResource)}
         onClick={previewLifecycle}>{gettext('Validate and preview')}</Button>
-        <Button color="warning" disabled={working ||
+        <Button color="warning" disabled={working || (recreateEmpty && (dropAttempted || !approvedCreationRoot)) ||
           plan?.state !== 'ready' || !plan?.execution_available ||
           (lifecycleOperation?.confirmation_required && !confirmed)}
         onClick={applyLifecycle}>{activeForm?.title}</Button>
@@ -6172,10 +6281,14 @@ DatabaseTargetWorkspace.propTypes = {
   onRefresh: PropTypes.func,
   initialMode: PropTypes.oneOf([
     'attach', 'define', 'connect', 'create', 'edit', 'alter', 'drop',
-    'remove',
+    'remove', 'recreate_empty',
   ]),
   initialTargetId: PropTypes.string,
   focused: PropTypes.bool,
+  initialCreatePath: PropTypes.string,
+  onRecreateEmpty: PropTypes.func,
+  approvedCreationRoot: PropTypes.string,
+  onTargetCatalogChanged: PropTypes.func,
 };
 
 function parseCsv(source) {
@@ -6711,7 +6824,8 @@ DataMovementWorkspace.propTypes = {
 
 export default function ProviderWorkspaceContent({
   closeModal, endpointUrl, initialTab='resources', initialContext={},
-  onEndpointRemoved, onEndpointProfileSaved, onCredentialRequired,
+  onEndpointRemoved, onEndpointProfileSaved, onCredentialRequired, onOpenSearchResult,
+  onRecreateEmpty, onTargetCatalogChanged,
 }) {
   const api = useMemo(() => getApiInstance(), []);
   const queryDatabaseTargetId = initialContext.database_target_id || (
@@ -6749,6 +6863,12 @@ export default function ProviderWorkspaceContent({
   const [parameterSource, setParameterSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
   const [clientSqlDialect, setClientSqlDialect] = useState(3);
+  const [historySensitive, setHistorySensitive] = useState(false);
+  const [historyNotice, setHistoryNotice] = useState('');
+  const [profileConfirmed, setProfileConfirmed] = useState(false);
+  const [profileReport, setProfileReport] = useState(null);
+  const [statisticsEnabled, setStatisticsEnabled] = useState(false);
+  const [queryStatistics, setQueryStatistics] = useState(null);
   const [fetchObservation, setFetchObservation] = useState(null);
   const [scriptResult, setScriptResult] = useState(null);
   const [firebirdPlan, setFirebirdPlan] = useState(null);
@@ -6804,6 +6924,10 @@ export default function ProviderWorkspaceContent({
     setError(null);
     setLoadedWorkspace(null);
     setScriptResult(null);
+    setProfileConfirmed(false);
+    setProfileReport(null);
+    setQueryStatistics(null);
+    setHistoryNotice('');
     setFirebirdPlan(null);
     setNativePage(null);
     setResourcePage(null);
@@ -7146,6 +7270,8 @@ export default function ProviderWorkspaceContent({
       const native = response.occurrence?.result?.extensions?.firebird?.payload;
       setFetchObservation(native?.fetch_observation || null);
       setScriptResult(native?.script || null);
+      setProfileReport(native?.profiling || null);
+      setQueryStatistics(native?.query_statistics || null);
       setFirebirdPlan(native?.query_plan || null);
       if (native?.error) {
         const codes = (native.error.native_status_codes || []).join(', ');
@@ -7180,7 +7306,7 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll, workspace]);
 
-  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false) => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false) => {
     if (querySessionBlocked || scriptLocked) return;
     if (sessionCommand && (languageProfile !== 'firebird-sql' || !sessionId || busy || occurrenceId)) return;
     setBusy(true);
@@ -7191,6 +7317,8 @@ export default function ProviderWorkspaceContent({
     setFirebirdPlan(null);
     setNativePage(null);
     setResultPresentation(presentation);
+    setProfileReport(null);
+    setQueryStatistics(null);
     try {
       let rowPolicy = {};
       if (languageProfile === 'firebird-sql' && !sessionCommand && !planMode) {
@@ -7218,12 +7346,16 @@ export default function ProviderWorkspaceContent({
         parameters,
         ...(scriptMode ? {script_mode: true} : {}),
         ...(planMode ? {plan_mode: true} : {}),
+        ...(profileMode ? {profile_mode: true} : {}),
+        ...(languageProfile === 'firebird-sql' && statisticsEnabled && !planMode && !scriptMode && !sessionCommand ? {statistics_mode: true} : {}),
         ...rowPolicy,
         ...(languageProfile === 'firebird-sql' ? {
           client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
+          history_sensitive: historySensitive,
         } : {}),
         database_target_id: queryDatabaseTargetId,
       });
+      setHistoryNotice(occurrence.sql_history?.warning || '');
       setOccurrenceId(occurrence.occurrence_id);
       await poll(occurrence.occurrence_id);
     } catch (requestError) {
@@ -7335,7 +7467,7 @@ export default function ProviderWorkspaceContent({
     }
   };
 
-  const [inspectorTarget, setInspectorTarget] = useState({});
+  const [inspectorTarget, setInspectorTarget] = useState({section: initialContext.section});
   const openNativeObject = (resource, section='properties', member='') => {
     setSelectedResource(resource);setSelectedResourceKind(resource.resource_kind);
     setSelectedOperationId('inspect');setInspectorTarget({section, member});setTab('object');
@@ -7414,6 +7546,10 @@ export default function ProviderWorkspaceContent({
           onRefresh={reloadResources}
           initialMode={initialContext.database_mode}
           initialTargetId={initialContext.resource_id}
+          initialCreatePath={initialContext.recreate_empty_path || ''}
+          onRecreateEmpty={onRecreateEmpty}
+          onTargetCatalogChanged={onTargetCatalogChanged}
+          approvedCreationRoot={workspace.endpoint_registration?.primary_route?.configuration?.database_create_root || ''}
           focused />
       </Box>}
       <ModalFooter><Button onClick={closeModal}>{gettext('Close')}</Button>
@@ -7446,6 +7582,12 @@ export default function ProviderWorkspaceContent({
         alignItems: 'center', gap: 1, px: 2, py: 1,
         borderBottom: 1, borderColor: 'divider'}}>
         <Box component="strong">{{
+          'metadata-search': gettext('Metadata Search'),
+          'firebird-server-catalog': gettext('Registered Database Catalogs'),
+          'firebird-events': gettext('Native Events'),
+          'firebird-templates': gettext('Native Code Templates'),
+          'firebird-test-data': gettext('Generate Test Data'),
+          'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
           properties: gettext('Database Properties'),
@@ -7456,6 +7598,7 @@ export default function ProviderWorkspaceContent({
           operations: gettext('Operations & Health'),
           semantic: gettext('Cubes & Semantic Models'),
           movement: gettext('Import & Bulk'),
+          export: gettext('Export'),
           connections: gettext('Databases & Connections'),
           streams: gettext('Change streams'),
         }[tab]}</Box>
@@ -7466,6 +7609,29 @@ export default function ProviderWorkspaceContent({
         {tab !== initialTab && <Button size="small" sx={{ml: 'auto'}}
           onClick={() => setTab(initialTab)}>{gettext('Back')}</Button>}
       </Box>}
+      {workspace && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <Button onClick={() => setTab('metadata-search')}>Search database metadata</Button>}
+      {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <Button onClick={() => setTab('firebird-events')}>Monitor database events</Button>}
+      {workspace && tab === 'firebird-events' && <FirebirdEvents key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <Button onClick={() => setTab('firebird-templates')}>Object code templates</Button>}
+      {workspace && selectedResource && tab === 'firebird-templates' && <FirebirdTemplates post={post}
+        resource={selectedResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}
+        disabled={busy || !!occurrenceId || scriptLocked}
+        onLoad={({source: renderedSource, parameters}) => {
+          if (busy || occurrenceId || scriptLocked) return;
+          setSource(renderedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(3); setTab('studio');
+        }} />}
+      {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) && tab === 'firebird-test-data' && <FirebirdTestData
+        key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+        languageProfile={languageProfile} resources={resourcePage?.items || []} />}
+      {workspace && tab === 'firebird-isql' && <FirebirdIsql post={post}
+        databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'metadata-search' && <FirebirdMetadataSearch
+        targets={workspace.database_targets?.targets || []} post={post} onOpen={onOpenSearchResult} />}
+      {workspace && tab === 'firebird-server-catalog' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <FirebirdServerCatalog endpoint={workspace.endpoint} targets={workspace.database_targets?.targets || []} post={post} />}
       <FormReference formKey="workspace" />
       {(error || workspace) && <Box role="region" tabIndex={0}
         aria-label={gettext('Provider workspace status')}
@@ -7524,9 +7690,32 @@ export default function ProviderWorkspaceContent({
           </Alert>}
         <LanguageSourceEditor key={languageProfile + ':' + queryDatabaseTargetId + ':' + scriptEditorGeneration}
           language={activeLanguage} source={source} onChange={setSource}
+          resources={resourcePage?.items}
+          onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
           post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId}
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked}
-          onScriptLock={setScriptLocked} />
+          onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
+        {languageProfile === 'firebird-sql' && <>
+          <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
+            checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+            onChange={(event) => setHistorySensitive(event.target.checked)} />} />
+          <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
+            onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
+          <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
+            control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+              onChange={event => setProfileConfirmed(event.target.checked)} />} />
+          <Button disabled={!profileConfirmed || busy || scriptLocked || querySessionBlocked || Boolean(occurrenceId)}
+            onClick={() => {setProfileConfirmed(false); execute(source, 'native', false, false, false, true);}}>
+            {gettext('Run with native profiling')}</Button>
+          <FormControlLabel label={gettext('Collect fresh attachment query statistics')} control={<Checkbox
+            checked={statisticsEnabled} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+            onChange={event => setStatisticsEnabled(event.target.checked)} />} />
+          <FirebirdProfiler report={profileReport} statistics={queryStatistics} />
+        </>}
+        {languageProfile === 'firebird-sql' && <FirebirdParameters source={source} dialect={clientSqlDialect}
+          plan={firebirdPlan} parameters={parameterSource} onChange={setParameterSource}
+          onPrepare={() => execute(source, 'native', false, false, true)}
+          disabled={busy || querySessionBlocked || scriptLocked || Boolean(occurrenceId)} />}
         <TextField multiline minRows={2} maxRows={6} value={parameterSource}
           sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
             gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
@@ -7684,6 +7873,20 @@ export default function ProviderWorkspaceContent({
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
+      {workspace && tab === 'export' &&
+        ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
+        <FirebirdExport onLoadMore={loadMoreResources} hasMore={Boolean(resourcePage?.next_cursor)} loadingMore={loadingMore}
+          databaseTargetId={queryDatabaseTargetId} key={queryDatabaseTargetId || 'active'} post={post} generation={resourcePage?.generation}
+          selectedResource={selectedResource} resources={resourcePage?.items || []} onCatalogRefresh={reloadResources}
+          onOpenAllocation={async (target) => {
+            const resource = await post({action: 'resource_inspect', request: {
+              resource_id: target.resource_id, generation: resourcePage?.generation,
+            }});
+            if (resource?.resource_id !== target.resource_id || resource?.resource_kind !== target.resource_kind) {
+              throw new Error(gettext('The native allocation object is no longer available. Refresh the catalog.'));
+            }
+            openResourceAdministration(resource, 'alter');
+          }} />}
       {workspace && tab === 'movement' &&
         <DataMovementWorkspace catalog={workspace.visual_admin}
           resources={resourcePage?.items || []}
@@ -7696,6 +7899,7 @@ export default function ProviderWorkspaceContent({
             resources={resourcePage?.items || []}
             post={post} setError={setError}
             onRefresh={reloadResources}
+            onTargetCatalogChanged={onTargetCatalogChanged}
             initialMode={initialContext.database_mode}
             initialTargetId={initialContext.resource_id} />
           <ConnectionRouteWorkspace post={post} setError={setError} />
@@ -7735,6 +7939,11 @@ export default function ProviderWorkspaceContent({
         workspace.visual_admin?.model_family
       ) &&
         <StructuredDataGrid catalog={workspace.visual_admin}
+          sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
+          onLoadSql={({source: generatedSource, parameters}) => {
+            if (busy || occurrenceId || scriptLocked) return;
+            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(3); setTab('studio');
+          }}
           resources={resourcePage?.items || []}
           post={post} setError={setError}
           languageProfile={workspace.languages?.[0]?.language_profile}
@@ -7757,10 +7966,15 @@ ProviderWorkspaceContent.propTypes = {
   initialTab: PropTypes.oneOf([
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
-    'semantic', 'movement', 'streams', 'connections',
+    'semantic', 'movement', 'streams', 'connections', 'export',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data',
+    'firebird-recovery',
   ]),
   initialContext: PropTypes.object,
+  onOpenSearchResult: PropTypes.func,
   onEndpointRemoved: PropTypes.func,
   onEndpointProfileSaved: PropTypes.func,
+  onTargetCatalogChanged: PropTypes.func,
+  onRecreateEmpty: PropTypes.func,
   onCredentialRequired: PropTypes.func,
 };

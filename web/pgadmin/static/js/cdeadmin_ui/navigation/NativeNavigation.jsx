@@ -17,6 +17,9 @@ function operationAllowed(resource, id) {
 function childrenFor(node, resources, owner) {
   return resources.filter(r => {
     if (r.resource_kind !== node.kind) return false;
+    const name = (r.display_name || '').toUpperCase();
+    if (node.name_prefix && !name.startsWith(node.name_prefix)) return false;
+    if (node.exclude_prefixes?.some(prefix => name.startsWith(prefix))) return false;
     if (!owner) return true;
     const parent = native(r).navigator_parent_resource_id;
     if (parent) return parent === owner.resource_id;
@@ -45,7 +48,7 @@ export default function NativeNavigation({design, endpoint, catalog, resources, 
   const render = (node, owner=null, depth=0, scope=null) => {
     const objectScope = /User objects/i.test(node.label) ? 'user' : node.kind === 'system-catalog' ? 'system' : scope;
     // Conditional branches require observed objects; a condition string is not a capability grant.
-    const matches = childrenFor(node, resources, owner).filter(r => objectScope === 'system' ? native(r).system_object === true : objectScope === 'user' ? native(r).system_object !== true : true);
+    const matches = childrenFor(node, resources, design.engine_id === 'firebird' && owner?.resource_kind === 'database' ? null : owner).filter(r => objectScope === 'system' ? native(r).system_object === true : objectScope === 'user' ? native(r).system_object !== true : true);
     if (node.condition && !matches.length) return null;
     const instances = node.label.startsWith('<') && matches.length ? matches : [null];
     return instances.map(resource => {

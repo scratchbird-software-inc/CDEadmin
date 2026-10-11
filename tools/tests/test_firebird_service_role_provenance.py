@@ -22,6 +22,8 @@ from pgadmin.cdeadmin.providers.firebird.service_connection import (
 def test_all_service_previews_disclose_effective_role(
         operation, task, expected, source):
     draft = {'role': task}
+    if operation in {'restore_logical', 'restore_physical'}:
+        draft['restore_database'] = '/owned/restored.fdb'
     if operation == 'activate_shadow':
         draft.update(shadow_filename='/owned/shadow.fdb',
                      confirmation='/owned/shadow.fdb', original_isolated=True)

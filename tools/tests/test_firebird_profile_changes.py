@@ -61,6 +61,7 @@ def registered(client):
     ('verify_server', ('new-password',)),
     ('verify_server', (None, 'alternate-user')),
     ('forget_server_credentials', ()),
+    ('clear_saved_credentials', ()),
 ])
 def test_connection_mutations_reject_before_changing_state(rig, method, args):
     registry, registration, binding = registered(rig.client)

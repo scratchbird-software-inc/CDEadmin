@@ -638,6 +638,17 @@ describe('provider structured record controls', () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
+  it('permits only reordering of fixed native column lists', () => {
+    const onChange = jest.fn();
+    render(<RecordListAdminField field={{label: 'Column order',
+      array_editor: {item_kind: 'string', fixed_items: true}}}
+    value={['A', 'B']} onChange={onChange} />);
+    expect(screen.getByLabelText('Column order 1')).toBeDisabled();
+    expect(screen.queryByRole('button', {name: 'Add Column order item'})).toBeNull();
+    expect(screen.queryByRole('button', {name: /Remove/})).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Column order 2: Move up'}));
+    expect(onChange).toHaveBeenCalledWith(['B', 'A']);
+  });
   it('edits primitive lists and accepts serialized existing lists', () => {
     const onChange = jest.fn();
     render(<RecordListAdminField field={{label: 'Index columns',
@@ -801,7 +812,7 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('submits ordered Firebird query parameters through its language contract', async () => {
+  it.each([[false, false], [true, false], [false, true]])('submits ordered Firebird parameters with profiling=%s statistics=%s', async (profiling, statistics) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'firebird-sql', title: 'Firebird SQL',
       starter_source: 'SELECT CAST(? AS INTEGER) FROM RDB$DATABASE',
@@ -820,12 +831,19 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText('Ordered ? placeholders')).toBeInTheDocument();
     expect(screen.getByText(/Driver prefetch may execute more procedure work/)).toBeInTheDocument();
     fireEvent.change(input, {target: {value: '[42,"text",null]'}});
-    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    if(statistics) fireEvent.click(screen.getByLabelText('Collect fresh attachment query statistics'));
+    if(profiling) {
+      expect(screen.getByRole('button', {name: 'Run with native profiling'})).toBeDisabled();
+      fireEvent.click(screen.getByLabelText('Allow native profiler storage and replacement of any active profile on this attachment'));
+      fireEvent.click(screen.getByRole('button', {name: 'Run with native profiling'}));
+    } else fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'firebird-session',
       source: 'SELECT CAST(? AS INTEGER) FROM RDB$DATABASE',
       parameters: [42, 'text', null], database_target_id: 'firebird-target',
-      max_rows: 1000, client_sql_dialect: 3,
+      max_rows: 1000, client_sql_dialect: 3, history_sensitive: false,
+      ...(profiling ? {profile_mode: true} : {}),
+      ...(statistics ? {statistics_mode: true} : {}),
     }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });
@@ -908,7 +926,7 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Disable all DECFLOAT traps'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'firebird-session', source: 'SET DECFLOAT TRAPS TO',
-      parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3,
+      parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3, history_sensitive: false,
     }));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
     expect(api.post.mock.calls.filter(([, value]) => value.action === 'open_session')).toHaveLength(1);

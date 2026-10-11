@@ -459,7 +459,7 @@ class ProfileMigrationSourceTests(unittest.TestCase):
     def test_schema_version_models_and_linear_migration_are_declared(self):
         model_source = MODEL_PATH.read_text(encoding='utf-8')
         migration_source = MIGRATION_PATH.read_text(encoding='utf-8')
-        self.assertRegex(model_source, r'SCHEMA_VERSION\s*=\s*58\b')
+        self.assertRegex(model_source, r'SCHEMA_VERSION\s*=\s*59\b')
         self.assertIn(
             "__tablename__ = 'cde_profile_migration_run'", model_source
         )
@@ -490,7 +490,7 @@ class ProfileMigrationSourceTests(unittest.TestCase):
             if predecessor:
                 predecessors.add(predecessor.group(1))
         self.assertEqual(
-            {'cde_project_assets_v1'},
+            {'cde_registration_aliases_v1'},
             revisions - predecessors,
         )
 

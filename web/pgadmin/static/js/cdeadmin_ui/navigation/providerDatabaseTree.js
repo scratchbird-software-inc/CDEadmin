@@ -18,7 +18,8 @@ export function providerEndpointSessionReady(serverData) {
 
 /** Local registration metadata is editable even when native auth is down. */
 export function isProviderRegistrationWorkspace(tab, context={}) {
-  return tab === 'connections' && ['edit', 'remove'].includes(context.server_mode);
+  return tab === 'firebird-registration' ||
+    (tab === 'connections' && ['edit', 'remove'].includes(context.server_mode));
 }
 
 /** Mirror a committed profile edit without reusing its old verification. */

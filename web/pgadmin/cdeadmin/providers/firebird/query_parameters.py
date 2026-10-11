@@ -21,7 +21,7 @@ def normalize_parameters(parameters):
                 value.get('encoding') in KINDS.values()):
             return parse(value)
         if (isinstance(value, Mapping) and
-                value.get('encoding') in {'float32', 'float64'}):
+                value.get('encoding') in {'float32', 'float64', 'base64'}):
             return bind_value(value)
         if isinstance(value, (list, tuple)):
             return [decode(item) for item in value]

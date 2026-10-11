@@ -304,14 +304,15 @@ define('pgadmin.node.server', [
               profile.engine_display_name || profile.display_name),
           };
           const initialData = {
-            name: gettext('%s on localhost',
+            name: registrationContext.name || gettext('%s on localhost',
               profile.engine_display_name || profile.display_name),
             cde_profile_id: profile.profile_id,
             cde_registration_intent: registrationIntent,
             host: profile.route_kind === 'network' ?
               (registrationContext.host || 'localhost') : '',
-            port: profile.default_port,
-            db: '',
+            port: registrationContext.port || profile.default_port,
+            db: registrationContext.database || '',
+            ...(registrationContext.username ? {username: registrationContext.username} : {}),
             connect_now: profile.workflow !== 'provider_endpoint',
             cde_verify_now: profile.workflow === 'provider_endpoint',
           };
@@ -376,6 +377,7 @@ define('pgadmin.node.server', [
               edit: gettext('Edit'),
               alter: gettext('Alter'),
               drop: gettext('Drop'),
+              recreate_empty: gettext('Recreate empty'),
               remove: gettext('Remove registration for'),
             };
             title = gettext('%s %s %s — %s',

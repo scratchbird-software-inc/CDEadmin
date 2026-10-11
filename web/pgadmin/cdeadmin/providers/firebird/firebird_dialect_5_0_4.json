@@ -30,7 +30,7 @@
       "session_settings": 9,
       "statements": 31
     },
-    "authoritative_task_count": 127,
+    "authoritative_task_count": 128,
     "authoritative_task_ids": [
       "visual_admin.authentication-mapping.alter",
       "visual_admin.authentication-mapping.comment",
@@ -137,6 +137,7 @@
       "visual_admin.table.grant",
       "visual_admin.table.insert",
       "visual_admin.table.recreate",
+      "visual_admin.table.reorder_columns",
       "visual_admin.table.revoke",
       "visual_admin.table.update",
       "visual_admin.trigger.alter",
@@ -160,7 +161,7 @@
       "visual_admin.view.revoke",
       "visual_admin.view.update"
     ],
-    "implemented_task_count": 127,
+    "implemented_task_count": 128,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -8923,6 +8924,7 @@
     "firebird-5.0.4-blob-filters-live",
     "firebird-5.0.4-character-metadata-live",
     "firebird-5.0.4-column-alterations-live",
+    "firebird-5.0.4-column-order-live",
     "firebird-5.0.4-database-storage-live",
     "firebird-5.0.4-exceptions-live",
     "firebird-5.0.4-external-functions-live",
@@ -9403,6 +9405,24 @@
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
       "sha256": "2e500fb7abd9aa44acfa342efbb2304a142f962743292da5ea156a2be2165fed"
+    },
+    {
+      "artifact": "result.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-column-order-live",
+      "evidence_kind": "live_execution",
+      "format": "scratchrobin.firebird.schema-plan-gate@1",
+      "license_id": "PostgreSQL",
+      "sha256": "1c4e03c8db233c4fe88e018f469aba81bc3e0b94368c4c270ad49b8c5c549a83"
+    },
+    {
+      "artifact": "result.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-column-order-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "scratchrobin.firebird.schema-plan-gate@1",
+      "license_id": "PostgreSQL",
+      "sha256": "1c4e03c8db233c4fe88e018f469aba81bc3e0b94368c4c270ad49b8c5c549a83"
     }
   ],
   "provider_id": "org.cdeadmin.firebird",
@@ -11006,6 +11026,23 @@
         "RECREATE GLOBAL TEMPORARY TABLE \"T_PRESERVE\" (\n  \"ID\" INTEGER PRIMARY KEY,\n  \"VALUE\" INTEGER DEFAULT 7\n) ON COMMIT PRESERVE ROWS, SQL SECURITY DEFINER"
       ],
       "task_id": "visual_admin.table.recreate"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "firebird-5.0.4-grammar",
+        "firebird-5.0.4-column-order-parser",
+        "firebird-5.0.4-column-order-live"
+      ],
+      "required_bindings": [],
+      "source": "ALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"D\" POSITION 1;\nALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"C\" POSITION 2;\nALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"B\" POSITION 3",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"D\" POSITION 1",
+        "ALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"C\" POSITION 2",
+        "ALTER TABLE \"Order:\u00fc\"\"\" ALTER COLUMN \"B\" POSITION 3"
+      ],
+      "task_id": "visual_admin.table.reorder_columns"
     },
     {
       "binding_style": "positional_question_mark",

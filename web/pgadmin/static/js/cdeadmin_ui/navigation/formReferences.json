@@ -5389,6 +5389,126 @@
     "metadata-extraction": {
       "reference": "SR-F-001347",
       "title": "Metadata extraction"
+    },
+    "firebird-export": {
+      "reference": "SR-F-001348",
+      "title": "Firebird export"
+    },
+    "ddn-viewer": {
+      "reference": "SR-F-001349",
+      "title": "Read-only DDN viewer"
+    },
+    "ddn-designer": {
+      "reference": "SR-F-001350",
+      "title": "DDN unified editor"
+    },
+    "firebird-dashboard": {
+      "reference": "SR-F-001351",
+      "title": "Read-only Firebird dashboard"
+    },
+    "firebird-monitoring-policy": {
+      "reference": "SR-F-001352",
+      "title": "Firebird collection policy"
+    },
+    "firebird-dashboard-editor": {
+      "reference": "SR-F-001353",
+      "title": "Firebird dashboard draft editor"
+    },
+    "firebird-recent-observations": {
+      "reference": "SR-F-001354",
+      "title": "Firebird retained observations"
+    },
+    "firebird-activity-details": {
+      "reference": "SR-F-001355",
+      "title": "Firebird activity details"
+    },
+    "operation:firebird.table.reorder_columns": {
+      "reference": "SR-F-001356",
+      "title": "Firebird whole-table column order"
+    },
+    "firebird-query-history": {
+      "reference": "SR-F-001357",
+      "title": "Firebird persistent SQL history"
+    },
+    "firebird-profiler": {
+      "reference": "SR-F-001358",
+      "title": "Firebird native SQL and PSQL profiler"
+    },
+    "firebird-query-statistics": {
+      "reference": "SR-F-001359",
+      "title": "Firebird attachment query statistics"
+    },
+    "firebird-blob-editor": {
+      "reference": "SR-F-001360",
+      "title": "Firebird BLOB editor"
+    },
+    "firebird-metadata-search": {
+      "reference": "SR-F-001361",
+      "title": "Firebird registered-database metadata search"
+    },
+    "firebird-row-sql": {
+      "reference": "SR-F-001362",
+      "title": "Firebird selected-row SQL generation"
+    },
+    "firebird-event-monitor": {
+      "reference": "SR-F-001363",
+      "title": "Firebird native event monitor"
+    },
+    "firebird-code-templates": {
+      "reference": "SR-F-001364",
+      "title": "Firebird object-context SQL templates"
+    },
+    "firebird-relational-diagram": {
+      "reference": "SR-F-001365",
+      "title": "Firebird relational DDN diagram"
+    },
+    "firebird-external-isql": {
+      "reference": "SR-F-001366",
+      "title": "Firebird external ISQL launch"
+    },
+    "firebird-test-data": {
+      "reference": "SR-F-001367",
+      "title": "Firebird test-data generation"
+    },
+    "firebird-docker": {
+      "reference": "SR-F-001368",
+      "title": "Firebird Docker provisioning"
+    },
+    "firebird-data-import": {
+      "reference": "SR-F-001370",
+      "title": "Firebird native data archive import"
+    },
+    "firebird-registration": {
+      "reference": "SR-F-001369",
+      "title": "Firebird registration clone and move"
+    },
+    "firebird-schema-plan": {
+      "reference": "SR-F-001371",
+      "title": "Firebird DDN schema review and application"
+    },
+    "firebird-parameters": {
+      "reference": "SR-F-001374",
+      "title": "Firebird prepared native parameter grid"
+    },
+    "firebird-catalog-designer": {
+      "reference": "SR-F-001375",
+      "title": "Firebird DDN catalog design and native review handoff"
+    },
+    "firebird-server-catalog": {
+      "reference": "SR-F-001376",
+      "title": "Firebird registered server catalog capture"
+    },
+    "firebird-monitoring-details": {
+      "reference": "SR-F-001377",
+      "title": "Firebird bounded server log, paths and security account inspection"
+    },
+    "firebird-privilege-queue": {
+      "reference": "SR-F-001373",
+      "title": "Firebird ordered privilege statement queue"
+    },
+    "firebird-statement-details": {
+      "reference": "SR-F-001372",
+      "title": "Firebird native statement SQL and plan inspection"
     }
   }
 }

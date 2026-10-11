@@ -26,6 +26,7 @@ from pgadmin.utils.master_password import set_masterpass_check_text
 from pgadmin.utils.driver import get_driver
 from .... import socketio as sio
 from sqlalchemy import text
+from pgadmin.cdeadmin.endpoints import registration_credentials
 
 
 def is_valid_ipaddress(address):
@@ -236,6 +237,7 @@ def validate_options(options, option_name, option_value):
 
 
 def _password_check(server, manager, old_key, new_key):
+    registration_credentials.reencrypt(server, old_key, new_key)
     # Check if old password was stored in pgadmin4 sqlite database.
     # If yes then update that password.
     if server.password is not None:
@@ -303,6 +305,7 @@ def migrate_passwords_from_pgadmin_db(servers, old_key, enc_key):
     try:
         for ser in servers:
             server, is_password_saved, is_tunnel_password_saved = ser
+            registration_credentials.reencrypt(server, old_key, enc_key)
             if is_password_saved:
                 password = decrypt(server.password, old_key).decode()
                 server_password = encrypt(password, enc_key)
@@ -348,10 +351,12 @@ def get_servers_with_saved_passwords():
             saved_password_servers.append(server)
             servers_with_pwd_in_os_secret.append(
                 (server, is_password_saved, is_tunnel_password_saved))
+            if registration_credentials.has_saved(server):
+                servers_with_pwd_in_pgadmin_db.append((server, False, False))
         else:
             is_password_saved = bool(server.password)
             is_tunnel_password_saved = bool(server.tunnel_password)
-            if is_password_saved or is_tunnel_password_saved:
+            if is_password_saved or is_tunnel_password_saved or registration_credentials.has_saved(server):
                 saved_password_servers.append(server)
                 servers_with_pwd_in_pgadmin_db.append(
                     (server, is_password_saved, is_tunnel_password_saved))
@@ -490,6 +495,10 @@ def remove_saved_passwords(user_id):
     This function will remove all the saved passwords for the server
     """
     try:
+        for server in Server.query.filter_by(user_id=user_id).all():
+            registration_credentials.clear(server)
+        for server in SharedServer.query.filter_by(user_id=user_id).all():
+            registration_credentials.clear(server)
         db.session.query(Server) \
             .filter(Server.user_id == user_id) \
             .update({Server.password: None, Server.tunnel_password: None,

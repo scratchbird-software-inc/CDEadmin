@@ -339,17 +339,1145 @@
         "firebird.mon_transactions.mon_top_transaction",
         "firebird.mon_transactions.mon_transaction_id"
       ],
+      "native_events": {
+        "committed_event_count": "2",
+        "idle_expiry_released": true,
+        "no_retained_monitor_transaction": true,
+        "passed": true,
+        "reconnect_new_interval": true,
+        "rollback_not_delivered": true,
+        "stop_released": true
+      },
       "owned_state_removed": true,
+      "profiling_statistics": {
+        "failed_sql_profile": {
+          "elapsed_unit": "nanoseconds",
+          "errors": [],
+          "profile_id": "3",
+          "scope": "same attachment; fetched execution only",
+          "section_limit": 200,
+          "sections": {
+            "access_paths": {
+              "rows": [
+                {
+                  "ACCESS_PATH": "Select Expression",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 0,
+                  "PARENT_RECORD_SOURCE_ID": null,
+                  "RECORD_SOURCE_ID": 1,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 1,
+                  "PARENT_RECORD_SOURCE_ID": 1,
+                  "RECORD_SOURCE_ID": 2,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Hash Join (inner)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 2,
+                  "PARENT_RECORD_SOURCE_ID": 2,
+                  "RECORD_SOURCE_ID": 3,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 4,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$ATTACHMENTS\" as \"A\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 4,
+                  "RECORD_SOURCE_ID": 5,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 65)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 6,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 6,
+                  "RECORD_SOURCE_ID": 7,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$IO_STATS\" as \"I\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 7,
+                  "RECORD_SOURCE_ID": 8,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 97)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 9,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 9,
+                  "RECORD_SOURCE_ID": 10,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$RECORD_STATS\" as \"R\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 10,
+                  "RECORD_SOURCE_ID": 11,
+                  "STATEMENT_ID": 5104
+                }
+              ],
+              "truncated": false
+            },
+            "psql": {
+              "rows": [],
+              "truncated": false
+            },
+            "record_sources": {
+              "rows": [
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 34624,
+                  "FETCH_MIN_ELAPSED_TIME": 33343,
+                  "FETCH_TOTAL_ELAPSED_TIME": 67967,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 472618,
+                  "OPEN_MIN_ELAPSED_TIME": 444716,
+                  "OPEN_TOTAL_ELAPSED_TIME": 917334,
+                  "RECORD_SOURCE_ID": 1,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 34549,
+                  "FETCH_MIN_ELAPSED_TIME": 33434,
+                  "FETCH_TOTAL_ELAPSED_TIME": 67983,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 472399,
+                  "OPEN_MIN_ELAPSED_TIME": 444513,
+                  "OPEN_TOTAL_ELAPSED_TIME": 916912,
+                  "RECORD_SOURCE_ID": 2,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 33311,
+                  "FETCH_MIN_ELAPSED_TIME": 31945,
+                  "FETCH_TOTAL_ELAPSED_TIME": 65256,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 472294,
+                  "OPEN_MIN_ELAPSED_TIME": 444184,
+                  "OPEN_TOTAL_ELAPSED_TIME": 916478,
+                  "RECORD_SOURCE_ID": 3,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 6731,
+                  "FETCH_MIN_ELAPSED_TIME": 6592,
+                  "FETCH_TOTAL_ELAPSED_TIME": 13323,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 472029,
+                  "OPEN_MIN_ELAPSED_TIME": 443805,
+                  "OPEN_TOTAL_ELAPSED_TIME": 915834,
+                  "RECORD_SOURCE_ID": 4,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 10,
+                  "FETCH_MAX_ELAPSED_TIME": 1303,
+                  "FETCH_MIN_ELAPSED_TIME": 134,
+                  "FETCH_TOTAL_ELAPSED_TIME": 4840,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 467551,
+                  "OPEN_MIN_ELAPSED_TIME": 439052,
+                  "OPEN_TOTAL_ELAPSED_TIME": 906603,
+                  "RECORD_SOURCE_ID": 5,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 14,
+                  "FETCH_MAX_ELAPSED_TIME": 1788,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 5276,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 1083,
+                  "OPEN_MIN_ELAPSED_TIME": 821,
+                  "OPEN_TOTAL_ELAPSED_TIME": 1904,
+                  "RECORD_SOURCE_ID": 6,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 12,
+                  "FETCH_MAX_ELAPSED_TIME": 590,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 1066,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 461,
+                  "OPEN_MIN_ELAPSED_TIME": 253,
+                  "OPEN_TOTAL_ELAPSED_TIME": 714,
+                  "RECORD_SOURCE_ID": 7,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 21,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 183,
+                  "OPEN_MIN_ELAPSED_TIME": 49,
+                  "OPEN_TOTAL_ELAPSED_TIME": 232,
+                  "RECORD_SOURCE_ID": 8,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 148,
+                  "FETCH_MAX_ELAPSED_TIME": 1068,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 6546,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 298,
+                  "OPEN_MIN_ELAPSED_TIME": 89,
+                  "OPEN_TOTAL_ELAPSED_TIME": 387,
+                  "RECORD_SOURCE_ID": 9,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 146,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 0,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 0,
+                  "RECORD_SOURCE_ID": 10,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 229,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 86,
+                  "OPEN_MIN_ELAPSED_TIME": 3,
+                  "OPEN_TOTAL_ELAPSED_TIME": 89,
+                  "RECORD_SOURCE_ID": 11,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                }
+              ],
+              "truncated": false
+            },
+            "requests": {
+              "rows": [
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 626,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5251,
+                  "TOTAL_ELAPSED_TIME": null
+                }
+              ],
+              "truncated": false
+            },
+            "statements": {
+              "rows": [
+                {
+                  "PACKAGE_NAME": "RDB$PROFILER                                                   ",
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": "START_SESSION                                                  ",
+                  "STATEMENT_ID": 626,
+                  "STATEMENT_TYPE": "FUNCTION"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5104,
+                  "STATEMENT_TYPE": "BLOCK"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5251,
+                  "STATEMENT_TYPE": "BLOCK"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "state": "complete"
+        },
+        "passed": true,
+        "psql": {
+          "elapsed_unit": "nanoseconds",
+          "errors": [],
+          "profile_id": "1",
+          "scope": "same attachment; fetched execution only",
+          "section_limit": 200,
+          "sections": {
+            "access_paths": {
+              "rows": [
+                {
+                  "ACCESS_PATH": "Select Expression",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 0,
+                  "PARENT_RECORD_SOURCE_ID": null,
+                  "RECORD_SOURCE_ID": 1,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 1,
+                  "PARENT_RECORD_SOURCE_ID": 1,
+                  "RECORD_SOURCE_ID": 2,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Hash Join (inner)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 2,
+                  "PARENT_RECORD_SOURCE_ID": 2,
+                  "RECORD_SOURCE_ID": 3,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 4,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$ATTACHMENTS\" as \"A\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 4,
+                  "RECORD_SOURCE_ID": 5,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 65)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 6,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 6,
+                  "RECORD_SOURCE_ID": 7,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$IO_STATS\" as \"I\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 7,
+                  "RECORD_SOURCE_ID": 8,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 97)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 9,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 9,
+                  "RECORD_SOURCE_ID": 10,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$RECORD_STATS\" as \"R\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 10,
+                  "RECORD_SOURCE_ID": 11,
+                  "STATEMENT_ID": 5104
+                }
+              ],
+              "truncated": false
+            },
+            "psql": {
+              "rows": [
+                {
+                  "COLUMN_NUM": 18,
+                  "COUNTER": 1,
+                  "LINE_NUM": 1,
+                  "MAX_ELAPSED_TIME": 237,
+                  "MIN_ELAPSED_TIME": 237,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": 237
+                },
+                {
+                  "COLUMN_NUM": 43,
+                  "COUNTER": 1,
+                  "LINE_NUM": 1,
+                  "MAX_ELAPSED_TIME": 0,
+                  "MIN_ELAPSED_TIME": 0,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": 0
+                },
+                {
+                  "COLUMN_NUM": 50,
+                  "COUNTER": 4,
+                  "LINE_NUM": 1,
+                  "MAX_ELAPSED_TIME": 487,
+                  "MIN_ELAPSED_TIME": 0,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": 826
+                },
+                {
+                  "COLUMN_NUM": 73,
+                  "COUNTER": 3,
+                  "LINE_NUM": 1,
+                  "MAX_ELAPSED_TIME": 8606,
+                  "MIN_ELAPSED_TIME": 242,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": 9997
+                },
+                {
+                  "COLUMN_NUM": 111,
+                  "COUNTER": 3,
+                  "LINE_NUM": 1,
+                  "MAX_ELAPSED_TIME": 799,
+                  "MIN_ELAPSED_TIME": 0,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": 799
+                }
+              ],
+              "truncated": false
+            },
+            "record_sources": {
+              "rows": [
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 12027,
+                  "FETCH_MIN_ELAPSED_TIME": 3068,
+                  "FETCH_TOTAL_ELAPSED_TIME": 15095,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 273983,
+                  "OPEN_MIN_ELAPSED_TIME": 186983,
+                  "OPEN_TOTAL_ELAPSED_TIME": 460966,
+                  "RECORD_SOURCE_ID": 1,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 12188,
+                  "FETCH_MIN_ELAPSED_TIME": 3210,
+                  "FETCH_TOTAL_ELAPSED_TIME": 15398,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 274117,
+                  "OPEN_MIN_ELAPSED_TIME": 187131,
+                  "OPEN_TOTAL_ELAPSED_TIME": 461248,
+                  "RECORD_SOURCE_ID": 2,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 11866,
+                  "FETCH_MIN_ELAPSED_TIME": 3090,
+                  "FETCH_TOTAL_ELAPSED_TIME": 14956,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 274187,
+                  "OPEN_MIN_ELAPSED_TIME": 187239,
+                  "OPEN_TOTAL_ELAPSED_TIME": 461426,
+                  "RECORD_SOURCE_ID": 3,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 1021,
+                  "FETCH_MIN_ELAPSED_TIME": 560,
+                  "FETCH_TOTAL_ELAPSED_TIME": 1581,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 273790,
+                  "OPEN_MIN_ELAPSED_TIME": 187239,
+                  "OPEN_TOTAL_ELAPSED_TIME": 461029,
+                  "RECORD_SOURCE_ID": 4,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 8,
+                  "FETCH_MAX_ELAPSED_TIME": 86,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 113,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 271021,
+                  "OPEN_MIN_ELAPSED_TIME": 186264,
+                  "OPEN_TOTAL_ELAPSED_TIME": 457285,
+                  "RECORD_SOURCE_ID": 5,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 14,
+                  "FETCH_MAX_ELAPSED_TIME": 390,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 1237,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 238,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 238,
+                  "RECORD_SOURCE_ID": 6,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 12,
+                  "FETCH_MAX_ELAPSED_TIME": 8,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 8,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 15,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 15,
+                  "RECORD_SOURCE_ID": 7,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 22,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 83,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 83,
+                  "RECORD_SOURCE_ID": 8,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 128,
+                  "FETCH_MAX_ELAPSED_TIME": 350,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 995,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 760,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 760,
+                  "RECORD_SOURCE_ID": 9,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 126,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 0,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 0,
+                  "RECORD_SOURCE_ID": 10,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 202,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 61,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 61,
+                  "RECORD_SOURCE_ID": 11,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                }
+              ],
+              "truncated": false
+            },
+            "requests": {
+              "rows": [
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 625,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 626,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5125,
+                  "TOTAL_ELAPSED_TIME": null
+                }
+              ],
+              "truncated": false
+            },
+            "statements": {
+              "rows": [
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 625,
+                  "STATEMENT_TYPE": "BLOCK"
+                },
+                {
+                  "PACKAGE_NAME": "RDB$PROFILER                                                   ",
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": "START_SESSION                                                  ",
+                  "STATEMENT_ID": 626,
+                  "STATEMENT_TYPE": "FUNCTION"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5104,
+                  "STATEMENT_TYPE": "BLOCK"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5125,
+                  "STATEMENT_TYPE": "BLOCK"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "state": "complete"
+        },
+        "record_sources": {
+          "elapsed_unit": "nanoseconds",
+          "errors": [],
+          "profile_id": "2",
+          "scope": "same attachment; fetched execution only",
+          "section_limit": 200,
+          "sections": {
+            "access_paths": {
+              "rows": [
+                {
+                  "ACCESS_PATH": "Select Expression",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 0,
+                  "PARENT_RECORD_SOURCE_ID": null,
+                  "RECORD_SOURCE_ID": 1,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 1,
+                  "PARENT_RECORD_SOURCE_ID": 1,
+                  "RECORD_SOURCE_ID": 2,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Hash Join (inner)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 2,
+                  "PARENT_RECORD_SOURCE_ID": 2,
+                  "RECORD_SOURCE_ID": 3,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 4,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$ATTACHMENTS\" as \"A\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 4,
+                  "RECORD_SOURCE_ID": 5,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 65)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 6,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 6,
+                  "RECORD_SOURCE_ID": 7,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$IO_STATS\" as \"I\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 7,
+                  "RECORD_SOURCE_ID": 8,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Record Buffer (record length: 97)",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 3,
+                  "PARENT_RECORD_SOURCE_ID": 3,
+                  "RECORD_SOURCE_ID": 9,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Filter",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 4,
+                  "PARENT_RECORD_SOURCE_ID": 9,
+                  "RECORD_SOURCE_ID": 10,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"MON$RECORD_STATS\" as \"R\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 5,
+                  "PARENT_RECORD_SOURCE_ID": 10,
+                  "RECORD_SOURCE_ID": 11,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "ACCESS_PATH": "Select Expression",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 0,
+                  "PARENT_RECORD_SOURCE_ID": null,
+                  "RECORD_SOURCE_ID": 1,
+                  "STATEMENT_ID": 5262
+                },
+                {
+                  "ACCESS_PATH": "-> Table \"RDB$RELATIONS\" Full Scan",
+                  "CURSOR_ID": 1,
+                  "LEVEL": 1,
+                  "PARENT_RECORD_SOURCE_ID": 1,
+                  "RECORD_SOURCE_ID": 2,
+                  "STATEMENT_ID": 5262
+                }
+              ],
+              "truncated": false
+            },
+            "psql": {
+              "rows": [],
+              "truncated": false
+            },
+            "record_sources": {
+              "rows": [
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 23257,
+                  "FETCH_MIN_ELAPSED_TIME": 14240,
+                  "FETCH_TOTAL_ELAPSED_TIME": 37497,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 593228,
+                  "OPEN_MIN_ELAPSED_TIME": 331171,
+                  "OPEN_TOTAL_ELAPSED_TIME": 924399,
+                  "RECORD_SOURCE_ID": 1,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 23332,
+                  "FETCH_MIN_ELAPSED_TIME": 14400,
+                  "FETCH_TOTAL_ELAPSED_TIME": 37732,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 593195,
+                  "OPEN_MIN_ELAPSED_TIME": 331148,
+                  "OPEN_TOTAL_ELAPSED_TIME": 924343,
+                  "RECORD_SOURCE_ID": 2,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 22787,
+                  "FETCH_MIN_ELAPSED_TIME": 13743,
+                  "FETCH_TOTAL_ELAPSED_TIME": 36530,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 592952,
+                  "OPEN_MIN_ELAPSED_TIME": 331013,
+                  "OPEN_TOTAL_ELAPSED_TIME": 923965,
+                  "RECORD_SOURCE_ID": 3,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 2,
+                  "FETCH_MAX_ELAPSED_TIME": 3417,
+                  "FETCH_MIN_ELAPSED_TIME": 2524,
+                  "FETCH_TOTAL_ELAPSED_TIME": 5941,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 592759,
+                  "OPEN_MIN_ELAPSED_TIME": 330833,
+                  "OPEN_TOTAL_ELAPSED_TIME": 923592,
+                  "RECORD_SOURCE_ID": 4,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 9,
+                  "FETCH_MAX_ELAPSED_TIME": 276,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 732,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 590470,
+                  "OPEN_MIN_ELAPSED_TIME": 329720,
+                  "OPEN_TOTAL_ELAPSED_TIME": 920190,
+                  "RECORD_SOURCE_ID": 5,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 14,
+                  "FETCH_MAX_ELAPSED_TIME": 1270,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 3495,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 761,
+                  "OPEN_MIN_ELAPSED_TIME": 336,
+                  "OPEN_TOTAL_ELAPSED_TIME": 1097,
+                  "RECORD_SOURCE_ID": 6,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 12,
+                  "FETCH_MAX_ELAPSED_TIME": 481,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 481,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 202,
+                  "OPEN_MIN_ELAPSED_TIME": 132,
+                  "OPEN_TOTAL_ELAPSED_TIME": 334,
+                  "RECORD_SOURCE_ID": 7,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 21,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 76,
+                  "OPEN_MIN_ELAPSED_TIME": 68,
+                  "OPEN_TOTAL_ELAPSED_TIME": 144,
+                  "RECORD_SOURCE_ID": 8,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 148,
+                  "FETCH_MAX_ELAPSED_TIME": 947,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 4949,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 303,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 303,
+                  "RECORD_SOURCE_ID": 9,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 146,
+                  "FETCH_MAX_ELAPSED_TIME": 0,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 0,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 0,
+                  "OPEN_MIN_ELAPSED_TIME": 0,
+                  "OPEN_TOTAL_ELAPSED_TIME": 0,
+                  "RECORD_SOURCE_ID": 10,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 230,
+                  "FETCH_MAX_ELAPSED_TIME": 310,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 310,
+                  "OPEN_COUNTER": 2,
+                  "OPEN_MAX_ELAPSED_TIME": 138,
+                  "OPEN_MIN_ELAPSED_TIME": 5,
+                  "OPEN_TOTAL_ELAPSED_TIME": 143,
+                  "RECORD_SOURCE_ID": 11,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 69,
+                  "FETCH_MAX_ELAPSED_TIME": 4616,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 10541,
+                  "OPEN_COUNTER": 1,
+                  "OPEN_MAX_ELAPSED_TIME": 1216,
+                  "OPEN_MIN_ELAPSED_TIME": 1216,
+                  "OPEN_TOTAL_ELAPSED_TIME": 1216,
+                  "RECORD_SOURCE_ID": 1,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5262
+                },
+                {
+                  "CURSOR_ID": 1,
+                  "FETCH_COUNTER": 69,
+                  "FETCH_MAX_ELAPSED_TIME": 4100,
+                  "FETCH_MIN_ELAPSED_TIME": 0,
+                  "FETCH_TOTAL_ELAPSED_TIME": 15186,
+                  "OPEN_COUNTER": 1,
+                  "OPEN_MAX_ELAPSED_TIME": 569,
+                  "OPEN_MIN_ELAPSED_TIME": 569,
+                  "OPEN_TOTAL_ELAPSED_TIME": 569,
+                  "RECORD_SOURCE_ID": 2,
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5262
+                }
+              ],
+              "truncated": false
+            },
+            "requests": {
+              "rows": [
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 626,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5104,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5251,
+                  "TOTAL_ELAPSED_TIME": null
+                },
+                {
+                  "REQUEST_ID": 0,
+                  "STATEMENT_ID": 5262,
+                  "TOTAL_ELAPSED_TIME": null
+                }
+              ],
+              "truncated": false
+            },
+            "statements": {
+              "rows": [
+                {
+                  "PACKAGE_NAME": "RDB$PROFILER                                                   ",
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": "START_SESSION                                                  ",
+                  "STATEMENT_ID": 626,
+                  "STATEMENT_TYPE": "FUNCTION"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5104,
+                  "STATEMENT_TYPE": "BLOCK"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5251,
+                  "STATEMENT_TYPE": "BLOCK"
+                },
+                {
+                  "PACKAGE_NAME": null,
+                  "PARENT_STATEMENT_ID": null,
+                  "ROUTINE_NAME": null,
+                  "STATEMENT_ID": 5262,
+                  "STATEMENT_TYPE": "BLOCK"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "state": "complete"
+        },
+        "statistics": {
+          "after": {
+            "attachment_id": "8",
+            "counters": {
+              "page_fetches": 4938,
+              "page_marks": 82,
+              "page_reads": 10,
+              "page_writes": 39,
+              "record_backouts": 0,
+              "record_deletes": 0,
+              "record_expunges": 0,
+              "record_idx_reads": 2853,
+              "record_inserts": 17,
+              "record_purges": 0,
+              "record_seq_reads": 219,
+              "record_updates": 5
+            }
+          },
+          "before": {
+            "attachment_id": "8",
+            "counters": {
+              "page_fetches": 4915,
+              "page_marks": 77,
+              "page_reads": 10,
+              "page_writes": 39,
+              "record_backouts": 0,
+              "record_deletes": 0,
+              "record_expunges": 0,
+              "record_idx_reads": 2850,
+              "record_inserts": 14,
+              "record_purges": 0,
+              "record_seq_reads": 219,
+              "record_updates": 5
+            }
+          },
+          "complete": true,
+          "deltas": {
+            "page_fetches": 23,
+            "page_marks": 5,
+            "page_reads": 0,
+            "page_writes": 0,
+            "record_backouts": 0,
+            "record_deletes": 0,
+            "record_expunges": 0,
+            "record_idx_reads": 3,
+            "record_inserts": 3,
+            "record_purges": 0,
+            "record_seq_reads": 0,
+            "record_updates": 0
+          },
+          "elapsed": 389881,
+          "elapsed_unit": "nanoseconds",
+          "errors": [],
+          "scope": "current attachment sampling window, including monitoring overhead",
+          "timing_scope": "host native dispatch, execution, fetch and cursor release"
+        },
+        "user_transaction_preserved_and_rollback_verified": true
+      },
       "provider_compiled_create": true,
       "remote_protocol_absent": true,
-      "runtime_sha256": "4c27c01379c2aa6e5424556ca31c01e60f2a3d97385f3e96053b4e79db01376a",
+      "runtime_sha256": "39844c2eaca638aa4d6763d7b80fb27b0d6145c8660f3db8c3cedea32bd4adaa",
       "schema": "cdeadmin.firebird-embedded-contract-proof.v1",
       "source_bindings": {
         "web/pgadmin/cdeadmin/providers/firebird/embedded_provider.py": "7203e7075938fe3a354f8bdf698cdcd8a0bd3293b63217f684086452a57f5718",
-        "web/pgadmin/cdeadmin/providers/firebird/firebird_dialect_5_0_4.json": "3f60b3f7071b969a28954ca32888d4d4d9f9ffc003887403407562a754e22829",
+        "web/pgadmin/cdeadmin/providers/firebird/events.py": "778f8df268c7384a0b2f4b2aefae30b27a293873f646c681c7eb99f17e38ad99",
+        "web/pgadmin/cdeadmin/providers/firebird/firebird_dialect_5_0_4.json": "55a28f9eee9670c3987f43ab8a09194d0c1bdd7267327c0793ec4ca5dad00f0a",
         "web/pgadmin/cdeadmin/providers/firebird/firebird_metrics_5_0_4.json": "3af0b7e88634aa99be26e66ec8f2344bdb03314312c8f450414fbdb83e6f1bfc",
-        "web/pgadmin/cdeadmin/providers/firebird/provider.py": "570b665f260a151b2bb6643c6d8dfe79321c9dd29dcf38ca85aff3c223a38010",
-        "web/pgadmin/cdeadmin/providers/relational_admin.py": "ff82af28a3ef082d5192dd57165a99d1b88c1ef5d0fc42e6415a27e092d44db8"
+        "web/pgadmin/cdeadmin/providers/firebird/profiling.py": "b7a76d976aa354c86cdef8d0868853e9beffda2cc68b7b4bd93bcfff360764b5",
+        "web/pgadmin/cdeadmin/providers/firebird/provider.py": "76d898ff1313f8dde76d9d3208a2f9f8d7488f154b3dfadf89a9ef7d1a3d6eba",
+        "web/pgadmin/cdeadmin/providers/firebird/query_client.py": "ea0e5bfacf4e1ae59b35ad0fdcaf588732e570f8238fe6e0909d652bd8524322",
+        "web/pgadmin/cdeadmin/providers/firebird/query_statistics.py": "e9ff1629f60a5bd8ad26a07eedfdb02fefbcd21936dfe66efd764d11c252494e",
+        "web/pgadmin/cdeadmin/providers/relational_admin.py": "92f71ee5e9d7bef91c5ecefb51f99a43ad5ed1fa61a26591fe6dd119ba5f1b93"
       },
       "source_runtime_unchanged": true,
       "task_ids": [
@@ -458,6 +1586,7 @@
         "visual_admin.table.grant",
         "visual_admin.table.insert",
         "visual_admin.table.recreate",
+        "visual_admin.table.reorder_columns",
         "visual_admin.table.revoke",
         "visual_admin.table.update",
         "visual_admin.trigger.alter",
@@ -493,7 +1622,7 @@
       ]
     },
     "scope": "Engine13 local attachment, provider-compiled table creation, independent transaction visibility and declared monitoring columns. Not exhaustive per-task or product qualification.",
-    "sha256": "78939c4d496b0e25a14eebd1e3f0e4447f143ea01a3eb0181305856e9e86348e"
+    "sha256": "acdd7b4ba9e33bdc00d8299f7f3af9680b0b8f1054e0c5382b84383f06043b12"
   },
   "engine_id": "firebird",
   "interface_id": "firebird-embedded",
@@ -3327,10 +4456,14 @@
     "scope": "Unchanged exact-engine SQL compiler and grammar; MON$ definitions and classification. No network, service or cross-platform qualification transfer.",
     "source_bindings": {
       "web/pgadmin/cdeadmin/providers/firebird/embedded_provider.py": "7203e7075938fe3a354f8bdf698cdcd8a0bd3293b63217f684086452a57f5718",
-      "web/pgadmin/cdeadmin/providers/firebird/firebird_dialect_5_0_4.json": "3f60b3f7071b969a28954ca32888d4d4d9f9ffc003887403407562a754e22829",
+      "web/pgadmin/cdeadmin/providers/firebird/events.py": "778f8df268c7384a0b2f4b2aefae30b27a293873f646c681c7eb99f17e38ad99",
+      "web/pgadmin/cdeadmin/providers/firebird/firebird_dialect_5_0_4.json": "55a28f9eee9670c3987f43ab8a09194d0c1bdd7267327c0793ec4ca5dad00f0a",
       "web/pgadmin/cdeadmin/providers/firebird/firebird_metrics_5_0_4.json": "3af0b7e88634aa99be26e66ec8f2344bdb03314312c8f450414fbdb83e6f1bfc",
-      "web/pgadmin/cdeadmin/providers/firebird/provider.py": "570b665f260a151b2bb6643c6d8dfe79321c9dd29dcf38ca85aff3c223a38010",
-      "web/pgadmin/cdeadmin/providers/relational_admin.py": "ff82af28a3ef082d5192dd57165a99d1b88c1ef5d0fc42e6415a27e092d44db8"
+      "web/pgadmin/cdeadmin/providers/firebird/profiling.py": "b7a76d976aa354c86cdef8d0868853e9beffda2cc68b7b4bd93bcfff360764b5",
+      "web/pgadmin/cdeadmin/providers/firebird/provider.py": "76d898ff1313f8dde76d9d3208a2f9f8d7488f154b3dfadf89a9ef7d1a3d6eba",
+      "web/pgadmin/cdeadmin/providers/firebird/query_client.py": "ea0e5bfacf4e1ae59b35ad0fdcaf588732e570f8238fe6e0909d652bd8524322",
+      "web/pgadmin/cdeadmin/providers/firebird/query_statistics.py": "e9ff1629f60a5bd8ad26a07eedfdb02fefbcd21936dfe66efd764d11c252494e",
+      "web/pgadmin/cdeadmin/providers/relational_admin.py": "92f71ee5e9d7bef91c5ecefb51f99a43ad5ed1fa61a26591fe6dd119ba5f1b93"
     },
     "source_profile": "firebird-native"
   }

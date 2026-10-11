@@ -17,6 +17,7 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import {loadDDNLibraries} from './library';
 import {validateDDNFiles, validateDDNSnapshot} from './contracts';
+import FormReference from '../../navigation/FormReference';
 
 function firstView(workspace, requestedEntry, requestedView) {
   const entries = workspace.entries().filter((entry) => entry.views.length);
@@ -27,9 +28,12 @@ function firstView(workspace, requestedEntry, requestedView) {
 }
 
 export function DDNViewerSurface({files, snapshot, entry, view,
-  presentation=false, executeCommand, onExport, onReady, onError}) {
+  presentation=false, executeCommand, onExport, onReady, onError, onSelectionChange}) {
+  const selectionCallback = useRef(onSelectionChange);
+  selectionCallback.current = onSelectionChange;
   const hostRef = useRef(null);
   const mountedRef = useRef(null);
+  const imageRef = useRef(null);
   const workspaceRef = useRef(null);
   const [libraries, setLibraries] = useState(null);
   const [selection, setSelection] = useState({entry: entry ?? '', view: view ?? ''});
@@ -68,24 +72,18 @@ export function DDNViewerSurface({files, snapshot, entry, view,
       chosen = firstView(workspace, requested.entry, requested.view);
       setEntries(workspace.entries());
       setSelection(chosen);
-      const mounted = libraries.viewer.mount(hostRef.current, {
-        workspace,
-        ...chosen,
-        overrides: snapshot?.overrides,
-        layoutState: snapshot?.layoutState,
-      });
-      mountedRef.current = mounted;
-      mounted.ready.then((rendered) => {
-        if(!active || rendered?.superseded) return;
-        setResult(rendered);
-        setLoading(false);
-        onReady?.(rendered);
-      }).catch((renderError) => {
-        if(!active) return;
-        setError(renderError);
-        setLoading(false);
-        onError?.(renderError);
-      });
+      const rendered = workspace.renderSync({...chosen,
+        overrides: snapshot?.overrides, layoutState: snapshot?.layoutState});
+      const img = document.createElement('img');
+      img.alt = 'DDN diagram';
+      img.style.maxWidth = '100%';
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rendered.svg);
+      hostRef.current.replaceChildren(img);
+      imageRef.current = img;
+      mountedRef.current = {destroy: () => img.remove(), exportSVG: () => rendered.svg,
+        setOptions: () => { img.style.maxWidth = '100%'; }};
+      if(active) { setResult(rendered); setLoading(false); selectionCallback.current?.(chosen); onReady?.(rendered); }
+
     } catch(renderError) {
       setError(renderError);
       setLoading(false);
@@ -109,17 +107,19 @@ export function DDNViewerSurface({files, snapshot, entry, view,
     try {
       mountedRef.current?.destroy();
       hostRef.current?.replaceChildren();
-      const mounted = libraries.viewer.mount(hostRef.current, {
-        workspace: workspaceRef.current,
-        entry: nextEntry,
-        view: nextView,
-      });
-      mountedRef.current = mounted;
-      const rendered = await mounted.ready;
-      if(!rendered?.superseded) {
-        setResult(rendered);
-        onReady?.(rendered);
-      }
+      const rendered = workspaceRef.current.renderSync({entry: nextEntry, view: nextView});
+      const img = document.createElement('img');
+      img.alt = 'DDN diagram';
+      img.style.maxWidth = '100%';
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rendered.svg);
+      hostRef.current.replaceChildren(img);
+      imageRef.current = img;
+      mountedRef.current = {destroy: () => img.remove(), exportSVG: () => rendered.svg,
+        setOptions: () => { img.style.maxWidth = '100%'; }};
+      setResult(rendered);
+      selectionCallback.current?.({entry: nextEntry, view: nextView});
+      onReady?.(rendered);
+
     } catch(renderError) {
       setError(renderError);
       onError?.(renderError);
@@ -150,9 +150,11 @@ export function DDNViewerSurface({files, snapshot, entry, view,
 
   return <Box
     data-cde-surface="diagram.ddn.viewer"
-    sx={{display: 'flex', flexDirection: 'column', height: '100%',
+    sx={{display: 'flex', flexDirection: 'column', height: presentation ? 'auto' : '100%',
+      flexShrink: presentation ? 0 : 1,
       minHeight: 0, bgcolor: 'background.default', color: 'text.primary'}}
   >
+    <FormReference formKey="ddn-viewer" />
     {!presentation && <Box component="header" sx={{height: 'var(--cde-toolbar-height, 34px)',
       display: 'flex', alignItems: 'center', gap: 1, px: 1,
       borderBottom: '1px solid', borderColor: 'divider'}}>
@@ -176,9 +178,9 @@ export function DDNViewerSurface({files, snapshot, entry, view,
           `${result?.diagnostics?.length ?? 0} diagnostics`} />
       </Box>
     </Box>}
-    <Box sx={{position: 'relative', flex: 1, minHeight: 0, overflow: 'auto'}}>
+    <Box sx={{position: 'relative', flex: presentation ? 'none' : 1, minHeight: 0, overflow: 'auto'}}>
       {error && <EmptyState role="alert" message={error.message} />}
-      <Box ref={hostRef} aria-label="DDN diagram" sx={{height: '100%',
+      <Box ref={hostRef} aria-label="DDN diagram" sx={{height: presentation ? 'auto' : '100%',
         display: error ? 'none' : 'block'}} />
       <ProgressOverlay message={loading ? 'Rendering DDN view' : ''} />
     </Box>
@@ -195,4 +197,5 @@ DDNViewerSurface.propTypes = {
   onExport: PropTypes.func,
   onReady: PropTypes.func,
   onError: PropTypes.func,
+  onSelectionChange: PropTypes.func,
 };

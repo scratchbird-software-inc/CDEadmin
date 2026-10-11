@@ -1,23 +1,32 @@
-# DDN libraries vendored by CDEadmin
+# DDN distribution consumed by ScratchRobin
 
-CDEadmin consumes these files as independently reusable libraries. They are
-not CDEadmin's authoritative model implementation and must not be modified to
-create application-specific behavior.
+`current/` contains DDN 0.8.0's public runtime, declarations, stylesheet and
+self-contained unified editing tool from the owner-designated sister project.
+It is distributed under **GPL-2.0-or-later**, with the original LICENSE and
+NOTICE.md. This is a new distribution; the previous MIT-labelled 0.5 viewer and
+0.1 Designer are retired, not relabelled.
 
-Versions:
+Run `python3 tools/refresh_ddn.py` from the repository root before builds and
+commit-validation tests. Direct webpack builds run this gate automatically.
+Set `SCRATCHROBIN_DDN_SOURCE` and `SCRATCHROBIN_DDN_WORK` for other workstations;
+`PYTHON` selects the interpreter used by webpack. The source must have its pinned
+build dependencies installed. Intake fails instead of falling back to old code.
 
-- DDN runtime/viewer: `0.5.0-draft.2`
-- DDN Designer: `0.1.0-preview.1`
+Intake captures current tracked and nonignored source files, verifies the capture
+against the unchanged source inventory, and builds runtime and tool in an
+isolated temporary snapshot. It never runs build tools in the sister checkout.
+`resource-manifest.json` records source revision, dirty status, source hashes,
+intake script hash, artifact hashes and license. `sdk-build.json` records the
+upstream builder's distribution evidence. Matching source and artifact hashes
+permit reuse of that exact previously built snapshot.
 
-The Designer requires the exact supplied runtime. Product code must use the
-public module declarations and the CDEadmin adapter under
-`cdeadmin_ui/integrations/ddn`; it must not import internal helpers, manipulate
-the Designer shadow DOM, or treat rendered SVG as authoritative data.
+Product adapters use DDNLive's documented workspace/render/editor APIs and the
+unified tool's setSource/getSource/onSourceChange/snapshot bridge. The read-only
+surface renders SVG in an image document, without editing event handlers.
+Versioned project-asset persistence and native database authorization remain
+ScratchRobin responsibilities. DDN diagrams do not execute database changes.
 
-The source distribution identifies the libraries as MIT licensed. The
-original SPDX notices are retained in the distributed files and the MIT text
-is included in `LICENSE-MIT.txt`.
-
-`resource-manifest.json` records the provenance and hashes of the exact files
-accepted into this repository. The two `ddn.global.js` files are identical by
-design because each upstream distribution is self-contained.
+Consumer checks include the Jest DDN suites and
+`TMPDIR=<artifact-directory> node tools/tests/check_ddn_browser.cjs` (set
+`DDN_BROWSER` when Chromium is not in the Playwright cache). These checks qualify
+the adapter boundary, not native metadata round trips or database dashboards.

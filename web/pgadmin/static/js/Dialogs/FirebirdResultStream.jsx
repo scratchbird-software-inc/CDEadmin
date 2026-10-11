@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
+import FirebirdBlobChunk from './FirebirdBlobChunk';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Table, TableBody, TableCell, TableHead, TableRow} from '@mui/material';
 import gettext from 'sources/gettext';
@@ -338,8 +339,7 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
       </Box>
     </>}
     {chunk?.blob_reference && <Box>
-      <div>{gettext('BLOB bytes:')} {chunk.offset}–{chunk.next_offset} ({gettext('base64')})</div>
-      <Box component="pre" sx={{maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{chunk.data}</Box>
+      <FirebirdBlobChunk chunk={chunk} />
       <Button disabled={busy || chunk.complete}
         onClick={() => run('blob', chunk.blob_reference)}>{gettext('Next BLOB chunk')}</Button>
     </Box>}

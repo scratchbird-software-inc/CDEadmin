@@ -63,7 +63,7 @@ CopyButton.propTypes = {
 };
 
 
-export default function CodeMirror({className, currEditor, showCopyBtn=false, customKeyMap=[], onTextSelect, ...props}) {
+export default function CodeMirror({className, currEditor, showCopyBtn=false, customKeyMap=[], onTextSelect, formatOverride, ...props}) {
   const editor = useRef();
   const [[showFind, isReplace, findKey], setShowFind] = useState([false, false, false]);
   const [showGoto, setShowGoto] = useState(false);
@@ -72,6 +72,7 @@ export default function CodeMirror({className, currEditor, showCopyBtn=false, cu
   const editorPrefs = usePreferences().getPreferencesForModule('editor');
 
   const formatSQL = (view)=>{
+    if(formatOverride) return formatOverride(view);
     let selection = true, sql = view.getSelection();
     /* New library does not support capitalize casing
       so if a user has set capitalize casing we will
@@ -142,7 +143,7 @@ export default function CodeMirror({className, currEditor, showCopyBtn=false, cu
       }
     },
     ...customKeyMap
-  ], [customKeyMap]);
+  ], [customKeyMap, formatOverride]);
 
   const closeFind = () => {
     setShowFind([false, false, false]);
@@ -207,4 +208,5 @@ CodeMirror.propTypes = {
   showCopyBtn: PropTypes.bool,
   customKeyMap: PropTypes.array,
   onTextSelect:PropTypes.func,
+  formatOverride:PropTypes.func,
 };

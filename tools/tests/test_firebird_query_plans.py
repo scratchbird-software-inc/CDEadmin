@@ -57,6 +57,17 @@ def prepared(rig, *, active=True):
     statement = Mock()
     statement.get_type.return_value = SimpleNamespace(name='SELECT')
     statement.get_input_metadata.return_value.get_count.return_value = 1
+    from enum import IntEnum
+    SQLDataType = IntEnum("SQLDataType", {"LONG": 496})
+    metadata = statement.get_input_metadata.return_value
+    metadata.get_type.return_value = SQLDataType.LONG
+    metadata.get_field.return_value = 'ID'
+    metadata.get_relation.return_value = 'T'
+    metadata.get_subtype.return_value = 0
+    metadata.get_length.return_value = 4
+    metadata.get_scale.return_value = 0
+    metadata.get_charset.return_value = 0
+    metadata.is_nullable.return_value = True
     statement.get_output_metadata.return_value.get_count.return_value = 2
 
     def info(items, buffer):
@@ -178,3 +189,24 @@ def test_metadata_release_failure_retains_both_native_owners(rig):
     metadata.release.side_effect = None
     owner.close()
     statement.free.assert_called_once_with()
+
+
+def test_native_parameter_descriptors_are_exact_and_source_bound(rig):
+    import hashlib
+    statement = prepared(rig)
+    source = 'SELECT * FROM T WHERE ID = ?'
+    result = submit(rig, source)['query_plan']
+    assert result['source_sha256'] == hashlib.sha256(source.encode()).hexdigest()
+    assert result['parameters_complete'] is True
+    assert result['parameters'] == [{'position': 0, 'native_type': 'LONG', 'type_code': 496,
+        'field': 'ID', 'relation': 'T', 'subtype': 0, 'length': 4, 'scale': 0, 'charset': 0, 'nullable': True}]
+    statement.get_input_metadata.return_value.release.assert_called_once_with()
+
+
+def test_large_parameter_metadata_is_explicitly_incomplete_and_released(rig):
+    statement = prepared(rig)
+    statement.get_input_metadata.return_value.get_count.return_value = 513
+    result = submit(rig)['query_plan']
+    assert result['parameter_count'] == 513 and result['parameters'] == []
+    assert result['parameters_complete'] is False
+    statement.get_input_metadata.return_value.release.assert_called_once_with()

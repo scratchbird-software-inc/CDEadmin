@@ -38,6 +38,8 @@ def source_bindings():
     paths = [PACKAGE / 'firebird_dialect_5_0_4.json',
              PACKAGE / 'firebird_metrics_5_0_4.json',
              PACKAGE / 'embedded_provider.py', PACKAGE / 'provider.py',
+             PACKAGE / 'query_client.py', PACKAGE / 'profiling.py',
+             PACKAGE / 'query_statistics.py', PACKAGE / 'events.py',
              PACKAGE.parent / 'relational_admin.py']
     return {str(path.relative_to(root)): hashlib.sha256(
         path.read_bytes()).hexdigest() for path in paths}
@@ -137,6 +139,10 @@ def qualify(runtime_source, evidence, *, require_activation=False):
                 connection.rollback()
                 result['monitoring_observation_ids'] = sorted(observed)
                 result['provider_compiled_create'] = True
+                from tools.firebird_profiler_native import qualify as qualify_profiler
+                result['profiling_statistics'] = qualify_profiler(connection, client, route)
+                from tools.firebird_events_native import qualify as qualify_events
+                result['native_events'] = qualify_events(connection, client, route)
             finally:
                 if observer is not None:
                     client.close_session(observer)

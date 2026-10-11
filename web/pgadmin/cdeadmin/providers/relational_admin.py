@@ -33,6 +33,7 @@ from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
+from .firebird import column_order as firebird_column_order
 from .firebird import character_metadata as firebird_character_metadata
 from .firebird import external_functions as firebird_external_functions
 from .firebird import blob_filters as firebird_blob_filters
@@ -413,9 +414,12 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird' and kind == 'table':
                 resource['operations'] = [
                     item for item in resource.get('operations', [])
-                    if item['operation_id'] != 'recreate'
+                    if item['operation_id'] not in {'recreate', 'reorder_columns'}
                 ] + [{'operation_id': 'recreate', 'title': 'Recreate table',
                       'mutation_class': 'destructive', 'target_required': True,
+                      'confirmation_required': True},
+                     {'operation_id': 'reorder_columns', 'title': 'Reorder columns',
+                      'mutation_class': 'admin', 'target_required': True,
                       'confirmation_required': True}]
             if (self.dialect.engine_id == 'firebird' and
                     kind in {'package', 'sequence'}):
@@ -467,7 +471,9 @@ class RelationalAdministration:
                         # (most importantly after shutdown, so Bring online
                         # is not stranded behind a database connection).
                         operation['workspace_scope'] = 'server_service'
-                        if operation_id == 'activate_shadow':
+                        if operation_id in {
+                                'activate_shadow', 'restore_logical',
+                                'restore_physical'}:
                             operation['target_required'] = False
                     database_form = (
                         self.dialect.database_forms.get(operation_id)
@@ -580,7 +586,24 @@ class RelationalAdministration:
             family.update(provider_concepts)
         return value
 
+    def _firebird_constraint_trigger_owner(self, request):
+        if (self.dialect.engine_id != 'firebird' or
+                request.get('resource_kind') != 'trigger' or
+                request.get('operation_id') == 'inspect'):
+            return None
+        target = request.get('target_resource') or {}
+        native = target.get('native')
+        if not isinstance(native, Mapping):
+            extension = (target.get('extensions') or {}).get('firebird') or {}
+            native = extension.get('native') or {}
+        return native.get('constraint_owner') if isinstance(native, Mapping) else None
+
     def validate(self, request):
+        owner = self._firebird_constraint_trigger_owner(request)
+        if owner:
+            return {'errors': [{'field_id': None, 'code': 'constraint_owned_trigger',
+                'message': 'This trigger is maintained by constraint ' + str(owner) +
+                           '; use the constraint lifecycle.'}]}
         errors = []
         resource_kind = request.get('resource_kind')
         operation_id = request.get('operation_id')
@@ -594,6 +617,14 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'firebird' and
+                resource_kind == 'table' and operation_id == 'reorder_columns'):
+            try:
+                firebird_column_order.compile_operation(draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': 'column_order', 'code': 'invalid_column_order',
+                               'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'firebird' and
                 resource_kind == 'table' and operation_id == 'recreate'):
             try:
@@ -3002,6 +3033,8 @@ class RelationalAdministration:
             if borrowed_firebird:
                 task_savepoint = NativeTaskSavepoint(cursor)
                 task_savepoint.begin()
+            if self.dialect.engine_id == 'firebird' and compiled.get('firebird_column_order'):
+                firebird_column_order.verify(cursor, compiled['firebird_column_order'])
             difference_path = compiled.get('firebird_difference_path')
             if self.dialect.engine_id == 'firebird' and difference_path:
                 firebird_database_storage.verify_difference_path(
@@ -3532,6 +3565,10 @@ class RelationalAdministration:
         }
 
     def _compile(self, request):
+        owner = self._firebird_constraint_trigger_owner(request)
+        if owner:
+            raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
+                                        '; use the constraint lifecycle.')
         operation = request['operation_id']
         if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] == 'database' and
@@ -3608,6 +3645,9 @@ class RelationalAdministration:
                 self._column_definition, self._constraint_definition)
             return {'statements': [{'source': statement, 'parameters': ()}],
                     'warnings': [firebird_table_replacement.WARNING]}
+        if (self.dialect.engine_id == 'firebird' and
+                request['resource_kind'] == 'table' and operation == 'reorder_columns'):
+            return firebird_column_order.compile_operation(request['draft'], request.get('target_resource'))
         if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] in {
                     'view', 'exception', 'procedure', 'function', 'trigger',
@@ -3818,7 +3858,9 @@ class RelationalAdministration:
             operation in _FIREBIRD_SERVICE_OPERATIONS
         ):
             route = request['_provider_route']
-            database = route.get('database')
+            database = (request.get('draft', {}).get('restore_database')
+                        if operation in {'restore_logical', 'restore_physical'}
+                        else route.get('database'))
             if not isinstance(database, str) or not database.strip():
                 raise RelationalClientError(
                     'Firebird service operation requires a database route'
@@ -5019,6 +5061,8 @@ class RelationalAdministration:
 
     def _form(self, kind, operation):
         title = operation.replace('_', ' ').title()
+        if (self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'reorder_columns'):
+            return firebird_column_order.form(self._field)
         if (self.dialect.engine_id == 'firebird' and kind == 'table' and
                 operation == 'recreate'):
             return firebird_table_replacement.form(self._field)
@@ -6213,6 +6257,10 @@ class RelationalAdministration:
                 self._field('confirmation', 'Confirmation', 'text', True),
             ],
         }.get(operation, [])
+        if self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'insert':
+            fields.append(self._field('override_identity', 'Preserve explicit identity values',
+                                     'boolean', default=False,
+                                     help_text='Uses OVERRIDING SYSTEM VALUE. Does not advance the identity generator.'))
         if operation == 'drop' and not self.dialect.supports_cascade:
             fields = [field for field in fields
                       if field['field_id'] != 'cascade']
@@ -7336,6 +7384,11 @@ class RelationalAdministration:
         is_view = request['resource_kind'] == 'view'
         firebird_table = (self.dialect.engine_id == 'firebird' and
                           request['resource_kind'] == 'table')
+        override = request['draft'].get('override_identity', False)
+        if ('override_identity' in request['draft'] and not firebird_table) or type(override) is not bool:
+            raise RelationalClientError('Identity override requires a Firebird base-table insert and a Boolean choice')
+        if override and not values:
+            raise RelationalClientError('Identity override requires explicit values')
         if not isinstance(values, Mapping) or (
                 not values and not is_view and not firebird_table):
             raise RelationalClientError('insert values must be an object')
@@ -7374,7 +7427,8 @@ class RelationalAdministration:
         columns = list(values)
         source = (
             f'INSERT INTO {target} '
-            f'({", ".join(self._quote(item) for item in columns)}) VALUES '
+            f'({", ".join(self._quote(item) for item in columns)}) '
+            + ('OVERRIDING SYSTEM VALUE ' if override else '') + 'VALUES '
             f'({", ".join(self.dialect.parameter for _item in columns)})'
         )
         return {

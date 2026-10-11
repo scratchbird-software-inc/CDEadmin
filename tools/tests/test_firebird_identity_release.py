@@ -62,7 +62,8 @@ def test_default_provider_preserves_failure_and_attempts_close(
     if cleanup_fails:
         handle.close.side_effect = RuntimeError('private cleanup error')
     provider.client = SimpleNamespace(open_session=Mock(return_value=handle))
-    provider.profile = SimpleNamespace(required_permissions=())
+    provider.profile = SimpleNamespace(
+        required_permissions=(), language_profile=PROFILE.language_profile)
     provider._sessions = {}
     original = failure('identity failure')
     provider._runtime_identity = Mock(side_effect=original)

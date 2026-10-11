@@ -1,5 +1,6 @@
 """Native prepare-only plans, preserving charset and truncation receipts."""
 import ctypes
+import hashlib
 import weakref
 
 from ...sdk.relational import RelationalClientError
@@ -72,6 +73,23 @@ class PreparedPlan:
         self.metadata.remove(metadata)
         return count
 
+    def parameters(self, metadata):
+        self.metadata.append(metadata)
+        count = metadata.get_count()
+        descriptors = []
+        if count <= 512:
+            for position in range(count):
+                kind = metadata.get_type(position)
+                descriptors.append({'position': position, 'native_type': kind.name,
+                    'type_code': int(kind), 'field': metadata.get_field(position),
+                    'relation': metadata.get_relation(position),
+                    'subtype': metadata.get_subtype(position),
+                    'length': metadata.get_length(position), 'scale': metadata.get_scale(position),
+                    'charset': metadata.get_charset(position), 'nullable': bool(metadata.is_nullable(position))})
+        metadata.release()
+        self.metadata.remove(metadata)
+        return count, descriptors
+
     def free(self):
         while self.metadata:
             self.metadata[-1].release()
@@ -97,9 +115,12 @@ def acquire(client, handle, request, state):
         encoding = getattr(handle._att, 'encoding', None)
         if not isinstance(encoding, str):
             encoding = handle._encoding
+        parameter_count, parameters = owner.parameters(statement.get_input_metadata())
         native = {
+            'source_sha256': hashlib.sha256(request['source'].encode('utf-8')).hexdigest(),
+            'parameters': parameters, 'parameters_complete': len(parameters) == parameter_count,
             'statement_type': statement.get_type().name,
-            'parameter_count': owner.count(statement.get_input_metadata()),
+            'parameter_count': parameter_count,
             'column_count': owner.count(statement.get_output_metadata()),
             'legacy': read_plan(statement, 22, encoding),
             'detailed': read_plan(statement, 26, encoding),

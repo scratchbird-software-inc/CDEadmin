@@ -64,3 +64,13 @@ class FirebirdExpressionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_native_outer_expression_modes_reject_additional_clauses():
+    from pgadmin.cdeadmin.providers.firebird_expressions import index_expression
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    import pytest
+    for source in ['(A) WHERE (B)', '(A) + (B)', 'COMPUTED BY (A)']:
+        with pytest.raises(RelationalClientError):
+            index_expression(source, 'native', require_outer=True)
+    assert index_expression('/* head */ ((A)) -- tail', 'native', require_outer=True) == '/* head */ ((A)) -- tail'

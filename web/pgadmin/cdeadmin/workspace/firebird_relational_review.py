@@ -1,0 +1,113 @@
+"""Bridge authoritative relational native facts into ordinary catalog review."""
+from copy import deepcopy
+from decimal import Decimal
+import hashlib
+import os
+from pathlib import Path
+import subprocess
+from .firebird_catalog_export import MAX_BYTES, MAX_DDN_UNITS, MAX_FILES, _json
+from .firebird_catalog_import import read_catalog, _decode, _equal, _SLOTS
+
+
+def _exact_json(value):
+    if isinstance(value, Decimal):
+        if not value.is_finite(): raise ValueError('Non-finite native number')
+        number = str(value)
+        return number if '.' in number or 'e' in number.lower() else number + '.0'
+    if isinstance(value, dict):
+        return '{' + ','.join(_json(key) + ':' + _exact_json(fact) for key, fact in sorted(value.items())) + '}'
+    if isinstance(value, list):
+        return '[' + ','.join(_exact_json(fact) for fact in value) + ']'
+    return _json(value)
+
+
+def read_relations(snapshot):
+    if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
+            snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
+            not 1 <= len(snapshot['files']) <= MAX_FILES or not isinstance(snapshot['entry'], str) or
+            not isinstance(snapshot['view'], str) or snapshot['entry'] not in snapshot['files']):
+        raise ValueError('Invalid relational workspace envelope')
+    for name, source in snapshot['files'].items():
+        if (not isinstance(name, str) or not name.endswith('.ddn') or
+                any(part in {'', '.', '..'} for part in name.split('/')) or '\\' in name or '\0' in name or
+                not isinstance(source, str) or len(source.encode('utf-16-le')) // 2 > MAX_DDN_UNITS):
+            raise ValueError('Invalid relational source file')
+    encoded = _json(snapshot)
+    if len(encoded.encode()) > MAX_BYTES:
+        raise ValueError('Relational design exceeds 8 MiB')
+    if not _SLOTS.acquire(timeout=1):
+        raise ValueError('Catalog reader is busy; retry shortly')
+    try:
+        result = subprocess.run(['node', str(Path(__file__).parent / 'ddn/read_relations.mjs')],
+            input=encoded, text=True, encoding='utf-8', capture_output=True, timeout=20,
+            env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
+        if result.returncode:
+            raise ValueError('Invalid or unsupported relational design')
+        parsed = _decode(result.stdout)
+        rows = parsed['rows']
+        fields = parsed['fields']
+        if len(fields) != len(set(fields)):
+            raise ValueError('Duplicate relational field identity')
+        children = []
+        for row in rows:
+            row['native'] = _decode(row['native_json'])
+            if not isinstance(row['native'], dict):
+                raise ValueError('Native relational facts must be objects')
+            columns = row['native'].pop('diagram_columns', [])
+            if not isinstance(columns, list) or not row['uid'].endswith(':' + row['resource_id']):
+                raise ValueError('Invalid relational native column mapping')
+            prefix = row['uid'][:-len(row['resource_id'])]
+            for column in columns:
+                if (not isinstance(column, dict) or set(column) != {'resource_id', 'native'} or
+                        not isinstance(column['resource_id'], str) or not isinstance(column['native'], dict)):
+                    raise ValueError('Invalid relational native column definition')
+                uid = prefix + column['resource_id']
+                if uid not in fields:
+                    raise ValueError('Relational column facts lack their exact field identity')
+                children.append({**column, 'uid': uid, 'native_json': _exact_json(column['native']),
+                                 'parent_resource_id': row['resource_id']})
+        combined = rows + children
+        if len({row['resource_id'] for row in combined}) != len(combined):
+            raise ValueError('Duplicate relational native identity')
+        return {row['resource_id']: row for row in combined}
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('Relational reader unavailable') from error
+    finally:
+        _SLOTS.release()
+
+
+def handoff(catalog_snapshot, original, desired):
+    current = read_catalog(_json(catalog_snapshot))
+    before, after = read_relations(original), read_relations(desired)
+    baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
+    replacements = [[], []]
+    changed = []
+    for identity, row in after.items():
+        old, live = before.get(identity), current['rows'].get(identity)
+        if old is None or live is None or live['kind'] not in {'table', 'view', 'column', 'constraint'}:
+            raise ValueError('Relational definition requires explicit catalog identity reconciliation: ' + identity)
+        if old['uid'] != live['uid'] or row['uid'] != live['uid']:
+            raise ValueError('Relational design belongs to another database or object')
+        facts = [deepcopy(old['native']), deepcopy(row['native'])]
+        if live['kind'] == 'constraint':
+            for key in ('source_columns', 'target_columns'):
+                if not _equal(facts[0].get(key), facts[1].get(key)):
+                    raise ValueError('Edit native constraint definitions rather than adapter column labels')
+                for value in facts: value.pop(key, None)
+        if not _equal(facts[0], facts[1]): changed.append(identity)
+        for index, value in enumerate(facts):
+            metadata = {key: live[key] for key in ('resource_id', 'kind', 'path_json', 'system')}
+            metadata['native_json'] = _exact_json(value)
+            key = 'o_' + hashlib.sha256(identity.encode()).hexdigest()
+            text = ('record ' + key + ' ' + _json(live['name']) + ' {uid: ' + _json(live['uid']) +
+                '; x_record: {' + ','.join(name + ':' + _json(fact) for name, fact in metadata.items()) + '};}')
+            replacements[index].append({**live['source_location'], 'text': text})
+    for snapshot, edits in zip((baseline, proposed), replacements):
+        for edit in sorted(edits, key=lambda value: value['start'], reverse=True):
+            # Public DDN source locations are UTF-16 code-unit offsets.
+            encoded = snapshot['files'][edit['file']].encode('utf-16-le')
+            snapshot['files'][edit['file']] = (encoded[:edit['start'] * 2] + edit['text'].encode('utf-16-le') +
+                encoded[edit['end'] * 2:]).decode('utf-16-le')
+        read_catalog(_json(snapshot))
+    return {'baseline': _json(baseline), 'desired': _json(proposed), 'changed_resource_ids': changed,
+            'status': 'prepared-for-native-preview', 'executed': False}

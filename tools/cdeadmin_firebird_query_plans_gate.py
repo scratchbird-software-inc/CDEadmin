@@ -50,6 +50,15 @@ def qualify(native, admin, route, accounts, evidence, root, embedded=False):
                 assert idle['execution_state'] == 'succeeded'
                 assert idle['query_plan']['transaction_started']
                 assert idle['query_plan']['parameter_count'] == 1
+                descriptors = idle['query_plan']['parameters']
+                assert idle['query_plan']['parameters_complete'] and len(descriptors) == 1
+                assert descriptors[0]['native_type'] == 'LONG' and descriptors[0]['length'] == 4
+                typed = explain(connection, 'SELECT CAST(? AS INT128), CAST(? AS NUMERIC(18,4)), CAST(? AS BOOLEAN), CAST(? AS VARBINARY(3)) FROM RDB$DATABASE')
+                assert typed['execution_state'] == 'succeeded', typed
+                params = typed['query_plan']['parameters']
+                assert [item['native_type'] for item in params] == ['INT128', 'INT64', 'BOOLEAN', 'VARYING'], params
+                assert params[1]['scale'] == -4 and params[3]['charset'] == 1
+                results.append({'charset': charset, 'prepared_parameter_types': params})
                 with connection.cursor() as cursor:
                     cursor.execute('INSERT INTO "café" VALUES(1)')
                 identity = connection.main_transaction.info.id

@@ -23,7 +23,7 @@ def rig(monkeypatch):
     handle = Mock()
     client._connections.append(handle)
     provider = FirebirdProvider(context(PROFILE), Permissions(), client)
-    provider._sessions['owned'] = SimpleNamespace(handle=handle)
+    provider._sessions['owned'] = SimpleNamespace(handle=handle, language_profile=PROFILE.language_profile)
     for label, session in [('owned-token', 'owned'), ('other-token', 'other')]:
         ADMINISTRATION._row_identities[label] = SimpleNamespace(
             session_id=session)
