@@ -7447,6 +7447,10 @@ export default function ProviderWorkspaceContent({
       const mysql = response.occurrence?.result?.extensions?.mysql?.payload
         || response.occurrence?.result?.extensions?.mariadb?.payload || postgres || sqlite || duck || cockroach || ysql || ycql || tidb || vitess || dolt || xtdb || immudb || ignite || cassandra || foundation || tikv || redis || mongodb || clickhouse || influxdb || neo4j || milvus || opensearch || searchsql;
       if (mysql?.has_page) setNativePage(mysql);
+      else if (languageProfile === 'mysql-sql' && (mysql?.statement_metrics || mysql?.error)) {
+        setNativePage(previous => ({...previous,
+          statement_metrics: mysql.statement_metrics || previous?.statement_metrics, error: mysql.error}));
+      }
       if (cassandra?.local_delivery_stopped) {
         setError(gettext('Cassandra result delivery stopped locally. This does not confirm server cancellation or rollback; dispatched mutations may have completed.'));
       }
@@ -8069,14 +8073,22 @@ export default function ProviderWorkspaceContent({
               disabled={busy || querySessionBlocked || !!occurrenceId}
               onExecute={(command) => execute(command, 'native', true)} />}
           </Box>
+          {languageProfile === 'mysql-sql' && nativePage?.error && <Box component="pre"
+            aria-label="MySQL diagnostic" sx={{whiteSpace: 'pre-wrap'}}>
+            {['sqlstate', 'errno', 'message_primary'].filter(key => nativePage.error[key] != null)
+              .map(key => `${key}: ${nativePage.error[key]}`).join('\n')}
+          </Box>}
           {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
             {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
           </Alert>}
           {transaction && <ProviderTransactionObservation transaction={transaction}
             label={gettext('Provider query transaction state')} />}
           {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
-          {rendered && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
-          Buffered rows: {rendered.page?.page_size ?? 0} · Server-retained rows: {rendered.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+          {(rendered || nativePage) && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
+          Buffered rows: {rendered?.page?.page_size ?? 0} · Server-retained rows: {rendered?.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+            {languageProfile === 'mysql-sql' && <Box>
+              Client dispatch (first response; excludes result fetching): {nativePage?.statement_metrics?.dispatch_ms ?? 'Unavailable'} ms
+            </Box>}
             <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>Plan used: {nativePage?.statement_metrics?.plan || 'Unavailable'}</Box>
           </Box>}
           {rendered && <ResultControls rendered={rendered} history={resultHistory}

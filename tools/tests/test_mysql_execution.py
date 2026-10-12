@@ -234,3 +234,23 @@ def test_native_error_text_excludes_local_connector_exceptions():
     local = Executions._error(InterfaceError(msg='private credential material', errno=2003))
     assert 'message_primary' not in local
     assert 'private' not in str(local)
+
+
+def test_failed_native_dispatch_retains_timing_and_diagnostic_without_replay():
+    from mysql.connector.errors import ProgrammingError
+    owner, connection, native = harness([[1]])
+    native.execute = Mock(side_effect=ProgrammingError(
+        msg='Unknown column', errno=1054, sqlstate='42S22'))
+    token = owner.execute(connection, {'source': 'SELECT missing_column'}, {})
+    pages = drain(owner, token)
+    payload = pages[-1]['payload']
+    assert not any(p['payload']['has_page'] for p in pages)
+    assert payload['error']['errno'] == 1054
+    assert payload['error']['sqlstate'] == '42S22'
+    assert payload['error']['message_primary'] == 'Unknown column'
+    metrics = payload['statement_metrics']
+    assert metrics['dispatch_ms'] >= 0
+    assert metrics['prepare_ms'] is metrics['execute_ms'] is metrics['plan'] is None
+    native.execute.assert_called_once()
+    connection.ping.assert_called_once_with(reconnect=False)
+    assert native.closed and not owner.client._uncertain_sessions

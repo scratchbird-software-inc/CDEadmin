@@ -767,3 +767,11 @@ refreshed before execution resumes; the UI never guesses transaction state.
 Concurrent validation/execution share one session-opening request. Switching
 languages or closing a workspace waits for that request and releases the same
 owned session. These controls do not change MySQL DDL implicit-commit semantics.
+
+MySQL statement diagnostics retain native error number, SQLSTATE and message in
+the shared result area, including requests that produce no row result. Client
+dispatch timing covers execution through the first response and excludes result
+fetching. It is shown separately from engine preparation/execution timings,
+which remain unavailable unless independently observed. A JSON EXPLAIN or
+EXPLAIN ANALYZE result is a requested plan; the UI must not relabel client timing
+as engine timing or infer a plan for ordinary statements.

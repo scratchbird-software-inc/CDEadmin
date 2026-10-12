@@ -895,6 +895,29 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'execute')).toBe(false);
   });
 
+  it('retains MySQL dispatch timing and native diagnostics without inventing engine timing or a row result', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT missing',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-diagnostic'}, execute: {occurrence_id: 'mysql-error'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {mysql: {payload: {
+        has_page: false, statement_metrics: {dispatch_ms: 12.5, prepare_ms: null, execute_ms: null, plan: null},
+        error: {errno: 1054, sqlstate: '42S22', message_primary: 'Unknown column missing'},
+      }}}}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio" />);
+    const run = await screen.findByRole('button', {name: 'Run', exact: true});
+    await waitFor(() => expect(run).toBeEnabled()); fireEvent.click(run);
+    expect(await screen.findByLabelText('MySQL diagnostic')).toHaveTextContent('1054');
+    expect(screen.getByLabelText('MySQL diagnostic')).toHaveTextContent('42S22');
+    expect(screen.getByLabelText('MySQL diagnostic')).toHaveTextContent('Unknown column missing');
+    expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('12.5 ms');
+    expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Preparation: Unavailable');
+    expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Execution: Unavailable');
+    expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Plan used: Unavailable');
+  });
+
   it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'mysql-sql', title: 'MySQL SQL',
