@@ -180,6 +180,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['constraint'] = common['constraint'] | frozenset({'enforcement'})
         common['view'] = common['view'] | frozenset({'alter'})
         from ..mysql_object_changes import OPERATIONS as object_changes
         for kind, operations in object_changes.items():
@@ -1890,6 +1891,15 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             ):
                 add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], {
                     key: value for key, value in record.items() if key not in {'routine_schema', 'routine_name', 'routine_type'}})
+            for record in optional_records(
+                'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED '
+                'FROM information_schema.TABLE_CONSTRAINTS '
+                "WHERE TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
+                'ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME'
+            ):
+                native = {**record, 'enforcement': 'ENFORCED' if record['enforced'] == 'YES' else 'NOT ENFORCED', 'administration': {'allowed_operations':
+                    ['inspect', 'create', 'drop'] + (['enforcement'] if record['constraint_type'] == 'CHECK' else [])}}
+                add('constraint', [record['table_schema'], record['table_name']], record['constraint_name'], native)
             for record in optional_records(
                 'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '
                 'p.PARTITION_ORDINAL_POSITION, p.PARTITION_DESCRIPTION, p.TABLE_ROWS, p.DATA_LENGTH, p.INDEX_LENGTH, '

@@ -792,3 +792,13 @@ updatability, algorithm warnings and check-option enforcement. Quoted identifier
 and account components must remain safe under ANSI_QUOTES/NO_BACKSLASH_ESCAPES.
 Definition changes use native implicit-commit DDL, preserve grants according to
 MySQL, and are never automatically retried after uncertain acknowledgement.
+
+Native CHECK constraint enforcement
+-----------------------------------
+
+MySQL CHECK constraints expose their native ENFORCED state and a separate
+ENFORCED/NOT ENFORCED operation under the exact database/table/constraint target.
+Primary, unique and foreign-key constraints do not receive this operation.
+Changing enforcement uses native ALTER TABLE and implicit commit semantics;
+MySQL validates existing rows when enabling enforcement. A refusal leaves the
+previous native state in force and is not evidence that enforcement changed.

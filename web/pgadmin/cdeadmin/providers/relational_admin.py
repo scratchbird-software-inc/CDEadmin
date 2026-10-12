@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
+from . import mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,11 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mysql' and kind == 'constraint':
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_constraints.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_constraints.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(mysql_constraints.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'view':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_views.OPERATIONS] + [{
                     'operation_id': operation, 'title': mysql_views.form(operation, self._field)['title'],
@@ -664,6 +669,12 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id == 'mysql' and resource_kind == 'constraint' and operation_id in mysql_constraints.OPERATIONS:
+            try:
+                mysql_constraints.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_check_enforcement', 'message': str(error)})
+            return {'errors': errors}
         if self.dialect.engine_id == 'mysql' and resource_kind == 'view' and operation_id in mysql_views.OPERATIONS:
             try:
                 mysql_views.compile_operation(operation_id, draft, request.get('target_resource'))
@@ -3667,6 +3678,10 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return {'statements': [mysql_constraints.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native CHECK enforcement changes use implicit-commit ALTER TABLE.',
+                                 'Enabling enforcement validates existing rows; native refusal does not establish a changed constraint.']}
         if self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'view' and operation in mysql_views.OPERATIONS:
             return {'statements': [mysql_views.compile_operation(operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native view DDL commits independently of interactive transactions.',
@@ -4942,6 +4957,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return value
         if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
             return value
         if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
@@ -5200,6 +5217,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return mysql_constraints.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
             return mysql_views.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
