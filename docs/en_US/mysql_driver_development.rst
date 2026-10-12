@@ -489,7 +489,7 @@ Until those stages pass, a semantic preview cannot be dispatched as a migration.
 
 The table preview's explicit validation stage uses native MySQL PREPARE on an
 independent idle connection, then DEALLOCATE without EXECUTE. It verifies the
-server UUID/version and recorded UTF-8 session context, caps the batch to 32
+server UUID/version and recorded native session context, caps the batch to 32
 statements/1 MiB and returns per-statement native error codes. Unsupported
 preparation remains unavailable; it is not relabelled successful validation.
 Validation does not reserve the live schema or make a preview executable.
@@ -844,3 +844,21 @@ remaining statements stay explicitly not dispatched. The receipt reports ordered
 per-statement results, including partial commitment. Crash/restart and repeat
 requests expose retained observations without redispatching any statement. The
 owner must reconcile native state and prepare a fresh review for remaining work.
+
+
+Native encoding during metadata deployment
+------------------------------------------
+
+Validation and application support native character-set-client and independent
+collation-connection contexts. An owned UTF-8 connection asks MySQL to encode the
+complete statement in the recorded client charset and round-trip it to UTF-8.
+Loss or unsupported context refuses dispatch. ASCII-only charset/collation names
+are required; native SET validates their availability. No Python encoding alias
+is used to approximate MySQL's character maps.
+
+Only statement preparation/dispatch uses those exact bytes under the captured
+context. The connection returns to UTF-8 for identity, baseline and rediscovery
+queries, preserving non-ASCII object names and Unicode result decoding. Native
+SQL mode remains the captured mode. Context restoration does not imply rollback:
+a success followed by restoration failure is still committed; lost replies remain
+uncertain. The independently owned connection is retired after the operation.

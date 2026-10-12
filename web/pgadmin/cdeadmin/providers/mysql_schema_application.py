@@ -2,6 +2,7 @@
 from ..workspace.firebird_schema_plan import digest
 from ..workspace.mysql_schema_plan import address, alteration, creation, schema
 from .mysql_family.mysql_catalog import identifier
+from .mysql_statement_encoding import statement_context
 
 
 def apply_review(connection, record):
@@ -41,12 +42,9 @@ def apply_review(connection, record):
                 (digest(schema(before)) if before is not None else None) != operation['baseline_schema_sha256'] or
                 digest(schema(after)) != operation['desired_schema_sha256']):
             raise ValueError('Reviewed native statement or baseline fingerprint changed')
-        if context['character_set_client'] not in {'utf8mb4', 'utf8mb3', 'utf8'}:
-            raise ValueError('Application needs an admitted UTF-8 encoding context')
         connection.autocommit = True
         connection.sql_mode = context['sql_mode']
-        connection.set_charset_collation(charset=context['character_set_client'],
-                                         collation=context['collation_connection'])
+        connection.set_charset_collation(charset='utf8mb4', collation='utf8mb4_0900_ai_ci')
         cursor = connection.cursor()
         cursor.execute('SET SESSION lock_wait_timeout=2')
         cursor.execute('SET SESSION sql_quote_show_create=1')
@@ -70,10 +68,11 @@ def apply_review(connection, record):
             observed = cursor.fetchone()
             if not observed or digest({'definition': observed[1], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
                 raise ValueError('Locked native table changed since review')
-        dispatched = True
-        cursor.execute(compiled)
-        acknowledged = True
-        result['state'] = 'committed'
+        with statement_context(connection, cursor, compiled, context) as encoded:
+            dispatched = True
+            cursor.execute(encoded)
+            acknowledged = True
+            result['state'] = 'committed'
         if operation['operation'] == 'drop':
             try:
                 cursor.execute('SHOW CREATE TABLE ' + target)

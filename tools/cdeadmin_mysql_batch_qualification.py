@@ -46,8 +46,8 @@ def qualify(options, output):
             request = {'review_id': receipt['review_id'], 'review_digest': receipt['review_digest'], 'confirmed': True}
             class CursorProxy:
                 def __init__(self, native): self.native = native
-                def execute(self, source):
-                    result = self.native.execute(source)
+                def execute(self, source, *parameters):
+                    result = self.native.execute(source, *parameters)
                     if source.startswith('ALTER TABLE'): raise OSError('fixture loses native success acknowledgement')
                     return result
                 def __getattr__(self, key): return getattr(self.native, key)

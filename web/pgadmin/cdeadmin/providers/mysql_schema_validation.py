@@ -1,5 +1,6 @@
 """Native PREPARE-only validation for server-compiled MySQL metadata previews."""
 import time
+from .mysql_statement_encoding import statement_context
 
 
 def validate(connection,plan):
@@ -18,14 +19,12 @@ def validate(connection,plan):
         for index,operation in enumerate(plan['operations']):
             if time.monotonic()-started>30:raise ValueError('Native validation exceeds 30 seconds')
             context=operation['context']
-            if context['character_set_client'] not in {'utf8mb4','utf8mb3','utf8'}:
-                raise ValueError('Native validation needs an admitted UTF-8 encoding context')
             connection.sql_mode=context['sql_mode']
-            connection.set_charset_collation(charset=context['character_set_client'],collation=context['collation_connection'])
             prepared=False
             try:
-                cursor.execute('SET @sr_native_preview = %s',(operation['source'],))
-                cursor.execute('PREPARE sr_native_preview FROM @sr_native_preview');prepared=True
+                with statement_context(connection, cursor, operation['source'], context) as encoded:
+                    cursor.execute('SET @sr_native_preview = %s',(encoded,))
+                    cursor.execute('PREPARE sr_native_preview FROM @sr_native_preview');prepared=True
                 results.append({'resource_id':operation['resource_id'],'index':index,'accepted':True})
             except Exception as error:
                 code=getattr(error,'errno',None)

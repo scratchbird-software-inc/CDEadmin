@@ -79,7 +79,7 @@ def test_locked_drift_refuses_dispatch_and_success_ack_survives_rediscovery_fail
 
 def test_native_dispatch_interruption_is_unknown_and_cleaned_up(tmp_path):
     applications,receipt,connection,cursor=execute_fixture(tmp_path)
-    def execute(source):
+    def execute(source, *parameters):
         if source.startswith('ALTER TABLE'):raise OSError('lost acknowledgement')
     cursor.execute.side_effect=execute
     result=applications.apply(request(receipt),'owner','binding',lambda record:apply_review(connection,record))
@@ -123,7 +123,7 @@ def test_creation_receipt_requires_absence_and_recompiles_exact_desired_definiti
     applications,receipt,before,desired=reviewed_creation(tmp_path)
     missing=RuntimeError('missing table');missing.errno=1146
     cursor=Mock();cursor.fetchone.side_effect=[('9.7.0','server','demo`db'),('t',table(desired)['native']['definition'])]
-    def execute(source):
+    def execute(source, *parameters):
         if source.startswith('SHOW CREATE') and not any(c.args[0].startswith('CREATE TABLE') for c in cursor.execute.call_args_list):
             raise missing
     cursor.execute.side_effect=execute
@@ -219,3 +219,17 @@ def test_batch_success_retains_each_statement_and_rejects_duplicate_targets(tmp_
     from pgadmin.cdeadmin.workspace.firebird_schema_plan import digest
     preview['execution_sha256']=digest(preview['operations'])
     with pytest.raises(SchemaApplyError):applications.review(preview,before,desired,'owner','binding','target')
+
+
+def test_native_success_remains_committed_when_unicode_context_restoration_fails(tmp_path):
+    applications,receipt,connection,cursor=execute_fixture(tmp_path)
+    calls=[]
+    def restore(**options):
+        calls.append(options)
+        if len(calls)==3:raise OSError('context restoration lost acknowledgement')
+    connection.set_charset_collation.side_effect=restore
+    result=applications.apply(request(receipt),'owner','binding',lambda record:apply_review(connection,record))
+    assert result['state']=='committed' and not result['outcome']['rediscovery_verified']
+    assert result['outcome']['error_type']=='OSError'
+    assert sum(call.args[0].startswith('ALTER TABLE') for call in cursor.execute.call_args_list)==1
+    assert applications.apply(request(receipt),'owner','binding',lambda _:pytest.fail('replay'))==result
