@@ -705,3 +705,23 @@ The mixed-encoding consumer uses ``mysql --binary-mode
 default in batch mode; the admitted short ``\C`` charset command and DELIMITER
 continue to work without enabling unrelated local commands. Consumer options
 are retained in the artifact manifest and shown with the download.
+
+Routine characteristics and index identity
+------------------------------------------
+
+MySQL routine ALTER forms change native SQL SECURITY, SQL data-access
+characteristics and comments, retaining unspecified characteristics. Native
+MySQL 9.7 ignores an empty ALTER comment; the adapter refuses an explicitly
+empty comment rather than promising to clear it. A blank optional field leaves
+the comment unchanged. They never replace a routine body or change its
+signature or determinism: those are not MySQL ALTER characteristics. Native
+privileges and routine-language restrictions remain authoritative. Comments are
+bound values and are not included in generated command previews.
+
+Secondary-index forms rename the exact database/table/index or set native
+VISIBLE/INVISIBLE optimizer visibility. Invisible indexes remain maintained and
+continue enforcing uniqueness; visibility is not deletion or constraint removal.
+Primary keys have neither operation. Native implicit-primary-key restrictions
+may also reject invisibility. These DDL actions commit independently; a lost
+acknowledgement must not be automatically replayed. MariaDB retains its own
+separate dialect and does not inherit these MySQL controls.

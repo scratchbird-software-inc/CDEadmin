@@ -180,6 +180,9 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_object_changes import OPERATIONS as object_changes
+        for kind, operations in object_changes.items():
+            common[kind] = common[kind] | operations
         from ..mysql_replication import OPERATIONS as replication_operations
         common['replication-channel'] = common['replication-channel'] | replication_operations
         from ..mysql_partitions import OPERATIONS as partition_operations
@@ -1849,6 +1852,21 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     ],
                 })
         if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, INDEX_TYPE, IS_VISIBLE, INDEX_COMMENT '
+                'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2,3"
+            ):
+                native = {key: value for key, value in record.items() if key not in {'table_schema', 'table_name', 'index_name'}}
+                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if record['index_name'].upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
+                add('index', [record['table_schema'], record['table_name']], record['index_name'], native)
+            for record in optional_records(
+                'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, SECURITY_TYPE, SQL_DATA_ACCESS, ROUTINE_COMMENT, IS_DETERMINISTIC '
+                'FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2"
+            ):
+                add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], {
+                    key: value for key, value in record.items() if key not in {'routine_schema', 'routine_name', 'routine_type'}})
             for record in optional_records(
                 'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '
                 'p.PARTITION_ORDINAL_POSITION, p.PARTITION_DESCRIPTION, p.TABLE_ROWS, p.DATA_LENGTH, p.INDEX_LENGTH, '

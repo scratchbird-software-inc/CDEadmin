@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 81,
+    "authoritative_task_count": 85,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -48,10 +48,13 @@
       "visual_admin.event.alter",
       "visual_admin.event.create",
       "visual_admin.event.drop",
+      "visual_admin.function.alter",
       "visual_admin.function.create",
       "visual_admin.function.drop",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.index.rename",
+      "visual_admin.index.visibility",
       "visual_admin.materialized-view.alter",
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
@@ -67,6 +70,7 @@
       "visual_admin.plugin.drop",
       "visual_admin.privilege.grant",
       "visual_admin.privilege.revoke",
+      "visual_admin.procedure.alter",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
       "visual_admin.replication-channel.alter",
@@ -114,7 +118,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 81,
+    "implemented_task_count": 85,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44446,7 +44450,8 @@
     "mysql-9.7.0-role-membership-native-20261012",
     "mysql-9.7.0-tablespaces-native-20261012",
     "mysql-9.7.0-partitions-native-20261012",
-    "mysql-9.7.0-replication-native-20261012"
+    "mysql-9.7.0-replication-native-20261012",
+    "mysql-9.7.0-object-changes-native-20261012"
   ],
   "profile_id": "mysql-native",
   "proof_records": [
@@ -44602,6 +44607,24 @@
       "format": "scratchrobin.native-replication-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "6c08da8a5379bdeb1f2b4b86dfe568e88142eb4b76f3f4fb81c94ec65e601821"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-object-changes-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_object_changes_qualification.py",
+      "format": "scratchrobin.native-object-changes-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "33652c16682f8f8d6eb7e0c2fbb3f4b059eca02c768c4fab1db81c8e94fd7adf"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-object-changes-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_object_changes_qualification.py",
+      "format": "scratchrobin.native-object-changes-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "33652c16682f8f8d6eb7e0c2fbb3f4b059eca02c768c4fab1db81c8e94fd7adf"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -44877,6 +44900,22 @@
       "task_id": "visual_admin.event.drop"
     },
     {
+      "task_id": "visual_admin.function.alter",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER FUNCTION `sr_objects`.`f``é` SQL SECURITY INVOKER NO SQL COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER FUNCTION `sr_objects`.`f``é` SQL SECURITY INVOKER NO SQL COMMENT %s"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -44931,6 +44970,34 @@
         "DROP INDEX `cde_editor_index` ON `cde_live_f95bb4ef1e8e`.`qualification`"
       ],
       "task_id": "visual_admin.index.drop"
+    },
+    {
+      "task_id": "visual_admin.index.rename",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_objects`.`t``é` RENAME INDEX `i``é` TO `renamed``é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_objects`.`t``é` RENAME INDEX `i``é` TO `renamed``é`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.index.visibility",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_objects`.`t``é` ALTER INDEX `renamed``é` INVISIBLE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_objects`.`t``é` ALTER INDEX `renamed``é` INVISIBLE"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -45141,6 +45208,22 @@
         "REVOKE SELECT ON `cde_live_f95bb4ef1e8e`.`qualification` FROM 'cde_editor_user'@'%'"
       ],
       "task_id": "visual_admin.privilege.revoke"
+    },
+    {
+      "task_id": "visual_admin.procedure.alter",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER PROCEDURE `sr_objects`.`p``é` SQL SECURITY INVOKER NO SQL COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER PROCEDURE `sr_objects`.`p``é` SQL SECURITY INVOKER NO SQL COMMENT %s"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",

@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
+from . import mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,12 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
+                additions = mysql_object_changes.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mysql_object_changes.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_replication.OPERATIONS] + [{
                     'operation_id': operation, 'title': mysql_replication.form(operation, self._field)['title'],
@@ -653,6 +659,12 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'mysql' and operation_id in mysql_object_changes.OPERATIONS.get(resource_kind, ())):
+            try:
+                mysql_object_changes.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_object_change', 'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and resource_kind == 'replication-channel' and operation_id in mysql_replication.OPERATIONS):
             try:
                 mysql_replication.compile_operation(operation_id, draft, request.get('target_resource'))
@@ -3644,6 +3656,10 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if (self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mysql_object_changes.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native object DDL commits independently of interactive transactions.',
+                                 'Routine ALTER changes characteristics, not the body, signature or determinism. Native index constraints remain authoritative.']}
         if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'replication-channel' and operation in mysql_replication.OPERATIONS):
             return {'statements': [mysql_replication.compile_operation(operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native channel configuration, receiver and applier actions do not roll back with interactive transactions.',
@@ -4911,6 +4927,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
+            return value
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
             return value
         if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
@@ -5165,6 +5183,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
+            return mysql_object_changes.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
             return mysql_replication.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
