@@ -18,11 +18,12 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   const [reviewing, setReviewing] = useState(false);
   const [allowNewColumns, setAllowNewColumns] = useState(false);
   const [allowColumnRenames, setAllowColumnRenames] = useState(false);
+  const [allowForeignKeys, setAllowForeignKeys] = useState(false);
   const editor = useRef(null);
   const fileToken = useRef(0);
   useEffect(() => {fileToken.current++; setMerging(false); setReviewing(false);}, [diagram.snapshot]);
   useEffect(() => {
-    fileToken.current++; setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
+    fileToken.current++; setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
     selected.current = {entry: diagram.snapshot?.entry, view: diagram.snapshot?.view};
     seed.current = baseline.current = diagram.snapshot; editor.current = null;
   }, [engine, databaseTargetId]);
@@ -77,11 +78,14 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {engine === 'mysql' && post && onReview && <FormControlLabel label="Include graphical column renames"
       control={<Checkbox checked={allowColumnRenames} disabled={editing || merging || reviewing}
         onChange={event => setAllowColumnRenames(event.target.checked)} />} />}
+    {engine === 'mysql' && post && onReview && <FormControlLabel label="Include foreign key design changes"
+      control={<Checkbox checked={allowForeignKeys} disabled={editing || merging || reviewing}
+        onChange={event => setAllowForeignKeys(event.target.checked)} />} />}
     {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && engine !== 'mysql')} onClick={async () => {
       const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {...(engine === 'mysql' ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {})} : {generation}),
+        const result = await post({action: `${engine}_relational_review`, request: {...(engine === 'mysql' ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);

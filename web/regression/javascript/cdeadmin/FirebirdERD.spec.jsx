@@ -101,3 +101,16 @@ it('admits MySQL graphical renames only through its separate explicit checkbox',
   await waitFor(() => expect(onReview).toHaveBeenCalled());
   expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_column_renames:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
 });
+
+
+it('binds explicit foreign-key design admission to the selected MySQL database', async () => {
+  const Component=withTheme(FirebirdERD);
+  const diagram={snapshot:{format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  expect(screen.getByLabelText('Include foreign key design changes')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Include foreign key design changes'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalled());
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_foreign_keys:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
+});

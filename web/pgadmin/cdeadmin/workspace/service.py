@@ -677,15 +677,17 @@ class ProviderWorkspaceService:
     def mysql_relational_review(self, server, request):
         from .firebird_relational_review import handoff
         if (not isinstance(request, dict) or not {'database_target_id', 'original', 'snapshot'} <= set(request) or
-                set(request) - {'database_target_id', 'original', 'snapshot', 'allow_new_columns', 'allow_column_renames'} or
+                set(request) - {'database_target_id', 'original', 'snapshot', 'allow_new_columns', 'allow_column_renames', 'allow_foreign_keys'} or
                 type(request.get('allow_new_columns', False)) is not bool or
-                type(request.get('allow_column_renames', False)) is not bool):
+                type(request.get('allow_column_renames', False)) is not bool or
+                type(request.get('allow_foreign_keys', False)) is not bool):
             raise ProviderWorkspaceError('Original and edited MySQL relational designs and boolean column admission are required')
         catalog = self.mysql_catalog(server, {'database_target_id': request['database_target_id']})
         try:
             return handoff(catalog['snapshot'], request['original'], request['snapshot'], engine='mysql',
                            allow_new_columns=request.get('allow_new_columns', False),
-                           allow_column_renames=request.get('allow_column_renames', False))
+                           allow_column_renames=request.get('allow_column_renames', False),
+                           allow_foreign_keys=request.get('allow_foreign_keys', False))
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 

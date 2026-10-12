@@ -86,7 +86,7 @@ def test_host_new_column_option_requires_boolean_and_preserves_target_admission(
     service.mysql_catalog.assert_not_called()
     result=service.mysql_relational_review('server',{**base,'allow_new_columns':True})
     service.mysql_catalog.assert_called_once_with('server',{'database_target_id':'target'})
-    handoff.assert_called_once_with('authorized catalog','before','after',engine='mysql',allow_new_columns=True,allow_column_renames=False)
+    handoff.assert_called_once_with('authorized catalog','before','after',engine='mysql',allow_new_columns=True,allow_column_renames=False,allow_foreign_keys=False)
     assert result['status']=='prepared-for-native-preview'
 
 

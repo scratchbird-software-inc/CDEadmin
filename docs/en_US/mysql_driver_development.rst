@@ -1062,8 +1062,8 @@ Unadmitted design intent must remain visible
 
 The relational handoff compares native relationship endpoints, identities,
 kind/enforcement and exact decoded facts. Changed or newly authored relationships
-currently require explicit native foreign-key reconciliation in the owning table
-definition; they must not be silently ignored or represented as deployed.
+require explicit native foreign-key design admission below, or reconciliation
+in the owning table definition; they must not be silently ignored or represented as deployed.
 Pure diagram label/layout changes remain presentation. Rebinding diagram aliases
 without changing native endpoints is presentation as well. Database-root native
 definition/removal changes are blocked with a native-administration requirement
@@ -1088,3 +1088,24 @@ DROP and ADD, with the intermediate unconstrained state visible. It never
 disables foreign-key checking or silently splits one reviewed statement. Column
 renames whose only FK difference is the corresponding native column references
 retain their FK identity and use MySQL's automatic reference propagation.
+
+Explicit relational foreign-key design intent
+--------------------------------------------
+
+The unchecked "Include foreign key design changes" choice admits native ref
+relationships with database enforcement, exact visible source/target tables and
+bounded unique UIDs. The relationship x_record.native_json carries an exact JSON
+object with format scratchrobin.mysql.foreign-key@1; action create or replace;
+name; ordered columns and referenced_columns; and optional native on_delete and
+on_update rules. Existing relationships retain their original native UID/facts
+while specifying replacement intent. Removal instead requires action drop and
+confirmation equal to the exact original constraint name. Missing relationships
+are selection omissions, never drops. Alias/label/layout changes remain display.
+
+The handoff adds/replaces/removes the exact owning table FOREIGN KEY clause,
+rejecting identity collisions, ambiguous original facts and conflicting native
+edits. It then uses normal native PREPARE, reviewed receipts, parent locks and
+rediscovery. Same-name replacement retains the native restriction above; users
+choose a new name or separate reviewed DROP/ADD. Parent/source columns, types,
+indexes, privileges and existing data are validated by native MySQL. Selecting
+this option does not execute or relax any native constraints.

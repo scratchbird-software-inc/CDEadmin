@@ -84,11 +84,14 @@ def read_relations(snapshot, *, engine="firebird"):
         _SLOTS.release()
 
 
-def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False):
+def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False):
     if type(allow_new_columns) is not bool or (allow_new_columns and engine != "mysql"):
         raise ValueError("New-column admission is available only for MySQL")
     if type(allow_column_renames) is not bool or (allow_column_renames and engine != "mysql"):
         raise ValueError("Column-rename admission is available only for MySQL")
+    if type(allow_foreign_keys) is not bool or (allow_foreign_keys and engine != "mysql"):
+        raise ValueError("Foreign-key design admission is available only for MySQL")
+    constraint_changes = {}
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
     if engine == "mysql":
@@ -98,8 +101,11 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 if isinstance(edge.get('native_json'), str):edge['native_json'] = _decode(edge['native_json'])
             return sorted(values, key=_exact_json)
         previous={edge.get('uid'):edge for edge in relationships(before)}
-        if any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
-            raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; edit the owning table native definition for reviewed deployment')
+        if allow_foreign_keys:
+            from .mysql_relational_constraints import relationship_changes
+            constraint_changes = relationship_changes(relationships(before), relationships(after), current['rows'])
+        elif any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
+            raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; enable foreign-key design admission or edit the owning table native definition')
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
     replacements = [[], []]
     changed = []
@@ -118,6 +124,10 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
             facts[1] = merge_fields({**old, 'name': live['name'], 'kind': live['kind']},
                 {**row, 'name': live['name'], 'kind': live['kind']},
                 roots[0]['native']['catalog_row']['sql_mode'], allow_new_columns=allow_new_columns, allow_column_renames=allow_column_renames)
+            if identity in constraint_changes:
+                from .mysql_relational_constraints import merge_constraints
+                facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
+                    constraint_changes[identity],roots[0]['native']['catalog_row']['sql_mode'])
         if engine == 'firebird' and live['kind'] == 'constraint':
             for key in ('source_columns', 'target_columns'):
                 if not _equal(facts[0].get(key), facts[1].get(key)):
