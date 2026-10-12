@@ -31,6 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
+from . import mysql_roles
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -269,6 +270,12 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mysql' and kind == 'role':
+                resource['operations'] = [item for item in resource.get('operations', [])
+                    if item['operation_id'] not in mysql_roles.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_roles.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(mysql_roles.OPERATIONS)]
             if self.dialect.engine_id == 'firebird' and kind == 'view':
                 resource['operations'] = [
                     item for item in resource.get('operations', [])
@@ -617,6 +624,13 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'mysql' and resource_kind == 'role' and
+                operation_id in mysql_roles.OPERATIONS):
+            try:
+                mysql_roles.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_role', 'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'firebird' and
                 resource_kind == 'table' and operation_id == 'reorder_columns'):
             try:
@@ -4069,6 +4083,10 @@ class RelationalAdministration:
             return compiled
         if operation in {'update', 'delete'}:
             return {'statements': [self._compile_identity_dml(request)]}
+        if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'role' and
+                operation in mysql_roles.OPERATIONS):
+            return {'statements': [mysql_roles.compile_operation(
+                operation, request['draft'], request.get('target_resource'))]}
         if (
                 self.dialect.engine_id == 'mariadb' and
                 request['resource_kind'] == 'role' and
@@ -5060,6 +5078,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:
+            return mysql_roles.form(operation, self._field)
         title = operation.replace('_', ' ').title()
         if (self.dialect.engine_id == 'firebird' and kind == 'table' and operation == 'reorder_columns'):
             return firebird_column_order.form(self._field)

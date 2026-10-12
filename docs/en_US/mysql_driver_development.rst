@@ -409,3 +409,21 @@ are observational and independent, not a global schema/data snapshot, cluster
 backup or automatic migration. Unregistered visible databases require explicit
 registration before database expansion. Engine-specific native version and
 owner/route checks apply to every scope.
+
+Native role membership and default activation
+---------------------------------------------
+
+MySQL role membership has dedicated grant/revoke forms. The target role uses
+its native user/host pair; the recipient user and host are separate fields, so
+names containing ``@``, quotes or backticks remain unambiguous. Grant optionally
+includes ``WITH ADMIN OPTION``. Revoke removes membership; MySQL 9.7 does not
+admit MariaDB's ``REVOKE ADMIN OPTION FOR`` syntax, so no such choice is shown.
+
+Default activation is a separate native ``SET DEFAULT ROLE ... TO`` operation.
+The mode is selected role, ALL granted roles or NONE. It replaces the recipient's
+existing default set and requires explicit confirmation. It does not grant
+membership and does not alter an existing attachment's active roles. Native
+permissions and role-edge validation remain MySQL's authority. These account
+administration statements can implicitly commit; they run through the existing
+reviewed native-operation path, never inside the user's pending query work.
+Unassigned locked accounts are not guessed to be roles during discovery.
