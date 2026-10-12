@@ -5553,6 +5553,10 @@
     "mysql-test-data": {
       "reference": "SR-F-001401",
       "title": "MySQL native test-data recipe"
+    },
+    "mysql-native-schema-preview": {
+      "reference": "SR-F-001402",
+      "title": "MySQL native DDN semantic change preview"
     }
   }
 }

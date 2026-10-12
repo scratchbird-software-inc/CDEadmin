@@ -649,6 +649,31 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_schema_plan(self, server, request, *, validate=False):
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog
+        from .mysql_schema_plan import plan
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'source'}:
+            raise ProviderWorkspaceError('Native MySQL preview requires baseline and desired DDN')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        try:
+            baseline = read_catalog(request['baseline'], engine='mysql')
+            desired = read_catalog(request['source'], engine='mysql')
+            for document in (baseline, desired):
+                if (document['provenance']['endpoint_id'] != str(context.endpoint_id) or
+                        document['provenance']['database_target_id'] != target):
+                    raise ValueError('Document belongs to another endpoint or registered database')
+            captured = provider.capture_catalog(endpoint['route'])
+            live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mysql', native_model=True)
+            result = plan(baseline, desired, live)
+            if validate:
+                result.update(provider.validate_schema_plan(endpoint['route'], result))
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mysql_test_data import generate, template

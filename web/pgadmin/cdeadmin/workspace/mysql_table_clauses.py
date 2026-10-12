@@ -4,10 +4,10 @@ import re
 FK = re.compile(r'^\s*CONSTRAINT\s+(?:`(?P<tick>(?:``|[^`])+)`|"(?P<ansi>(?:""|[^"])+)")\s+FOREIGN\s+KEY\s*\(', re.I)
 
 
-def separate_foreign_keys(statement, expected, sql_mode):
-    """Split canonical native table-list clauses with exact catalog identities.
+def table_layout(statement, sql_mode):
+    """Separate native table-list boundaries while preserving exact clause text.
 
-    This recognizes only boundaries and catalog-matched foreign-key clauses. It
+    This recognizes only lexical boundaries. It
     does not validate arbitrary SQL grammar or authorize execution of a script.
     """
     no_escape = 'NO_BACKSLASH_ESCAPES' in {part.strip().upper() for part in sql_mode.split(',')}
@@ -50,8 +50,13 @@ def separate_foreign_keys(statement, expected, sql_mode):
         i += 1
     if opening is None or closing is None or quote or comment or depth:
         raise ValueError('Native table clause boundaries are unavailable')
+    return {'prefix':statement[:opening], 'clauses':clauses, 'suffix':statement[closing+1:]}
+
+
+def separate_foreign_keys(statement, expected, sql_mode):
+    layout = table_layout(statement, sql_mode)
     remaining, foreign = [], {}
-    for clause in clauses:
+    for clause in layout['clauses']:
         match = FK.match(clause)
         if match:
             name = match.group('tick').replace('``', '`') if match.group('tick') is not None else match.group('ansi').replace('""', '"')
@@ -61,4 +66,4 @@ def separate_foreign_keys(statement, expected, sql_mode):
     if set(foreign) != set(expected):
         raise ValueError('Native foreign-key definitions do not match catalog identities')
     if not remaining:raise ValueError('Native table body is empty')
-    return statement[:opening+1] + ','.join(remaining) + statement[closing:], list(foreign.values())
+    return layout['prefix'] + '(' + ','.join(remaining) + ')' + layout['suffix'], list(foreign.values())

@@ -75,3 +75,24 @@ describe('MySQL native catalog form', () => {
   });
 
 });
+
+describe('MySQL three-way native metadata preview', () => {
+  it('binds saved baseline and desired DDN to fresh native review without applying', async () => {
+    const preview={operations: [{source: 'ALTER TABLE `demo`.`native` ADD COLUMN `value` int'}], ready_for_review: true,
+      blockers: [], conflicts: [], ignored: [], executed: false};
+    const post=jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(preview).mockResolvedValueOnce({
+      ...preview, native_grammar_validated: true, native_validation: [{index: 0, accepted: true}]});
+    render(<Component post={post} databaseTargetId="mysql-owned-target" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    fireEvent.click(screen.getByRole('button', {name: 'Preview native changes'}));
+    await screen.findByRole('textbox', {name: 'Native MySQL change preview'});
+    expect(post).toHaveBeenLastCalledWith({action: 'mysql_schema_plan', request: {
+      database_target_id: 'mysql-owned-target', baseline: JSON.stringify(capture.snapshot), source: JSON.stringify(capture.snapshot)}});
+    fireEvent.click(screen.getByRole('button', {name: 'Validate native changes'}));
+    await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
+    expect(post.mock.calls.every(([request]) => ['mysql_catalog_export','mysql_schema_plan','mysql_schema_validate'].includes(request.action))).toBe(true);
+    expect(screen.getByText('SR-F-001402')).toBeVisible();
+    expect(screen.queryByRole('button', {name: /^Apply/})).not.toBeInTheDocument();
+  });
+});

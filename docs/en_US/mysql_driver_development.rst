@@ -465,3 +465,31 @@ that MyISAM writes, sequence allocation or trigger effects are rollback-safe.
 Limits: 32 tables, 1000 rows per table, 5000 total rows, 4 MiB recipe and 1 MiB
 script. Recipes and downloaded scripts may include user data. SQL text literals
 use explicit UTF-8 hexadecimal conversion, independent of SQL-mode escaping.
+
+Native DDN change-review admission
+---------------------------------
+
+A native MySQL change review compares baseline, desired and freshly captured
+live catalog models for the same authenticated endpoint, registered database
+and server UUID. Comparison uses schema definitions and stored creation context,
+not volatile statistics. A missing desired row is a filtered selection, never
+removal intent. Explicit removals must carry the adapter's target-name
+confirmation. Conflicting live edits block the affected operation. Imported
+SQL remains input: lexical clause separation is not native grammar validation.
+
+Table alteration previews preserve native SHOW CREATE clauses, including native
+types, expressions, defaults, comments, indexes and constraints. Column removal
+requires an explicit ``mysql_change.drop_columns`` list; table removal requires
+``mysql_change.action = drop`` and exact name confirmation. New tables must have
+an exact native target identity and a CREATE TABLE definition. Unsupported or
+ambiguous native clauses block the affected operation without guessing SQL.
+Native PREPARE validation, reviewed receipt admission, locked revalidation,
+explicit apply and post-application rediscovery are separate required stages.
+Until those stages pass, a semantic preview cannot be dispatched as a migration.
+
+The table preview's explicit validation stage uses native MySQL PREPARE on an
+independent idle connection, then DEALLOCATE without EXECUTE. It verifies the
+server UUID/version and recorded UTF-8 session context, caps the batch to 32
+statements/1 MiB and returns per-statement native error codes. Unsupported
+preparation remains unavailable; it is not relabelled successful validation.
+Validation does not reserve the live schema or make a preview executable.

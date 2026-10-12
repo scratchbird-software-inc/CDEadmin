@@ -11,12 +11,14 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
+  const [baseline, setBaseline] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
   const [metadata, setMetadata] = useState(null), [dataCapture, setDataCapture] = useState(null);
   const [relation, setRelation] = useState(''), [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setDataCapture(null); setRelation(''); setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
+    setBaseline(''); setSchemaPlan(null);
     setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -29,6 +31,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       if(token !== serial.current) return;
       if(compare) setComparison(response);
       else {setSource(''); setMetadata(null); setDataCapture(null);
+        setBaseline(JSON.stringify(response.snapshot)); setSchemaPlan(null);
         setRelation(response.objects?.find(item => ['table', 'view', 'materialized-view'].includes(item.kind))?.resource_id || ''); setResult(response); setComparison(null); setDisplay('inventory'); setView(response.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL catalog capture failed');}
     finally {if(token === serial.current) setBusy(false);}
@@ -47,6 +50,16 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     const url = URL.createObjectURL(new Blob([metadata.script], {type: 'text/plain;charset=utf-8'}));
     const link = document.createElement('a'); link.href = url; link.download = 'mysql-native-metadata.sql'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const previewChanges = async (validate=false) => {
+    const token = ++serial.current;
+    setBusy(true); setError(''); setSchemaPlan(null);
+    try {
+      const response = await post({action: validate ? 'mysql_schema_validate' : 'mysql_schema_plan', request: {database_target_id: databaseTargetId,
+        baseline, source: source || JSON.stringify(result.snapshot)}});
+      if(token === serial.current) setSchemaPlan(response);
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL native change preview failed');}
+    finally {if(token === serial.current) setBusy(false);}
   };
   const captureData = async () => {
     const token = ++serial.current;
@@ -79,12 +92,22 @@ export default function MySQLCatalog({post, databaseTargetId}) {
           event.target.value = '';
           if(!file) return;
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {const text = await file.text(); if(token === serial.current) {setSource(text); setMetadata(null); setComparison(null);}}
+          try {const text = await file.text(); if(token === serial.current) {setSource(text); setMetadata(null); setComparison(null); setSchemaPlan(null);}}
           catch {if(token === serial.current) setError('Unable to read catalog file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => run(true)}>Compare with live catalog</Button>
       <Button disabled={busy || !(source || result?.snapshot) || !databaseTargetId} onClick={generate}>Generate native SQL</Button>
       <Button disabled={busy || !metadata?.script_available} onClick={downloadSQL}>Download native SQL</Button>
+      <Button component="label" disabled={busy}>Read baseline DDN<input hidden type="file" accept=".ddn,.json" aria-label="MySQL baseline DDN file"
+        onChange={async event => {
+          const file = event.target.files?.[0], token = serial.current; event.target.value = '';
+          if(!file) return;
+          if(file.size > 8 * 1024 * 1024) {setError('Baseline exceeds 8 MiB'); return;}
+          try {const text = await file.text(); if(token === serial.current) {setBaseline(text); setSchemaPlan(null);}}
+          catch {if(token === serial.current) setError('Unable to read baseline');}
+        }} /></Button>
+      <Button disabled={busy || !baseline || !(source || result?.snapshot)} onClick={() => previewChanges()}>Preview native changes</Button>
+      <Button disabled={busy || !schemaPlan?.ready_for_review} onClick={() => previewChanges(true)}>Validate native changes</Button>
       <TextField select size="small" label="Display" value={display} disabled={busy || !result}
         onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : event.target.value === 'data' ? dataCapture.snapshot.view : result.snapshot.view);}}>
         <MenuItem value="inventory">Native inventory</MenuItem>
@@ -135,6 +158,19 @@ export default function MySQLCatalog({post, databaseTargetId}) {
           {key: 'status', name: 'Difference', width: 140},
           {key: 'fields', name: 'Changed native fields', minWidth: 260, renderCell: ({row}) => row.fields.join(', ')},
         ]} />
+    </Box>}
+    {schemaPlan && <Box>
+      <FormReference formKey="mysql-native-schema-preview" />
+      <Alert severity="info">Native semantic preview only. Native grammar validation, a prepared review receipt, locked revalidation and rediscovery are required before application.</Alert>
+      {schemaPlan.native_validation && <Alert severity={schemaPlan.native_grammar_validated ? 'success' : 'error'}>
+        {schemaPlan.native_grammar_validated ? 'Native PREPARE accepted the change statements; none were executed.' : 'Native PREPARE rejected one or more change statements.'}
+      </Alert>}
+      {schemaPlan.native_validation?.filter(item => !item.accepted).map(item => <Alert severity="error" key={item.index}>MySQL error {item.error_code}, SQLSTATE {item.sqlstate}</Alert>)}
+      {schemaPlan.blockers?.map(item => <Alert severity="error" key={item.resource_id + item.reason}>{item.name}: {item.reason}</Alert>)}
+      {schemaPlan.conflicts?.map(item => <Alert severity="error" key={item.resource_id}>Live conflict: {item.reason}</Alert>)}
+      {schemaPlan.ignored?.map(item => <Alert severity="info" key={item.resource_id}>{item.reason}</Alert>)}
+      {!!schemaPlan.operations?.length && <TextField label="Native MySQL change preview" multiline minRows={4} maxRows={16}
+        value={schemaPlan.operations.map(item => item.source + ';').join('\n\n')} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
     </Box>}
     {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
       <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId} />

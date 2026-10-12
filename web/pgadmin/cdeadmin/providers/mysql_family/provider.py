@@ -1444,6 +1444,18 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def validate_schema_plan(self, route, plan):
+        from ..mysql_schema_validation import validate
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL validation client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return validate(connection, plan)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_server_catalog(self, route):
         from .mysql_server_catalog import capture
         self._require('data_read', 'resource')
