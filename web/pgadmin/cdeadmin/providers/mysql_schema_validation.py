@@ -20,6 +20,7 @@ def validate(connection,plan):
             if time.monotonic()-started>30:raise ValueError('Native validation exceeds 30 seconds')
             context=operation['context']
             connection.sql_mode=context['sql_mode']
+            if 'time_zone' in context:connection.time_zone=context['time_zone']
             prepared=False
             try:
                 with statement_context(connection, cursor, operation['source'], context) as encoded:

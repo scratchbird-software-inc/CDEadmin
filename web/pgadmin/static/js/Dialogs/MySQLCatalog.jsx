@@ -184,7 +184,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     {schemaPlan && <Box>
       <FormReference formKey="mysql-native-schema-preview" />
-      <Alert severity="info">Review the displayed native CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Existing tables use native table locks; views and libraries use cooperating advisory locks. Baselines are revalidated before dispatch; unknown outcomes are never automatically retried.</Alert>
+      <Alert severity="info">Review the displayed native CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Existing tables use native table locks; views, libraries and events use cooperating advisory locks. Baselines are revalidated before dispatch; unknown outcomes are never automatically retried.</Alert>
       {schemaPlan.native_validation && <Alert severity={schemaPlan.native_grammar_validated ? 'success' : 'error'}>
         {schemaPlan.native_grammar_validated ? 'Native PREPARE accepted the change statements; none were executed.' : 'Native PREPARE rejected one or more change statements.'}
       </Alert>}
@@ -197,7 +197,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
       <Button disabled={busy || !schemaPlan?.ready_for_review || !schemaPlan.native_grammar_validated ||
-        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => !['table','view','library'].includes(op.kind) || !['create', 'alter', 'drop'].includes(op.operation))}
+        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => !['table','view','library','event'].includes(op.kind) || !['create', 'alter', 'drop'].includes(op.operation))}
       onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
       <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
         disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />

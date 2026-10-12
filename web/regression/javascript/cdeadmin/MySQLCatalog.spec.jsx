@@ -98,7 +98,7 @@ describe('MySQL three-way native metadata preview', () => {
 });
 
 describe('MySQL reviewed schema controls', () => {
-  it.each([['table','alter'],['table','create'],['table','drop'],['view','alter'],['view','create'],['view','drop'],['library','create'],['library','alter'],['library','drop']])('requires native validation, receipt and confirmation for %s %s, then shows the native outcome', async (kind,operationId) => {
+  it.each([['table','alter'],['table','create'],['table','drop'],['view','alter'],['view','create'],['view','drop'],['library','create'],['library','alter'],['library','drop'],['event','create'],['event','alter'],['event','drop']])('requires native validation, receipt and confirmation for %s %s, then shows the native outcome', async (kind,operationId) => {
     const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
     const operation={kind,operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
     const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation],warnings:kind==='view'?['External DDL is not fenced']:[]};

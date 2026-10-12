@@ -106,7 +106,7 @@ def capture(connection, database, *, include_system=False):
     identity = list(read('SELECT DATABASE() AS database_name, VERSION() AS version, '
                          '@@server_uuid AS server_uuid, @@lower_case_table_names AS lower_case_table_names, '
                          '@@sql_mode AS sql_mode, @@character_set_client AS character_set_client, '
-                         '@@collation_connection AS collation_connection'))
+                         '@@collation_connection AS collation_connection, @@time_zone AS time_zone'))
     if len(identity) != 1 or identity[0]['database_name'] != database:
         raise ValueError('Selected MySQL database identity changed')
     if identity[0]['version'].split('-')[0] != '9.7.0':
@@ -139,7 +139,7 @@ def capture(connection, database, *, include_system=False):
         item = add(kind, name, row, root['resource_id'])
         item['native']['definition'] = ddl
         item['native']['definition_context'] = {key: value for key, value in (values[0].items() if values else ())
-            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
+            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
         item['native']['definition_available'] = bool(ddl)
         relations[name] = item
 
@@ -172,7 +172,7 @@ def capture(connection, database, *, include_system=False):
                         if key.startswith('create ') or key == 'sql original statement'), None)
             item['native']['definition'] = ddl
             item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
-                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
+                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
             if kind == 'library':
                 # SHOW CREATE LIBRARY exposes SQL mode, but not the stored
                 # client charset/collation. Its decoded Unicode text is exported

@@ -136,7 +136,7 @@ def plan(baseline,desired,live):
                 if current is not None:address(current,database)
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
-            if after['kind'] not in {'table','view','library'}:raise ValueError('Native adapter for this object kind is not yet admitted')
+            if after['kind'] not in {'table','view','library','event'}:raise ValueError('Native adapter for this object kind is not yet admitted')
             if before is not None and (current is None or not _equal(schema(before),schema(current))):
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
@@ -148,7 +148,14 @@ def plan(baseline,desired,live):
                     raise ValueError('Removal requires exact native name confirmation')
                 operation='drop'
             else:operation='alter'
-            if after['kind']=='library':
+            if after['kind']=='event':
+                from .mysql_event_plan import compile_event
+                source=compile_event(after,operation,database)
+                context={name:after['native'].get('definition_context',{}).get(name)
+                    for name in ('sql_mode','character_set_client','collation_connection','time_zone')}
+                if any(not isinstance(value,str) or '\x00' in value for value in context.values()):
+                    raise ValueError('Native event SQL/character/time-zone context is required')
+            elif after['kind']=='library':
                 from .mysql_library_plan import compile_library
                 source=compile_library(after,operation,database,before)
                 context={name:after['native'].get('definition_context',{}).get(name,identity[name])
@@ -177,5 +184,5 @@ def plan(baseline,desired,live):
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
-            (['View/library updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
-             if any(op['kind'] in {'view','library'} and op['operation']!='create' for op in operations) else [])}
+            (['View/library/event updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
+             if any(op['kind'] in {'view','library','event'} and op['operation']!='create' for op in operations) else [])}

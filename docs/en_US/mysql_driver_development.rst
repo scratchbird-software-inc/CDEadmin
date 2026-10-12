@@ -828,7 +828,7 @@ preview must not invalidate a handoff or leave the catalog in a busy state.
 Reviewed multi-table application receipts
 ----------------------------------------
 
-A native-validated plan may contain 1 to 32 distinct user-table/ordinary-view/library CREATE/ALTER/DROP
+A native-validated plan may contain 1 to 32 distinct user-table/ordinary-view/library/event CREATE/ALTER/DROP
 operations, within 1 MiB of SQL and the existing 4 MiB review bound. Review seals
 its displayed order, exact baseline/desired fingerprints, owner and database
 binding. Application runs that order once, using the existing independently
@@ -1010,3 +1010,19 @@ SHOW CREATE/SQL-mode comparison. External DDL is not fenced, so a guaranteed
 exclusive change requires an operator-controlled DDL maintenance window.
 Native acknowledgements, uncertain outcomes, restart and non-replay follow the
 same per-operation durable receipt rules as table/view deployment.
+
+Reviewed DDN events and time zones
+----------------------------------
+
+Event metadata preserves native SHOW CREATE EVENT SQL mode, client charset,
+connection/database collation and event time zone. Native SQL export sets and
+restores the event time zone explicitly; an absent time-zone observation blocks
+event export rather than reinterpreting schedule timestamps in the caller's zone.
+Reviewed CREATE/ALTER/DROP uses the exact event identity, complete native
+schedule/body/definer and recorded session context. No replacement or rename is
+inferred. Native PREPARE validates without scheduling or running an event.
+Advisory locks serialize cooperating applications and fresh SHOW CREATE/context
+checks refuse observed drift; external DDL and scheduler activity remain unfenced.
+An event may execute, expire or remove itself according to native scheduling.
+A success acknowledgement remains committed even if later rediscovery cannot
+find the event; an uncertain outcome is never automatically retried.

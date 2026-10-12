@@ -34,7 +34,7 @@ def _script(blocks, database):
              'DELIMITER ' + delimiter]
     def append(value):
         lines.append(value + '\n' + delimiter)
-    for setting in ('sql_mode', 'character_set_client', 'collation_connection'):
+    for setting in ('sql_mode', 'character_set_client', 'collation_connection', 'time_zone'):
         append('SET ' + prefix + setting + ' = @@SESSION.' + setting)
     selected = False
     for block in blocks:
@@ -45,7 +45,7 @@ def _script(blocks, database):
             selected = True
         lines.append('-- ' + block['kind'])
         append(block['statement'])
-    for setting in ('sql_mode', 'character_set_client', 'collation_connection'):
+    for setting in ('sql_mode', 'character_set_client', 'collation_connection', 'time_zone'):
         append('SET SESSION ' + setting + ' = ' + prefix + setting)
         append('SET ' + prefix + setting + ' = NULL')
     lines.append('DELIMITER ;')
@@ -93,6 +93,8 @@ def build_metadata(document):
             problem(row, 'Exact native SHOW CREATE definition is unavailable')
             continue
         context = {**default_context, **{key: value for key, value in native.get('definition_context', {}).items() if key in default_context}}
+        if kind == 'event':
+            context['time_zone'] = native.get('definition_context', {}).get('time_zone')
         try:
             for value in context.values(): _literal(value)
             charset = context['character_set_client']
