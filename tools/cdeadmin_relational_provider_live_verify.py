@@ -1172,6 +1172,12 @@ def _relational_editor_evidence(provider, request, engine):
                     }, plugin,
                 )
 
+        if engine=='mysql' and attempt('component.create','component','create',{
+                'urns':['file://component_validate_password'],'settings':[]}):
+            component=inspect_created('component.inspect-created','component','file://component_validate_password')
+            if component is not None:
+                attempt('component.drop','component','drop',{'confirmation':'file://component_validate_password'},component)
+
         if engine == 'mariadb':
             def inspect_observed(kind, label, attempts=40):
                 resource = None

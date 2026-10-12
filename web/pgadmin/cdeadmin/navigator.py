@@ -42,6 +42,7 @@ _KIND_LABELS = {
     'package': 'Packages',
     'partition': 'Partitions',
     'plugin': 'Extensions and plugins',
+    'component': 'Server components',
     'privilege': 'Roles and grants',
     'procedure': 'Procedures',
     'publication': 'Replication objects',

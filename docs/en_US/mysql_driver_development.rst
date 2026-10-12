@@ -912,3 +912,23 @@ the corresponding drop/add/modify operations within that single ALTER TABLE.
 Native PREPARE, locked baseline revalidation, receipt admission, execution and
 rediscovery remain required. Graphical label changes alone do not authorize this
 operation; field UID and native-name reconciliation remain distinct.
+
+Native server components
+------------------------
+
+MySQL components have their own server-level inventory branch, separate from
+plugins. Discovery reads component_id, component_group_id and exact component_urn
+from mysql.component; permission failures remain unavailable observations.
+Install accepts 1–32 distinct exact URNs and optional ordered native SET entries
+(scope GLOBAL or PERSIST, exact variable name and scalar literal value).
+Uninstall targets the discovered exact URN with confirmation. A component is not
+renamed or altered through plugin commands; dependent services, native library
+availability, privileges and persistence remain MySQL's authority.
+
+Compilation binds URNs and scalar values as parameters; variable identifiers are
+bounded native names, including component-qualified names. The compact forms
+expose install-time options separately from runtime global/persisted settings.
+No component is downloaded or an absent native library silently substituted.
+Successful install/remove is independently rediscovered; native implicit commits
+and component lifecycle side effects are not represented as user rollbackable.
+MariaDB does not inherit this MySQL-only component operation family.

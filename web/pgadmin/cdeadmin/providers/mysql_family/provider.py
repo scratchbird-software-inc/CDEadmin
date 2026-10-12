@@ -36,7 +36,7 @@ MYSQL_PROFILE = PilotProfile(
     'mysql-session-autocommit', 'tabular',
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
-     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin',
+     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component',
      'replication-channel', 'resource-group', 'system-variable', 'session', 'metric'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
@@ -180,6 +180,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['component'] = frozenset({'inspect','create','drop'})
         common['constraint'] = common['constraint'] | frozenset({'enforcement'})
         common['view'] = common['view'] | frozenset({'alter'})
         from ..mysql_object_changes import OPERATIONS as object_changes
@@ -2062,6 +2063,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 add('tablespace', [], record['name'], {**record, 'engine': 'InnoDB',
                     'available_tablespace_changes': changes, 'keyring_observed_active': keyring_active,
                     'administration': {'allowed_operations': allowed}})
+        if profile is MYSQL_PROFILE:
+            for record in optional_records('SELECT component_id,component_group_id,component_urn FROM mysql.component ORDER BY component_id'):
+                add('component',[],record['component_urn'],record)
         for name, status, plugin_type, library, license_name in plugin_rows:
             add('plugin', [], name, {
                 'status': status,
@@ -2311,7 +2315,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
-            'plugin', 'resource-group', 'server-link', 'system-variable',
+            'plugin', 'component', 'resource-group', 'server-link', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {

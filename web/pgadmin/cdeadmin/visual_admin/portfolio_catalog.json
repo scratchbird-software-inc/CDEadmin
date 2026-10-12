@@ -1212,6 +1212,7 @@
         {"resource_kind": "role", "title": "Role", "operation_profile": "security"},
         {"resource_kind": "privilege", "title": "Privilege", "operation_profile": "security"},
         {"resource_kind": "plugin", "title": "Server plugin", "operation_profile": "definition"},
+        {"resource_kind": "component", "title": "Server component", "operation_profile": "definition"},
         {"resource_kind": "replication-channel", "title": "Replication channel", "operation_profile": "topology"},
         {"resource_kind": "resource-group", "title": "Resource group", "operation_profile": "topology"},
         {"resource_kind": "metric", "title": "Metric", "operation_profile": "read_only"},
