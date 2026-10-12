@@ -64,7 +64,7 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
-  'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export',
+  'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
   'resource_page', 'resource_refresh', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',

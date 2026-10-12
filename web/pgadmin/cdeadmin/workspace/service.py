@@ -610,6 +610,25 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Select a native MySQL endpoint')
         return context, endpoint, provider
 
+    def mysql_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MySQL design request')
+        context, _endpoint, _provider = self._mysql_catalog_context(server, request.get('database_target_id'))
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='mysql').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id),
+                'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
+
     def mysql_native_metadata(self, server, request):
         from .firebird_catalog_import import read_catalog
         from .mysql_sql_export import build_metadata

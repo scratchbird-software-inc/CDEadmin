@@ -2641,7 +2641,7 @@ class ServerNode(PGChildNodeView):
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
                         'firebird_schema_apply', 'firebird_schema_receipt',
@@ -2813,6 +2813,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action in {'mysql_design_read', 'mysql_design_save'}:
+                    payload = service.mysql_design_asset(server, action.removeprefix('mysql_design_'), data.get('request'))
                 elif action == 'mysql_sql_export':
                     payload = service.mysql_native_metadata(server, data.get('request'))
                 elif action in {'mysql_catalog_export', 'mysql_catalog_compare'}:

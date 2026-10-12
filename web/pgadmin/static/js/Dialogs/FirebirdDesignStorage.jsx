@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, TextField} from '@mui/material';
 
-export default function FirebirdDesignStorage({post, databaseTargetId, kind, capture, onLoad, disabled}) {
+export default function FirebirdDesignStorage({post, databaseTargetId, kind, capture, onLoad, disabled, engine='firebird'}) {
   const family = kind === 'catalog' ? 'catalog' : 'relational';
   const [reference, setReference] = useState(null), [revision, setRevision] = useState('');
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
@@ -11,7 +11,7 @@ export default function FirebirdDesignStorage({post, databaseTargetId, kind, cap
   useEffect(() => {
     epoch.current++; running.current = false; setReference(null); setRevision(''); setMessage(''); setError(''); setBusy(false);
     return () => {epoch.current++;};
-  }, [post, databaseTargetId, kind]);
+  }, [post, databaseTargetId, kind, engine]);
   const act = async mode => {
     if (running.current) return;
     const serial = epoch.current;
@@ -23,7 +23,7 @@ export default function FirebirdDesignStorage({post, databaseTargetId, kind, cap
         if (!/^[1-9][0-9]*$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw new Error('Enter a positive revision number.');
         request.version = Number(revision);
       }
-      const value = await post({action: 'firebird_design_' + (mode === 'save' ? 'save' : 'read'), request});
+      const value = await post({action: engine + '_design_' + (mode === 'save' ? 'save' : 'read'), request});
       if (serial !== epoch.current) return;
       setReference(value.assetRef);
       if (mode === 'load' && value.snapshot) onLoad(value);
@@ -42,6 +42,6 @@ export default function FirebirdDesignStorage({post, databaseTargetId, kind, cap
     {error && <Alert severity="error">{error}</Alert>}
   </Box>;
 }
-FirebirdDesignStorage.propTypes = {post: PropTypes.func, databaseTargetId: PropTypes.string,
+FirebirdDesignStorage.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql']), post: PropTypes.func, databaseTargetId: PropTypes.string,
   kind: PropTypes.oneOf(['catalog', 'relations']).isRequired, capture: PropTypes.func.isRequired,
   onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool};

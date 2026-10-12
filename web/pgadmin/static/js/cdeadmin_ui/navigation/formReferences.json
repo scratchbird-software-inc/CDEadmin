@@ -5537,6 +5537,10 @@
     "mysql-catalog-ddn": {
       "reference": "SR-F-001393",
       "title": "MySQL native catalog and DDN views"
+    },
+    "mysql-relational-diagram": {
+      "reference": "SR-F-001398",
+      "title": "MySQL relational DDN design and saved revisions"
     }
   }
 }

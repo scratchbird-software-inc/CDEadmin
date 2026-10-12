@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
+import FirebirdERD from './FirebirdERD';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
@@ -77,7 +78,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         <MenuItem value="inventory">Native inventory</MenuItem>
         <MenuItem value="relations" disabled={!result?.diagram?.snapshot}>Relations</MenuItem>
       </TextField>
-      {shown?.views && <TextField select size="small" label="DDN view" value={view} disabled={busy} onChange={event => setView(event.target.value)}>
+      {shown?.views && display === 'inventory' && <TextField select size="small" label="DDN view" value={view} disabled={busy} onChange={event => setView(event.target.value)}>
         {shown.views.map(item => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
       </TextField>}
     </Box>
@@ -103,7 +104,10 @@ export default function MySQLCatalog({post, databaseTargetId}) {
           {key: 'fields', name: 'Changed native fields', minWidth: 260, renderCell: ({row}) => row.fields.join(', ')},
         ]} />
     </Box>}
-    {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
+    {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
+      <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId} />
+    </Box>}
+    {shown?.snapshot && display === 'inventory' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />
     </Box>}

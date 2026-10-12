@@ -52,4 +52,16 @@ describe('Native relational DDN handoff', () => {
       snapshot: {...diagram.snapshot, files: {'relations.ddn': 'instant edit'}},
     }});
   });
+  it('uses the paired designer and MySQL form identity without sending Firebird operations', () => {
+    const post = jest.fn();
+    render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-db" post={post} />);
+    expect(screen.getByText('SR-F-001398')).toBeVisible();
+    fireEvent.click(screen.getByText('Edit relational diagram in DDN'));
+    fireEvent.click(screen.getByText('Change design'));
+    fireEvent.click(screen.getByText('Return to diagram viewer'));
+    expect(screen.getByTestId('viewer')).toHaveTextContent('edited design');
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.queryByText('Review relational metadata changes')).toBeNull();
+  });
+
 });

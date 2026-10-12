@@ -28,4 +28,18 @@ describe('Firebird versioned design storage', () => {
     expect(post).toHaveBeenCalledWith({action: 'firebird_design_read', request: {kind: 'relations', database_target_id: 'db', version: 2}});
     expect(onLoad).toHaveBeenCalledWith(value);
   });
+  it('binds MySQL saves to their engine and clears the observed version when the engine changes', async () => {
+    const assetRef = {assetVersion: 1}, post = jest.fn().mockResolvedValue({assetRef, version: 1});
+    const capture = jest.fn(() => ({snapshot: {files: {}}, baseline: {files: {}}}));
+    const rendered = render(<Component engine="mysql" post={post} databaseTargetId="db" kind="relations" capture={capture} onLoad={jest.fn()} />);
+    fireEvent.click(screen.getByText('Check saved relational design'));
+    await waitFor(() => expect(screen.getByText('Save relational design revision')).toBeEnabled());
+    fireEvent.click(screen.getByText('Save relational design revision'));
+    await screen.findByText('Saved relational design revision 1; current revision 1.');
+    expect(post).toHaveBeenLastCalledWith({action: 'mysql_design_save', request: {
+      database_target_id: 'db', kind: 'relations', assetRef, ...capture.mock.results[0].value}});
+    rendered.rerender(<Component engine="firebird" post={post} databaseTargetId="db" kind="relations" capture={capture} onLoad={jest.fn()} />);
+    expect(screen.getByText('Save relational design revision')).toBeDisabled();
+  });
+
 });

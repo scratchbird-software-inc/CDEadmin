@@ -343,3 +343,21 @@ The shared session contribution contract admits native ``autocommit_on`` and
 an action for an engine: the selected provider's declared action set remains
 controlling. MySQL's advertised actions must pass host contribution validation
 before an explorer workspace can bootstrap.
+
+Saved relational designs
+------------------------
+
+MySQL relational captures open in the same sister-project DDN designer used by
+Firebird. Editing a diagram never executes SQL. Native baseline and authored
+workspace are stored together in immutable revisions of an owner-scoped project
+asset. MySQL and Firebird use different project namespaces and baseline keys;
+endpoint/database/kind scopes and optimistic asset versions must match before
+saving. Reading an older revision returns its historical design and baseline
+alongside the current reference for a subsequent compare-and-swap save.
+
+Use the registered native MySQL database context for every read/save; ownership,
+engine and route/database checks occur before asset access. The designer can
+save/download manual layouts and native facts, then merge a newer capture using
+the existing DDN three-way merge tools. A saved diagram is an authored asset,
+not permission to apply metadata. Database-switch responses cannot replace the
+new target's design, and empty visual selections never request deletion.
