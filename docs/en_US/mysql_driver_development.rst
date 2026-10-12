@@ -643,3 +643,27 @@ Per-partition capability filters hide RANGE/LIST-only drop/reorganization on
 HASH/KEY nodes, and hide EXCHANGE on a table with native subpartitions. InnoDB
 OPTIMIZE can report that it rebuilt/analyzed the table instead; the native result
 messages are retained rather than relabeled as a partition-only optimization.
+
+Native replication channels
+---------------------------
+
+MySQL channel forms use CHANGE REPLICATION SOURCE TO, START/STOP REPLICA,
+RESET REPLICA and CHANGE REPLICATION FILTER, scoped with an explicitly bound
+FOR CHANNEL value. The empty value identifies only the native default channel;
+it never means all channels. Reserved Group Replication channels remain owned
+by their native group lifecycle, not these asynchronous-replication forms.
+Create and alter share the native change-source command and retain unspecified
+settings. They never stop an active channel implicitly. Credentials have a
+separate password field and are redacted from validation and command previews.
+
+The advanced source-options object retains native option names and typed values:
+source/network binding, retry/delay/heartbeat, log/GTID positioning, TLS paths,
+verification, compression, failover, row-format and privilege-check settings.
+Unknown options are refused. Exact large log positions use decimal strings.
+Thread selection, source/relay-position or GTID stop conditions, and channel
+filters are explicit controls. RESET optionally removes channel configuration;
+its default preserves it. Native privileges, thread state and option combinations
+remain authoritative. A start acknowledgement does not prove connected transport
+or applied data; discovery exposes native receiver/applier status and error codes
+without passwords. Native replication changes are independent of interactive
+transaction rollback, and failures do not authorize automatic replay.

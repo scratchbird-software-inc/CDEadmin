@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 75,
+    "authoritative_task_count": 81,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -69,6 +69,12 @@
       "visual_admin.privilege.revoke",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
+      "visual_admin.replication-channel.alter",
+      "visual_admin.replication-channel.create",
+      "visual_admin.replication-channel.filter",
+      "visual_admin.replication-channel.reset",
+      "visual_admin.replication-channel.start",
+      "visual_admin.replication-channel.stop",
       "visual_admin.resource-group.alter",
       "visual_admin.resource-group.assign",
       "visual_admin.resource-group.create",
@@ -108,7 +114,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 75,
+    "implemented_task_count": 81,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44439,7 +44445,8 @@
     "mysql-9.7.0-task-live-execution",
     "mysql-9.7.0-role-membership-native-20261012",
     "mysql-9.7.0-tablespaces-native-20261012",
-    "mysql-9.7.0-partitions-native-20261012"
+    "mysql-9.7.0-partitions-native-20261012",
+    "mysql-9.7.0-replication-native-20261012"
   ],
   "profile_id": "mysql-native",
   "proof_records": [
@@ -44577,6 +44584,24 @@
       "format": "scratchrobin.native-partition-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "88d9075dab241641e984c95d19b64df4affd4c49905753d5ed45b18b8c273d98"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-replication-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Two native MySQL 9.7.0 servers",
+      "artifact": "tools/cdeadmin_mysql_replication_qualification.py",
+      "format": "scratchrobin.native-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "6c08da8a5379bdeb1f2b4b86dfe568e88142eb4b76f3f4fb81c94ec65e601821"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-replication-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Two native MySQL 9.7.0 servers",
+      "artifact": "tools/cdeadmin_mysql_replication_qualification.py",
+      "format": "scratchrobin.native-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "6c08da8a5379bdeb1f2b4b86dfe568e88142eb4b76f3f4fb81c94ec65e601821"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -45144,6 +45169,106 @@
         "DROP PROCEDURE `cde_live_f95bb4ef1e8e`.`cde_editor_procedure`"
       ],
       "task_id": "visual_admin.procedure.drop"
+    },
+    {
+      "task_id": "visual_admin.replication-channel.alter",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "CHANGE REPLICATION SOURCE TO SOURCE_CONNECT_RETRY=3, SOURCE_HEARTBEAT_PERIOD=0.5 FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION SOURCE TO SOURCE_CONNECT_RETRY=3, SOURCE_HEARTBEAT_PERIOD=0.5 FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.create",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4"
+      ],
+      "source": "CHANGE REPLICATION SOURCE TO SOURCE_HOST=%s, SOURCE_PORT=3306, SOURCE_USER=%s, SOURCE_AUTO_POSITION=1, SOURCE_SSL=1, SOURCE_CONNECT_RETRY=1, SOURCE_PASSWORD=%s FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION SOURCE TO SOURCE_HOST=%s, SOURCE_PORT=3306, SOURCE_USER=%s, SOURCE_AUTO_POSITION=1, SOURCE_SSL=1, SOURCE_CONNECT_RETRY=1, SOURCE_PASSWORD=%s FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.filter",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "CHANGE REPLICATION FILTER REPLICATE_DO_DB=(`sr_repl_79a12bc4b3a9`), REPLICATE_IGNORE_DB=(), REPLICATE_DO_TABLE=(), REPLICATE_IGNORE_TABLE=(), REPLICATE_WILD_DO_TABLE=(), REPLICATE_WILD_IGNORE_TABLE=(%s), REPLICATE_REWRITE_DB=((`sr_unused_source`,`sr_unused_target`)) FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION FILTER REPLICATE_DO_DB=(`sr_repl_79a12bc4b3a9`), REPLICATE_IGNORE_DB=(), REPLICATE_DO_TABLE=(), REPLICATE_IGNORE_TABLE=(), REPLICATE_WILD_DO_TABLE=(), REPLICATE_WILD_IGNORE_TABLE=(%s), REPLICATE_REWRITE_DB=((`sr_unused_source`,`sr_unused_target`)) FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.reset",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "RESET REPLICA FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "RESET REPLICA FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.start",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "START REPLICA FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "START REPLICA FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.stop",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "STOP REPLICA SQL_THREAD FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "STOP REPLICA SQL_THREAD FOR CHANNEL %s"
+      ]
     },
     {
       "task_id": "visual_admin.resource-group.alter",

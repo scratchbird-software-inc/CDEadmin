@@ -180,6 +180,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_replication import OPERATIONS as replication_operations
+        common['replication-channel'] = common['replication-channel'] | replication_operations
         from ..mysql_partitions import OPERATIONS as partition_operations
         for kind, operations in partition_operations.items():
             common[kind] = common[kind] | operations
@@ -2020,7 +2022,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         for row in optional(replication_source):
             if profile is MYSQL_PROFILE:
                 name, host, port = row
-                native = {'host': host, 'port': port}
+                native = {'channel_name': name, 'host': host, 'port': port,
+                          'replication_password_returned': False,
+                          **({'administration': {'allowed_operations': ['inspect']}}
+                             if str(name).lower().startswith('group_replication_') else {})}
             else:
                 name, host, user, port, *detail = row
                 native = {
@@ -2042,7 +2047,20 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         value, (str, int, float, bool)) else value)
                     for key, value in native.items()
                 }
+            if profile is MYSQL_PROFILE:
+                from ..mysql_replication import channel_label
+                name = channel_label(name)
             add('replication-channel', [], name, native)
+        if profile is MYSQL_PROFILE:
+            for query, observation in [
+                ('SELECT CHANNEL_NAME, SERVICE_STATE, SOURCE_UUID, RECEIVED_TRANSACTION_SET, LAST_ERROR_NUMBER, LAST_ERROR_TIMESTAMP FROM performance_schema.replication_connection_status', 'receiver'),
+                ('SELECT CHANNEL_NAME, SERVICE_STATE, REMAINING_DELAY, COUNT_TRANSACTIONS_RETRIES FROM performance_schema.replication_applier_status', 'applier'),
+            ]:
+                for record in optional_records(query):
+                    name = record['channel_name']
+                    key = ':'.join(['replication-channel', channel_label(name)])
+                    if key in resources:
+                        resources[key]['native'][observation] = record
         if profile is MYSQL_PROFILE:
             for record in optional_records(
                 'SELECT t.THREAD_ID, t.PROCESSLIST_ID, t.PROCESSLIST_USER, t.PROCESSLIST_HOST, '
