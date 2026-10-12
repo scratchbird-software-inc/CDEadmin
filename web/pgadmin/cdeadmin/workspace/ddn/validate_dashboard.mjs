@@ -6,8 +6,8 @@ for await (const part of process.stdin) {
   if(input.length > 2 * 1024 * 1024) throw new Error('Input limit exceeded');
 }
 try {
-  const {snapshot, scope} = JSON.parse(input);
-  process.stdout.write(JSON.stringify(validatePublication(runtime, snapshot, scope)));
+  const {snapshot, scope, engine} = JSON.parse(input);
+  process.stdout.write(JSON.stringify(validatePublication(runtime, snapshot, scope, engine)));
 } catch {
   process.stderr.write('Dashboard source or metric bindings are invalid.');
   process.exitCode = 1;

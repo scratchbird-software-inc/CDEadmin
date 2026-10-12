@@ -32,6 +32,7 @@ _HANDLERS = frozenset({
     'edit_endpoint',
     'forget_endpoint',
     'open_workspace',
+    'open_mysql_fleet', 'open_mysql_dashboard_editor',
     'open_firebird_fleet',
     'open_postgresql_fleet',
     'open_firebird_docker',
@@ -239,6 +240,13 @@ def connector_context_actions(
                         disabled_reason=unavailable_reason,
                     ),
                 ])
+    if engine_id == 'mysql' and not localhost_placeholder:
+        actions.extend([
+            _action('connector.mysql.monitoring', 'MySQL engine dashboard...', 'open_mysql_fleet',
+                icon='tool.dashboard', group='information', priority=5),
+            _action('connector.mysql.dashboard_editor', 'Edit MySQL engine dashboard...', 'open_mysql_dashboard_editor',
+                icon='action.edit', group='information', priority=6, mutation='write'),
+        ])
     if engine_id == 'postgresql' and not localhost_placeholder:
         actions.append(_action(
             'connector.postgresql.monitoring', 'PostgreSQL engine dashboard...',
@@ -687,6 +695,16 @@ def endpoint_context_actions(
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
+    if engine_id == 'mysql':
+        for tab, label in (('monitoring', 'MySQL server dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(f'endpoint.mysql.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability', arguments={'tab': tab},
+                mutation='admin' if tab == 'monitoring_policy' else 'read', enabled=ready and can_manage,
+                disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
+        actions.append(_action('endpoint.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'firebird':
         # Firebird implements guarded native release; do not advertise this
         # lifecycle action for providers without that release contract.
@@ -1168,6 +1186,8 @@ def database_target_context_actions(
                 mutation='admin' if tab == 'monitoring_policy' else 'read',
                 arguments={**base, 'tab': tab},
             ))
+        actions.append(_action('database.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', arguments=base))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

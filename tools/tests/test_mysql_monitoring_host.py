@@ -81,3 +81,32 @@ def test_dedicated_credentials_are_sealed_and_common_lock_is_released(tmp_path, 
         assert shared.close()
         assert host.ownership.fd is None
     finally: shared.close()
+
+
+def test_fleet_is_passive_owner_scoped_and_does_not_expose_authentication(tmp_path, monkeypatch):
+    host, shared, server, permission = make_host(tmp_path, monkeypatch)
+    try:
+        monkeypatch.setattr(host, '_registrations', lambda owner: [{'server_id': 7, 'name': 'MySQL',
+            'databases': [{'target_id': 'database', 'name': 'demo'}]}] if owner == 1 else [])
+        snapshot = Mock(side_effect=lambda owner, sid, target: {'state': 'collecting',
+            'authentication': {'username': 'not-fleet-data'}, 'samples': [{'sample_id': 'old'}, {'sample_id': 'latest'}]})
+        monkeypatch.setattr(host, 'snapshot', snapshot)
+        data = host.fleet(1)
+        assert data['engine_id'] == 'mysql' and data['registered_endpoints'] == 1
+        assert data['servers'][0]['snapshot']['samples'][0]['sample_id'] == 'latest'
+        assert 'not-fleet-data' not in str(data)
+        assert not host._grants and not host._admissions
+        permission.acquire_secret.assert_not_called()
+        assert not host.fleet(2)['servers']
+    finally: shared.close()
+
+
+def test_definition_scope_matches_native_owner_and_database_without_connecting(tmp_path, monkeypatch):
+    host, shared, server, permission = make_host(tmp_path, monkeypatch)
+    try:
+        assert host.definition_scope(1, 7, 'database') == {'engine': 'mysql', 'kind': 'database',
+            'owner': 1, 'server_id': 7, 'endpoint_id': 'endpoint', 'target_id': 'database', 'database': 'demo'}
+        with pytest.raises(PermissionError): host.definition_scope(1, 7, 'other')
+        with pytest.raises(PermissionError): host.definition_scope(2, 7, 'database')
+        permission.acquire_secret.assert_not_called()
+    finally: shared.close()

@@ -10,6 +10,47 @@ export const COUNTER_FIELDS = Object.freeze({
 const counts = {engine: {inventory: 8}, server: {status: 10, server: 6},
   database: {status: 10, database: 10, attachments: 6, transactions: 4,
     io: 4, records: 15, memory: 4, storage: 5, protection: 7}};
+const postgresCounts = {engine: {inventory: 3}, server: {status: 13, databases: 3, activity: 10, locks: 3, replication: 4, io: 3, settings: 4},
+  database: {status: 13, databases: 3, activity: 10, locks: 3, replication: 4, io: 3, settings: 4, tables: 3}};
+const mysqlCounts = {engine: {inventory: 5}, server: {availability: 9, native_status: 5, native_settings: 5, native_storage: 5, native_activity: 5, native_replication: 5},
+  database: {availability: 9, native_status: 5, native_settings: 5, native_storage: 5, native_activity: 5, native_replication: 5}};
+function mysqlDynamic(id, scope) {
+  const hex = value => [...new TextEncoder().encode(value)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  if(scope === 'engine') {
+    const match = /^mysql_fleet_[1-9][0-9]*_[a-f0-9]{2,1024}_([a-f0-9]{2,128})$/.exec(id);
+    return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
+  }
+  const match = /^mysql_(status|settings|storage|activity|replication)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(!match) return false;
+  const fields = {status: ['variable_name', 'variable_value'],
+    settings: ['max_connections', 'innodb_page_size', 'innodb_buffer_pool_size', 'read_only', 'super_read_only', 'event_scheduler'],
+    storage: ['engine', 'tables_count', 'estimated_rows', 'data_bytes', 'index_bytes'],
+    activity: ['processlist_id', 'processlist_user', 'processlist_db', 'processlist_command', 'processlist_time', 'processlist_state'],
+    replication: ['channel_name', 'service_state', 'last_error_number']};
+  if(!fields[match[1]].some(field => hex(field) === match[3])) return false;
+  if(match[1] === 'settings') return match[2] === hex('settings');
+  if(match[1] !== 'status') return true;
+  return ['Uptime', 'Uptime_since_flush_status', 'Threads_connected', 'Threads_running', 'Connections',
+    'Aborted_connects', 'Aborted_clients', 'Questions', 'Com_select', 'Com_insert', 'Com_update', 'Com_delete',
+    'Com_commit', 'Com_rollback', 'Bytes_received', 'Bytes_sent', 'Slow_queries', 'Created_tmp_tables',
+    'Created_tmp_disk_tables', 'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
+    'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_dirty', 'Innodb_data_reads', 'Innodb_data_writes',
+    'Innodb_row_lock_waits', 'Innodb_row_lock_time', 'Innodb_rows_read', 'Innodb_rows_inserted',
+    'Innodb_rows_updated', 'Innodb_rows_deleted'].some(field => hex(field) === match[2]);
+}
+function postgresDynamic(id, scope) {
+  const patterns = scope === 'engine' ? [
+    /^server_[0-9]+_[a-f0-9]{2,1024}_([0-8])$/,
+    /^fleetdb_[0-9]+_[a-f0-9]{2,1024}_[a-f0-9]{2,1024}_([0-8])$/,
+  ] : [
+    /^database_[0-9]+_[a-f0-9]{2,1024}_([0-9]|1[0-5])$/,
+    /^replica_[0-9]+_[a-f0-9]{2,1024}_([0-9])$/,
+    /^io_[a-f0-9]{2,1024}_([0-7])$/,
+    /^(lock|setting)_[a-f0-9]{2,1024}_0$/,
+    ...(scope === 'database' ? [/^table_[0-9]+_[a-f0-9]{2,1024}_([0-9]|1[01])$/] : []),
+  ];
+  return patterns.some(pattern => pattern.test(id));
+}
 const unavailable = {value: 'Unavailable', unit: '', rate: ''};
 function check(condition, message) { if(!condition) throw new Error(message); }
 function records(runtime, files) {
@@ -19,21 +60,26 @@ function records(runtime, files) {
   check(blocks.length === 1 && blocks[0].id === 'observations', 'Only observations data is admitted.');
   return {parsed, rows: blocks[0].children};
 }
-export function validatePublication(runtime, snapshot, scope) {
-  check(counts[scope], 'Unknown dashboard scope.');
+export function validatePublication(runtime, snapshot, scope, engine='firebird') {
+  check(['firebird', 'postgresql', 'mysql'].includes(engine), 'Unknown dashboard engine.');
+  const bindings = engine === 'postgresql' ? postgresCounts : engine === 'mysql' ? mysqlCounts : counts;
+  check(bindings[scope], 'Unknown dashboard scope.');
   check(snapshot?.format === 'ddn-workspace@1', 'Unsupported dashboard format.');
   check(Object.keys(snapshot.files || {}).join() === 'dashboard.ddn', 'Use one dashboard.ddn file.');
   check(snapshot.entry === 'dashboard.ddn' && typeof snapshot.view === 'string', 'Invalid selected view.');
   const source = snapshot.files['dashboard.ddn'];
   check(typeof source === 'string' && new TextEncoder().encode(source).length <= 512 * 1024, 'Dashboard source exceeds its limit.');
   const {parsed, rows} = records(runtime, snapshot.files);
+  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring'].includes(parsed.module) :
+    parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
   check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)), 'Unsupported dashboard declaration.');
-  const allowed = new Set(Object.entries(counts[scope]).flatMap(([prefix, count]) =>
+  const allowed = new Set(Object.entries(bindings[scope]).flatMap(([prefix, count]) =>
     Array.from({length: count}, (_, index) => `${prefix}_${index}`)));
-  check(rows.length > 0 && rows.length <= allowed.size, 'Dashboard needs admitted metric records.');
+  check(rows.length > 0 && rows.length <= (engine === 'firebird' ? allowed.size : 4096), 'Dashboard needs admitted metric records.');
   const seen = new Set();
   for(const row of rows) {
-    check(allowed.has(row.id) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
+    check((allowed.has(row.id) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
+      (engine === 'mysql' && mysqlDynamic(row.id, scope))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
     seen.add(row.id);
     check(row.type === 'object' && row.props.kind === 'record' && !row.children.length,
       'Only metric records are admitted.');
@@ -64,8 +110,8 @@ export function validatePublication(runtime, snapshot, scope) {
     return workspace.snapshot(snapshot.entry, snapshot.view, snapshot.overrides || {}, layout);
   } finally { workspace.destroy(); }
 }
-export function bindPublication(runtime, snapshot, scope, liveFiles) {
-  const clean = validatePublication(runtime, snapshot, scope);
+export function bindPublication(runtime, snapshot, scope, liveFiles, engine='firebird') {
+  const clean = validatePublication(runtime, snapshot, scope, engine);
   const wanted = records(runtime, clean.files).rows;
   const current = new Map(records(runtime, liveFiles).rows.map((row) => [row.id, row.props.x_record]));
   const workspace = runtime.createWorkspace(clean.files);

@@ -9,6 +9,7 @@ from .assets import ProjectAssetError, ProjectAssetForbidden, ProjectAssetNotFou
 # Serialize this adapter's read/check/save operations. The underlying asset store
 # remains authoritative and carries immutable revisions and expected versions.
 _LOCK = threading.RLock()
+ENGINE_NAMES = {'firebird': 'Firebird', 'postgresql': 'PostgreSQL', 'mysql': 'MySQL'}
 
 
 class DashboardDefinitions:
@@ -20,12 +21,15 @@ class DashboardDefinitions:
 
     def _identity(self, owner, sid, target):
         scope = self.authorize(owner, sid, target)
-        project = f'firebird-dashboard-drafts-{owner}'
+        engine = scope.get('engine', 'firebird')
+        if engine not in ('firebird', 'postgresql', 'mysql'):
+            raise ProjectAssetError('Unknown dashboard engine')
+        project = f'{engine}-dashboard-drafts-{owner}'
         key = hashlib.sha256(json.dumps(scope, sort_keys=True).encode()).hexdigest()
         reference = {'schemaVersion': 1, 'projectId': project, 'assetId': key,
                      'assetVersion': 0, 'assetType': 'ddn-workspace',
                      'path': f'dashboards/{key}.ddn',
-                     'displayName': f"Firebird {scope['kind']} dashboard draft"}
+                     'displayName': f"{ENGINE_NAMES[engine]} {scope['kind']} dashboard draft"}
         return scope, reference
 
     def _project(self, owner, key):
@@ -70,7 +74,7 @@ class DashboardDefinitions:
                     from .assets import ProjectAssetConflict
                     raise ProjectAssetConflict('Dashboard draft version has changed')
                 self.assets.create_project(owner, reference['projectId'], {
-                    'name': 'Firebird dashboard drafts',
+                    'name': ENGINE_NAMES[scope.get('engine', 'firebird')] + ' dashboard drafts',
                     'source_control_eligible': False})
             result = self.assets.save_asset(owner, (), reference['projectId'],
                                             reference['assetId'], body)
@@ -117,13 +121,13 @@ class DashboardDefinitions:
             published_ref = {**reference, 'assetId': reference['assetId'] + '-published',
                              'path': f"dashboards/{reference['assetId']}.published.ddn",
                              'assetVersion': body['expected_version'],
-                             'displayName': f"Firebird {scope['kind']} published dashboard"}
+                             'displayName': f"{ENGINE_NAMES[scope.get('engine', 'firebird')]} {scope['kind']} published dashboard"}
             from sqlalchemy.exc import IntegrityError
             try:
                 result = self.assets.save_asset(owner, (), reference['projectId'], published_ref['assetId'], {
                     'schema': 'cdeadmin.ddn-asset.v1', 'assetRef': published_ref,
                     'snapshot': snapshot, 'metadata': {'source_version': body['source_version'],
-                        'binding_contract': 'firebird-observations-v1'},
+                        'binding_contract': scope.get('engine', 'firebird') + '-observations-v1'},
                 })
             except IntegrityError:
                 # Two workers may both see no first publication. Unique asset

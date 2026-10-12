@@ -74,6 +74,53 @@ Dashboard viewers use the DDN presentation surface without policy or editing
 controls. Only a fresh, completed observation for the selected scope supplies
 current metric values; failed, stale and mismatched samples remain unavailable.
 An action failure remains visible when subsequent background polling succeeds.
+
+Engine and server dashboard contracts
+-------------------------------------
+
+The engine dashboard enumerates only the authenticated owner's native MySQL
+registrations and registered database targets. It reads existing collector
+observations without opening connections or starting collection. Each endpoint
+and database retains its own status; server-global counters are not summed
+across database collectors or registration aliases. Registration identity does
+not prove physical-instance identity, and no complete discovered fleet is
+asserted. Server dashboards and collector policies are accessible from their
+server context, independently of database policies.
+The passive fleet response includes only the latest identity/availability
+observation per scope, not detailed native row groups or authentication data.
+The standard engine publication displays at most 128 scopes and reduces this
+limit further to fit 512 KiB, reporting omitted scopes explicitly. All registered
+scopes remain selectable for their separate dashboards. Page selectors come
+from generated compositions rather than untrusted native labels.
+
+Dashboard drafts and publications use the shared versioned project-asset store,
+with engine/owner/endpoint/target identity in the asset key. Editing is a separate
+authorized context action. Publication validates DDN and a finite MySQL metric
+binding contract, strips sampled values, and uses expected publication versions.
+Viewers reauthorize both definition and observations; unavailable bindings never
+retain a previously sampled or draft-authored value. Native metric record keys
+derive from source identity and field name rather than a row's current position.
+Reordering or losing visibility to another row must not rebind a saved metric.
+
+Retained trend views cover the bounded volatile window only. Counter rates use
+exact decimal differences over positive monotonic sample intervals, within the
+same collector epoch and server UUID. Missing/denied/failed probes, reconnects,
+uptime decreases and counter resets break rate continuity. Database-scoped
+collectors label global-status rates as server-wide. Chart conversion is
+approximate; preserve exact values and explicit gaps beside the chart and
+do not claim stale observations are current availability.
+Settings and database storage observations follow the configured metadata
+interval. Cached metadata retains its original observation time and reports its
+age; status, activity, replication and heartbeat probes refresh each sample.
+Connection failure discards the cache, and a new collector epoch refreshes it.
+For a configured monitoring role, establish the dedicated transport without a
+default database, activate the exact quoted role, then select the requested
+database. This permits accounts whose database privileges derive from that
+role without granting direct privileges or changing their default roles.
+Native integer probe cells use exact decimal strings over JSON, including
+connection identities and byte counts; browser numeric conversion must not
+round a binding identity.
+
 The backend team owns native driver correctness, backend operations and
 functional forms. Windows and macOS teams own native UX refinement and platform
 QA; driver defects discovered there return to this workstream. MariaDB has a

@@ -26,6 +26,23 @@ describe('MySQL dedicated monitoring controls', () => {
     expect(screen.queryByRole('button', {name: 'Start collection'})).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
   });
+  it('engine dashboards stay display-only even if policyMode is supplied', async () => {
+    render(<Component engineMode policyMode />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/cdeadmin/api/monitoring/mysql'));
+    expect(screen.queryByRole('button', {name: 'Start collection'})).toBeNull();
+    expect(screen.getByTestId('viewer')).toHaveAttribute('data-read-only', 'true');
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it('opens retained trend views without changing collector policy', async () => {
+    render(<Component serverId={7} targetId="mysql:demo" />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Display'}));
+    fireEvent.click(await screen.findByRole('option', {name: 'Retained observations'}));
+    expect(screen.getByText('SR-F-001397')).toBeVisible();
+    expect(screen.getByRole('combobox', {name: 'Retained window'})).toBeVisible();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
   it('uses registered credentials by default and validates heartbeat timeout', async () => {
     render(<Component serverId={7} targetId="mysql:demo" policyMode />);
     const start = screen.getByRole('button', {name: 'Start collection'});

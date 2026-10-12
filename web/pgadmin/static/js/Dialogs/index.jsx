@@ -163,6 +163,34 @@ export function showFirebirdDashboardEditor(serverId, targetId) {
   return panelId;
 }
 
+export function showMySQLDashboardEditor(serverId, targetId) {
+  const panelId = `id-mysql-dashboard-editor-${++providerWorkspaceSequence}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL dashboard draft'),
+    closable: true, manualClose: true, floatable: true,
+    content: <ErrorBoundary><FirebirdDashboardEditor engine="mysql" serverId={serverId}
+      targetId={targetId} panelId={panelId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLMonitor(serverId, targetId, name='MySQL') {
+  const panelId = `id-mysql-monitor-${serverId}-${targetId || 'server'}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: `${name} — dashboard`,
+    closable: true, floatable: true,
+    content: <ErrorBoundary><MySQLMonitoring serverId={Number(serverId)} targetId={targetId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLFleet() {
+  const panelId = 'id-mysql-fleet';
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL engine dashboard'),
+    closable: true, floatable: true,
+    content: <ErrorBoundary><MySQLMonitoring engineMode onNavigate={showMySQLMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
 export function showPostgresqlFleet() {
   const panelId = 'id-postgresql-fleet';
   pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,

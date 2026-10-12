@@ -31,13 +31,13 @@ def _validate(node, payload, generation):
         _SLOTS.release()
 
 
-def validate_dashboard(snapshot, scope, node='node'):
+def validate_dashboard(snapshot, scope, node='node', engine='firebird'):
     files = snapshot.get('files', {}) if isinstance(snapshot, dict) else {}
     if (not isinstance(files, dict) or len(files) != 1 or
             any(not isinstance(value, str) or len(value.encode()) > 512 * 1024
                 for value in files.values())):
         raise ProjectAssetError('Dashboard source exceeds its admitted limits')
-    payload = json.dumps({'snapshot': snapshot, 'scope': scope}, sort_keys=True)
+    payload = json.dumps({'snapshot': snapshot, 'scope': scope, 'engine': engine}, sort_keys=True)
     if len(payload.encode()) > 2 * 1024 * 1024:
         raise ProjectAssetError('Dashboard request exceeds its admitted limits')
     generation = tuple((path.stat().st_mtime_ns, path.stat().st_size) for path in _INPUTS)

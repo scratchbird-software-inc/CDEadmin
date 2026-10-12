@@ -81,6 +81,84 @@ class MySQLMonitoringHost(MonitoringHost):
                 grant.revoke()
             return self.runtime.close()  # The common host owns the process lock.
 
+    def snapshot(self, owner, sid, target):
+        with self.app.app_context():
+            server = self._owned_server(owner, sid)
+            targets = sorted([{'target_id': row.id, 'name': row.display_name}
+                for row in server.endpoint_profile.database_targets],
+                key=lambda row: (row['name'].casefold(), row['target_id']))
+            if target is not None and not any(row['target_id'] == target for row in targets):
+                raise PermissionError('Monitoring target is unavailable')
+            navigation = {'server_id': sid, 'name': server.name, 'databases': targets}
+        with self._lock:
+            grant = self._grants.get((owner, sid, target))
+            if grant is None:
+                return {'state': 'disabled', 'samples': [], 'history': 'volatile',
+                    'runtime_scope': 'this-process', 'collection_available': self.available,
+                    'navigation': navigation}
+            current = self._authorizer(owner, sid, target)
+            result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
+                current(policy, purpose, grant.generation, grant.route_digest))
+            return {**result, 'navigation': navigation, 'authentication': dict(grant.authentication)}
+
+    def _registrations(self, owner):
+        from pgadmin.model import Server, User
+        with self.app.app_context():
+            if User.query.filter_by(id=owner, active=True).first() is None:
+                raise PermissionError('Monitoring owner is unavailable')
+            registrations = []
+            for server in Server.query.filter_by(user_id=owner).all():
+                endpoint = server.endpoint_profile
+                if endpoint is None or endpoint.profile_id != 'mysql-native' or endpoint.provider_id != 'org.cdeadmin.mysql':
+                    continue
+                registrations.append({'server_id': server.id, 'name': server.name,
+                    'databases': sorted([{'target_id': row.id, 'name': row.display_name}
+                        for row in endpoint.database_targets], key=lambda row: (row['name'].casefold(), row['target_id']))})
+            if len(registrations) > 512 or sum(len(row['databases']) for row in registrations) > 4096:
+                raise ValueError('Monitoring inventory exceeds its registered-scope bound')
+            return sorted(registrations, key=lambda row: (row['name'].casefold(), row['server_id']))
+
+    def fleet(self, owner):
+        def read(sid, target):
+            try:
+                current = self.snapshot(owner, sid, target)
+                samples = []
+                for sample in current.get('samples', [])[-1:]:
+                    identity = {key: value for key, value in sample.get('identity', {}).items()
+                        if key in {'database_name', 'version', 'server_uuid'}}
+                    samples.append({key: value for key, value in {**sample, 'identity': identity}.items()
+                        if key not in {'groups', 'rates'}})
+                return {key: value for key, value in {**current, 'samples': samples}.items()
+                    if key not in {'authentication', 'navigation'}}
+            except PermissionError:
+                return {'state': 'authorization-denied', 'samples': []}
+            except Exception:
+                return {'state': 'scope-unavailable', 'samples': []}
+        servers = []
+        for registered in self._registrations(owner):
+            sid = registered['server_id']
+            servers.append({**registered, 'snapshot': read(sid, None),
+                'databases': [{**target, 'snapshot': read(sid, target['target_id'])} for target in registered['databases']]})
+        return {'scope': 'engine', 'engine_id': 'mysql', 'registered_endpoints': len(servers),
+            'servers': servers, 'history': 'volatile', 'inventory': 'owner-registrations-not-physical-instances'}
+
+    def definition_scope(self, owner, sid, target):
+        with self.app.app_context():
+            if sid is None:
+                if target is not None:
+                    raise ValueError('Engine scope cannot include a database')
+                self._registrations(owner)
+                return {'engine': 'mysql', 'kind': 'engine', 'owner': owner}
+            server = self._owned_server(owner, sid)
+            scope = {'engine': 'mysql', 'kind': 'database' if target is not None else 'server',
+                'owner': owner, 'server_id': sid, 'endpoint_id': server.endpoint_profile.id}
+            if target is not None:
+                registered = next((row for row in server.endpoint_profile.database_targets if row.id == target), None)
+                if registered is None:
+                    raise PermissionError('Dashboard target is unavailable')
+                scope.update(target_id=target, database=registered.database)
+            return scope
+
     def disable(self, owner, sid, target):
         result = super().disable(owner, sid, target)
         if result.get('released'):
@@ -101,6 +179,52 @@ def init_app(app, shared_host):
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint('cdeadmin_mysql_monitoring', __name__)
 
+    @api.route('/cdeadmin/api/monitoring/mysql', methods=['GET'])
+    @pga_login_required
+    def fleet():
+        try:
+            response = jsonify(success=1, data=host.fleet(current_user.id))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except PermissionError:
+            return jsonify(success=0, errormsg='Monitoring scope is not authorized'), 403
+        except Exception:
+            return jsonify(success=0, errormsg='Monitoring inventory is unavailable'), 503
+
+    @api.route('/cdeadmin/api/monitoring/mysql/definition', methods=['GET', 'PUT', 'POST'])
+    @pga_login_required
+    def definition():
+        from .assets import service_for_app, ProjectAssetError, ProjectAssetConflict, ProjectAssetForbidden
+        from .dashboard_definitions import DashboardDefinitions
+        from .dashboard_validation import validate_dashboard
+        try:
+            text = request.args.get('sid')
+            sid = int(text) if text is not None else None
+            target = request.args.get('target_id')
+            if target == '' or (target is not None and len(target) > 255):
+                raise ValueError('Invalid target')
+            definitions = DashboardDefinitions(service_for_app(app), host.definition_scope,
+                lambda snapshot, scope: validate_dashboard(snapshot, scope,
+                    app.config.get('CDEADMIN_DDN_NODE', 'node'), engine='mysql'))
+            if request.method == 'GET':
+                data = (definitions.published(current_user.id, sid, target) if request.args.get('published') == '1'
+                    else definitions.read(current_user.id, sid, target))
+            elif request.method == 'POST':
+                data = definitions.publish(current_user.id, sid, target, request.get_json(silent=True))
+            else:
+                data = definitions.save(current_user.id, sid, target, request.get_json(silent=True))
+            response = jsonify(success=1, data=data)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except (PermissionError, ProjectAssetForbidden):
+            return jsonify(success=0, errormsg='Dashboard scope is not authorized'), 403
+        except ProjectAssetConflict:
+            return jsonify(success=0, code='asset_conflict', errormsg='Dashboard version changed; reopen before saving.'), 409
+        except (ProjectAssetError, ValueError, TypeError):
+            return jsonify(success=0, errormsg='Invalid dashboard draft'), 400
+        except Exception:
+            return jsonify(success=0, errormsg='Dashboard draft request failed'), 503
+
     @api.route('/cdeadmin/api/monitoring/mysql/<int:sid>', methods=['GET', 'POST', 'DELETE'])
     @pga_login_required
     def monitoring(sid):
@@ -115,7 +239,9 @@ def init_app(app, shared_host):
                 data = host.disable(owner, sid, target)
             else:
                 data = host.snapshot(owner, sid, target)
-            return jsonify(success=1, data=data)
+            response = jsonify(success=1, data=data)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         except PermissionError:
             return jsonify(success=0, errormsg='Monitoring scope is not authorized'), 403
         except (ValueError, TypeError):

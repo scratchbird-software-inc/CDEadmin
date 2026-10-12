@@ -6,10 +6,13 @@ import url_for from 'sources/url_for';
 import getApiInstance from '../api_instance';
 import {LAYOUT_EVENTS} from '../helpers/Layout';
 import {DDNDesignerSurface} from '../cdeadmin_ui/integrations/ddn';
+import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
+import {validatePublication} from '../cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
 import {firebirdDashboardFiles, firebirdFleetFiles} from '../cdeadmin_ui/integrations/ddn/firebirdDashboard';
+import {mysqlDashboardFiles, mysqlFleetFiles} from '../cdeadmin_ui/integrations/ddn/mysqlDashboard';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
-export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
+export default function FirebirdDashboardEditor({serverId, targetId, panelId, engine='firebird'}) {
   const [definition, setDefinition] = useState(null);
   const [error, setError] = useState('');
   const [sourceVersion, setSourceVersion] = useState(0);
@@ -22,11 +25,23 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
     const params = new URLSearchParams();
     if(serverId != null) params.set('sid', serverId);
     if(targetId) params.set('target_id', targetId);
-    return url_for('cdeadmin_monitoring.definition') + (params.size ? `?${params}` : '');
-  }, [serverId, targetId]);
+    return url_for(engine === 'firebird' ? 'cdeadmin_monitoring.definition' : `cdeadmin_${engine}_monitoring.definition`) + (params.size ? `?${params}` : '');
+  }, [serverId, targetId, engine]);
   useEffect(() => {
     let active = true;
-    getApiInstance().get(endpoint).then(({data}) => {
+    getApiInstance().get(endpoint).then(async ({data}) => {
+      if(engine === 'mysql' && !data.data.snapshot) {
+        const monitor = serverId == null ? url_for(`cdeadmin_${engine}_monitoring.fleet`) :
+          url_for(`cdeadmin_${engine}_monitoring.monitoring`, {sid: serverId}) +
+          (targetId ? `?target_id=${encodeURIComponent(targetId)}` : '');
+        const current = (await getApiInstance().get(monitor)).data.data;
+        const scope = serverId == null ? 'engine' : targetId ? 'database' : 'server';
+        const files = serverId == null ? mysqlFleetFiles(current) : mysqlDashboardFiles(current, scope);
+        const {viewer} = await loadDDNLibraries();
+        // Discover binding identities, but never persist sampled telemetry in a draft.
+        data = {...data, data: {...data.data, snapshot: validatePublication(viewer,
+          {format: 'ddn-workspace@1', files, entry: 'dashboard.ddn', view: 'dashboard'}, scope, engine)}};
+      }
       if(active) {
         setDefinition(data.data);
         setSourceVersion(data.data.assetRef.assetVersion);
@@ -36,7 +51,7 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
       if(active) setError(err.response?.data?.errormsg || 'Dashboard draft is unavailable.');
     });
     return () => { active = false; };
-  }, [endpoint]);
+  }, [endpoint, engine, serverId, targetId]);
   useEffect(() => {
     const workspace = pgAdmin.Browser.docker.default_workspace;
     const dirty = () => {
@@ -61,9 +76,10 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
   }, [panelId]);
   const snapshot = useMemo(() => definition?.snapshot || {
     format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: 'dashboard',
-    files: serverId == null ? firebirdFleetFiles(null) : firebirdDashboardFiles(null,
-      'Firebird dashboard draft', targetId ? 'database' : 'server'),
-  }, [definition, serverId, targetId]);
+    files: engine === 'mysql' ? (serverId == null ? mysqlFleetFiles(null) : mysqlDashboardFiles(null, targetId ? 'database' : 'server')) :
+      serverId == null ? firebirdFleetFiles(null) : firebirdDashboardFiles(null,
+        'Firebird dashboard draft', targetId ? 'database' : 'server'),
+  }, [definition, serverId, targetId, engine]);
   const save = async (payload) => {
     if(saving.current) throw new Error('Wait for the current save or publication to finish.');
     saving.current = true;
@@ -93,12 +109,12 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
   const exportSVG = (svg) => {
     const url = URL.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
     const link = document.createElement('a');
-    link.href = url; link.download = 'firebird-dashboard-draft.svg';
+    link.href = url; link.download = `${engine}-dashboard-draft.svg`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-    <FormReference formKey="firebird-dashboard-editor" />
+    <FormReference formKey={`${engine}-dashboard-editor`} />
     <Alert severity="info">Saving preserves a draft. Publish a saved revision to use its layout in the read-only dashboard. Metric values come from authorized collectors; publishing does not change collection.</Alert>
     <Box><Button disabled={!ready || !sourceVersion || publishing} onClick={publish}>Publish saved revision</Button>
       <span>{publicationVersion ? `Published revision ${publicationVersion}` : 'Standard dashboard is active'}</span></Box>
@@ -107,5 +123,5 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId}) {
       saveAsset={save} onExport={exportSVG} onReady={(value) => { controller.current = value; setReady(true); }} />}
   </Box>;
 }
-FirebirdDashboardEditor.propTypes = {serverId: PropTypes.number,
+FirebirdDashboardEditor.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql']), serverId: PropTypes.number,
   targetId: PropTypes.string, panelId: PropTypes.string.isRequired};

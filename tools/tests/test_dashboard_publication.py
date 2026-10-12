@@ -59,3 +59,47 @@ def test_publish_keeps_draft_and_publication_independent_and_fences_stale_versio
                      {'schema': 'cdeadmin.ddn-asset.v1', 'assetRef': pub['assetRef'], 'snapshot': malicious})
     with pytest.raises(ProjectAssetError):
         definitions.published(1, 7)
+
+
+def test_postgresql_publications_have_engine_isolated_assets_and_native_bindings():
+    from pgadmin.cdeadmin.workspace.dashboard_definitions import DashboardDefinitions
+    firebird, assets = setup()
+    def authorize(owner, sid, target):
+        return {**firebird.authorize(owner, sid, target), 'engine': 'postgresql'}
+    postgres = DashboardDefinitions(assets, authorize,
+        lambda snapshot, scope: validate_dashboard(snapshot, scope, engine='postgresql'))
+    initial = postgres.read(1, 7)
+    assert initial['assetRef']['projectId'] == 'postgresql-dashboard-drafts-1'
+    request = payload(initial['assetRef'])
+    request['snapshot'] = source()
+    request['snapshot']['files']['dashboard.ddn'] = SOURCE.replace('server_0', 'status_0').replace('scratchrobin.firebird.monitoring', 'scratchrobin.postgresql.monitoring')
+    postgres.save(1, 7, None, request)
+    published = postgres.publish(1, 7, None, {'source_version': 1, 'expected_version': 0})
+    assert published['scope']['engine'] == 'postgresql'
+    assert 'should-not-persist' not in published['snapshot']['files']['dashboard.ddn']
+    assert firebird.published(1, 7)['state'] == 'standard'
+    with pytest.raises(ProjectAssetError):
+        postgres.save(1, 7, None, payload(firebird.read(1, 7)['assetRef']))
+
+
+def test_mysql_publications_use_native_scope_and_isolated_versioned_assets():
+    from pgadmin.cdeadmin.workspace.dashboard_definitions import DashboardDefinitions
+    firebird, assets = setup()
+    def authorize(owner, sid, target):
+        return {**firebird.authorize(owner, sid, target), 'engine': 'mysql'}
+    mysql = DashboardDefinitions(assets, authorize,
+        lambda snapshot, scope: validate_dashboard(snapshot, scope, engine='mysql'))
+    reference = mysql.read(1, 7)['assetRef']
+    assert reference['projectId'] == 'mysql-dashboard-drafts-1'
+    assert reference['displayName'] == 'MySQL server dashboard draft'
+    request = payload(reference)
+    request['snapshot'] = source()
+    request['snapshot']['files']['dashboard.ddn'] = SOURCE.replace('server_0', 'availability_0').replace(
+        'scratchrobin.firebird.monitoring', 'scratchrobin.mysql.monitoring')
+    mysql.save(1, 7, None, request)
+    published = mysql.publish(1, 7, None, {'source_version': 1, 'expected_version': 0})
+    assert 'should-not-persist' not in published['snapshot']['files']['dashboard.ddn']
+    assert mysql._publication(1, reference)['metadata']['binding_contract'] == 'mysql-observations-v1'
+    assert firebird.published(1, 7)['state'] == 'standard'
+    with pytest.raises(ProjectAssetConflict):
+        mysql.publish(1, 7, None, {'source_version': 1, 'expected_version': 0})

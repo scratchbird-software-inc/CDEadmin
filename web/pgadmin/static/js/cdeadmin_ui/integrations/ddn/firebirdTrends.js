@@ -65,6 +65,11 @@ export function trendObservations(snapshot, metricId, limit=120) {
 export function firebirdTrendFiles(snapshot, metricId, limit=120) {
   const rows = trendObservations(snapshot, metricId, limit);
   const metric = FIREBIRD_TREND_METRICS.find((item) => item.id === metricId);
+  return retainedTrendFiles(rows, metric.label, 'scratchrobin.firebird.trends');
+}
+
+// Shared DDN presentation only. Native adapters own values, epochs and gaps.
+export function retainedTrendFiles(rows, label, moduleName) {
   const table = rows.length ? rows : [{reason: 'No retained observations'}];
   const records = table.map((row, index) => `record r${index} ${quote(row.observed)} {
     x_record: {value: ${quote(row.exact)}, elapsed: ${quote(row.elapsed)}, epoch: ${quote(row.epoch)},
@@ -81,7 +86,7 @@ export function firebirdTrendFiles(snapshot, metricId, limit=120) {
         width: 1000px; height: 400px; }
       publication {size: content; fit: none;}
     }` : '';
-  return {'trends.ddn': `ddn "0.5"; module "scratchrobin.firebird.trends";
+  return {'trends.ddn': `ddn "0.5"; module ${quote(moduleName)};
     data observations {${records}}
     ${chart}
     view detail "Exact retained values and gaps" {
@@ -92,7 +97,7 @@ export function firebirdTrendFiles(snapshot, metricId, limit=120) {
           {key:"x_record.coverage",label:"Coverage"}, {key:"x_record.epoch",label:"Epoch"}];
       } publication {size: content; fit: none;}
     }
-    view trends ${quote(metric.label)} { data: [@observations];
+    view trends ${quote(label)} { data: [@observations];
       projection {kind: panels; profile: "panels.composed@1"; columns: 1;
         panels: [${points.length ? '{id:"chart",title:"Retained sample points",row:0,column:0,view:@chart},' : ''}
           {id:"detail",title:"Exact observations",row:${points.length ? 1 : 0},column:0,view:@detail}];

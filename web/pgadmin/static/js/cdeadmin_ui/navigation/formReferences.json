@@ -5525,6 +5525,14 @@
     "mysql-dashboard": {
       "reference": "SR-F-001395",
       "title": "MySQL display-only native dashboard"
+    },
+    "mysql-dashboard-editor": {
+      "reference": "SR-F-001396",
+      "title": "MySQL DDN dashboard draft and publication"
+    },
+    "mysql-recent-observations": {
+      "reference": "SR-F-001397",
+      "title": "MySQL retained monitoring observations"
     }
   }
 }
