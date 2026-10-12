@@ -19,7 +19,7 @@ def apply_review(connection, record):
         operations = plan['operations']
         if (plan.get('format') != 'scratchrobin.mysql.schema-plan@1' or len(operations) != 1 or
                 plan['execution_sha256'] != digest(operations) or not plan.get('native_grammar_validated')):
-            raise ValueError('Exact native-validated single-table plan is required')
+            raise ValueError('Exact native-validated single-object plan is required')
         operation = operations[0]
         key = operation['resource_id']
         before, after = record['baseline']['rows'].get(key), record['desired']['rows'][key]
@@ -27,11 +27,16 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if after['kind'] not in {'table','view'} or (before is not None and before['kind'] != after['kind']):
-            raise ValueError('Only exact user table/view definitions are admitted')
+        if after['kind'] not in {'table','view','library'} or (before is not None and before['kind'] != after['kind']):
+            raise ValueError('Only exact user table/view/library definitions are admitted')
         context = operation['context']
         target = identifier(database) + '.' + identifier(after['name'])
-        if after['kind']=='view':
+        if after['kind']=='library':
+            from ..workspace.mysql_library_plan import compile_library
+            if (operation['operation']=='create') != (before is None):
+                raise ValueError('Native library operation disagrees with baseline presence')
+            compiled=compile_library(after,operation['operation'],database,before)
+        elif after['kind']=='view':
             from ..workspace.mysql_view_plan import compile_view
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native view operation disagrees with baseline presence')
@@ -59,31 +64,37 @@ def apply_review(connection, record):
         identity = cursor.fetchone()
         if str(identity[0]).split('-')[0] != '9.7.0' or identity[1] != plan['server_uuid'] or identity[2] != database:
             raise ValueError('Native application connection identity changed')
+        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'TABLE ')+target
+        definition_index=2 if after['kind']=='library' else 1
+        absence_code=1305 if after['kind']=='library' else 1146
         if before is None:
             try:
-                cursor.execute('SHOW CREATE TABLE ' + target)
+                cursor.execute(show_source)
                 cursor.fetchone()
             except Exception as error:
-                if getattr(error, 'errno', None) != 1146:
+                if getattr(error, 'errno', None) != absence_code:
                     raise
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind']=='view':
-                advisory='sr-ddn-view:'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48]
+            if after['kind'] in {'view','library'}:
+                advisory='sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
                     advisory=None
-                    raise ValueError('Native view advisory lock is unavailable')
+                    raise ValueError('Native object advisory lock is unavailable')
                 result['concurrent_external_ddl_fenced']=False
-                result['concurrency_warning']='View baseline is observational; external DDL can change the view before dispatch'
+                result['concurrency_warning']='View/library baseline is observational; external DDL can change the object before dispatch'
             else:
                 cursor.execute('LOCK TABLES ' + target + ' WRITE')
                 locked = True
-            cursor.execute('SHOW CREATE TABLE ' + target)
+            cursor.execute(show_source)
             observed = cursor.fetchone()
-            if not observed or digest({'definition': observed[1], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
+            if not observed or digest({'definition': observed[definition_index], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
                 raise ValueError('Locked native object changed since review')
+            if after['kind']=='library' and (len(observed)<3 or
+                    before['native'].get('definition_context',{}).get('sql_mode')!=observed[1]):
+                raise ValueError('Native library SQL mode changed since review')
             if after['kind']=='view' and (len(observed)<4 or any(
                     before['native'].get('definition_context',{}).get(field)!=observed[index]
                     for field,index in [('character_set_client',2),('collation_connection',3)])):
@@ -95,20 +106,20 @@ def apply_review(connection, record):
             result['state'] = 'committed'
         if operation['operation'] == 'drop':
             try:
-                cursor.execute('SHOW CREATE TABLE ' + target)
+                cursor.execute(show_source)
                 cursor.fetchone()
             except Exception as error:
-                if getattr(error, 'errno', None) == 1146:
+                if getattr(error, 'errno', None) == absence_code:
                     result['rediscovery_verified'] = True
                 else:
                     raise
         else:
-            cursor.execute('SHOW CREATE TABLE ' + target)
+            cursor.execute(show_source)
             observed = cursor.fetchone()
             if not observed:
-                raise ValueError('Native rediscovery returned no table')
-            result.update(rediscovery_verified=True, native_definition=observed[1],
-                desired_definition_exact_match=observed[1] == after['native']['definition'])
+                raise ValueError('Native rediscovery returned no object')
+            result.update(rediscovery_verified=True, native_definition=observed[definition_index],
+                desired_definition_exact_match=observed[definition_index] == after['native']['definition'])
     except Exception as error:
         # An error after dispatch may be a lost acknowledgement. Never infer
         # rollback or retry from a native error, broken link or process restart.

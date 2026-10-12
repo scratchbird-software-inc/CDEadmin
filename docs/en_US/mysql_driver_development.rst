@@ -828,7 +828,7 @@ preview must not invalidate a handoff or leave the catalog in a busy state.
 Reviewed multi-table application receipts
 ----------------------------------------
 
-A native-validated plan may contain 1 to 32 distinct user-table/ordinary-view CREATE/ALTER/DROP
+A native-validated plan may contain 1 to 32 distinct user-table/ordinary-view/library CREATE/ALTER/DROP
 operations, within 1 MiB of SQL and the existing 4 MiB review bound. Review seals
 its displayed order, exact baseline/desired fingerprints, owner and database
 binding. Application runs that order once, using the existing independently
@@ -997,3 +997,16 @@ Grammar presence alone must not expose a working masking-policy administration
 feature or claim successful policy deployment. Native SQL diagnostics remain
 available; support for an admitted policy component needs its exact native
 catalog/operation contract and qualification rather than a placeholder.
+
+Reviewed DDN library deployment
+-------------------------------
+
+Catalog DDN libraries support exact-target CREATE, COMMENT-only ALTER and
+explicit name-confirmed DROP through the durable review/apply pipeline. Native
+PREPARE validates the complete statement without execution. Body, language or
+creation-context replacement through ALTER is refused; it is not silently
+implemented as DROP/CREATE. Existing targets use an advisory lock and fresh
+SHOW CREATE/SQL-mode comparison. External DDL is not fenced, so a guaranteed
+exclusive change requires an operator-controlled DDL maintenance window.
+Native acknowledgements, uncertain outcomes, restart and non-replay follow the
+same per-operation durable receipt rules as table/view deployment.
