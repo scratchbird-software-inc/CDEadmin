@@ -98,9 +98,9 @@ describe('MySQL three-way native metadata preview', () => {
 });
 
 describe('MySQL reviewed schema controls', () => {
-  it('requires native validation, prepared receipt and explicit confirmation, then shows the native outcome', async () => {
+  it.each(['alter', 'create', 'drop'])('requires native validation, receipt and confirmation for %s, then shows the native outcome', async operationId => {
     const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
-    const operation={operation:'alter',source:'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
+    const operation={operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
     const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation]};
     const receipt={review_id:'receipt',review_digest:'review-digest',state:'reviewed'};
     const post=jest.fn().mockImplementation(async ({action}) => {

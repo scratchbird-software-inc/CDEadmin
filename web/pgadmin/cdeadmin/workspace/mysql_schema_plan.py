@@ -98,6 +98,11 @@ def alteration(before,after,sql_mode):
     return 'ALTER TABLE '+identifier(before['native']['database'])+'.'+identifier(before['name'])+' '+', '.join(result)
 
 
+def creation(row,sql_mode,database):
+    layout,_clauses,_order=parts(row,sql_mode)
+    return 'CREATE TABLE '+identifier(database)+'.'+identifier(row['name'])+' ('+','.join(layout['clauses'])+')'+layout['suffix']
+
+
 def plan(baseline,desired,live):
     database,identity=root(live)
     for document in (baseline,desired):
@@ -124,8 +129,7 @@ def plan(baseline,desired,live):
             if before is None:
                 if current is not None:raise ValueError('New native table target already exists')
                 if intent:raise ValueError('Creation does not accept alteration/removal intent')
-                layout,_clauses,_order=parts(after,identity['sql_mode'])
-                source='CREATE TABLE '+identifier(database)+'.'+identifier(after['name'])+' ('+','.join(layout['clauses'])+')'+layout['suffix'];operation='create'
+                source=creation(after,identity['sql_mode'],database);operation='create'
             elif isinstance(intent,dict) and intent.get('action')=='drop':
                 if set(intent)!={'action','confirmation'} or intent['confirmation']!=before['name']:
                     raise ValueError('Table removal requires exact native name confirmation')
@@ -145,4 +149,4 @@ def plan(baseline,desired,live):
         'native_grammar_validated':False,'application_supported':False,'executed':False,
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
-            'Locked revalidation, durable reviewed admission and rediscovery are required before application.']}
+            'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.']}

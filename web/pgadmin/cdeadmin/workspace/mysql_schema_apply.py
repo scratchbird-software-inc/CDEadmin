@@ -13,16 +13,23 @@ class MySQLSchemaApplications(SchemaApplications):
         operations = plan.get('operations', [])
         if (plan.get('format') != 'scratchrobin.mysql.schema-plan@1' or
                 not plan.get('ready_for_review') or not plan.get('native_grammar_validated') or
-                len(operations) != 1 or operations[0].get('operation') not in {'alter', 'drop'} or
+                len(operations) != 1 or operations[0].get('operation') not in {'create', 'alter', 'drop'} or
                 plan.get('execution_sha256') != digest(operations) or
                 not plan.get('server_uuid')):
-            raise SchemaApplyError('Prepare one native-validated existing-table alteration or removal')
+            raise SchemaApplyError('Prepare one native-validated table creation, alteration or removal')
         operation = operations[0]
         key = operation['resource_id']
         before = baseline['rows'].get(key)
-        if before is None or digest(schema(before)) != operation['baseline_schema_sha256']:
+        if operation['operation'] == 'create':
+            if before is not None or operation['baseline_schema_sha256'] is not None:
+                raise SchemaApplyError('Native creation requires an absent baseline target')
+        elif before is None or digest(schema(before)) != operation['baseline_schema_sha256']:
             raise SchemaApplyError('Exact native baseline is required')
+        if digest(schema(desired['rows'][key])) != operation['desired_schema_sha256']:
+            raise SchemaApplyError('Exact desired native definition is required')
         def reduced(document):
+            if key not in document['rows']:
+                return {'rows': {}}
             row = document['rows'][key]
             native = row['native']
             return {'rows': {key: {**deepcopy({field: value for field, value in row.items() if field != 'native'}),

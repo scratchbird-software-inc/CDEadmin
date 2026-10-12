@@ -193,7 +193,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
       <Button disabled={busy || !schemaPlan?.ready_for_review || !schemaPlan.native_grammar_validated ||
-        schemaPlan.operations?.length !== 1 || !['alter', 'drop'].includes(schemaPlan.operations[0]?.operation)}
+        schemaPlan.operations?.length !== 1 || !['create', 'alter', 'drop'].includes(schemaPlan.operations[0]?.operation)}
       onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
       <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
         disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />

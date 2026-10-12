@@ -1,6 +1,6 @@
 """Single native DDL dispatch with table-lock revalidation and rediscovery."""
 from ..workspace.firebird_schema_plan import digest
-from ..workspace.mysql_schema_plan import address, alteration, schema
+from ..workspace.mysql_schema_plan import address, alteration, creation, schema
 from .mysql_family.mysql_catalog import identifier
 
 
@@ -19,22 +19,27 @@ def apply_review(connection, record):
             raise ValueError('Exact native-validated single-table plan is required')
         operation = operations[0]
         key = operation['resource_id']
-        before, after = record['baseline']['rows'][key], record['desired']['rows'][key]
+        before, after = record['baseline']['rows'].get(key), record['desired']['rows'][key]
         database = plan['database']
-        address(before, database)
+        if before is not None:
+            address(before, database)
         address(after, database)
-        if before['kind'] != 'table' or after['kind'] != 'table':
-            raise ValueError('Only existing user tables are admitted')
+        if (before is not None and before['kind'] != 'table') or after['kind'] != 'table':
+            raise ValueError('Only exact user table definitions are admitted')
         context = operation['context']
-        target = identifier(database) + '.' + identifier(before['name'])
-        if operation['operation'] == 'alter':
+        target = identifier(database) + '.' + identifier(after['name'])
+        if operation['operation'] == 'create' and before is None and not after['native'].get('mysql_change'):
+            compiled = creation(after, context['sql_mode'], database)
+        elif operation['operation'] == 'alter' and before is not None:
             compiled = alteration(before, after, context['sql_mode'])
-        elif operation['operation'] == 'drop' and after['native'].get('mysql_change') == {
+        elif operation['operation'] == 'drop' and before is not None and after['native'].get('mysql_change') == {
                 'action': 'drop', 'confirmation': before['name']}:
             compiled = 'DROP TABLE ' + target
         else:
             raise ValueError('Unsupported native application operation')
-        if compiled != operation['source'] or digest(schema(before)) != operation['baseline_schema_sha256']:
+        if (compiled != operation['source'] or
+                (digest(schema(before)) if before is not None else None) != operation['baseline_schema_sha256'] or
+                digest(schema(after)) != operation['desired_schema_sha256']):
             raise ValueError('Reviewed native statement or baseline fingerprint changed')
         if context['character_set_client'] not in {'utf8mb4', 'utf8mb3', 'utf8'}:
             raise ValueError('Application needs an admitted UTF-8 encoding context')
@@ -49,12 +54,22 @@ def apply_review(connection, record):
         identity = cursor.fetchone()
         if str(identity[0]).split('-')[0] != '9.7.0' or identity[1] != plan['server_uuid'] or identity[2] != database:
             raise ValueError('Native application connection identity changed')
-        cursor.execute('LOCK TABLES ' + target + ' WRITE')
-        locked = True
-        cursor.execute('SHOW CREATE TABLE ' + target)
-        observed = cursor.fetchone()
-        if not observed or digest({'definition': observed[1], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
-            raise ValueError('Locked native table changed since review')
+        if before is None:
+            try:
+                cursor.execute('SHOW CREATE TABLE ' + target)
+                cursor.fetchone()
+            except Exception as error:
+                if getattr(error, 'errno', None) != 1146:
+                    raise
+            else:
+                raise ValueError('Native creation target already exists')
+        else:
+            cursor.execute('LOCK TABLES ' + target + ' WRITE')
+            locked = True
+            cursor.execute('SHOW CREATE TABLE ' + target)
+            observed = cursor.fetchone()
+            if not observed or digest({'definition': observed[1], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
+                raise ValueError('Locked native table changed since review')
         dispatched = True
         cursor.execute(compiled)
         acknowledged = True

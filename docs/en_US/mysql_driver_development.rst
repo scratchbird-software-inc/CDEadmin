@@ -497,16 +497,16 @@ Validation does not reserve the live schema or make a preview executable.
 Reviewed single-table metadata application
 ------------------------------------------
 
-A MySQL application review binds one existing-table ALTER or explicitly confirmed
+A MySQL application review binds one new-table CREATE, existing-table ALTER or explicitly confirmed
 DROP to the registration, database target, native server UUID, owner and exact
-compiled statement digest. Creation and multi-object batches require separately
-admitted adapters. Reviews expire after five minutes. A durable receipt is
+compiled statement digest. Multi-object batches require separately admitted
+execution contracts. Reviews expire after five minutes. A durable receipt is
 claimed as ``unknown_outcome`` before native access; a claimed token is never
 redispatched, including after process restart. This application receipt stores
 review/dispatch evidence, not database recovery or a substitute transaction log.
 
-Execution uses an independently owned idle connection and native WRITE table
-locking with a bounded lock wait. Under that lock, the executor rechecks native
+Execution uses an independently owned idle connection. Existing-table changes
+use native WRITE table locking with a bounded lock wait. Under that lock, the executor rechecks native
 server/database identity, SQL mode, quoted SHOW CREATE and the exact baseline
 schema fingerprint before sending one DDL statement. Native DDL commits
 implicitly: neither a user transaction nor receipt storage makes it rollbackable.
@@ -667,3 +667,14 @@ remain authoritative. A start acknowledgement does not prove connected transport
 or applied data; discovery exposes native receiver/applier status and error codes
 without passwords. Native replication changes are independent of interactive
 transaction rollback, and failures do not authorize automatic replay.
+
+
+Reviewed creation checks native absence before dispatch and uses an ordinary
+CREATE TABLE without IF NOT EXISTS, REPLACE or DROP. No client lock is claimed on
+a nonexistent table. MySQL's native dictionary serializes the actual creation;
+a concurrent creator can cause a native refusal. A pre-dispatch existing target
+refuses application, while a lost acknowledgement after dispatch stays unknown
+and the durable token is never replayed. The desired definition is fingerprinted
+and recompiled from the same exact catalog representation. Successful creation
+is independently rediscovered using SHOW CREATE TABLE. This does not authorize
+unreviewed multi-object batches or infer atomic rollback across DDL statements.

@@ -108,3 +108,46 @@ applications.apply(json.loads(sys.argv[2]),'owner','binding',execute)
     execute=Mock()
     assert restarted.apply(request(receipt),'owner','binding',execute)['state']=='unknown_outcome'
     execute.assert_not_called()
+
+
+def reviewed_creation(tmp_path):
+    desired=captured();before=deepcopy(desired)
+    del before['rows'][table(desired)['resource_id']]
+    preview=plan(before,desired,before);preview['native_grammar_validated']=True
+    applications=MySQLSchemaApplications(tmp_path/'receipts.json',clock=lambda:100)
+    receipt=applications.review(preview,before,desired,'owner','binding','target')
+    return applications,receipt,before,desired
+
+
+def test_creation_receipt_requires_absence_and_recompiles_exact_desired_definition(tmp_path):
+    applications,receipt,before,desired=reviewed_creation(tmp_path)
+    missing=RuntimeError('missing table');missing.errno=1146
+    cursor=Mock();cursor.fetchone.side_effect=[('9.7.0','server','demo`db'),('t',table(desired)['native']['definition'])]
+    def execute(source):
+        if source.startswith('SHOW CREATE') and not any(c.args[0].startswith('CREATE TABLE') for c in cursor.execute.call_args_list):
+            raise missing
+    cursor.execute.side_effect=execute
+    connection=Mock(in_transaction=False);connection.cursor.return_value=cursor
+    result=applications.apply(request(receipt),'owner','binding',lambda record:apply_review(connection,record))
+    assert result['state']=='committed' and result['outcome']['rediscovery_verified']
+    sources=[call.args[0] for call in cursor.execute.call_args_list]
+    assert len([source for source in sources if source.startswith('CREATE TABLE')])==1
+    assert not any(source.startswith(('LOCK TABLES','UNLOCK TABLES','DROP TABLE')) for source in sources)
+    again=Mock();assert applications.apply(request(receipt),'owner','binding',again)==result;again.assert_not_called()
+
+
+def test_creation_refuses_target_that_appeared_after_review(tmp_path):
+    applications,receipt,before,desired=reviewed_creation(tmp_path)
+    cursor=Mock();cursor.fetchone.side_effect=[('9.7.0','server','demo`db'),('t','competing native table')]
+    connection=Mock(in_transaction=False);connection.cursor.return_value=cursor
+    result=applications.apply(request(receipt),'owner','binding',lambda record:apply_review(connection,record))
+    assert result['state']=='not_dispatched' and 'already exists' in result['outcome']['rejection_reason']
+    assert not any(call.args[0].startswith('CREATE TABLE') for call in cursor.execute.call_args_list)
+
+
+def test_creation_receipt_rejects_desired_fingerprint_drift(tmp_path):
+    applications,receipt,before,desired=reviewed_creation(tmp_path)
+    preview=plan(before,desired,before);preview['native_grammar_validated']=True
+    table(desired)['native']['definition']+=' COMMENT=\'changed\''
+    with pytest.raises(SchemaApplyError,match='desired'):
+        applications.review(preview,before,desired,'owner','binding','target')
