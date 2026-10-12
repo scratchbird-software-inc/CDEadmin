@@ -150,3 +150,31 @@ describe('MySQL native encoded download', () => {
     } finally {URL.createObjectURL=previous;click.mockRestore();}
   });
 });
+
+it('keeps parent previews disabled until the relational handoff installs its reviewed documents', async () => {
+  let finish;
+  const diagram={snapshot:{format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native relations'}},views:[]};
+  const post=jest.fn().mockImplementation(request => {
+    if(request.action==='mysql_catalog_export') return Promise.resolve({...capture,diagram});
+    if(request.action==='mysql_relational_review') return new Promise(resolve => {finish=resolve;});
+    return Promise.resolve({operations:[],blockers:[],conflicts:[],ignored:[]});
+  });
+  render(<Component post={post} databaseTargetId="mysql-target" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));
+  await screen.findByText('Native tables, views, columns and foreign keys. Diagram edits do not alter the database. Save a design revision or download it to retain changes. Native application requires schema reconciliation and explicit review.');
+  // The suite's fixed 800px offsetHeight needs a matching menu viewport.
+  const viewport=window.innerHeight;
+  try {
+    window.innerHeight=1200;
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'Display'}));
+    fireEvent.click(screen.getByRole('option',{name:'Relations'}));
+  } finally {window.innerHeight=viewport;}
+  fireEvent.click(screen.getByRole('button',{name:'Review relational metadata changes'}));
+  expect(screen.getByRole('button',{name:'Preview native changes'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Capture metadata'})).toBeDisabled();
+  await act(async () => {finish({baseline:'reviewed baseline',desired:'reviewed desired'});});
+  await waitFor(() => expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_schema_plan',request:{database_target_id:'mysql-target',baseline:'reviewed baseline',source:'reviewed desired'}}));
+  await waitFor(() => expect(screen.getByRole('button',{name:'Capture metadata'})).toBeEnabled());
+});

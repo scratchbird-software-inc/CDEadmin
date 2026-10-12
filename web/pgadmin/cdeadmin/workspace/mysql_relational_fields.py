@@ -3,6 +3,7 @@ from copy import deepcopy
 import json
 import re
 from .mysql_schema_plan import parts
+from ..providers.mysql_family.mysql_catalog import identifier
 
 TYPES = set('tinyint smallint mediumint int integer bigint decimal numeric float double real bit bool boolean date datetime timestamp time year char varchar binary varbinary tinyblob blob mediumblob longblob tinytext text mediumtext longtext enum set json geometry point linestring polygon multipoint multilinestring multipolygon geometrycollection vector'.split())
 
@@ -106,22 +107,38 @@ def edit_clause(clause, changes, mode):
     return clause
 
 
-def merge_fields(before, desired, mode):
+def merge_fields(before, desired, mode, *, allow_new_columns=False):
+    if type(allow_new_columns) is not bool: raise ValueError('New-column admission must be boolean')
     native = deepcopy(desired['native'])
     old_fields, new_fields = before.get('fields', {}), desired.get('fields', {})
-    changes = {}
+    changes, additions = {}, []
+    labels = [field.get('_label') for field in new_fields.values()]
+    if any(not isinstance(label, str) for label in labels) or len(set(labels)) != len(labels):
+        raise ValueError('Graphical field names must be unique')
     for uid, fields in new_fields.items():
         old = old_fields.get(uid)
-        if old is None or fields.get('_label') != old.get('_label'):
-            raise ValueError('New or renamed graphical fields require explicit native reconciliation')
         if set(fields.get('_property_names', [])) - {'uid', 'datatype', 'nullable', 'description'}:
             raise ValueError('Unsupported graphical field property')
+        if old is None:
+            if not allow_new_columns:
+                raise ValueError('New or renamed graphical fields require explicit native reconciliation')
+            if not isinstance(uid, str) or not uid or len(uid) > 4096:
+                raise ValueError('New graphical field requires a bounded unique UID')
+            if not 1 <= len(fields['_label']) <= 64: raise ValueError('Native column name requires 1 to 64 characters')
+            column = identifier(fields['_label']) + ' ' + datatype(fields.get('datatype'), mode)
+            column = edit_clause(column, {'nullable': fields.get('nullable', True),
+                **({'description': fields['description']} if 'description' in fields else {})}, mode)
+            additions.append((fields['_label'], column))
+            if len(additions) > 128: raise ValueError('At most 128 new graphical columns per table')
+            continue
+        if fields.get('_label') != old.get('_label'):
+            raise ValueError('New or renamed graphical fields require explicit native reconciliation')
         changed = {key: fields[key] for key in ('datatype', 'nullable', 'description') if key in fields and fields[key] != old.get(key)}
         if changed:
             expected = before['uid'] + ':' + json.dumps(old['_label'], ensure_ascii=False, separators=(',', ':'))
             if uid != expected: raise ValueError('Graphical field identity does not match its native column')
             changes[old['_label']] = changed
-    if not changes: return native
+    if not changes and not additions: return native
     if before.get('kind') != 'table': raise ValueError('Graphical column changes require a native table')
     old_row = {'name': before['name'], 'native': before['native']}
     new_row = {'name': desired['name'], 'native': native}
@@ -136,5 +153,17 @@ def merge_fields(before, desired, mode):
         if new_clauses[key] not in {old_clauses[key], changed}:
             raise ValueError('Graphical and native column edits disagree')
         replacements[new_clauses[key]] = changed
-    native['definition'] = layout['prefix'] + '(' + ','.join(replacements.get(clause.strip(), clause) for clause in layout['clauses']) + ')' + layout['suffix']
+    appended = []
+    for name, clause in additions:
+        key = ('column', name)
+        if key in old_clauses:
+            raise ValueError('New graphical UID cannot rebind an existing native column')
+        if key in new_clauses:
+            if new_clauses[key] != clause:
+                raise ValueError('Graphical and native new-column definitions disagree')
+        else:
+            appended.append(clause)
+    native['definition'] = layout['prefix'] + '(' + ','.join([
+        *(replacements.get(clause.strip(), clause) for clause in layout['clauses']),
+        *appended]) + ')' + layout['suffix']
     return native

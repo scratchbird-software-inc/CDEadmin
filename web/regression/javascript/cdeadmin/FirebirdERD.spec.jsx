@@ -75,3 +75,16 @@ it('binds MySQL relational review to the registered database target without Fire
   await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before',desired:'after'}));
   expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',original:diagram.snapshot,snapshot:diagram.snapshot}});
 });
+
+
+it('admits new MySQL graphical columns only through the explicit review checkbox', async () => {
+  const Component = withTheme(FirebirdERD);
+  const diagram = {snapshot: {format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  expect(screen.getByLabelText('Include new graphical columns')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Include new graphical columns'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalled());
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_new_columns:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
+});

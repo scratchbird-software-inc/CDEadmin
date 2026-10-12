@@ -82,7 +82,9 @@ def read_relations(snapshot, *, engine="firebird"):
         _SLOTS.release()
 
 
-def handoff(catalog_snapshot, original, desired, *, engine="firebird"):
+def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False):
+    if type(allow_new_columns) is not bool or (allow_new_columns and engine != "mysql"):
+        raise ValueError("New-column admission is available only for MySQL")
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
@@ -102,7 +104,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird"):
             if len(roots) != 1: raise ValueError('Native relational review requires one database')
             facts[1] = merge_fields({**old, 'name': live['name'], 'kind': live['kind']},
                 {**row, 'name': live['name'], 'kind': live['kind']},
-                roots[0]['native']['catalog_row']['sql_mode'])
+                roots[0]['native']['catalog_row']['sql_mode'], allow_new_columns=allow_new_columns)
         if engine == 'firebird' and live['kind'] == 'constraint':
             for key in ('source_columns', 'target_columns'):
                 if not _equal(facts[0].get(key), facts[1].get(key)):

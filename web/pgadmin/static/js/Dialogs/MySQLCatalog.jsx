@@ -9,13 +9,15 @@ import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function MySQLCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [error, setError] = useState('');
-  const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
+  const [requestBusy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
   const [baseline, setBaseline] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
   const [review, setReview] = useState(null), [confirmed, setConfirmed] = useState(false), [receiptId, setReceiptId] = useState('');
   const [metadata, setMetadata] = useState(null), [dataCapture, setDataCapture] = useState(null);
   const [relation, setRelation] = useState(''), [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
+  const [relationalReviewBusy, setRelationalReviewBusy] = useState(false);
+  const busy = requestBusy || relationalReviewBusy;
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setDataCapture(null); setRelation(''); setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
@@ -220,6 +222,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
       <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId}
+        onReviewBusyChange={setRelationalReviewBusy}
         onReview={handoff => {serial.current++; setBaseline(handoff.baseline); setSource(handoff.desired);
           setSchemaPlan(null); setReview(null); setConfirmed(false); setDisplay('inventory'); setView(result.snapshot.view);}} />
     </Box>}

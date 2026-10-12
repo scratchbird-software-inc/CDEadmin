@@ -33,3 +33,58 @@ def test_conflicting_native_and_graphical_edits_and_new_field_identity_are_refus
     with pytest.raises(ValueError,match='reconciliation'):merge_fields(before,desired,'')
     desired=deepcopy(before);desired['fields']={}
     assert merge_fields(before,desired,'')==before['native']
+
+
+def test_explicit_new_graphical_columns_preserve_native_clauses_and_do_not_remove_omissions():
+    uid='mysql:ep:db:table'
+    before={'uid':uid,'name':'t','kind':'table','native':{'database':'db',
+        'definition':"CREATE TABLE `t` (`id` int NOT NULL DEFAULT 42, PRIMARY KEY (`id`)) ENGINE=InnoDB"},
+        'fields':{uid+':"id"':{'datatype':'int','_label':'id','_property_names':['uid','datatype']}}}
+    desired=deepcopy(before)
+    desired['fields']={'new-field':{'datatype':'varchar(80)','nullable':True,'description':"owner's note",'_label':'n`é',
+                                  '_property_names':['uid','datatype','nullable','description']}}
+    with pytest.raises(ValueError,match='reconciliation'):merge_fields(before,desired,'')
+    result=merge_fields(before,desired,'',allow_new_columns=True)
+    assert "`id` int NOT NULL DEFAULT 42, PRIMARY KEY (`id`)" in result['definition']
+    assert "`n``é` varchar(80) NULL COMMENT 'owner''s note'" in result['definition']
+    assert result['definition'].endswith('ENGINE=InnoDB')
+    from pgadmin.cdeadmin.workspace.mysql_schema_plan import alteration
+    source=alteration({'name':'t','native':before['native']},{'name':'t','native':result},'')
+    assert source.startswith('ALTER TABLE `db`.`t` ADD COLUMN `n``é`') and 'DROP' not in source
+
+
+@pytest.mark.parametrize('new_field', [
+    {'_label':'id','datatype':'int'}, {'_label':'n','datatype':'int DEFAULT 1'},
+    {'_label':'n'}, {'_label':'n','datatype':'int','nullable':'true'},
+    {'_label':'x'*65,'datatype':'int'}, {'_label':'n','datatype':'int','_property_names':['default']},
+])
+def test_new_graphical_column_admission_refuses_rebinding_and_unsupported_attributes(new_field):
+    before={'uid':'table','name':'t','kind':'table','native':{'database':'db','definition':'CREATE TABLE `t` (`id` int)'},'fields':{}}
+    desired=deepcopy(before);desired['fields']={'new':new_field}
+    with pytest.raises(ValueError):merge_fields(before,desired,'',allow_new_columns=True)
+
+
+def test_graphical_addition_cannot_override_conflicting_native_new_column():
+    before={'uid':'table','name':'t','kind':'table','native':{'database':'db','definition':'CREATE TABLE `t` (`id` int)'},'fields':{}}
+    desired=deepcopy(before);desired['native']['definition']='CREATE TABLE `t` (`id` int, `n` bigint)'
+    desired['fields']={'new':{'_label':'n','datatype':'int'}}
+    with pytest.raises(ValueError,match='disagree'):merge_fields(before,desired,'',allow_new_columns=True)
+
+
+def test_host_new_column_option_requires_boolean_and_preserves_target_admission(monkeypatch):
+    from unittest.mock import Mock
+    from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService, ProviderWorkspaceError
+    from pgadmin.cdeadmin.workspace import firebird_relational_review
+    service=object.__new__(ProviderWorkspaceService)
+    service.mysql_catalog=Mock(return_value={'snapshot': 'authorized catalog'})
+    handoff=Mock(return_value={'status':'prepared-for-native-preview'})
+    monkeypatch.setattr(firebird_relational_review,'handoff',handoff)
+    base={'database_target_id':'target','original':'before','snapshot':'after'}
+    for value in ('true', 1, None, {}):
+        with pytest.raises(ProviderWorkspaceError):
+            service.mysql_relational_review('server',{**base,'allow_new_columns':value})
+    service.mysql_catalog.assert_not_called()
+    result=service.mysql_relational_review('server',{**base,'allow_new_columns':True})
+    service.mysql_catalog.assert_called_once_with('server',{'database_target_id':'target'})
+    handoff.assert_called_once_with('authorized catalog','before','after',engine='mysql',allow_new_columns=True)
+    assert result['status']=='prepared-for-native-preview'

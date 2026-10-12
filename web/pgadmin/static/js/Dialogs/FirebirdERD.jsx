@@ -1,13 +1,13 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Dialog} from '@mui/material';
+import {Alert, Box, Button, Checkbox, Dialog, FormControlLabel} from '@mui/material';
 import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import {refreshDesign} from '../cdeadmin_ui/integrations/ddn/designMerge';
 
-export default function FirebirdERD({diagram, post, databaseTargetId, generation, onReview, engine='firebird'}) {
+export default function FirebirdERD({diagram, post, databaseTargetId, generation, onReview, onReviewBusyChange, engine='firebird'}) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(diagram.snapshot);
@@ -16,15 +16,17 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   const baseline = useRef(diagram.snapshot);
   const [merging, setMerging] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [allowNewColumns, setAllowNewColumns] = useState(false);
   const editor = useRef(null);
   const fileToken = useRef(0);
   useEffect(() => {fileToken.current++; setMerging(false); setReviewing(false);}, [diagram.snapshot]);
   useEffect(() => {
-    fileToken.current++; setEditing(false); setError(null); setDraft(diagram.snapshot);
+    fileToken.current++; setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
     selected.current = {entry: diagram.snapshot?.entry, view: diagram.snapshot?.view};
     seed.current = baseline.current = diagram.snapshot; editor.current = null;
   }, [engine, databaseTargetId]);
   useEffect(() => () => {fileToken.current++;}, []);
+  useEffect(() => () => onReviewBusyChange?.(false), [onReviewBusyChange]);
   const snapshot = () => ({...draft, ...selected.current});
   const download = (content, name, type) => {
     const url = URL.createObjectURL(new Blob([content], {type}));
@@ -68,16 +70,19 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       capture={() => ({snapshot: snapshot(), baseline: baseline.current})}
       onLoad={value => {setDraft(value.snapshot); baseline.current = value.baseline;
         selected.current = {entry: value.snapshot.entry, view: value.snapshot.view}; setError(null);}} />
+    {engine === 'mysql' && post && onReview && <FormControlLabel label="Include new graphical columns"
+      control={<Checkbox checked={allowNewColumns} disabled={editing || merging || reviewing}
+        onChange={event => setAllowNewColumns(event.target.checked)} />} />}
     {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && engine !== 'mysql')} onClick={async () => {
-      const serial = ++fileToken.current; setReviewing(true); setError(null);
+      const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {...(engine === 'mysql' ? {database_target_id: databaseTargetId} : {generation}),
+        const result = await post({action: `${engine}_relational_review`, request: {...(engine === 'mysql' ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);
       } catch (failure) {if (serial === fileToken.current) setError(failure.response?.data?.errormsg || failure.message || 'Unable to prepare relational review.');}
-      finally {if (serial === fileToken.current) setReviewing(false);}
+      finally {if (serial === fileToken.current) {setReviewing(false); onReviewBusyChange?.(false);}}
     }}>Review relational metadata changes</Button>}
     {JSON.stringify(baseline.current) !== JSON.stringify(diagram.snapshot) &&
       <Alert severity="warning">The native relational capture has changed. Your design and its original baseline are retained.</Alert>}
@@ -109,4 +114,4 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   </Box>;
 }
 FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
-  generation: PropTypes.string, onReview: PropTypes.func};
+  generation: PropTypes.string, onReview: PropTypes.func, onReviewBusyChange: PropTypes.func};

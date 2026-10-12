@@ -802,3 +802,23 @@ Primary, unique and foreign-key constraints do not receive this operation.
 Changing enforcement uses native ALTER TABLE and implicit commit semantics;
 MySQL validates existing rows when enabling enforcement. A refusal leaves the
 previous native state in force and is not evidence that enforcement changed.
+
+Explicit graphical column additions
+-----------------------------------
+
+The MySQL relational viewer offers an unchecked "Include new graphical columns"
+choice when preparing metadata review. Its explicit boolean is bound to the
+selected database target and the original/edited DDN documents. Without it,
+unknown field identities remain a reconciliation error. With it, up to 128 new
+fields per existing user table may become ADD COLUMN clauses using their exact
+unique names, required native datatype, boolean nullability and optional comment.
+Existing native clauses, defaults, generated expressions and constraints remain
+intact; a conflicting native definition blocks review. New fields cannot reuse
+an existing column name through a different UID. Missing fields never delete
+columns, and renames still require separate explicit reconciliation. This choice
+only prepares the ordinary three-way preview; native PREPARE validation and
+owner-bound reviewed application remain required before database mutation.
+
+A pending relational handoff disables parent catalog previews and mutations until
+the reviewed baseline/desired pair is installed or the handoff fails. A concurrent
+preview must not invalidate a handoff or leave the catalog in a busy state.
