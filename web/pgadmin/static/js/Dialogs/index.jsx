@@ -27,6 +27,7 @@ import ProviderWorkspaceContent from './ProviderWorkspaceContent';
 import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
 import PostgresqlMonitoring from './PostgresqlMonitoring';
+import MySQLMonitoring from './MySQLMonitoring';
 import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
@@ -259,8 +260,10 @@ export function showProviderWorkspace(
           const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
           node?.callbacks?.refresh?.call(node, null, connector);
         }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
-        <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
-          targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> : <ProviderWorkspaceContent
+        (nodeData.cde_profile_id === 'mysql-native' ? <MySQLMonitoring serverId={Number(nodeData._id ?? nodeData.id)}
+          targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
+          <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
+            targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
           closeModal={onClose}
           endpointUrl={endpointUrl}
           initialTab={initialTab}

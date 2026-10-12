@@ -5517,6 +5517,14 @@
     "postgresql-monitoring-policy": {
       "reference": "SR-F-001379",
       "title": "PostgreSQL dedicated monitoring credentials and policy"
+    },
+    "mysql-monitoring-policy": {
+      "reference": "SR-F-001394",
+      "title": "MySQL dedicated monitoring credentials and policy"
+    },
+    "mysql-dashboard": {
+      "reference": "SR-F-001395",
+      "title": "MySQL display-only native dashboard"
     }
   }
 }

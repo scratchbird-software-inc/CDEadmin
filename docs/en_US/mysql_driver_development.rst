@@ -53,6 +53,27 @@ are unavailable; connection failures invalidate the whole sample and retire the
 attachment. Reconnection establishes a new source epoch and never replays user
 work. Only a completed sample supplies heartbeat evidence. This source alone
 does not establish host credential configuration or dashboard qualification.
+
+MySQL collector delegation uses the existing sealed worker grant and
+single-process ownership lock. The authenticated owner selects registration or
+dedicated credentials at admission. Workers retain encrypted, lease-bounded
+credentials and recheck persisted owner activity, endpoint verification,
+provider/profile generation, routes, targets and credential references before
+collection and viewing. A registration change requires stop/reconfiguration;
+worker authorization must not depend on an interactive Flask login session.
+Stopping revokes the grant before releasing its attachment. Engine/server
+inventory remains owner-scoped and reports configured collectors, not a complete
+discovered fleet. Multiworker scheduling is not admitted by this contract.
+
+The MySQL monitoring policy form uses compact credential and numeric controls.
+Registration credentials are the default; dedicated credentials are submitted
+only on start and the password is cleared after either success or failure.
+Heartbeat timeout is optional and must exceed the sampling interval by at least
+five seconds. Target changes discard credentials and outstanding responses.
+Dashboard viewers use the DDN presentation surface without policy or editing
+controls. Only a fresh, completed observation for the selected scope supplies
+current metric values; failed, stale and mismatched samples remain unavailable.
+An action failure remains visible when subsequent background polling succeeds.
 The backend team owns native driver correctness, backend operations and
 functional forms. Windows and macOS teams own native UX refinement and platform
 QA; driver defects discovered there return to this workstream. MariaDB has a

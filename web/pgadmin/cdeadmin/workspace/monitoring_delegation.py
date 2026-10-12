@@ -38,7 +38,7 @@ class MonitoringGrant:
     def issue(cls, policy, route, generation, permissions, key_ring,
               authorize, *, clock=time.monotonic, credentials=None,
               engine='firebird'):
-        if engine not in ('firebird', 'postgresql'):
+        if engine not in ('firebird', 'postgresql', 'mysql'):
             raise MonitoringGrantError('Unsupported monitoring engine')
         if not key_ring.available:
             raise MonitoringGrantError('Monitoring worker key authority is unavailable')
@@ -81,8 +81,10 @@ class MonitoringGrant:
                 raise MonitoringGrantError('Monitoring credential references conflict')
             references[kind] = primary
         if credentials is not None:
-            references = {'database_password': 'dedicated'}
-        if set(references) != {'database_password'}:
+            references['database_password'] = 'dedicated'
+        required = {'database_password'}
+        optional = {'database_password_2', 'database_password_3'} if engine == 'mysql' else set()
+        if not required <= set(references) or set(references) - required - optional:
             raise MonitoringGrantError('A database password reference is required')
         principal = original.get('principal_reference')
         if not isinstance(principal, str) or not principal:
@@ -115,7 +117,7 @@ class MonitoringGrant:
                 if not isinstance(reference, str) or not reference:
                     raise MonitoringGrantError('Monitoring credential is unavailable')
                 identifier = str(uuid.uuid4())
-                lease = (SecretLease(credentials['password']) if credentials is not None
+                lease = (SecretLease(credentials['password']) if credentials is not None and kind == 'database_password'
                          else permissions.acquire_secret(reference, principal, 'connect', kind))
                 with lease:
                     envelope = lease.use(lambda value: key_ring.encrypt(
@@ -189,6 +191,9 @@ class MonitoringGrant:
                 if self.engine == 'postgresql':
                     from pgadmin.cdeadmin.providers.postgresql.monitoring import PostgreSQLMonitor
                     source_factory = PostgreSQLMonitor
+                elif self.engine == 'mysql':
+                    from pgadmin.cdeadmin.providers.mysql_family.mysql_monitoring import MySQLMonitor
+                    source_factory = MySQLMonitor
                 elif self.engine == 'firebird':
                     from pgadmin.cdeadmin.providers.firebird.monitoring import FirebirdMonitor
                     source_factory = FirebirdMonitor

@@ -1160,6 +1160,14 @@ def database_target_context_actions(
                 }, confirmation=False, macro=True,
             ))
     if engine_id == 'mysql':
+        for tab, label in (('monitoring', 'MySQL database dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(
+                f'database.mysql.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read',
+                arguments={**base, 'tab': tab},
+            ))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

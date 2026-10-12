@@ -292,10 +292,12 @@ class MonitoringHost:
         with self._lock:
             postgres = self.app.extensions.get('cdeadmin_postgresql_monitoring_host')
             postgres_released = postgres.close() if postgres is not None else True
+            mysql = self.app.extensions.get('cdeadmin_mysql_monitoring_host')
+            mysql_released = mysql.close() if mysql is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
-            released = released and postgres_released
+            released = released and postgres_released and mysql_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -425,4 +427,6 @@ def init_app(app, endpoint_service):
     app.register_blueprint(api)
     from .postgresql_monitoring_host import init_app as init_postgresql
     init_postgresql(app, host)
+    from .mysql_monitoring_host import init_app as init_mysql
+    init_mysql(app, host)
     return host
