@@ -39,6 +39,20 @@ does not authorize concurrent socket reuse or destruction while that worker
 still owns the protocol. Shutdown checks every execution and retains any
 unfinished ownership for a subsequent cleanup attempt; it never asserts rollback
 or replays a statement to establish an outcome.
+
+Dedicated monitoring source
+---------------------------
+
+The MySQL collector owns its connection, uses native autocommit for bounded
+read-only probes and never borrows a query session. Each sample verifies the
+server UUID, exact version and selected database. Global status remains labelled
+server-wide even on a database dashboard. Database storage figures from
+``information_schema.TABLES`` are estimates, not filesystem usage. Activity and
+replication groups are privilege-filtered and limited to 100 rows. Denied groups
+are unavailable; connection failures invalidate the whole sample and retire the
+attachment. Reconnection establishes a new source epoch and never replays user
+work. Only a completed sample supplies heartbeat evidence. This source alone
+does not establish host credential configuration or dashboard qualification.
 The backend team owns native driver correctness, backend operations and
 functional forms. Windows and macOS teams own native UX refinement and platform
 QA; driver defects discovered there return to this workstream. MariaDB has a
