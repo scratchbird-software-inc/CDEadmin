@@ -7,8 +7,10 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
+import Theme from 'sources/Theme';
+const render = (ui, options) => rtlRender(ui, {wrapper: Theme, ...options});
 import ProviderWorkspaceContent, {
   DatabaseTargetWorkspace,
   ObjectInspectorSection,
@@ -859,6 +861,40 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });
 
+  it.each(['mysql'])('observes %s autocommit and changes only acknowledged policy', async (engine) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',
+      transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
+    }]}}});
+    let policy = true;
+    api.post.mockImplementation((_url, payload) => {
+      if (payload.action === 'transaction_action') policy = payload.transaction_action === 'autocommit_on';
+      return Promise.resolve({data: {data: payload.action === 'open_session' ?
+        {session_id: 'pg-policy'} : {provider_payload: {autocommit: policy}}}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: '42'}} />);
+    expect(await screen.findByRole('button', {name: 'commit', exact: true})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Provider transaction state'}));
+    await waitFor(() => expect(screen.getByRole('checkbox', {name: 'Autocommit'})).toBeChecked());
+    expect(screen.getByRole('button', {name: 'rollback', exact: true})).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Autocommit'}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeEnabled());
+    expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'transaction_action', session_id: 'pg-policy', transaction_action: 'autocommit_off',
+    }));
+    expect(screen.getByRole('checkbox', {name: 'Autocommit'})).not.toBeChecked();
+    api.post.mockRejectedValueOnce(new Error('Unacknowledged policy change'));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Autocommit'}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Provider transaction state'})).toBeEnabled());
+    expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Provider transaction state'}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeEnabled());
+    expect(screen.getByRole('checkbox', {name: 'Autocommit'})).not.toBeChecked();
+    expect(api.post.mock.calls.some(([, payload]) => payload.action === 'execute')).toBe(false);
+  });
+
   it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'mysql-sql', title: 'MySQL SQL',
@@ -1122,10 +1158,12 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
-    const cancelButton = await screen.findByRole('button', {name: 'Cancel request'});
-    await waitFor(() => expect(cancelButton).not.toBeDisabled());
-    fireEvent.click(cancelButton);
+    const run = await screen.findByRole('button', {name: 'Run', exact: true});
+    await waitFor(() => expect(run).toBeEnabled());
+    fireEvent.click(run);
+    await screen.findByRole('button', {name: 'Cancel request'});
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Cancel request'})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel request'}));
     expect(await screen.findByText('Firebird query did not complete. Native status codes: 335544794')).toBeInTheDocument();
     expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'execute')).toHaveLength(1);
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_control')).toBe(false);
@@ -3002,7 +3040,7 @@ describe('ProviderWorkspaceContent', () => {
     />);
     expect(await screen.findByText('MySQL SQL')).toBeInTheDocument();
     expect(screen.queryByLabelText('Provider grid activation status')).toBeNull();
-    fireEvent.click(screen.getByText('Run'));
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     expect(await screen.findByText('42')).toBeInTheDocument();
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
     expect(api.post.mock.calls.map((call) => call[1].action)).toEqual([
@@ -3046,11 +3084,11 @@ describe('ProviderWorkspaceContent', () => {
     }}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('commit'));
+    fireEvent.click(await screen.findByRole('button', {name: 'commit', exact: true}));
     expect(await screen.findByText(/next_transaction_started/)).toBeVisible();
-    expect(screen.getByText('Run')).toBeDisabled();
-    expect(screen.getByText('commit')).toBeDisabled();
-    expect(screen.getByText('Close query session')).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Close query session'})).toBeEnabled();
     expect(api.post.mock.calls.filter(([, payload]) =>
       payload.action === 'transaction_action')).toHaveLength(1);
   });
@@ -3070,7 +3108,7 @@ describe('ProviderWorkspaceContent', () => {
     }}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('commit'));
+    fireEvent.click(await screen.findByRole('button', {name: 'commit', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith(
       '/workspace/1', {
         action: 'transaction_action', session_id: 'session-one',
@@ -3080,14 +3118,14 @@ describe('ProviderWorkspaceContent', () => {
     ));
     expect(await screen.findByText(/driver_observation_only/))
       .toBeInTheDocument();
-    fireEvent.click(screen.getByText('Close query session'));
+    fireEvent.click(screen.getByRole('button', {name: 'Close query session'}));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith(
       '/workspace/1', {
         action: 'close_session', session_id: 'session-one',
         database_target_id: null,
       }
     ));
-    expect(screen.getByText('Close query session')).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Close query session'})).toBeDisabled();
   });
 
   it('pages, exports, and compares endpoint-bound retained results', async () => {
@@ -3111,7 +3149,7 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     fireEvent.click(await screen.findByRole('button', {name: 'Next result page'}));
     expect(await screen.findByText('43')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Export JSON'));
@@ -3155,7 +3193,7 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const results = await screen.findByLabelText('Document results');
     expect(results).toHaveTextContent('0123456789abcdef01234567');
     expect(results).toHaveTextContent('42');
@@ -3187,7 +3225,7 @@ describe('ProviderWorkspaceContent', () => {
     }[payload.action]}}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const results = await screen.findByLabelText('Graph results');
     expect(results).toHaveTextContent('Person');
     expect(results).toHaveTextContent('Alice');
@@ -3226,7 +3264,7 @@ describe('ProviderWorkspaceContent', () => {
     }[payload.action]}}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const results = await screen.findByLabelText('Wide-column results');
     expect(results).toHaveTextContent('tenant');
     expect(results).toHaveTextContent('blob');
@@ -3268,7 +3306,7 @@ describe('ProviderWorkspaceContent', () => {
     }[payload.action]}}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const results = await screen.findByLabelText('Columnar results');
     expect(results).toHaveTextContent('category');
     expect(results).toHaveTextContent('LowCardinality(String)');
@@ -4084,7 +4122,7 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
     await screen.findByText('MySQL SQL');
-    fireEvent.click(screen.getByText('Run'));
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     expect(await screen.findByLabelText(accessibleName)).toBeInTheDocument();
   });
 
@@ -4321,7 +4359,7 @@ describe('ProviderWorkspaceContent', () => {
     }}));
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByText('Run'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const pivot = await screen.findByLabelText('Cube pivot results');
     expect(pivot).toHaveTextContent('North');
     expect(pivot).toHaveTextContent('42.5');

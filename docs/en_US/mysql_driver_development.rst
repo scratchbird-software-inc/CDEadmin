@@ -753,3 +753,17 @@ selected registered database target. Connection registration/editing remains a
 separate action. Disconnect explicitly names its server-wide effect: all
 registered database routes and their active sessions for that endpoint are
 released together. It is never labeled as disconnecting only one database.
+
+Shared query toolbar and autocommit observation
+-----------------------------------------------
+
+MySQL uses the shared compact query frame, icon actions, connection selector,
+language binding and bounded browser-buffer control. A single autocommit
+checkbox replaces separate on/off buttons. Its state comes from the native
+session observation, including a refresh after opening and terminal execution;
+it is indeterminate when no reliable observation is available. Commit/rollback
+are disabled while autocommit is on or unknown. An uncertain policy must be
+refreshed before execution resumes; the UI never guesses transaction state.
+Concurrent validation/execution share one session-opening request. Switching
+languages or closing a workspace waits for that request and releases the same
+owned session. These controls do not change MySQL DDL implicit-commit semantics.

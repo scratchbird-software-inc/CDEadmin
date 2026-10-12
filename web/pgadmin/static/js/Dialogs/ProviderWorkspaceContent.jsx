@@ -1,3 +1,5 @@
+import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
+import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 /////////////////////////////////////////////////////////////
 //
@@ -7048,6 +7050,17 @@ export default function ProviderWorkspaceContent({
   const [queryPollingPaused, setQueryPollingPaused] = useState(false);
   const [querySessionBlocked, setQuerySessionBlocked] = useState(false);
   const [transaction, setTransaction] = useState(null);
+  const [sessionAutocommit, setSessionAutocommit] = useState(null);
+  const managedAutocommit = (languageProfile === 'mysql-sql' && workspace?.languages?.find(
+    item => item.language_profile === languageProfile)?.transaction_actions?.includes('autocommit_on'));
+  const sessionPolicyUnknown = managedAutocommit &&
+    Boolean(sessionId) && sessionAutocommit === null;
+  const observeTransaction = (observation) => {
+    setTransaction(observation);
+    const policy = observation.provider_payload?.autocommit;
+    setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+    if (observation.provider_payload?.session_reuse_blocked) setQuerySessionBlocked(true);
+  };
   const [selectedResource, setSelectedResource] = useState(null);
   // A verified object can be outside the visible page after a mutation.
   // Bind that observation to the cache generation, not page membership.
@@ -7063,11 +7076,13 @@ export default function ProviderWorkspaceContent({
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
   const querySessionIdRef = useRef(null);
+  const querySessionOpeningRef = useRef(null);
   useModalCloseGuard(async () => {
-    if (occurrenceId || (busy && sessionId)) {
+    if (occurrenceId || (busy && (sessionId || querySessionOpeningRef.current))) {
       setError(gettext('Wait for the current query request to finish, or cancel the running query before closing this workspace.'));
       return false;
     }
+    if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
     const closingSession = querySessionIdRef.current;
     if (!closingSession) return true;
     setBusy(true);
@@ -7076,6 +7091,7 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId});
       querySessionIdRef.current = null;
       setSessionId(null);
+      setSessionAutocommit(null);
       setTransaction(null);
       return true;
     } catch (requestError) {
@@ -7368,17 +7384,33 @@ export default function ProviderWorkspaceContent({
   };
 
   const ensureSession = useCallback(async () => {
-    if (sessionId) return sessionId;
-    const language = languageProfile;
-    if (!language) throw new Error(gettext('No query language is available.'));
-    const opened = await post({
-      action: 'open_session', language_profile: language,
-      database_target_id: queryDatabaseTargetId,
-    });
-    querySessionIdRef.current = opened.session_id;
-    setSessionId(opened.session_id);
-    return opened.session_id;
-  }, [languageProfile, post, queryDatabaseTargetId, sessionId]);
+    if (querySessionOpeningRef.current) return querySessionOpeningRef.current;
+    if (querySessionIdRef.current) return querySessionIdRef.current;
+    const opening = (async () => {
+      const language = languageProfile;
+      if (!language) throw new Error(gettext('No query language is available.'));
+      const opened = await post({
+        action: 'open_session', language_profile: language,
+        database_target_id: queryDatabaseTargetId,
+      });
+      querySessionIdRef.current = opened.session_id;
+      setSessionId(opened.session_id);
+      if (language === 'mysql-sql' && managedAutocommit) {
+        const observed = await post({action: 'transaction', session_id: opened.session_id,
+          database_target_id: queryDatabaseTargetId});
+        setTransaction(observed);
+        const policy = observed.provider_payload?.autocommit;
+        setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+        if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
+          throw new Error(gettext('Refresh the native transaction state before executing.'));
+        }
+      }
+      return opened.session_id;
+    })();
+    querySessionOpeningRef.current = opening;
+    try { return await opening; }
+    finally { if (querySessionOpeningRef.current === opening) querySessionOpeningRef.current = null; }
+  }, [languageProfile, managedAutocommit, post, queryDatabaseTargetId]);
 
   const poll = useCallback(async (id) => {
     setBusy(true);
@@ -7457,6 +7489,18 @@ export default function ProviderWorkspaceContent({
           setError(gettext('This Firebird query session cannot be reused. Close it and explicitly reconnect.'));
         }
       }
+      if (languageProfile === 'mysql-sql' && managedAutocommit && response.occurrence?.operation?.terminal) {
+        setSessionAutocommit(null);
+        try {
+          const observed = await post({action: 'transaction', session_id: querySessionIdRef.current,
+            database_target_id: queryDatabaseTargetId});
+          setTransaction(observed);
+          const policy = observed.provider_payload?.autocommit;
+          setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+        } catch {
+          setTransaction(null);
+        }
+      }
       setQueryPollingPaused(Boolean(mysql?.has_page));
       setOccurrenceId(response.occurrence?.operation?.terminal ? null : id);
     } catch (requestError) {
@@ -7465,7 +7509,7 @@ export default function ProviderWorkspaceContent({
     } finally {
       setBusy(false);
     }
-  }, [acceptRendered, bufferRows, languageProfile, post, queryDatabaseTargetId]);
+  }, [acceptRendered, bufferRows, languageProfile, managedAutocommit, post, queryDatabaseTargetId]);
 
   useEffect(() => {
     if (!workspace?.languages?.some(item => item.language_profile === languageProfile) ||
@@ -7552,9 +7596,10 @@ export default function ProviderWorkspaceContent({
 
   const refreshTransaction = async () => {
     setBusy(true);
+    if (managedAutocommit) setSessionAutocommit(null);
     try {
       const activeSession = await ensureSession();
-      setTransaction(await post({
+      observeTransaction(await post({
         action: 'transaction', session_id: activeSession,
         database_target_id: queryDatabaseTargetId,
       }));
@@ -7574,26 +7619,27 @@ export default function ProviderWorkspaceContent({
         transaction_action: action,
         database_target_id: queryDatabaseTargetId,
       });
-      setTransaction(observation);
-      if (observation.provider_payload?.session_reuse_blocked) {
-        setQuerySessionBlocked(true);
-      }
+      observeTransaction(observation);
     } catch (requestError) {
+      if (managedAutocommit) setSessionAutocommit(null);
       setError(errorMessage(requestError));
     } finally { setBusy(false); }
   };
 
   const releaseQuerySession = async () => {
-    if (!sessionId) return;
+    if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
+    const closingSession = querySessionIdRef.current;
+    if (!closingSession) return;
     setBusy(true);
     setError(null);
     try {
       await post({
-        action: 'close_session', session_id: sessionId,
+        action: 'close_session', session_id: closingSession,
         database_target_id: queryDatabaseTargetId,
       });
       querySessionIdRef.current = null;
       setSessionId(null);
+      setSessionAutocommit(null);
       setScriptLocked(false);
       setScriptEditorGeneration(value => value + 1);
       setQuerySessionBlocked(false);
@@ -7609,6 +7655,7 @@ export default function ProviderWorkspaceContent({
     setBusy(true);
     setError(null);
     try {
+      if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
       if (querySessionIdRef.current) {
         await post({
           action: 'close_session', session_id: querySessionIdRef.current,
@@ -7617,6 +7664,7 @@ export default function ProviderWorkspaceContent({
         querySessionIdRef.current = null;
       }
       setLanguageProfile(profile);
+      setSessionAutocommit(null);
       const language = workspace?.languages?.find((item) =>
         item.language_profile === profile);
       setSource(defaultSource(language));
@@ -7681,7 +7729,8 @@ export default function ProviderWorkspaceContent({
   const queryTarget = workspace?.database_targets?.targets?.find(target => target.target_id === queryDatabaseTargetId);
   useEffect(() => {
     if (workspace?.endpoint) labelSQLConnection(endpointUrl,
-      `${workspace.endpoint.display_name || workspace.endpoint.endpoint_id} / ${queryTarget?.display_name || queryDatabaseTargetId || 'server'} — ${workspace.endpoint.verified_runtime_family || workspace.endpoint.profile_id}`);
+      `${workspace.endpoint.display_name || workspace.endpoint.endpoint_id} / ${queryTarget?.display_name || queryDatabaseTargetId || 'server'}`,
+      workspace.endpoint.verified_runtime_family || workspace.endpoint.profile_id);
   }, [endpointUrl, workspace?.endpoint, queryTarget, queryDatabaseTargetId]);
   const bufferValid = Number.isInteger(bufferRows) && bufferRows >= 1 && bufferRows <= 500;
 
@@ -7860,12 +7909,32 @@ export default function ProviderWorkspaceContent({
           {queryDatabaseTargetId && <> · {gettext('Database')}: {queryDatabaseTargetId}</>}
         </Box>
       </Box>}
-      {workspace && <Box role="region"
+      {workspace && <QueryToolFrame role="region"
         aria-label={gettext('Provider query workspace')}
-        sx={{p: 2, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
-          minHeight: 0, minWidth: 0, overflow: 'hidden'}}>
-        <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
-          <TextField select size="small" sx={{mb: 1, maxWidth: 360}}
+        sx={{display: tab === 'studio' ? 'flex' : 'none'}}>
+        <QueryToolToolbar aria-label={gettext('SQL execution toolbar')}>
+          <QueryToolAction action="execute" title={gettext('Run')}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
+            onClick={() => execute()} />
+          {languageProfile === 'firebird-sql' && <QueryToolAction action="explain" title={gettext('Explain / query plan')}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
+            onClick={() => execute(source, 'native', false, false, true)} />}
+          {activePlanTemplates.map((template, index) => <QueryToolAction key={template.label}
+            action={index === 0 ? 'explain' : 'analyze'} title={index === 0 ? gettext('Explain / query plan') : template.label}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
+            onClick={() => execute(template.source_template.replace('{source}', source), 'plan')} />)}
+          <QueryToolAction action="refresh" title={gettext('Poll')} disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)} />
+          <QueryToolAction action="cancel" title={gettext('Cancel request')} disabled={busy || !occurrenceId} onClick={cancel} />
+          <QueryToolAction action="refresh" title={gettext('Provider transaction state')} disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction} />
+          {managedAutocommit && <FormControlLabel label={gettext('Autocommit')} control={<Checkbox
+            checked={sessionAutocommit === true} indeterminate={sessionAutocommit === null}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId}
+            onChange={(_event, checked) => controlTransaction(checked ? 'autocommit_on' : 'autocommit_off')} />} />}
+          {(activeLanguage?.transaction_actions || []).filter(action => !managedAutocommit || !action.startsWith('autocommit_')).map(action =>
+            <QueryToolAction key={action} action={action} title={gettext(action)} color={action === 'rollback' ? 'warning' : 'primary'}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || (managedAutocommit && sessionAutocommit !== false)} onClick={() => controlTransaction(action)} />)}
+          <QueryToolAction action="close" title={gettext('Close query session')} disabled={busy || !!occurrenceId || !sessionId} onClick={releaseQuerySession} />
+          <TextField select size="small" sx={{width: 200}}
             label={gettext('Provider language')} value={languageProfile}
             disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked}
             onChange={(event) => selectLanguage(event.target.value)}>
@@ -7877,55 +7946,30 @@ export default function ProviderWorkspaceContent({
           <TextField type="number" size="small" label={gettext('Maximum rows per fetch')}
             value={bufferRows} disabled={busy || queryStreamActive || !!occurrenceId || Boolean(rendered) || scriptLocked}
             error={!bufferValid} inputProps={{min: 1, max: 500, step: 1}}
-            sx={{mb: 1, maxWidth: '16rem'}} onChange={event => setBufferRows(Number(event.target.value))}
+            sx={{width: 155}} onChange={event => setBufferRows(Number(event.target.value))}
             title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
-        </Box>
-        <Box sx={{display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap'}}
-          aria-label={gettext('Provider language examples')}>
-          {sourcePresets(activeLanguage).map(([label, example]) =>
-            <Button size="small" key={label} disabled={scriptLocked} onClick={() => setSource(example)}>
-              {label}</Button>)}
-        </Box>
+          {sourcePresets(activeLanguage).length > 0 && <TextField select size="small"
+            label={gettext('Statement example')} value="" sx={{width: 180}}
+            disabled={busy || scriptLocked || Boolean(occurrenceId)} onChange={event => setSource(event.target.value)}>
+            <MenuItem value="" disabled>{gettext('Choose example')}</MenuItem>
+            {sourcePresets(activeLanguage).map(([label, example]) => <MenuItem key={label} value={example}>{label}</MenuItem>)}
+          </TextField>}
+        </QueryToolToolbar>
         {sourcePresets(activeLanguage).length === 0 &&
           !defaultSource(activeLanguage).trim() && !source.trim() &&
           <Alert severity="info" sx={{mb: 1}}>
             {gettext('This provider has not supplied an evidence-bound query template. The editor is intentionally empty.')}
           </Alert>}
-        <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
-          <Button variant="contained" disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute()}>{gettext('Run')}</Button>
-          {languageProfile === 'firebird-sql' && <Button
-            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute(source, 'native', false, false, true)}>
-            {gettext('Explain / query plan')}</Button>}
-          {activePlanTemplates.map((template, index) =>
-            <Button key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-              onClick={() => execute(
-                template.source_template.replace('{source}', source), 'plan'
-              )}>
-              {index === 0 ? gettext('Explain / query plan') : template.label}
-            </Button>)}
-          <Button disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)}>{gettext('Poll')}</Button>
-          <Button disabled={busy || !occurrenceId} onClick={cancel}>{gettext('Cancel request')}</Button>
-          <Button disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction}>{gettext('Provider transaction state')}</Button>
-          {(activeLanguage?.transaction_actions || []).map((action) =>
-            <Button key={action} color={action === 'rollback' ? 'warning' : 'primary'}
-              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId} onClick={() => controlTransaction(action)}>
-              {gettext(action)}</Button>)}
-          <Button disabled={busy || !!occurrenceId || !sessionId}
-            onClick={releaseQuerySession}>
-            {gettext('Close query session')}</Button>
-          {busy && <CircularProgress size={24} />}
-        </Box>
         <LanguageSourceEditor key={languageProfile + ':' + queryDatabaseTargetId + ':' + scriptEditorGeneration}
           language={activeLanguage} source={source} onChange={setSource}
           resources={resourcePage?.items}
           onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
           post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId}
-          disabled={busy || Boolean(occurrenceId) || querySessionBlocked}
+          disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
+            {languageProfile === 'mysql-sql' && <MySQLQueryOptions transaction={transaction} />}
             {['firebird-sql', 'mysql-sql'].includes(languageProfile) && <>
               <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
                 checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
@@ -8055,7 +8099,7 @@ export default function ProviderWorkspaceContent({
           {rendered && resultPresentation === 'plan' &&
           <QueryPlanView rendered={rendered} />}
         </Box>
-      </Box>}
+      </QueryToolFrame>}
       {workspace && tab === 'object' &&
         workspace.visual_admin?.objects?.find((item) =>
           item.resource_kind === selectedResource?.resource_kind

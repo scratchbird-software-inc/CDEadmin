@@ -3,6 +3,17 @@ import {useState} from 'react';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import SQLConnections, {activateSQLConnection, registerSQLConnection, removeSQLConnections} from '../../../pgadmin/static/js/cdeadmin_ui/editors/SQLConnections';
 function Draft() {const [value,setValue]=useState('');return <input aria-label="draft" value={value} onChange={e=>setValue(e.target.value)} />;}
+it('shows the complete query-tool layout before any connection is selected', () => {
+  const Component = withTheme(SQLConnections); render(<Component />);
+  expect(screen.getByRole('button', {name: 'Run'})).toBeDisabled();
+  expect(screen.getByRole('button', {name: 'Commit'})).toBeDisabled();
+  expect(screen.getByRole('button', {name: 'Rollback'})).toBeDisabled();
+  expect(screen.getByRole('tab', {name: 'Data Output'})).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Buffered rows: 0');
+  fireEvent.click(screen.getByRole('tab', {name: 'Messages'}));
+  expect(screen.getByRole('tabpanel', {name: 'Messages'})).toHaveTextContent('No connection selected.');
+});
+
 it('switches active connections without unmounting drafts or recreating their sessions', () => {
   Object.defineProperty(window, 'innerHeight', {configurable:true,value:1000});
   activateSQLConnection({id:'firebird-a',label:'Firebird / A',content:<Draft />});
@@ -34,11 +45,11 @@ it('lists explorer connections before opening SQL and removes only the disconnec
 });
 
 it('disconnects one PostgreSQL database without removing its sibling connection', () => {
-  registerSQLConnection({id:'pg-a',serverId:18,databaseTargetId:'postgresql-database:10',label:'PostgreSQL / A'});
-  registerSQLConnection({id:'pg-b',serverId:18,databaseTargetId:'postgresql-database:11',label:'PostgreSQL / B'});
+  registerSQLConnection({id:'pg-a',serverId:18,databaseTargetId:'postgresql-database:10',engine:'PostgreSQL',label:'A'});
+  registerSQLConnection({id:'pg-b',serverId:18,databaseTargetId:'postgresql-database:11',engine:'PostgreSQL',label:'B'});
   removeSQLConnections(18, 'postgresql-database:10');
   const Component=withTheme(SQLConnections);render(<Component />);
   fireEvent.mouseDown(screen.getByRole('combobox', {name:'Active connection'}));
-  expect(screen.queryByRole('option',{name:'PostgreSQL / A'})).not.toBeInTheDocument();
-  expect(screen.getByRole('option',{name:'PostgreSQL / B'})).toBeInTheDocument();
+  expect(screen.queryByRole('option',{name:'PostgreSQL — A'})).not.toBeInTheDocument();
+  expect(screen.getByRole('option',{name:'PostgreSQL — B'})).toBeInTheDocument();
 });
