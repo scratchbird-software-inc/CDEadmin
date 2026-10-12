@@ -3,10 +3,12 @@ from ..workspace.firebird_schema_plan import digest
 from ..workspace.mysql_schema_plan import address, alteration, creation, schema
 from .mysql_family.mysql_catalog import identifier
 from .mysql_statement_encoding import statement_context
+import hashlib
 
 
 def apply_review(connection, record):
     dispatched = acknowledged = locked = False
+    advisory = None
     cursor = None
     result = {'state': 'not_dispatched', 'rediscovery_verified': False,
               'automatic_retry': False, 'transactional_rollback_available': False}
@@ -25,11 +27,16 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if (before is not None and before['kind'] != 'table') or after['kind'] != 'table':
-            raise ValueError('Only exact user table definitions are admitted')
+        if after['kind'] not in {'table','view'} or (before is not None and before['kind'] != after['kind']):
+            raise ValueError('Only exact user table/view definitions are admitted')
         context = operation['context']
         target = identifier(database) + '.' + identifier(after['name'])
-        if operation['operation'] == 'create' and before is None and not after['native'].get('mysql_change'):
+        if after['kind']=='view':
+            from ..workspace.mysql_view_plan import compile_view
+            if (operation['operation']=='create') != (before is None):
+                raise ValueError('Native view operation disagrees with baseline presence')
+            compiled=compile_view(after,operation['operation'],database)
+        elif operation['operation'] == 'create' and before is None and not after['native'].get('mysql_change'):
             compiled = creation(after, context['sql_mode'], database)
         elif operation['operation'] == 'alter' and before is not None:
             compiled = alteration(before, after, context['sql_mode'])
@@ -62,12 +69,25 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            cursor.execute('LOCK TABLES ' + target + ' WRITE')
-            locked = True
+            if after['kind']=='view':
+                advisory='sr-ddn-view:'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48]
+                cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
+                if cursor.fetchone()[0]!=1:
+                    advisory=None
+                    raise ValueError('Native view advisory lock is unavailable')
+                result['concurrent_external_ddl_fenced']=False
+                result['concurrency_warning']='View baseline is observational; external DDL can change the view before dispatch'
+            else:
+                cursor.execute('LOCK TABLES ' + target + ' WRITE')
+                locked = True
             cursor.execute('SHOW CREATE TABLE ' + target)
             observed = cursor.fetchone()
             if not observed or digest({'definition': observed[1], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
-                raise ValueError('Locked native table changed since review')
+                raise ValueError('Locked native object changed since review')
+            if after['kind']=='view' and (len(observed)<4 or any(
+                    before['native'].get('definition_context',{}).get(field)!=observed[index]
+                    for field,index in [('character_set_client',2),('collation_connection',3)])):
+                raise ValueError('Locked native view creation context changed since review')
         with statement_context(connection, cursor, compiled, context) as encoded:
             dispatched = True
             cursor.execute(encoded)
@@ -98,6 +118,12 @@ def apply_review(connection, record):
             result['rejection_reason'] = str(error)
     finally:
         if cursor is not None:
+            if advisory is not None:
+                try:
+                    cursor.execute('SELECT RELEASE_LOCK(%s)',(advisory,))
+                    cursor.fetchone()
+                except Exception as error:
+                    result['cleanup_error_type']=type(error).__name__
             if locked:
                 try:
                     cursor.execute('UNLOCK TABLES')

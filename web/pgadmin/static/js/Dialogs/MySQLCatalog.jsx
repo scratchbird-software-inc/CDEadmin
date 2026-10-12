@@ -197,7 +197,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
       <Button disabled={busy || !schemaPlan?.ready_for_review || !schemaPlan.native_grammar_validated ||
-        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => op.kind !== 'table' || !['create', 'alter', 'drop'].includes(op.operation))}
+        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => !['table','view'].includes(op.kind) || !['create', 'alter', 'drop'].includes(op.operation))}
       onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
       <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
         disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />
@@ -208,6 +208,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       <Button disabled={busy || !receiptId || !databaseTargetId}
         onClick={() => schemaApplication('mysql_schema_receipt')}>Read receipt</Button>
     </Box>
+    {schemaPlan?.warnings?.map((warning,index) => <Alert key={index} severity="warning">{warning}</Alert>)}
     {review && <Box>
       <Alert severity={review.state === 'committed' ? 'success' : review.state === 'reviewed' ? 'info' : 'warning'}>
         Schema receipt {review.review_id}: {review.state}. Automatic retry is disabled.
@@ -220,6 +221,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
             {key: 'state', name: 'Observed outcome', minWidth: 180},
           ]} />
       </Box>}
+      {review.outcome?.concurrency_warning && <Alert severity="warning">{review.outcome.concurrency_warning}</Alert>}
       {review.outcome?.rejection_reason && <Alert severity="warning">{review.outcome.rejection_reason}</Alert>}
       {review.outcome?.desired_definition_exact_match === false && <Alert severity="warning">
         Native SHOW CREATE differs from the desired text. Review the rediscovered definition before further changes.

@@ -828,7 +828,7 @@ preview must not invalidate a handoff or leave the catalog in a busy state.
 Reviewed multi-table application receipts
 ----------------------------------------
 
-A native-validated plan may contain 1 to 32 distinct user-table CREATE/ALTER/DROP
+A native-validated plan may contain 1 to 32 distinct user-table/ordinary-view CREATE/ALTER/DROP
 operations, within 1 MiB of SQL and the existing 4 MiB review bound. Review seals
 its displayed order, exact baseline/desired fingerprints, owner and database
 binding. Application runs that order once, using the existing independently
@@ -862,3 +862,34 @@ queries, preserving non-ASCII object names and Unicode result decoding. Native
 SQL mode remains the captured mode. Context restoration does not imply rollback:
 a success followed by restoration failure is still committed; lost replies remain
 uncertain. The independently owned connection is retired after the operation.
+
+Reviewed ordinary-view DDN deployment
+-------------------------------------
+
+Native ordinary views join table CREATE/ALTER/DROP in the same ordered receipt
+contract. The adapter preserves native algorithm, exact definer, SQL security,
+query, check option and recorded client/collation context. It accepts an exact
+quoted SHOW CREATE VIEW target; CREATE never replaces an existing object. A reviewed view update
+uses native CREATE OR REPLACE with the exact existing-target observation and baseline
+check below; absence is refused. MySQL 9.7 PREPARE rejects ALTER VIEW with error
+1295, so it is not falsely labelled validated. The displayed replacement
+statement itself must pass native PREPARE. The query form retains native ALTER
+VIEW as its separate operation. Explicit DROP requires the
+exact view name confirmation. Materialized views require their separate adapter.
+
+Existing views use a bounded native advisory lock keyed by database and view,
+then exact SHOW CREATE definition and creation-context revalidation immediately
+before dispatch. This serializes cooperating ScratchRobin DDN applications only;
+ordinary SQL and other administrators need not honor it. MySQL rejects view
+replacement under LOCK TABLES with error 1192, so no table-lock or atomic
+compare-and-swap guarantee is claimed for view updates/removals. Review exposes
+this concurrency warning and receipts record that external DDL was not fenced.
+Concurrent external replacement in the observation/dispatch interval can be
+overwritten or removed; use an exclusive DDL maintenance window when that must
+be prevented. Permission or advisory-lock refusal stops before dispatch.
+
+Views can depend on tables or other views; displayed order remains the sealed
+execution order, and native PREPARE does not preflight a hypothetical schema
+containing earlier changes. Observed creation-context or native-definition drift
+requires a fresh review. Rediscovery reports native definitions; dependent
+objects are not implicitly rewritten or recreated by the adapter.

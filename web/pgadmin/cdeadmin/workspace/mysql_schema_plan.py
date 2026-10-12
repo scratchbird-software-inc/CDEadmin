@@ -123,21 +123,30 @@ def plan(baseline,desired,live):
                 if current is not None:address(current,database)
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
-            if after['kind']!='table':raise ValueError('Native adapter for this object kind is not yet admitted')
+            if after['kind'] not in {'table','view'}:raise ValueError('Native adapter for this object kind is not yet admitted')
             if before is not None and (current is None or not _equal(schema(before),schema(current))):
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
-                if current is not None:raise ValueError('New native table target already exists')
+                if current is not None:raise ValueError('New native target already exists')
                 if intent:raise ValueError('Creation does not accept alteration/removal intent')
-                source=creation(after,identity['sql_mode'],database);operation='create'
+                operation='create'
             elif isinstance(intent,dict) and intent.get('action')=='drop':
                 if set(intent)!={'action','confirmation'} or intent['confirmation']!=before['name']:
-                    raise ValueError('Table removal requires exact native name confirmation')
-                source='DROP TABLE '+identifier(database)+'.'+identifier(before['name']);operation='drop'
+                    raise ValueError('Removal requires exact native name confirmation')
+                operation='drop'
+            else:operation='alter'
+            if after['kind']=='view':
+                from .mysql_view_plan import compile_view
+                source=compile_view(after,operation,database)
+                context={name:after['native'].get('definition_context',{}).get(name,identity[name])
+                    for name in ('sql_mode','character_set_client','collation_connection')}
             else:
-                source=alteration(before,after,identity['sql_mode']);operation='alter'
-            operations.append({'resource_id':key,'kind':'table','name':after['name'],'database':database,'operation':operation,
-                'source':source,'context':{name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')},
+                source=(creation(after,identity['sql_mode'],database) if operation=='create' else
+                    'DROP TABLE '+identifier(database)+'.'+identifier(before['name']) if operation=='drop' else
+                    alteration(before,after,identity['sql_mode']))
+                context={name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')}
+            operations.append({'resource_id':key,'kind':after['kind'],'name':after['name'],'database':database,'operation':operation,
+                'source':source,'context':context,
                 'baseline_schema_sha256':digest(schema(before)) if before else None,'desired_schema_sha256':digest(schema(after))})
         except (ValueError,KeyError,TypeError) as error:
             blockers.append({'resource_id':key,'name':after['name'],'reason':str(error)})
@@ -149,4 +158,6 @@ def plan(baseline,desired,live):
         'native_grammar_validated':False,'application_supported':False,'executed':False,
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
-            'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.']}
+            'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
+            (['View updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
+             if any(op['kind']=='view' and op['operation']!='create' for op in operations) else [])}

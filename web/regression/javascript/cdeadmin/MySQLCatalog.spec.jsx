@@ -98,10 +98,10 @@ describe('MySQL three-way native metadata preview', () => {
 });
 
 describe('MySQL reviewed schema controls', () => {
-  it.each(['alter', 'create', 'drop'])('requires native validation, receipt and confirmation for %s, then shows the native outcome', async operationId => {
+  it.each([['table','alter'],['table','create'],['table','drop'],['view','alter'],['view','create'],['view','drop']])('requires native validation, receipt and confirmation for %s %s, then shows the native outcome', async (kind,operationId) => {
     const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
-    const operation={kind:'table',operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
-    const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation]};
+    const operation={kind,operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
+    const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation],warnings:kind==='view'?['External DDL is not fenced']:[]};
     const receipt={review_id:'receipt',review_digest:'review-digest',state:'reviewed'};
     const post=jest.fn().mockImplementation(async ({action}) => {
       if(action==='mysql_catalog_export') return {snapshot,views:[{id:'inventory_1',entry:'native.ddn'}],objects:[]};
@@ -115,6 +115,7 @@ describe('MySQL reviewed schema controls', () => {
     await screen.findByText('Native DDN viewer');
     fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
     await screen.findByRole('textbox',{name:'Native MySQL change preview'});
+    if(kind==='view') expect(screen.getByText('External DDL is not fenced')).toBeVisible();
     expect(screen.getByRole('button',{name:'Prepare reviewed change'})).toBeDisabled();
     fireEvent.click(screen.getByRole('button',{name:'Validate native changes'}));
     await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
