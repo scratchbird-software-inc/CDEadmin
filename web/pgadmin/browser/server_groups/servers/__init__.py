@@ -2813,6 +2813,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action == 'mysql_server_catalog':
+                    payload = service.mysql_server_catalog(server, data.get('request'))
                 elif action == 'mysql_data_capture':
                     payload = service.mysql_data_capture(server, data.get('request'))
                 elif action in {'mysql_design_read', 'mysql_design_save'}:

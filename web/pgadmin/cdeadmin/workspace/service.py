@@ -610,6 +610,45 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Select a native MySQL endpoint')
         return context, endpoint, provider
 
+    def mysql_server_catalog(self, server, request):
+        from ..providers.mysql_family.provider import MySQLPilotProvider
+        from .firebird_catalog_export import build_export, MAX_BYTES
+        if not isinstance(request, dict) or set(request) - {'targets', 'include_system'}:
+            raise ProviderWorkspaceError('Invalid MySQL server catalog request')
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mysql-native':
+            raise ProviderWorkspaceError('Select an owned native MySQL server')
+        targets, include_system = request.get('targets', []), request.get('include_system', True)
+        if (not isinstance(targets, list) or len(targets) > 32 or any(not isinstance(value, str) or not value for value in targets) or
+                len(targets) != len(set(targets)) or type(include_system) is not bool):
+            raise ProviderWorkspaceError('Select at most 32 distinct registered database targets')
+        registered = self.endpoint_service.database_catalog(server)['targets']
+        if not set(targets) <= {item['target_id'] for item in registered}:
+            raise ProviderWorkspaceError('Database expansion requires owned registered targets')
+        context, endpoint, _root = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mysql-native' or not isinstance(provider, MySQLPilotProvider):
+            raise ProviderWorkspaceError('Select a native MySQL endpoint')
+        try:
+            captured = provider.capture_server_catalog(endpoint['route'])
+            result = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + captured['server_uuid'], generation=captured['generation'],
+                include_system=include_system, refreshed=True, engine='mysql')
+            result.update(server_uuid=captured['server_uuid'], registered_targets=[{key: item.get(key)
+                for key in ('target_id', 'database', 'display_name')} for item in registered], databases=[])
+            for target in targets:
+                database = self.mysql_catalog(server, {'database_target_id': target, 'include_system': include_system})
+                if database['server_uuid'] != captured['server_uuid']:
+                    raise ValueError('Database capture reported another native server UUID')
+                result['databases'].append({'target_id': target, 'capture': database})
+                if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                    raise ValueError('Server/database DDN collection exceeds 8 MiB; select a smaller batch')
+            if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                raise ValueError('Server DDN collection exceeds 8 MiB')
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_data_capture(self, server, request):
         if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
             raise ProviderWorkspaceError('Invalid MySQL relation data request')
@@ -681,6 +720,7 @@ class ProviderWorkspaceService:
                 include_system=include_system, refreshed=True, engine='mysql', native_model=compare)
             if compare:
                 return compare_catalogs(document, result)
+            result['server_uuid'] = captured['resources'][0]['native']['catalog_row']['server_uuid']
             result['objects'] = [{'resource_id': item['resource_id'], 'name': item['display_name'],
                 'kind': item['resource_kind'], 'path': item['display_path']} for item in captured['resources']]
             return result

@@ -24,6 +24,7 @@ import FirebirdMetadataSearch from './FirebirdMetadataSearch';
 import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
 import MySQLCatalog from './MySQLCatalog';
+import MySQLServerCatalog from './MySQLServerCatalog';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -8084,7 +8085,8 @@ export default function ProviderWorkspaceContent({
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
-        <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+        (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
+          <MySQLServerCatalog post={post} />)}
       {workspace && tab === 'export' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdExport onLoadMore={loadMoreResources} hasMore={Boolean(resourcePage?.next_cursor)} loadingMore={loadingMore}

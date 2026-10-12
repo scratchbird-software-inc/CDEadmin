@@ -1443,6 +1443,17 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def capture_server_catalog(self, route):
+        from .mysql_server_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL catalog client is unavailable')
+        connection = self.client._connect({'route': {**route, 'database': None}})
+        try:
+            return capture(connection)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_data(self, route, resource_id, *, endpoint_id, target_id, mode='sample', row_limit=100):
         from .mysql_data_capture import capture
         self._require('data_read', 'resource')

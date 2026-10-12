@@ -5545,6 +5545,10 @@
     "mysql-data-capture": {
       "reference": "SR-F-001399",
       "title": "MySQL explicit relation data acquisition for DDN"
+    },
+    "mysql-server-catalog": {
+      "reference": "SR-F-001400",
+      "title": "MySQL server inventory and explicit database DDN collection"
     }
   }
 }

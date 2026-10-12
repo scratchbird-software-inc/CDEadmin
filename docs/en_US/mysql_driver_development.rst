@@ -388,3 +388,24 @@ read-only transaction does not make MyISAM or unknown view dependencies
 transactional. No cross-database snapshot, metadata fence, restorable backup or
 historical retention is implied. Static DDN table views carry acquisition
 provenance and page bounds through the shared engine-independent result adapter.
+
+Server-wide DDN discovery
+-------------------------
+
+Server inventory is independently acquired and owner-scoped. Capture native
+identity, visible databases, account identity/policy flags, role edges, default
+roles, visible global grants, plugins/components, built-in character metadata,
+storage engines and tablespaces using explicit credential-free projections.
+Never read authentication strings, password hashes, arbitrary configuration
+values or replication-secret stores. Each section records visibility or native
+permission refusal; a denied catalog is not empty or fully covered. Accounts
+without visible role edges are not heuristically classified as roles.
+
+Bound inventory to 20,000 facts and 8 MiB. Optional database expansion accepts at
+most 32 distinct owned registered database target IDs; each uses its own existing
+native metadata capture and must report the inventory's server UUID. Return
+separate database DDN workspaces with their own baselines/diagrams. These reads
+are observational and independent, not a global schema/data snapshot, cluster
+backup or automatic migration. Unregistered visible databases require explicit
+registration before database expansion. Engine-specific native version and
+owner/route checks apply to every scope.

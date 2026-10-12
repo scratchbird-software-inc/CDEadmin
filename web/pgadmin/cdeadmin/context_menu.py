@@ -705,6 +705,9 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
+        actions.append(_action('endpoint.mysql.server_catalog', 'MySQL server metadata and DDN...', 'open_workspace',
+            icon='action.export', group='database', arguments={'tab': 'export', 'server_catalog': True}, enabled=ready and can_manage,
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
     if engine_id == 'firebird':
         # Firebird implements guarded native release; do not advertise this
         # lifecycle action for providers without that release contract.
