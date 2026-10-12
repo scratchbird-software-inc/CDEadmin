@@ -107,11 +107,59 @@ def edit_clause(clause, changes, mode):
     return clause
 
 
-def merge_fields(before, desired, mode, *, allow_new_columns=False):
+def _rename_group(source, renames, mode):
+    parsed=tokens(source,mode);edits=[]
+    for index,(kind,value,start,end) in enumerate(parsed):
+        if kind=='group':
+            replacement='('+_rename_group(value[1:-1],renames,mode)+')'
+        elif kind=='quoted' and (value.startswith('`') or
+                value.startswith('"') and 'ANSI_QUOTES' in mode.split(',')):
+            name=value[1:-1].replace(value[0]*2,value[0])
+            # A quoted routine name before an argument list is not a column.
+            if name not in renames or (index+1<len(parsed) and parsed[index+1][0]=='group' and
+                    not re.fullmatch(r'\(\s*[0-9]+\s*\)',parsed[index+1][1])):continue
+            replacement=identifier(renames[name])
+        else:continue
+        if replacement!=value:edits.append((start,end,replacement))
+    for start,end,replacement in reversed(edits):source=source[:start]+replacement+source[end:]
+    return source
+
+
+def rename_definition(before,native,renames,mode):
+    layout,clauses,_order=parts({'name':before['name'],'native':native},mode)
+    changed=[]
+    for (kind,name),clause in clauses.items():
+        parsed=tokens(clause,mode);edits=[];groups=[part for part in parsed if part[0]=='group']
+        selected=groups
+        if kind=='foreign-key':
+            selected=groups[:1]
+            reference=next((i for i,part in enumerate(parsed) if part[1].upper()=='REFERENCES'),None)
+            if reference is None:raise ValueError('Native foreign key lacks exact referenced table')
+            target=[]
+            for part in parsed[reference+1:]:
+                if part[0]=='group':break
+                if part[0]=='quoted':target.append(part[1][1:-1].replace(part[1][0]*2,part[1][0]))
+            if target in ([before['name']],[native['database'],before['name']]):selected=groups
+        for _kind,value,start,end in selected:
+            replacement='('+_rename_group(value[1:-1],renames,mode)+')'
+            if replacement!=value:edits.append((start,end,replacement))
+        if kind=='column' and name in renames:edits.append((parsed[0][2],parsed[0][3],identifier(renames[name])))
+        for start,end,replacement in sorted(edits,reverse=True):clause=clause[:start]+replacement+clause[end:]
+        changed.append(clause)
+    native['definition']=layout['prefix']+'('+','.join(changed)+')'+layout['suffix']
+    intent=native.setdefault('mysql_change',{})
+    if not isinstance(intent,dict) or ('rename_columns' in intent and intent['rename_columns']!=renames):
+        raise ValueError('Graphical and native column rename intent disagree')
+    intent['rename_columns']=renames
+    return native
+
+
+def merge_fields(before, desired, mode, *, allow_new_columns=False, allow_column_renames=False):
     if type(allow_new_columns) is not bool: raise ValueError('New-column admission must be boolean')
+    if type(allow_column_renames) is not bool:raise ValueError('Column-rename admission must be boolean')
     native = deepcopy(desired['native'])
     old_fields, new_fields = before.get('fields', {}), desired.get('fields', {})
-    changes, additions = {}, []
+    changes, additions, renames = {}, [], {}
     labels = [field.get('_label') for field in new_fields.values()]
     if any(not isinstance(label, str) for label in labels) or len(set(labels)) != len(labels):
         raise ValueError('Graphical field names must be unique')
@@ -132,13 +180,21 @@ def merge_fields(before, desired, mode, *, allow_new_columns=False):
             if len(additions) > 128: raise ValueError('At most 128 new graphical columns per table')
             continue
         if fields.get('_label') != old.get('_label'):
-            raise ValueError('New or renamed graphical fields require explicit native reconciliation')
+            if not allow_column_renames:raise ValueError('New or renamed graphical fields require explicit native reconciliation')
+            expected=before['uid']+':'+json.dumps(old['_label'],ensure_ascii=False,separators=(',',':'))
+            label=fields['_label']
+            if uid!=expected or not 1<=len(label)<=64 or '\x00' in label or label in {field['_label'] for field in old_fields.values()}:
+                raise ValueError('Graphical rename requires its stable native field UID and a distinct new name')
+            renames[old['_label']]=label
+            if len(renames)>128:raise ValueError('At most 128 graphical column renames per table')
         changed = {key: fields[key] for key in ('datatype', 'nullable', 'description') if key in fields and fields[key] != old.get(key)}
         if changed:
             expected = before['uid'] + ':' + json.dumps(old['_label'], ensure_ascii=False, separators=(',', ':'))
             if uid != expected: raise ValueError('Graphical field identity does not match its native column')
             changes[old['_label']] = changed
-    if not changes and not additions: return native
+    if not changes and not additions and not renames: return native
+    if renames and native.get('definition')!=before['native'].get('definition'):
+        raise ValueError('Graphical renames require unchanged native source; reconcile simultaneous native edits separately')
     if before.get('kind') != 'table': raise ValueError('Graphical column changes require a native table')
     old_row = {'name': before['name'], 'native': before['native']}
     new_row = {'name': desired['name'], 'native': native}
@@ -166,4 +222,4 @@ def merge_fields(before, desired, mode, *, allow_new_columns=False):
     native['definition'] = layout['prefix'] + '(' + ','.join([
         *(replacements.get(clause.strip(), clause) for clause in layout['clauses']),
         *appended]) + ')' + layout['suffix']
-    return native
+    return rename_definition(before,native,renames,mode) if renames else native

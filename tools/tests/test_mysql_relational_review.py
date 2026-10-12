@@ -86,5 +86,34 @@ def test_host_new_column_option_requires_boolean_and_preserves_target_admission(
     service.mysql_catalog.assert_not_called()
     result=service.mysql_relational_review('server',{**base,'allow_new_columns':True})
     service.mysql_catalog.assert_called_once_with('server',{'database_target_id':'target'})
-    handoff.assert_called_once_with('authorized catalog','before','after',engine='mysql',allow_new_columns=True)
+    handoff.assert_called_once_with('authorized catalog','before','after',engine='mysql',allow_new_columns=True,allow_column_renames=False)
     assert result['status']=='prepared-for-native-preview'
+
+
+def test_graphical_rename_uses_stable_uid_and_reconciles_native_references_without_touching_literals():
+    uid='mysql:ep:db:table';field=uid+':"note"'
+    before={'uid':uid,'name':'t','kind':'table','native':{'database':'db',
+        'definition':"CREATE TABLE `t` (`note` varchar(80) NOT NULL DEFAULT 'note', `g` int GENERATED ALWAYS AS (length(`note`)) STORED, KEY `note` (`note`(10)), CONSTRAINT `c` CHECK ((`note` <> 'note'))) ENGINE=InnoDB"},
+        'fields':{field:{'_label':'note','datatype':'varchar(80)','_property_names':['uid','datatype']}}}
+    desired=deepcopy(before);desired['fields'][field]['_label']='memo`é'
+    with pytest.raises(ValueError,match='reconciliation'):merge_fields(before,desired,'')
+    result=merge_fields(before,desired,'',allow_column_renames=True)
+    assert result['mysql_change']=={'rename_columns':{'note':'memo`é'}}
+    assert "DEFAULT 'note'" in result['definition'] and "<> 'note'" in result['definition']
+    assert 'KEY `note` (`memo``é`(10))' in result['definition']
+    assert 'length(`memo``é`)' in result['definition']
+    from pgadmin.cdeadmin.workspace.mysql_schema_plan import alteration
+    assert 'CHANGE COLUMN `note` `memo``é`' in alteration({'name':'t','native':before['native']},{'name':'t','native':result},'')
+
+
+def test_graphical_rename_preserves_other_table_foreign_key_targets_and_updates_self_references():
+    uid='table';field=uid+':"id"'
+    before={'uid':uid,'name':'t','kind':'table','native':{'database':'db','definition':
+        'CREATE TABLE `t` (`id` int, CONSTRAINT `external` FOREIGN KEY (`id`) REFERENCES `other` (`id`), CONSTRAINT `self` FOREIGN KEY (`id`) REFERENCES `t` (`id`))'},
+        'fields':{field:{'_label':'id','datatype':'int'}}}
+    desired=deepcopy(before);desired['fields'][field]['_label']='new_id'
+    result=merge_fields(before,desired,'',allow_column_renames=True)
+    assert 'FOREIGN KEY (`new_id`) REFERENCES `other` (`id`)' in result['definition']
+    assert 'FOREIGN KEY (`new_id`) REFERENCES `t` (`new_id`)' in result['definition']
+    desired['native']['definition']=desired['native']['definition'].replace('int','bigint')
+    with pytest.raises(ValueError,match='simultaneous native edits'):merge_fields(before,desired,'',allow_column_renames=True)

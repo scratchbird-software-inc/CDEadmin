@@ -537,7 +537,7 @@ SHOW CREATE column clause, preserving other attributes, defaults, expressions,
 indexes and options. Native and graphical edits to the same clause must agree.
 Field omissions and view filtering never remove columns. New field identities
 require the explicit graphical column admission below; renamed identities require
-separate native reconciliation; unsupported properties
+explicit graphical rename admission below; unsupported properties
 are not silently treated as deployed changes. Native PREPARE remains required:
 lexical clause editing is not a replacement grammar or deployment authority.
 
@@ -817,7 +817,7 @@ unique names, required native datatype, boolean nullability and optional comment
 Existing native clauses, defaults, generated expressions and constraints remain
 intact; a conflicting native definition blocks review. New fields cannot reuse
 an existing column name through a different UID. Missing fields never delete
-columns, and renames still require separate explicit reconciliation. This choice
+columns. Renames use the separate explicit admission below. This choice
 only prepares the ordinary three-way preview; native PREPARE validation and
 owner-bound reviewed application remain required before database mutation.
 
@@ -1040,3 +1040,19 @@ authoritative; omitted DEFINER follows MySQL's own ALTER behavior.
 Administration owns an independent connection and refuses a borrowed transaction.
 An explicit time zone is set with a bound session value before native DDL.
 Discovery retains complete visible EVENTS facts and SHOW CREATE/context.
+
+Explicit graphical column renames
+---------------------------------
+
+The unchecked "Include graphical column renames" choice admits changed column
+labels only with the original exact field UID. New names cannot rebind existing
+native columns, and omissions never imply deletion. Up to 128 renames per table
+are translated into explicit mysql_change.rename_columns for ordinary reviewed
+CHANGE COLUMN deployment. Native defaults, literal text, index/constraint names
+and table options are preserved. Quoted column references in generated/default
+expressions, index lists, checks and foreign-key source lists are reconciled;
+self-referencing targets are updated while other-table targets remain unchanged.
+Simultaneous native-source and graphical rename edits require separate native
+reconciliation. Native PREPARE and reviewed durable application remain required.
+Changes MySQL propagates into other tables require fresh capture/review of those
+tables; a later batch baseline conflict is never bypassed or automatically retried.
