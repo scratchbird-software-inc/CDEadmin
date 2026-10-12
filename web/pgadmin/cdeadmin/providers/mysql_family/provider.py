@@ -180,6 +180,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['view'] = common['view'] | frozenset({'alter'})
         from ..mysql_object_changes import OPERATIONS as object_changes
         for kind, operations in object_changes.items():
             common[kind] = common[kind] | operations
@@ -1667,9 +1668,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     kind == 'database' and name in system_databases):
                 resource.setdefault('native', {})['system_object'] = True
 
-        def optional(source):
+        def optional(source, parameters=()):
             try:
-                cursor.execute(catalog_source(source))
+                if parameters:
+                    cursor.execute(catalog_source(source), parameters)
+                else:
+                    cursor.execute(catalog_source(source))
                 return cursor.fetchall()
             except Exception as error:
                 record_failure(source, error)
@@ -1813,6 +1817,25 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             native = {'table_type': object_type}
             if create_source:
                 native['ddl'] = create_source
+            if kind == 'view' and profile is MYSQL_PROFILE:
+                facts = optional('SELECT VIEW_DEFINITION,CHECK_OPTION,DEFINER,SECURITY_TYPE,IS_UPDATABLE '
+                                 'FROM information_schema.VIEWS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',
+                                 (schema_name, object_name))
+                if facts:
+                    row = facts[0]
+                    native.update(view_definition=row[0], check_option=row[1],
+                                  definer=row[2], sql_security=row[3], is_updatable=row[4])
+                    user, separator, host = str(row[2]).rpartition('@')
+                    if separator:
+                        native.update(definer_user=user, definer_host=host)
+                algorithm = re.match(r'CREATE\s+ALGORITHM\s*=\s*(UNDEFINED|MERGE|TEMPTABLE)\b', create_source, re.I)
+                if algorithm:
+                    native['algorithm'] = algorithm.group(1).upper()
+                output_columns = optional('SELECT COLUMN_NAME FROM information_schema.COLUMNS '
+                                          'WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s ORDER BY ORDINAL_POSITION',
+                                          (schema_name, object_name))
+                if output_columns:
+                    native['view_columns'] = [str(row[0]) for row in output_columns]
             add(kind, [schema_name], object_name, native)
         queries = (
             ('column', 'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, '

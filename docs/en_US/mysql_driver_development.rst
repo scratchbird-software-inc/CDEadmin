@@ -775,3 +775,20 @@ fetching. It is shown separately from engine preparation/execution timings,
 which remain unavailable unless independently observed. A JSON EXPLAIN or
 EXPLAIN ANALYZE result is a requested plan; the UI must not relabel client timing
 as engine timing or infer a plan for ordinary statements.
+
+Native ordinary-view definition controls
+---------------------------------------
+
+MySQL ordinary-view CREATE and ALTER use the same compact structured form:
+exact database/name, SELECT or WITH query, optional ordered output-column names,
+ALGORITHM (UNDEFINED, MERGE or TEMPTABLE), SQL SECURITY (DEFINER or INVOKER),
+optional exact definer user/host, and NONE/LOCAL/CASCADED check option. ALTER
+requires the complete desired definition; omitted native clauses use MySQL's
+native defaults and must not be described as preserving previous values.
+CREATE remains distinct from replacement and must fail if the name exists.
+Queries are single statements checked for lexical framing under both native
+backslash modes; native MySQL owns grammar, privileges, dependencies,
+updatability, algorithm warnings and check-option enforcement. Quoted identifiers
+and account components must remain safe under ANSI_QUOTES/NO_BACKSLASH_ESCAPES.
+Definition changes use native implicit-commit DDL, preserve grants according to
+MySQL, and are never automatically retried after uncertain acknowledgement.
