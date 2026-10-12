@@ -174,6 +174,25 @@ def build_metadata(document):
         if kind in CONTEXTUAL:
             prerequisites.append({'resource_id': identity, 'kind': 'native-body-and-definer',
                 'name': block['name'], 'database': database})
+    trigger_groups={}
+    for identity,block in blocks.items():
+        if block['kind']!='trigger':continue
+        facts=rows[identity]['native'].get('catalog_row',{})
+        group=tuple(facts.get(key) for key in ('event_object_schema','event_object_table','action_timing','event_manipulation'))
+        trigger_groups.setdefault(group,[]).append((facts.get('action_order'),identity))
+    for group,members in trigger_groups.items():
+        valid=all(isinstance(order,int) and not isinstance(order,bool) and order>0 for order,_ in members)
+        if len(members)>1 and (not all(isinstance(value,str) and value for value in group) or
+                not valid or len({order for order,_ in members})!=len(members)):
+            for _order,identity in members:problem(rows[identity],'Native multi-trigger execution order is unavailable or ambiguous')
+            continue
+        if valid:
+            members.sort()
+            for (_prior_order,prior),(_order,current) in zip(members,members[1:]):dependencies[current].add(prior)
+            if [order for order,_ in members]!=list(range(1,len(members)+1)):
+                prerequisites.append({'kind':'unselected-trigger-order','database':database,
+                    'table':group[1],'timing':group[2],'event':group[3],
+                    'reason':'Visible selection omits sibling trigger order positions; review existing target triggers'})
     ordered, pending = [], {key: value.copy() for key, value in dependencies.items()}
     while pending:
         ready = sorted(key for key, needs in pending.items() if not needs)

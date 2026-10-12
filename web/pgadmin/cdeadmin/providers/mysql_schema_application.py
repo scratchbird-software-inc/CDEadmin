@@ -27,11 +27,16 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if after['kind'] not in {'table','view','library','event','procedure','function'} or (before is not None and before['kind'] != after['kind']):
+        if after['kind'] not in {'table','view','library','event','procedure','function','trigger'} or (before is not None and before['kind'] != after['kind']):
             raise ValueError('Only exact user table/view/library/event/routine definitions are admitted')
         context = operation['context']
         target = identifier(database) + '.' + identifier(after['name'])
-        if after['kind'] in {'procedure','function'}:
+        if after['kind']=='trigger':
+            from ..workspace.mysql_trigger_plan import compile_trigger
+            if (operation['operation']=='create') != (before is None):
+                raise ValueError('Native trigger operation disagrees with baseline presence')
+            compiled=compile_trigger(after,operation['operation'],database)
+        elif after['kind'] in {'procedure','function'}:
             from ..workspace.mysql_routine_plan import compile_routine
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native routine operation disagrees with baseline presence')
@@ -75,9 +80,9 @@ def apply_review(connection, record):
         identity = cursor.fetchone()
         if str(identity[0]).split('-')[0] != '9.7.0' or identity[1] != plan['server_uuid'] or identity[2] != database:
             raise ValueError('Native application connection identity changed')
-        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else after['kind'].upper()+' ' if after['kind'] in {'procedure','function'} else 'TABLE ')+target
-        definition_index=2 if after['kind'] in {'library','procedure','function'} else 3 if after['kind']=='event' else 1
-        absence_code=1305 if after['kind'] in {'library','procedure','function'} else 1539 if after['kind']=='event' else 1146
+        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else after['kind'].upper()+' ' if after['kind'] in {'procedure','function','trigger'} else 'TABLE ')+target
+        definition_index=2 if after['kind'] in {'library','procedure','function','trigger'} else 3 if after['kind']=='event' else 1
+        absence_code=1360 if after['kind']=='trigger' else 1305 if after['kind'] in {'library','procedure','function'} else 1539 if after['kind']=='event' else 1146
         if before is None:
             try:
                 cursor.execute(show_source)
@@ -88,7 +93,7 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind'] in {'view','library','event','procedure','function'}:
+            if after['kind'] in {'view','library','event','procedure','function','trigger'}:
                 advisory='sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:40]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
@@ -102,9 +107,15 @@ def apply_review(connection, record):
                 locked = True
             cursor.execute(show_source)
             observed = cursor.fetchone()
-            if not observed or digest({'definition': observed[definition_index], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
+            observed_schema={'definition':observed[definition_index] if observed else None,
+                'definition_context':before['native'].get('definition_context')}
+            if after['kind']=='trigger':
+                cursor.execute('SELECT EVENT_OBJECT_SCHEMA,EVENT_OBJECT_TABLE,ACTION_TIMING,EVENT_MANIPULATION,ACTION_ORDER FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s AND TRIGGER_NAME=%s',(database,after['name']))
+                facts=cursor.fetchone()
+                observed_schema['trigger_identity']=dict(zip(('database','table','timing','event','action_order'),facts)) if facts else None
+            if not observed or digest(observed_schema) != operation['baseline_schema_sha256']:
                 raise ValueError('Locked native object changed since review')
-            if after['kind'] in {'procedure','function'} and (len(observed)<6 or any(
+            if after['kind'] in {'procedure','function','trigger'} and (len(observed)<6 or any(
                     before['native'].get('definition_context',{}).get(field)!=observed[index]
                     for field,index in [('sql_mode',1),('character_set_client',3),('collation_connection',4),('database collation',5)])):
                 raise ValueError('Native routine creation context changed since review')

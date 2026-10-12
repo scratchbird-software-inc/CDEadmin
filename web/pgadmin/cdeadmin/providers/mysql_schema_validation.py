@@ -39,7 +39,10 @@ def validate(connection,plan):
                 parsed_routine=(code==1295 and operation.get('kind') in {'procedure','function'} and
                     operation.get('operation') in {'create','alter','drop'} and
                     operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
-                parsed=parsed_view or parsed_routine
+                parsed_trigger=(code==1295 and operation.get('kind')=='trigger' and
+                    operation.get('operation') in {'create','drop'} and
+                    operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
+                parsed=parsed_view or parsed_routine or parsed_trigger
                 results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed,
                     'preparation_supported':False,'validation_stage':'parse-only' if parsed else 'rejected',
                     'error_code':code,'sqlstate':getattr(error,'sqlstate',None),'error_type':type(error).__name__})
@@ -48,4 +51,4 @@ def validate(connection,plan):
                 cursor.execute('SET @sr_native_preview = NULL')
     finally:cursor.close()
     return {'native_grammar_validated':all(row['accepted'] for row in results),'native_validation':results,
-        'validation_mode':'native-PREPARE-without-EXECUTE;admitted-view-routine-1295-parse-only','executed':False,'application_supported':False}
+        'validation_mode':'native-PREPARE-without-EXECUTE;admitted-view-routine-trigger-1295-parse-only','executed':False,'application_supported':False}

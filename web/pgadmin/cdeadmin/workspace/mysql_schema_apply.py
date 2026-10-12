@@ -14,7 +14,7 @@ class MySQLSchemaApplications(SchemaApplications):
         if (plan.get('format') != 'scratchrobin.mysql.schema-plan@1' or
                 not plan.get('ready_for_review') or not plan.get('native_grammar_validated') or
                 not 1 <= len(operations) <= 32 or
-                any(op.get('kind') not in {'table', 'view', 'library', 'event', 'procedure', 'function'} or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
+                any(op.get('kind') not in {'table', 'view', 'library', 'event', 'procedure', 'function', 'trigger'} or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
                 len({op['resource_id'] for op in operations}) != len(operations) or
                 sum(len(op['source'].encode('utf8')) for op in operations) > 1024 * 1024 or
                 plan.get('execution_sha256') != digest(operations) or
@@ -34,7 +34,7 @@ class MySQLSchemaApplications(SchemaApplications):
         def reduced(document):
             return {'rows': {key: {**deepcopy({field: value for field, value in row.items() if field != 'native'}),
                 'native': {field: deepcopy(value) for field, value in row['native'].items() if field in {
-                    'database', 'navigator_parent_resource_id', 'definition', 'definition_context', 'mysql_change'}}}
+                    'database', 'navigator_parent_resource_id', 'definition', 'definition_context', 'mysql_change', 'trigger_identity'}}}
                 for key, row in document['rows'].items() if key in ids}}
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed',
                   'created_at': self.clock(), 'expires_at': self.clock() + 300,

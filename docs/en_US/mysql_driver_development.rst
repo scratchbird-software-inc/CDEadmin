@@ -877,7 +877,8 @@ receiving that specific error is accepted as native grammar validation with
 ``preparation_supported=false`` and ``validation_stage=parse-only``. This does
 not claim successful preparation, name resolution, authorization or execution.
 Malformed syntax (including malformed query bodies), other native errors and
-unsupported preparation for other object kinds remain refused. No EXECUTE runs
+unsupported preparation outside the explicitly admitted view/routine/trigger
+contracts remain refused. No EXECUTE runs
 during validation. Native execution checks semantic validity and privileges;
 its failure retains the existing uncertain-outcome receipt rules. Explicit DROP requires the
 exact view name confirmation. Materialized views require their separate adapter.
@@ -1142,3 +1143,24 @@ semantic and privilege checks. The routine's observed SQL mode/client charset/
 collation context is rechecked before dispatch. A cooperating advisory lock does
 not fence external DDL: use an exclusive DDL maintenance window. Native DDL commits
 implicitly, and a lost execution reply remains uncertain without automatic retry.
+
+Reviewed trigger DDN deployment and execution order
+--------------------------------------------------
+
+Trigger CREATE and explicitly confirmed DROP use the same durable native review
+contract. The quoted trigger database/name, owning database/table, timing and
+operation must agree with captured native identity. The complete native body and
+definer remain opaque to the adapter and pass the native server parser. MySQL has
+no ALTER TRIGGER: edits require separately reviewed explicit DROP and CREATE.
+Omitted triggers are never removal intent. Native 1295 for admitted trigger CREATE or DROP
+is recorded as parse-only validation; other errors remain failures.
+
+Capture retains the native owner, timing, event and ACTION_ORDER. Existing trigger
+removal rechecks these facts and SHOW CREATE/context before dispatch. Trigger
+advisory locks coordinate ScratchRobin clients only; external DDL is not fenced.
+Metadata export orders triggers of each table/timing/event group by observed
+ACTION_ORDER. Ambiguous, duplicate or unavailable order in a multi-trigger group
+blocks export instead of silently changing execution order. Unselected sibling
+triggers make relative-order coverage partial and must be considered before
+applying to an existing target. The native server validates table availability,
+body semantics, trigger ordering clauses and privileges on execution.

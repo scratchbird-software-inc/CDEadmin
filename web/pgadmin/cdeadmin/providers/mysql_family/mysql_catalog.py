@@ -173,6 +173,10 @@ def capture(connection, database, *, include_system=False):
             item['native']['definition'] = ddl
             item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
                 if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
+            if kind == 'trigger':
+                item['native']['trigger_identity']={'database':row.get('event_object_schema'),
+                    'table':row.get('event_object_table'),'timing':row.get('action_timing'),
+                    'event':row.get('event_manipulation'),'action_order':row.get('action_order')}
             if kind == 'library':
                 # SHOW CREATE LIBRARY exposes SQL mode, but not the stored
                 # client charset/collation. Its decoded Unicode text is exported
