@@ -870,11 +870,16 @@ Native ordinary views join table CREATE/ALTER/DROP in the same ordered receipt
 contract. The adapter preserves native algorithm, exact definer, SQL security,
 query, check option and recorded client/collation context. It accepts an exact
 quoted SHOW CREATE VIEW target; CREATE never replaces an existing object. A reviewed view update
-uses native CREATE OR REPLACE with the exact existing-target observation and baseline
-check below; absence is refused. MySQL 9.7 PREPARE rejects ALTER VIEW with error
-1295, so it is not falsely labelled validated. The displayed replacement
-statement itself must pass native PREPARE. The query form retains native ALTER
-VIEW as its separate operation. Explicit DROP requires the
+uses native ALTER VIEW with the exact existing-target observation and baseline
+check below; absence is refused. MySQL 9.7 parses the complete statement before
+rejecting ALTER VIEW preparation with error 1295. Only an admitted view ALTER
+receiving that specific error is accepted as native grammar validation with
+``preparation_supported=false`` and ``validation_stage=parse-only``. This does
+not claim successful preparation, name resolution, authorization or execution.
+Malformed syntax (including malformed query bodies), other native errors and
+unsupported preparation for other object kinds remain refused. No EXECUTE runs
+during validation. Native execution checks semantic validity and privileges;
+its failure retains the existing uncertain-outcome receipt rules. Explicit DROP requires the
 exact view name confirmation. Materialized views require their separate adapter.
 
 Existing views use a bounded native advisory lock keyed by database and view,

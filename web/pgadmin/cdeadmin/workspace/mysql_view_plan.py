@@ -26,5 +26,5 @@ def compile_view(row, operation, database):
         return 'DROP VIEW '+target
     if operation not in {'create','alter'} or row['native'].get('mysql_change'):
         raise ValueError('Unsupported native view intent')
-    prefix=re.sub(r'^\s*CREATE\b','CREATE OR REPLACE' if operation=='alter' else 'CREATE',source[:match.start('first')],count=1,flags=re.I)
+    prefix=re.sub(r'^\s*CREATE\b','ALTER' if operation=='alter' else 'CREATE',source[:match.start('first')],count=1,flags=re.I)
     return prefix+target+source[match.end():]

@@ -26,15 +26,22 @@ def validate(connection,plan):
                 with statement_context(connection, cursor, operation['source'], context) as encoded:
                     cursor.execute('SET @sr_native_preview = %s',(encoded,))
                     cursor.execute('PREPARE sr_native_preview FROM @sr_native_preview');prepared=True
-                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':True})
+                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':True,
+                    'preparation_supported':True,'validation_stage':'prepared'})
             except Exception as error:
                 code=getattr(error,'errno',None)
                 if code is None or code in {2006,2013,2055}:raise
-                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':False,
+                # MySQL 9.7 parses the whole ALTER VIEW before its explicit
+                # unsupported-preparation branch. Admit only this qualified path;
+                # a 1295 on any other operation remains a validation failure.
+                parsed_view=(code==1295 and operation.get('kind')=='view' and
+                    operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER '))
+                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed_view,
+                    'preparation_supported':False,'validation_stage':'parse-only' if parsed_view else 'rejected',
                     'error_code':code,'sqlstate':getattr(error,'sqlstate',None),'error_type':type(error).__name__})
             finally:
                 if prepared:cursor.execute('DEALLOCATE PREPARE sr_native_preview')
                 cursor.execute('SET @sr_native_preview = NULL')
     finally:cursor.close()
     return {'native_grammar_validated':all(row['accepted'] for row in results),'native_validation':results,
-        'validation_mode':'native-PREPARE-without-EXECUTE','executed':False,'application_supported':False}
+        'validation_mode':'native-PREPARE-without-EXECUTE;view-ALTER-1295-parse-only','executed':False,'application_supported':False}
