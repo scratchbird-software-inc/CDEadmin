@@ -74,7 +74,8 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       const result=await send({action:script ? 'native_script_prepare' : 'source_validate',
         session_id:await ensureSession(), source,
         ...(script && language?.language_profile === 'firebird-sql' ?
-          {history_sensitive: historySensitive, client_sql_dialect: clientSqlDialect} : {})});
+          {history_sensitive: historySensitive, client_sql_dialect: clientSqlDialect} : {}),
+        ...(script && language?.language_profile === 'mysql-sql' ? {history_sensitive: historySensitive} : {})});
       if (!mounted.current || current!==generation.current) return;
       if(result.sql_history?.warning) setError(result.sql_history.warning);
       if(script){setPlan(result);setPreparedSource(source);setValidation(result.validation || null);}

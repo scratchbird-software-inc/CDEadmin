@@ -725,3 +725,22 @@ Primary keys have neither operation. Native implicit-primary-key restrictions
 may also reject invisibility. These DDL actions commit independently; a lost
 acknowledgement must not be automatically replayed. MariaDB retains its own
 separate dialect and does not inherit these MySQL controls.
+
+Persistent SQL request history
+-------------------------------
+
+The shared SQL editor offers opt-in source history per application owner,
+registered MySQL server, explicit database target and native language profile.
+Its configuration-store session is independent of native transactions. Retention
+and record limits are bounded policy settings; history survives application
+restart. Credentials, query parameter values and result rows are never captured.
+Known authentication statements and credential-bearing MySQL URIs omit source;
+the user can also mark any source sensitive. This detector is conservative, not
+a guarantee that arbitrary SQL contains no confidential data. Capture is off by
+default.
+
+History reports host request/preparation observations, not commit finality.
+Storage failures cannot block or replay native execution. Loading an entry
+changes editor text only and never executes it. Clearing entries requires
+confirmation and retains policy. Engine/target switches reset the visible
+history state so one connection's entries are not displayed under another.

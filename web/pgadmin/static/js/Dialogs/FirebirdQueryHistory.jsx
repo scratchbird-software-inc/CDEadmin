@@ -7,7 +7,7 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/ma
 import gettext from 'sources/gettext';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
-export default function FirebirdQueryHistory({post, databaseTargetId, dialect, onLoad, disabled, notice}) {
+export default function FirebirdQueryHistory({post, databaseTargetId, dialect, onLoad, disabled, notice, engine='firebird'}) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState(null);
   const [policy, setPolicy] = useState(null);
@@ -21,11 +21,11 @@ export default function FirebirdQueryHistory({post, databaseTargetId, dialect, o
     token.current++; setData(null); setPolicy(null); setSearch(''); setSelected(-1);
     setClearConfirmed(false); setError(''); setBusy(false); setOpen(false);
     return () => {token.current++;};
-  }, [post, databaseTargetId, dialect]);
+  }, [post, databaseTargetId, dialect, engine]);
   const call = async (action = 'query_history_read') => {
     const id = ++token.current;
     setBusy(true); setError('');
-    const scope = {database_target_id: databaseTargetId, client_sql_dialect: dialect};
+    const scope = {database_target_id: databaseTargetId, ...(engine === 'firebird' ? {client_sql_dialect: dialect} : {})};
     try {
       if(action !== 'query_history_read') await post({action, request: {...scope,
         ...(action === 'query_history_configure' ? {policy} : {confirmed: clearConfirmed})}});
@@ -68,7 +68,7 @@ export default function FirebirdQueryHistory({post, databaseTargetId, dialect, o
         <Button disabled={disabled || busy || next < 0} onClick={() => load(next)}>{gettext('Next history entry')}</Button>
       </Box>
       {data && <Box sx={{height: 360, minWidth: 0, overflow: 'auto'}}>
-        <PagedDataGrid readOnly gridId="firebird/sql-history" aria-label={gettext('Retained SQL history')}
+        <PagedDataGrid readOnly gridId={engine + '/sql-history'} aria-label={gettext('Retained SQL history')}
           rows={data.entries.map((entry, index) => ({...entry, __index: index}))}
           rowKeyGetter={row => row.entry_id} columns={[
             {key: 'created_at', name: gettext('Time'), width: 180,
@@ -89,4 +89,4 @@ export default function FirebirdQueryHistory({post, databaseTargetId, dialect, o
   </Box>;
 }
 FirebirdQueryHistory.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string,
-  dialect: PropTypes.number.isRequired, onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool, notice: PropTypes.string};
+  dialect: PropTypes.number, engine: PropTypes.oneOf(['firebird', 'postgresql', 'mysql']), onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool, notice: PropTypes.string};

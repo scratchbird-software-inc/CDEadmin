@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session
 
 DEFAULT_POLICY = {'capture_source': False, 'retention_days': 30, 'max_records': 500}
 SENSITIVE = re.compile(r'\b(?:PASSWORD|SECRET|TOKEN)\b', re.IGNORECASE)
+POSTGRESQL_CREDENTIAL_URI = re.compile(r'\bpostgres(?:ql)?://[^\s/]*@', re.IGNORECASE)
+MYSQL_CREDENTIAL_URI = re.compile(r'\bmysql(?:x)?://[^\s/]*@', re.IGNORECASE)
+MYSQL_AUTHENTICATION = re.compile(r'\bIDENTIFIED\s+(?:BY|WITH)\b', re.IGNORECASE)
 
 
 class HistoryError(ValueError):
@@ -26,11 +29,12 @@ class HistoryScope:
     owner: int
     server: int
     target: str
-    dialect: int
+    dialect: int | str
+    engine: str = 'firebird'
 
     @property
     def key(self):
-        return 'scratchrobin:firebird-history:v1:' + json.dumps([self.target, self.dialect], separators=(',', ':'))
+        return 'scratchrobin:' + self.engine + '-history:v1:' + json.dumps([self.target, self.dialect], separators=(',', ':'))
 
 
 def policy(value):
@@ -63,7 +67,10 @@ class QueryHistory:
     def _run(self, scope, callback):
         if (type(scope.owner) is not int or type(scope.server) is not int or
                 scope.owner < 1 or scope.server < 1 or not isinstance(scope.target, str) or
-                not 1 <= len(scope.target) <= 256 or type(scope.dialect) is not int or scope.dialect not in (1, 2, 3)):
+                not 1 <= len(scope.target) <= 256 or not (
+                    scope.engine == 'firebird' and type(scope.dialect) is int and scope.dialect in (1, 2, 3) or
+                    scope.engine == 'postgresql' and scope.dialect == 'postgresql-sql' or
+                    scope.engine == 'mysql' and scope.dialect == 'mysql-sql')):
             raise HistoryError('History requires an authorized owner, server, database target and SQL dialect')
         # A separate SQLAlchemy session must never commit unrelated application
         # work. Retry only configuration-store contention, never native SQL.
@@ -117,7 +124,9 @@ class QueryHistory:
             entries = [entry for _row, entry in self._entries(session, scope, selected)]
             return {'policy': selected, 'total_retained': len(entries),
                     'entries': [entry for entry in entries if search.casefold() in (entry.get('source') or '').casefold()],
-                    'scope': {'database_target_id': scope.target, 'client_sql_dialect': scope.dialect}}
+                    'scope': {'database_target_id': scope.target, **(
+                        {'engine_id': scope.engine, 'language_profile': scope.dialect} if scope.engine in {'postgresql', 'mysql'}
+                        else {'client_sql_dialect': scope.dialect})}}
         return self._run(scope, load)
 
     def clear(self, scope):
@@ -135,7 +144,10 @@ class QueryHistory:
             entries = self._entries(session, scope, selected)
             if not selected['capture_source']:
                 return {'recorded': False, 'reason': 'Source capture disabled'}
-            if sensitive or SENSITIVE.search(source):
+            if (sensitive or SENSITIVE.search(source) or
+                    (scope.engine == 'postgresql' and POSTGRESQL_CREDENTIAL_URI.search(source)) or
+                    (scope.engine == 'mysql' and (
+                        MYSQL_CREDENTIAL_URI.search(source) or MYSQL_AUTHENTICATION.search(source)))):
                 reason = 'Sensitive source omitted'
             elif len(source.encode('utf-8')) > 65536:
                 reason = 'Source exceeds 64 KiB'

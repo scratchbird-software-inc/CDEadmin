@@ -878,7 +878,7 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'mysql-session', source: 'SELECT 1',
-      parameters: JSON.parse(parameters), database_target_id: 'mysql-target',
+      parameters: JSON.parse(parameters), database_target_id: 'mysql-target', history_sensitive: false,
     }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });

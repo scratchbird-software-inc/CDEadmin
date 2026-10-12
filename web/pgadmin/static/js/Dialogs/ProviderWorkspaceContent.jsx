@@ -7522,8 +7522,8 @@ export default function ProviderWorkspaceContent({
         ...rowPolicy,
         ...(languageProfile === 'firebird-sql' ? {
           client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
-          history_sensitive: historySensitive,
         } : {}),
+        ...(['firebird-sql', 'mysql-sql'].includes(languageProfile) ? {history_sensitive: historySensitive} : {}),
         database_target_id: queryDatabaseTargetId,
       });
       setHistoryNotice(occurrence.sql_history?.warning || '');
@@ -7926,12 +7926,15 @@ export default function ProviderWorkspaceContent({
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
-            {languageProfile === 'firebird-sql' && <>
+            {['firebird-sql', 'mysql-sql'].includes(languageProfile) && <>
               <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
                 checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
                 onChange={(event) => setHistorySensitive(event.target.checked)} />} />
               <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
+                engine={languageProfile === 'mysql-sql' ? 'mysql' : 'firebird'}
                 onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
+            </>}
+            {languageProfile === 'firebird-sql' && <>
               <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
                 control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
                   onChange={event => setProfileConfirmed(event.target.checked)} />} />

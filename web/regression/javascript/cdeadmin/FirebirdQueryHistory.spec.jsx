@@ -35,4 +35,24 @@ describe('Firebird persistent SQL history', () => {
       database_target_id: 'db', client_sql_dialect: 1, confirmed: true,
     }}));
   });
+  it('uses the native MySQL target and loads text without a Firebird dialect or execution', async () => {
+    const post = jest.fn().mockResolvedValue(response), onLoad = jest.fn();
+    render(<Component post={post} databaseTargetId="mysql-target" engine="mysql" onLoad={onLoad} />);
+    fireEvent.click(screen.getByText('SQL history'));
+    await screen.findByText('select 1');
+    expect(post).toHaveBeenCalledWith({action: 'query_history_read', request: {database_target_id: 'mysql-target', search: ''}});
+    fireEvent.click(screen.getByText('Previous history entry'));
+    expect(onLoad).toHaveBeenCalledWith('select 1');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+  it('reuses the form for PostgreSQL without sending a Firebird dialect', async () => {
+    const post = jest.fn().mockResolvedValue(response), onLoad = jest.fn();
+    render(<Component post={post} databaseTargetId="postgresql-database:42" engine="postgresql" onLoad={onLoad} />);
+    fireEvent.click(screen.getByText('SQL history'));
+    await screen.findByText('select 1');
+    expect(post).toHaveBeenCalledWith({action: 'query_history_read', request: {database_target_id: 'postgresql-database:42', search: ''}});
+    fireEvent.click(screen.getByText('Previous history entry'));
+    expect(onLoad).toHaveBeenCalledWith('select 1');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
 });
