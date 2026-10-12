@@ -493,3 +493,33 @@ server UUID/version and recorded UTF-8 session context, caps the batch to 32
 statements/1 MiB and returns per-statement native error codes. Unsupported
 preparation remains unavailable; it is not relabelled successful validation.
 Validation does not reserve the live schema or make a preview executable.
+
+Reviewed single-table metadata application
+------------------------------------------
+
+A MySQL application review binds one existing-table ALTER or explicitly confirmed
+DROP to the registration, database target, native server UUID, owner and exact
+compiled statement digest. Creation and multi-object batches require separately
+admitted adapters. Reviews expire after five minutes. A durable receipt is
+claimed as ``unknown_outcome`` before native access; a claimed token is never
+redispatched, including after process restart. This application receipt stores
+review/dispatch evidence, not database recovery or a substitute transaction log.
+
+Execution uses an independently owned idle connection and native WRITE table
+locking with a bounded lock wait. Under that lock, the executor rechecks native
+server/database identity, SQL mode, quoted SHOW CREATE and the exact baseline
+schema fingerprint before sending one DDL statement. Native DDL commits
+implicitly: neither a user transaction nor receipt storage makes it rollbackable.
+The executor retains the table lock through rediscovery. A received DDL success
+acknowledgement means ``committed`` even when rediscovery subsequently fails;
+``rediscovery_verified`` is then false. Failure after dispatch with uncertain
+native outcome remains ``unknown_outcome``. Pre-dispatch failures are explicitly
+``not_dispatched``. Exact schema differences found by rediscovery are reported;
+canonicalized SHOW CREATE is not assumed textually identical to desired DDN.
+
+Server UUID plus database/table name and observed definition are the native
+identity contract. MySQL does not expose a permanent database/table UUID here;
+an identical drop/recreate incarnation cannot be distinguished by these facts.
+Table locking fences concurrent operations during revalidation and execution,
+not the earlier documentary capture. Permission errors and lock timeouts are
+not an empty catalog. Cleanup always retires the independent connection.

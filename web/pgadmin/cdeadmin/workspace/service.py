@@ -674,6 +674,53 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mysql_schema_apply import MySQLSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MySQL application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        applications = MySQLSchemaApplications(str(store.path) + '.mysql-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'mysql_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                    raise ValueError('Invalid MySQL schema review request')
+                preview = self.mysql_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, validate=True)
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mysql'),
+                    read_catalog(request['source'], engine='mysql'), owner, binding, target)
+            if action == 'mysql_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid MySQL schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'mysql_schema_apply':
+                raise ValueError('Unknown MySQL schema application action')
+            def execute(record):
+                result = provider.apply_schema_review(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        result['explorer_invalidated'] = True
+                    except Exception as error:
+                        result.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return result
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mysql_test_data import generate, template

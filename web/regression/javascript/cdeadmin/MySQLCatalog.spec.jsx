@@ -93,6 +93,40 @@ describe('MySQL three-way native metadata preview', () => {
     await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
     expect(post.mock.calls.every(([request]) => ['mysql_catalog_export','mysql_schema_plan','mysql_schema_validate'].includes(request.action))).toBe(true);
     expect(screen.getByText('SR-F-001402')).toBeVisible();
-    expect(screen.queryByRole('button', {name: /^Apply/})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Apply reviewed change'})).toBeDisabled();
+  });
+});
+
+describe('MySQL reviewed schema controls', () => {
+  it('requires native validation, prepared receipt and explicit confirmation, then shows the native outcome', async () => {
+    const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
+    const operation={operation:'alter',source:'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
+    const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation]};
+    const receipt={review_id:'receipt',review_digest:'review-digest',state:'reviewed'};
+    const post=jest.fn().mockImplementation(async ({action}) => {
+      if(action==='mysql_catalog_export') return {snapshot,views:[{id:'inventory_1',entry:'native.ddn'}],objects:[]};
+      if(action==='mysql_schema_plan') return preview;
+      if(action==='mysql_schema_validate') return {...preview,native_grammar_validated:true,native_validation:[{accepted:true}]};
+      if(action==='mysql_schema_review') return receipt;
+      return {...receipt,state:'committed',outcome:{rediscovery_verified:true,native_definition:'CREATE TABLE `t` (`extra` int)',desired_definition_exact_match:false}};
+    });
+    render(<Component post={post} databaseTargetId="db-target" />);
+    fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+    await screen.findByRole('textbox',{name:'Native MySQL change preview'});
+    expect(screen.getByRole('button',{name:'Prepare reviewed change'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'Validate native changes'}));
+    await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
+    fireEvent.click(screen.getByRole('button',{name:'Prepare reviewed change'}));
+    await screen.findByText(/Schema receipt receipt: reviewed/);
+    expect(screen.getByRole('button',{name:'Apply reviewed change'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:'Confirm reviewed native DDL and implicit commit'}));
+    fireEvent.click(screen.getByRole('button',{name:'Apply reviewed change'}));
+    await screen.findByText(/Schema receipt receipt: committed/);
+    expect(post).toHaveBeenLastCalledWith({action:'mysql_schema_apply',request:{database_target_id:'db-target',review_id:'receipt',review_digest:'review-digest',confirmed:true}});
+    expect(screen.getByRole('button',{name:'Apply reviewed change'})).toBeDisabled();
+    expect(screen.getByRole('textbox',{name:'Rediscovered native definition'})).toHaveValue('CREATE TABLE `t` (`extra` int)');
+    expect(screen.getByText(/Native SHOW CREATE differs/)).toBeInTheDocument();
   });
 });

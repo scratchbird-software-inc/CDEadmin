@@ -2641,7 +2641,7 @@ class ServerNode(PGChildNodeView):
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
                         'firebird_schema_apply', 'firebird_schema_receipt',
@@ -2815,6 +2815,8 @@ class ServerNode(PGChildNodeView):
                     )
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
+                elif action in {'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt'}:
+                    payload = service.mysql_schema_application(server, action, data.get('request'))
                 elif action in {'mysql_schema_plan', 'mysql_schema_validate'}:
                     payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
                 elif action == 'mysql_test_data':
