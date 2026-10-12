@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
+from . import mysql_events, mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,11 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id=='mysql' and kind=='event':
+                resource['operations']=[{'operation_id':'inspect','title':'Inspect native event','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
+                    'operation_id':operation,'title':mysql_events.form(operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
+                } for operation in sorted(mysql_events.OPERATIONS)]
             if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native object','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
                     'operation_id':operation,'title':mysql_program_objects.form(kind,operation,self._field)['title'],
@@ -684,6 +689,10 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id=='mysql' and resource_kind=='event' and operation_id in mysql_events.OPERATIONS:
+            try:mysql_events.compile_operation(operation_id,draft,request.get('target_resource'),self._safe_definition)
+            except RelationalClientError as error:errors.append({'field_id':None,'code':'invalid_mysql_event','message':str(error)})
+            return {'errors':errors}
         if self.dialect.engine_id=='mysql' and operation_id in mysql_program_objects.OPERATIONS.get(resource_kind,()):
             try: mysql_program_objects.compile_operation(resource_kind,operation_id,draft,request.get('target_resource'))
             except RelationalClientError as error: errors.append({'field_id':None,'code':'invalid_mysql_program_object','message':str(error)})
@@ -3136,6 +3145,8 @@ class RelationalAdministration:
                 'transaction_finality_interpreted_by_common_code': False,
             }
         owns_connection = connection is None
+        if self.dialect.engine_id=='mysql' and compiled.get('mysql_owned_event_scope') and not owns_connection:
+            raise RelationalClientError('Native event administration requires an independently owned connection')
         global_function_scope = (self.dialect.engine_id == 'mysql' and
                                  compiled.get('mysql_global_function_scope'))
         if global_function_scope:
@@ -3719,6 +3730,12 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if self.dialect.engine_id=='mysql' and request['resource_kind']=='event' and operation in mysql_events.OPERATIONS:
+            statement=mysql_events.compile_operation(operation,request['draft'],request.get('target_resource'),self._safe_definition)
+            zone=statement.pop('mysql_event_time_zone',None)
+            statements=([{'source':'SET SESSION time_zone=%s','parameters':(zone,)}] if zone is not None else [])+[statement]
+            return {'statements':statements,'mysql_owned_event_scope':True,
+                'warnings':['Native events commit independently and may execute or expire under the server scheduler. Native ALTER without an explicit DEFINER uses MySQL definer rules; omitted schedule/completion/status/body remain unchanged.']}
         if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(request['resource_kind'],()):
             return {'statements':[mysql_program_objects.compile_operation(request['resource_kind'],operation,request['draft'],request.get('target_resource'))],
                 'mysql_global_function_scope': request['resource_kind']=='loadable-function',
@@ -5008,6 +5025,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id=='mysql' and kind=='event':
+            return value
         if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
             return value
         if self.dialect.engine_id=='mysql' and kind=='group-replication':
@@ -5274,6 +5293,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id=='mysql' and kind=='event' and operation in mysql_events.OPERATIONS:
+            return mysql_events.form(operation,self._field)
         if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
             return mysql_program_objects.form(kind,operation,self._field)
         if self.dialect.engine_id=='mysql' and kind=='group-replication' and operation in mysql_group_replication.OPERATIONS:

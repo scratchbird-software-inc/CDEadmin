@@ -1026,3 +1026,17 @@ checks refuse observed drift; external DDL and scheduler activity remain unfence
 An event may execute, expire or remove itself according to native scheduling.
 A success acknowledgement remains committed even if later rediscovery cannot
 find the event; an uncertain outcome is never automatically retried.
+
+Complete native event forms
+---------------------------
+
+MySQL event forms expose schedule, completion, ENABLE/DISABLE/DISABLE ON REPLICA,
+body, comment/explicit comment clearing, exact optional definer and event time
+zone. ALTER selectors default to UNCHANGED; changing a comment must not reset
+status, schedule, body or completion. CREATE supports IF NOT EXISTS. RENAME uses
+ALTER EVENT RENAME TO with an exact optional destination database, and DROP
+uses the discovered database/name. Native definer and scheduler rules remain
+authoritative; omitted DEFINER follows MySQL's own ALTER behavior.
+Administration owns an independent connection and refuses a borrowed transaction.
+An explicit time zone is set with a bound session value before native DDL.
+Discovery retains complete visible EVENTS facts and SHOW CREATE/context.

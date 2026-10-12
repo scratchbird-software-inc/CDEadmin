@@ -180,6 +180,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_events import OPERATIONS as event_operations
+        common['event']=event_operations | frozenset({'inspect'})
         from ..mysql_program_objects import OPERATIONS as program_operations
         for kind,operations in program_operations.items():common[kind]=operations | frozenset({'inspect'})
         from ..mysql_group_replication import OPERATIONS as group_operations
@@ -1959,6 +1961,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('event', [schema_name], name, {
                 'status': status, 'event_type': event_type,
             })
+        if profile is MYSQL_PROFILE:
+            from .mysql_catalog import identifier as quote_event_identifier
+            for record in optional_records("SELECT * FROM information_schema.EVENTS WHERE EVENT_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY EVENT_SCHEMA,EVENT_NAME"):
+                record['show_create']=optional_records('SHOW CREATE EVENT '+quote_event_identifier(record['event_schema'])+'.'+quote_event_identifier(record['event_name']))
+                add('event',[record['event_schema']],record['event_name'],record)
         roles = set()
         if profile is MYSQL_PROFILE:
             # MySQL stores role membership with the role on the FROM side.

@@ -1011,9 +1011,10 @@ def _relational_editor_evidence(provider, request, engine):
         if provider.client.supports_admin_operation(
                 'event', 'create') and attempt(
             'event.create', 'event', 'create', {
-                'name': 'cde_editor_event', 'parent': parent,
-                'schedule': 'EVERY 1 DAY', 'preserve': True,
-                'enabled': True, 'body': 'SELECT 1',
+                'name': 'cde_editor_event',
+                **({'database':parent,'completion':'PRESERVE','status':'ENABLE'} if engine=='mysql' else
+                   {'parent':parent,'preserve':True,'enabled':True}),
+                'schedule': 'EVERY 1 DAY', 'body': 'SELECT 1',
             },
         ):
             event = inspect_created(
@@ -1022,13 +1023,17 @@ def _relational_editor_evidence(provider, request, engine):
             if event is not None:
                 attempt(
                     'event.alter', 'event', 'alter', {
-                        'schedule': 'EVERY 2 DAY', 'preserve': True,
-                        'enabled': False, 'body': 'SELECT 2',
+                        'schedule': 'EVERY 2 DAY',
+                        **({'completion':'PRESERVE','status':'DISABLE','confirmation':'alter-live-editor-event'} if engine=='mysql' else
+                           {'preserve':True,'enabled':False}),
+                        'body': 'SELECT 2',
                     }, event,
                 )
+                if engine=='mysql' and attempt('event.rename','event','rename',{'new_name':'cde_editor_event_renamed','confirmation':'rename-live-editor-event'},event):
+                    event=inspect_created('event.rename.inspect','event','cde_editor_event_renamed')
                 attempt(
                     'event.drop', 'event', 'drop', {
-                        'cascade': False,
+                        **({'cascade': False} if engine!='mysql' else {}),
                         'confirmation': 'drop-live-editor-event',
                     }, event,
                 )
