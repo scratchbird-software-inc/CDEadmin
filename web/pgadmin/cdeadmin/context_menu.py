@@ -981,6 +981,8 @@ def database_target_context_actions(
             ('remove', 'Remove DuckDB file registration...',
              'action.delete', 'destructive'),
         )
+    if engine_id == 'mysql':
+        action_specs = tuple(item for item in action_specs if item[0] != 'connect')
     for offset, (operation_id, label, icon, mutation) in enumerate(
         action_specs
     ):
@@ -1001,6 +1003,13 @@ def database_target_context_actions(
         'verify_endpoint', icon='action.connect', group='connection',
         priority=10, arguments=base,
     ))
+    if engine_id == 'mysql':
+        actions.append(_action(
+            'database.mysql.disconnect',
+            'Disconnect server (all databases)...', 'disconnect_endpoint',
+            icon='action.disconnect', group='connection', priority=11,
+            mutation='admin', arguments=base,
+        ))
     if engine_id == 'firebird':
         actions.append(_action(
             'database.firebird.disconnect',

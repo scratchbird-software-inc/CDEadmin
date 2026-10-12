@@ -744,3 +744,12 @@ Storage failures cannot block or replay native execution. Loading an entry
 changes editor text only and never executes it. Clearing entries requires
 confirmation and retains policy. Engine/target switches reset the visible
 history state so one connection's entries are not displayed under another.
+
+Database connection menu
+-------------------------
+
+The MySQL database context menu offers one Connect action that verifies the
+selected registered database target. Connection registration/editing remains a
+separate action. Disconnect explicitly names its server-wide effect: all
+registered database routes and their active sessions for that endpoint are
+released together. It is never labeled as disconnecting only one database.

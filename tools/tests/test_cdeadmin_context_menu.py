@@ -407,6 +407,19 @@ class ContextMenuTests(unittest.TestCase):
         )
         self.assertEqual([], actions)
 
+    def test_mysql_database_has_one_verified_connect_and_explicit_server_disconnect(self):
+        actions = database_target_context_actions(profile('mysql', multiple=True), {
+            'target_id': 'mysql-one', 'display_name': 'demo', 'database': 'demo',
+        })
+        ids = [item['command_id'] for item in actions]
+        self.assertEqual(len(ids), len(set(ids)))
+        connect = next(item for item in actions if item['command_id'] == 'database.mysql.connect')
+        self.assertEqual(connect['handler'], 'verify_endpoint')
+        self.assertEqual(connect['arguments']['database_target_id'], 'mysql-one')
+        disconnect = next(item for item in actions if item['command_id'] == 'database.mysql.disconnect')
+        self.assertEqual(disconnect['handler'], 'disconnect_endpoint')
+        self.assertIn('all databases', disconnect['label'])
+
     def test_database_target_actions_open_exact_provider_forms(self):
         actions = database_target_context_actions(
             profile('firebird'), {
