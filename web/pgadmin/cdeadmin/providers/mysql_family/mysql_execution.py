@@ -3,6 +3,7 @@ import copy
 import json
 import queue
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -22,6 +23,7 @@ class Execution:
     cancelled: bool = False
     closed: bool = False
     error: object = None
+    statement_metrics: object = None
     cleanup_failed: bool = False
     poll_lock: object = field(default_factory=threading.Lock)
 
@@ -34,6 +36,7 @@ class Executions:
         self.client = client
         self.tokens = []
         self.lock = threading.RLock()
+        self.closing = False
 
     def active(self, handle):
         return next((t for t in self.tokens if t.connection is handle
@@ -49,6 +52,8 @@ class Executions:
             raise RelationalClientError('MySQL query source is required')
         bound = parameters(request.get('parameters', ()))
         with self.lock:
+            if self.closing:
+                raise RelationalClientError('MySQL execution owner is closing')
             self.require_idle(handle)
             self.client._require_usable_session(handle)
             token = Execution(handle, copy.deepcopy(session_request))
@@ -69,10 +74,16 @@ class Executions:
 
     @staticmethod
     def _error(exc):
-        return {key: item for key, item in {
+        result = {key: item for key, item in {
             'type': type(exc).__name__, 'errno': getattr(exc, 'errno', None),
             'sqlstate': getattr(exc, 'sqlstate', None),
         }.items() if isinstance(item, (str, int))}
+        errno, sqlstate = result.get('errno'), result.get('sqlstate')
+        if (isinstance(errno, int) and errno >= 1000 and
+                not 2000 <= errno < 3000 and isinstance(sqlstate, str) and
+                len(sqlstate) == 5 and isinstance(getattr(exc, 'msg', None), str)):
+            result['message_primary'] = exc.msg[:16384]
+        return result
 
     def _run(self, token, source, bound):
         cursor = None
@@ -85,11 +96,19 @@ class Executions:
                 token.identity = (str(server), int(connection_id))
             finally:
                 identity_cursor.close()
+            if token.cancelled:
+                return  # Shutdown before dispatch is not a native SQL outcome.
             cursor = Cursor(token.connection)
+            started = time.perf_counter()
             if bound:
                 cursor.execute(source, bound)
             else:
                 cursor.execute(source)
+            token.statement_metrics = {
+                'dispatch_ms': round((time.perf_counter() - started) * 1000, 3),
+                'scope': 'client-execute-through-first-response-excluding-fetch',
+                'prepare_ms': None, 'execute_ms': None, 'plan': None,
+            }
             index = 0
             while True:
                 schema = columns(cursor)
@@ -172,6 +191,8 @@ class Executions:
                 'rows': [], 'has_page': False}}
         complete = token.finished.is_set() and token.pages.empty()
         payload = page['payload']
+        if token.statement_metrics is not None:
+            payload['statement_metrics'] = dict(token.statement_metrics)
         payload.update(cancelled=token.cancelled, streamed_by_provider=True)
         if complete:
             payload.update(error=token.error,
@@ -224,11 +245,29 @@ class Executions:
                 self.client._safe_close(control)
 
     def close(self):
-        for token in self.tokens:
+        with self.lock:
+            self.closing = True
+            tokens = list(self.tokens)
+            for token in tokens:
+                # Release a full producer queue even when nobody polls again.
+                token.cancelled = True
+        unfinished = []
+        for token in tokens:
             if not token.finished.is_set():
-                self.cancel(token)
+                token.worker.join(timeout=0.1)
+                if not token.finished.is_set() and token.identity is not None:
+                    try:
+                        self.cancel(token)
+                    except RelationalClientError:
+                        # The original protocol owner may still finish/drain.
+                        # Failed cancellation never permits racing its socket.
+                        pass
                 token.worker.join(timeout=5)
-                if not token.finished.is_set():
-                    raise RelationalClientError(
-                        'MySQL execution still owns its connection')
-        self.tokens.clear()
+            if not token.finished.is_set():
+                unfinished.append(token)
+            else:
+                with self.lock:
+                    if token in self.tokens:
+                        self.tokens.remove(token)
+        if unfinished:
+            raise RelationalClientError('MySQL execution still owns its connection')

@@ -881,6 +881,9 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 class MySQLDBAPIClient(RelationalDBAPIClient):
     """MySQL DB-API plus a constrained MySQL Shell administration port."""
 
+    transaction_actions = ('commit', 'rollback', 'autocommit_on',
+                           'autocommit_off')
+
     _OPTION_NAMES = {
         'backup_logical': {
             'consistent': 'consistent',
@@ -1027,6 +1030,28 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         self._require_usable_session(handle)
         if action not in self.transaction_actions:
             return super().control_transaction(handle, action)
+        if action in {'autocommit_on', 'autocommit_off'}:
+            observation = self._describe_idle_transaction(handle)
+            if not observation.get('connection_usable'):
+                raise RelationalClientError('MySQL session outcome is unknown')
+            enabled = action == 'autocommit_on'
+            if observation['autocommit'] == enabled:
+                return observation
+            if observation['in_transaction']:
+                raise RelationalClientError(
+                    'Commit or roll back the MySQL transaction before '
+                    'changing autocommit')
+            try:
+                handle.autocommit = enabled
+                observed = self._describe_idle_transaction(handle)
+                if (not observed.get('connection_usable') or
+                        observed.get('autocommit') != enabled):
+                    raise RelationalClientError(
+                        'MySQL autocommit acknowledgement is unknown')
+                return observed
+            except BaseException:
+                self._uncertain_sessions.add(id(handle))
+                raise
         try:
             return super().control_transaction(handle, action)
         except BaseException:
@@ -1417,6 +1442,20 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 class MySQLPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
+
+    def capture_catalog(self, route, *, include_system=False):
+        """Capture on a dedicated lease, never an interactive session handle."""
+        from .mysql_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL catalog client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return capture(connection, route.get('database'), include_system=include_system)
+        finally:
+            # Even a bounded-read interruption may leave an unread result.
+            # Retire this attachment rather than lending it to user work.
+            self.client._discard_failed_session(connection)
 
 
 class MariaDBPilotProvider(ActualEnginePilotProvider):

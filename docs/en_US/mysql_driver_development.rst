@@ -2,6 +2,43 @@ MySQL driver development and platform handoff
 ============================================
 
 ScratchRobin targets MySQL 9.7.0 with ``mysql-connector-python==26.7.0``.
+The full engine acceptance contract is ``mysql_functional_completion.rst``;
+driver and shared-editor receipts alone do not establish full engine completion.
+
+Native catalog exchange
+-----------------------
+
+MySQL catalog capture uses an independently owned connection and an explicit
+registered database target. It verifies ``DATABASE()`` and exact server version,
+captures native ``SHOW CREATE`` definitions and visible information-schema child
+facts, and exports documentary DDN under ``scratchrobin.mysql.catalog@1``.
+Identifiers use escaped backticks; catalog predicates use bound parameters.
+Capture is bounded to 20,000 facts and 8 MiB, with streamed catalog rows.
+Permission-denied sections remain explicit observations; other query failures
+abort capture. Definitions withheld by the server remain unavailable, never
+empty authoritative definitions. Catalog visibility is privilege-filtered and
+DDL is not an atomic snapshot, so capture never asserts full coverage or backup
+equivalence. Row data and account secrets are excluded from this metadata path.
+Imported documentary DDN may be compared, but comparison grants no execution.
+
+SQL history
+-----------
+
+The shared editor exposes optional persistent history for MySQL, scoped to the
+authenticated application owner, server, registered database and ``mysql-sql``.
+Capture defaults off. Retention is limited by days and record count. Explicitly
+sensitive requests, credential URIs and authentication statements omit source;
+parameters and results are never stored. Loading an entry only changes editor
+text. A history-store failure adds a notice without blocking or retrying native
+execution, and recorded request acceptance is not transaction finality.
+
+Provider shutdown releases result backpressure and permits the worker to finish
+an in-flight cancellation-identity read before attempting a native kill. If the
+worker has not dispatched SQL, shutdown prevents dispatch. Cancellation failure
+does not authorize concurrent socket reuse or destruction while that worker
+still owns the protocol. Shutdown checks every execution and retains any
+unfinished ownership for a subsequent cleanup attempt; it never asserts rollback
+or replays a statement to establish an outcome.
 The backend team owns native driver correctness, backend operations and
 functional forms. Windows and macOS teams own native UX refinement and platform
 QA; driver defects discovered there return to this workstream. MariaDB has a
@@ -136,3 +173,46 @@ loopback ephemeral ports and remove only their own containers and volumes.
 No Windows/macOS execution, receiving-team acceptance, enterprise identity
 provider deployment, or complete management-console UX acceptance is inferred
 from Linux driver receipts.
+
+Shared SQL query form
+---------------------
+
+MySQL query entry points use the global SQL workspace and its PostgreSQL-based
+frame, compact native-action toolbar, source pane, result navigation and
+Data Output/Explain/Messages/Engine options panels. Connection labels include
+MySQL and retain endpoint/database identity. Firebird dialect, profiler,
+DECFLOAT and streaming controls do not appear in a MySQL session.
+
+Plan buttons keep their provider-native MySQL names: JSON EXPLAIN and execution
+plan (EXPLAIN ANALYZE). The latter executes the source statement. Parameters
+retain Connector/Python positional/named shapes and exact-value envelopes.
+The MySQL options panel displays the last explicitly requested session-state,
+autocommit and in-transaction observations, including unknown/unobserved states;
+it does not infer finality. The shared toolbar changes autocommit only through
+the provider-owned action and displays the acknowledged native value. It explains
+implicit DDL commits, nontransactional-table limits and native script binding.
+Multi-result paging, cancellation and transaction callbacks remain provider-owned.
+
+MySQL shared transaction controls
+--------------------------------
+
+The shared editor exposes an autocommit checkbox when the MySQL provider admits
+both policy actions. Opening the retained SQL session observes its native policy
+before execution. Commit and rollback are disabled while autocommit is enabled
+or its value is unknown. A failed policy request invalidates the checkbox until
+an explicit transaction-state refresh succeeds; the UI never assumes success.
+
+The provider serializes policy changes with execution. Changing autocommit while
+a native transaction is active is refused: the user must explicitly commit or
+roll back first. An unchanged setting is an idempotent observation. A failed SET
+or uncertain acknowledgement quarantines the connection without reconnect or
+replay. MySQL DDL implicit commits and nontransactional table behavior are not
+changed. These actions are not added to MariaDB or MySQL-wire engines by analogy.
+
+Completed MySQL statements refresh the checkbox's observation on the same idle
+connection, so explicit SET autocommit SQL is reflected. Failed observation
+blocks further execution until refresh succeeds. Query messages expose bounded
+native server error text with errno/SQLSTATE, but not local connector exception
+text. Client dispatch timing covers cursor.execute only: it includes transport
+and the first native response, not subsequent result fetching, browser waits,
+or isolated server execution/preparation time.

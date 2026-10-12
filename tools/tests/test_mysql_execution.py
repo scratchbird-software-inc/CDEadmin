@@ -100,6 +100,36 @@ def test_backpressure_blocks_native_fetch_and_second_execution():
     assert pages[-1]['complete']
 
 
+def test_shutdown_releases_unconsumed_result_backpressure():
+    owner, connection, native = harness([list(range(4096))])
+    token = owner.execute(connection, {'source': 'native rows'}, {})
+    deadline = time.monotonic() + 3
+    while not token.pages.full() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert token.pages.full()
+    owner.close()
+    assert token.finished.is_set() and native.closed and not owner.tokens
+
+
+def test_shutdown_during_identity_read_prevents_dispatch():
+    import threading
+    owner, connection, native = harness([[1]])
+    entered, release = threading.Event(), threading.Event()
+    identity = connection.cursor()
+    def read_identity():
+        entered.set(); release.wait(2)
+        return ('server-one', 7)
+    identity.fetchone.side_effect = read_identity
+    native.execute = Mock()
+    token = owner.execute(connection, {'source': 'native rows'}, {})
+    assert entered.wait(1)
+    timer = threading.Timer(0.05, release.set); timer.start()
+    try: owner.close()
+    finally: release.set(); timer.join()
+    assert token.finished.is_set() and not owner.tokens
+    native.execute.assert_not_called()
+
+
 def test_late_error_keeps_earlier_result_and_protocol_failure_quarantines():
     owner, connection, native = harness([[1]])
     native.nextset = Mock(side_effect=RuntimeError('secret SQL text'))
@@ -189,3 +219,12 @@ def test_mysql_profile_omits_removed_plugin_without_changing_wire_profiles():
     with pytest.raises(RelationalClientError, match='does not support'):
         _route_arguments(
             {'auth_plugin': 'mysql_native_password'}, MYSQL_PROFILE)
+
+
+def test_native_error_text_excludes_local_connector_exceptions():
+    from mysql.connector.errors import ProgrammingError, InterfaceError
+    server = Executions._error(ProgrammingError(msg='Unknown column', errno=1054, sqlstate='42S22'))
+    assert server['message_primary'] == 'Unknown column'
+    local = Executions._error(InterfaceError(msg='private credential material', errno=2003))
+    assert 'message_primary' not in local
+    assert 'private' not in str(local)
