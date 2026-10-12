@@ -756,8 +756,10 @@ def _relational_editor_evidence(provider, request, engine):
         ) and attempt(
             'view.create', 'view', 'create', {
                 'name': 'cde_editor_view',
-                **({'parent': parent} if parent else {}),
-                'query': (
+                **({'database': parent, 'algorithm': 'UNDEFINED',
+                    'sql_security': 'DEFINER', 'check_option': 'NONE'}
+                   if engine == 'mysql' else ({'parent': parent} if parent else {})),
+                ('definition' if engine == 'mysql' else 'query'): (
                     'SELECT ID, QUALIFICATION_VALUE FROM QUALIFICATION'
                     if engine == 'firebird' else
                     'SELECT id, value FROM qualification'
@@ -771,7 +773,10 @@ def _relational_editor_evidence(provider, request, engine):
                 if provider.client.supports_admin_operation('view', 'alter'):
                     attempt(
                         'view.alter', 'view', 'alter', {
-                            'query': (
+                            **({'algorithm': 'UNDEFINED', 'sql_security': 'DEFINER',
+                                'check_option': 'NONE', 'confirmation': 'alter-live-editor-view'}
+                               if engine == 'mysql' else {}),
+                            ('definition' if engine == 'mysql' else 'query'): (
                                 'SELECT ID FROM QUALIFICATION'
                                 if engine == 'firebird' else
                                 (
