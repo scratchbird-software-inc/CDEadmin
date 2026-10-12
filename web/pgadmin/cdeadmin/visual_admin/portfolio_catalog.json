@@ -1214,7 +1214,9 @@
         {"resource_kind": "plugin", "title": "Server plugin", "operation_profile": "definition"},
         {"resource_kind": "replication-channel", "title": "Replication channel", "operation_profile": "topology"},
         {"resource_kind": "resource-group", "title": "Resource group", "operation_profile": "topology"},
-        {"resource_kind": "metric", "title": "Metric", "operation_profile": "read_only"}
+        {"resource_kind": "metric", "title": "Metric", "operation_profile": "read_only"},
+        {"resource_kind": "session", "title": "Native session and running operation", "operation_profile": "read_only"},
+        {"resource_kind": "system-variable", "title": "Native global and persisted variable", "operation_profile": "read_only"}
       ]
     },
     {

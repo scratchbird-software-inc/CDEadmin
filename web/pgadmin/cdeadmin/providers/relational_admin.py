@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_roles, mysql_resource_groups
+from . import mysql_roles, mysql_resource_groups, mysql_server_operations
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,12 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mysql' and kind in mysql_server_operations.OPERATIONS:
+                additions = mysql_server_operations.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mysql_server_operations.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_resource_groups.OPERATIONS] + [{
@@ -631,6 +637,12 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'mysql' and operation_id in mysql_server_operations.OPERATIONS.get(resource_kind, ())):
+            try:
+                mysql_server_operations.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_server_operation', 'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and resource_kind == 'resource-group' and
                 operation_id in mysql_resource_groups.OPERATIONS):
             try:
@@ -3598,6 +3610,10 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if (self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mysql_server_operations.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native server configuration and session control are independent of interactive transaction rollback.',
+                                 'Persistent variable changes can affect subsequent server restarts.']}
         if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'resource-group' and
                 operation in mysql_resource_groups.OPERATIONS):
             return {'statements': [mysql_resource_groups.compile_operation(operation, request['draft'], request.get('target_resource'))],
@@ -4849,7 +4865,7 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
-        if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
+        if self.dialect.engine_id == 'mysql' and kind in {'resource-group', 'system-variable', 'session'}:
             return value
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
@@ -5099,6 +5115,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(kind, ()):
+            return mysql_server_operations.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
             return mysql_resource_groups.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:

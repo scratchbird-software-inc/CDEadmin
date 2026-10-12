@@ -37,7 +37,7 @@ MYSQL_PROFILE = PilotProfile(
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
      'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin',
-     'replication-channel', 'resource-group', 'metric'),
+     'replication-channel', 'resource-group', 'system-variable', 'session', 'metric'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
         'contract_complete': True,
@@ -180,6 +180,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['system-variable'] = frozenset({'inspect', 'set_global', 'set_persist', 'set_persist_only', 'reset_persist'})
+        common['session'] = frozenset({'inspect', 'terminate_query', 'terminate_connection'})
         common['resource-group'] = frozenset({'inspect', 'create', 'alter', 'assign', 'drop'})
         common['role'] = common['role'] | frozenset({'grant', 'revoke', 'set_default'})
         common.pop('sequence')
@@ -1988,6 +1990,26 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     for key, value in native.items()
                 }
             add('replication-channel', [], name, native)
+        if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                'SELECT t.THREAD_ID, t.PROCESSLIST_ID, t.PROCESSLIST_USER, t.PROCESSLIST_HOST, '
+                't.PROCESSLIST_DB, t.PROCESSLIST_COMMAND, t.PROCESSLIST_TIME, t.PROCESSLIST_STATE, '
+                't.RESOURCE_GROUP FROM performance_schema.threads t '
+                'WHERE t.PROCESSLIST_ID IS NOT NULL ORDER BY t.PROCESSLIST_ID'
+            ):
+                record['processlist_id'] = str(record['processlist_id'])
+                record['thread_id'] = str(record['thread_id'])
+                add('session', ['Sessions'], record['processlist_id'], record)
+            for record in optional_records(
+                'SELECT g.VARIABLE_NAME, g.VARIABLE_VALUE AS GLOBAL_VALUE, '
+                'v.VARIABLE_SOURCE, v.VARIABLE_PATH, v.MIN_VALUE, v.MAX_VALUE, '
+                'v.SET_TIME, v.SET_USER, v.SET_HOST, p.VARIABLE_VALUE AS PERSISTED_VALUE '
+                'FROM performance_schema.global_variables g '
+                'LEFT JOIN performance_schema.variables_info v ON v.VARIABLE_NAME=g.VARIABLE_NAME '
+                'LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME '
+                'ORDER BY g.VARIABLE_NAME'
+            ):
+                add('system-variable', ['Configuration'], record['variable_name'], record)
         if profile is MYSQL_PROFILE:
             for name, resource_type, enabled in optional(
                 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, '

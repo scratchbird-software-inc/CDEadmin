@@ -554,3 +554,32 @@ remain authoritative; a native refusal is not reported as successful change.
 FORCE may move assigned threads back to the native default group. These server
 operations commit independently of an interactive user's transaction. MariaDB
 must not inherit the MySQL resource-group syntax or controls.
+
+Native server configuration and session control
+----------------------------------------------
+
+MySQL server navigation exposes native global variables, persisted values and
+variable-source metadata from performance_schema. Separate operations use SET
+GLOBAL, SET PERSIST, SET PERSIST_ONLY and RESET PERSIST for the selected exact
+variable. Values are bound scalars or explicit DEFAULT; previews redact bound
+values. Native privilege, dynamic/read-only/startup-only and persistence rules
+remain authoritative. SET PERSIST changes current and restart configuration;
+PERSIST_ONLY changes restart configuration without changing the current value.
+RESET PERSIST removes only the selected persisted override. These forms do not
+pretend a helper connection's session settings configure the user's SQL session.
+
+Native session nodes retain separate process/connection IDs and thread IDs as
+exact decimal strings. Query cancellation uses KILL QUERY; disconnect uses KILL
+CONNECTION against the selected native process ID. Both require explicit target
+confirmation. KILL has native transaction and disconnection effects; a cancelled
+statement or broken connection must not be reported as a commit/rollback proof.
+Only native server-visible sessions are discovered, with denied observations
+reported by the existing catalog-coverage contract.
+
+Exact numeric variable inputs may use JSON text with explicit INTEGER or DECIMAL
+representation; the adapter uses bound text with native numeric casts, keeping
+durable plans JSON-safe without JavaScript integer rounding. Automatic JSON scalars preserve their scalar type.
+A numeric variable may reject a quoted text value rather than coerce it. Native
+KILL QUERY acknowledgement means the interrupt was requested, not that every
+statement produces an error: MySQL 9.7's SLEEP expression can return its native
+interrupted value. The result and transaction state must remain native facts.

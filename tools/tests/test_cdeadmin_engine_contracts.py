@@ -380,7 +380,7 @@ def test_mysql_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, MYSQL_PROFILE, MYSQL_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 53
+    assert checked['coverage']['authoritative_task_count'] == 59
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 760,
         'statements': 143,
