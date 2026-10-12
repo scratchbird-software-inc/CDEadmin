@@ -11,11 +11,12 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
-  const [metadata, setMetadata] = useState(null);
+  const [metadata, setMetadata] = useState(null), [dataCapture, setDataCapture] = useState(null);
+  const [relation, setRelation] = useState(''), [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
   const serial = useRef(0);
   useEffect(() => {
-    serial.current++; setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
+    serial.current++; setDataCapture(null); setRelation(''); setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
     setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -27,7 +28,8 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         request: {database_target_id: databaseTargetId, include_system: includeSystem, ...(compare ? {source} : {})}});
       if(token !== serial.current) return;
       if(compare) setComparison(response);
-      else {setSource(''); setMetadata(null); setResult(response); setComparison(null); setDisplay('inventory'); setView(response.snapshot.view);}
+      else {setSource(''); setMetadata(null); setDataCapture(null);
+        setRelation(response.objects?.find(item => ['table', 'view', 'materialized-view'].includes(item.kind))?.resource_id || ''); setResult(response); setComparison(null); setDisplay('inventory'); setView(response.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL catalog capture failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
@@ -46,7 +48,17 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     const link = document.createElement('a'); link.href = url; link.download = 'mysql-native-metadata.sql'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const shown = display === 'relations' ? result?.diagram : result;
+  const captureData = async () => {
+    const token = ++serial.current;
+    setBusy(true); setError(''); setDataCapture(null);
+    try {
+      const response = await post({action: 'mysql_data_capture', request: {database_target_id: databaseTargetId,
+        resource_id: relation, mode: dataMode, row_limit: Number(rowLimit)}});
+      if(token === serial.current) {setDataCapture(response); setDisplay('data'); setView(response.snapshot.view);}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL relation data capture failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const shown = display === 'relations' ? result?.diagram : display === 'data' ? dataCapture : result;
   const download = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(shown.snapshot)], {type: 'application/json'}));
     const link = document.createElement('a'); link.href = url; link.download = `mysql-${display}.ddn-workspace.json`; link.click();
@@ -74,14 +86,34 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       <Button disabled={busy || !(source || result?.snapshot) || !databaseTargetId} onClick={generate}>Generate native SQL</Button>
       <Button disabled={busy || !metadata?.script_available} onClick={downloadSQL}>Download native SQL</Button>
       <TextField select size="small" label="Display" value={display} disabled={busy || !result}
-        onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : result.snapshot.view);}}>
+        onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : event.target.value === 'data' ? dataCapture.snapshot.view : result.snapshot.view);}}>
         <MenuItem value="inventory">Native inventory</MenuItem>
         <MenuItem value="relations" disabled={!result?.diagram?.snapshot}>Relations</MenuItem>
+        <MenuItem value="data" disabled={!dataCapture?.snapshot}>Captured relation data</MenuItem>
       </TextField>
-      {shown?.views && display === 'inventory' && <TextField select size="small" label="DDN view" value={view} disabled={busy} onChange={event => setView(event.target.value)}>
+      {shown?.views && display !== 'relations' && <TextField select size="small" label="DDN view" value={view} disabled={busy} onChange={event => setView(event.target.value)}>
         {shown.views.map(item => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
       </TextField>}
     </Box>
+    {result && <FormReference formKey="mysql-data-capture">
+      <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
+        <TextField select size="small" label="Native table or view" value={relation} disabled={busy} sx={{minWidth: 220}}
+          onChange={event => setRelation(event.target.value)}>
+          {(result.objects || []).filter(item => ['table', 'view', 'materialized-view'].includes(item.kind)).map(item =>
+            <MenuItem key={item.resource_id} value={item.resource_id}>{item.kind}: {item.name}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Data capture mode" value={dataMode} disabled={busy}
+          onChange={event => setDataMode(event.target.value)}>
+          <MenuItem value="sample">Bounded sample</MenuItem><MenuItem value="full">Full relation within budget</MenuItem>
+        </TextField>
+        <TextField size="small" type="number" label="Data row budget" value={rowLimit} disabled={busy} sx={{width: 150}}
+          slotProps={{htmlInput: {min: 1, max: 6000, step: 1}}} onChange={event => setRowLimit(event.target.value)} />
+        <Button disabled={busy || !relation || !Number.isSafeInteger(Number(rowLimit)) || Number(rowLimit) < 1 || Number(rowLimit) > 6000}
+          onClick={captureData}>Capture selected data</Button>
+      </Box>
+      <Alert severity="info">Data inclusion is explicit. Capture uses a separate read-only transaction; nontransactional tables and view dependencies may have weaker consistency.</Alert>
+    </FormReference>}
+    {display === 'data' && dataCapture?.warnings?.map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
     {(result?.provenance?.warnings || []).map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
     {metadata && <Box>
       <Alert severity="info">Native SQL export only. Imported definitions have not been validated against the live server and this does not execute a migration.</Alert>
@@ -107,7 +139,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
       <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId} />
     </Box>}
-    {shown?.snapshot && display === 'inventory' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
+    {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />
     </Box>}

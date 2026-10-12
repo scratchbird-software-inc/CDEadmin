@@ -54,4 +54,24 @@ describe('MySQL native catalog form', () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 
+
+  it('acquires data only after explicit relation/mode/budget selection and shows static DDN coverage', async () => {
+    const captured = {...capture, objects: [{resource_id: 'native-table', kind: 'table', name: 'Exact values'}]};
+    const data = {snapshot: {format: 'ddn-workspace@1', entry: 'result-1.ddn', view: 'result_1',
+      files: {'result-1.ddn': 'static exact data'}}, views: [{id: 'result_1', label: 'Data page 1', entry: 'result-1.ddn'}],
+    warnings: ['Explicit sample coverage']};
+    const post = jest.fn().mockResolvedValueOnce(captured).mockResolvedValueOnce(data);
+    render(<Component post={post} databaseTargetId="mysql-owned-target" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    expect(post).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Data row budget'}), {target: {value: '3'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Capture selected data'}));
+    await screen.findByText('Explicit sample coverage');
+    expect(post).toHaveBeenLastCalledWith({action: 'mysql_data_capture', request: {
+      database_target_id: 'mysql-owned-target', resource_id: 'native-table', mode: 'sample', row_limit: 3}});
+    expect(mockViewer.snapshot.files).toEqual(data.snapshot.files);
+    expect(screen.getByText('SR-F-001399')).toBeVisible();
+  });
+
 });

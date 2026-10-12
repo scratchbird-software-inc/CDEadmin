@@ -361,3 +361,30 @@ save/download manual layouts and native facts, then merge a newer capture using
 the existing DDN three-way merge tools. A saved diagram is an authored asset,
 not permission to apply metadata. Database-switch responses cannot replace the
 new target's design, and empty visual selections never request deletion.
+
+Selected relation data to DDN
+-----------------------------
+
+Data inclusion is explicit and separate from metadata capture. Select one exact
+native user table/view identity in an owned registered database, sample/full
+mode and a 1–6,000 row budget. Capture on an independent native attachment with
+REPEATABLE READ, READ ONLY and WITH CONSISTENT SNAPSHOT, bounded execution/lock
+waits, 4 MiB of acquired JSON and at most 8 MiB of generated DDN. The owner must
+have both data-read and execute permission. Refresh and close that transaction
+before returning the download; never reuse an interactive session or its work.
+
+Observe database/server/version and relation kind before selecting. Native
+column definitions accompany positional values encoded by the same exact
+MySQL codec as the SQL editor, preserving unsigned integers, decimals, temporal
+text, JSON, character encodings and opaque/binary values. Row order is native
+and unspecified. A sample discloses whether more rows were observed; full mode
+exceeding its budget fails without a partial download. Denied or failed reads
+never become empty results. Only a successful rollback/attachment cleanup
+permits success.
+
+InnoDB table capture uses the native consistent snapshot. Nontransactional
+tables and views are explicitly labelled with their weaker consistency; the
+read-only transaction does not make MyISAM or unknown view dependencies
+transactional. No cross-database snapshot, metadata fence, restorable backup or
+historical retention is implied. Static DDN table views carry acquisition
+provenance and page bounds through the shared engine-independent result adapter.

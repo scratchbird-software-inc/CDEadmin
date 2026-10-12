@@ -1443,6 +1443,19 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id, mode='sample', row_limit=100):
+        from .mysql_data_capture import capture
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL data client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return capture(connection, route.get('database'), resource_id, endpoint_id=endpoint_id,
+                target_id=target_id, mode=mode, row_limit=row_limit)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_catalog(self, route, *, include_system=False):
         """Capture on a dedicated lease, never an interactive session handle."""
         from .mysql_catalog import capture

@@ -5541,6 +5541,10 @@
     "mysql-relational-diagram": {
       "reference": "SR-F-001398",
       "title": "MySQL relational DDN design and saved revisions"
+    },
+    "mysql-data-capture": {
+      "reference": "SR-F-001399",
+      "title": "MySQL explicit relation data acquisition for DDN"
     }
   }
 }

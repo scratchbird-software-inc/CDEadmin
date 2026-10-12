@@ -610,6 +610,17 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Select a native MySQL endpoint')
         return context, endpoint, provider
 
+    def mysql_data_capture(self, server, request):
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+            raise ProviderWorkspaceError('Invalid MySQL relation data request')
+        context, endpoint, provider = self._mysql_catalog_context(server, request.get('database_target_id'))
+        try:
+            return provider.capture_data(endpoint['route'], request.get('resource_id'),
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'],
+                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_design_asset(self, server, action, request):
         from .assets import ProjectAssetError
         from .firebird_design_assets import NativeDesignAssets
