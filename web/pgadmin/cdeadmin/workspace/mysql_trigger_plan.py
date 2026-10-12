@@ -2,7 +2,7 @@
 import re
 from ..providers.mysql_family.mysql_catalog import identifier
 
-TOKEN=r'`(?:``|[^`])+`'
+TOKEN=r'(?:`(?:``|[^`])+`|"(?:""|[^"])+")'
 HEADER=re.compile(r'^\s*CREATE\s+(?:DEFINER\s*=\s*'+TOKEN+r'\s*@\s*'+TOKEN+r'\s+)?TRIGGER\s+'
     r'(?P<first>'+TOKEN+r')(?:\s*\.\s*(?P<second>'+TOKEN+r'))?\s+'
     r'(?P<timing>BEFORE|AFTER)\s+(?P<event>INSERT|UPDATE|DELETE)\s+ON\s+'
@@ -14,7 +14,7 @@ def compile_trigger(row,operation,database):
     if not isinstance(source,str) or not source or '\x00' in source:raise ValueError('Exact native trigger definition is required')
     match=HEADER.match(source)
     if not match:raise ValueError('Exact quoted native trigger/owner header is required')
-    def values(*keys):return [match[key][1:-1].replace('``','`') for key in keys if match[key] is not None]
+    def values(*keys):return [match[key][1:-1].replace(match[key][0]*2,match[key][0]) for key in keys if match[key] is not None]
     if values('first','second') not in ([row['name']],[database,row['name']]):raise ValueError('Trigger header disagrees with native identity')
     if (facts.get('database')!=database or not isinstance(facts.get('table'),str) or
         values('table_first','table_second') not in ([facts['table']],[database,facts['table']]) or

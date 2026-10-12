@@ -155,7 +155,7 @@ def plan(baseline,desired,live):
                 if current is not None:address(current,database)
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
-            if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database'}:raise ValueError('Native adapter for this object kind is not yet admitted')
+            if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database','materialized-view'}:raise ValueError('Native adapter for this object kind is not yet admitted')
             if before is not None and (current is None or not _equal(schema(before),schema(current))):
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
@@ -193,7 +193,7 @@ def plan(baseline,desired,live):
                 source=compile_library(after,operation,database,before)
                 context={name:after['native'].get('definition_context',{}).get(name,identity[name])
                     for name in ('sql_mode','character_set_client','collation_connection')}
-            elif after['kind']=='view':
+            elif after['kind'] in {'view','materialized-view'}:
                 from .mysql_view_plan import compile_view
                 source=compile_view(after,operation,database)
                 context={name:after['native'].get('definition_context',{}).get(name,identity[name])
@@ -218,4 +218,4 @@ def plan(baseline,desired,live):
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
             (['View/library/event/routine/trigger updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
-             if any(op['kind'] in {'view','library','event','procedure','function','trigger','database'} and op['operation']!='create' for op in operations) else [])}
+             if any(op['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'} and op['operation']!='create' for op in operations) else [])}

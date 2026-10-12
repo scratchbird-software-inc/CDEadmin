@@ -37,7 +37,7 @@ def qualify(output):
             preview.update(validate(connection,preview));assert preview['native_grammar_validated'],preview
             receipt=applications.review(preview,before,desired,'owner','binding','target')
             return {'review_id':receipt['review_id'],'review_digest':receipt['review_digest'],'confirmed':True}
-        for mode in ('','NO_BACKSLASH_ESCAPES'):
+        for mode in ('','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
             for zone in ('+05:30','-07:00'):
                 connection.sql_mode=mode;connection.time_zone=zone
                 cursor.execute("CREATE EVENT `e``é` ON SCHEDULE AT '2037-01-01 12:00:00' ON COMPLETION PRESERVE DISABLE COMMENT 'initial' DO BEGIN INSERT INTO events_observed VALUES(1); SELECT 'é €'; END")

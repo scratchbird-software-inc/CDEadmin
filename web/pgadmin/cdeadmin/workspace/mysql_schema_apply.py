@@ -14,7 +14,7 @@ class MySQLSchemaApplications(SchemaApplications):
         if (plan.get('format') != 'scratchrobin.mysql.schema-plan@1' or
                 not plan.get('ready_for_review') or not plan.get('native_grammar_validated') or
                 not 1 <= len(operations) <= 32 or
-                any(op.get('kind') not in {'table', 'view', 'library', 'event', 'procedure', 'function', 'trigger', 'database'} or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
+                any(op.get('kind') not in {'table', 'view', 'library', 'event', 'procedure', 'function', 'trigger', 'database', 'materialized-view'} or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
                 len({op['resource_id'] for op in operations}) != len(operations) or
                 sum(len(op['source'].encode('utf8')) for op in operations) > 1024 * 1024 or
                 plan.get('execution_sha256') != digest(operations) or

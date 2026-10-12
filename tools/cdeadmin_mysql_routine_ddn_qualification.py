@@ -28,7 +28,7 @@ def qualify(options,output):
         cursor.execute('CREATE DATABASE '+identifier(database)+' CHARACTER SET utf8mb4');connection.database=database
         reader=mysql.connector.connect(**{**options,'database':database,'autocommit':True})
         applications=MySQLSchemaApplications(output/'receipts.json')
-        for mode in ('','NO_BACKSLASH_ESCAPES'):
+        for mode in ('','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
             for kind in ('procedure','function'):
                 connection.sql_mode=mode
                 cursor.execute('CREATE '+kind.upper()+' r() '+('RETURNS INT DETERMINISTIC BEGIN RETURN 42; END' if kind=='function' else 'BEGIN SELECT 42 AS value; END'))

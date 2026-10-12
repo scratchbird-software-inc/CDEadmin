@@ -133,11 +133,14 @@ def capture(connection, database, *, include_system=False):
         # Native materialized views may be catalogued as VIEW. Use the server's
         # own DDL header, not a substring in comments/defaults/query literals.
         if isinstance(ddl, str):
-            import re
-            if re.match(r'^CREATE\s+(?:(?:ALGORITHM=\S+|DEFINER=\S+|SQL SECURITY \w+)\s+)*MATERIALIZED\s+VIEW\b', ddl, re.I):
-                kind = 'materialized-view'
+            from ..mysql_view_identity import HEADER as view_header
+            matched=view_header.match(ddl)
+            if matched and matched['materialized']:kind='materialized-view'
         item = add(kind, name, row, root['resource_id'])
         item['native']['definition'] = ddl
+        if kind=='materialized-view':
+            item['native'].update(materialization_requested=True,
+                materialization_engine=matched['engine'],physical_materialization_verified=False)
         item['native']['definition_context'] = {key: value for key, value in (values[0].items() if values else ())
             if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
         item['native']['definition_available'] = bool(ddl)

@@ -35,7 +35,7 @@ def qualify(output):
             preview.update(validate(connection,preview));assert preview['native_grammar_validated'],preview
             receipt=applications.review(preview,before,desired,'owner','binding','target')
             return {'review_id':receipt['review_id'],'review_digest':receipt['review_digest'],'confirmed':True}
-        for mode in ('','NO_BACKSLASH_ESCAPES'):
+        for mode in ('','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
             connection.sql_mode=mode
             cursor.execute("CREATE LIBRARY `library` LANGUAGE JAVASCRIPT COMMENT 'initial' AS %s",("export function value() { return 'é €'; }",))
             template=model();library=next(row for row in template['rows'].values() if row['kind']=='library');key=library['resource_id']

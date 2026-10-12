@@ -2,11 +2,7 @@
 import re
 from ..providers.mysql_family.mysql_catalog import identifier
 
-TOKEN = r'(?:`(?:``|[^`])+`|"(?:""|[^"])+")'
-HEADER = re.compile(r'^\s*CREATE\s+(?:ALGORITHM\s*=\s*(?:UNDEFINED|MERGE|TEMPTABLE)\s+)?'
-    r'(?:DEFINER\s*=\s*'+TOKEN+r'\s*@\s*'+TOKEN+r'\s+)?'
-    r'(?:SQL\s+SECURITY\s+(?:DEFINER|INVOKER)\s+)?VIEW\s+'
-    r'(?P<first>'+TOKEN+r')(?:\s*\.\s*(?P<second>'+TOKEN+r'))?(?=\s|\()',re.I)
+from ..providers.mysql_view_identity import HEADER
 
 
 def compile_view(row, operation, database):
@@ -14,7 +10,7 @@ def compile_view(row, operation, database):
     if not isinstance(source,str) or not source or '\x00' in source:
         raise ValueError('Exact native view definition is required')
     match=HEADER.match(source)
-    if not match:raise ValueError('Exact quoted native ordinary-view header is required')
+    if not match or bool(match['materialized']) != (row['kind']=='materialized-view'):raise ValueError('Exact quoted native ordinary-view header is required')
     def unquote(value):return value[1:-1].replace(value[0]*2,value[0])
     names=[unquote(value) for value in (match['first'],match['second']) if value is not None]
     if names not in ([row['name']],[database,row['name']]):

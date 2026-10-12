@@ -29,7 +29,7 @@ def qualify(options,output):
         cursor.execute('CREATE DATABASE '+identifier(database)+' CHARACTER SET utf8mb4');connection.database=database
         reader=mysql.connector.connect(**{**options,'database':database,'autocommit':True})
         applications=MySQLSchemaApplications(output/'receipts.json')
-        for mode in ('','NO_BACKSLASH_ESCAPES'):
+        for mode in ('','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
             connection.sql_mode=mode
             cursor.execute('CREATE TABLE t (id INT)')
             cursor.execute('CREATE TRIGGER z_first BEFORE INSERT ON t FOR EACH ROW SET NEW.id=NEW.id+1')

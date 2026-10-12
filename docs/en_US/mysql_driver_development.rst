@@ -1185,3 +1185,27 @@ and the durable reviewed pipeline rechecks SHOW CREATE DATABASE under a cooperat
 advisory lock before dispatch. External DDL remains unfenced. Native rediscovery
 is shown after application; normalized SHOW CREATE text need not equal the
 unchanged baseline text accompanying explicit option intent.
+
+Native materialized-view DDN identity
+------------------------------------
+
+MySQL 9.7 SHOW CREATE places MATERIALIZED and a native ``BY ENGINE`` diagnostic
+comment between ALGORITHM and DEFINER. Capture recognizes this header rather than
+searching query literals, and preserves the diagnostic in the exact definition.
+Ordinary and materialized views cannot change kind through an imported definition.
+Materialized-view CREATE/ALTER/confirmed DROP use the same native view review path,
+including explicit parse-only evidence for ALTER. The metadata adapter reports
+requested materialization and the engine named by SHOW CREATE. ENGINE=UNKNOWN is
+not proof of physical materialization, freshness, refresh scheduling or persisted
+query results; none of those guarantees may be inferred from an accepted keyword.
+
+Native identifier quoting in stored definitions
+------------------------------------------------
+
+View, routine, trigger, event and library adapters accept exact native backtick
+and ANSI double-quoted SHOW CREATE identifiers, including doubled quote escapes
+and definer components. Target binding decodes the native quote delimiter before
+comparing identity; newly emitted target names use escaped backticks, which remain
+valid under ANSI_QUOTES. Complete bodies and literals are retained under their
+recorded SQL mode. A change in SQL mode must never reinterpret a stored identifier
+as a string literal or discard a native body.

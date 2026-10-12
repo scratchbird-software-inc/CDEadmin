@@ -27,7 +27,7 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database'} or (before is not None and before['kind'] != after['kind']):
+        if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database','materialized-view'} or (before is not None and before['kind'] != after['kind']):
             raise ValueError('Only exact user table/view/library/event/routine definitions are admitted')
         context = operation['context']
         target = identifier(database) if after['kind']=='database' else identifier(database) + '.' + identifier(after['name'])
@@ -54,7 +54,7 @@ def apply_review(connection, record):
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native library operation disagrees with baseline presence')
             compiled=compile_library(after,operation['operation'],database,before)
-        elif after['kind']=='view':
+        elif after['kind'] in {'view','materialized-view'}:
             from ..workspace.mysql_view_plan import compile_view
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native view operation disagrees with baseline presence')
@@ -96,7 +96,7 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind'] in {'view','library','event','procedure','function','trigger','database'}:
+            if after['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'}:
                 advisory=('sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48])[:64]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
@@ -129,7 +129,7 @@ def apply_review(connection, record):
             if after['kind']=='library' and (len(observed)<3 or
                     before['native'].get('definition_context',{}).get('sql_mode')!=observed[1]):
                 raise ValueError('Native library SQL mode changed since review')
-            if after['kind']=='view' and (len(observed)<4 or any(
+            if after['kind'] in {'view','materialized-view'} and (len(observed)<4 or any(
                     before['native'].get('definition_context',{}).get(field)!=observed[index]
                     for field,index in [('character_set_client',2),('collation_connection',3)])):
                 raise ValueError('Locked native view creation context changed since review')

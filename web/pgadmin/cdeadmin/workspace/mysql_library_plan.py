@@ -3,7 +3,7 @@ import re
 from ..providers.mysql_family.mysql_catalog import identifier
 from .mysql_relational_fields import tokens
 
-TOKEN=r'`(?:``|[^`])+`'
+TOKEN=r'(?:`(?:``|[^`])+`|"(?:""|[^"])+")'
 HEADER=re.compile(r'^\s*CREATE\s+LIBRARY\s+(?P<first>'+TOKEN+r')(?:\s*\.\s*(?P<second>'+TOKEN+r'))?(?=\s)',re.I)
 
 
@@ -13,7 +13,7 @@ def layout(row,database):
         raise ValueError('Exact native library definition is required')
     match=HEADER.match(source)
     if not match:raise ValueError('Exact quoted native library header is required')
-    names=[value[1:-1].replace('``','`') for value in (match['first'],match['second']) if value is not None]
+    names=[value[1:-1].replace(value[0]*2,value[0]) for value in (match['first'],match['second']) if value is not None]
     if names not in ([row['name']],[database,row['name']]):raise ValueError('Library header disagrees with native identity')
     tail=source[match.end():].strip();comment=None
     if re.match(r'^COMMENT\b',tail,re.I):

@@ -68,3 +68,18 @@ def test_native_parse_acceptance_is_limited_to_qualified_view_alter(code,kind,op
     assert item['preparation_supported'] is False
     assert item['validation_stage']==('parse-only' if accepted else 'rejected')
     assert not any(call.args[0].startswith(('DEALLOCATE','EXECUTE','ALTER VIEW')) for call in cursor.execute.call_args_list)
+
+
+def test_materialized_view_header_preserves_native_engine_diagnostic_and_identity():
+    before=model([('materialized-view','v','CREATE ALGORITHM=UNDEFINED MATERIALIZED /*(BY ENGINE=UNKNOWN)*/ DEFINER=`owner`@`%` SQL SECURITY DEFINER VIEW `v` AS select 42 AS `id`',{})])
+    desired=deepcopy(before);row=next(row for row in desired['rows'].values() if row['kind']=='materialized-view')
+    row['native']['definition']=row['native']['definition'].replace('select 42','select 43')
+    result=plan(before,desired,before)
+    assert result['ready_for_review'] and result['operations'][0]['source'].startswith('ALTER ALGORITHM=UNDEFINED MATERIALIZED /*(BY ENGINE=UNKNOWN)*/')
+    row['native']['definition']=row['native']['definition'].replace('MATERIALIZED /*(BY ENGINE=UNKNOWN)*/ ','')
+    assert plan(before,desired,before)['blockers']
+
+
+def test_native_ansi_quoted_view_header_preserves_account_and_exact_identity():
+    row=view(captured());row['native']['definition']='CREATE ALGORITHM=MERGE DEFINER="owner"@"%" SQL SECURITY INVOKER VIEW "v" AS select 42 AS "id"'
+    assert compile_view(row,'alter','demo`db')=='ALTER ALGORITHM=MERGE DEFINER="owner"@"%" SQL SECURITY INVOKER VIEW `demo``db`.`v` AS select 42 AS "id"'

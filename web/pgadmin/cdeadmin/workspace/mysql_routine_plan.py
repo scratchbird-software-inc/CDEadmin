@@ -3,7 +3,7 @@ import re
 from ..providers.mysql_family.mysql_catalog import identifier
 from .firebird_catalog_import import _equal
 
-TOKEN=r'`(?:``|[^`])+`'
+TOKEN=r'(?:`(?:``|[^`])+`|"(?:""|[^"])+")'
 HEADER=re.compile(r'^\s*CREATE\s+(?:DEFINER\s*=\s*'+TOKEN+r'\s*@\s*'+TOKEN+r'\s+)?'
     r'(?P<kind>PROCEDURE|FUNCTION)\s+(?P<first>'+TOKEN+r')(?:\s*\.\s*(?P<second>'+TOKEN+r'))?(?=\s*\()',re.I)
 
@@ -14,7 +14,7 @@ def compile_routine(row,operation,database,before=None):
         raise ValueError('Exact native stored-routine definition is required')
     match=HEADER.match(source)
     if not match or match['kind'].lower()!=kind:raise ValueError('Exact quoted native routine header is required')
-    names=[value[1:-1].replace('``','`') for value in (match['first'],match['second']) if value is not None]
+    names=[value[1:-1].replace(value[0]*2,value[0]) for value in (match['first'],match['second']) if value is not None]
     if names not in ([row['name']],[database,row['name']]):raise ValueError('Routine header disagrees with native identity')
     target=identifier(database)+'.'+identifier(row['name']);intent=row['native'].get('mysql_change')
     if operation=='create' and not intent:return source[:match.start('first')]+target+source[match.end():]

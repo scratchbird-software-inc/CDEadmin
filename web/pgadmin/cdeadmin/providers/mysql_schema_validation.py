@@ -34,7 +34,7 @@ def validate(connection,plan):
                 # MySQL 9.7 parses the whole ALTER VIEW before its explicit
                 # unsupported-preparation branch. Admit only this qualified path;
                 # routine commands have the same post-parse refusal. Other 1295 errors fail.
-                parsed_view=(code==1295 and operation.get('kind')=='view' and
+                parsed_view=(code==1295 and operation.get('kind') in {'view','materialized-view'} and
                     operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER '))
                 parsed_routine=(code==1295 and operation.get('kind') in {'procedure','function'} and
                     operation.get('operation') in {'create','alter','drop'} and
