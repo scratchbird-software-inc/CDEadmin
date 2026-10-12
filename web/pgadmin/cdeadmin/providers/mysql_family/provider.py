@@ -180,6 +180,9 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_partitions import OPERATIONS as partition_operations
+        for kind, operations in partition_operations.items():
+            common[kind] = common[kind] | operations
         common['tablespace'] = frozenset({'inspect', 'create', 'alter', 'rename', 'drop'})
         common['system-variable'] = frozenset({'inspect', 'set_global', 'set_persist', 'set_persist_only', 'reset_persist'})
         common['session'] = frozenset({'inspect', 'terminate_query', 'terminate_connection'})
@@ -1831,6 +1834,33 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         for item in detail
                     ],
                 })
+        if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '
+                'p.PARTITION_ORDINAL_POSITION, p.PARTITION_DESCRIPTION, p.TABLE_ROWS, p.DATA_LENGTH, p.INDEX_LENGTH, '
+                't.ENGINE, p.TABLESPACE_NAME, p.SUBPARTITION_NAME, p.SUBPARTITION_METHOD, p.SUBPARTITION_EXPRESSION '
+                'FROM information_schema.PARTITIONS p JOIN information_schema.TABLES t '
+                'ON t.TABLE_SCHEMA=p.TABLE_SCHEMA AND t.TABLE_NAME=p.TABLE_NAME WHERE p.PARTITION_NAME IS NOT NULL '
+                "AND p.TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
+                'ORDER BY p.TABLE_SCHEMA,p.TABLE_NAME,p.PARTITION_ORDINAL_POSITION,p.SUBPARTITION_ORDINAL_POSITION'
+            ):
+                add('partition', [record['table_schema'], record['table_name']], record['partition_name'], {
+                    key: value for key, value in record.items() if not key.startswith('subpartition_')})
+                if record.get('subpartition_name'):
+                    partition = resources[':'.join(['partition',record['table_schema'],record['table_name'],record['partition_name']])]
+                    partition['native'].setdefault('subpartitions', []).append({key:value for key,value in record.items() if key.startswith('subpartition_')})
+            for resource in resources.values():
+                if resource['resource_kind'] != 'partition':
+                    continue
+                native = resource['native']
+                allowed = ['inspect']
+                if native.get('engine') == 'InnoDB':
+                    allowed += ['analyze', 'check', 'optimize', 'rebuild', 'truncate']
+                    if native.get('partition_method') in {'RANGE', 'RANGE COLUMNS', 'LIST', 'LIST COLUMNS'}:
+                        allowed += ['drop', 'reorganize']
+                    if not native.get('subpartitions'):
+                        allowed += ['exchange']
+                native['administration'] = {'allowed_operations': allowed}
         for schema_name, name, routine_type, data_type in optional(
             'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE '
             "FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN "

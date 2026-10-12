@@ -617,3 +617,29 @@ native space type. General-space ENCRYPTION alteration is offered only when an
 active native component/plugin keyring was observed. Absence of an observation
 is not proof that a privileged raw SQL command cannot work; it grants no form
 capability. Native rediscovery and validation still govern each operation.
+
+Native partition administration
+-------------------------------
+
+Partition nodes retain their exact database/table/partition identity and native
+method, expression, ordinal, bound and storage observations. Their operations
+address the owning table explicitly: analyze, check, optimize, rebuild, truncate,
+drop and exchange with a named compatible nonpartitioned table. Exchange defaults
+to WITH VALIDATION; WITHOUT VALIDATION requires explicit selection. Native engine
+compatibility, partition method, privileges and row-placement checks remain
+server authority. InnoDB does not offer a fictitious REPAIR operation.
+
+Owning table forms add or reorganize native partition definitions, coalesce
+HASH/KEY partitions, remove partitioning or set a native PARTITION BY clause.
+Definitions and partition clauses are bounded single native fragments with
+balanced lexical boundaries; the forms do not invent a common partition dialect.
+Comments, statement separators and mode-dependent backslash escapes in these
+fragment fields are refused; the engine-aware SQL editor supports complete native
+scripts. Exact identifiers in structured fields are quoted separately. A native
+DDL result is not a rollback promise: destructive operations may delete rows,
+exchange moves ownership of data and partition DDL commits independently.
+
+Per-partition capability filters hide RANGE/LIST-only drop/reorganization on
+HASH/KEY nodes, and hide EXCHANGE on a table with native subpartitions. InnoDB
+OPTIMIZE can report that it rebuilt/analyzed the table instead; the native result
+messages are retained rather than relabeled as a partition-only optimization.
