@@ -893,3 +893,22 @@ execution order, and native PREPARE does not preflight a hypothetical schema
 containing earlier changes. Observed creation-context or native-definition drift
 requires a fresh review. Rediscovery reports native definitions; dependent
 objects are not implicitly rewritten or recreated by the adapter.
+
+Explicit native DDN column rename intent
+----------------------------------------
+
+An existing-table desired native definition may declare
+``mysql_change.rename_columns`` as an exact old-name to new-name mapping, bounded
+to 128 distinct pairs. Every source must be present only in the baseline and
+every destination only in the desired definition. Names are 1–64 characters;
+identity reuse, swaps into occupied names and implicit rename guessing are
+refused. Unmapped disappearance still requires exact drop_columns intent.
+
+Compilation uses native CHANGE COLUMN with the full desired column clause and
+ordered placement, retaining defaults, generation, comments and native type
+attributes. Desired indexes, constraints and generated expressions must carry
+their explicitly intended native definitions; normal clause differences produce
+the corresponding drop/add/modify operations within that single ALTER TABLE.
+Native PREPARE, locked baseline revalidation, receipt admission, execution and
+rediscovery remain required. Graphical label changes alone do not authorize this
+operation; field UID and native-name reconciliation remain distinct.

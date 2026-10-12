@@ -66,8 +66,18 @@ def address(row,database):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mysql_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns'}:raise ValueError('Unknown table alteration intent')
-    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column'}
+    if not isinstance(intent,dict) or set(intent)-{'drop_columns','rename_columns'}:raise ValueError('Unknown table alteration intent')
+    renames=intent.get('rename_columns',{})
+    if (not isinstance(renames,dict) or len(renames)>128 or
+            any(not isinstance(value,str) or not 1<=len(value)<=64 or '\x00' in value
+                for pair in renames.items() for value in pair) or
+            len(set(renames.values()))!=len(renames) or any(
+                ('column',old) not in columns or ('column',old) in desired or
+                ('column',new) in columns or ('column',new) not in desired
+                for old,new in renames.items())):
+        raise ValueError('Column rename requires distinct exact baseline and desired native names')
+    inverse={new:old for old,new in renames.items()}
+    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column' and key[1] not in renames}
     declared=intent.get('drop_columns',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=removals:
         raise ValueError('Column removal requires exact explicit mysql_change.drop_columns intent')
@@ -76,7 +86,7 @@ def alteration(before,after,sql_mode):
         if key in desired and columns[key]==desired[key]:continue
         kind,value=key
         if kind=='column':
-            if key not in desired:drops.append('DROP COLUMN '+identifier(value))
+            if key not in desired and value not in renames:drops.append('DROP COLUMN '+identifier(value))
         elif kind=='primary':drops.insert(0,'DROP PRIMARY KEY')
         elif kind=='index':drops.insert(0,'DROP INDEX '+identifier(value))
         elif kind=='foreign-key':drops.insert(0,'DROP FOREIGN KEY '+identifier(value))
@@ -84,10 +94,13 @@ def alteration(before,after,sql_mode):
     for index,value in enumerate(new_order):
         key=('column',value)
         previous=new_order[index-1] if index else None
-        old_previous=old_order[old_order.index(value)-1] if value in old_order and old_order.index(value)>0 else None
-        if key not in columns or columns[key]!=desired[key] or previous!=old_previous:
+        original=inverse.get(value,value)
+        old_previous=old_order[old_order.index(original)-1] if original in old_order and old_order.index(original)>0 else None
+        old_previous=renames.get(old_previous,old_previous)
+        if value in inverse or key not in columns or columns[key]!=desired[key] or previous!=old_previous:
             placement=' AFTER '+identifier(previous) if previous is not None else ' FIRST'
-            mutations.append(('ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
+            mutations.append(('CHANGE COLUMN '+identifier(inverse[value])+' ' if value in inverse else
+                'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
         if key[0]!='column' and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
     if old['suffix'].strip()!=new['suffix'].strip():
