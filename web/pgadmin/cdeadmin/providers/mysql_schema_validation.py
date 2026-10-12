@@ -33,15 +33,19 @@ def validate(connection,plan):
                 if code is None or code in {2006,2013,2055}:raise
                 # MySQL 9.7 parses the whole ALTER VIEW before its explicit
                 # unsupported-preparation branch. Admit only this qualified path;
-                # a 1295 on any other operation remains a validation failure.
+                # routine commands have the same post-parse refusal. Other 1295 errors fail.
                 parsed_view=(code==1295 and operation.get('kind')=='view' and
                     operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER '))
-                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed_view,
-                    'preparation_supported':False,'validation_stage':'parse-only' if parsed_view else 'rejected',
+                parsed_routine=(code==1295 and operation.get('kind') in {'procedure','function'} and
+                    operation.get('operation') in {'create','alter','drop'} and
+                    operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
+                parsed=parsed_view or parsed_routine
+                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed,
+                    'preparation_supported':False,'validation_stage':'parse-only' if parsed else 'rejected',
                     'error_code':code,'sqlstate':getattr(error,'sqlstate',None),'error_type':type(error).__name__})
             finally:
                 if prepared:cursor.execute('DEALLOCATE PREPARE sr_native_preview')
                 cursor.execute('SET @sr_native_preview = NULL')
     finally:cursor.close()
     return {'native_grammar_validated':all(row['accepted'] for row in results),'native_validation':results,
-        'validation_mode':'native-PREPARE-without-EXECUTE;view-ALTER-1295-parse-only','executed':False,'application_supported':False}
+        'validation_mode':'native-PREPARE-without-EXECUTE;admitted-view-routine-1295-parse-only','executed':False,'application_supported':False}

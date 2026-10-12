@@ -1114,3 +1114,31 @@ rediscovery. Same-name replacement retains the native restriction above; users
 choose a new name or separate reviewed DROP/ADD. Parent/source columns, types,
 indexes, privileges and existing data are validated by native MySQL. Selecting
 this option does not execute or relax any native constraints.
+
+Reviewed stored-routine DDN deployment
+-------------------------------------
+
+Stored procedures and stored functions use the same durable, single-operation
+review/apply/rediscovery contract as ordinary views. CREATE binds the exact quoted
+native database/name while retaining the complete native definer, parameters,
+return type, characteristics, language and body. DROP requires explicit exact-name
+confirmation. Filtered or omitted routines never imply DROP.
+
+MySQL does not provide routine body replacement through ALTER. Body, parameter,
+return type, language and definer changes are refused; use separately reviewed
+explicit DROP and CREATE when replacement is intended. Native characteristic
+updates instead retain the original definition/context and supply
+``mysql_change={action:"alter-characteristics",sql_security:"INVOKER",
+data_access:"READS SQL DATA",comment:"description"}`` in native metadata.
+At least one characteristic is required; omitted values remain unchanged.
+SQL security accepts DEFINER/INVOKER. Data access accepts CONTAINS SQL, NO SQL,
+READS SQL DATA and MODIFIES SQL DATA. An empty comment explicitly clears it.
+These properties are desired native intent, not a rewritten routine body.
+
+Native PREPARE may report 1295 after parsing these admitted routine commands.
+Such results are explicitly parse-only, never successful preparation; malformed
+bodies and all other errors remain refused. Execution supplies remaining native
+semantic and privilege checks. The routine's observed SQL mode/client charset/
+collation context is rechecked before dispatch. A cooperating advisory lock does
+not fence external DDL: use an exclusive DDL maintenance window. Native DDL commits
+implicitly, and a lost execution reply remains uncertain without automatic retry.

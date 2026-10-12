@@ -98,7 +98,8 @@ describe('MySQL three-way native metadata preview', () => {
 });
 
 describe('MySQL reviewed schema controls', () => {
-  it.each([['table','alter'],['table','create'],['table','drop'],['view','alter'],['view','create'],['view','drop'],['library','create'],['library','alter'],['library','drop'],['event','create'],['event','alter'],['event','drop']])('requires native validation, receipt and confirmation for %s %s, then shows the native outcome', async (kind,operationId) => {
+  it.each([['table','alter'],['table','create'],['table','drop'],['view','alter'],['view','create'],['view','drop'],['library','create'],['library','alter'],['library','drop'],['event','create'],['event','alter'],['event','drop'],['procedure','create'],['procedure','alter'],['procedure','drop'],['function','create'],['function','alter'],['function','drop']])('requires native validation, receipt and confirmation for %s %s, then shows the native outcome', async (kind,operationId) => {
+    const parseOnly=(kind==='view' && operationId==='alter') || ['procedure','function'].includes(kind);
     const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
     const operation={kind,operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
     const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation],warnings:kind==='view'?['External DDL is not fenced']:[]};
@@ -106,7 +107,7 @@ describe('MySQL reviewed schema controls', () => {
     const post=jest.fn().mockImplementation(async ({action}) => {
       if(action==='mysql_catalog_export') return {snapshot,views:[{id:'inventory_1',entry:'native.ddn'}],objects:[]};
       if(action==='mysql_schema_plan') return preview;
-      if(action==='mysql_schema_validate') return {...preview,native_grammar_validated:true,native_validation:[{accepted:true}]};
+      if(action==='mysql_schema_validate') return {...preview,native_grammar_validated:true,native_validation:[{accepted:true,validation_stage:parseOnly?'parse-only':'prepared',preparation_supported:!parseOnly}]};
       if(action==='mysql_schema_review') return receipt;
       return {...receipt,state:'committed',outcome:{rediscovery_verified:true,native_definition:'CREATE TABLE `t` (`extra` int)',desired_definition_exact_match:false}};
     });
@@ -118,7 +119,7 @@ describe('MySQL reviewed schema controls', () => {
     if(kind==='view') expect(screen.getByText('External DDL is not fenced')).toBeVisible();
     expect(screen.getByRole('button',{name:'Prepare reviewed change'})).toBeDisabled();
     fireEvent.click(screen.getByRole('button',{name:'Validate native changes'}));
-    await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
+    await screen.findByText(parseOnly ? 'Native grammar accepted; some statements cannot be prepared. Semantic and privilege checks occur on execution. None were executed.' : 'Native PREPARE accepted the change statements; none were executed.');
     fireEvent.click(screen.getByRole('button',{name:'Prepare reviewed change'}));
     await screen.findByText(/Schema receipt receipt: reviewed/);
     expect(screen.getByRole('button',{name:'Apply reviewed change'})).toBeDisabled();

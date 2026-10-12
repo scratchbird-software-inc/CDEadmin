@@ -27,11 +27,16 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if after['kind'] not in {'table','view','library','event'} or (before is not None and before['kind'] != after['kind']):
-            raise ValueError('Only exact user table/view/library/event definitions are admitted')
+        if after['kind'] not in {'table','view','library','event','procedure','function'} or (before is not None and before['kind'] != after['kind']):
+            raise ValueError('Only exact user table/view/library/event/routine definitions are admitted')
         context = operation['context']
         target = identifier(database) + '.' + identifier(after['name'])
-        if after['kind']=='event':
+        if after['kind'] in {'procedure','function'}:
+            from ..workspace.mysql_routine_plan import compile_routine
+            if (operation['operation']=='create') != (before is None):
+                raise ValueError('Native routine operation disagrees with baseline presence')
+            compiled=compile_routine(after,operation['operation'],database,before)
+        elif after['kind']=='event':
             from ..workspace.mysql_event_plan import compile_event
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native event operation disagrees with baseline presence')
@@ -70,9 +75,9 @@ def apply_review(connection, record):
         identity = cursor.fetchone()
         if str(identity[0]).split('-')[0] != '9.7.0' or identity[1] != plan['server_uuid'] or identity[2] != database:
             raise ValueError('Native application connection identity changed')
-        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else 'TABLE ')+target
-        definition_index=2 if after['kind']=='library' else 3 if after['kind']=='event' else 1
-        absence_code=1305 if after['kind']=='library' else 1539 if after['kind']=='event' else 1146
+        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else after['kind'].upper()+' ' if after['kind'] in {'procedure','function'} else 'TABLE ')+target
+        definition_index=2 if after['kind'] in {'library','procedure','function'} else 3 if after['kind']=='event' else 1
+        absence_code=1305 if after['kind'] in {'library','procedure','function'} else 1539 if after['kind']=='event' else 1146
         if before is None:
             try:
                 cursor.execute(show_source)
@@ -83,14 +88,14 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind'] in {'view','library','event'}:
-                advisory='sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48]
+            if after['kind'] in {'view','library','event','procedure','function'}:
+                advisory='sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:40]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
                     advisory=None
                     raise ValueError('Native object advisory lock is unavailable')
                 result['concurrent_external_ddl_fenced']=False
-                result['concurrency_warning']='View/library/event baseline is observational; external DDL can change the object before dispatch'
+                result['concurrency_warning']='View/library/event/routine baseline is observational; external DDL can change the object before dispatch'
             else:
                 from ..workspace.mysql_foreign_key_locks import lock_source
                 cursor.execute(lock_source(before,after,context['sql_mode']))
@@ -99,6 +104,10 @@ def apply_review(connection, record):
             observed = cursor.fetchone()
             if not observed or digest({'definition': observed[definition_index], 'definition_context': before['native'].get('definition_context')}) != operation['baseline_schema_sha256']:
                 raise ValueError('Locked native object changed since review')
+            if after['kind'] in {'procedure','function'} and (len(observed)<6 or any(
+                    before['native'].get('definition_context',{}).get(field)!=observed[index]
+                    for field,index in [('sql_mode',1),('character_set_client',3),('collation_connection',4),('database collation',5)])):
+                raise ValueError('Native routine creation context changed since review')
             if after['kind']=='event' and (len(observed)<7 or any(
                     before['native'].get('definition_context',{}).get(field)!=observed[index]
                     for field,index in [('sql_mode',1),('time_zone',2),('character_set_client',4),('collation_connection',5),('database collation',6)])):
