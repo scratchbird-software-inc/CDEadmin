@@ -11,7 +11,7 @@
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
-from .client import XTDBClient
+from .driver import XTDBNativeClient
 
 
 PROFILE = PilotProfile(
@@ -33,6 +33,8 @@ PROFILE = PilotProfile(
         'role', 'privilege', 'metric', 'health', 'snapshot', 'compactor',
     ),
     admin_tools=('psql', 'healthz', 'finish-block'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native XTDB bindings, JSON documents and exact envelopes',
     required_permissions=('network', 'secret_read'),
     language_mime_type='text/x-sql',
     result_renderer_kind='bitemporal-document',
@@ -61,6 +63,9 @@ PROFILE = PilotProfile(
 class XTDBPilotProvider(ActualEnginePilotProvider):
     """Bind the XTDB adapter to the common actual-engine facade."""
 
+    def _discard_unverified_session(self, handle):
+        self.client._forget_and_close(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -70,7 +75,7 @@ def create_provider(context, permissions, client=None):
     return XTDBPilotProvider(
         context,
         permissions,
-        client or XTDBClient(
+        client or XTDBNativeClient(
             permissions.acquire_secret,
             pool_namespace=context.pool_namespace,
         ),

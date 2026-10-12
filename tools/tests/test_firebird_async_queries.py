@@ -68,6 +68,30 @@ def submit(rig):
     return query
 
 
+def test_failed_native_liveness_quarantines_only_the_affected_session(rig):
+    observation = {'state': 'unknown', 'attachment_live': False}
+    rig.client.config = replace(
+        rig.client.config, transaction_observer=lambda _: observation)
+    assert rig.client.describe_transaction(rig.handle) == observation
+    for operation in (
+            lambda: rig.client.execute(rig.handle, {'source': 'SELECT 1'}),
+            lambda: rig.client.submit_query(rig.handle,
+                                            {'source': 'SELECT 1'}),
+            lambda: rig.client.control_transaction(rig.handle, 'commit'),
+            lambda: rig.client.control_transaction(rig.handle, 'rollback')):
+        with pytest.raises(RelationalClientError, match='liveness check'):
+            operation()
+    rig.cursor.execute.assert_not_called()
+    rig.handle.commit.assert_not_called()
+    rig.handle.rollback.assert_not_called()
+    other = Mock()
+    rig.client._connections.append(other)
+    with rig.client._exclusive(other):
+        pass
+    with rig.client._exclusive(rig.handle, closing=True):
+        pass
+
+
 @pytest.mark.parametrize('outcome', [
     'success', 'confirmed-failure', 'unconfirmed-rollback', 'interrupt'])
 def test_visual_task_uncertainty_requires_explicit_release(rig, outcome):
@@ -217,7 +241,8 @@ def test_service_execution_blocks_whole_client_release(rig):
                'run_server_operation', side_effect=native_service):
         result = rig.client.run_server_operation(
             {'route': {'host': 'test'}}, 'database_statistics', 'owned', {})
-    assert result == {'server_completed': True}
+    assert result['server_completed'] is True
+    assert result['service_authentication_requested']['requested_role'] is None
     assert rig.client._native_operations == 0
 
 
@@ -973,7 +998,7 @@ def test_provider_publishes_operation_before_completion_and_keeps_busy_handles(
     from tools.tests.test_cdeadmin_actual_engine_pilots import context
     from pgadmin.cdeadmin.providers.firebird.provider import FirebirdProvider
     provider = FirebirdProvider(context(PROFILE), Mock(), rig.client)
-    provider._sessions['owned-session'] = SimpleNamespace(handle=rig.handle)
+    provider._sessions['owned-session'] = SimpleNamespace(handle=rig.handle, language_profile='firebird-sql')
     operation = provider.execute({'session_id': 'owned-session',
                                   'execution_id': 'owned-execution',
                                   'source': 'SELECT 1 FROM RDB$DATABASE'})

@@ -7,19 +7,19 @@
 //
 //////////////////////////////////////////////////////////////
 
-export const DDN_RUNTIME_VERSION = '0.5.0-draft.2';
-export const DDN_DESIGNER_VERSION = '0.1.0-preview.1';
+export const DDN_RUNTIME_VERSION = '0.8.0';
+export const DDN_DESIGNER_VERSION = '0.8.0';
 
 let librariesPromise;
 const scriptLoads = new Map();
 
-function staticAssetUrl(path) {
+export function staticAssetUrl(path) {
   if(typeof document === 'undefined') {
     throw new Error('DDN browser libraries require a document host.');
   }
   const generated = window.resourceBasePath || '/static/js/generated/';
   const base = new URL(generated, document.baseURI);
-  return new URL(`../../vendor/ddn/0.5.0-draft.2/${path}`, base).href;
+  return new URL(`../../vendor/ddn/current/${path}`, base).href;
 }
 
 function loadScript(path, available) {
@@ -51,10 +51,8 @@ function loadScript(path, available) {
 }
 
 async function browserLibraryLoader() {
-  await loadScript('viewer/ddn.global.js', () => Boolean(window.DDNLive));
-  await loadScript('designer-0.1.0-preview.1/ddn-designer.js',
-    () => Boolean(window.DDNDesigner));
-  return [window.DDNLive, window.DDNDesigner];
+  await loadScript('ddn.global.js', () => Boolean(window.DDNLive));
+  return [window.DDNLive];
 }
 
 let libraryLoader = browserLibraryLoader;
@@ -65,36 +63,19 @@ function requireFunction(value, name) {
   }
 }
 
-function validateLibraries(viewer, designer) {
+function validateLibraries(viewer) {
   if(viewer?.VERSION !== DDN_RUNTIME_VERSION) {
-    throw new Error(
-      `DDN runtime ${DDN_RUNTIME_VERSION} is required; received `+
-      `${viewer?.VERSION || 'an unidentified runtime'}.`
-    );
-  }
-  if(designer?.VERSION !== DDN_DESIGNER_VERSION) {
-    throw new Error(
-      `DDN Designer ${DDN_DESIGNER_VERSION} is required; received `+
-      `${designer?.VERSION || 'an unidentified designer'}.`
-    );
-  }
-  if(designer?.RUNTIME_VERSION !== DDN_RUNTIME_VERSION) {
-    throw new Error(
-      `DDN Designer requires runtime ${DDN_RUNTIME_VERSION}; received `+
-      `${designer?.RUNTIME_VERSION || 'no runtime identity'}.`
-    );
+    throw new Error(`DDN runtime ${DDN_RUNTIME_VERSION} is required; received ${viewer?.VERSION || 'unidentified'}.`);
   }
   requireFunction(viewer.createWorkspace, 'createWorkspace()');
   requireFunction(viewer.mount, 'mount()');
-  requireFunction(designer.createSession, 'createSession()');
-  requireFunction(designer.mount, 'Designer.mount()');
-  return Object.freeze({viewer, designer});
+  return Object.freeze({viewer, toolUrl: staticAssetUrl('ddn-tool.html')});
 }
 
 export function loadDDNLibraries() {
   if(!librariesPromise) {
     librariesPromise = Promise.resolve().then(() => libraryLoader())
-      .then(([viewer, designer]) => validateLibraries(viewer, designer))
+      .then(([viewer]) => validateLibraries(viewer))
       .catch((error) => {
         librariesPromise = undefined;
         throw error;

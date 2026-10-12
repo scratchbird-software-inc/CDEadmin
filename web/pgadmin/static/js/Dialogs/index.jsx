@@ -24,7 +24,14 @@ import { BROWSER_PANELS } from '../../../browser/static/js/constants';
 import ErrorBoundary from '../helpers/ErrorBoundary';
 import QuickSearch from '../QuickSearch';
 import ProviderWorkspaceContent from './ProviderWorkspaceContent';
+import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
+import FirebirdMonitoring from './FirebirdMonitoring';
+import PostgresqlMonitoring from './PostgresqlMonitoring';
+import MySQLMonitoring from './MySQLMonitoring';
+import FirebirdDocker from './FirebirdDocker';
+import FirebirdDashboardEditor from './FirebirdDashboardEditor';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
+import FirebirdRegistration from './FirebirdRegistration';
 import {invalidateProviderEndpointProfile} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
@@ -112,29 +119,130 @@ export function showEndpointVerification(
       />
     ), {id: 'id-verify-endpoint'}
   );
-  if (profile?.requires_secret === false) {
+  const verify = () => {
+    if (profile?.requires_secret === false) {
     // Passwordless and conditionally-authenticated providers must first be
     // verified without fabricating a database password. If the retained
     // route activates an optional secret, the server responds with 401 and
     // the same provider endpoint can then request it explicitly.
-    submit(new FormData())
-      .catch((error) => {
-        if (error?.response?.status === 401) {
-          showSecretPrompt();
-        } else {
-          onFailure?.(error);
-        }
-      });
-    return;
+      submit(new FormData())
+        .catch((error) => {
+          if (error?.response?.status === 401) {
+            showSecretPrompt();
+          } else {
+            onFailure?.(error);
+          }
+        });
+      return;
+    }
+    showSecretPrompt();
+  };
+  if (databaseTargetId && ['firebird-native', 'firebird-embedded'].includes(profile?.profile_id)) {
+    return api.post(nodeObj.generate_url(itemNodeData, 'cde_workspace', nodeData, true),
+      {action: 'database_target_list', request: {}}).then(response => {
+      const target = response.data.data.targets.find(item => item.target_id === databaseTargetId);
+      if (!target) throw new Error('Database registration is unavailable.');
+      if (target.registration_credentials) prompt.username = target.registration_user;
+      prompt.server_label = `${prompt.server_label} / ${target.display_name}`;
+      return verify();
+    }).catch(error => onFailure?.(error));
   }
-  showSecretPrompt();
+  return verify();
 }
 
 let providerWorkspaceSequence = 0;
 
+export function showFirebirdDashboardEditor(serverId, targetId) {
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = `id-firebird-dashboard-editor-${++providerWorkspaceSequence}`;
+  workspace.openTab({id: panelId, title: gettext('Firebird dashboard draft'),
+    closable: true, manualClose: true, floatable: true,
+    content: <ErrorBoundary><FirebirdDashboardEditor serverId={serverId}
+      targetId={targetId} panelId={panelId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLDashboardEditor(serverId, targetId) {
+  const panelId = `id-mysql-dashboard-editor-${++providerWorkspaceSequence}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL dashboard draft'),
+    closable: true, manualClose: true, floatable: true,
+    content: <ErrorBoundary><FirebirdDashboardEditor engine="mysql" serverId={serverId}
+      targetId={targetId} panelId={panelId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLMonitor(serverId, targetId, name='MySQL') {
+  const panelId = `id-mysql-monitor-${serverId}-${targetId || 'server'}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: `${name} — dashboard`,
+    closable: true, floatable: true,
+    content: <ErrorBoundary><MySQLMonitoring serverId={Number(serverId)} targetId={targetId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLFleet() {
+  const panelId = 'id-mysql-fleet';
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL engine dashboard'),
+    closable: true, floatable: true,
+    content: <ErrorBoundary><MySQLMonitoring engineMode onNavigate={showMySQLMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showPostgresqlFleet() {
+  const panelId = 'id-postgresql-fleet';
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,
+    title: gettext('PostgreSQL engine dashboard'), closable: true, floatable: true,
+    content: <ErrorBoundary><PostgresqlMonitoring engineMode onNavigate={showPostgresqlMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showPostgresqlMonitor(serverId, targetId, name='PostgreSQL', policyMode=false) {
+  const panelId = `id-postgresql-monitor-${serverId}-${targetId || 'server'}-${policyMode ? 'policy' : 'viewer'}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId,
+    title: `${name} — ${policyMode ? 'monitoring settings' : 'dashboard'}`, closable: true, floatable: true,
+    content: <ErrorBoundary><PostgresqlMonitoring serverId={Number(serverId)} targetId={targetId}
+      policyMode={policyMode} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showFirebirdMonitor(serverId, targetId, name='Firebird') {
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = `id-firebird-monitor-${serverId}-${targetId || 'server'}`;
+  workspace.openTab({id: panelId, title: `${name} — dashboard`, closable: true, floatable: true,
+    content: <ErrorBoundary><FirebirdMonitoring serverId={serverId} targetId={targetId}
+      onNavigate={showFirebirdMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showFirebirdDocker(onRegister) {
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = `id-firebird-docker-${++providerWorkspaceSequence}`;
+  workspace.openTab({id: panelId, title: gettext('Provision Firebird in Docker'),
+    closable: true, floatable: true,
+    content: <ErrorBoundary><FirebirdDocker onRegister={onRegister} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showFirebirdFleet() {
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = 'id-firebird-fleet-dashboard';
+  workspace.openTab({id: panelId, title: gettext('Firebird engine dashboard'),
+    closable: true, floatable: true,
+    content: <ErrorBoundary><FirebirdMonitoring engineMode onNavigate={showFirebirdMonitor} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
 export function showProviderWorkspace(
   title, nodeObj, nodeData, itemNodeData, initialTab='resources',
-  initialContext={}, onEndpointRemoved,
+  initialContext={}, onEndpointRemoved, registerOnly=false,
 ) {
   const generatedUrl = nodeObj.generate_url(
     itemNodeData, 'cde_workspace', nodeData, true
@@ -155,31 +263,75 @@ export function showProviderWorkspace(
   const endpointUrl = parameters.size ?
     `${generatedUrl}${generatedUrl.includes('?') ? '&' : '?'}${parameters}` :
     generatedUrl;
+  const connection = {id: endpointUrl, serverId: nodeData._id, databaseTargetId,
+    label: `${nodeData.label || nodeData._label || title} / ${initialContext.display_name || databaseTargetId || 'server'}`};
+  if (registerOnly) {
+    registerSQLConnection({...connection, open: () => showProviderWorkspace(
+      title, nodeObj, nodeData, itemNodeData, 'studio', initialContext, onEndpointRemoved)});
+    return;
+  }
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const onClose = () => workspace.close(panelId);
-  workspace.openTab({
+  const panel = {
     id: panelId,
     title,
     closable: true,
     floatable: true,
-    content: <ErrorBoundary><ProviderWorkspaceContent
-      closeModal={onClose}
-      endpointUrl={endpointUrl}
-      initialTab={initialTab}
-      initialContext={initialContext}
-      onEndpointRemoved={onEndpointRemoved}
-      onEndpointProfileSaved={(result) => invalidateProviderEndpointProfile(
-        pgAdmin.Browser.tree, itemNodeData, result
-      )}
-      onCredentialRequired={(retry)=>{
-        nodeObj.callbacks.verify_cde_endpoint.call(nodeObj, {
-          item: itemNodeData,
-          onSuccess: retry,
-        });
-      }}
-    /></ErrorBoundary>,
-  }, BROWSER_PANELS.MAIN, 'middle');
+    content: <ErrorBoundary>{initialTab === 'firebird-registration' ?
+      <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
+        post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
+          .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
+        onChanged={() => {
+          const tree = pgAdmin.Browser.tree;
+          const connector = tree.parent(itemNodeData);
+          const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
+          node?.callbacks?.refresh?.call(node, null, connector);
+        }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
+        (nodeData.cde_profile_id === 'mysql-native' ? <MySQLMonitoring serverId={Number(nodeData._id ?? nodeData.id)}
+          targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
+          <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
+            targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
+          closeModal={onClose}
+          endpointUrl={endpointUrl}
+          initialTab={initialTab}
+          initialContext={initialContext}
+          onTargetCatalogChanged={() => {
+            nodeObj.callbacks.refresh.call(nodeObj, null, itemNodeData);
+          }}
+          onRecreateEmpty={(databasePath) => {
+            showProviderWorkspace(
+              gettext('Create empty Firebird database'), nodeObj, nodeData,
+              itemNodeData, 'connections', {
+                database_mode: 'create', recreate_empty_path: databasePath,
+              }
+            );
+            onClose();
+          }}
+          onOpenSearchResult={(targetId, resource) => showProviderWorkspace(
+            resource.display_name, nodeObj, nodeData, itemNodeData, 'object', {
+              database_target_id: targetId, resource_id: resource.resource_id,
+              resource_kind: resource.resource_kind, operation_id: 'inspect',
+            })}
+          onEndpointRemoved={onEndpointRemoved}
+          onEndpointProfileSaved={(result) => invalidateProviderEndpointProfile(
+            pgAdmin.Browser.tree, itemNodeData, result
+          )}
+          onCredentialRequired={(retry)=>{
+            nodeObj.callbacks.verify_cde_endpoint.call(nodeObj, {
+              item: itemNodeData,
+              databaseTargetId,
+              onSuccess: retry,
+            });
+          }}
+        />}</ErrorBoundary>,
+  };
+  if (initialTab === 'studio') {
+    activateSQLConnection({...connection, content: panel.content});
+    workspace.focus(BROWSER_PANELS.SQL);
+    return BROWSER_PANELS.SQL;
+  }
+  workspace.openTab(panel, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
 }
 

@@ -11,7 +11,7 @@
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
-from .client import YugabyteDBYCQLClient
+from .driver import NativeYCQLClient
 
 
 PROFILE = PilotProfile(
@@ -33,6 +33,8 @@ PROFILE = PilotProfile(
     ),
     admin_tools=('ycqlsh',),
     required_permissions=('network', 'secret_read'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native CQL bindings and exact type/value envelopes',
     language_mime_type='application/vnd.yugabyte.ycql',
     result_renderer_kind='wide-column',
     result_renderer_id='cdeadmin.result.wide-column.grid',
@@ -59,6 +61,9 @@ PROFILE = PilotProfile(
 class YugabyteDBYCQLProvider(ActualEnginePilotProvider):
     """CDEadmin facade for the native YCQL interface."""
 
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -67,5 +72,5 @@ def create_provider(context, permissions, client=None):
     return YugabyteDBYCQLProvider(
         context,
         permissions,
-        client or YugabyteDBYCQLClient(permissions.acquire_secret),
+        client or NativeYCQLClient(permissions.acquire_secret),
     )

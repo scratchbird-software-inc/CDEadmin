@@ -51,8 +51,8 @@ class ConnectionLiveMatrixGateTests(unittest.TestCase):
     def test_unrun_matrix_fails_closed(self):
         result = audit(matrix())
         self.assertFalse(result['complete'])
-        self.assertEqual(26, result['profile_count'])
-        self.assertEqual(364, result['category_count'])
+        self.assertEqual(27, result['profile_count'])
+        self.assertEqual(378, result['category_count'])
 
     def test_passed_category_requires_evidence(self):
         value = matrix()

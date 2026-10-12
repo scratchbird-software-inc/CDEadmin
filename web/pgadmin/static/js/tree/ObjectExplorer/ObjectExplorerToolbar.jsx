@@ -82,24 +82,24 @@ export default function ObjectExplorerToolbar() {
 
   return (
     <Box display="flex" alignItems="center" gap="6px" sx={{px: '4px'}}>
-        <ToolbarButton icon={
-          <Badge badgeContent=" " overlap="circular" variant='dot' color="success" invisible={!hasFilters}>
-            <FilterAltRoundedIcon />
-          </Badge>
-        } menuItem={{
-          label: gettext('Filter Objects'),
-          isDisabled: false,
-          callback: () => {
-            pgAdmin.Browser.Events.trigger('pgadmin:object-explorer:filter:show');
-          }
-        }} id="filter-objects" isDropdown />
-        <ToolbarButton icon={<QueryToolIcon />} menuItem={menus['query_tool']} shortcut={browserPref?.sub_menu_query_tool} />
-        <ToolbarButton icon={<ViewDataIcon />} menuItem={menus['view_all_rows_context'] ??
+      <ToolbarButton icon={
+        <Badge badgeContent=" " overlap="circular" variant='dot' color="success" invisible={!hasFilters}>
+          <FilterAltRoundedIcon />
+        </Badge>
+      } menuItem={{
+        label: gettext('Filter Objects'),
+        isDisabled: false,
+        callback: () => {
+          pgAdmin.Browser.Events.trigger('pgadmin:object-explorer:filter:show');
+        }
+      }} id="filter-objects" isDropdown />
+      <ToolbarButton icon={<QueryToolIcon />} menuItem={menus['query_tool']} shortcut={browserPref?.sub_menu_query_tool} />
+      <ToolbarButton icon={<ViewDataIcon />} menuItem={menus['view_all_rows_context'] ??
           {label :gettext('All Rows')}}
-        shortcut={browserPref?.sub_menu_view_data} />
-        <ToolbarButton icon={<RowFilterIcon />} menuItem={menus['view_filtered_rows_context'] ?? { label : gettext('Filtered Rows...')}} />
-        <ToolbarButton icon={<SearchOutlinedIcon style={{height: '1.4rem'}} />} menuItem={menus['search_objects']} shortcut={browserPref?.sub_menu_search_objects} />
-        {!_.isUndefined(menus['psql']) && <ToolbarButton icon={<TerminalRoundedIcon style={{height: '1.4rem'}}/>} menuItem={menus['psql']} />}
+      shortcut={browserPref?.sub_menu_view_data} />
+      <ToolbarButton icon={<RowFilterIcon />} menuItem={menus['view_filtered_rows_context'] ?? { label : gettext('Filtered Rows...')}} />
+      <ToolbarButton icon={<SearchOutlinedIcon style={{height: '1.4rem'}} />} menuItem={menus['search_objects']} shortcut={browserPref?.sub_menu_search_objects} />
+      {!_.isUndefined(menus['psql']) && <ToolbarButton icon={<TerminalRoundedIcon style={{height: '1.4rem'}}/>} menuItem={menus['psql']} />}
     </Box>
   );
 }

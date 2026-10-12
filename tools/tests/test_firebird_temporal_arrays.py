@@ -18,8 +18,12 @@ from firebird.driver import core, fbapi
     (12, '0001-01-01', date(1, 1, 1)),
     (12, '9999-12-31', date(9999, 12, 31)),
     (13, '23:59:59.9999', time(23, 59, 59, 999900)),
+    (13, '23:59:59.999900', time(23, 59, 59, 999900)),
+    (13, '23:59:59.99990', time(23, 59, 59, 999900)),
     (35, '0001-01-01 12:34:56.0001', datetime(1, 1, 1, 12, 34, 56, 100)),
     (35, '9999-12-31T23:59:59.9999',
+     datetime(9999, 12, 31, 23, 59, 59, 999900)),
+    (35, '9999-12-31T23:59:59.999900',
      datetime(9999, 12, 31, 23, 59, 59, 999900)),
 ])
 def test_temporal_exact_text(code, text, expected):
@@ -68,6 +72,10 @@ def test_cursor_factory_matches_native_transaction_ownership():
     connection = MagicMock(spec=core.Connection)
     connection.sql_dialect = 3
     connection._encoding = 'utf8'
+    connection._att = MagicMock()
+    connection._ic = MagicMock()
+    connection._att.get_info.side_effect = lambda items, buffer: setattr(
+        buffer, 'raw', b'\x65\x01\x00\x04\x01'.ljust(16, b'\0'))
     transaction = connection.main_transaction
     transaction._cursors = []
     result = cursor(connection)

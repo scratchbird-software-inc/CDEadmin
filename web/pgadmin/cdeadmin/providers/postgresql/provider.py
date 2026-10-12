@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import copy
 import uuid
-from contextlib import ExitStack
-from dataclasses import dataclass
+import threading
+from contextlib import ExitStack, contextmanager
+from functools import wraps
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from flask import render_template
@@ -43,6 +45,9 @@ from pgadmin.cdeadmin.resources.properties import (
 from pgadmin.cdeadmin.visual_admin import (
     ProviderVisualAdministration,
     enrich_engine_experience,
+)
+from .execution import (
+    Execution, parameters as native_parameters, control as native_control,
 )
 from .native_admin import (
     PostgreSQLNativeAdminError, compile_native_admin,
@@ -114,12 +119,41 @@ def _required_text(value, label):
     return value.strip()
 
 
+def _provider_serialized(method):
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        with self._state_lock:
+            return method(self, *args, **kwargs)
+    return call
+
+
+def _session_serialized(method):
+    @_provider_serialized
+    @wraps(method)
+    def call(self, request):
+        payload = _mapping(request)
+        session_id = payload.get('session_id')
+        if not session_id and payload.get('operation_id'):
+            session_id = self._operation(payload['operation_id']).session_id
+        state = self._sessions.get(session_id)
+        if state is None:
+            # Terminal receipts remain observable after explicit session close.
+            return method(self, request)
+        with state.lock:
+            return method(self, request)
+    return call
+
+
 @dataclass
 class _SessionState:
     server_id: int
     database_id: int | None
     connection_id: str
     connection: object
+    manager: object
+    uncertain: bool = False
+    attached: bool = False
+    lock: object = field(default_factory=threading.RLock)
 
 
 @dataclass
@@ -129,6 +163,7 @@ class _OperationState:
     session_id: str
     connection: object
     result: dict[str, Any] | None = None
+    execution: object = None
 
 
 class PostgreSQLCatalogSource:
@@ -227,6 +262,7 @@ class PostgreSQLProvider:
         self._operations: dict[str, _OperationState] = {}
         self._completion_adapters: dict[str, object] = {}
         self._closed = False
+        self._state_lock = threading.RLock()
         self._visual_admin = ProviderVisualAdministration(
             context, permissions, 'postgresql', PROFILE_VERSION,
             client=self, operation_gate=self.supports_admin_operation,
@@ -530,6 +566,7 @@ class PostgreSQLProvider:
                     'PostgreSQL SQL',
                     'text/x-pgsql',
                     frozenset({'relational'}),
+                    parameter_shape='object-or-array',
                 ),
             ),
             'completions': (
@@ -759,8 +796,11 @@ class PostgreSQLProvider:
             'extensions': {'postgresql': resource_route},
         }
 
+    @_provider_serialized
     def open_session(self, request):
         self.permissions.require('network')
+        if self._closed:
+            raise PostgreSQLProviderError('PostgreSQL provider is closed')
         payload = _mapping(request)
         route = payload.get('route', {})
         server_id = _required_int(route, 'server_id')
@@ -776,15 +816,24 @@ class PostgreSQLProvider:
             )
         else:
             manager = self._driver.connection_manager(server_id)
-        connection_id = str(route.get('connection_id') or uuid.uuid4())
+        connection_id = str(uuid.uuid4())
         connection = manager.connection(
-            did=database_id, conn_id=connection_id
+            did=database_id, conn_id=connection_id, auto_reconnect=False,
+            async_=False
         )
-        self._connect_delegated_route(connection, manager, route)
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = _SessionState(
-            server_id, database_id, connection_id, connection
+            server_id, database_id, connection_id, connection, manager
         )
+        try:
+            self._connect_delegated_route(connection, manager, route)
+            self._sessions[session_id].attached = connection.connected()
+        except Exception:
+            self._sessions[session_id].uncertain = True
+            manager.release(conn_id=connection_id)
+            self._sessions.pop(session_id, None)
+            raise PostgreSQLProviderError(
+                'PostgreSQL delegated session could not be opened') from None
         return {
             'identity': self._identity(),
             'session_id': session_id,
@@ -844,9 +893,39 @@ class PostgreSQLProvider:
             values.clear()
         if not status:
             raise PostgreSQLProviderError(
-                'PostgreSQL delegated connection failed: ' + str(error)
+                'PostgreSQL delegated connection failed'
             )
 
+    def _require_idle_session(self, session_id):
+        state = self._sessions.get(session_id)
+        if state is None:
+            raise PostgreSQLProviderError('PostgreSQL session is unavailable')
+        if state.uncertain:
+            raise PostgreSQLProviderError(
+                'PostgreSQL connection state is unknown; close this session')
+        if any(op.session_id == session_id and not op.operation['terminal']
+               for op in self._operations.values()):
+            raise PostgreSQLProviderError(
+                'PostgreSQL session execution is active')
+        return state
+
+    @staticmethod
+    def _ensure_native_connection(state):
+        if not state.connection.connected():
+            if state.attached:
+                state.uncertain = True
+                raise PostgreSQLProviderError(
+                    'PostgreSQL connection was lost; do not replay')
+            try:
+                status, _detail = state.connection.connect()
+            except Exception:
+                raise PostgreSQLProviderError(
+                    'PostgreSQL connection failed') from None
+            if not status:
+                raise PostgreSQLProviderError('PostgreSQL connection failed')
+        state.attached = True
+
+    @_session_serialized
     def describe_transaction(self, request):
         payload = _mapping(request)
         session_id = payload.get('session_id')
@@ -858,13 +937,16 @@ class PostgreSQLProvider:
             'session_id': session_id,
             'transaction_model': 'postgresql-native',
             'provider_payload': {
-                'transaction_status': state.connection.transaction_status(),
+                'transaction_status': (None if state.uncertain else
+                                       state.connection.transaction_status()),
+                'session_reuse_blocked': state.uncertain,
                 'interpretation': 'PostgreSQL provider-owned opaque value',
             },
             'authority_reference': 'provider:org.pgadmin.postgresql',
             'extensions': {},
         }
 
+    @_session_serialized
     def control_transaction(self, request):
         """Execute native PostgreSQL transaction control on this session."""
         payload = _mapping(request)
@@ -877,15 +959,29 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL transaction action is unavailable'
             )
-        status, _detail = state.connection.execute_void(statements[action])
-        if not status:
-            raise PostgreSQLProviderError(
-                'PostgreSQL transaction action outcome is provider-owned'
-            )
-        return self.describe_transaction({
+        self.permissions.require('execute')
+        with state.lock:
+            self._require_idle_session(payload.get('session_id'))
+            self._ensure_native_connection(state)
+            try:
+                status, _detail = native_control(
+                    state.connection.conn, statements[action])
+            except Exception:
+                state.uncertain = True
+                raise PostgreSQLProviderError(
+                    'PostgreSQL transaction outcome is unknown; '
+                    'do not replay') from None
+            if not status:
+                state.uncertain = True
+                raise PostgreSQLProviderError(
+                    'PostgreSQL transaction outcome is unknown; do not replay')
+        observation = self.describe_transaction({
             'session_id': payload.get('session_id'),
         })
+        observation['provider_payload']['command_status'] = _detail
+        return observation
 
+    @_session_serialized
     def close_session(self, request):
         """Roll back and release one retained PostgreSQL connection."""
         payload = _mapping(request)
@@ -893,16 +989,49 @@ class PostgreSQLProvider:
         state = self._sessions.get(session_id)
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
-        rollback_status, _detail = state.connection.execute_void('ROLLBACK;')
-        manager = self._driver.connection_manager(state.server_id)
-        manager.release(did=state.database_id, conn_id=state.connection_id)
-        self._sessions.pop(session_id, None)
-        self._completion_adapters.pop(session_id, None)
+        with state.lock:
+            for op in self._operations.values():
+                if op.session_id != session_id or op.operation['terminal']:
+                    continue
+                token = op.execution
+                try:
+                    token.cancel()
+                except Exception:
+                    state.uncertain = True
+                token.discard.set()
+                token.worker.join(timeout=5)
+                if not token.finished.is_set():
+                    raise PostgreSQLProviderError(
+                        'PostgreSQL execution still owns its connection')
+                state.uncertain |= token.uncertain
+                # Keep the final native observation after release for polling.
+                while not op.operation['terminal']:
+                    self.describe_result(op.operation)
+            rollback_status = False
+            rollback_requested = not state.uncertain and state.attached
+            try:
+                if rollback_requested:
+                    rollback_status, _detail = native_control(
+                        state.connection.conn, 'ROLLBACK;')
+                    if not rollback_status:
+                        state.uncertain = True
+            except Exception:
+                state.uncertain = True
+            finally:
+                try:
+                    state.manager.release(conn_id=state.connection_id)
+                except Exception:
+                    state.uncertain = True
+                    raise PostgreSQLProviderError(
+                        'PostgreSQL connection release failed') from None
+            self._sessions.pop(session_id, None)
+            self._completion_adapters.pop(session_id, None)
         return {
             'session_id': session_id,
             'provider_closed': True,
             'provider_payload': {
-                'rollback_requested': True,
+                'rollback_requested': rollback_requested,
+                'outcome_unknown': state.uncertain,
                 'rollback_driver_response': bool(rollback_status),
                 'connection_released': True,
             },
@@ -910,6 +1039,7 @@ class PostgreSQLProvider:
             'common_finality_interpreted': False,
         }
 
+    @_session_serialized
     def complete(self, request):
         """Use pgAdmin's existing PostgreSQL completion implementation."""
         payload = _mapping(request)
@@ -917,6 +1047,8 @@ class PostgreSQLProvider:
         state = self._sessions.get(session_id)
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
+        self._require_idle_session(session_id)
+        self._ensure_native_connection(state)
         adapter = self._completion_adapters.get(session_id)
         if adapter is None:
             # Import lazily so provider registration does not make the legacy
@@ -935,6 +1067,7 @@ class PostgreSQLProvider:
             str(payload.get('source_before_cursor', '')),
         )
 
+    @_session_serialized
     def execute(self, request):
         self.permissions.require('execute')
         payload = _mapping(request)
@@ -942,9 +1075,18 @@ class PostgreSQLProvider:
         state = self._sessions.get(session_id)
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
-        status, detail = state.connection.execute_async(
-            payload.get('source', ''), payload.get('parameters') or None
-        )
+        source = payload.get('source')
+        if not isinstance(source, str) or not source.strip():
+            raise PostgreSQLProviderError(
+                'PostgreSQL query source is required')
+        bound = native_parameters(payload.get('parameters'))
+        with state.lock:
+            self._require_idle_session(session_id)
+            self._ensure_native_connection(state)
+            execution = Execution(state.connection.conn, source, bound)
+            return self._start_execution(payload, session_id, state, execution)
+
+    def _start_execution(self, payload, session_id, state, execution):
         operation_id = str(uuid.uuid4())
         operation = {
             'identity': self._identity(),
@@ -955,56 +1097,65 @@ class PostgreSQLProvider:
             'risk_class': 'unknown',
             'provider_state': {
                 'session_id': session_id,
-                'accepted': bool(status),
+                'accepted': True,
             },
-            'terminal': not bool(status),
-            'provider_receipt': None if status else {'error': str(detail)},
+            'terminal': False,
+            'provider_receipt': None,
             'extensions': {'postgresql': {'provider_owned': True}},
         }
         self._operations[operation_id] = _OperationState(
             operation, payload.get('execution_id', ''), session_id,
-            state.connection,
+            state.connection, execution=execution,
         )
+        try:
+            execution.start()
+        except Exception:
+            self._operations.pop(operation_id, None)
+            raise PostgreSQLProviderError(
+                'PostgreSQL execution worker could not start') from None
         return copy.deepcopy(operation)
 
+    @_session_serialized
     def cancel(self, request):
         self.permissions.require('execute')
         payload = _mapping(request)
         state = self._operation(payload.get('operation_id'))
-        session = self._sessions[state.session_id]
-        status, detail = state.connection.cancel_transaction(
-            session.connection_id, session.database_id
-        )
+        if state.operation['terminal']:
+            return copy.deepcopy(state.operation)
+        try:
+            status = state.execution.cancel()
+        except Exception:
+            self._sessions[state.session_id].uncertain = True
+            raise PostgreSQLProviderError(
+                'PostgreSQL cancellation state is unknown') from None
         state.operation['provider_receipt'] = {
             'cancel_request_accepted': bool(status),
-            'detail': str(detail),
+            'detail': None,
             'outcome': 'pending-provider-observation',
         }
         return copy.deepcopy(state.operation)
 
+    def script_statement_outcome(self, occurrence):
+        from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
+        return retained_outcome(occurrence, 'postgresql')
+
+    @_session_serialized
     def describe_result(self, request):
         payload = _mapping(request)
         state = self._operation(payload.get('operation_id'))
         if state.result is not None:
             return copy.deepcopy(state.result)
-        poll_status, detail = state.connection.poll(
-            formatted_exception_msg=True, no_result=True
-        )
-        complete = poll_status == 1
-        rows = None
-        if complete:
-            row_status, rows = state.connection.async_fetchmany_2darray(-1)
-            if not row_status:
-                detail = rows
-                rows = None
-                complete = False
+        page = state.execution.poll()
+        complete = page.pop('complete')
+        if page.get('session_reuse_blocked'):
+            self._sessions[state.session_id].uncertain = True
         result = {
             'identity': self._identity(),
             'result_id': str(uuid.uuid4()),
             'execution_id': state.execution_id,
             'result_kind': 'tabular',
             'schema': {
-                'columns': state.connection.get_column_info() or [],
+                'columns': page.pop('columns'),
             },
             'stream_reference': None,
             'complete': complete,
@@ -1013,14 +1164,13 @@ class PostgreSQLProvider:
             ),
             'extensions': {
                 'postgresql': {
-                    'rows': rows,
-                    'poll_status': poll_status,
-                    'detail': detail,
+                    **page,
+                    'payload': copy.deepcopy(page),
                     'provider_owned': True,
                 }
             },
         }
-        if complete or poll_status is False:
+        if complete:
             state.result = copy.deepcopy(result)
             state.operation['terminal'] = True
         return result
@@ -1108,12 +1258,32 @@ class PostgreSQLProvider:
                 'PostgreSQL operation is unavailable'
             ) from exc
 
+    @contextmanager
+    def profile_change_guard(self):
+        """Keep routing/credentials alive until explicitly owned work is closed."""
+        with self._state_lock:
+            if self._sessions:
+                raise PostgreSQLProviderError('Close PostgreSQL SQL sessions before disconnecting')
+            yield
+
+    def release_for_profile_change(self):
+        self.close()
+
+    @_provider_serialized
     def close(self):
-        """Drop handles; the legacy driver retains connection GC authority."""
-        self._sessions.clear()
+        """Release owned sessions; retain any failed cleanup for retry."""
+        self._closed = True
+        failures = []
+        for session_id in list(self._sessions):
+            try:
+                self.close_session({'session_id': session_id})
+            except Exception as exc:
+                failures.append(type(exc).__name__)
+        if failures:
+            raise PostgreSQLProviderError(
+                'PostgreSQL session cleanup is incomplete')
         self._operations.clear()
         self._completion_adapters.clear()
-        self._closed = True
 
 
 def create_provider(context, permissions):

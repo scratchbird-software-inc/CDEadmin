@@ -1,6 +1,7 @@
 """Per-statement native dialect; never change the attachment's default."""
 from collections.abc import Mapping
 import weakref
+import time
 
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
@@ -42,9 +43,27 @@ class DialectCursor:
         return getattr(self.cursor, name)
 
     def execute(self, source, parameters=None):
+        started = time.perf_counter_ns()
+        self.prepare(source, self.connection.main_transaction)
+        prepared = time.perf_counter_ns()
+        self.cursor.execute(self.statement, parameters)
+        executed = time.perf_counter_ns()
+        self.statement_metrics = {
+            'prepare_ms': (prepared - started) / 1_000_000,
+            'execute_ms': (executed - prepared) / 1_000_000,
+            'scope': 'host native prepare/execute calls; fetch excluded',
+            'plan': None,
+        }
+        try:
+            self.statement_metrics['plan'] = self.statement.plan
+        except Exception:
+            pass  # Optional diagnostics must never change an executed outcome.
+        return self
+
+    def prepare(self, source, transaction):
+        """Retain native preparation ownership even on metadata failure."""
         from firebird.driver.core import Statement
 
-        transaction = self.connection.main_transaction
         if not transaction.is_active():
             transaction.begin()
         # Retain the partially initialized wrapper if metadata acquisition
@@ -61,8 +80,7 @@ class DialectCursor:
         statement._istmt = native
         Statement.__init__(statement, self.connection, native, source,
                            self.dialect)
-        self.cursor.execute(statement, parameters)
-        return self
+        return statement
 
     def close(self):
         # A failed result close must not free the statement underneath it.

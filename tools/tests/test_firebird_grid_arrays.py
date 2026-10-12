@@ -47,7 +47,7 @@ def test_exact_scaled_boundaries_and_nested_non_one_based_dimensions():
 
 @pytest.mark.parametrize('code,value', [
     (10, '1e100'), (10, '1e-100'), (27, '1e400'), (27, '1e-400'),
-    (27, 'NaN'), (10, None)])
+    (27, 'sNaN'), (10, None)])
 def test_float_array_rejects_native_width_loss(code, value):
     with pytest.raises(RelationalClientError):
         convert([value], spec(code))
@@ -178,17 +178,20 @@ def test_decfloat_binding_is_independent_of_ambient_decimal_context(code):
             convert(['1e999999999999999999999999999999999'], spec(code))
 
 
-@pytest.mark.parametrize('charset,kind', [
-    ('ASCII', 'text'), ('UTF8', 'text'), ('ISO8859_1', 'text'),
-    ('WIN1252', 'text'), ('OCTETS', 'binary'), ('NONE', None),
-    ('UNICODE_FSS', None)])
+@pytest.mark.parametrize('charset,identifier,kind', [
+    ('ASCII', 2, 'text'), ('UTF8', 4, 'text'), ('ISO8859_1', 21, 'text'),
+    ('WIN1252', 53, 'text'), ('OCTETS', 1, 'binary'), ('NONE', 0, 'text'),
+    ('UNICODE_FSS', 3, 'text'), ('SJIS_0208', 5, 'text'),
+    ('GBK', 67, 'text'), ('NEXT', 19, 'text'), ('CUSTOM', 200, None),
+    ('UTF8', None, None)])
 @pytest.mark.parametrize('code', [14, 37])
-def test_character_editor_admission(charset, kind, code):
+def test_character_editor_admission(charset, identifier, kind, code):
     from unittest.mock import MagicMock
     from pgadmin.cdeadmin.providers.firebird.grid_arrays import editor_specs
     connection = MagicMock()
     catalog = connection.cursor.return_value.__enter__.return_value
-    catalog.fetchall.return_value = [(code, 0, 0, 0, -1, 0, 8, charset)]
+    catalog.fetchall.return_value = [
+        (code, 0, 0, 0, -1, 0, 8, charset, identifier)]
     result = editor_specs(connection, [{
         'native_type': 'ARRAY', 'source_relation': 'T', 'source_field': 'A',
         'native_name': 'A'}])

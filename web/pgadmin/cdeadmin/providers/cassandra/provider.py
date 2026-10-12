@@ -2,7 +2,7 @@
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
-from .client import CassandraClient
+from .driver import NativeCassandraClient
 
 
 PROFILE = PilotProfile(
@@ -28,6 +28,8 @@ PROFILE = PilotProfile(
         'cqlsh', 'nodetool', 'sstableloader',
     ),
     required_permissions=('network', 'secret_read'),
+    parameter_shape='object-or-array',
+    parameter_hint='CQL bindings with exact type/value scalar envelopes',
     language_mime_type='application/vnd.apache.cassandra.cql',
     result_renderer_kind='wide-column',
     result_renderer_id='cdeadmin.result.wide-column.grid',
@@ -46,6 +48,9 @@ PROFILE = PilotProfile(
 
 
 class CassandraPilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -54,5 +59,5 @@ def create_provider(context, permissions, client=None):
     return CassandraPilotProvider(
         context,
         permissions,
-        client or CassandraClient(permissions.acquire_secret),
+        client or NativeCassandraClient(permissions.acquire_secret),
     )

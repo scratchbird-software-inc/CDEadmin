@@ -52,10 +52,11 @@ def test_native_write_failure_releases_transferred_metadata():
                                           create_string_buffer(20)))
     original = (['text'], 42)
     prefix = 'pgadmin.cdeadmin.providers.firebird.character_arrays.'
+    from tools.tests.test_firebird_array_chunks import descriptor
+    bounds = descriptor([(1, 1)], 32)
+    cursor._connection._att.put_slice.side_effect = ValueError('native')
     with patch(prefix + 'metadata', return_value=(14, 8, 4, 4)), \
-            patch(prefix + 'layout', return_value=(None, [1], 32, 1)), \
-            patch(prefix + 'api.get_api') as api:
-        api.return_value.isc_array_put_slice.side_effect = ValueError('native')
+            patch(prefix + 'layout', return_value=(bounds, [1], 32, 1)):
         with pytest.raises(ValueError, match='native'):
             pack(cursor, meta, None, original, native_pack)
     assert original == (['text'], 42)

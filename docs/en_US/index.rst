@@ -20,6 +20,33 @@ upstream attribution.
    cdeadmin_hard_fork
    project_governance
    cdeadmin_architecture
+   firebird_driver_development
+   mysql_driver_development
+   mariadb_driver_development
+   postgresql_driver_development
+   postgresql_functional_completion
+   sqlite_driver_development
+   duckdb_driver_development
+   cockroachdb_driver_development
+   yugabytedb_ysql_driver_development
+   yugabytedb_ycql_driver_development
+   tidb_driver_development
+   vitess_driver_development
+   dolt_driver_development
+   xtdb_driver_development
+   immudb_driver_development
+   ignite_driver_development
+   cassandra_driver_development
+   foundationdb_driver_development
+   tikv_driver_development
+   redis_driver_development
+   mongodb_driver_development
+   clickhouse_driver_development
+   influxdb_driver_development
+   neo4j_driver_development
+   milvus_driver_development
+   opensearch_driver_development
+   opensearch_sql_ppl_driver_development
    interface_designer
    implementation_status
    report_delivery
@@ -40,3 +67,13 @@ upstream attribution.
 .. note:: Postgres, PostgreSQL and the Slonik Logo are trademarks or
     registered trademarks of the `PostgreSQL Community Association of Canada
     <https://www.postgres.ca/>`_, and used with their permission.
+
+.. toctree::
+   :hidden:
+
+   compact_forms
+   native_navigation_forms
+   firebird_functional_completion
+   firebird_form_parity
+   firebird_dashboards
+   ddn_database_roundtrip

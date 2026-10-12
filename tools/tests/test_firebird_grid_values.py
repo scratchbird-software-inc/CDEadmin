@@ -57,7 +57,7 @@ def test_float_grid_uses_roundtrip_text_and_preserves_negative_zero(
 
 
 @pytest.mark.parametrize('value', [
-    'NaN', 'Infinity', '-Infinity', '1e400', '1e-400',
+    'sNaN', 'NaN(1)', '1e400', '1e-400',
     '1_2', ' 1', '١', '', None, True])
 def test_float_binding_rejects_invalid_or_unrepresentable_input(value):
     from pgadmin.cdeadmin.sdk.relational import RelationalClientError
@@ -104,6 +104,8 @@ def test_hints_use_driver_types_not_names(value_type, expected):
     (SQLDataType.TEXT, 0, 0, 1, 'binary'),
     (SQLDataType.BLOB, 1, 0, 4, 'text'),
     (SQLDataType.BLOB, 0, 0, 0, 'binary'),
+    (SQLDataType.BLOB, -42, 0, 0, 'binary'),
+    (SQLDataType.BLOB, -32768, 0, 0, 'binary'),
     (SQLDataType.ARRAY, 0, 0, 0, None),
 ])
 def test_native_metadata_wins_over_incomplete_dbapi(
@@ -228,3 +230,21 @@ def test_grid_retains_native_identity_but_emits_lossless_values():
         assert identity.original['V'] == original[1]
     finally:
         ADMINISTRATION._row_identities.pop(token, None)
+
+
+@pytest.mark.parametrize('kind', ['float32', 'float64'])
+@pytest.mark.parametrize('text', [
+    'NaN', 'nan', '-NaN', '+NaN', 'Infinity', '-Infinity', '+Infinity',
+    'inf', '-inf', '+INF'])
+def test_explicit_binary_special_values_roundtrip_as_valid_json(kind, text):
+    import json
+    import math
+    from pgadmin.cdeadmin.providers.firebird.query_parameters import (
+        normalize_parameters,
+    )
+    actual = normalize_parameters([{'encoding': kind, 'data': text}])[0]
+    assert math.isnan(actual) if 'nan' in text.lower() else (
+        actual == float(text))
+    result = json.loads(json.dumps(normalize_value(actual), allow_nan=False))
+    rebound = bind_value({'encoding': kind, 'data': result})
+    assert math.isnan(rebound) if math.isnan(actual) else rebound == actual

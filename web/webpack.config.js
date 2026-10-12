@@ -9,6 +9,11 @@
 
 // Import file, libraries and plugins
 const path = require('path');
+// Every direct webpack invocation must admit one coherent current DDN snapshot.
+// Test entry points also use tools/refresh_ddn.py before validation (AGENTS.md).
+require('child_process').execFileSync(process.env.PYTHON ||
+  (process.platform === 'win32' ? 'python' : 'python3'),
+[path.resolve(__dirname, '../tools/refresh_ddn.py')], {stdio: 'inherit'});
 const webpack = require('webpack');
 const sourceDir = __dirname + '/pgadmin/static';
 // webpack.shim.js contains path references for resolve > alias configuration

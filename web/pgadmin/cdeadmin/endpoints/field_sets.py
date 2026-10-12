@@ -259,8 +259,6 @@ MARIADB_FIELDS = (
     _field('default_file', 'Client option file', 'file', MARIADB),
     _field('default_group', 'Client option group', group=MARIADB),
     _field('plugin_dir', 'Authentication plugin directory', 'file', MARIADB),
-    _field('reconnect', 'Driver automatic reconnect', 'boolean', MARIADB,
-           default=False),
     _field('ssl', 'Require TLS', 'boolean', MARIADB_TLS, default=False),
     _field('ssl_ca', 'Certificate authority file', 'file', MARIADB_TLS),
     _field('ssl_capath', 'Certificate authority directory', 'file',

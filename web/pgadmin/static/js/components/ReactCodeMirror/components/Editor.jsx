@@ -167,7 +167,7 @@ export default function Editor({
   currEditor, name, value, options, onCursorActivity, onChange, readonly,
   disabled, autocomplete = false, autocompleteOnKeyPress, breakpoint = false, onBreakPointChange,
   showActiveLine=false, keepHistory = true, cid, helpid, labelledBy,
-  customKeyMap, language='pgsql'
+  customKeyMap, language='pgsql', sqlConfig=null
 }) {
   const checkIsMounted = useIsMounted();
 
@@ -389,7 +389,7 @@ export default function Editor({
       if(language == 'json') {
         newConfigExtn.push(json());
       } else {
-        newConfigExtn.push(sql({dialect: PgSQL}));
+        newConfigExtn.push(sql(sqlConfig || {dialect: PgSQL}));
       }
     }
 
@@ -426,7 +426,7 @@ export default function Editor({
     editor.current.dispatch({
       effects: configurables.current.reconfigure(newConfigExtn)
     });
-  }, [preferencesStore, theme]);
+  }, [preferencesStore, theme, language, sqlConfig]);
 
   useMemo(() => {
     if (!checkIsMounted()) return;
@@ -455,6 +455,7 @@ export default function Editor({
 }
 
 Editor.propTypes = {
+  sqlConfig: PropTypes.object,
   currEditor: PropTypes.func,
   name: PropTypes.string,
   value: PropTypes.string,

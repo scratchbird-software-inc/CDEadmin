@@ -345,14 +345,16 @@
       "title": "Back up SQLite database",
       "fields": [
         {"field_id": "backup_path", "label": "Absolute backup database filename", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "overwrite", "label": "Replace an existing backup file", "control": "boolean", "required": false, "default": false}
+        {"field_id": "overwrite", "label": "Replace an existing backup file", "control": "boolean", "required": false, "default": false},
+        {"field_id": "backup_timeout", "label": "Backup deadline (seconds)", "control": "number", "required": false, "default": 30, "minimum": 0.01, "maximum": 3600}
       ]
     },
     "sqlite_database_restore": {
       "title": "Restore SQLite database",
       "fields": [
         {"field_id": "backup_path", "label": "Absolute backup database filename", "control": "text", "required": true, "max_length": 4096},
-        {"field_id": "confirmation", "label": "Type the active database path to confirm replacement", "control": "text", "required": true, "max_length": 4096}
+        {"field_id": "confirmation", "label": "Type the active database path to confirm replacement", "control": "text", "required": true, "max_length": 4096},
+        {"field_id": "backup_timeout", "label": "Backup deadline (seconds)", "control": "number", "required": false, "default": 30, "minimum": 0.01, "maximum": 3600}
       ]
     },
     "sqlite_database_check": {
@@ -601,7 +603,9 @@
       ]
     },
     "firebird_upgrade_database": {
-      "title": "Upgrade Firebird database ODS", "fields": []
+      "title": "Upgrade Firebird database ODS", "fields": [
+        {"field_id": "role", "label": "SQL role", "control": "text", "required": false, "help": "Leave empty to inherit the connection role. This override applies only to this service task; native Firebird determines upgrade privileges."}
+      ]
     },
     "alter": {
       "title": "Alter",
@@ -828,9 +832,9 @@
       {"operation_id": "alter", "title": "Alter database properties", "mutation_class": "admin", "form_id": "firebird_database_alter", "target_required": true},
       {"operation_id": "drop", "title": "Drop database", "mutation_class": "destructive", "form_id": "firebird_database_drop", "target_required": true, "confirmation_required": true},
       {"operation_id": "backup_logical", "title": "Logical backup (gbak)", "mutation_class": "admin", "form_id": "firebird_backup_logical", "target_required": true, "required_permissions": ["backup_admin"]},
-      {"operation_id": "restore_logical", "title": "Logical restore (gbak)", "mutation_class": "destructive", "form_id": "firebird_restore_logical", "target_required": true, "confirmation_required": true, "required_permissions": ["restore_admin"]},
+      {"operation_id": "restore_logical", "title": "Logical restore (gbak)", "mutation_class": "destructive", "form_id": "firebird_restore_logical", "target_required": false, "confirmation_required": true, "required_permissions": ["restore_admin"]},
       {"operation_id": "backup_physical", "title": "Physical backup (nbackup)", "mutation_class": "admin", "form_id": "firebird_backup_physical", "target_required": true, "required_permissions": ["backup_admin"]},
-      {"operation_id": "restore_physical", "title": "Physical restore (nbackup)", "mutation_class": "destructive", "form_id": "firebird_restore_physical", "target_required": true, "confirmation_required": true, "required_permissions": ["restore_admin"]},
+      {"operation_id": "restore_physical", "title": "Physical restore (nbackup)", "mutation_class": "destructive", "form_id": "firebird_restore_physical", "target_required": false, "confirmation_required": true, "required_permissions": ["restore_admin"]},
       {"operation_id": "validate_database", "title": "Validate database", "mutation_class": "admin", "form_id": "firebird_validate_database", "target_required": true, "required_permissions": ["maintenance_admin"]},
       {"operation_id": "repair_database", "title": "Repair database (gfix)", "mutation_class": "destructive", "form_id": "firebird_repair_database", "target_required": true, "confirmation_required": true, "required_permissions": ["maintenance_admin"]},
       {"operation_id": "sweep_database", "title": "Sweep database", "mutation_class": "admin", "form_id": "firebird_sweep_database", "target_required": true, "required_permissions": ["maintenance_admin"]},
@@ -1031,7 +1035,7 @@
         {"resource_kind": "blob-filter", "title": "BLOB filter", "parent_kinds": ["database"], "operation_profile": "read_only", "editor": {"sections": ["properties", "ddl", "dependencies", "dependents", "privileges", "operations"]}},
         {"resource_kind": "shadow", "title": "Shadow", "parent_kinds": ["database"], "navigator_group": "storage", "operation_profile": "read_only", "editor": {"sections": ["properties", "ddl", "files", "operations"]}},
         {"resource_kind": "storage-file", "title": "Storage file", "parent_kinds": ["database", "shadow"], "navigator_group": "storage", "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
-        {"resource_kind": "plugin", "title": "Configured plugin", "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
+        {"resource_kind": "configuration", "title": "Effective configuration setting", "parent_kinds": ["database"], "operation_profile": "read_only", "editor": {"sections": ["properties", "operations"]}},
         {"resource_kind": "publication", "title": "Publication", "operation_profile": "definition", "editor": {"sections": ["properties", "dependencies", "dependents", "privileges", "operations"]}},
         {"resource_kind": "service-operation", "title": "Service operation", "operation_profile": "operational", "editor": {"sections": ["properties", "state", "operations"]}}
       ]

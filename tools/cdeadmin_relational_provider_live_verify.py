@@ -4128,8 +4128,29 @@ class _FirebirdAccount:
             self.password = ''
 
 
+def _live_result(provider, operation, engine):
+    """Consume the native asynchronous contract before inspecting evidence."""
+    if engine not in {'mysql', 'mariadb'}:
+        return provider.describe_result(operation)
+    rows = []
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        result = provider.describe_result(operation)
+        payload = result['extensions'][engine]['payload']
+        rows.extend(payload.get('rows') or [])
+        if len(rows) > 10000:
+            raise RuntimeError('Live qualification result exceeds its row bound')
+        if result.get('complete'):
+            if payload.get('error'):
+                raise RuntimeError('Native live query failed (' + str(payload['error'].get('errno')) + ')')
+            payload['rows'] = rows
+            return result
+        time.sleep(0.01)
+    raise RuntimeError('Live qualification execution did not terminate')
+
+
 def _result_payload(provider, operation, engine):
-    result = provider.describe_result(operation)
+    result = _live_result(provider, operation, engine)
     if not result['complete'] or result['result_kind'] != (
         provider.profile.result_kind
     ):
@@ -4150,7 +4171,7 @@ def _execute_provider_result(
         'source': source,
         'parameters': parameters,
     })
-    result = provider.describe_result(operation)
+    result = _live_result(provider, operation, engine)
     if not result['complete']:
         raise RuntimeError('provider transaction probe result is incomplete')
     return result['extensions'][engine]['payload']
@@ -4396,7 +4417,7 @@ def _semantic_payload(provider, session, engine):
         raise RuntimeError(
             f'{engine} semantic base_aggregate execution failed'
         ) from exc
-    result = provider.describe_result(operation)
+    result = _live_result(provider, operation, engine)
     payload = result['extensions'][engine]['payload']
     rows = payload.get('rows') or []
     if not rows or int(rows[0][-1]) != 1:
@@ -4433,7 +4454,7 @@ def _semantic_payload(provider, session, engine):
             raise RuntimeError(
                 f'{engine} semantic {case_id} execution failed'
             ) from exc
-        case_result = provider.describe_result(case_operation)
+        case_result = _live_result(provider, case_operation, engine)
         case_rows = case_result['extensions'][engine]['payload'].get(
             'rows'
         ) or []
@@ -5053,14 +5074,8 @@ def verify(
                 'execution_id': f'{engine}-live-fault',
                 'source': 'SELECT * FROM cdeadmin_live_missing_object',
             })
-            if engine == 'mariadb':
-                for _attempt in range(40):
-                    result = provider.describe_result({
-                        'operation_id': fault_operation['operation_id'],
-                    })
-                    if result.get('complete'):
-                        break
-                    time.sleep(0.05)
+            if engine in {'mysql', 'mariadb'}:
+                _live_result(provider, fault_operation, engine)
         except Exception as exc:
             if secret_leak_marker and secret_leak_marker in str(exc):
                 raise RuntimeError('provider fault exposed secret material')

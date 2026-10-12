@@ -20,11 +20,16 @@ from tools.cdeadmin_firebird_admin_mapping_gate import (  # noqa: E402
 
 
 def run(profiles):
-    import firebird.driver as driver
     document = json.loads(profiles.read_text())
     route = next(dict(item) for item in document['profiles']
                  if item['engine'] == 'firebird')
     route.setdefault('host', document.get('host', '127.0.0.1'))
+    return run_route(route)
+
+
+def run_route(route):
+    import firebird.driver as driver
+    route = dict(route)
     route['database'] = str(PurePosixPath(route['database']).parent /
                             ('cde_stream_owned_' + uuid.uuid4().hex + '.fdb'))
     password = route.pop('password')
@@ -145,6 +150,25 @@ def run(profiles):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--profiles', type=Path, required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--profiles', type=Path)
+    inputs.add_argument('--runtime-root', type=Path)
+    parser.add_argument('--evidence-root', type=Path)
     options = parser.parse_args()
-    print(json.dumps(run(options.profiles), indent=2))
+    if options.runtime_root:
+        if options.evidence_root is None:
+            parser.error('--runtime-root requires --evidence-root')
+        from tools.cdeadmin_firebird_local_fixture import run_local
+
+        def qualify(native, admin, route, accounts, evidence, root):
+            user, password = accounts['Srp'][0]
+            outcome = run_route(dict(route, user=user, password=password))
+            (evidence / 'stream.json').write_text(
+                json.dumps(outcome, indent=2) + '\n')
+
+        outcome = run_local(options.runtime_root, options.evidence_root,
+                            qualify)
+        print(json.dumps(outcome, indent=2))
+        raise SystemExit(0 if outcome['complete'] else 1)
+    else:
+        print(json.dumps(run(options.profiles), indent=2))

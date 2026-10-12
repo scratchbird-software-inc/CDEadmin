@@ -105,7 +105,8 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
             {formData.use_alternate_user && <Box marginTop='12px'>
               <Box marginBottom='4px'>{gettext('Alternate user or principal')}</Box>
               <InputText value={formData.connect_as}
-                controlProps={{maxLength: 255, autoComplete: 'username'}}
+                controlProps={{maxLength: 255, autoComplete: 'username',
+                  'aria-label': gettext('Alternate user or principal')}}
                 onChange={(event) => onTextChange(event, 'connect_as')}
                 onKeyDown={(event) => onKeyDown(event)} />
             </Box>}
@@ -124,7 +125,7 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
                 /* Set only if no tunnel password asked */
                 firstEleRef.current = ele;
               }
-            }} type={passwordVisible ? 'text' : 'password'} value={formData['password']} controlProps={{maxLength:null, autoComplete: 'current-password'}}
+            }} type={passwordVisible ? 'text' : 'password'} value={formData['password']} controlProps={{maxLength:null, autoComplete: 'current-password', 'aria-label': gettext('Password')}}
             onChange={(e)=>onTextChange(e, 'password')} onKeyDown={(e)=>onKeyDown(e)}/>
             <DefaultButton data-test="toggle-password-visibility"
               onClick={() => setPasswordVisible(!passwordVisible)}>
@@ -147,24 +148,25 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
           closeModal();
         }} >{gettext('Cancel')}</DefaultButton>
         {(data.prompt_password || data.prompt_tunnel_password) && <>
-          <PrimaryButton ref={okBtnRef} data-test="save" startIcon={<CheckRoundedIcon />} onClick={()=>{
-            let postFormData = new FormData();
-            if(data.prompt_tunnel_password) {
-              postFormData.append('tunnel_password', formData.tunnel_password);
-              formData.save_tunnel_password &&
+          <PrimaryButton ref={okBtnRef} data-test="save" startIcon={<CheckRoundedIcon />}
+            disabled={formData.use_alternate_user && (!formData.connect_as.trim() || !formData.password)} onClick={()=>{
+              let postFormData = new FormData();
+              if(data.prompt_tunnel_password) {
+                postFormData.append('tunnel_password', formData.tunnel_password);
+                formData.save_tunnel_password &&
                 postFormData.append('save_tunnel_password', formData.save_tunnel_password);
-            }
-            if(data.prompt_password) {
-              postFormData.append('password', formData.password);
-              if(formData.use_alternate_user && formData.connect_as.trim()) {
-                postFormData.append('connect_as', formData.connect_as.trim());
               }
-              formData.save_password && !formData.use_alternate_user &&
+              if(data.prompt_password) {
+                postFormData.append('password', formData.password);
+                if(formData.use_alternate_user && formData.connect_as.trim()) {
+                  postFormData.append('connect_as', formData.connect_as.trim());
+                }
+                formData.save_password && !formData.use_alternate_user &&
                 postFormData.append('save_password', formData.save_password);
-            }
-            onOK?.(postFormData);
-            closeModal();
-          }} >{gettext('OK')}</PrimaryButton>
+              }
+              onOK?.(postFormData);
+              closeModal();
+            }} >{gettext('OK')}</PrimaryButton>
         </>}
       </ModalFooter>
     </ModalContent>

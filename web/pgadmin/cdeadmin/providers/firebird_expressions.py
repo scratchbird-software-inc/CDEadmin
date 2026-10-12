@@ -3,18 +3,21 @@
 from ..sdk.relational import RelationalClientError
 
 
-def index_expression(value, label):
+def index_expression(value, label, *, require_outer=False, forbidden_top_level=()):
     """Admit one balanced expression for a provider-owned parenthesized slot.
 
     Follow Firebird 5 lexer quoting/comment boundaries. Native prepare checks
     grammar, types, determinism and index restrictions. Preserve input text;
-    the caller must append a newline before its closing parenthesis so a final
+    Optional native-clause modes require one enclosing expression or reject
+    top-level clause keywords without treating quoted text as SQL keywords.
+    The caller must append a newline before its closing parenthesis so a final
     line comment cannot swallow provider-owned syntax.
     """
     if not isinstance(value, str) or not value.strip() or '\x00' in value:
         raise RelationalClientError(f'{label} must contain expression text')
     value = value.strip()
     pos, stack, content = 0, [], False
+    outer_closed = False
 
     def invalid():
         raise RelationalClientError(
@@ -37,6 +40,8 @@ def index_expression(value, label):
                 invalid()
             pos = end + 2
             continue
+        if require_outer and (outer_closed or (not content and char != '(')):
+            invalid()
         content = True
         if char in 'qQ' and value[pos:pos + 2].lower() == "q'":
             if pos + 2 >= len(value):
@@ -63,16 +68,21 @@ def index_expression(value, label):
                 invalid()
             continue
         if char.isalnum() or char in '_$':
+            start = pos
             pos += 1
             while pos < len(value) and (
                     value[pos].isalnum() or value[pos] in '_$'):
                 pos += 1
+            if not stack and value[start:pos].upper() in forbidden_top_level:
+                invalid()
             continue
         if char in '([':
             stack.append(char)
         elif char in ')]':
             if not stack or stack.pop() != {')': '(', ']': '['}[char]:
                 invalid()
+            if require_outer and not stack:
+                outer_closed = True
         elif char == ';':
             invalid()
         pos += 1

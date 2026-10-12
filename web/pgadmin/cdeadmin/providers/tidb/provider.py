@@ -12,9 +12,9 @@ from urllib.parse import urlsplit
 from pgadmin.cdeadmin.sdk import (
     ActualEnginePilotProvider,
     PilotProfile,
-    RelationalDBAPIClient,
     RelationalClientError,
 )
+from .driver import TiDBNativeClient
 from ..distributed_sql import (
     create_sql_client,
     mysql_catalog,
@@ -40,6 +40,8 @@ PROFILE = PilotProfile(
         'user', 'role', 'privilege',
     ),
     ('mysql-client', 'tiup', 'br', 'ticdc'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native MySQL-wire bindings and exact encoding/data envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'tidb-sql', 'quote_open': '`',
@@ -1283,11 +1285,14 @@ def _extras(cursor, _request, generation):
 
 
 class TiDBProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
 
-class TiDBDBAPIClient(RelationalDBAPIClient):
+class TiDBDBAPIClient(TiDBNativeClient):
     """Keep TiCDC credentials leased and outside persistent route state."""
 
     _TICDC_SECRET_KIND = 'tidb_ticdc_password'
@@ -1346,7 +1351,13 @@ class TiDBDBAPIClient(RelationalDBAPIClient):
         return routes
 
     def _with_ticdc_credentials(self, request, callback):
-        scoped = copy.deepcopy(dict(request))
+        scoped = copy.deepcopy({
+            key: value for key, value in request.items()
+            if key != '_provider_session_handle'
+        })
+        if '_provider_session_handle' in request:
+            scoped['_provider_session_handle'] = request[
+                '_provider_session_handle']
         routes = self._request_routes(scoped)
         configured = [
             route for route in routes

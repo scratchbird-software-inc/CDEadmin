@@ -107,7 +107,9 @@ def run(options, password):
         result = wait.until(lambda value: value.find_element(
             By.CSS_SELECTOR, '[aria-label="Firebird service result"]'))
         fields = result.find_elements(By.CSS_SELECTOR, 'dl > div')
-        assert len(fields) == 4
+        assert len(fields) == 7
+        assert 'Requested service role' in result.text
+        assert 'Server default security context' in result.text
         for index, field in enumerate(fields):
             driver.execute_script(
                 'arguments[0].scrollIntoView({block:"center"})', field)

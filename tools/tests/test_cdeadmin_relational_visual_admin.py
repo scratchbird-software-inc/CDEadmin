@@ -723,6 +723,12 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         }
         for operation_id, form_id in expected.items():
             self.assertEqual(form_id, operations[operation_id]['form_id'])
+            role_fields = [field for field in
+                           operations[operation_id]['form']['fields']
+                           if field['field_id'] == 'role']
+            self.assertEqual(1, len(role_fields), operation_id)
+            self.assertEqual('text', role_fields[0]['control'])
+            self.assertFalse(role_fields[0]['required'])
             self.assertEqual(
                 'server_service', operations[operation_id]['workspace_scope']
             )
@@ -3428,7 +3434,11 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
                     'source': "UPDATE state SET value = 'rolled-back' "
                               'WHERE id = 1',
                 })
-                client.describe_result(token)
+                for _ in range(200):
+                    if client.describe_result(token)['complete']:
+                        break
+                else:
+                    self.fail('DuckDB execution did not complete')
                 client.control_transaction(session, 'rollback')
                 self.assertEqual(
                     ('original',), session.execute(
@@ -3439,7 +3449,11 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
                     'source': "UPDATE state SET value = 'committed' "
                               'WHERE id = 1',
                 })
-                client.describe_result(token)
+                for _ in range(200):
+                    if client.describe_result(token)['complete']:
+                        break
+                else:
+                    self.fail('DuckDB execution did not complete')
                 client.control_transaction(session, 'commit')
                 self.assertEqual(
                     ('committed',), session.execute(

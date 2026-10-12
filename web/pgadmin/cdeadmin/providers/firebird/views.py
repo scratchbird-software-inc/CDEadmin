@@ -14,59 +14,69 @@ WARNING = (
     'permission checks apply. Review the definition and ordered column names.')
 
 
-def grid_update_identity(connection, name, *, operation='update'):
-    """Admit direct PK-preserving views; prepare, never execute, probes.
+def projected_primary_key(catalog, name, seen=None):
+    """Follow exact aliases independently of target operation permissions."""
+    seen = set() if seen is None else seen
+    if name in seen:
+        return (), ()
+    seen.add(name)
+    catalog.execute(
+        'SELECT TRIM(V.RDB$RELATION_NAME), V.RDB$VIEW_CONTEXT '
+        'FROM RDB$VIEW_RELATIONS V JOIN RDB$RELATIONS R ON '
+        'R.RDB$RELATION_NAME = V.RDB$RELATION_NAME '
+        'WHERE V.RDB$VIEW_NAME = ?', (name,))
+    sources = catalog.fetchall()
+    if len(sources) != 1:
+        return (), ()
+    base, context = sources[0]
+    catalog.execute('SELECT RDB$VIEW_BLR, RDB$RELATION_TYPE FROM '
+                    'RDB$RELATIONS WHERE RDB$RELATION_NAME = ?', (base,))
+    relation = catalog.fetchone()
+    if not relation:
+        return (), ()
+    if relation[0] is not None:
+        primary, _ = projected_primary_key(catalog, base, seen)
+    elif relation[1] in (0, 4, 5):
+        catalog.execute('SELECT TRIM(S.RDB$FIELD_NAME) FROM '
+                        'RDB$RELATION_CONSTRAINTS C JOIN RDB$INDEX_SEGMENTS S '
+                        'ON S.RDB$INDEX_NAME = C.RDB$INDEX_NAME WHERE '
+                        "C.RDB$CONSTRAINT_TYPE = 'PRIMARY KEY' AND "
+                        'C.RDB$RELATION_NAME = ? '
+                        'ORDER BY S.RDB$FIELD_POSITION', (base,))
+        primary = [row[0] for row in catalog.fetchall()]
+    else:
+        return (), ()
+    if not primary:
+        return (), ()
+    catalog.execute('SELECT TRIM(RDB$FIELD_NAME), TRIM(RDB$BASE_FIELD), '
+                    'RDB$VIEW_CONTEXT FROM RDB$RELATION_FIELDS WHERE '
+                    'RDB$RELATION_NAME = ? ORDER BY RDB$FIELD_POSITION',
+                    (name,))
+    fields = catalog.fetchall()
+    keys = []
+    for key in primary:
+        aliases = [field for field, source, field_context in fields
+                   if source == key and field_context == context]
+        if len(aliases) != 1:
+            return (), ()
+        keys.append(aliases[0])
+    return tuple(keys), fields
 
-    This is deliberately not a general native updatability classifier. Joins,
-    nested views and trigger-backed views need separate row identity contracts.
-    Return key aliases and writable columns (empty for DELETE). Prepare UPDATE
-    and DELETE independently; neither implies permission for the other.
-    Retain this connection/transaction for subsequent mutations.
+
+def grid_update_identity(connection, name, *, operation='update'):
+    """Admit complete PK projections; prepare only the final target DML.
+
+    Direct and nested projections may have native triggers. Joins and ambiguous
+    keys are not inferred. INSERT admission also has an independent path that
+    does not require any row identity.
     """
     import firebird.driver as native
     if operation not in {'update', 'delete', 'insert', 'insert-defaults'}:
         raise RelationalClientError('view row operation is unavailable')
     with connection.cursor() as cursor:
-        cursor.execute(
-            'SELECT TRIM(V.RDB$RELATION_NAME), V.RDB$VIEW_CONTEXT '
-            'FROM RDB$VIEW_RELATIONS V JOIN RDB$RELATIONS R ON '
-            'R.RDB$RELATION_NAME = V.RDB$RELATION_NAME '
-            'WHERE V.RDB$VIEW_NAME = ?', (name,))
-        sources = cursor.fetchall()
-        if len(sources) != 1:
+        keys, fields = projected_primary_key(cursor, name)
+        if not keys:
             return (), ()
-        base, context = sources[0]
-        cursor.execute('SELECT RDB$VIEW_BLR, RDB$RELATION_TYPE FROM '
-                       'RDB$RELATIONS WHERE RDB$RELATION_NAME = ?', (base,))
-        relation = cursor.fetchone()
-        if not relation or relation[0] is not None or relation[1] != 0:
-            return (), ()
-        cursor.execute('SELECT COUNT(*) FROM RDB$TRIGGERS WHERE '
-                       'RDB$RELATION_NAME = ? AND '
-                       'COALESCE(RDB$TRIGGER_INACTIVE, 0) = 0', (name,))
-        if cursor.fetchone()[0]:
-            return (), ()
-        cursor.execute('SELECT TRIM(S.RDB$FIELD_NAME) FROM '
-                       'RDB$RELATION_CONSTRAINTS C JOIN RDB$INDEX_SEGMENTS S '
-                       'ON S.RDB$INDEX_NAME = C.RDB$INDEX_NAME WHERE '
-                       "C.RDB$CONSTRAINT_TYPE = 'PRIMARY KEY' AND "
-                       'C.RDB$RELATION_NAME = ? ORDER BY S.RDB$FIELD_POSITION',
-                       (base,))
-        primary = [row[0] for row in cursor.fetchall()]
-        if not primary:
-            return (), ()
-        cursor.execute('SELECT TRIM(RDB$FIELD_NAME), TRIM(RDB$BASE_FIELD), '
-                       'RDB$VIEW_CONTEXT FROM RDB$RELATION_FIELDS WHERE '
-                       'RDB$RELATION_NAME = ? ORDER BY RDB$FIELD_POSITION',
-                       (name,))
-        fields = cursor.fetchall()
-        keys = []
-        for key in primary:
-            aliases = [field for field, source, field_context in fields
-                       if source == key and field_context == context]
-            if len(aliases) != 1:
-                return (), ()
-            keys.append(aliases[0])
         if operation in {'delete', 'insert-defaults'}:
             statement = None
             try:

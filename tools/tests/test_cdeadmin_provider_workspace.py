@@ -18,7 +18,7 @@ import uuid
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +57,48 @@ from pgadmin.cdeadmin.visual_admin.provider import (  # noqa: E402
 class Permissions:
     def require(self, _permission, _scope='endpoint'):
         return None
+
+
+class OfflineRegistrationTests(unittest.TestCase):
+    def test_rejected_catalog_read_does_not_fall_back_to_native_access(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.route_catalog.side_effect = ValueError(
+            'Endpoint registration unavailable')
+        with self.assertRaisesRegex(ValueError, 'registration unavailable'):
+            service.registration_workspace(SimpleNamespace(name='Offline'))
+        service.endpoint_service.workspace.assert_not_called()
+        service.endpoint_service.provider_registry.resolve.assert_not_called()
+
+    def test_local_profile_read_never_opens_a_native_workspace(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.workspace.side_effect = AssertionError(
+            'Offline editing must not resolve a native workspace')
+        forms = {'forms': {'edit': {'form_id': 'firebird.server.edit'}}}
+        route = {'configuration': {'host': '127.0.0.10', 'port': 3050}}
+        service.endpoint_service.route_catalog.return_value = {
+            'server_forms': forms, 'routes': [route],
+        }
+        server = SimpleNamespace(name='Offline Firebird', save_password=False)
+        result = service.registration_workspace(server)
+        self.assertEqual(result, {'endpoint_registration': {
+            'display_name': 'Offline Firebird', 'is_password_saved': False,
+            'forms': forms, 'primary_route': route,
+        }})
+        service.endpoint_service.workspace.assert_not_called()
+        service.endpoint_service.provider_registry.resolve.assert_not_called()
+
+    def test_missing_primary_route_is_represented_without_connecting(self):
+        service = object.__new__(ProviderWorkspaceService)
+        service.endpoint_service = Mock()
+        service.endpoint_service.route_catalog.return_value = {
+            'server_forms': {'forms': {}}, 'routes': [],
+        }
+        result = service.registration_workspace(
+            SimpleNamespace(name='Unconfigured Firebird', save_password=True))
+        self.assertIsNone(result['endpoint_registration']['primary_route'])
+        self.assertTrue(result['endpoint_registration']['is_password_saved'])
 
 
 class PilotClient:
@@ -484,6 +526,28 @@ class ProviderWorkspaceTests(unittest.TestCase):
                 'generation': refreshed['generation'],
                 'endpoint_id': 'forged',
             })
+
+    def test_buffered_poll_omits_duplicate_native_rows_without_losing_retained_result(self):
+        server = SimpleNamespace()
+        original = self.client.describe_result
+        def describe(token):
+            result = original(token)
+            result['payload']['rows'] = [(index,) for index in range(8)]
+            return result
+        self.client.describe_result = describe
+        session = self.workspace.open_session(server, 'mysql-sql', 'target-one')
+        occurrence = self.workspace.execute(server, session['session_id'], 'SELECT 42',
+                                            database_target_id='target-one')
+        response = self.workspace.poll(server, occurrence['occurrence_id'],
+                                       database_target_id='target-one', buffer_rows=3)
+        rendered = response['rendered_result']
+        self.assertEqual([{'answer': 0}, {'answer': 1}, {'answer': 2}], rendered['view_model']['rows'])
+        payload = response['occurrence']['result']['extensions']['mysql']['payload']
+        self.assertNotIn('rows', payload)
+        self.assertEqual(3, payload['buffered_row_count'])
+        next_page = self.workspace.result_page(server, {'result_id': rendered['descriptor']['result_id'],
+            'cursor': rendered['page']['next_cursor'], 'page_size': 3})
+        self.assertEqual([{'answer': 3}, {'answer': 4}, {'answer': 5}], next_page['view_model']['rows'])
 
     def test_data_studio_executes_and_renders_provider_rows(self):
         server = SimpleNamespace()

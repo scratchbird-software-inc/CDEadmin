@@ -29,6 +29,17 @@ import getApiInstance from '../../../pgadmin/static/js/api_instance';
 import firebirdManifest from '../../../pgadmin/cdeadmin/providers/firebird/provider_manifest.json';
 
 jest.mock('../../../pgadmin/static/js/api_instance');
+// Execution contract tests use a text adapter; the native browser gate covers CodeMirror.
+jest.mock('../../../pgadmin/static/js/cdeadmin_ui/editors/CodeEditor', () => ({__esModule: true,
+  default: ({label, value, onChange, disabled}) => <textarea aria-label={label} value={value}
+    disabled={disabled} onChange={event => onChange(event.target.value)} /> }));
+let detailsObserver;
+beforeEach(() => {
+  detailsObserver = new MutationObserver(() => document.querySelectorAll('details').forEach(node => node.open = true));
+  detailsObserver.observe(document.body, {childList: true, subtree: true});
+});
+afterEach(() => detailsObserver.disconnect());
+
 
 describe('provider structured record controls', () => {
   it('retains a receipt only for its original or verified renamed object in the same scope', () => {
@@ -638,6 +649,17 @@ describe('provider structured record controls', () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
+  it('permits only reordering of fixed native column lists', () => {
+    const onChange = jest.fn();
+    render(<RecordListAdminField field={{label: 'Column order',
+      array_editor: {item_kind: 'string', fixed_items: true}}}
+    value={['A', 'B']} onChange={onChange} />);
+    expect(screen.getByLabelText('Column order 1')).toBeDisabled();
+    expect(screen.queryByRole('button', {name: 'Add Column order item'})).toBeNull();
+    expect(screen.queryByRole('button', {name: /Remove/})).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Column order 2: Move up'}));
+    expect(onChange).toHaveBeenCalledWith(['B', 'A']);
+  });
   it('edits primitive lists and accepts serialized existing lists', () => {
     const onChange = jest.fn();
     render(<RecordListAdminField field={{label: 'Index columns',
@@ -797,11 +819,11 @@ describe('ProviderWorkspaceContent', () => {
     expect(status).toHaveStyle({maxHeight: '40%', overflow: 'auto', flexShrink: '0'});
     expect(status).toContainElement(screen.getByText(/Maximum fetched rows must be an integer/));
     expect(status).toContainElement(screen.getByLabelText('Exact engine contract status'));
-    expect(status).toContainElement(screen.getByLabelText('Provider grid activation status'));
+    expect(screen.queryByLabelText('Provider grid activation status')).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('submits ordered Firebird query parameters through its language contract', async () => {
+  it.each([[false, false], [true, false], [false, true]])('submits ordered Firebird parameters with profiling=%s statistics=%s', async (profiling, statistics) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'firebird-sql', title: 'Firebird SQL',
       starter_source: 'SELECT CAST(? AS INTEGER) FROM RDB$DATABASE',
@@ -820,14 +842,76 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText('Ordered ? placeholders')).toBeInTheDocument();
     expect(screen.getByText(/Driver prefetch may execute more procedure work/)).toBeInTheDocument();
     fireEvent.change(input, {target: {value: '[42,"text",null]'}});
-    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    if(statistics) fireEvent.click(screen.getByLabelText('Collect fresh attachment query statistics'));
+    if(profiling) {
+      expect(screen.getByRole('button', {name: 'Run with native profiling'})).toBeDisabled();
+      fireEvent.click(screen.getByLabelText('Allow native profiler storage and replacement of any active profile on this attachment'));
+      fireEvent.click(screen.getByRole('button', {name: 'Run with native profiling'}));
+    } else fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'firebird-session',
       source: 'SELECT CAST(? AS INTEGER) FROM RDB$DATABASE',
       parameters: [42, 'text', null], database_target_id: 'firebird-target',
-      max_rows: 1000, client_sql_dialect: 3,
+      max_rows: 1000, client_sql_dialect: 3, history_sensitive: false,
+      ...(profiling ? {profile_mode: true} : {}),
+      ...(statistics ? {statistics_mode: true} : {}),
     }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+  });
+
+  it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL',
+      starter_source: 'SELECT 1', parameter_shape: 'object-or-array',
+      parameter_hint: 'Native MySQL named or positional placeholders',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-session'},
+      execute: {occurrence_id: 'mysql-occurrence'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'mysql-target'}} />);
+    const input = await screen.findByLabelText('Query parameters (JSON object or array)');
+    fireEvent.change(input, {target: {value: parameters}});
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'execute', session_id: 'mysql-session', source: 'SELECT 1',
+      parameters: JSON.parse(parameters), database_target_id: 'mysql-target',
+    }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+  });
+
+  it.each([['mysql', 'MySQL'], ['mariadb', 'MariaDB'], ['postgresql', 'PostgreSQL'], ['sqlite', 'SQLite'], ['duckdb', 'DuckDB'], ['cockroachdb', 'CockroachDB'], ['yugabytedb', 'YugabyteDB YSQL'], ['ycql', 'YugabyteDB YCQL'], ['tidb', 'TiDB'], ['vitess', 'Vitess'], ['dolt', 'Dolt'], ['xtdb', 'XTDB'], ['immudb', 'immudb'], ['apache_ignite', 'Ignite'], ['cassandra', 'Cassandra'], ['foundationdb', 'FoundationDB'], ['tikv', 'TiKV'], ['redis', 'Redis'], ['mongodb', 'MongoDB'], ['clickhouse', 'ClickHouse'], ['influxdb', 'InfluxDB'], ['neo4j', 'Neo4j'], ['milvus', 'Milvus'], ['opensearch', 'OpenSearch'], ['opensearch_sql_ppl', 'OpenSearch SQL/PPL']])('polls %s pages and retains page identity after a terminal status', async (engine, title) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: engine === 'opensearch_sql_ppl' ? 'opensearch-sql-ppl' : engine === 'opensearch' ? 'opensearch-query-dsl' : engine === 'milvus' ? 'milvus-query-search-api' : engine === 'neo4j' ? 'cypher' : engine === 'influxdb' ? 'influxdb3-sql-influxql' : engine === 'mongodb' ? 'mongodb-query-api-json' : engine === 'redis' ? 'redis-resp3-command' : engine === 'tikv' ? 'tikv-keyvalue-json' : engine === 'foundationdb' ? 'foundationdb-keyvalue-json' : engine === 'cassandra' ? 'cql-3' : engine === 'apache_ignite' ? 'ignite-sql-keyvalue' : engine === 'xtdb' ? 'xtdb-sql-2.1' : engine === 'ycql' ? 'ycql' : engine === 'yugabytedb' ? 'ysql' : `${engine}-sql`, title: `${title} SQL`,
+      starter_source: engine === 'sqlite' ? 'SELECT 2' : 'SELECT 1; SELECT 2', parameter_shape: 'object-or-array',
+    }]}}});
+    let polls = 0;
+    api.post.mockImplementation((_url, payload) => {
+      const result = payload.action === 'poll' ? {
+        occurrence: {operation: {terminal: ++polls > 1}, result: {
+          complete: polls > 1, extensions: {[engine === 'ycql' ? 'yugabytedb' : engine]: {payload: polls === 1 ? {
+            has_page: true, [['apache_ignite', 'foundationdb', 'tikv', 'redis'].includes(engine) ? 'entries' : 'rows']: [[2]], result_set_index: engine === 'sqlite' ? 0 : 1,
+            row_offset: 256, result_set_end: true,
+          } : {has_page: false, rows: [], error: engine === 'sqlite' ? {type: 'OperationalError', sqlite_errorcode: 8, sqlite_errorname: 'SQLITE_READONLY'} : engine === 'cassandra' ? {type: 'SyntaxException', native_code: 8192} : {type: 'ProgrammingError',
+            errno: 1146, sqlstate: '42S02'}}}},
+        }}, rendered_result: null,
+      } : {open_session: {session_id: 'mysql-session'},
+        execute: {occurrence_id: 'mysql-occurrence'}}[payload.action];
+      return Promise.resolve({data: {data: result}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    expect(await screen.findByLabelText(`${title} result page`))
+      .toHaveTextContent(`Result set: ${engine === 'sqlite' ? 1 : 2} Row offset: 256 Rows on this page: 1`);
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Poll', exact: true})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', {name: 'Poll', exact: true}));
+    expect(await screen.findByText(`${title} ${['foundationdb', 'tikv', 'redis'].includes(engine) ? 'operation' : 'query'} did not complete. ${engine === 'sqlite' ? 'OperationalError 8 SQLITE_READONLY' : engine === 'cassandra' ? 'SyntaxException 8192' : 'ProgrammingError 1146 42S02'}`))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText(`${title} result page`)).toHaveTextContent('End of result set.');
   });
 
   it('runs confirmed trap control on the existing session without editor parameters or a new attachment', async () => {
@@ -855,7 +939,7 @@ describe('ProviderWorkspaceContent', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Disable all DECFLOAT traps'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'execute', session_id: 'firebird-session', source: 'SET DECFLOAT TRAPS TO',
-      parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3,
+      parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3, history_sensitive: false,
     }));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
     expect(api.post.mock.calls.filter(([, value]) => value.action === 'open_session')).toHaveLength(1);
@@ -888,6 +972,28 @@ describe('ProviderWorkspaceContent', () => {
     const opening = api.post.mock.calls.find(([, payload]) => payload.action === 'open_session')[1];
     expect(opening).not.toHaveProperty('client_sql_dialect');
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'transaction_control')).toBe(false);
+  });
+
+  it('prepares Firebird plans through the retained session without bindings, row limits or source rewriting', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'firebird-sql', title: 'Firebird SQL',
+      starter_source: 'DELETE FROM T WHERE ID=?', parameter_shape: 'array',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'fb'}, execute: {occurrence_id: 'query'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.change(await screen.findByLabelText('Maximum fetched rows'), {target: {value: '-1'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Explain / query plan'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', plan_mode: true, parameters: [], session_id: 'fb',
+      source: 'DELETE FROM T WHERE ID=?', client_sql_dialect: 3,
+    })));
+    const request = api.post.mock.calls.find(([, payload]) => payload.action === 'execute')[1];
+    expect(request).not.toHaveProperty('max_rows');
+    expect(request).not.toHaveProperty('script_mode');
   });
 
   it.each(['', '-1', '1.5', '1000001'])('rejects invalid Firebird row bound %s before opening a session', async (value) => {
@@ -1197,10 +1303,23 @@ describe('ProviderWorkspaceContent', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['edit', 'remove'])('does not prompt for engine credentials on a denied local profile %s', async (mode) => {
+    const onCredentialRequired = jest.fn();
+    api.post.mockRejectedValue({response: {status: 401,
+      data: {errormsg: 'Application login required'}}});
+    render(<ProviderWorkspaceContent endpointUrl="/workspace/1"
+      initialTab="connections" initialContext={{server_mode: mode}}
+      onCredentialRequired={onCredentialRequired} />);
+    expect(await screen.findByText('Application login required')).toBeInTheDocument();
+    expect(onCredentialRequired).not.toHaveBeenCalled();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
   it('forwards a successful focused endpoint edit through the workspace boundary', async () => {
     const result = {display_name: 'Owned Firebird'};
     const onEndpointProfileSaved = jest.fn();
-    api.get.mockResolvedValue({data: {data: {...bootstrap,
+    api.get.mockRejectedValue(new Error('Native Services API unavailable'));
+    api.post.mockResolvedValueOnce({data: {data: {
       endpoint_registration: {forms: {forms: {edit: {
         form_id: 'owned-firebird-edit', title: 'Owned Firebird editor', fields: [],
       }}}},
@@ -1214,6 +1333,10 @@ describe('ProviderWorkspaceContent', () => {
     }));
     await waitFor(() => expect(onEndpointProfileSaved).toHaveBeenCalledWith(result));
     expect(onEndpointProfileSaved).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'endpoint_profile_read',
+    });
     expect(api.post).toHaveBeenCalledWith('/workspace/1', {
       action: 'endpoint_profile_update', request: {},
     });
@@ -1828,7 +1951,7 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByLabelText('Query source'))
       .toHaveValue('SELECT 42 FROM RDB$DATABASE'));
     expect(screen.getByRole('region', {name: 'Provider query workspace'}))
-      .toHaveStyle({overflow: 'auto', minHeight: '0'});
+      .toHaveStyle({overflow: 'hidden', minHeight: '0'});
     expect(screen.queryByText(/editor is intentionally empty/)).not.toBeInTheDocument();
   });
 
@@ -2007,6 +2130,23 @@ describe('ProviderWorkspaceContent', () => {
       .toBeInTheDocument();
   });
 
+  it('always shows the bound endpoint, database and admitted dialect above the SQL editor', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap,
+      endpoint: {...bootstrap.endpoint, endpoint_id: 'endpoint-a', display_name: 'Reporting connection'},
+      endpoint_registration: {primary_route: {configuration: {host: 'db.example', port: 3307}}},
+      database_targets: {targets: [{target_id: 'db-a', display_name: 'Accounts'}]},
+    }}});
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1"
+      initialTab="studio" initialContext={{database_target_id: 'db-a'}} />);
+    const banner = await screen.findByRole('status', {name: 'SQL editor connection'});
+    expect(banner).toHaveTextContent('Reporting connection');
+    expect(banner).toHaveTextContent('db.example:3307');
+    expect(banner).toHaveTextContent('Accounts');
+    expect(banner).toHaveTextContent('MySQL SQL');
+    expect(banner).toHaveTextContent('Session not open');
+    expect(screen.getByLabelText('Maximum rows per fetch')).toHaveValue(500);
+  });
+
   it('requests the next provider-owned result page from its occurrence', async () => {
     const post = jest.fn();
     const onProviderContinuation = jest.fn().mockResolvedValue();
@@ -2020,7 +2160,7 @@ describe('ProviderWorkspaceContent', () => {
     setError={jest.fn()} setBusy={jest.fn()}
     onProviderContinuation={onProviderContinuation} />);
 
-    fireEvent.click(screen.getByText('Next result page'));
+    fireEvent.click(screen.getByRole('button', {name: 'Next result page'}));
 
     await waitFor(() => expect(onProviderContinuation).toHaveBeenCalled());
     expect(post).not.toHaveBeenCalled();
@@ -2861,15 +3001,7 @@ describe('ProviderWorkspaceContent', () => {
       initialContext={{resource_id: 'database-one'}}
     />);
     expect(await screen.findByText('MySQL SQL')).toBeInTheDocument();
-    expect(screen.getByLabelText('Provider grid activation status'))
-      .toHaveTextContent('grid contract checks passed; this is not full engine qualification');
-    const status = screen.getByLabelText('Provider grid activation status');
-    expect(status.tagName).toBe('DETAILS');
-    expect(status).not.toHaveAttribute('open');
-    fireEvent.click(screen.getByText('Grid checks passed'));
-    expect(status).toHaveAttribute('open');
-    fireEvent.click(screen.getByText('Grid checks passed'));
-    expect(status).not.toHaveAttribute('open');
+    expect(screen.queryByLabelText('Provider grid activation status')).toBeNull();
     fireEvent.click(screen.getByText('Run'));
     expect(await screen.findByText('42')).toBeInTheDocument();
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
@@ -2897,6 +3029,30 @@ describe('ProviderWorkspaceContent', () => {
     expect(warning).toHaveTextContent(failure === 'runtime' ?
       'live provider verification' : 'column_contract');
     expect(screen.queryByText('Grid checks passed')).not.toBeInTheDocument();
+  });
+
+  it('preserves a DuckDB decision and blocks replay when the next transaction fails', async () => {
+    api.get.mockResolvedValue({data: {data: {
+      ...bootstrap,
+      languages: [{language_profile: 'duckdb-sql', title: 'DuckDB SQL',
+        starter_source: 'SELECT 1', transaction_actions: ['commit', 'rollback']}],
+    }}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {
+      data: payload.action === 'open_session' ? {session_id: 'duck-session'} : {
+        session_id: 'duck-session', transaction_model: 'duckdb-native-transaction',
+        provider_payload: {last_decision: 'commit', decision_returned: true,
+          next_transaction_started: false, session_reuse_blocked: true},
+      },
+    }}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.click(await screen.findByText('commit'));
+    expect(await screen.findByText(/next_transaction_started/)).toBeVisible();
+    expect(screen.getByText('Run')).toBeDisabled();
+    expect(screen.getByText('commit')).toBeDisabled();
+    expect(screen.getByText('Close query session')).toBeEnabled();
+    expect(api.post.mock.calls.filter(([, payload]) =>
+      payload.action === 'transaction_action')).toHaveLength(1);
   });
 
   it('uses provider transaction controls without inferring finality', async () => {
@@ -2956,7 +3112,7 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
     fireEvent.click(await screen.findByText('Run'));
-    fireEvent.click(await screen.findByText('Next result page'));
+    fireEvent.click(await screen.findByRole('button', {name: 'Next result page'}));
     expect(await screen.findByText('43')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Export JSON'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
@@ -3118,6 +3274,28 @@ describe('ProviderWorkspaceContent', () => {
     expect(results).toHaveTextContent('LowCardinality(String)');
     expect(results).toHaveTextContent('one');
     expect(results).toHaveTextContent('30');
+  });
+
+  it.each([
+    ['firebird-native', false], ['firebird-embedded', false],
+    ['firebird-native', true], ['firebird-embedded', true],
+    ['mysql-native', false], ['mysql-native', true],
+  ])('surfaces prepared recovery only for its engine: %s tabbed=%s', async (profile, tabbed) => {
+    api.get.mockResolvedValue({data: {data: {
+      ...bootstrap, endpoint: {...bootstrap.endpoint, profile_id: profile},
+    }}});
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="administration"
+      initialContext={{composition_mode: tabbed ? 'tabbed' : 'focused'}} />);
+    await screen.findByRole('textbox', {name: /Name/});
+    const entry = screen.queryByRole(tabbed ? 'tab' : 'button', {name: 'Prepared Transaction Recovery'});
+    if (profile.startsWith('firebird')) {
+      expect(entry).toBeInTheDocument();
+      fireEvent.click(entry);
+      expect(await screen.findByRole('region', {name: 'Coordinated Firebird recovery'})).toBeInTheDocument();
+    } else {
+      expect(entry).not.toBeInTheDocument();
+    }
   });
 
   it('renders provider-declared administration forms and blocked plans', async () => {
@@ -3361,9 +3539,8 @@ describe('ProviderWorkspaceContent', () => {
     }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="operations" />);
-    fireEvent.click(await screen.findByText(
-      'Operation progress and history'
-    ));
+    fireEvent.mouseDown(await screen.findByRole('combobox', {name: 'Workspace'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Operation progress and history'}));
     expect(await screen.findByText(/restart-safe audit record/)).toBeInTheDocument();
     expect(screen.getByText('Observe provider state')).toBeDisabled();
     expect(screen.getByText('Request cancellation')).toBeDisabled();
@@ -3373,8 +3550,8 @@ describe('ProviderWorkspaceContent', () => {
   it('renders provider-declared operational facets and commands', async () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="operations" />);
-    expect(await screen.findAllByText('Server and cluster health'))
-      .toHaveLength(2);
+    expect(await screen.findByRole('heading', {name: 'Server and cluster health'})).toBeInTheDocument();
+    expect(screen.getByRole('combobox', {name: 'Workspace'})).toHaveTextContent('Server and cluster health');
     expect(screen.getByText('Provider observations')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Validate and preview'}))
       .toBeInTheDocument();
@@ -3440,6 +3617,9 @@ describe('ProviderWorkspaceContent', () => {
     }[payload.action]}}));
     const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load rows'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: 'Grid mode'})).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Grid mode'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Edit'}));
     const label = operation === 'insert' ? 'A new value' : 'A value';
     fireEvent.click(await screen.findByRole('button', {name: `${label} [-1:0]`}));
     if (operation === 'insert') fireEvent.click(screen.getByRole('button', {name: 'Initialize array'}));
@@ -3457,7 +3637,7 @@ describe('ProviderWorkspaceContent', () => {
 
   it.each([
     ['table', 'update'], ['table', 'insert'], ['table', 'defaults'], ['table', 'select-only'],
-    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'],
+    ['view', 'update'], ['view', 'delete'], ['view', 'insert'], ['view', 'defaults'], ['view', 'keyless'],
     ['view', 'empty'], ['view', 'null'], ['view', 'omit'], ['view', 'array'],
     ['view', 'typed-text'], ['view', 'typed-integer'], ['view', 'typed-decimal'],
     ['view', 'typed-decfloat'], ['view', 'typed-null'], ['view', 'typed-date'],
@@ -3471,7 +3651,7 @@ describe('ProviderWorkspaceContent', () => {
       'typed-binary': {encoding: 'base64', data: 'AP9/', byte_length: 3},
       'typed-float32': {encoding: 'float32', data: '-0.0'},
       'typed-float64': {encoding: 'float64', data: '1.7976931348623157e308'}}[operation];
-    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array'].includes(operation) ? 'insert' : operation;
+    const mutation = typed || ['defaults', 'empty', 'null', 'omit', 'array', 'keyless'].includes(operation) ? 'insert' : operation;
     const gridBootstrap = {
       ...bootstrap,
       resource_page: {items: [{
@@ -3503,9 +3683,9 @@ describe('ProviderWorkspaceContent', () => {
               ...(typed ? {input_kind: ['typed-null', 'typed-date', 'typed-time', 'typed-timestamp'].includes(operation) ? 'text' : operation.slice(6)} : {})},
           ],
           rows: [{
-            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: 'row-one',
+            values: {id: 1, 'second key': 2, name: operation === 'typed-binary' ? scalarValue : 'first'}, identity_token: operation === 'keyless' ? null : 'row-one',
           }],
-          editable: !(kind === 'table' && operation === 'defaults'),
+          editable: !(kind === 'table' && operation === 'defaults') && operation !== 'keyless',
           ...(kind === 'table' && operation !== 'update' ? {
             operation_authority: 'firebird-native-preparation',
           } : {}),
@@ -3534,19 +3714,21 @@ describe('ProviderWorkspaceContent', () => {
     const {unmount} = render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load rows'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: 'Grid mode'})).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Grid mode'}));
+    if (operation === 'select-only') {
+      expect(screen.getByRole('option', {name: 'Edit'})).toHaveAttribute('aria-disabled', 'true');
+      fireEvent.keyDown(screen.getByRole('listbox'), {key: 'Escape'});
+      expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+      expect(screen.queryByRole('textbox', {name: 'name value'})).toBeNull();
+      unmount(); return;
+    }
+    fireEvent.click(screen.getByRole('option', {name: 'Edit'}));
     const name = await screen.findByDisplayValue(operation === 'typed-binary' ? scalarValue.data : 'first');
     expect(screen.getByRole('textbox', {name: 'name value'})).toBe(name);
     expect(screen.getByRole('textbox', {name: 'id value'})).toHaveValue('1');
     expect(screen.getByRole('textbox', {name: 'second key value'})).toHaveValue('2');
-    if (operation === 'select-only') {
-      expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
-      expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
-      expect(screen.queryByRole('textbox', {name: 'name new value'})).toBeNull();
-      expect(name).toBeDisabled();
-      unmount();
-      return;
-    }
-    if (kind === 'table' && operation === 'defaults') {
+    if ((kind === 'table' && operation === 'defaults') || operation === 'keyless') {
       expect(screen.getByText(/Insertion is available/)).toBeInTheDocument();
     }
     if (kind === 'table') {
@@ -3561,7 +3743,15 @@ describe('ProviderWorkspaceContent', () => {
     if (operation === 'delete') {
       expect(name).toBeDisabled();
       expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
-      fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+      const remove = screen.getByRole('button', {name: 'Delete'});
+      const focus = jest.spyOn(remove, 'focus');
+      fireEvent.mouseDown(remove, {button: 2});
+      expect(focus).not.toHaveBeenCalled();
+      fireEvent.mouseDown(remove, {button: 0});
+      expect(focus).toHaveBeenCalledWith({preventScroll: true});
+      expect(remove).toHaveFocus();
+      expect(api.post).toHaveBeenCalledTimes(2);
+      fireEvent.click(remove);
       expect(api.post).toHaveBeenCalledTimes(2);
       fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
     } else if (mutation === 'insert') {
@@ -3599,7 +3789,7 @@ describe('ProviderWorkspaceContent', () => {
       }
     } else {
       fireEvent.change(name, {target: {value: 'second'}});
-      fireEvent.click(screen.getByText('Save'));
+      fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     }
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(6));
     expect(api.post.mock.calls.map((call) => call[1].action)).toEqual([
@@ -3635,7 +3825,7 @@ describe('ProviderWorkspaceContent', () => {
       .toBe('database-one');
     expect(await screen.findByLabelText('Staged provider grid changes'))
       .toHaveTextContent('1 grid change');
-    fireEvent.click(screen.getByText('Rollback changes'));
+    fireEvent.click(screen.getByRole('button', {name: 'Rollback changes'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(8));
     expect(api.post.mock.calls[6][1]).toEqual({
       action: 'transaction_action', session_id: 'grid-session',
@@ -3688,7 +3878,7 @@ describe('ProviderWorkspaceContent', () => {
     expect(await screen.findByRole('combobox', {name: 'Table or view'}))
       .toHaveTextContent('OPEN_WORK_ORDERS');
     fireEvent.click(screen.getByText('Load rows'));
-    expect(await screen.findByDisplayValue('1001')).toBeInTheDocument();
+    expect(await screen.findByText('1001')).toBeInTheDocument();
     expect(api.post.mock.calls[0][1]).toEqual({
       action: 'open_session', language_profile: 'mysql-sql',
       database_target_id: 'firebird-database-one',
@@ -3698,9 +3888,9 @@ describe('ProviderWorkspaceContent', () => {
       .toBe('firebird-database-one');
     expect(screen.getByText(/This grid is read-only because CDEadmin/)).toBeInTheDocument();
     expect(screen.getByText(/The engine may support writes/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('1001')).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Delete'})).toBeDisabled();
+    expect(screen.queryByRole('textbox', {name: 'id value'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Delete'})).toBeNull();
     expect(screen.queryByRole('button', {name: 'Insert row'})).toBeNull();
   });
 
@@ -3745,13 +3935,16 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load documents'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: 'Data mode'})).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Data mode'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Edit'}));
     const editor = await screen.findByRole('textbox', {
       name: 'Document JSON',
     });
     fireEvent.change(editor, {target: {value: JSON.stringify({
       _id: {$oid: '0123456789abcdef01234567'}, name: 'second',
     })}});
-    fireEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(5));
     expect(api.post.mock.calls[1][1].request).toEqual({
       resource_kind: 'document', operation_id: 'update',
@@ -3840,9 +4033,12 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="data" />);
     fireEvent.click(await screen.findByText('Load graph'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: 'Data mode'})).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Data mode'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Edit'}));
     const editor = await screen.findByRole('textbox', {name: 'Node properties'});
     fireEvent.change(editor, {target: {value: '{"name":"Alicia"}'}});
-    fireEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(5));
     expect(api.post.mock.calls[1][1].request).toEqual({
       resource_kind: 'node', operation_id: 'update',

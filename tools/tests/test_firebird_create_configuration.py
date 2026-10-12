@@ -18,7 +18,11 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 @pytest.mark.parametrize('compression', [False, True])
 @pytest.mark.parametrize('protocol', ['INET4', 'INET6'])
 def test_create_retains_every_selected_connection_option(
-        trusted, compression, protocol):
+        trusted, compression, protocol, monkeypatch):
+    # Windows argument construction only, not native SSPI qualification.
+    monkeypatch.setattr(
+        'pgadmin.cdeadmin.providers.firebird.authentication.'
+        'windows_authentication_host', lambda: True)
     import firebird.driver as driver
     route = {'host': '::1' if protocol == 'INET6' else 'localhost',
              'port': 53050, 'user': 'creation-user', 'trusted_auth': trusted,
@@ -51,7 +55,7 @@ def test_create_retains_every_selected_connection_option(
     assert config.dummy_packet_interval.value == 20
     assert config.config.value == (
         'WireCrypt=Required\nWireCompression=' + str(compression).lower() +
-        '\nWireCryptPlugin=ChaCha64')
+        '\nDummyPacketInterval=20\nWireCryptPlugin=ChaCha64')
     assert config.page_size.value == 16384
     assert config.db_charset.value == 'UTF8'
     assert config.db_sql_dialect.value == 1
@@ -100,7 +104,12 @@ def test_invalid_configuration_never_becomes_cached_success(invalid):
                                        driver)
 
 
-def test_sdk_create_does_not_merge_old_username_into_trusted_attachment():
+def test_sdk_create_does_not_merge_old_username_into_trusted_attachment(
+        monkeypatch):
+    # Windows team must repeat against an actual SSPI-capable native client.
+    monkeypatch.setattr(
+        'pgadmin.cdeadmin.providers.firebird.authentication.'
+        'windows_authentication_host', lambda: True)
     import firebird.driver as driver
     with patch('pgadmin.cdeadmin.providers.firebird.provider.'
                '_configure_client_library'):

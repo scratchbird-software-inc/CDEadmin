@@ -128,7 +128,7 @@ def decode_navigator_state(token):
         raise ProviderNavigatorError('navigator token is invalid') from exc
     if not isinstance(state, dict) or set(state).difference({
         'scope', 'target_id', 'database', 'display_name', 'parent_path',
-        'resource_kind', 'resource_id', 'object_scope',
+        'resource_kind', 'resource_id', 'object_scope', 'virtual_branch',
     }):
         raise ProviderNavigatorError('navigator state is invalid')
     if state.get('scope') not in {'database', 'server', 'kind', 'resource'}:
@@ -141,7 +141,7 @@ def decode_navigator_state(token):
     ):
         raise ProviderNavigatorError('navigator display path is invalid')
     for name in ('target_id', 'database', 'display_name', 'resource_kind',
-                 'resource_id'):
+                 'resource_id', 'virtual_branch'):
         value = state.get(name)
         if value is not None and not isinstance(value, str):
             raise ProviderNavigatorError(
@@ -198,6 +198,11 @@ def resource_children(resources, state, visual_catalog=None):
         raise ProviderNavigatorError('provider resources must be an array')
     state = dict(state)
     prepared = _prepared_resources(resources, state)
+    if (visual_catalog or {}).get('engine_id') == 'firebird':
+        from .providers.firebird.navigation import children
+        result = children(resources, prepared, state)
+        if result is not None:
+            return result
     scope = state['scope']
     parent_path = tuple(state.get('parent_path') or ())
     paths = {tuple(item['_navigator_path']) for item in prepared}

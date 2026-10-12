@@ -10,6 +10,17 @@
 const { contextBridge, ipcRenderer } = require('electron/renderer');
 
 contextBridge.exposeInMainWorld('electronUI', {
+  firebirdIsql: {
+    available: process.platform === 'linux',
+    launch: request => ipcRenderer.invoke('firebird-isql:launch', request),
+  },
+  firebirdDocker: {
+    available: process.platform === 'linux',
+    contexts: () => ipcRenderer.invoke('firebird-docker:contexts'),
+    prepare: request => ipcRenderer.invoke('firebird-docker:prepare', request),
+    apply: request => ipcRenderer.invoke('firebird-docker:apply', request),
+    receipt: id => ipcRenderer.invoke('firebird-docker:receipt', id),
+  },
   focus: () => ipcRenderer.send('focus'),
   onMenuClick: (callback) => ipcRenderer.on('menu-click', (_event, details) => callback(details)),
   setMenus: (menus) => {

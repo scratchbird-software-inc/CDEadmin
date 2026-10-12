@@ -3,6 +3,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .client import MilvusClientAdapter
+from .driver import MilvusDriver, MilvusDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -35,6 +36,9 @@ PROFILE = PilotProfile(
 
 
 class MilvusPilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -42,5 +46,7 @@ class MilvusPilotProvider(ActualEnginePilotProvider):
 def create_provider(context, permissions, client=None):
     return MilvusPilotProvider(
         context, permissions,
-        client or MilvusClientAdapter(permissions.acquire_secret),
+        client or MilvusDriver(
+            PROFILE, MilvusDriverBackend(permissions.acquire_secret),
+            MilvusClientAdapter.ADMIN_OPERATIONS),
     )

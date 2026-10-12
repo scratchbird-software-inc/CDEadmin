@@ -121,9 +121,8 @@ def definition(draft):
                                 2147483647, 'Lower bound')
                 upper = integer(dimension.get('upper'), -2147483648,
                                 2147483647, 'Upper bound')
-                if int(lower) > int(upper):
-                    raise RelationalClientError('Lower bound exceeds upper '
-                                                'bound')
+                if int(lower) >= int(upper):
+                    raise RelationalClientError('Upper bound must exceed lower bound')
                 ranges.append(lower + ':' + upper)
             base, separator, charset = rendered.partition(' CHARACTER SET ')
             rendered = base + '[' + ', '.join(ranges) + ']' + (

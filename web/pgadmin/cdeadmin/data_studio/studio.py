@@ -11,6 +11,9 @@
 
 from __future__ import annotations
 
+from .language_tools import capabilities
+from .scripts import serialized_execution, serialized_close
+
 import copy
 import hashlib
 import json
@@ -168,6 +171,8 @@ class DataStudioService:
         self, provider_registry, contributions=None, history=None,
         result_service=None,
     ):
+        from .scripts import ScriptCoordinator
+        self.scripts = ScriptCoordinator(self)
         self.provider_registry = provider_registry
         self.contributions = (
             contributions or DataStudioContributionRegistry()
@@ -193,6 +198,7 @@ class DataStudioService:
             'language_profile': item.language_profile,
             'title': item.title,
             'editor_mode': item.editor_mode,
+            'tooling': capabilities(item.language_profile),
             'model_families': sorted(item.model_families),
             'source_kind': item.source_kind,
             'parameter_shape': item.parameter_shape,
@@ -225,6 +231,10 @@ class DataStudioService:
             )
         binding = self.provider_registry.resolve(context)
         self._ensure_contributions(binding)
+        identity = binding.manifest['identity']
+        admitted = self._provider_languages.get((identity['provider_id'], identity['provider_version']), ())
+        if language_profile not in admitted:
+            raise DataStudioAccessError('Language is not admitted by the selected provider')
         language = self.contributions.language(language_profile)
         contribution = self.contributions.session(language.language_profile)
         provider_session = self._contract(
@@ -277,6 +287,7 @@ class DataStudioService:
         }
         return contribution.complete(binding, request)
 
+    @serialized_execution
     def execute(
         self, context, session_id, source, *, parameters=None,
         deadline=None, output_policy=None,
@@ -290,7 +301,9 @@ class DataStudioService:
                                   isinstance(parameters, dict) and
                                   not parameters):
             parameters = [] if language.parameter_shape == 'array' else {}
-        expected = list if language.parameter_shape == 'array' else dict
+        expected = ((dict, list)
+                    if language.parameter_shape == 'object-or-array' else
+                    list if language.parameter_shape == 'array' else dict)
         if not isinstance(parameters, expected):
             raise DataStudioAccessError(
                 'This provider language requires a JSON parameter ' +
@@ -476,6 +489,7 @@ class DataStudioService:
         )
         return copy.deepcopy(presentation)
 
+    @serialized_execution
     def control_transaction(self, context, session_id, action):
         """Dispatch an advertised action and return provider-owned state."""
         session, binding = self._operational_session(context, session_id)
@@ -517,9 +531,33 @@ class DataStudioService:
         )
         return copy.deepcopy(presentation)
 
+    def validate_source(self, context, session_id, source):
+        from .language_tools import analyze
+        session, binding = self._operational_session(context, session_id)
+        result = analyze(source, session.language_profile)
+        # Providers may supply an explicitly non-executing native validator.
+        validator = getattr(binding.instance, 'validate_source_without_execution', None)
+        if callable(validator):
+            result['native_validation'] = validator({
+                'session_id': session_id, 'language_profile': session.language_profile,
+                'source': source})
+        return result
+
+    def preview_script(self, context, session_id, source):
+        session, binding = self._operational_session(context, session_id)
+        if context.provider_id not in {
+                'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
+            raise DataStudioAccessError('Provider has not admitted scripts')
+        return binding.instance.preview_script({
+            'source': source,
+            'session_id': session.provider_session['session_id'],
+        })
+
+    @serialized_execution
     def query_stream(self, context, session_id, request):
         session, binding = self._operational_session(context, session_id)
-        if context.provider_id != 'org.cdeadmin.firebird':
+        if context.provider_id not in {
+                'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
             raise DataStudioAccessError('Provider has not admitted streaming')
         self.history.append('stream.requested', session_id, {
             'action': request.get('stream_action'),
@@ -530,6 +568,7 @@ class DataStudioService:
             'session_id': session.provider_session['session_id'],
         })
 
+    @serialized_close
     def close_session(self, context, session_id):
         """Close a provider-owned session and forget its local presentation."""
         session, binding = self._operational_session(context, session_id)
@@ -549,6 +588,7 @@ class DataStudioService:
             )
         with self._lock:
             self._sessions.pop(session.session_id, None)
+        self.scripts.forget_closed_session(session.session_id)
         self.history.append('session.closed', session.session_id, {
             'endpoint_id': session.endpoint_id,
             'provider_closed': True,
@@ -637,6 +677,8 @@ class DataStudioService:
                 'non-production Data Studio fixtures cannot execute'
             )
         binding = self.provider_registry.resolve(context)
+        if dict(session.provider_session['identity']) != dict(binding.manifest['identity']):
+            raise DataStudioAccessError('Retained session provider identity changed')
         self._ensure_contributions(binding)
         return session, binding
 

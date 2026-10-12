@@ -209,3 +209,55 @@ def test_unqualified_provider_must_not_silently_ignore_the_fetch_policy():
     with pytest.raises(ProviderWorkspaceError, match='has not admitted'):
         workspace.execute('server', 'session', 'source', max_rows=7)
     workspace.studio_service.execute.assert_not_called()
+
+
+@pytest.mark.parametrize('provider_id', [
+    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'])
+def test_script_workspace_preserves_target_and_separate_script_policy(
+        provider_id):
+    workspace, context = workspace_fixture(provider_id)
+    workspace.preview_script('server', 'session', 'SELECT 1;', 'target')
+    workspace.studio_service.preview_script.assert_called_once_with(
+        context, 'session', 'SELECT 1;')
+    workspace.execute('server', 'session', 'SELECT 1;', [], 'target',
+                      script_mode=True)
+    workspace.studio_service.execute.assert_called_once_with(
+        context, 'session', 'SELECT 1;', parameters=[],
+        output_policy={'redact_keys': [], 'firebird_script': True})
+
+
+@pytest.mark.parametrize('mode', [1, 'true', None])
+def test_script_workspace_rejects_non_boolean_mode(mode):
+    workspace, _context = workspace_fixture()
+    with pytest.raises(ProviderWorkspaceError, match='boolean'):
+        workspace.execute('server', 'session', 'SELECT 1;', script_mode=mode)
+    workspace.studio_service.execute.assert_not_called()
+
+
+def test_scripts_are_not_added_to_other_engines():
+    workspace, _context = workspace_fixture('org.cdeadmin.other')
+    with pytest.raises(ProviderWorkspaceError, match='not admitted'):
+        workspace.execute('server', 'session', 'SELECT 1;', script_mode=True)
+    workspace.studio_service.execute.assert_not_called()
+
+
+@pytest.mark.parametrize('provider_id', [
+    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'])
+def test_plan_policy_is_native_and_target_scoped(provider_id):
+    workspace, context = workspace_fixture(provider_id)
+    workspace.execute('server', 'session', 'DELETE FROM T;', [], 'target',
+                      plan_mode=True, client_sql_dialect=1)
+    workspace.studio_service.execute.assert_called_once_with(
+        context, 'session', 'DELETE FROM T;', parameters=[],
+        output_policy={'redact_keys': [], 'firebird_plan': True,
+                       'client_sql_dialect': 1})
+
+
+@pytest.mark.parametrize('settings', [{'plan_mode': 1},
+                                     {'plan_mode': 'true'},
+                                     {'plan_mode': True, 'script_mode': True}])
+def test_invalid_plan_modes_do_not_dispatch(settings):
+    workspace, _context = workspace_fixture()
+    with pytest.raises(ProviderWorkspaceError):
+        workspace.execute('server', 'session', 'DELETE FROM T;', **settings)
+    workspace.studio_service.execute.assert_not_called()

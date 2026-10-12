@@ -14,7 +14,7 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {
   ETL_ERROR_ACTIONS, ETL_EXECUTION_LOCATIONS, ETL_NODE_FAMILIES,

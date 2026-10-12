@@ -206,3 +206,9 @@ def test_provider_keeps_session_identity_until_release_is_confirmed():
     instance.client.close_session.return_value = {'connection_released': True}
     assert instance.close_session(session)['provider_closed'] is True
     assert session['session_id'] not in instance._sessions
+
+
+def test_binary_parameter_envelope_decodes_without_text_coercion():
+    assert normalize_parameters([{'encoding': 'base64', 'data': 'AP8=', 'byte_length': 2}]) == (b'\x00\xff',)
+    with pytest.raises(RelationalClientError):
+        normalize_parameters([{'encoding': 'base64', 'data': 'AP8=', 'byte_length': 1}])

@@ -44,7 +44,7 @@ def test_workspace_passes_selected_dialect_without_changing_endpoint(dialect):
     service.execute('server', 'session', 'SQL', client_sql_dialect=dialect)
     policy = service.studio_service.execute.call_args.kwargs['output_policy']
     assert policy == {
-        'redact_keys': [], 'client_sql_dialect': dialect}
+        'redact_keys': [], 'client_sql_dialect': dialect, 'firebird_statement_metrics': True}
 
 
 def test_other_engines_cannot_select_firebird_dialect():

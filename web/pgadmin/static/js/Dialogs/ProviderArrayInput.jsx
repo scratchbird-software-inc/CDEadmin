@@ -24,7 +24,7 @@ export function newArray(spec, depth = 0) {
   const lengths = arrayShape(spec);
   // Explicit UI allocation guard, not a native engine limit.
   if (lengths.reduce((a, b) => a * b, 1) > 100000) throw new Error(gettext('Initializing more than 100,000 array elements is not available in this editor.'));
-  const initial = {text: '', binary: '', boolean: false, date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00'}[spec.element_kind] ?? '0';
+  const initial = {text: '', binary: '', boolean: false, date: '2000-01-01', time: '00:00:00', timestamp: '2000-01-01 00:00:00', 'firebird-time-tz': {encoding: 'firebird-time-tz', utc: '00:00:00', time_zone: '+00:00'}, 'firebird-timestamp-tz': {encoding: 'firebird-timestamp-tz', utc: '2000-01-01 00:00:00', time_zone: '+00:00'}}[spec.element_kind] ?? '0';
   return Array.from({length: lengths[depth]}, () => depth === lengths.length - 1 ? initial : newArray(spec, depth + 1));
 }
 
@@ -65,6 +65,7 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
       <DialogContent>
         <Typography>{gettext('Element type')}: {spec.element_kind}{spec.precision ? `(${spec.precision})` : ''}; {gettext('Scale')}: {spec.scale}</Typography>
         {spec.length && <Typography>{gettext('Declared length')}: {spec.length} {spec.element_kind === 'binary' ? gettext('bytes') : gettext('characters')}; {gettext('Character set')}: {spec.charset}</Typography>}
+        {spec.element_kind?.startsWith('firebird-') && <Typography>{gettext('Each element is a JSON object with encoding, utc and time_zone fields. UTC preserves distinct DST instants.')}</Typography>}
         {spec.element_kind === 'binary' && <Typography>{gettext('Enter each element as canonical Base64. Fixed-width values are zero-padded by the engine.')}</Typography>}
         <Typography>{gettext('Changes remain in the row draft. Save the row, then explicitly commit or roll back the data session.')}</Typography>
         <TextField select size="small" value={draft.isNull ? 'null' : 'value'} disabled={disabled}
@@ -83,8 +84,8 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
             const name = `${label} [${coordinates.join(', ')}]`;
             return <TextField key={index} size="small" fullWidth helperText={name}
               select={spec.element_kind === 'boolean'}
-              multiline={spec.element_kind === 'text'}
-              value={spec.element_kind === 'binary' && element?.encoding === 'base64' ? element.data : String(element)}
+              multiline={spec.element_kind === 'text' || spec.element_kind?.startsWith('firebird-')}
+              value={spec.element_kind?.startsWith('firebird-') && typeof element === 'object' ? JSON.stringify(element) : spec.element_kind === 'binary' && element?.encoding === 'base64' ? element.data : String(element)}
               disabled={disabled || draft.isNull}
               inputProps={{'aria-label': name}}
               SelectProps={{inputProps: {'aria-label': name}}}

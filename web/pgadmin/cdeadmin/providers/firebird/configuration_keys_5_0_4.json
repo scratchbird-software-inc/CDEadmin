@@ -1,0 +1,313 @@
+{
+  "engine_version": "5.0.4",
+  "keys": {
+    "TempBlockSize": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "TempCacheLimit": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "RemoteFileOpenAbility": {
+      "native_type": "boolean",
+      "configuration_scope": "global"
+    },
+    "GuardianOption": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "CpuAffinityMask": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "TcpRemoteBufferSize": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "TcpNoNagle": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "DefaultDbCachePages": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ConnectionTimeout": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "DummyPacketInterval": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "DefaultTimeZone": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "LockMemSize": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "LockHashSlots": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "LockAcquireSpins": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "EventMemSize": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "DeadlockTimeout": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "RemoteServiceName": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "RemoteServicePort": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "IpcName": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "MaxUnflushedWrites": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "MaxUnflushedWriteTime": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ProcessPriorityLevel": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "RemoteAuxPort": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "RemoteBindAddress": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "ExternalFileAccess": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "DatabaseAccess": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "UdfAccess": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "TempDirectories": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "BugcheckAbort": {
+      "native_type": "boolean",
+      "configuration_scope": "global"
+    },
+    "TraceDSQL": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "LegacyHash": {
+      "native_type": "boolean",
+      "configuration_scope": "global"
+    },
+    "GCPolicy": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "Redirection": {
+      "native_type": "boolean",
+      "configuration_scope": "global"
+    },
+    "DatabaseGrowthIncrement": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "FileSystemCacheThreshold": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "RelaxedAliasChecking": {
+      "native_type": "boolean",
+      "configuration_scope": "global"
+    },
+    "AuditTraceConfigFile": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "MaxUserTraceLogSize": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "FileSystemCacheSize": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "Providers": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "AuthServer": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "AuthClient": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "UserManager": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "DefaultProfilerPlugin": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "TracePlugin": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "SecurityDatabase": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "ServerMode": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "WireCrypt": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "WireCryptPlugin": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "KeyHolderPlugin": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "RemoteAccess": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "IPv6V6Only": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "WireCompression": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "MaxIdentifierByteLength": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "MaxIdentifierCharLength": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "AllowEncryptedSecurityDatabase": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "StatementTimeout": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ConnectionIdleTimeout": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "OnDisconnectTriggerTimeout": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ClientBatchBuffer": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "OutputRedirectionFile": {
+      "native_type": "string",
+      "configuration_scope": "global"
+    },
+    "ExtConnPoolSize": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "ExtConnPoolLifeTime": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "SnapshotsMemSize": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "TipCacheBlockSize": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ReadConsistency": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "DataTypeCompatibility": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "UseFileSystemCache": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "InlineSortThreshold": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "TempTableDirectory": {
+      "native_type": "string",
+      "configuration_scope": "database-overridable"
+    },
+    "MaxStatementCacheSize": {
+      "native_type": "integer",
+      "configuration_scope": "database-overridable"
+    },
+    "ParallelWorkers": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "MaxParallelWorkers": {
+      "native_type": "integer",
+      "configuration_scope": "global"
+    },
+    "OptimizeForFirstRows": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "OuterJoinConversion": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "SubQueryConversion": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    },
+    "AllowUpdateOverwrite": {
+      "native_type": "boolean",
+      "configuration_scope": "database-overridable"
+    }
+  }
+}

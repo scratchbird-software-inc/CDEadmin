@@ -43,7 +43,7 @@ class ProviderFormContractTests(unittest.TestCase):
 
     def test_every_active_profile_owns_all_required_forms(self):
         profiles = registration_profiles()
-        self.assertEqual(26, len(profiles))
+        self.assertEqual(27, len(profiles))
         self.assertTrue(assert_form_contract_coverage(profiles))
         expected_database_operations = {
             'define', 'connect', 'create', 'edit', 'alter', 'drop',
@@ -65,7 +65,7 @@ class ProviderFormContractTests(unittest.TestCase):
                 for form in contract[scope]['forms'].values():
                     self.assertNotIn(form['form_id'], form_ids)
                     form_ids.add(form['form_id'])
-        self.assertEqual(260, len(form_ids))
+        self.assertEqual(270, len(form_ids))
 
     def test_provider_forms_expose_native_database_identity_and_options(self):
         firebird = registration_profile(

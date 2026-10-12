@@ -6,8 +6,9 @@ import json
 import os
 import re
 import threading
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, nullcontext, contextmanager
 from enum import Enum
+from dataclasses import replace
 from importlib import resources as package_resources
 
 from pgadmin.cdeadmin.sdk import (
@@ -24,7 +25,7 @@ from ..relational_admin import (
     RelationalAdminDialect,
 )
 from . import columns, mappings, character_metadata, external_functions
-from . import packages
+from . import packages, configuration
 from . import (
     blob_filters, object_privileges, shadows, database_storage,
     shadow_activation, limbo, views,
@@ -35,6 +36,7 @@ from .backup_volumes import logical_backup_volumes, start_logical_backup
 from .restore_files import logical_restore_files, start_logical_restore
 from .encryption_info import read_encryption_text
 from .attachment_cache import requested_pages, stored_page_buffers
+from .authentication import validate_authentication_plugins
 from .decfloat_traps import requested_traps
 from .parallel_workers import requested_workers
 from .failed_session import discard_failed_session
@@ -51,12 +53,17 @@ from .query_parameters import normalize_parameters
 from .query_values import normalize_value
 from .query_columns import describe_columns
 from .query_client import FirebirdQueryClient
-from .service_connection import connect_service, notify_attached
+from .service_connection import (
+    connect_service, notify_attached, security_context,
+)
 from .database_creation import create_database as create_owned_database
 from .session_settings import initialize_timeouts
 from .transaction_state import observe_transaction, release_session
 from . import availability
 from . import repair
+from .embedded import (
+    embedded_route, reject_embedded_service, require_attachment_mode,
+)
 
 
 PROFILE = PilotProfile(
@@ -67,7 +74,7 @@ PROFILE = PilotProfile(
      'constraint', 'domain', 'sequence', 'routine', 'trigger', 'procedure',
      'function', 'package', 'exception', 'user', 'role', 'privilege',
      'character-set', 'collation', 'external-function', 'blob-filter',
-     'plugin', 'shadow', 'storage-file',
+     'configuration', 'shadow', 'storage-file',
      'publication', 'authentication-mapping', 'global-authentication-mapping',
      'service-operation', 'metric'),
     ('isql', 'gbak', 'gfix', 'gstat', 'nbackup', 'user-administration'),
@@ -110,6 +117,9 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
     database_create_mode='firebird-driver',
     supports_cascade=False,
     database_extension='.fdb',
+    concept_resource_kinds={
+        'extensions_and_plugins': ('configuration',),
+    },
     not_applicable_concepts=frozenset({
         'schemas', 'materialized_views', 'types', 'partitions',
         'tablespaces_and_filespaces', 'jobs_and_events',
@@ -129,7 +139,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
             'fixup_database', 'set_replica_mode', 'upgrade_database',
         }) | database_storage.OPERATIONS | limbo.ATTACHMENT_OPERATIONS,
         'table': frozenset({
-            'inspect', 'create', 'alter', 'drop', 'recreate',
+            'inspect', 'create', 'alter', 'drop', 'recreate', 'reorder_columns',
             'insert', 'update', 'delete', 'grant', 'revoke',
         }),
         'view': frozenset({'inspect', 'create', 'alter', 'drop',
@@ -180,7 +190,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
         'external-function': (external_functions.OPERATIONS |
                               object_privileges.OPERATIONS),
         'blob-filter': blob_filters.OPERATIONS,
-        'plugin': frozenset({'inspect'}),
+        'configuration': frozenset({'inspect'}),
         'publication': frozenset({'inspect', 'alter'}),
         'service-operation': frozenset({'inspect'}),
     },
@@ -188,16 +198,54 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 
 
 class FirebirdProvider(ActualEnginePilotProvider):
-    def __init__(self, context, permissions, client):
-        super().__init__(context, permissions, client, PROFILE)
+    def __init__(self, context, permissions, client, *, profile=PROFILE):
+        embedded = context.target_adapter_id == 'firebird-embedded-client'
+        if embedded and 'network' in context.effective_permissions:
+            raise RelationalClientError(
+                'Firebird endpoint cannot admit network and embedded '
+                'execution permissions together')
+        self.attachment_mode = 'embedded' if embedded else 'network'
+        profile = (replace(profile, required_permissions=(
+            'embedded_runtime', 'filesystem')) if embedded else profile)
+        super().__init__(context, permissions, client, profile)
+
+    def _identity(self):
+        # Session DTOs must use the same admitted evidence identity as their
+        # manifest. The pilot facade's generic evidence token is not this
+        # native provider's identity and makes retained sessions unusable.
+        identity = super()._identity()
+        filename = ('embedded_provider_manifest.json' if self.profile.profile_id ==
+                    'firebird-embedded' else 'provider_manifest.json')
+        manifest = json.loads(package_resources.files(__package__).joinpath(filename).read_text())['identity']
+        if any(identity[key] != manifest[key] for key in identity if key != 'evidence_reference'):
+            raise RelationalClientError('Firebird provider identity does not match its manifest')
+        return dict(manifest)
+
+    def _admit_transport(self, request):
+        payload = _mapping(request)
+        require_attachment_mode(
+            _mapping(payload.get('route', {})), self.attachment_mode)
+
+    def discover_endpoint(self, request):
+        self._admit_transport(request)
+        return super().discover_endpoint(request)
 
     def open_session(self, request):
+        self._admit_transport(request)
         if isinstance(self.client, FirebirdQueryClient):
             # Initialization alone is not admission: identity verification,
             # failed-open cleanup and publication must precede shutdown too.
             with self.client._connecting():
                 return super().open_session(request)
         return super().open_session(request)
+
+    def preview_script(self, request):
+        self._require('execute')
+        request = _mapping(request)
+        if request.get('session_id') not in self._sessions:
+            raise ValueError('Provider session is unavailable')
+        from .scripts import preview
+        return preview(request.get('source'))
 
     def query_stream(self, request):
         self._require('execute')
@@ -261,6 +309,28 @@ class FirebirdProvider(ActualEnginePilotProvider):
             return self.client.discard_unverified_session(handle)
         return super()._discard_unverified_session(handle)
 
+    @contextmanager
+    def profile_change_guard(self):
+        """Refuse profile edits without releasing any live native identity.
+
+        Linux qualification covers database/service/failed attachments and
+        concurrent admission. Windows/macOS teams must repeat native detach,
+        credential-store and UI recovery tests with their client runtimes.
+        No connection failure is evidence that an attachment was released.
+        """
+        lock = (self.client._admission if isinstance(
+            self.client, FirebirdQueryClient) else nullcontext())
+        with lock:
+            if self._sessions or (isinstance(
+                    self.client, FirebirdQueryClient) and any((
+                        self.client._connections, self.client._opening,
+                        self.client._native_operations,
+                        self.client._recoveries))):
+                raise RelationalClientError(
+                    'Close Firebird sessions and release outstanding '
+                    'attachments before changing this connection')
+            yield
+
     def release_for_profile_change(self):
         """Do not replace credentials or routing beneath an owned session."""
         if not isinstance(self.client, FirebirdQueryClient):
@@ -296,28 +366,71 @@ class FirebirdProvider(ActualEnginePilotProvider):
 _CONFIG_LOCK = threading.RLock()
 
 
+def _validate_network_timing(route):
+    # Native DPB/SPB/config integers share the signed 32-bit domain. Zero is
+    # explicit (not an omitted/default value). Windows/macOS teams repeat
+    # native handshake/dummy-packet behavior with their client libraries.
+    for field, label in (('timeout', 'connection timeout'),
+                         ('dummy_packet_interval', 'dummy packet interval')):
+        value = route.get(field)
+        if value is not None and (type(value) is not int or
+                                  not 0 <= value <= 2147483647):
+            raise RelationalClientError(
+                f'Firebird {label} must be an integer from 0 to 2147483647')
+
+
 def _wire_configuration(route):
+    if route.get('attachment_mode') == 'embedded':
+        return 'Providers=Engine13'
+    _validate_network_timing(route)
     options = []
-    if route.get('wire_config') is not None and not isinstance(
-            route['wire_config'], str):
-        raise RelationalClientError('Firebird wire configuration is invalid')
-    if route.get('wire_crypt'):
-        if route['wire_crypt'] not in {'Disabled', 'Enabled', 'Required'}:
+    from .config_text import validate_config_selection
+    validate_config_selection(route)
+    if route.get('wire_crypt') is not None:
+        if (not isinstance(route['wire_crypt'], str) or
+                route['wire_crypt'] not in {
+                    'Disabled', 'Enabled', 'Required'}):
             raise RelationalClientError(
                 'Firebird wire encryption policy is invalid')
         options.append(f'WireCrypt={route["wire_crypt"]}')
+    plugins = route.get('wire_crypt_plugins')
+    if plugins is not None:
+        # Native plugin discovery owns availability and ordered negotiation.
+        # This field is one config value, never an injected config document.
+        # Windows/macOS teams repeat loader/handshake/browser qualification.
+        if (not isinstance(plugins, str) or not plugins.strip(' \t,;') or
+                any(ord(char) < 32 and char != '\t' for char in plugins) or
+                any(char in plugins for char in '\x7f#={}')):
+            raise RelationalClientError(
+                'Firebird wire encryption plugin list is invalid')
+        options.append('WireCryptPlugin=' + plugins)
     if route.get('wire_compression') is not None:
         if type(route['wire_compression']) is not bool:
             raise RelationalClientError(
                 'Firebird wire compression policy is invalid')
         options.append('WireCompression=' + (
             'true' if route['wire_compression'] else 'false'))
+    if route.get('dummy_packet_interval') is not None:
+        # Firebird 5 REMOTE_get_timeout_params reads native configuration,
+        # not the legacy dummy-packet DPB/SPB item. Applies to Services too.
+        options.append('DummyPacketInterval=' +
+                       str(route['dummy_packet_interval']))
     if route.get('wire_config'):
         options.append(route['wire_config'])
     return '\n'.join(options) or None
 
 
 def _route_arguments(route, module=None, *, creation=None):
+    validate_authentication_plugins(route)
+    route = embedded_route(
+        route, database=creation['database'] if creation else None)
+    _validate_network_timing(route)
+    if route.get('attachment_mode') == 'embedded' and module is not None:
+        # Missing local runtime is an endpoint dependency error, not a broken
+        # provider factory. Keep registration/catalog inspection available.
+        _configure_client_library(module)
+    if creation is not None and route.get('attachment_mode') == 'embedded':
+        creation = {**creation, 'database': route['database']}
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
     cache_pages = requested_pages(route)
@@ -376,9 +489,12 @@ def _route_arguments(route, module=None, *, creation=None):
             'host', 'port', 'database', 'user', 'auth_plugin_list',
             'trusted_auth', 'timeout',
             'protocol', 'dummy_packet_interval', 'wire_config',
-            'wire_crypt', 'wire_compression', 'decfloat_round', 'no_linger',
+            'wire_crypt', 'wire_crypt_plugins', 'wire_compression',
+            'decfloat_round', 'no_linger',
         )
     }
+    material['attachment_mode'] = route.get('attachment_mode', 'network')
+    material['filesystem_root'] = route.get('filesystem_root')
     if creation is not None:
         material['creation'] = creation
     material['attachment_cache_pages'] = cache_pages
@@ -487,21 +603,20 @@ def _server_route(route):
 
 def _server_arguments(route, module):
     """Build a Firebird service-manager attachment without a database."""
+    validate_authentication_plugins(route)
+    reject_embedded_service(route)
     validate_transport(route.get('protocol'), route.get('host'),
                        route.get('port'))
-    expected_db = route.get('service_expected_database')
-    if expected_db is not None:
-        if not isinstance(expected_db, str) or '\x00' in expected_db:
-            raise RelationalClientError(
-                'Firebird service authentication database must be text')
-        expected_db = expected_db.strip() or None
-    _configure_client_library(module)
+    expected_db = security_context(route.get('service_expected_database'))
     wire_configuration = _wire_configuration(route)
+    _configure_client_library(module)
     material = {
         name: route.get(name) for name in (
-            'host', 'port', 'user', 'protocol', 'trusted_auth',
+            'host', 'port', 'user', 'protocol', 'trusted_auth', 'timeout',
+            'dummy_packet_interval',
             'auth_plugin_list',
-            'wire_config', 'wire_crypt', 'wire_compression',
+            'wire_config', 'wire_crypt', 'wire_crypt_plugins',
+            'wire_compression',
         )
     }
     digest = hashlib.sha256(json.dumps(
@@ -1107,6 +1222,8 @@ def _version(row):
 
 
 def _initialize_connection(connection, route, module):
+    from .attachment_metadata import install
+    install(connection)
     _client_library_identity(module)
     isolation_name = route.get('transaction_isolation', 'SNAPSHOT')
     access_name = route.get('transaction_access', 'WRITE')
@@ -1139,6 +1256,9 @@ def _initialize_connection(connection, route, module):
     connection.default_tpb = value
     connection.main_transaction.default_tpb = value
     initialize_timeouts(connection, route, module)
+    from .connection_opening import notify_attached
+    if getattr(connection, '_cdeadmin_attached_pending', False) is True:
+        notify_attached(module.core, connection)
 
 
 def _materialize_catalog_value(value):
@@ -1211,6 +1331,14 @@ def _resources(connection, request):
                 'generation': generation,
             }
             if native:
+                if kind in {'column', 'index', 'constraint'} and path:
+                    # Child catalogs do not all carry their own system flag.
+                    # Preserve the observed owning relation's classification.
+                    parent = resources.get(_catalog_resource_id('table', [], path[0])) or resources.get(
+                        _catalog_resource_id('view', [], path[0]))
+                    flag = parent.get('native', {}).get('system_object') if parent else None
+                    if type(flag) is bool:
+                        native.setdefault('system_object', flag)
                 resources[resource_id]['native'] = native
 
         catalog_reader = CatalogReader(cursor, _materialize_catalog_value)
@@ -1499,7 +1627,7 @@ def _resources(connection, request):
              'F.RDB$COMPUTED_SOURCE, '
              'RF.RDB$FIELD_POSITION, '
              'RF.RDB$DESCRIPTION, G.RDB$INITIAL_VALUE, '
-             'G.RDB$GENERATOR_INCREMENT '
+             'G.RDB$GENERATOR_INCREMENT, F.RDB$NULL_FLAG, F.RDB$DIMENSIONS '
              'FROM RDB$RELATION_FIELDS RF JOIN RDB$RELATIONS R ON '
              'R.RDB$RELATION_NAME = RF.RDB$RELATION_NAME JOIN RDB$FIELDS F '
              'ON F.RDB$FIELD_NAME = RF.RDB$FIELD_SOURCE LEFT JOIN '
@@ -1533,6 +1661,7 @@ def _resources(connection, request):
                 'character_set', 'collation', 'identity_type',
                 'generator_name', 'computed_source', 'position',
                 'description', 'identity_initial_value', 'identity_increment',
+                'domain_not_null', 'dimensions',
             ),
             'index': (
                 'unique', 'inactive', 'index_type', 'statistics',
@@ -1570,7 +1699,7 @@ def _resources(connection, request):
              'TRIM(TRAILING FROM CO.RDB$COLLATION_NAME), F.RDB$NULL_FLAG, '
              'F.RDB$DEFAULT_SOURCE, '
              'F.RDB$VALIDATION_SOURCE, '
-             'F.RDB$DESCRIPTION, F.RDB$DIMENSIONS '
+             'F.RDB$DESCRIPTION, F.RDB$DIMENSIONS, TRIM(TRAILING FROM F.RDB$OWNER_NAME) '
              'FROM RDB$FIELDS F LEFT JOIN RDB$CHARACTER_SETS CS ON '
              'CS.RDB$CHARACTER_SET_ID = F.RDB$CHARACTER_SET_ID LEFT JOIN '
              'RDB$COLLATIONS CO ON CO.RDB$CHARACTER_SET_ID = '
@@ -1598,7 +1727,8 @@ def _resources(connection, request):
              'RDB$DESCRIPTION, RDB$PROCEDURE_TYPE, '
              'RDB$VALID_BLR, RDB$SQL_SECURITY, TRIM(TRAILING FROM '
              'RDB$ENTRYPOINT), '
-             'TRIM(TRAILING FROM RDB$ENGINE_NAME), RDB$PRIVATE_FLAG '
+             'TRIM(TRAILING FROM RDB$ENGINE_NAME), RDB$PRIVATE_FLAG, '
+             'TRIM(TRAILING FROM RDB$OWNER_NAME) '
              'FROM RDB$PROCEDURES WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 ORDER BY 1'),
             ('function', 'SELECT TRIM(TRAILING FROM RDB$FUNCTION_NAME), '
@@ -1608,7 +1738,8 @@ def _resources(connection, request):
              'RDB$VALID_BLR, RDB$SQL_SECURITY, TRIM(TRAILING FROM '
              'RDB$ENTRYPOINT), '
              'TRIM(TRAILING FROM RDB$ENGINE_NAME), RDB$DETERMINISTIC_FLAG, '
-             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG, RDB$PRIVATE_FLAG '
+             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG, RDB$PRIVATE_FLAG, '
+             'TRIM(TRAILING FROM RDB$OWNER_NAME) '
              'FROM RDB$FUNCTIONS WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND '
              'RDB$MODULE_NAME IS NULL ORDER BY 1'),
@@ -1619,7 +1750,8 @@ def _resources(connection, request):
              'TRIM(TRAILING FROM RDB$ENGINE_NAME), TRIM(TRAILING FROM '
              'RDB$PACKAGE_NAME), '
              'RDB$DESCRIPTION, '
-             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG FROM RDB$FUNCTIONS '
+             'RDB$RETURN_ARGUMENT, RDB$LEGACY_FLAG, '
+             'TRIM(TRAILING FROM RDB$OWNER_NAME) FROM RDB$FUNCTIONS '
              'WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND '
              'RDB$MODULE_NAME IS NOT NULL ORDER BY 1'),
@@ -1634,10 +1766,10 @@ def _resources(connection, request):
              'RDB$PACKAGE_HEADER_SOURCE, '
              'RDB$PACKAGE_BODY_SOURCE, '
              'RDB$DESCRIPTION, RDB$VALID_BODY_FLAG, '
-             'RDB$SQL_SECURITY FROM RDB$PACKAGES WHERE '
+             'RDB$SQL_SECURITY, TRIM(TRAILING FROM RDB$OWNER_NAME) FROM RDB$PACKAGES WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 ORDER BY 1'),
             ('exception', 'SELECT TRIM(TRAILING FROM RDB$EXCEPTION_NAME), '
-             'RDB$MESSAGE, RDB$DESCRIPTION '
+             'RDB$MESSAGE, RDB$DESCRIPTION, TRIM(TRAILING FROM RDB$OWNER_NAME) '
              'FROM RDB$EXCEPTIONS WHERE '
              'COALESCE(RDB$SYSTEM_FLAG, 0) = 0 ORDER BY 1'),
             ('role', 'SELECT TRIM(TRAILING FROM RDB$ROLE_NAME), '
@@ -1665,9 +1797,6 @@ def _resources(connection, request):
             ('user', 'SELECT TRIM(TRAILING FROM SEC$USER_NAME), '
              'TRIM(TRAILING FROM SEC$PLUGIN) '
              'FROM SEC$USERS ORDER BY 1'),
-            ('plugin', 'SELECT TRIM(TRAILING FROM RDB$CONFIG_NAME), '
-             'RDB$CONFIG_VALUE FROM RDB$CONFIG WHERE '
-             "UPPER(RDB$CONFIG_NAME) LIKE '%PLUGIN%' ORDER BY 1"),
             ('publication', 'SELECT TRIM(TRAILING FROM RDB$PUBLICATION_NAME), '
              'RDB$ACTIVE_FLAG FROM RDB$PUBLICATIONS ORDER BY 1'),
         )
@@ -1677,7 +1806,7 @@ def _resources(connection, request):
                 'field_scale', 'field_precision', 'character_length',
                 'segment_length', 'character_set', 'collation', 'not_null',
                 'default_source', 'validation_source', 'description',
-                'dimensions',
+                'dimensions', 'owner',
             ),
             'sequence': ('initial_value', 'increment', 'owner', 'description'),
             'trigger': (
@@ -1688,26 +1817,26 @@ def _resources(connection, request):
             'procedure': (
                 'package', 'metadata_source', 'description',
                 'procedure_type', 'valid_blr', 'sql_security', 'entrypoint',
-                'engine_name', 'private_flag',
+                'engine_name', 'private_flag', 'owner',
             ),
             'function': (
                 'package', 'metadata_source', 'description',
                 'function_type', 'valid_blr', 'sql_security', 'entrypoint',
                 'engine_name', 'deterministic', 'return_argument',
-                'legacy', 'private_flag',
+                'legacy', 'private_flag', 'owner',
             ),
             'external-function': (
                 'module_name', 'entrypoint', 'engine_name', 'package',
-                'description', 'return_argument', 'legacy',
+                'description', 'return_argument', 'legacy', 'owner',
             ),
             'blob-filter': ('input_subtype', 'output_subtype', 'entrypoint',
                             'module_name', 'owner', 'description',
                             'security_class', 'system_flag'),
             'package': (
                 'header_source', 'body_source', 'description',
-                'valid_body', 'sql_security',
+                'valid_body', 'sql_security', 'owner',
             ),
-            'exception': ('message', 'description'),
+            'exception': ('message', 'description', 'owner'),
             'role': ('system_privileges', 'owner', 'description'),
             'character-set': (
                 'bytes_per_character', 'default_collation', 'form_of_use',
@@ -1719,7 +1848,6 @@ def _resources(connection, request):
                 'system_flag', 'owner', 'description', 'character_set',
             ),
             'user': ('plugin',),
-            'plugin': ('value',),
             'publication': ('active',),
         }
 
@@ -1728,14 +1856,18 @@ def _resources(connection, request):
 
         for kind, source in simple_queries:
             for row in catalog_rows(source, kind + ' objects',
-                                    required=kind not in {'user', 'plugin'}):
+                                    required=kind != 'user'):
                 native = {
                     field: detail_value(field, detail)
                     for field, detail in zip(
                         simple_detail_names[kind], row[1:]
                     )
                 }
-                if native.get('system_flag') not in (None, '0'):
+                if 'SYSTEM_FLAG, 0) = 0' in source:
+                    native['system_object'] = False
+                elif native.get('system_flag') in (0, '0'):
+                    native['system_object'] = False
+                if native.get('system_flag') not in (None, 0, '0'):
                     native['system_object'] = True
                 if kind == 'role':
                     native.update(_role_privileges(row[1]))
@@ -1789,6 +1921,21 @@ def _resources(connection, request):
                 package = native.get('package') if kind in {
                     'procedure', 'function', 'external-function'} else None
                 add(kind, [package] if package else [], row[0], native)
+
+        settings = catalog_rows(configuration.SQL, 'effective configuration',
+                                required=False)
+        settings_available = catalog_reader.observations[-1]['available']
+        database_native['configuration_catalog'] = {
+            'available': settings_available,
+            'visible_row_count': len(settings) if settings_available else None,
+            'visibility': 'current attachment native privileges',
+            'empty_result_note': (
+                'No visible rows does not establish that configuration '
+                'is absent; native privileges may limit visibility.'),
+        }
+        for setting in settings:
+            add('configuration', [], setting[0],
+                configuration.metadata(setting))
 
         def routine_named(kind, name, package):
             name = str(name or '').rstrip(' ')
@@ -2046,6 +2193,7 @@ def _resources(connection, request):
                 depended_type, field_name, package_name) in dependency_rows:
             dependency = {
                 'object_name': str(depended_name or '').rstrip(' '),
+                'dependent_type_code': dependent_type,
                 'object_type_code': depended_type,
                 'object_type': dependency_type_names.get(
                     depended_type, f'object type {depended_type}'
@@ -2138,11 +2286,14 @@ def _resources(connection, request):
                         'delete_rule': str(delete_rule or '').strip() or None,
                     })
 
-        for constraint_name, check_source in catalog_rows(
+        for constraint_name, trigger_name, check_source in catalog_rows(
             'SELECT TRIM(TRAILING FROM CC.RDB$CONSTRAINT_NAME), '
-            'T.RDB$TRIGGER_SOURCE '
+            'TRIM(TRAILING FROM T.RDB$TRIGGER_NAME), T.RDB$TRIGGER_SOURCE '
             'FROM RDB$CHECK_CONSTRAINTS CC JOIN RDB$TRIGGERS T ON '
-            'T.RDB$TRIGGER_NAME = CC.RDB$TRIGGER_NAME ORDER BY 1',
+            'T.RDB$TRIGGER_NAME = CC.RDB$TRIGGER_NAME JOIN '
+            'RDB$RELATION_CONSTRAINTS RC ON '
+            'RC.RDB$CONSTRAINT_NAME = CC.RDB$CONSTRAINT_NAME '
+            "WHERE RC.RDB$CONSTRAINT_TYPE <> 'NOT NULL' ORDER BY 1, 2",
             'check constraint definitions',
         ):
             for constraint in objects_named(constraint_name):
@@ -2151,6 +2302,12 @@ def _resources(connection, request):
                         None if check_source is None else
                         str(check_source).strip()
                     )
+                    for trigger in objects_named(str(trigger_name).rstrip(' ')):
+                        if trigger['resource_kind'] == 'trigger':
+                            trigger.setdefault('native', {})['constraint_owner'] = str(constraint_name).rstrip(' ')
+                            trigger['native']['administration'] = {
+                                'allowed_operations': ['inspect'],
+                                'reason': 'Maintained by constraint ' + str(constraint_name).rstrip(' ')}
 
         for constraint_name, column_name in catalog_rows(
             'SELECT TRIM(TRAILING FROM CC.RDB$CONSTRAINT_NAME), '
@@ -2273,7 +2430,7 @@ def _resources(connection, request):
             security = sql_security(detail.get('sql_security'))
             body = f'\n{security}' if security else ''
             return body + (
-                f'\n{source};' if trigger and source.upper().startswith('AS ')
+                f'\n{source};' if trigger and re.match(r'^AS\b', source, re.IGNORECASE)
                 else f'\nAS\n{source};')
 
         def routine_comments(kind, detail, qualified_name):
@@ -2459,65 +2616,13 @@ def _resources(connection, request):
             return 'SQL SECURITY DEFINER' if flag else 'SQL SECURITY INVOKER'
 
         def trigger_action(value):
-            trigger_type = numeric(value)
-            if trigger_type is None:
+            from .trigger_types import action
+            try:
+                return action(value)
+            except (ValueError, RelationalClientError):
+                # Preserve unavailable metadata instead of exporting a subset
+                # of an unknown native trigger event mask.
                 return None
-            trigger_mask = 3 << 13
-            trigger_family = trigger_type & trigger_mask
-            if trigger_family == 0:
-                prefix = 'AFTER' if (trigger_type + 1) & 1 else 'BEFORE'
-                suffixes = []
-                names = ('', 'INSERT', 'UPDATE', 'DELETE')
-                for slot in range(1, 4):
-                    suffix = ((trigger_type + 1) >> (slot * 2 - 1)) & 3
-                    if suffix:
-                        suffixes.append(names[suffix])
-                return None if not suffixes else (
-                    f'{prefix} ' + ' OR '.join(suffixes)
-                )
-            if trigger_family == 1 << 13:
-                event = trigger_type & ~(1 << 13)
-                events = (
-                    'CONNECT', 'DISCONNECT', 'TRANSACTION START',
-                    'TRANSACTION COMMIT', 'TRANSACTION ROLLBACK',
-                )
-                return f'ON {events[event]}' if event < len(events) else None
-            if trigger_family != 2 << 13:
-                return None
-            unsigned = trigger_type & ((1 << 64) - 1)
-            prefix = 'AFTER' if unsigned & 1 else 'BEFORE'
-            any_mask = ((1 << 63) - 1) & ~trigger_mask & ~1
-            if unsigned & any_mask == any_mask:
-                return f'{prefix} ANY DDL STATEMENT'
-            action_names = {
-                1: 'CREATE TABLE', 2: 'ALTER TABLE', 3: 'DROP TABLE',
-                4: 'CREATE PROCEDURE', 5: 'ALTER PROCEDURE',
-                6: 'DROP PROCEDURE', 7: 'CREATE FUNCTION',
-                8: 'ALTER FUNCTION', 9: 'DROP FUNCTION',
-                10: 'CREATE TRIGGER', 11: 'ALTER TRIGGER',
-                12: 'DROP TRIGGER', 16: 'CREATE EXCEPTION',
-                17: 'ALTER EXCEPTION', 18: 'DROP EXCEPTION',
-                19: 'CREATE VIEW', 20: 'ALTER VIEW', 21: 'DROP VIEW',
-                22: 'CREATE DOMAIN', 23: 'ALTER DOMAIN',
-                24: 'DROP DOMAIN', 25: 'CREATE ROLE', 26: 'ALTER ROLE',
-                27: 'DROP ROLE', 28: 'CREATE INDEX', 29: 'ALTER INDEX',
-                30: 'DROP INDEX', 31: 'CREATE SEQUENCE',
-                32: 'ALTER SEQUENCE', 33: 'DROP SEQUENCE',
-                34: 'CREATE USER', 35: 'ALTER USER', 36: 'DROP USER',
-                37: 'CREATE COLLATION', 38: 'DROP COLLATION',
-                39: 'ALTER CHARACTER SET', 40: 'CREATE PACKAGE',
-                41: 'ALTER PACKAGE', 42: 'DROP PACKAGE',
-                43: 'CREATE PACKAGE BODY', 44: 'DROP PACKAGE BODY',
-                45: 'CREATE MAPPING', 46: 'ALTER MAPPING',
-                47: 'DROP MAPPING',
-            }
-            actions = [
-                action_names[position] for position in range(1, 64)
-                if unsigned & (1 << position) and
-                position not in {13, 14, 15} and
-                position in action_names
-            ]
-            return None if not actions else f'{prefix} ' + ' OR '.join(actions)
 
         def index_segments(index_name):
             index = next((
@@ -2762,6 +2867,7 @@ def _resources(connection, request):
                 native['recreation_statements'] = statements
                 native['ddl'] = ';\n\n'.join(statements) + ';'
             elif kind == 'domain':
+                native['array_dimensions'] = list(field_dimensions.get(name, []))
                 rendered_type = data_type(native, include_domain=False)
                 if rendered_type is not None:
                     definition = (
@@ -2957,6 +3063,15 @@ def _resources(connection, request):
                         f"IS '{comment}'")
                 native['recreation_statements'] = statements
                 native['ddl'] = ';\n'.join(statements) + ';'
+        for item in resources.values():
+            if item['resource_kind'] != 'constraint':
+                continue
+            detail = item.setdefault('native', {})
+            matches = [candidate for candidate in objects_named(detail.get('index_name'))
+                       if candidate['resource_kind'] == 'index' and
+                       candidate['display_path'][:-1] == item['display_path'][:-1]]
+            detail['backing_index'] = ({'name': matches[0]['display_name'],
+                **matches[0].get('native', {})} if len(matches) == 1 else None)
         primary_key_columns = {}
         for candidate in resources.values():
             detail = candidate.get('native', {})
@@ -2976,9 +3091,10 @@ def _resources(connection, request):
                         if len(parents) == 1 else {})
             primary_key = item['display_name'] in primary_key_columns.get(
                 tuple(path[:-1]), set())
+            native['array_dimensions'] = list(field_dimensions.get(native.get('domain'), []))
             native['alteration'] = columns.alteration_context(
                 native, relation, primary_key=primary_key,
-                array=bool(field_dimensions.get(native.get('domain'))))
+                array=bool(field_dimensions.get(native.get('domain'))) or str(native.get('dimensions') or '0') != '0')
             native['type_editor'] = type_editor_values(native)
         plural = {
             'column': 'columns', 'index': 'indexes',
@@ -3007,6 +3123,7 @@ def _resources(connection, request):
             if item['resource_kind'] != 'table':
                 continue
             native = item.setdefault('native', {})
+            native['column_order'] = [column['name'] for column in native.get('columns', [])]
             if native.get('system_object'):
                 continue
             lines = []
@@ -3090,6 +3207,7 @@ def _resources(connection, request):
                     'The exact Firebird field type could not be rendered.'
                 ))
                 continue
+            foreign_clauses = []
             for constraint in native.get('constraints', []):
                 if constraint.get('constraint_type') == 'NOT NULL':
                     continue
@@ -3104,6 +3222,8 @@ def _resources(connection, request):
                         'metadata is missing.')
                     break
                 lines.append(clause)
+                if constraint.get('constraint_type') == 'FOREIGN KEY':
+                    foreign_clauses.append(clause)
             if native.get('ddl_available') is False:
                 continue
             relation_type = numeric(native.get('relation_type'), 0)
@@ -3154,6 +3274,21 @@ def _resources(connection, request):
                         f'COMMENT ON COLUMN '
                         f'{identifier(item["display_name"])}.'
                         f'{identifier(column["name"])} IS \'{comment}\'')
+            primary = list(statements)
+            primary[0] = prefix + ' (\n  ' + ',\n  '.join(
+                line for line in lines if line not in foreign_clauses) + f'\n){suffix}'
+            deferred = ['ALTER TABLE ' + identifier(item['display_name']) + ' ADD ' + clause
+                        for clause in foreign_clauses]
+            backing = {constraint.get('index_name'): constraint.get('constraint_type')
+                       for constraint in native.get('constraints', []) if constraint.get('index_name')}
+            for index in native.get('indexes', []):
+                if index['name'] in backing and index.get('description') is not None:
+                    comment = str(index['description']).replace("'", "''")
+                    statement = 'COMMENT ON INDEX ' + identifier(index['name']) + " IS '" + comment + "'"
+                    statements.append(statement)
+                    (deferred if backing[index['name']] == 'FOREIGN KEY' else primary).append(statement)
+            native['recreation_primary_statements'] = primary
+            native['recreation_deferred_statements'] = deferred
             native['recreation_statements'] = statements
             native['ddl'] = ';\n'.join(statements) + ';'
         dependency_capable = {
@@ -3194,7 +3329,8 @@ def _resources(connection, request):
                 sections.append('files')
             sections.append('operations')
             native['property_sections'] = sections
-        for name in PROFILE.admin_tools:
+        for name in (() if request.get('route', {}).get(
+                'attachment_mode') == 'embedded' else PROFILE.admin_tools):
             add('service-operation', [], name)
         for metric in _metric_records():
             if not str(metric['source']).startswith('MON$'):
@@ -3346,21 +3482,25 @@ def _sequence_state(cursor, name):
                 'reason': 'Generator value could not be read by this account'}
 
 
-def _create_client(permissions):
+def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
+                   administration=ADMINISTRATION):
     module = load_optional_module('firebird.driver')
     core = (load_optional_module('firebird.driver.core')
             if module is not None else None)
-    if module is not None:
+    if module is not None and attachment_mode != 'embedded':
         _configure_client_library(module)
-    return FirebirdQueryClient(RelationalClientConfig(
-        profile=PROFILE,
+    from .connection_opening import connect as connect_database
+    client = FirebirdQueryClient(RelationalClientConfig(
+        profile=profile,
         module_name='firebird.driver',
         version_query=(
             "SELECT RDB$GET_CONTEXT('SYSTEM', 'ENGINE_VERSION') "
             'FROM RDB$DATABASE'
         ),
         version_parser=_version,
-        connect_arguments=lambda route: _route_arguments(route, module),
+        connect_arguments=lambda route: _route_arguments(
+            embedded_route(require_attachment_mode(
+                route, attachment_mode), permissions), module),
         metadata_reader=_resources,
         query_parameter_normalizer=normalize_parameters,
         query_value_normalizer=lambda value: normalize_value(
@@ -3378,17 +3518,22 @@ def _create_client(permissions):
         ),
         failed_session_releaser=discard_failed_session,
         database_create_arguments=lambda route, database, options: (
-            _database_create_arguments(route, database, options, module)
+            _database_create_arguments(
+                embedded_route(require_attachment_mode(
+                    route, attachment_mode), permissions, database=database),
+                database, options, module)
         ),
         database_creator=(
             (lambda **kwargs: create_owned_database(module, core, **kwargs))
             if module is not None else None),
-        administration=ADMINISTRATION,
+        administration=administration,
         server_route=_server_route,
         server_connector_name='connect_server',
-        server_connect_arguments=lambda route: _server_arguments(
-            route, module
-        ),
+        server_connect_arguments=lambda route: {
+            **_server_arguments(
+                require_attachment_mode(route, attachment_mode), module),
+            'connect_timeout': route.get('timeout'),
+        },
         server_identity_reader=lambda server, request: _server_identity(
             server, request, module
         ),
@@ -3402,10 +3547,17 @@ def _create_client(permissions):
         (lambda **kwargs: connect_service(module, core, **kwargs))
         if module is not None else None), service_attached=(
         (lambda connection: notify_attached(core, connection))
-        if core is not None else None))
+        if core is not None else None), database_connector=(
+        (lambda **kwargs: connect_database(
+            module, core, failed_owner=client._retain_failed_attachment,
+            **kwargs)) if core is not None else None))
+    return client
 
 
 def create_provider(context, permissions, client=None):
     return FirebirdProvider(
-        context, permissions, client or _create_client(permissions)
+        context, permissions, client or _create_client(
+            permissions, attachment_mode=(
+                'embedded' if context.target_adapter_id ==
+                'firebird-embedded-client' else 'network'))
     )

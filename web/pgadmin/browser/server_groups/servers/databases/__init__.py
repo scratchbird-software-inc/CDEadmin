@@ -593,7 +593,14 @@ class DatabaseView(PGChildNodeView):
         from pgadmin.utils.driver import get_driver
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
         conn = manager.connection(did=did, auto_reconnect=True)
-        status = manager.release(did=did)
+        from pgadmin.cdeadmin.endpoints.service import (
+            service_for_app as endpoint_service_for_app, EndpointRegistrationError,
+        )
+        try:
+            status = endpoint_service_for_app(current_app).release_native_connections(
+                get_server(sid), lambda: manager.release(did=did))
+        except EndpointRegistrationError as exc:
+            return make_json_response(status=409, success=0, errormsg=str(exc))
 
         if not status:
             return unauthorized(_("Database could not be disconnected."))

@@ -64,7 +64,7 @@ def _namespace():
     return str(uuid.uuid4())
 
 
-def _context(identity):
+def _context(identity, manifest):
     """Build an isolated, unverified context without opening a connection."""
     return SimpleNamespace(
         endpoint_id=_namespace(),
@@ -72,10 +72,13 @@ def _context(identity):
         profile_id=identity['profile_id'],
         provider_id=identity['provider_id'],
         provider_version=identity['provider_version'],
+        target_adapter_id=manifest['composition']['target_adapter_ids'][0],
         runtime_verification_state='unverified',
         verified_runtime_family=None,
         declared_runtime_family=None,
-        effective_permissions=frozenset({'network', 'secret_read'}),
+        effective_permissions=frozenset(
+            item['permission_id'] for item in manifest.get('permissions', [])
+            if item.get('granted') is True),
         session_namespace=_namespace(),
         cache_namespace=_namespace(),
         pool_namespace=_namespace(),
@@ -130,7 +133,7 @@ def provider_catalogs():
         else:
             module = importlib.import_module(module_name)
             provider = module.create_provider(
-                _context(identity), _InventoryPermissions()
+                _context(identity, manifest), _InventoryPermissions()
             )
             descriptor = provider.visual_admin_descriptor()
         if profile_id in catalogs:

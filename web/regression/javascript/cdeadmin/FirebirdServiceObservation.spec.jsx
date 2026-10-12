@@ -11,6 +11,35 @@ describe('Firebird native service result', () => {
   };
 
   it.each([
+    ['TASK_ROLE', 'task', 'This task'],
+    ['DEFAULT_ROLE', 'connection', 'Connection default'],
+    [null, 'none', 'No requested role'],
+  ])('shows requested role %s without asserting privileges', (role, source, label) => {
+    render(<FirebirdServiceObservation observation={{...observation,
+      service_authentication_requested: {requested_role: role, role_source: source,
+        authentication_database: 'security_context', role_transport: 'service_attachment',
+        authorization_verified: false}}} />);
+    expect(screen.getByText('Requested service role').nextElementSibling)
+      .toHaveTextContent(role || 'None requested');
+    expect(screen.getByText('Service role source').nextElementSibling).toHaveTextContent(label);
+    expect(screen.getByText('Service authentication database').nextElementSibling)
+      .toHaveTextContent('security_context');
+    expect(screen.getByText(/not a grant of privileges/)).toBeInTheDocument();
+    expect(screen.queryByText(/provenance is incomplete/)).not.toBeInTheDocument();
+  });
+
+  it.each([null, {}, {requested_role: {}}, {role_source: '__proto__'},
+    {requested_role: 'ROLE', role_source: 'task', authentication_database: null,
+      role_transport: 'service_attachment', authorization_verified: true},
+  ])('does not certify malformed authentication provenance: %j', (auth) => {
+    render(<FirebirdServiceObservation observation={{...observation,
+      service_authentication_requested: auth}} />);
+    expect(screen.getByText('Requested service role').nextElementSibling)
+      .toHaveTextContent('Not reported');
+    expect(screen.getByText(/provenance is incomplete/)).toBeInTheDocument();
+  });
+
+  it.each([
     ['NEW_DATABASE', 'FROM_BACKUP', false, 'Create a new restored database'],
     ['IN_PLACE', 'READ_ONLY', true, 'Apply increments to an existing offline database'],
     ['FIXUP', 'UNCHANGED', true, 'Fix up an offline copied database'],

@@ -18,8 +18,8 @@ import {IconButton} from '../primitives/Button';
 export function Toolbar({label='Toolbar', children, trailing}) {
   return <Box role="toolbar" aria-label={label}
     sx={{minHeight: 'var(--cde-toolbar-height)', display: 'flex',
-      alignItems: 'center', gap: 0.5, px: 0.5, borderBottom: '1px solid',
-      borderColor: 'divider', overflow: 'hidden'}}>
+      alignItems: 'center', flexWrap: 'wrap', flexShrink: 0, gap: 0.5, px: 0.5, py: 0.5, borderBottom: '1px solid',
+      borderColor: 'divider', minWidth: 0}}>
     {children}
     {trailing && <Box sx={{ml: 'auto'}}>{trailing}</Box>}
   </Box>;

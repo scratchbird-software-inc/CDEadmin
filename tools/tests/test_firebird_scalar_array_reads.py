@@ -1,5 +1,5 @@
 """Bounded scalar slices retain native decoding and transaction ownership."""
-from ctypes import byref, create_string_buffer, memmove
+from ctypes import create_string_buffer, memmove
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -26,23 +26,21 @@ def test_scalar_slices_use_original_transaction_and_exact_decode(
         _stmt=SimpleNamespace(_out_buffer=create_string_buffer(8)))
     desc = SimpleNamespace(relation='T', field='A', offset=0, length=8)
     catalog = cursor._transaction.cursor.return_value.__enter__.return_value
-    catalog.fetchone.return_value = None if failure == 'subtype' else (1,)
+    catalog.fetchall.return_value = ([] if failure == 'subtype' else
+                                     [(8, 1, -2, bounds.array_desc_length,
+                                      0, -1, 2)])
     calls = []
 
-    def lookup(status, db, transaction, relation, field, target):
-        memmove(byref(target), byref(bounds), len(bytes(bounds)))
-
-    def get(status, db, transaction, array_id, part, data, length):
-        assert transaction is cursor._transaction._get_handle.return_value
+    def get(transaction, array_id, sdl, params, data):
+        assert transaction is cursor._transaction._tra
         assert len(data) <= cap
-        coordinates = part.array_desc_bounds[0]
-        values = range(coordinates.array_bound_lower,
-                       coordinates.array_bound_upper + 1)
+        low = -1 + sum(calls)//4
+        assert sdl[-7:-3] == low.to_bytes(4, 'little', signed=True)
+        values = range(low, low+len(data)//4)
         packed = b''.join(v.to_bytes(4, 'little', signed=True) for v in values)
         memmove(data, packed, len(packed))
         calls.append(len(data))
-        if failure == 'short':
-            length.value -= 1
+        return len(data)-int(failure == 'short')
 
     def decode(width, dtype, subtype, scale, depth, shape, data, offset):
         assert (width, dtype, subtype, scale, depth, offset) == (
@@ -52,10 +50,8 @@ def test_scalar_slices_use_original_transaction_and_exact_decode(
                 len(data) - int(failure == 'decode'))
 
     cursor._extract_db_array_to_list = decode
-    with patch.object(scalar_arrays.api, 'get_api') as native, \
-            patch.object(varying_arrays, 'SLICE_BYTES', cap):
-        native.return_value.isc_array_lookup_bounds.side_effect = lookup
-        native.return_value.isc_array_get_slice.side_effect = get
+    cursor._connection._att.get_slice.side_effect = get
+    with patch.object(varying_arrays, 'SLICE_BYTES', cap):
         if failure:
             with pytest.raises(RelationalClientError):
                 scalar_arrays.read(cursor, desc)

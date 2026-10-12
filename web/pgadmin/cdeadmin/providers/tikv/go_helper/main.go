@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,9 +189,13 @@ func rawRequest(ctx context.Context, value request) (response, error) {
 		return response{}, errors.New("TiKV RawKV connection failed")
 	}
 	defer client.Close()
+	return rawOnClient(ctx, client, value)
+}
+
+func rawOnClient(ctx context.Context, client *rawkv.Client, value request) (response, error) {
 	native := map[string]any{
 		"operation":         value.Operation,
-		"cluster_id":        client.ClusterID(),
+		"cluster_id":        strconv.FormatUint(client.ClusterID(), 10),
 		"transaction_model": "raw-single-key-or-client-batch",
 	}
 	result := response{Native: native, ProviderFinality: true}
@@ -326,7 +331,7 @@ func transactionRequest(ctx context.Context, value request) (response, error) {
 	result := response{
 		Records: []record{},
 		Native: map[string]any{
-			"operation": "transaction", "start_ts": txn.StartTS(),
+			"operation": "transaction", "start_ts": strconv.FormatUint(txn.StartTS(), 10),
 			"transaction_model": "tikv-client-go-native",
 			"transaction_mode":  value.TransactionMode,
 			"isolation":         "snapshot-isolation",
@@ -354,6 +359,11 @@ func transactionRequest(ctx context.Context, value request) (response, error) {
 		key, err := decode(change.Key, "mutation key_base64")
 		if err != nil {
 			return response{}, err
+		}
+		if value.TransactionMode == "pessimistic" {
+			if err := txn.LockKeysWithWaitTime(ctx, 0, key); err != nil {
+				return response{}, errors.New("TiKV pessimistic lock failed")
+			}
 		}
 		switch change.Operation {
 		case "set":
@@ -393,6 +403,9 @@ func transactionRequest(ctx context.Context, value request) (response, error) {
 }
 
 func run() error {
+	if len(os.Args) == 2 && os.Args[1] == "--session" {
+		return serveSession(os.Stdin, os.Stdout)
+	}
 	reader := bufio.NewReader(io.LimitReader(os.Stdin, maximumRequestBytes+1))
 	payload, err := io.ReadAll(reader)
 	if err != nil {

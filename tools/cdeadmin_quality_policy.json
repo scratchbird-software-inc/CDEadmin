@@ -1,7 +1,7 @@
 {
   "schema": "cdeadmin.quality-policy.v1",
   "baseline_id": "pgadmin4-9.17-bc58657d3d3a-20260831",
-  "source_budget_revision": "cde-reference-portfolio-complete-20260910",
+  "source_budget_revision": "cde-firebird-native-workflows-20261011",
   "production_provider_roots": [
     "web/pgadmin/cdeadmin/providers"
   ],
@@ -21,8 +21,8 @@
   "contract_schema": "web/pgadmin/cdeadmin/contracts/v1/contract.schema.json",
   "contract_runtime": "web/pgadmin/cdeadmin/contracts/v1/runtime.py",
   "source_budgets": {
-    "production_cdeadmin_bytes_baseline": 55089135,
-    "production_cdeadmin_bytes_maximum": 63352406,
+    "production_cdeadmin_bytes_baseline": 64347205,
+    "production_cdeadmin_bytes_maximum": 73999285,
     "frontend_cdeadmin_bytes_maximum": 12000
   },
   "built_bundle": {
@@ -34,7 +34,7 @@
     "maximum_bytes": 77623060
   },
   "startup": {
-    "route_count": 1406,
+    "route_count": 1411,
     "wall_seconds_maximum": 8.0,
     "max_rss_kib_maximum": 240000,
     "required_extensions": [

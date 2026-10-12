@@ -7,19 +7,27 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {removeSQLConnections} from '../editors/SQLConnections';
+
 export function providerEndpointSessionReady(serverData) {
   return Boolean(
     serverData?.cde_endpoint &&
     serverData.runtime_verification_state === 'verified' &&
-    (serverData.is_password_saved ||
-      serverData.cde_session_authenticated)
+    serverData.cde_session_authenticated
   );
+}
+
+/** Local registration metadata is editable even when native auth is down. */
+export function isProviderRegistrationWorkspace(tab, context={}) {
+  return tab === 'firebird-registration' ||
+    (tab === 'connections' && ['edit', 'remove'].includes(context.server_mode));
 }
 
 /** Mirror a committed profile edit without reusing its old verification. */
 export function invalidateProviderEndpointProfile(tree, item, result={}) {
   const data = tree?.itemData?.(item);
   if (!data?.cde_endpoint) return false;
+  removeSQLConnections(data._id);
   data.runtime_verification_state = 'stale';
   data.cde_session_authenticated = false;
   data.connected = false;
@@ -32,10 +40,10 @@ export function invalidateProviderEndpointProfile(tree, item, result={}) {
   // supplies its current value; do not erase credentials to invalidate state.
   const primary = result?.route_catalog?.routes?.[0]?.configuration;
   if (typeof primary?.user === 'string') data.username = primary.user;
-  if (typeof result?.display_name === 'string' && result.display_name.trim()) {
-    data.label = result.display_name;
-    data._label = result.display_name;
-    tree.setLabel(item, {label: result.display_name});
+  if (typeof result?.navigator_label === 'string' && result.navigator_label.trim()) {
+    data.label = result.navigator_label;
+    data._label = result.navigator_label;
+    tree.setLabel(item, {label: result.navigator_label});
   }
   tree.addIcon(item, {icon: data.icon});
   return true;
@@ -51,6 +59,7 @@ export function beforeOpenProviderDatabase(tree, serverNode, item) {
     // an earlier request failed before endpoint verification. A deliberate
     // reopen must retry that read, not permanently present an empty catalog.
     // Preserve populated branches and never load before verification.
+    serverNode.callbacks?.register_cde_sql_connection?.call(serverNode, {item: serverItem, databaseItem: item});
     if (item.children?.length === 0) item._children = null;
     return true;
   }

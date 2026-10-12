@@ -84,6 +84,7 @@ from pgadmin.cdeadmin.navigator import (
     encode_navigator_state,
     is_loopback_server,
     resource_children,
+    resource_native,
     server_display_name,
 )
 from pgadmin.cdeadmin.data_studio import DataStudioError
@@ -217,7 +218,7 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
     nodes = []
     base_state = {
         key: state[key] for key in (
-            'target_id', 'database', 'display_name', 'object_scope'
+            'target_id', 'database', 'display_name', 'object_scope', 'virtual_branch'
         ) if key in state
     }
     for value in resource_children(snapshot['resources'], state,
@@ -229,6 +230,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 'parent_path': value['parent_path'],
                 'resource_kind': value['resource_kind'],
             }
+            if value.get('virtual_branch'):
+                child_state['virtual_branch'] = value['virtual_branch']
             if value.get('object_scope'):
                 child_state['object_scope'] = value['object_scope']
             if state.get('resource_id'):
@@ -273,9 +276,19 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'parent_path': value['display_path'],
             'resource_id': value['resource_id'],
         }
+        if resource_native(resource).get('system_object'):
+            child_state['object_scope'] = 'system'
         node_id = hashlib.sha256(
-            value['resource_id'].encode('utf-8')
+            (value['resource_id'] + (':' + value['section'] if value.get('section') else '')).encode('utf-8')
         ).hexdigest()[:24]
+        actions = resource_context_actions(
+            profile, resource, snapshot.get('visual_admin'),
+            database_target_id=base_state.get('target_id'))
+        if value.get('section'):
+            actions = [a for a in actions if a.get('arguments', {}).get('tab') == 'object']
+            for action in actions:
+                action['arguments']['section'] = value['section']
+                action['label'] = 'Open ' + value['section']
         nodes.append({
             'id': f'cde_resource_{node_id}',
             'label': value['label'],
@@ -303,12 +316,10 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
-            'cde_context_actions': resource_context_actions(
-                profile, resource, snapshot.get('visual_admin'),
-                database_target_id=base_state.get('target_id'),
-            ),
+            'cde_context_actions': actions,
+            'cde_section': value.get('section'),
         })
-    return sorted(nodes, key=lambda item: item['label'].casefold())
+    return nodes if profile['engine_id'] == 'firebird' else sorted(nodes, key=lambda item: item['label'].casefold())
 
 
 def has_any(data, keys):
@@ -1933,6 +1944,13 @@ class ServerNode(PGChildNodeView):
                         'The parent directory for the database does not exist.'
                     ))
         targeting = endpoint_registration.get('database_targeting', {})
+        explicit_embedded_create = (
+            endpoint_registration['profile_id'] == 'firebird-embedded' and
+            registration_intent == 'create_database')
+        if explicit_embedded_create and not data.get('cde_verify_now'):
+            return bad_request(errormsg=gettext(
+                'Firebird embedded creation requires immediate verification.'
+            ))
         if provider_endpoint and not embedded_endpoint and (
             registration_intent in {'register_existing', 'create_database'}
         ) and not data.get('db'):
@@ -2150,11 +2168,26 @@ class ServerNode(PGChildNodeView):
                             'A password is required to verify this endpoint.'
                         )
                     )
+                created_embedded = False
                 try:
-                    verification = endpoint_service_for_app(
-                        current_app
-                    ).verify_server(server, transient_password)
+                    endpoint_service = endpoint_service_for_app(current_app)
+                    if explicit_embedded_create:
+                        created_embedded = True
+                        endpoint_service.create_initial_embedded_database(
+                            server)
+                    verification = endpoint_service.verify_server(
+                        server, transient_password)
                 except EndpointRegistrationError as exc:
+                    if created_embedded:
+                        return make_json_response(
+                            status=409, success=0, errormsg=gettext(
+                                'Embedded database creation or verification '
+                                'did not complete. The endpoint was preserved; '
+                                'inspect the destination before retrying: '
+                                '%(e)s',
+                                e=str(exc)),
+                            data={'server_id': server.id,
+                                  'endpoint_preserved': True})
                     db.session.delete(server)
                     db.session.commit()
                     return make_json_response(
@@ -2410,6 +2443,9 @@ class ServerNode(PGChildNodeView):
     @pga_login_required
     def verify_endpoint(self, gid, sid):
         """Verify a provider endpoint without invoking PostgreSQL drivers."""
+        from pgadmin.cdeadmin.endpoints.credential_storage import (
+            encrypted_credentials, protected_configuration_write,
+        )
         server = get_server(sid)
         if server is None:
             return bad_request(self.not_found_error_msg())
@@ -2432,30 +2468,46 @@ class ServerNode(PGChildNodeView):
         )
         password = data.get('password') or None
         connect_as = data.get('connect_as') or None
-        if connect_as and data.get('save_password'):
+        save_password = data.get('save_password', False)
+        if isinstance(save_password, str):
+            save_password = {'true': True, 'false': False}.get(save_password)
+        if not isinstance(save_password, bool):
+            return bad_request(gettext('Save password must be true or false.'))
+        if connect_as and save_password:
             return bad_request(gettext(
                 'Credentials used to connect as another user are session '
                 'only. Edit the connection profile to change and save the '
                 'default user credentials.'
             ))
+        verification = None
         try:
+            # Check policy/key availability before creating a verified session.
+            protected_password = encrypted_credentials(password) if (
+                password and save_password) else None
             verification = endpoint_service_for_app(
                 current_app
             ).verify_server(
                 server, password, connect_as=connect_as,
                 database_target_id=data.get('database_target_id') or None)
+            if protected_password is not None:
+                with protected_configuration_write(db.session):
+                    target_id = data.get('database_target_id')
+                    target = (endpoint_service_for_app(current_app).
+                              _owned_database_target(server.endpoint_profile, target_id)
+                              if target_id else None)
+                    if target is not None and target.registration_credentials:
+                        target.registration_password = protected_password
+                    else:
+                        server.password = protected_password
+                        server.save_password = 1
+                    db.session.commit()
         except EndpointRegistrationError as exc:
+            if verification is not None:
+                endpoint_service_for_app(
+                    current_app).forget_server_credentials(server)
             return make_json_response(
                 status=401, success=0, errormsg=str(exc)
             )
-        if password and data.get('save_password'):
-            crypt_key_present, crypt_key = get_crypt_key()
-            if not crypt_key_present:
-                raise CryptKeyMissing
-            if config.ALLOW_SAVE_PASSWORD:
-                server.password = encrypt(password, crypt_key)
-                server.save_password = 1
-                db.session.commit()
         return make_json_response(
             data={
                 **verification,
@@ -2570,11 +2622,32 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'firebird_file_download':
+                    from pgadmin.cdeadmin.workspace.firebird_download import (
+                        response as file_response,
+                    )
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        data = json.loads(body)
+                        if not isinstance(data, dict):
+                            raise ValueError('Invalid request')
+                        return file_response(service, server, data)
+                    except (ValueError, TypeError, KeyError):
+                        return bad_request('Invalid file delivery request')
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
-                        'resource_page', 'resource_inspect', 'resource_refresh'}:
+                        'resource_page', 'resource_inspect', 'resource_refresh',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate',
+                        'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
+                        'firebird_schema_plan', 'firebird_schema_review',
+                        'firebird_schema_apply', 'firebird_schema_receipt',
+                        'firebird_design_read', 'firebird_design_save',
+                        'firebird_relational_review',
+                        'query_history_read', 'query_history_configure', 'query_history_clear', 'firebird_events', 'firebird_object_templates', 'firebird_isql_context'}:
                     resource_request = data.get('request') or {}
                     if not isinstance(resource_request, dict) or (
                             resource_request.get('database_target_id') not in
@@ -2608,6 +2681,8 @@ class ServerNode(PGChildNodeView):
                     ).delete_route(
                         server, route_request.get('route_id')
                     )
+                elif action == 'endpoint_profile_read':
+                    payload = service.registration_workspace(server)
                 elif action == 'endpoint_profile_update':
                     payload = endpoint_service_for_app(
                         current_app
@@ -2640,6 +2715,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.open_session(
                         server, data.get('language_profile'),
                         data.get('database_target_id'),
+                        session_purpose=data.get('session_purpose'),
                     )
                 elif action == 'execute':
                     payload = service.execute(
@@ -2650,7 +2726,39 @@ class ServerNode(PGChildNodeView):
                         data.get('database_target_id'),
                         max_rows=data.get('max_rows'),
                         client_sql_dialect=data.get('client_sql_dialect'),
+                        script_mode=data.get('script_mode', False),
+                        plan_mode=data.get('plan_mode', False),
+                        history_sensitive=data.get('history_sensitive', False),
+                        profile_mode=data.get('profile_mode', False),
+                        statistics_mode=data.get('statistics_mode', False),
                     )
+                elif action in {'query_history_read', 'query_history_configure', 'query_history_clear'}:
+                    payload = service.query_history_action(server, action, data.get('request'))
+                elif action == 'firebird_object_templates':
+                    payload = service.firebird_object_templates(server, data.get('request'))
+                elif action == 'firebird_isql_context':
+                    payload = service.firebird_isql_context(server, data.get('request'))
+                elif action == 'firebird_events':
+                    payload = service.firebird_event_action(server, data.get('request'))
+                elif action == 'firebird_metadata_search':
+                    payload = service.firebird_metadata_search(server, data.get('request'))
+                elif action == 'firebird_editor_metadata':
+                    payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
+                elif action in {'source_validate', 'native_script_prepare',
+                                'native_script_advance', 'native_script_stop',
+                                'native_script_discard'}:
+                    payload = service.language_tool_action(server, action, data)
+                elif action == 'script_preview':
+                    from pgadmin.cdeadmin.providers.firebird.scripts import (
+                        ScriptPreflightError,
+                    )
+                    try:
+                        payload = service.preview_script(
+                            server, data.get('session_id'), data.get('source'),
+                            data.get('database_target_id'),
+                        )
+                    except ScriptPreflightError as exc:
+                        return bad_request(errormsg=str(exc))
                 elif action == 'query_stream':
                     payload = service.query_stream(
                         server, data.get('session_id'),
@@ -2660,7 +2768,7 @@ class ServerNode(PGChildNodeView):
                 elif action == 'poll':
                     payload = service.poll(
                         server, data.get('occurrence_id'),
-                        data.get('database_target_id'),
+                        data.get('database_target_id'), buffer_rows=data.get('buffer_rows'),
                     )
                 elif action == 'cancel':
                     payload = service.cancel(
@@ -2705,6 +2813,47 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action == 'mysql_server_catalog':
+                    payload = service.mysql_server_catalog(server, data.get('request'))
+                elif action in {'mysql_schema_plan', 'mysql_schema_validate'}:
+                    payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
+                elif action == 'mysql_test_data':
+                    payload = service.mysql_test_data(server, data.get('request'))
+                elif action == 'mysql_data_capture':
+                    payload = service.mysql_data_capture(server, data.get('request'))
+                elif action in {'mysql_design_read', 'mysql_design_save'}:
+                    payload = service.mysql_design_asset(server, action.removeprefix('mysql_design_'), data.get('request'))
+                elif action == 'mysql_sql_export':
+                    payload = service.mysql_native_metadata(server, data.get('request'))
+                elif action in {'mysql_catalog_export', 'mysql_catalog_compare'}:
+                    payload = service.mysql_catalog(server, data.get('request'),
+                        compare=action == 'mysql_catalog_compare')
+                elif action == 'firebird_catalog_export':
+                    payload = service.export_firebird_catalog(server, data.get('request'))
+                elif action == 'firebird_registered_catalog':
+                    payload = service.capture_firebird_registered_catalog(server, data.get('request'))
+                elif action in {'firebird_design_read', 'firebird_design_save'}:
+                    payload = service.firebird_design_asset(server, action.removeprefix('firebird_design_'), data.get('request'))
+                elif action == 'ddn_design_merge':
+                    from pgadmin.cdeadmin.workspace.design_conversion import merge_design
+                    try:
+                        payload = merge_design(data.get('request'))
+                    except ValueError as error:
+                        return bad_request(errormsg=str(error))
+                elif action == 'firebird_relational_review':
+                    payload = service.firebird_relational_review(server, data.get('request'))
+                elif action == 'firebird_data_import_plan':
+                    payload = service.plan_firebird_data_import(server, data.get('request'))
+                elif action == 'firebird_data_export':
+                    payload = service.export_firebird_data(server, data.get('request'))
+                elif action == 'firebird_sql_export':
+                    payload = service.export_firebird_sql(server, data.get('request'))
+                elif action == 'firebird_catalog_compare':
+                    payload = service.compare_firebird_catalog(server, data.get('request'))
+                elif action == 'firebird_schema_plan':
+                    payload = service.plan_firebird_schema(server, data.get('request'))
+                elif action in {'firebird_schema_review', 'firebird_schema_apply', 'firebird_schema_receipt'}:
+                    payload = service.firebird_schema_application(server, action, data.get('request'))
                 elif action == 'resource_inspect':
                     payload = service.inspect_resource(
                         server, data.get('request') or {}
@@ -2721,6 +2870,44 @@ class ServerNode(PGChildNodeView):
                     payload = service.plan_visual_admin(
                         server, data.get('request')
                     )
+                elif action == 'firebird_recovery_targets':
+                    if profile['profile_id'] not in {
+                            'firebird-native', 'firebird-embedded'}:
+                        raise ProviderWorkspaceError(
+                            'Firebird recovery workspace required')
+                    choices = []
+                    for candidate in Server.query.filter_by(
+                            user_id=current_user.id).all():
+                        endpoint = getattr(candidate, 'endpoint_profile', None)
+                        if getattr(endpoint, 'profile_id', None) not in {
+                                'firebird-native', 'firebird-embedded'}:
+                            continue
+                        catalog = service.endpoint_service.database_catalog(
+                            candidate)
+                        choices.append({
+                            'server_id': candidate.id, 'name': candidate.name,
+                            'targets': [{key: item[key] for key in (
+                                'target_id', 'display_name', 'database')}
+                                for item in catalog.get('targets', [])],
+                        })
+                    payload = {'endpoints': choices}
+                elif action in {
+                        'firebird_recovery_preview', 'firebird_recovery_apply',
+                        'firebird_recovery_status'}:
+                    from pgadmin.cdeadmin.providers.firebird import (
+                        recovery_groups,
+                    )
+
+                    def owned_participant(identifier):
+                        return Server.query.filter_by(
+                            id=identifier, user_id=current_user.id).first()
+
+                    try:
+                        payload = service.firebird_recovery_action(
+                            server, action, data.get('request'),
+                            owned_participant)
+                    except recovery_groups.RecoveryGroupError as exc:
+                        return bad_request(errormsg=str(exc))
                 elif action == 'visual_admin_apply':
                     payload = service.apply_visual_admin(
                         server, data.get('request')
@@ -3150,21 +3337,42 @@ class ServerNode(PGChildNodeView):
         if server is None:
             return bad_request(self.not_found_error_msg())
 
+        disconnect_profile = _cde_registration(server)
+        if (disconnect_profile['workflow'] == 'provider_endpoint' and
+                disconnect_profile['engine_id'] == 'firebird'):
+            if _is_non_owner(server):
+                return forbidden(errormsg=gettext(
+                    'Only the endpoint owner can disconnect its credentials.'))
+            try:
+                endpoint_service_for_app(current_app).disconnect_server(server)
+            except EndpointRegistrationError as exc:
+                return make_json_response(
+                    status=409, success=0, errormsg=str(exc))
+            return make_json_response(
+                success=1, info=gettext('Endpoint disconnected.'), data={
+                    'icon': server_icon_and_background(
+                        False, None, server, 'unverified'),
+                    'connected': False,
+                    'runtime_verification_state': 'unverified'})
+
         # Release Connection
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        # Check if any psql terminal is running for the current disconnecting
-        # server. If any terminate the psql tool connection.
-        if 'sid_soid_mapping' in current_app.config and str(sid) in \
-                current_app.config['sid_soid_mapping'] and \
-                str(sid) in current_app.config['sid_soid_mapping']:
-            for i in current_app.config['sid_soid_mapping'][str(sid)]:
-                sio.emit('disconnect-psql', namespace='/pty', to=i)
-
-        status = manager.release()
+        try:
+            status = endpoint_service_for_app(current_app).release_native_connections(
+                server, manager.release)
+        except EndpointRegistrationError as exc:
+            return make_json_response(status=409, success=0, errormsg=str(exc))
 
         if not status:
             return unauthorized(gettext("Server could not be disconnected."))
         else:
+            # Check if any psql terminal is running for the current disconnecting
+            # server. If any terminate the psql tool connection.
+            if 'sid_soid_mapping' in current_app.config and str(sid) in \
+                    current_app.config['sid_soid_mapping'] and \
+                    str(sid) in current_app.config['sid_soid_mapping']:
+                for i in current_app.config['sid_soid_mapping'][str(sid)]:
+                    sio.emit('disconnect-psql', namespace='/pty', to=i)
             return make_json_response(
                 success=1,
                 info=gettext("Server disconnected."),
@@ -3580,6 +3788,14 @@ class ServerNode(PGChildNodeView):
                     success=0,
                     info=self.not_found_error_msg()
                 )
+
+            if _cde_registration(server)['workflow'] == 'provider_endpoint':
+                credential_server = (ServerModule.get_shared_server(server, gid)
+                                     if _is_non_owner(server) else server)
+                endpoint_service_for_app(current_app).clear_saved_credentials(credential_server)
+                return make_json_response(success=1,
+                    info=gettext('Saved endpoint and registration passwords were cleared.'),
+                    data={'is_password_saved': False})
 
             if _is_non_owner(server):
                 shared_server = ServerModule.get_shared_server(

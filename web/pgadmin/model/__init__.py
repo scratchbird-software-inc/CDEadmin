@@ -36,7 +36,7 @@ import config
 #
 ##########################################################################
 
-SCHEMA_VERSION = 58
+SCHEMA_VERSION = 59
 
 ##########################################################################
 #
@@ -837,6 +837,9 @@ class CDEProjectAsset(db.Model, UserScopedMixin):
     schema_name = db.Column(db.String(128), nullable=False)
     schema_version = db.Column(db.Integer(), nullable=False, default=1)
     version = db.Column(db.Integer(), nullable=False, default=0)
+    # Include the previously loaded version in UPDATE/DELETE predicates. The
+    # asset service assigns revision numbers; the ORM fences concurrent saves.
+    __mapper_args__ = {'version_id_col': version, 'version_id_generator': False}
     content = db.Column(db.Text(), nullable=False)
     asset_metadata = db.Column(db.Text(), nullable=False, default='{}')
     dependency_references = db.Column(db.Text(), nullable=False, default='[]')
@@ -1394,10 +1397,6 @@ class EndpointDatabaseTarget(db.Model):
     """
     __tablename__ = 'cde_endpoint_database_target'
     __table_args__ = (
-        db.UniqueConstraint(
-            'endpoint_id', 'database',
-            name='uq_cde_endpoint_database_target'
-        ),
         db.CheckConstraint(
             'active >= 0 AND active <= 1',
             name='ck_cde_endpoint_database_target_active'
@@ -1412,6 +1411,12 @@ class EndpointDatabaseTarget(db.Model):
     display_name = db.Column(db.String(256), nullable=False)
     database = db.Column(db.Text(), nullable=False)
     configuration = db.Column(db.Text(), nullable=False, default='{}')
+    # Registration aliases can share a physical filename. Credentials remain
+    # protected columns, never part of configuration JSON or catalog DTOs.
+    registration_user = db.Column(db.String(255), nullable=True)
+    registration_password = db.Column(db.String(), nullable=True)
+    registration_credentials = db.Column(
+        db.Boolean(), nullable=False, default=False, server_default='0')
     active = db.Column(db.Boolean(), nullable=False, default=False)
     created_at = db.Column(
         db.DateTime(), nullable=False, server_default=db.func.now()

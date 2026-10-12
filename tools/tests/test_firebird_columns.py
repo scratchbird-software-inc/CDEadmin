@@ -215,6 +215,7 @@ def test_structured_create_column(values, expected):
 @pytest.mark.parametrize('values', [
     {'column_mode': 'UNKNOWN'}, {'has_default': 'yes'},
     {'dimensions': [{'lower': 2, 'upper': 1}]},
+    {'dimensions': [{'lower': 1, 'upper': 1}]},
     {'dimensions': [{'lower': 1, 'upper': 2}] * 17},
     {'data_type': 'BLOB', 'dimensions': [{'lower': 1, 'upper': 2}]},
     {'column_mode': 'IDENTITY', 'increment': 0},

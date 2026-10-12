@@ -120,8 +120,12 @@ def test_provider_catalog_admits_only_native_filter_tasks_and_owned_forms():
 def test_empty_database_has_separate_filter_and_udf_creation_groups():
     catalog = ADMINISTRATION.catalog(catalog_for_engine('firebird'))
     groups = resource_children([], {'scope': 'database'}, catalog)
-    assert {'BLOB filters', 'External functions'} <= {
-        item['label'] for item in groups}
+    assert 'programming' in {item['label'] for item in groups}
+    children = resource_children([], {'scope': 'kind',
+        'resource_kind': 'firebird-folder', 'virtual_branch': 'programming'}, catalog)
+    by_kind = {item['resource_kind']: item['label'] for item in children}
+    assert by_kind['blob-filter'] == 'filters'
+    assert by_kind['external-function'] == 'external functions'
     item = next(item for item in catalog['objects']
                 if item['resource_kind'] == 'blob-filter')
     assert item['navigator']['parent_kinds'] == ['database']

@@ -194,10 +194,14 @@ def _xml_text(value, maximum):
 
 def _tabular_rows(metadata, records):
     names = _column_names(metadata, records)
+    keys = [column.get('key', column['name'])
+            for column in metadata.get('schema', {}).get('columns', [])
+            if isinstance(column, Mapping) and
+            isinstance(column.get('name'), str)] or names
     rows = [names]
     for record in records:
         if isinstance(record, Mapping):
-            rows.append([record.get(name) for name in names])
+            rows.append([record.get(key) for key in keys])
         elif isinstance(record, (list, tuple)):
             rows.append(list(record))
         else:

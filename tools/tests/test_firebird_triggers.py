@@ -98,3 +98,15 @@ def test_invalid_operation(operation):
         triggers.compile_operation(operation, {})
     with pytest.raises(RelationalClientError):
         triggers.form(operation, None)
+
+
+@pytest.mark.parametrize('operation', ['alter', 'drop', 'comment', 'recreate', 'create_or_alter'])
+@pytest.mark.parametrize('wrapped', [False, True])
+def test_constraint_trigger_lifecycle_is_never_a_direct_trigger_mutation(operation, wrapped):
+    facts = {'constraint_owner': 'Exact constraint'}
+    target = {**TARGET, **({'extensions': {'firebird': {'native': facts}}} if wrapped else {'native': facts})}
+    request = {'resource_kind': 'trigger', 'operation_id': operation,
+               'target_resource': target, 'draft': {}}
+    assert ADMINISTRATION.validate(request)['errors'][0]['code'] == 'constraint_owned_trigger'
+    with pytest.raises(RelationalClientError, match='Exact constraint'):
+        ADMINISTRATION._compile(request)

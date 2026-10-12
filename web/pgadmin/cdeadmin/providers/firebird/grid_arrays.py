@@ -16,7 +16,8 @@ def descriptor(catalog, relation, field):
         'SELECT F.RDB$FIELD_TYPE, F.RDB$FIELD_SUB_TYPE, '
         'F.RDB$FIELD_SCALE, D.RDB$DIMENSION, '
         'D.RDB$LOWER_BOUND, D.RDB$UPPER_BOUND, '
-        'F.RDB$CHARACTER_LENGTH, TRIM(C.RDB$CHARACTER_SET_NAME) '
+        'F.RDB$CHARACTER_LENGTH, TRIM(C.RDB$CHARACTER_SET_NAME), '
+        'F.RDB$CHARACTER_SET_ID '
         'FROM RDB$RELATION_FIELDS R JOIN RDB$FIELDS F ON '
         'F.RDB$FIELD_NAME = R.RDB$FIELD_SOURCE '
         'JOIN RDB$FIELD_DIMENSIONS D ON '
@@ -33,11 +34,13 @@ def descriptor(catalog, relation, field):
               'scale': rows[0][2] or 0,
               'bounds': [(row[4], row[5]) for row in rows]}
     if result['type'] in (14, 37):
-        result.update(length=rows[0][6], charset=rows[0][7])
+        result.update(length=rows[0][6], charset=rows[0][7],
+                      charset_id=rows[0][8] if len(rows[0]) > 8 else None)
     return result
 
 
 def editor_specs(connection, columns):
+    from .varying_arrays import TEXT_CHARSETS
     result = {}
     for column in columns:
         if column.get('native_type') != 'ARRAY' or not column.get(
@@ -49,13 +52,14 @@ def editor_specs(connection, columns):
         kind = {7: 'integer', 8: 'integer', 16: 'integer', 26: 'integer',
                 10: 'float32', 27: 'float64', 23: 'boolean',
                 24: 'decfloat', 25: 'decfloat', 12: 'date',
-                13: 'time', 35: 'timestamp'}.get(spec['type'])
+                13: 'time', 35: 'timestamp',
+                28: 'firebird-time-tz',
+                29: 'firebird-timestamp-tz'}.get(spec['type'])
         if kind == 'integer' and (spec['subtype'] or spec['scale']):
             kind = 'decimal'
         if (spec['type'] in (14, 37) and spec.get('length') and
-                spec.get('charset') in {
-                    'ASCII', 'UTF8', 'ISO8859_1', 'WIN1252', 'OCTETS'}):
-            kind = 'binary' if spec['charset'] == 'OCTETS' else 'text'
+                spec.get('charset_id') in (1, *TEXT_CHARSETS)):
+            kind = 'binary' if spec['charset_id'] == 1 else 'text'
         if kind:
             result[column['native_name']] = {**spec, 'element_kind': kind}
             if kind == 'decfloat':
@@ -83,6 +87,9 @@ def convert(value, spec):
                     'Firebird character array requires values within '
                     'its declared character or byte length')
             return item
+        if code in (28, 29):
+            from .zoned_values import parse
+            return parse(item, code)
         if code in (12, 13, 35):
             from .temporal_arrays import parse
             return parse(item, code)

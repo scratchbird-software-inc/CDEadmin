@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later.
+ * Optional DDN theme hooks. Include this stylesheet on a page that embeds
+ * rendered DDN SVG to restyle diagrams through CSS custom properties.
+ * Script-level presentation (format palette, look, object/occurrence
+ * overrides) is emitted as inline SVG presentation attributes and therefore
+ * always wins over these rules; page CSS only fills the gaps the script
+ * left unset. No important-flagged declarations appear anywhere in DDN output.
+ */
+:root {
+  --ddn-font: "DejaVu Sans", Arial, sans-serif;
+  --ddn-ink: #203047;
+  --ddn-node-fill: #ffffff;
+  --ddn-node-stroke: #285ea8;
+  --ddn-label-color: var(--ddn-ink);
+  --ddn-field-color: var(--ddn-ink);
+  --ddn-rel-stroke: #285ea8;
+  --ddn-mark-fill: #337db7;
+}
+
+/* Base font and fallback paint for the whole diagram surface. */
+.ddn-svg {
+  font-family: var(--ddn-font);
+}
+
+/* Classed groups inherit these into any descendant that does not carry an
+ * inline presentation attribute of its own. */
+.ddn-node {
+  fill: var(--ddn-node-fill);
+  stroke: var(--ddn-node-stroke);
+}
+
+.ddn-rel {
+  stroke: var(--ddn-rel-stroke);
+}
+
+.ddn-label {
+  fill: var(--ddn-label-color);
+}
+
+.ddn-field {
+  fill: var(--ddn-field-color);
+}
+
+.ddn-mark {
+  fill: var(--ddn-mark-fill);
+}

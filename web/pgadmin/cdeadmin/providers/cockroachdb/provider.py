@@ -21,6 +21,7 @@ from ..distributed_sql import (
     resource,
     sql_administration,
 )
+from .driver import CockroachDBClient
 from ..distributed_control_plane import DistributedSQLControlPlane
 from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
@@ -41,6 +42,8 @@ PROFILE = PilotProfile(
         'zone-config', 'job', 'schedule', 'changefeed',
     ),
     ('cockroach-sql', 'node-status', 'debug-zip', 'backup-restore'),
+    parameter_shape='object-or-array',
+    parameter_hint='Named or positional bindings; exact type/value envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'cockroachdb-sql', 'quote_open': '"',
@@ -1524,6 +1527,9 @@ class CockroachDBProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
 
 def create_provider(context, permissions, client=None):
     return CockroachDBProvider(
@@ -1539,6 +1545,8 @@ def create_provider(context, permissions, client=None):
                 connection, request, 'CockroachDB', _extras
             ),
             administration=ADMINISTRATION,
+            client_class=CockroachDBClient,
+            client_options={'pool_namespace': context.pool_namespace},
             pool_namespace=context.pool_namespace,
         ),
     )

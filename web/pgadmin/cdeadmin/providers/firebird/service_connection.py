@@ -9,6 +9,22 @@ does not emit that marker. Do not patch driver globals or its installation.
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
+def security_context(value):
+    """An ordinary database's configuration selects its security store.
+
+    Linux qualified; Windows/macOS teams must repeat path/alias/Unicode and
+    environment-isolation checks with their native clients. This is not the
+    security database filename and does not change the operation target.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or any(ord(char) < 32 for char in value):
+        raise RelationalClientError(
+            'Firebird service authentication database must be text '
+            'without control characters')
+    return value.strip() or None
+
+
 def validate_service_role(role):
     """Reject roles that native service argv construction cannot preserve."""
     if role is not None:
@@ -36,9 +52,37 @@ def effective_service_role(task_role, default_role=None):
     return role or None
 
 
+def service_authentication(route, options):
+    """Describe a requested identity scope, never infer native permission.
+
+    Linux qualification covers native service attachment transport. Windows
+    and macOS must repeat role/Unicode/denial tests with their client runtimes.
+    The database task target is intentionally not an authentication DB default.
+    """
+    role = effective_service_role(options.get('role'), route.get('role'))
+    return {
+        'requested_role': role,
+        'role_source': ('task' if options.get('role') else
+                        'connection' if role else 'none'),
+        'authentication_database': security_context(
+            route.get('service_expected_database')),
+        'role_transport': 'service_attachment',
+        'authorization_verified': False,
+        'authorization_authority': 'native_service_action',
+        'saved_profile_modified': False,
+    }
+
+
 def connect_service(module, core, *, server, user=None, password=None,
-                    expected_db=None, role=None, crypt_callback=None):
+                    expected_db=None, role=None, crypt_callback=None,
+                    connect_timeout=None):
+    if connect_timeout is not None and (
+            type(connect_timeout) is not int or
+            not 0 <= connect_timeout <= 2147483647):
+        raise RelationalClientError(
+            'Firebird connection timeout must be a non-negative integer')
     validate_service_role(role)
+    expected_db = security_context(expected_db)
     config = module.driver_config.get_server(server)
     if config is None:
         raise RelationalClientError(
@@ -54,11 +98,18 @@ def connect_service(module, core, *, server, user=None, password=None,
         password=password, trusted_auth=config.trusted_auth.value,
         config=config.config.value,
         auth_plugin_list=config.auth_plugin_list.value,
-        expected_db=expected_db, role=role,
+        # Explicit empty SPB prevents yvalve setLogin() from importing an
+        # unrelated process-wide FB_EXPECTED_DB. Never mutate os.environ:
+        # concurrent routes must retain independent authentication contexts.
+        expected_db=expected_db or '', role=role,
         encoding='utf-8', errors='strict',
     ).get_buffer()
     with api.util.get_xpb_builder(core.XpbKind.SPB_ATTACH, buffer) as builder:
         builder.insert_tag(core.SPBItem.UTF8_FILENAME)
+        if connect_timeout is not None:
+            # Native REMOTE_get_timeout_params reads isc_spb_connect_timeout.
+            # Linux qualified; Windows/macOS repeat stalled-handshake tests.
+            builder.insert_int(core.SPBItem.CONNECT_TIMEOUT, connect_timeout)
         buffer = builder.get_buffer()
     # Allocate the Python owner before obtaining the native attachment.
     # Publish driver ATTACHED hooks only after the client records ownership.

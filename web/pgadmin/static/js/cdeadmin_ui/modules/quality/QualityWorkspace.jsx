@@ -14,7 +14,7 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import {
   QUALITY_DIMENSIONS, QUALITY_EVALUATION_MODES, QUALITY_RULE_FAMILIES,
   QUALITY_ACTION_TYPES, QUALITY_SEVERITIES, QUALITY_SAMPLING_MODES,

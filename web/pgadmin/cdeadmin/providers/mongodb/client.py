@@ -508,6 +508,7 @@ class MongoDBClient:
         reference_id = route.get('credential_reference_id')
         principal = route.get('principal_reference')
         arguments = self._connector_arguments(route)
+        client = None
         try:
             references = dict(route.get('credential_references') or {})
             if reference_id is not None:
@@ -531,8 +532,12 @@ class MongoDBClient:
                 client = self._connector(**arguments)
             client.admin.command('ping')
         except MongoDBClientError:
+            if client is not None:
+                client.close()
             raise
         except Exception as exc:
+            if client is not None:
+                client.close()
             raise MongoDBClientError(
                 f'MongoDB connection failed ({type(exc).__name__})'
             ) from None

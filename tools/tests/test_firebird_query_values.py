@@ -21,6 +21,7 @@ from pgadmin.cdeadmin.sdk.relational import RelationalClientError
     (Decimal('12.3400'), '12.3400'), (Decimal('NaN'), 'NaN'),
     (Decimal('-Infinity'), '-Infinity'), (1.25, 1.25),
     (float('nan'), 'nan'), (float('inf'), 'inf'),
+    (-0.0, '-0.0'), (0.0, 0.0),
     (date(2026, 9, 14), '2026-09-14'),
     (time(12, 34, 56, 123400), '12:34:56.123400'),
     (datetime(2026, 9, 14, 12, 34, 56, 123400),

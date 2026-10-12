@@ -1,227 +1,70 @@
-/////////////////////////////////////////////////////////////
-//
-// CDEadmin - Multi-engine Database Administration
-//
-// Copyright (C) 2013 - 2026, The pgAdmin Development Team
-// This software is released under the PostgreSQL Licence
-//
-//////////////////////////////////////////////////////////////
+import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
+import {DDNSessionController, loadDDNLibraries, setDDNLibraryLoaderForTests,
+  resetDDNLibraryLoaderForTests, validateDDNFiles, validateDDNAssetRef,
+  validateDDNSnapshot} from 'sources/cdeadmin_ui/integrations/ddn';
+const files = {'model.ddn': 'ddn "0.5"; module "test"; data model { object a "Alpha" { kind: table; } } view main { data: [@model]; select: [@model.a]; }'};
+const assetRef = (assetVersion=0) => ({projectId: 'p', assetId: 'a', assetVersion, assetType: 'ddn-workspace'});
 
-import {
-  DDN_DESIGNER_VERSION,
-  DDN_PERSISTENCE_STATES,
-  DDN_RUNTIME_VERSION,
-  DDNSessionController,
-  ddnAssetPayload,
-  loadDDNLibraries,
-  resetDDNLibraryLoaderForTests,
-  setDDNLibraryLoaderForTests,
-  validateDDNAssetRef,
-  validateDDNFiles,
-  validateDDNSnapshot,
-} from 'sources/cdeadmin_ui/integrations/ddn';
-import viewer from '../../../pgadmin/static/vendor/ddn/0.5.0-draft.2/viewer/ddn.mjs';
-import designer from '../../../pgadmin/static/vendor/ddn/0.5.0-draft.2/designer-0.1.0-preview.1/ddn-designer.mjs';
-
-const assetRef = (version=0) => ({
-  schemaVersion: 1,
-  projectId: 'project-1',
-  assetId: 'model-1',
-  assetType: 'ddn-workspace',
-  assetVersion: version,
-  path: 'models/customer.ddn-project',
-  displayName: 'Customer model',
-});
-
-describe('CDEadmin DDN library integration', () => {
-  let libraries;
-
-  beforeAll(async () => {
-    setDDNLibraryLoaderForTests(async () => [viewer, designer]);
-    libraries = await loadDDNLibraries();
-    // JSDOM deliberately has no canvas implementation. DDN's documented
-    // measurement provider keeps these integration tests deterministic and
-    // exercises the same public hook used by non-canvas hosts.
-    libraries.viewer.setTextProvider((text, size) => ({
-      width: String(text).length * size * 0.64,
-      ascent: size * 0.85,
-      descent: size * 0.25,
-    }), 'cdeadmin-jest-metrics');
+describe('current DDN public workspace and persistence boundary', () => {
+  beforeEach(() => {
+    setDDNLibraryLoaderForTests(async () => [viewer]);
+    viewer.setTextProvider((text, size) => ({width: String(text).length * size * 0.6,
+      ascent: size * 0.8, descent: size * 0.2}), 'scratchrobin-test');
   });
-
-  afterAll(() => {
-    libraries.viewer.setTextProvider(null);
-    resetDDNLibraryLoaderForTests();
+  afterEach(() => { viewer.setTextProvider(null); resetDDNLibraryLoaderForTests(); });
+  it('uses the current runtime with a separate tool URL', async () => {
+    const lib = await loadDDNLibraries();
+    expect(lib.viewer.VERSION).toBe('0.8.0');
+    expect(lib.toolUrl).toContain('/vendor/ddn/current/ddn-tool.html');
+    expect(lib.designer).toBeUndefined();
+    expect(await loadDDNLibraries()).toBe(lib);
   });
-
-  it('loads and verifies the exact approved public libraries once', async () => {
-    const again = await loadDDNLibraries();
-
-    expect(again).toBe(libraries);
-    expect(libraries.viewer.VERSION).toBe(DDN_RUNTIME_VERSION);
-    expect(libraries.designer.VERSION).toBe(DDN_DESIGNER_VERSION);
-    expect(libraries.designer.RUNTIME_VERSION).toBe(DDN_RUNTIME_VERSION);
-    expect(libraries.viewer.createWorkspace).toEqual(expect.any(Function));
-    expect(libraries.designer.createSession).toEqual(expect.any(Function));
+  it.each([null, {}, {'../bad.ddn': ''}, {'bad.txt': ''}, {'a.ddn': 42}])('rejects invalid files %j', (input) => {
+    expect(() => validateDDNFiles(input)).toThrow();
   });
-
-  it.each([
-    [null, 'must be an object'],
-    [{}, 'require'],
-    [{'../escape.ddn': 'ddn "0.5";'}, 'Invalid DDN source path'],
-    [{'model.txt': 'not ddn'}, 'Invalid DDN source path'],
-    [{'model.ddn': 42}, 'must be text'],
-  ])('rejects invalid source workspaces %#', (files, message) => {
-    expect(() => validateDDNFiles(files)).toThrow(message);
+  it('preserves source, metadata and source maps through rendering and snapshots', async () => {
+    const c = await DDNSessionController.create({files, assetRef: assetRef()});
+    expect(c.render().svg).toContain('<svg');
+    expect(c.render().sourceMap).toEqual(expect.any(Object));
+    expect(c.snapshot().files).toEqual(files);
+    expect(() => validateDDNSnapshot({...c.snapshot(), format: 'svg'})).toThrow();
+    expect(() => validateDDNAssetRef({...assetRef(), assetType: 'table'})).toThrow();
+    c.destroy();
+    expect(() => c.render()).toThrow('destroyed');
   });
-
-  it('validates AssetRef and snapshot identity independently', () => {
-    const files = libraries.designer.blankFiles('data');
-    const session = libraries.designer.createSession({files});
-    const snapshot = session.snapshot();
-    const payload = ddnAssetPayload(assetRef(), snapshot);
-
-    expect(payload.assetRef.projectId).toBe('project-1');
-    expect(payload.snapshot.files['model.ddn']).toContain('data model');
-    expect(() => validateDDNAssetRef({...assetRef(), assetType: 'table'}))
-      .toThrow('ddn-workspace');
-    expect(() => validateDDNSnapshot({...snapshot, format: 'svg'}))
-      .toThrow('Unsupported DDN snapshot format');
-    session.destroy();
+  it('previews source edits, applies only on commit and retains undo/redo', async () => {
+    const c = await DDNSessionController.create({files});
+    const plan = c.prepare({type: 'files', changes: {'model.ddn': files['model.ddn'].replace('Alpha', 'Beta')}});
+    expect(c.getFiles()['model.ddn']).toContain('Alpha');
+    c.commit(plan);
+    expect(c.getFiles()['model.ddn']).toContain('Beta');
+    expect(c.state().persistence).toBe('dirty');
+    c.undo(); expect(c.getFiles()['model.ddn']).toContain('Alpha');
+    c.redo(); expect(c.getFiles()['model.ddn']).toContain('Beta');
+    c.destroy();
   });
-
-  it('renders every view from a real source workspace and retains source maps', async () => {
-    const files = libraries.designer.blankFiles('data');
-    const workspace = libraries.viewer.createWorkspace(files);
-    const entries = workspace.entries().filter((item) => item.views.length);
-
-    expect(entries.length).toBeGreaterThan(0);
-    for(const entry of entries) {
-      for(const view of entry.views) {
-        const result = await workspace.render({
-          entry: entry.file,
-          view: view.id,
-        });
-        expect(result.svg).toContain('<svg');
-        expect(result.entry).toBe(entry.file);
-        expect(result.view).toBe(view.id);
-        expect(result.sourceMap).toEqual(expect.any(Object));
-        expect(result.modelFingerprint).toEqual(expect.any(String));
-      }
-    }
-    workspace.destroy();
-    expect(() => workspace.destroy()).not.toThrow();
+  it('blocks writes and saves through a read-only controller', async () => {
+    const c = await DDNSessionController.create({files, readOnly: true});
+    expect(() => c.updateSource('model.ddn', '')).toThrow('read-only');
+    await expect(c.save(jest.fn())).rejects.toThrow('read-only'); c.destroy();
   });
-
-  it('executes, prepares, confirms, commits, undoes and redoes source changes', async () => {
-    const controller = await DDNSessionController.create({
-      files: libraries.designer.blankFiles('data'),
-      assetRef: assetRef(),
-    });
-    const target = controller.inspect().writeTargets[0].id;
-    const created = controller.execute({
-      type: 'create', id: 'customer', name: 'Customer',
-      kind: 'object', writeTo: target,
-      fields: [{id: 'customer_id', name: 'Customer ID'}],
-    });
-
-    expect(created.status).toBe('valid');
-    expect(controller.state().persistence).toBe(DDN_PERSISTENCE_STATES.DIRTY);
-    const customer = controller.inspect().definitions.find(
-      (item) => item.local === 'customer');
-    const plan = controller.prepare({
-      type: 'label', id: customer.id, value: 'Account',
-    });
-    expect(plan.files[0].before).toContain('Customer');
-    expect(plan.files[0].after).toContain('Account');
-    expect(controller.inspect().definitions.find(
-      (item) => item.id === customer.id).name).toBe('Customer');
-
-    controller.commit(plan);
-    expect(controller.inspect().definitions.find(
-      (item) => item.id === customer.id).name).toBe('Account');
-    expect(controller.undo()).toBe(true);
-    expect(controller.inspect().definitions.find(
-      (item) => item.id === customer.id).name).toBe('Customer');
-    expect(controller.redo()).toBe(true);
-    expect(controller.review(true).views[0].status).toBe('valid');
-    expect(controller.render().svg).toContain('<svg');
-    expect(controller.exportSVG()).toContain('<svg');
-    controller.destroy();
-    expect(() => controller.inspect()).toThrow('destroyed');
-    expect(() => controller.destroy()).not.toThrow();
-  });
-
-  it('enforces read-only sessions and rejects invalid semantic changes', async () => {
-    const controller = await DDNSessionController.create({
-      files: libraries.designer.blankFiles('data'),
-      readOnly: true,
-    });
-
-    expect(() => controller.execute({type: 'delete', id: 'missing'}))
-      .toThrow('read-only');
-    controller.setReadOnly(false);
-    expect(() => controller.execute({type: 'unsupported'}))
-      .toThrow('Unsupported command');
-    controller.destroy();
-  });
-
-  it('persists exact snapshots and updates optimistic AssetRef versions', async () => {
-    const controller = await DDNSessionController.create({
-      files: libraries.designer.blankFiles('data'),
-      assetRef: assetRef(4),
-    });
-    const target = controller.inspect().writeTargets[0].id;
-    controller.execute({type: 'create', id: 'order', writeTo: target});
-    const save = jest.fn(async (payload, options) => {
-      expect(payload.snapshot.files['model.ddn']).toContain('object order');
-      expect(options.expectedAssetVersion).toBe(4);
-      return {assetRef: assetRef(5)};
-    });
-
-    await controller.save(save);
-    expect(controller.state().persistence).toBe(DDN_PERSISTENCE_STATES.CLEAN);
-    expect(controller.assetRef.assetVersion).toBe(5);
-    controller.destroy();
-  });
-
-  it('does not mark newer edits clean when an earlier save completes', async () => {
+  it('does not mark newer source clean when an older save completes', async () => {
     let release;
-    const pending = new Promise((resolve) => { release = resolve; });
-    const controller = await DDNSessionController.create({
-      files: libraries.designer.blankFiles('data'),
-      assetRef: assetRef(),
+    const c = await DDNSessionController.create({files, assetRef: assetRef(4)});
+    const saving = c.save((payload, options) => {
+      expect(payload.snapshot.files).toEqual(files);
+      expect(options.expectedAssetVersion).toBe(4);
+      return new Promise((resolve) => { release = resolve; });
     });
-    const target = controller.inspect().writeTargets[0].id;
-    controller.execute({type: 'create', id: 'first', writeTo: target});
-    const saving = controller.save(async () => {
-      await pending;
-      return {assetRef: assetRef(1)};
-    });
-    controller.execute({type: 'create', id: 'second', writeTo: target});
-    release();
-    await saving;
-
-    expect(controller.state().persistence)
-      .toBe(DDN_PERSISTENCE_STATES.SAVED_NEWER_EDITS);
-    controller.destroy();
+    await expect(c.save(jest.fn())).rejects.toThrow('already in progress');
+    c.updateSource('model.ddn', files['model.ddn'].replace('Alpha', 'Beta'));
+    release({assetRef: assetRef(5)}); await saving;
+    expect(c.state().persistence).toBe('saved-newer-edits');
+    expect(c.assetRef.assetVersion).toBe(5); c.destroy();
   });
-
-  it.each([
-    ['asset_conflict', DDN_PERSISTENCE_STATES.EXTERNAL_CONFLICT],
-    ['network_error', DDN_PERSISTENCE_STATES.SAVE_FAILED],
-  ])('retains dirty source after %s', async (code, state) => {
-    const controller = await DDNSessionController.create({
-      files: libraries.designer.blankFiles('data'),
-      assetRef: assetRef(),
-    });
-    const error = Object.assign(new Error(code), {code});
-
-    await expect(controller.save(async () => { throw error; }))
-      .rejects.toBe(error);
-    expect(controller.state().persistence).toBe(state);
-    expect(controller.state().lastError).toBe(error);
-    expect(controller.getFiles()).toEqual(expect.any(Object));
-    controller.destroy();
+  it.each([['asset_conflict', 'external-conflict'], ['network_error', 'save-failed']])('retains source on %s', async (code, state) => {
+    const c = await DDNSessionController.create({files, assetRef: assetRef()});
+    await expect(c.save(async () => { throw Object.assign(new Error(code), {code}); })).rejects.toThrow(code);
+    expect(c.state().persistence).toBe(state); expect(c.getFiles()).toEqual(files); c.destroy();
   });
 });

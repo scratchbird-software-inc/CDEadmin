@@ -23,6 +23,7 @@ from pgadmin.cdeadmin.visual_admin import (
     ControlPlaneOperation,
     control_plane_field as cp_field,
 )
+from .driver import ImmudbNativeMixin
 from ..distributed_control_plane import DistributedSQLControlPlane
 from ..distributed_sql import (
     PsycopgPoolDBAPIClient,
@@ -45,6 +46,8 @@ PROFILE = PilotProfile(
         'user', 'permission',
     ),
     ('immuadmin', 'immuclient', 'proof-verifier', 'hot-backup'),
+    parameter_shape='object-or-array',
+    parameter_hint='Native immudb SQL bindings and exact type/value envelopes',
     semantic_sql_dialect={
         'contract_complete': True,
         'language_profile': 'immudb-sql', 'quote_open': '"',
@@ -1683,7 +1686,7 @@ ADMINISTRATION = ImmudbAdministration(
 )
 
 
-class ImmudbDBAPIClient(PsycopgPoolDBAPIClient):
+class ImmudbDBAPIClient(ImmudbNativeMixin, PsycopgPoolDBAPIClient):
     """Join PostgreSQL-wire SQL with exact native REST identity/admin."""
 
     MAX_REST_BYTES = 16 * 1024 * 1024
@@ -1695,7 +1698,7 @@ class ImmudbDBAPIClient(PsycopgPoolDBAPIClient):
         )
         self._opener = opener or urllib.request.urlopen
 
-    def _connect(self, request, overrides=None):
+    def _open_connection(self, request, overrides=None):
         """Use psycopg's safe text binding for immudb's PG adapter.
 
         immudb 1.11.0 exposes binary-bound scalar parameters as unknown-type
@@ -1716,10 +1719,10 @@ class ImmudbDBAPIClient(PsycopgPoolDBAPIClient):
             try:
                 initializer(connection, route)
             except RelationalClientError:
-                self._safe_close(connection)
+                self._discard_failed_session(connection)
                 raise
             except Exception as exc:
-                self._safe_close(connection)
+                self._discard_failed_session(connection)
                 raise RelationalClientError(
                     'immudb session initialization failed '
                     f'({type(exc).__name__})'
@@ -2180,7 +2183,7 @@ class ImmudbDBAPIClient(PsycopgPoolDBAPIClient):
         }
         return item
 
-    def runtime_identity(self, request, handle=None):
+    def _runtime_identity(self, request, handle=None):
         temporary = handle is None
         connection = handle or self._connect(request)
         cursor = None
@@ -2259,6 +2262,9 @@ def _security(connection, request):
 
 
 class ImmudbProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client._discard_failed_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

@@ -1,0 +1,111 @@
+SQLite driver development and platform qualification
+===================================================
+
+The admitted profile is SQLite 3.53.0 through Python's ``sqlite3`` module.
+The Python version alone does not identify the embedded SQLite runtime. Bundle
+and test the actual library used by the application's Python interpreter;
+never replace the operating system's SQLite library. This profile's native
+qualification includes FTS5, R-tree and JSON. The runtime must support threads;
+connections have exclusive execution ownership even when shared by application
+request threads. Preserve platform architecture and extension-module ABI when
+packaging ``_sqlite3`` and its native library.
+
+Check the interpreter which will run ScratchRobin::
+
+    python -c "import sqlite3; print(sqlite3.sqlite_version, sqlite3.threadsafety)"
+
+On Linux, an isolated library directory can be selected with
+``LD_LIBRARY_PATH`` before starting Python. Windows and macOS teams should use
+their application's packaged interpreter/library arrangement. A library change
+inside an already running process is not an admitted runtime switch. The
+portable gate records the actual SQLite source ID and compile options.
+
+Driver behavior
+---------------
+
+Queries retain a native connection and run on one worker, publishing up to two
+queued pages of 256 rows or a 1 MiB target. A single large cell can exceed the
+byte target. A SQLite statement can contain a trigger body with semicolons;
+the driver does not split SQL text. It does not silently substitute
+``executescript`` for ``execute`` because their transaction behavior differs.
+SQLite shell dot-commands belong to the separate native CLI interface; they
+are not SQL accepted by this driver.
+
+Named ``:name`` and positional ``?`` parameters are admitted. SQLite's native
+storage classes remain authoritative: no DECIMAL type is invented. Unsafe
+browser integers are decimal text; BLOBs are base64 objects containing
+``encoding``, ``data`` and ``byte_length``. Bind exact signed 64-bit integers
+with ``{"encoding":"integer","data":"9223372036854775807"}``; bind binary
+with ``{"encoding":"base64","data":"AP8="}``. Ordinary JSON numbers must
+fit the safe integer range or be finite floating-point values. Results preserve
+floating-point representations as text. SQL NULL remains null.
+
+Malformed UTF-8 TEXT is returned as base64 with
+``native_storage_class: "text"``; no replacement characters are invented.
+Rebinding its bytes as TEXT requires an explicit SQL cast. Result column keys
+include ordinals because labels can repeat and a SQLite column can hold
+multiple storage classes. Optional ``detect_types`` invokes Python's registered
+converters and their own precision/timezone behavior; leave it at ``none`` to
+retain native storage values.
+
+On Python versions exposing ``LEGACY_TRANSACTION_CONTROL``, the connector
+selects it explicitly so the route's ``isolation_level`` retains its documented
+behavior across changes to Python defaults. The ``autocommit`` route selects
+``isolation_level=None``; explicit SQL transactions remain native SQLite work.
+
+Cancel requests SQLite interruption and observes its native result. It does
+not claim that a write had no effects or that only one statement rolled back.
+The actual ``in_transaction`` value remains authoritative. A busy COMMIT can
+leave a transaction open for an explicit user retry; the driver never retries
+the decision automatically. I/O/ownership uncertainty blocks reuse until
+close. Closing cancels active work, drains presentation state and releases the
+connection. If the worker or release has not finished, ownership is retained.
+
+File operations
+---------------
+
+Read-only routes apply to configured attachments too. Attachment names are
+quoted native identifiers and can contain Unicode or spaces. Connection paths
+remain within the registered filesystem root. This route boundary is not a
+sandbox for arbitrary SQL executed by an authorized SQLite user.
+
+Backup and restore use SQLite's online backup API with a deadline checked
+between native backup steps. The forms expose the deadline, defaulting to
+30 seconds and capped at 3600. An active transaction must first be resolved.
+Backup copies to an owned staging file, verifies ``quick_check``, flushes it
+and publishes it atomically. Failure before publication preserves any old
+backup. An existing destination is replaced only with explicit overwrite;
+without overwrite, publication refuses a concurrent destination. POSIX
+filesystems must support hard links for exclusive publication; Windows uses
+native no-replace rename. Filesystem crash durability is distinct from atomic
+publication. Backup artifacts must be offline: known attached destinations,
+active-file aliases and destination journal sidecars are refused.
+
+Restore checks the SQLite header and integrity before using an escaped
+read-only URI, so legal filenames containing ``?``, ``#``, ``%`` or Unicode do not
+become URI options. Filename whitespace is preserved; platform filesystem
+naming rules still apply. SQLite can refuse a cross-page-size restore into a
+WAL destination. Preserve that native refusal and its code; do not change
+journal mode automatically. Native page-size and journal behavior are preserved. SQLite
+WAL remains supported as a SQLite feature. A restore I/O failure can quarantine
+the destination session; investigate it before deliberate retry.
+
+Portable qualification
+----------------------
+
+With the intended Python/SQLite runtime selected, run from the repository root::
+
+    python tools/cdeadmin_sqlite_driver_platform_gate.py \
+      --evidence /external/workarea/new-sqlite-proof
+
+Use a new directory outside the repository. The gate creates and removes only
+its owned fixture files, calls the production provider and driver, records
+source hashes, and fails if checks or cleanup fail. It exercises exact values,
+bindings, bounded fetch, transactions/savepoints, FTS5/R-tree/JSON, interruption,
+WAL backup/restore, page size and read-only enforcement. Additional regression
+tests in ``tools/tests/test_sqlite_driver.py`` cover busy decisions, backup
+failure/deadline behavior, aliases, cleanup retry and session independence.
+
+Linux evidence does not prove native Windows/macOS behavior. Those teams run
+this gate with their packaged libraries and own UX, accessibility and platform
+release acceptance; native driver defects they find remain backend work.

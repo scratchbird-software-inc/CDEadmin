@@ -31,6 +31,14 @@ def observe_transaction(connection):
         'fields': {},
         'attachment_fields': {},
     }
+    try:
+        connection.ping()
+    except Exception as exc:
+        result.update(state='unknown', attachment_live=False,
+                      error_type=type(exc).__name__,
+                      native_status_codes=list(status_codes(exc)))
+        return result
+    result['attachment_live'] = True
     # These are distinct native observations. Database dialect must never be
     # used as a guess for the dialect used to prepare client SQL. Neither
     # accessor executes SQL or starts the caller's transaction.

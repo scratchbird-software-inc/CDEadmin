@@ -69,9 +69,11 @@ describe('provider operation close and admission safety', () => {
     act(() => expect(guard()).toBe(false));
     expect(screen.getByLabelText('Provider task close deferred')).toHaveTextContent(
       'Closing a task does not cancel or roll back a native operation.');
-    for (const name of ['Database', 'Table', 'Database statistics', 'Backup',
-      'Validate and preview', 'Apply provider plan']) {
+    for (const name of ['Validate and preview', 'Apply provider plan']) {
       expect(screen.getByRole('button', {name, exact: true})).toBeDisabled();
+    }
+    for (const name of ['Object type', 'Operation']) {
+      expect(screen.getByRole('combobox', {name})).toHaveAttribute('aria-disabled', 'true');
     }
     const count = post.mock.calls.length;
     fireEvent.click(screen.getByRole('button', {name: 'Validate and preview'}));

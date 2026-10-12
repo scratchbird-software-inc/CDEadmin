@@ -13,7 +13,7 @@ import {ResourcePicker, SecretPicker, TreeRow} from '../../navigation/AdvancedNa
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {
   CDC_CAPTURE_MECHANISMS, CDC_DELIVERY_GUARANTEES, CDC_EVOLUTION_ACTIONS,

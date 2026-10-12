@@ -6,6 +6,7 @@ from pgadmin.cdeadmin.sdk import (
 )
 
 from .client import ClickHouseClient
+from .driver import ClickHouseDriver, ClickHouseDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -57,6 +58,9 @@ PROFILE = PilotProfile(
 
 
 class ClickHousePilotProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -65,5 +69,7 @@ def create_provider(context, permissions, client=None):
     return ClickHousePilotProvider(
         context,
         permissions,
-        client or ClickHouseClient(permissions.acquire_secret),
+        client or ClickHouseDriver(
+            PROFILE, ClickHouseDriverBackend(permissions.acquire_secret),
+            ClickHouseClient.ADMIN_OPERATIONS),
     )

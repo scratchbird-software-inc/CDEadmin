@@ -3959,7 +3959,12 @@ class ProjectAssetRepository:
         self.db.session.delete(row)
 
     def commit(self):
-        self.db.session.commit()
+        from sqlalchemy.orm.exc import StaleDataError
+        try:
+            self.db.session.commit()
+        except StaleDataError:
+            self.db.session.rollback()
+            raise ProjectAssetConflict('asset version has changed') from None
 
     def rollback(self):
         self.db.session.rollback()

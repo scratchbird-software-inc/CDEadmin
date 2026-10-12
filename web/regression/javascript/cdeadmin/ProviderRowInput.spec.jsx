@@ -49,12 +49,12 @@ describe('Provider scalar inputs', () => {
   it.each(['NaN', 'Infinity', 'sNaN'])('does not admit DECFLOAT special %s for fixed point', (value) => {
     expect(() => rowInputValue(rowInputDraft(value), 'decimal')).toThrow();
   });
-  it.each(['-0.0', '1.7976931348623157e308', '2.2250738585072014e-308'])('tags float %s without JS numeric coercion', (value) => {
+  it.each(['NaN', 'nan', 'Infinity', '-Infinity', 'inf', '-inf', '-0.0', '1.7976931348623157e308', '2.2250738585072014e-308'])('tags float %s without JS numeric coercion', (value) => {
     expect(rowInputValue(rowInputDraft(value, 'float64'), 'float64')).toEqual({
       encoding: 'float64', data: value,
     });
   });
-  it.each(['NaN', 'Infinity', '1_2', ' 1'])('rejects invalid float %s', (value) => {
+  it.each(['sNaN', 'NaN(1)', '1_2', ' 1'])('rejects invalid float %s', (value) => {
     expect(() => rowInputValue(rowInputDraft(value), 'float32')).toThrow();
   });
   it('uses a separate NULL selector without losing the text draft', () => {
@@ -77,5 +77,20 @@ describe('Provider scalar inputs', () => {
     for (const control of screen.getAllByRole('combobox')) {
       expect(control).toHaveAttribute('aria-disabled', 'true');
     }
+  });
+});
+
+
+describe('Firebird zoned drafts', () => {
+  it.each(['firebird-time-tz', 'firebird-timestamp-tz'])('keeps %s UTC and region', (kind) => {
+    const value = {encoding: kind, utc: kind === 'firebird-time-tz' ? '12:34:56.000100' : '2025-11-02 06:30:00.000100', time_zone: 'America/New_York'};
+    expect(rowInputValue(rowInputDraft(value, kind), kind)).toEqual(value);
+    expect(rowInputValue(rowInputDraft(JSON.stringify(value), kind), kind)).toEqual(value);
+    const spec = {bounds: [[-1, -1]], element_kind: kind};
+    expect(rowInputValue(rowInputDraft([value], 'array'), 'array', spec)).toEqual([value]);
+    expect(rowInputValue(rowInputDraft([JSON.stringify(value)], 'array'), 'array', spec)).toEqual([value]);
+  });
+  it.each(['{}', 'null', '[]', '{"encoding":"firebird-time-tz","utc":"12:00:00","time_zone":"UTC","extra":1}'])('rejects invalid draft %s', (text) => {
+    expect(() => rowInputValue({text, isNull: false}, 'firebird-time-tz')).toThrow();
   });
 });

@@ -208,16 +208,22 @@ class OpenSearchSQLPPLClient:
 
     @staticmethod
     def _language(value, default):
-        if not value:
+        # A named language wins over the route default. Wire compatibility or
+        # a substring in an unknown profile is not language authorization.
+        if default not in ('sql', 'ppl'):
+            raise OpenSearchSQLPPLClientError('query language default is invalid')
+        if value is None or value == '':
             return default
-        value = str(value).casefold()
-        if value in {'sql', 'ppl'}:
-            return value
-        if 'ppl' in value and 'sql' not in value:
-            return 'ppl'
-        if 'sql' in value:
+        if not isinstance(value, str):
+            raise OpenSearchSQLPPLClientError('query language is invalid')
+        value = value.casefold()
+        if value == 'opensearch-sql-ppl':
+            # Compatibility for existing combined-profile sessions only.
             return default
-        raise OpenSearchSQLPPLClientError('query language is invalid')
+        aliases = {'sql': 'sql', 'ppl': 'ppl', 'opensearch-sql': 'sql', 'opensearch-ppl': 'ppl'}
+        if value not in aliases:
+            raise OpenSearchSQLPPLClientError('query language is invalid')
+        return aliases[value]
 
     def _query(self, route, source, language=None, parameters=None):
         source = required_text(source, 'SQL/PPL query', 2 * 1024 * 1024)

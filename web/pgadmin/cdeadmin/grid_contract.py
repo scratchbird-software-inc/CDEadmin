@@ -182,7 +182,11 @@ def normalize_columns(
         if not isinstance(name_value, str) or not name_value.strip():
             name_value = f'column_{ordinal + 1}'
         name = name_value.strip()
-        proposed = _identifier(column.get('key'), name)
+        supplied_key = column.get('key')
+        # This is a record lookup key, not a DOM/SQL identifier. Sanitizing
+        # it independently of the records hides values and creates collisions.
+        proposed = (supplied_key if isinstance(supplied_key, str) and
+                    supplied_key else name)
         key = proposed
         suffix = 2
         while key in used:

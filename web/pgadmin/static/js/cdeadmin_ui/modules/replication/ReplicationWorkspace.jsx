@@ -13,7 +13,7 @@ import {TreeRow} from '../../navigation/AdvancedNavigation';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/DataGrid';
+import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {createReplicationContent, validateFailoverPlan} from './contracts';
 import {topologyGraph} from './ReplicationEngine';

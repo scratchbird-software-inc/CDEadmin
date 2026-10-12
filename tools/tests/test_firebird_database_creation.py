@@ -56,7 +56,8 @@ def test_all_config_fields_and_initial_attachment_preserved(
         auth_plugin_list='Srp256')
     dpb = core.DPB.call_args.kwargs
     assert {key: dpb[key] for key in CONFIG_FIELDS} == {
-        key: getattr(config, key).value for key in CONFIG_FIELDS}
+        key: True if key == 'utf8filename' else getattr(config, key).value
+        for key in CONFIG_FIELDS}
     assert dpb['password'] == 'secret'
     assert dpb['user'] == 'owner'
     assert dpb['role'] == 'OWNER'
@@ -70,7 +71,7 @@ def test_all_config_fields_and_initial_attachment_preserved(
     core.DPB.return_value.get_buffer.assert_called_once_with(for_create=True)
     dispatcher.set_dbcrypt_callback.assert_called_once_with(callback)
     dispatcher.create_database.assert_called_once_with(
-        config.dsn.value, b'owned-dpb', 'utf-8' if utf8 else 'latin-1')
+        config.dsn.value, b'owned-dpb', 'utf-8')
     core.Connection.assert_called_once_with(
         dispatcher.create_database.return_value, config.dsn.value,
         b'owned-dpb', 1, 'UTF8')
@@ -305,8 +306,13 @@ def test_existing_driver_creation_dpb_parity_except_worker_fix(
     monkeypatch.setattr(native.core, '__make_connection', Mock())
     arguments = {'database': args['database'], **overrides}
     native.create_database(**arguments)
+    # Compare option resolution before the separately qualified UTF8 DPB
+    # transport transforms text encoding without changing SQL charset.
+    builder = Mock(return_value=b'owned-dpb')
+    monkeypatch.setattr(
+        'pgadmin.cdeadmin.providers.firebird.database_creation.build', builder)
     create_database(module, core, **arguments)
     expected = dpb.call_args.kwargs
-    observed = core.DPB.call_args.kwargs
+    observed = dict(builder.call_args.args[1])
     assert observed.pop('parallel_workers') == 4
     assert observed == expected

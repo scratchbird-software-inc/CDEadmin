@@ -3,6 +3,7 @@
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
 
 from .client import InfluxDBClient
+from .driver import InfluxDBDriver, InfluxDBDriverBackend
 
 
 PROFILE = PilotProfile(
@@ -50,6 +51,12 @@ PROFILE = PilotProfile(
 
 
 class InfluxDBPilotProvider(ActualEnginePilotProvider):
+    language_alternatives = (('influxdb3-sql', 'InfluxDB 3 SQL', 'text/x-sql'), ('influxdb3-influxql', 'InfluxDB 3 InfluxQL', 'text/x-influxql'))
+    language_routes = {'influxdb3-sql': 'sql', 'influxdb3-influxql': 'influxql'}
+
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -57,5 +64,7 @@ class InfluxDBPilotProvider(ActualEnginePilotProvider):
 def create_provider(context, permissions, client=None):
     return InfluxDBPilotProvider(
         context, permissions,
-        client or InfluxDBClient(permissions.acquire_secret),
+        client or InfluxDBDriver(
+            PROFILE, InfluxDBDriverBackend(permissions.acquire_secret),
+            InfluxDBClient.ADMIN_OPERATIONS),
     )

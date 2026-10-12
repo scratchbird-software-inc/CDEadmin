@@ -1,11 +1,14 @@
 // Provider-declared scalar editors. Exact numbers stay text on the JSON wire.
+import {useState} from 'react';
+import FirebirdBlobEditor from './FirebirdBlobEditor';
 import PropTypes from 'prop-types';
-import {Box, MenuItem, TextField} from '@mui/material';
+import {Box, Button, MenuItem, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 import ProviderArrayInput, {arrayShape} from './ProviderArrayInput';
 
 export function rowInputDraft(value, kind) {
-  if (kind === 'array') return {text: value == null ? '' : JSON.stringify(value), isNull: value === null};
+  if (kind?.startsWith('firebird-') && typeof value === 'string') return {text: value, isNull: false};
+  if (kind === 'array' || kind?.startsWith('firebird-')) return {text: value == null ? '' : JSON.stringify(value), isNull: value === null};
   return {text: kind === 'binary' && value?.encoding === 'base64' ? value.data :
     value == null ? '' : String(value), isNull: value === null};
 }
@@ -27,6 +30,12 @@ export function rowInputValue(draft, kind, spec) {
       });
     };
     return visit(JSON.parse(draft.text), 0);
+  }
+  if (['firebird-time-tz', 'firebird-timestamp-tz'].includes(kind)) {
+    let value;
+    try { value = JSON.parse(draft.text); } catch { throw new Error(gettext('Enter the UTC value and time zone as a JSON object.')); }
+    if (!value || Array.isArray(value) || Object.keys(value).sort().join(',') !== 'encoding,time_zone,utc' || value.encoding !== kind || typeof value.utc !== 'string' || typeof value.time_zone !== 'string' || !value.time_zone.trim()) throw new Error(gettext('A zoned value requires matching encoding, utc and time_zone fields.'));
+    return value;
   }
   if (kind === 'binary') {
     try {
@@ -54,14 +63,16 @@ export function rowInputValue(draft, kind, spec) {
     throw new Error(gettext('Enter an integer without a decimal point.'));
   }
   const decimalSpecial = kind === 'decfloat' && /^[+-]?(?:s?NaN|Infinity)$/i.test(draft.text);
-  if (['decimal', 'decfloat', 'float32', 'float64'].includes(kind) && !decimalSpecial && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
+  const floatSpecial = ['float32', 'float64'].includes(kind) && /^[+-]?(?:NaN|Inf(?:inity)?)$/i.test(draft.text);
+  if (['decimal', 'decfloat', 'float32', 'float64'].includes(kind) && !decimalSpecial && !floatSpecial && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(draft.text)) {
     throw new Error(gettext('Enter an exact decimal value.'));
   }
   if (['float32', 'float64'].includes(kind)) return {encoding: kind, data: draft.text};
   return draft.text;
 }
 
-export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec}) {
+export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec, firebirdBlob}) {
+  const [blobOpen, setBlobOpen] = useState(false);
   if (kind === 'array') return <ProviderArrayInput {...{draft, label, disabled, onChange, spec}} />;
   return <Box sx={{display: 'flex', gap: 0.5, minWidth: '18rem'}}>
     <TextField size="small" select value={draft.isNull ? 'null' : 'value'}
@@ -80,17 +91,21 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
         <MenuItem value="true">{gettext('True')}</MenuItem>
         <MenuItem value="false">{gettext('False')}</MenuItem>
       </TextField> :
-      <TextField size="small" value={draft.text}
-        helperText={kind === 'binary' ? gettext('Base64 binary data') :
-          ['float32', 'float64'].includes(kind) ? gettext('Approximate native FLOAT/DOUBLE value') : undefined}
+      <TextField size="small" value={draft.text} multiline={kind?.startsWith('firebird-')}
+        helperText={kind?.startsWith('firebird-') ? gettext('JSON fields: encoding, utc (100-microsecond precision), time_zone (database region or signed offset).') : kind === 'binary' ? gettext('Base64 binary data') :
+          ['float32', 'float64'].includes(kind) ? gettext('Approximate native FLOAT/DOUBLE value, NaN or signed Infinity') : undefined}
         disabled={disabled || draft.isNull} inputProps={{'aria-label': label}}
         onChange={(event) => onChange({...draft, text: event.target.value})} />}
+    {firebirdBlob && <Button onClick={() => setBlobOpen(true)}>BLOB editor</Button>}
+    {firebirdBlob && blobOpen && <FirebirdBlobEditor value={draft} kind={kind} label={label} readOnly={disabled}
+      onApply={onChange} onClose={() => setBlobOpen(false)} />}
   </Box>;
 }
 
 ProviderRowInput.propTypes = {
-  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary', 'array']).isRequired,
+  kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary', 'array', 'firebird-time-tz', 'firebird-timestamp-tz']).isRequired,
   spec: PropTypes.object,
+  firebirdBlob: PropTypes.bool,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,

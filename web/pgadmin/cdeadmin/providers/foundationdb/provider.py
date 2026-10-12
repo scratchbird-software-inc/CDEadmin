@@ -1,9 +1,6 @@
 """FoundationDB 7.3.77 ordered key/value provider."""
 
 from pgadmin.cdeadmin.sdk import ActualEnginePilotProvider, PilotProfile
-from ..native_distributed import (
-    NativeDistributedClient,
-)
 from .client import ADMIN_OPERATIONS
 
 
@@ -27,15 +24,18 @@ OPERATIONS = ADMIN_OPERATIONS
 
 
 class FoundationDBProvider(ActualEnginePilotProvider):
+    def _discard_unverified_session(self, handle):
+        self.client.close_session(handle)
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
 
 def create_provider(context, permissions, client=None):
     if client is None:
-        from .client import FoundationDBBackend
-        client = NativeDistributedClient(
-            PROFILE, FoundationDBBackend(permissions.acquire_secret),
+        from .driver import FoundationDBDriver, FoundationDBDriverBackend
+        client = FoundationDBDriver(
+            PROFILE, FoundationDBDriverBackend(permissions.acquire_secret),
             OPERATIONS,
         )
     return FoundationDBProvider(context, permissions, client)

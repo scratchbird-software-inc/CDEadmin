@@ -34,38 +34,44 @@ export class DDNSessionController {
     this.libraries = libraries;
     this.assetRef = options.assetRef ?
       validateDDNAssetRef(options.assetRef) : null;
-    const sessionOptions = {
-      readOnly: Boolean(options.readOnly),
-      validation: options.validation || 'strict',
-      overrides: options.overrides,
-    };
-    if(options.snapshot) {
-      const snapshot = validateDDNSnapshot(options.snapshot);
-      sessionOptions.files = snapshot.files;
-      sessionOptions.entry = snapshot.entry;
-      sessionOptions.view = snapshot.view;
-      sessionOptions.overrides = snapshot.overrides;
-    } else if(options.files) {
-      sessionOptions.files = validateDDNFiles(options.files);
-      sessionOptions.entry = options.entry;
-      sessionOptions.view = options.view;
+    this.tool = options.tool || null;
+    this.readOnly = Boolean(options.readOnly);
+    this.validation = options.validation || 'strict';
+    const source = options.snapshot ? validateDDNSnapshot(options.snapshot) : options;
+    this._workspace = this.tool ? null : libraries.viewer.createWorkspace(validateDDNFiles(source.files));
+    this.editor = this.workspace.editor({canWrite: () => !this.readOnly});
+    const entries = this.workspace.entries().filter((item) => item.views.length);
+    const entry = entries.find((item) => item.file === source.entry) || entries[0];
+    if(!entry) {
+      if(!this.tool) this.workspace.destroy();
+      throw new Error('The DDN workspace has no displayable views.');
     }
-    this.session = libraries.designer.createSession(sessionOptions);
+    this.entry = entry.file;
+    this.view = entry.views.find((item) => item.id === source.view)?.id || entry.views[0].id;
+    this.overrides = source.overrides;
+    this.layoutState = source.layoutState;
     this.persistenceState = DDN_PERSISTENCE_STATES.CLEAN;
     this.lastError = null;
     this.listeners = new Set();
     this.destroyed = false;
-    this.unsubscribe = this.session.subscribe((event) => {
-      if(event.type === 'change') {
-        this.persistenceState = DDN_PERSISTENCE_STATES.DIRTY;
-      }
+    this.saving = false;
+    this.savedFingerprint = JSON.stringify(this.snapshot().files);
+    const changed = (event) => {
+      this.persistenceState = DDN_PERSISTENCE_STATES.DIRTY;
+      try {
+        if(!this.isDirty()) this.persistenceState = DDN_PERSISTENCE_STATES.CLEAN;
+      } catch(error) { this.lastError = error; }
       this._emit({type: 'session', event});
-    });
+    };
+    this.unsubscribe = this.tool ? this.tool.onSourceChange(changed) : this.workspace.subscribe(changed);
   }
 
   _alive() {
     if(this.destroyed) throw new Error('DDN session has been destroyed.');
   }
+
+  get workspace() { return this.tool?.workspace || this._workspace; }
+  isDirty() { return this.saving || JSON.stringify(this.snapshot().files) !== this.savedFingerprint; }
 
   _emit(event) {
     for(const listener of this.listeners) listener(this.state(), event);
@@ -73,13 +79,13 @@ export class DDNSessionController {
 
   state() {
     return Object.freeze({
-      entry: this.session.entry,
-      view: this.session.view,
-      revision: this.session.revision,
-      readOnly: this.session.readOnly,
-      validation: this.session.validation,
+      entry: this.entry,
+      view: this.view,
+      revision: this.workspace.revision,
+      readOnly: this.readOnly,
+      validation: this.validation,
       persistence: this.persistenceState,
-      history: Object.freeze({...this.session.history()}),
+      history: Object.freeze({...this.workspace.history()}),
       lastError: this.lastError,
     });
   }
@@ -93,44 +99,52 @@ export class DDNSessionController {
     return () => this.listeners.delete(listener);
   }
 
-  inspect() { this._alive(); return this.session.inspect(); }
-  sourceOf(id) { this._alive(); return this.session.sourceOf(id); }
-  getFiles() { this._alive(); return this.session.getFiles(); }
-  render() { this._alive(); return this.session.render(); }
-  review(all=false) { this._alive(); return this.session.review(all); }
-  exportSVG() { this._alive(); return this.session.exportSVG(); }
-  snapshot() { this._alive(); return validateDDNSnapshot(this.session.snapshot()); }
-  evaluateDecision(input) { this._alive(); return this.session.evaluateDecision(input); }
-  simulateLifecycle(events, expected) {
+  _writable() {
     this._alive();
-    return this.session.simulateLifecycle(events, expected);
+    if(this.readOnly) throw new Error('This DDN workspace is read-only.');
   }
-
-  prepare(command) { this._alive(); return this.session.prepare(command); }
-  commit(plan) { this._alive(); return this.session.commit(plan); }
-  execute(command) { this._alive(); return this.session.execute(command); }
-  updateSource(file, source) { this._alive(); this.session.updateSource(file, source); }
-  replaceFiles(files) { this._alive(); this.session.replaceFiles(validateDDNFiles(files)); }
-  renameFile(from, to) { this._alive(); this.session.renameFile(from, to); }
-  removeFile(path) { this._alive(); this.session.removeFile(path); }
-  undo() { this._alive(); return this.session.undo(); }
-  redo() { this._alive(); return this.session.redo(); }
-  setReadOnly(value) { this._alive(); this.session.setReadOnly(Boolean(value)); }
-  setValidation(value) { this._alive(); this.session.setValidation(value); }
-  setView(entry, view) { this._alive(); this.session.setView(entry, view); }
-  setOptions(value) { this._alive(); this.session.setOptions(value); }
-  getOptions() { this._alive(); return this.session.getOptions(); }
-  resetOptions() { this._alive(); this.session.resetOptions(); }
-  load(snapshot) { this._alive(); this.session.load(validateDDNSnapshot(snapshot)); }
+  request() { return {entry: this.entry, view: this.view, overrides: this.overrides, layoutState: this.layoutState}; }
+  inspect() { this._alive(); return this.workspace.inspect(this.entry, this.view); }
+  getFiles() { this._alive(); return this.tool ? validateDDNFiles(this.tool.getSource({includeAppearance: true}).files) : this.workspace.getFiles(); }
+  render() { this._alive(); return this.workspace.renderSync(this.request()); }
+  review() { this._alive(); return this.workspace.validateDraft(this.entry, this.view); }
+  exportSVG() { this._alive(); return this.tool ? this.tool.exportSvgString() : this.render().svg; }
+  snapshot() {
+    this._alive();
+    if(this.tool) {
+      // A source bridge alone does not detect pending structured-editor drafts.
+      // The documented snapshot API rejects unapplied drafts before any save.
+      const snapshot = this.tool.snapshot();
+      const source = this.tool.getSource({includeAppearance: true});
+      return validateDDNSnapshot({...snapshot, format: 'ddn-workspace@1', ...source});
+    }
+    return validateDDNSnapshot(this.workspace.snapshot(this.entry, this.view, this.overrides, this.layoutState));
+  }
+  prepare(operation) {
+    this._writable();
+    return this.editor.preview({entry: this.entry, view: this.view,
+      expectedRevision: this.workspace.revision, mode: this.validation === 'strict' ? 'review' : 'design',
+      operations: [operation]});
+  }
+  commit(plan) { this._writable(); return this.editor.apply(plan); }
+  execute(operation) { return this.commit(this.prepare(operation)); }
+  updateSource(file, source) { return this.execute({type: 'files', changes: {[file]: source}}); }
+  undo() { this._writable(); return this.workspace.undo(); }
+  redo() { this._writable(); return this.workspace.redo(); }
+  setReadOnly(value) { this.readOnly = Boolean(value); }
 
   async save(saveAsset) {
-    this._alive();
+    this._writable();
+    if(this.saving) throw new Error('A DDN save is already in progress.');
     if(!this.assetRef) throw new Error('DDN session is not bound to an AssetRef.');
     if(typeof saveAsset !== 'function') {
       throw new TypeError('DDN asset save authority must be a function.');
     }
-    const revision = this.session.revision;
-    const payload = ddnAssetPayload(this.assetRef, this.session.snapshot());
+    const captured = this.snapshot();
+    const fingerprint = JSON.stringify(captured.files);
+    const revision = this.workspace.revision;
+    const payload = ddnAssetPayload(this.assetRef, captured);
+    this.saving = true;
     this.persistenceState = DDN_PERSISTENCE_STATES.SAVING;
     this.lastError = null;
     this._emit({type: 'saving', revision});
@@ -139,8 +153,15 @@ export class DDNSessionController {
         expectedAssetVersion: this.assetRef.assetVersion,
         sourceRevision: revision,
       });
-      if(result?.assetRef) this.assetRef = validateDDNAssetRef(result.assetRef);
-      this.persistenceState = this.session.revision === revision ?
+      if(!result?.assetRef) throw new Error('Save did not return a versioned AssetRef.');
+      const reference = validateDDNAssetRef(result.assetRef);
+      if(reference.projectId !== this.assetRef.projectId || reference.assetId !== this.assetRef.assetId ||
+          reference.assetVersion <= this.assetRef.assetVersion) {
+        throw new Error('Save returned an incompatible asset identity or version.');
+      }
+      this.assetRef = reference;
+      this.savedFingerprint = fingerprint;
+      this.persistenceState = JSON.stringify(this.snapshot().files) === fingerprint ?
         DDN_PERSISTENCE_STATES.CLEAN :
         DDN_PERSISTENCE_STATES.SAVED_NEWER_EDITS;
       this._emit({type: 'saved', revision, result});
@@ -152,6 +173,8 @@ export class DDNSessionController {
         DDN_PERSISTENCE_STATES.SAVE_FAILED;
       this._emit({type: 'save-error', revision, error});
       throw error;
+    } finally {
+      this.saving = false;
     }
   }
 
@@ -159,7 +182,7 @@ export class DDNSessionController {
     if(this.destroyed) return;
     this.unsubscribe?.();
     this.listeners.clear();
-    this.session.destroy();
+    if(!this.tool) this.workspace.destroy();
     this.destroyed = true;
   }
 }

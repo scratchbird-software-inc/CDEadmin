@@ -1,3 +1,4 @@
+import {removeSQLConnections} from 'sources/cdeadmin_ui/editors/SQLConnections';
 /////////////////////////////////////////////////////////////
 //
 // CDEadmin - Multi-engine Database Administration
@@ -9,7 +10,7 @@
 
 import { getNodeListById } from '../../../../static/js/node_ajax';
 import ServerSchema from './server.ui';
-import { showServerPassword, showEndpointVerification, showProviderWorkspace, showChangeServerPassword, showNamedRestorePoint } from '../../../../../static/js/Dialogs/index';
+import { showPostgresqlMonitor, showServerPassword, showEndpointVerification, showProviderWorkspace, showChangeServerPassword, showNamedRestorePoint } from '../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../static/js/api_instance';
 import { AllPermissionTypes } from '../../../../static/js/constants';
@@ -17,6 +18,7 @@ import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
+  isProviderRegistrationWorkspace,
 } from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
@@ -86,6 +88,16 @@ define('pgadmin.node.server', [
         });
 
         pgBrowser.add_menus([{
+          name: 'postgresql_monitor', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_postgresql_monitor',
+          priority: 7, label: gettext('PostgreSQL dashboard...'),
+          enable: (node) => !!node?.connected && !node?.cde_endpoint,
+        },{
+          name: 'postgresql_monitor_policy', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_postgresql_monitor_policy',
+          priority: 8, label: gettext('Configure PostgreSQL monitoring...'),
+          enable: (node) => !!node?.connected && !node?.cde_endpoint,
+        },{
           name: 'create_server_on_engine', node: 'engine_type', module: this,
           applies: ['object', 'context'], callback: 'register_engine_server',
           category: 'register', priority: 1,
@@ -233,7 +245,7 @@ define('pgadmin.node.server', [
         );
       },
       is_not_connected: function(node) {
-        return (node && !node.connected && !node.cde_endpoint);
+        return node?.cde_endpoint ? !providerEndpointSessionReady(node) : (node && !node.connected);
       },
       canCreate: function(node){
         let serverOwner = node.user_id;
@@ -241,7 +253,7 @@ define('pgadmin.node.server', [
 
       },
       is_connected: function(node) {
-        return node?.connected;
+        return node?.cde_endpoint ? providerEndpointSessionReady(node) : node?.connected;
       },
       enable_reload_config: function(node) {
         // Must be connected & is Super user
@@ -270,6 +282,14 @@ define('pgadmin.node.server', [
         return _.some(item.children, (child) => pgAdmin.Browser.tree.getData(child).connected);
       },
       callbacks: {
+        open_postgresql_monitor: function(args) {
+          const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
+          showPostgresqlMonitor(node._id, undefined, node.label || node._label);
+        },
+        open_postgresql_monitor_policy: function(args) {
+          const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
+          showPostgresqlMonitor(node._id, undefined, node.label || node._label, true);
+        },
         register_engine_server: function(args) {
           const tree = pgBrowser.tree;
           let item = args?.item || tree.selected();
@@ -303,14 +323,15 @@ define('pgadmin.node.server', [
               profile.engine_display_name || profile.display_name),
           };
           const initialData = {
-            name: gettext('%s on localhost',
+            name: registrationContext.name || gettext('%s on localhost',
               profile.engine_display_name || profile.display_name),
             cde_profile_id: profile.profile_id,
             cde_registration_intent: registrationIntent,
             host: profile.route_kind === 'network' ?
               (registrationContext.host || 'localhost') : '',
-            port: profile.default_port,
-            db: '',
+            port: registrationContext.port || profile.default_port,
+            db: registrationContext.database || '',
+            ...(registrationContext.username ? {username: registrationContext.username} : {}),
             connect_now: profile.workflow !== 'provider_endpoint',
             cde_verify_now: profile.workflow === 'provider_endpoint',
           };
@@ -340,9 +361,11 @@ define('pgadmin.node.server', [
           const item = args?.item || tree.selected();
           const data = item ? tree.itemData(item) : undefined;
           const providerReady = providerEndpointSessionReady(data);
-          const postgresReady = initialTab === 'semantic' &&
+          const localProfile = data?.cde_endpoint &&
+            isProviderRegistrationWorkspace(initialTab, initialContext);
+          const postgresReady = ['semantic', 'studio'].includes(initialTab) &&
             !data?.cde_endpoint && data?.connected;
-          if (!providerReady && !postgresReady) {
+          if (!providerReady && !postgresReady && !localProfile) {
             if(data?.cde_endpoint) {
               this.callbacks.verify_cde_endpoint.call(this, {
                 item,
@@ -373,6 +396,7 @@ define('pgadmin.node.server', [
               edit: gettext('Edit'),
               alter: gettext('Alter'),
               drop: gettext('Drop'),
+              recreate_empty: gettext('Recreate empty'),
               remove: gettext('Remove registration for'),
             };
             title = gettext('%s %s %s — %s',
@@ -394,6 +418,14 @@ define('pgadmin.node.server', [
           );
           return false;
         },
+        register_cde_sql_connection: function({item, databaseItem}) {
+          const tree = pgBrowser.tree;
+          const data = tree.itemData(item);
+          const database = tree.itemData(databaseItem);
+          showProviderWorkspace('SQL', this, data, item, 'studio', {
+            database_target_id: database._id, display_name: database.label || database._label,
+          }, undefined, true);
+        },
         verify_cde_endpoint: function(args) {
           const input = args || {};
           const node = this;
@@ -410,6 +442,18 @@ define('pgadmin.node.server', [
                 response.data.runtime_verification_state;
               data.is_password_saved = response.data.is_password_saved;
               data.cde_session_authenticated = true;
+              // Preserve the live menu state; persisted verification is not
+              // sufficient to decide whether this browser can disconnect.
+              (data.cde_context_actions || []).forEach(action => {
+                if (action.handler === 'disconnect_endpoint' &&
+                    action.disabled_reason === 'Endpoint is not verified.') {
+                  action.enabled = true;
+                  action.disabled_reason = '';
+                }
+              });
+              if (!input.databaseTargetId) showProviderWorkspace(
+                'SQL', node, data, item, 'studio', {}, undefined, true
+              );
               // `connected` enables inherited PostgreSQL dashboard polling.
               // Provider readiness has its own state and must not enable it.
               data.connected = false;
@@ -445,6 +489,7 @@ define('pgadmin.node.server', [
             i = input.item || t.selected(),
             d = i  ? t.itemData(i) : undefined;
 
+          if (d?.cde_endpoint) return this.callbacks.verify_cde_endpoint.call(this, {item: i});
           if (d) {
             connect_to_server(obj, d, t, i, false);
           }
@@ -1077,6 +1122,11 @@ define('pgadmin.node.server', [
             d = t.itemData(i);
             t.removeIcon(i);
             d.connected = false;
+            removeSQLConnections(d._id);
+            if (d.cde_endpoint) {
+              d.runtime_verification_state = 'unverified';
+              d.cde_session_authenticated = false;
+            }
             d.label = label;
             t.setLabel(i, {label});
             // Update server tree node data after server diconnected.
@@ -1099,15 +1149,10 @@ define('pgadmin.node.server', [
             if (pgBrowser.serverInfo && d._id in pgBrowser.serverInfo) {
               delete pgBrowser.serverInfo[d._id];
             }
-            else {
-              try {
-                pgAdmin.Browser.notifier.errorText(res.errormsg);
-              } catch (e) {
-                console.warn(e.stack || e);
-              }
-              t.setLabel(i, {label});
-              t.unload(i);
-            }
+          } else {
+            pgAdmin.Browser.notifier.errorText(res.errormsg);
+            t.setLabel(i, {label});
+            t.unload(i);
           }
         }).catch(function(error) {
           pgAdmin.Browser.notifier.pgRespErrorNotify(error);

@@ -155,3 +155,25 @@ def test_failed_detach_does_not_prevent_independent_attachment_release(
     failed._att.detach.side_effect = None
     client.close()
     assert client._closed and not client._connections
+
+
+def test_partial_connection_constructor_retains_failed_detach(monkeypatch):
+    monkeypatch.setattr(
+        'pgadmin.cdeadmin.providers.firebird.provider.'
+        '_configure_client_library', Mock())
+    client = _create_client(SimpleNamespace(acquire_secret=None))
+    handle = Mock()
+    attachment = handle._att
+    handle._close.side_effect = AttributeError('partial constructor')
+    attachment.detach.side_effect = RuntimeError('detach unconfirmed')
+    client._retain_failed_attachment(handle)
+    assert any(item is handle for item in client._connections)
+    assert id(handle) in client._failed_initializations
+    assert handle._att is attachment
+    attachment.detach.side_effect = None
+    result = client._release_failed_initialization(handle)
+    assert result['connection_released']
+    assert result['local_cleanup_error_type'] == 'AttributeError'
+    assert not client._connections
+    assert id(handle) not in client._failed_initializations
+    client.close()

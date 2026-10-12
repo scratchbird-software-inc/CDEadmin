@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from functools import wraps
 
 from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError
+from pgadmin.cdeadmin.navigator import server_display_name
 from pgadmin.cdeadmin.security import SecretReference
 from pgadmin.cdeadmin.security import (
     credential_from_protected_value,
@@ -38,6 +39,10 @@ from .profiles import (
     provider_route_options,
 )
 from .routing import RouteHealthRegistry, RouteSelectionError
+from .firebird_registration import secret_model, secret_models
+from .credential_storage import (
+    encrypted_credentials, protected_configuration_write,
+)
 
 
 APP_EXTENSION_KEY = 'cdeadmin_endpoint_service'
@@ -77,11 +82,34 @@ def _form_field_is_visible(field, form, data):
     return 'visible_when' not in field or matches(field['visible_when'])
 
 
+def _validate_firebird_auth_selection(profile, values):
+    identity = profile.get('profile_id') or profile.get(
+        'form_contract', {}).get('profile_id')
+    if identity != 'firebird-native':
+        return
+    from pgadmin.cdeadmin.providers.firebird.authentication import (
+        validate_authentication_plugins,
+    )
+    from pgadmin.cdeadmin.providers.firebird.service_connection import (
+        security_context,
+    )
+    from pgadmin.cdeadmin.providers.firebird.config_text import (
+        validate_config_selection,
+    )
+    from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+    try:
+        validate_authentication_plugins(values)
+        security_context(values.get('service_expected_database'))
+        validate_config_selection(values)
+    except RelationalClientError as error:
+        raise EndpointRegistrationError(str(error)) from None
+
+
 def _validate_firebird_trap_selection(profile, values, *, inheritance=False):
     """Keep invalid initial trap selections out of saved Firebird profiles."""
     identity = profile.get('profile_id') or profile.get(
         'form_contract', {}).get('profile_id')
-    if identity != 'firebird-native':
+    if identity not in {'firebird-native', 'firebird-embedded'}:
         return
     if inheritance and values.get('decfloat_traps_policy') == 'SERVER_DEFAULT':
         return
@@ -140,6 +168,7 @@ def _credential_change(method):
         endpoint = getattr(server, 'endpoint_profile', None)
         with self._principal_lock:
             previous_override = (
+                self._principal_overrides.get((endpoint.id, database_target_id)) or
                 self._principal_overrides.get(endpoint.id)
                 if endpoint is not None else None)
         callback = (guarded if password or connect_as or previous_override
@@ -212,17 +241,29 @@ class ProtectedColumnResolver:
         from pgadmin.utils.crypto import decrypt
         from pgadmin.utils.master_password import get_crypt_key
 
-        source_type = Server if source_kind == 'server' else SharedServer
+        if source_kind == 'database_target':
+            from pgadmin.model import EndpointDatabaseTarget
+            source_type = EndpointDatabaseTarget
+        else:
+            source_type = Server if source_kind == 'server' else SharedServer
         source = source_type.query.filter_by(id=source_id).first()
-        endpoint = getattr(source, 'endpoint_profile', None)
+        endpoint = (getattr(source, 'endpoint', None)
+                    if source_kind == 'database_target'
+                    else getattr(source, 'endpoint_profile', None))
+        owner = (getattr(endpoint, 'legacy_server', None) or
+                 getattr(endpoint, 'legacy_shared_server', None)) if (
+                     source_kind == 'database_target') else source
+        if source_kind == 'database_target' and not getattr(
+                source, 'registration_credentials', False):
+            raise EndpointRegistrationError('registration credential is unavailable')
         expected_principal = (
-            f'user:{source.user_id}' if source is not None else None
+            f'user:{owner.user_id}' if owner is not None else None
         )
-        if source is None or endpoint is None or (
+        if source is None or endpoint is None or owner is None or (
             endpoint.id != context.endpoint_id or
             principal != expected_principal or
             not current_user.is_authenticated or
-            current_user.id != source.user_id
+            current_user.id != owner.user_id
         ):
             raise EndpointRegistrationError(
                 'protected endpoint credential is unavailable'
@@ -241,13 +282,18 @@ class ProtectedColumnResolver:
                     value, column, credential_kind
                 )
         ciphertext = getattr(source, column, None)
-        key_present, key = get_crypt_key()
-        if ciphertext is None or not key_present:
+        try:
+            key_present, key = get_crypt_key()
+            if ciphertext is not None and key_present:
+                return self._select_credential(
+                    decrypt(ciphertext, key), column, credential_kind
+                )
+        except Exception:
             raise EndpointRegistrationError(
                 'protected endpoint credential is unavailable'
-            )
-        return self._select_credential(
-            decrypt(ciphertext, key), column, credential_kind
+            ) from None
+        raise EndpointRegistrationError(
+            'protected endpoint credential is unavailable'
         )
 
     @staticmethod
@@ -255,7 +301,7 @@ class ProtectedColumnResolver:
         if credential_kind is None:
             return value
         legacy_kind = (
-            'database_password' if column == 'password'
+            'database_password' if column in {'password', 'registration_password'}
             else 'tunnel_password'
         )
         return credential_from_protected_value(
@@ -269,15 +315,18 @@ class ProtectedColumnResolver:
             if len(parts) not in {3, 4}:
                 raise ValueError
             source_kind, raw_id, column = parts[:3]
-            credential_kind = parts[3] if len(parts) == 4 else None
-            source_id = int(raw_id)
+            credential_kind = (parts[3] if len(parts) == 4 else
+                               'database_password' if source_kind == 'database_target' else None)
+            source_id = (str(uuid.UUID(raw_id)) if source_kind == 'database_target'
+                         else int(raw_id))
         except (AttributeError, TypeError, ValueError) as exc:
             raise EndpointRegistrationError(
                 'protected endpoint credential locator is invalid'
             ) from exc
-        if source_kind not in {'server', 'sharedserver'} or column not in {
-            'password', 'tunnel_password'
-        }:
+        if (source_kind == 'database_target' and column != 'registration_password') or (
+            source_kind != 'database_target' and (
+                source_kind not in {'server', 'sharedserver'} or
+                column not in {'password', 'tunnel_password'})):
             raise EndpointRegistrationError(
                 'protected endpoint credential locator is invalid'
             )
@@ -302,9 +351,53 @@ class EndpointService:
             RESOLVER_ID, self.resolver
         )
 
+    @_connection_change
+    def create_initial_embedded_database(self, server):
+        """Explicit Firebird file creation before endpoint verification."""
+        endpoint, profile = self._managed_endpoint(server)
+        if profile['profile_id'] != 'firebird-embedded':
+            raise EndpointRegistrationError(
+                'This interface does not admit explicit embedded bootstrap')
+        if len(endpoint.routes) != 1:
+            raise EndpointRegistrationError(
+                'Embedded database creation requires one local route')
+        route = self._route_configuration(endpoint.routes[0])
+        context = self._context(
+            endpoint, EMBEDDED_VERIFY_PERMISSIONS | {'administer'})
+        try:
+            observation = self.provider_registry.resolve(
+                context).instance.create_initial_database({'route': route})
+            self.retain_created_database(
+                server, observation['endpoint_database_target'])
+        except Exception as exc:
+            raise EndpointRegistrationError(str(exc)) from None
+        return observation
+
     @_credential_change
     def verify_server(self, server, password=None, connect_as=None,
                       database_target_id=None):
+        try:
+            return self._verify_server(
+                server, password, connect_as, database_target_id)
+        except EndpointRegistrationError:
+            raise
+        except Exception:
+            # Includes failures recording verification after native auth.
+            # Never allow driver/crypto/SQL bind text into a server traceback.
+            from pgadmin.model import db
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            try:
+                self.forget_server_credentials(server)
+            except Exception:
+                pass
+            raise EndpointRegistrationError(
+                'endpoint verification could not be completed') from None
+
+    def _verify_server(self, server, password=None, connect_as=None,
+                       database_target_id=None):
         endpoint = getattr(server, 'endpoint_profile', None)
         if endpoint is None or endpoint.provider_version is None:
             raise EndpointRegistrationError(
@@ -319,11 +412,27 @@ class EndpointService:
             None if endpoint.profile_id == 'firebird-native' and
             database_target_id is None else Ellipsis)
         database_options = None
+        credential_target = None
         if database_target_id is not None:
             target = self._owned_database_target(endpoint, database_target_id)
             database_override = target.database
+            credential_target = target
             database_options = self._database_target_configuration(target)
+        principal_key = ((endpoint.id, credential_target.id) if
+                         secret_model(credential_target) else endpoint.id)
         connect_as = self._validated_principal_override(connect_as)
+        if endpoint.profile_id == 'firebird-native' and not password:
+            # A saved/default password must never be tried under a different
+            # database identity. Native password-plugin tests run on Linux;
+            # Windows/macOS teams must repeat saved/prompted/alternate flows
+            # with their clients. Win_Sspi is a separate platform contract.
+            with self._principal_lock:
+                previous_user = self._principal_overrides.get(principal_key)
+            if connect_as or previous_user:
+                raise EndpointRegistrationError(
+                    'Enter the password explicitly when changing the '
+                    'Firebird connection user, or disconnect before '
+                    'reconnecting with saved default credentials')
         embedded = profile['route_kind'] == 'embedded_file'
         context = self._context(
             endpoint,
@@ -348,6 +457,7 @@ class EndpointService:
                 principal_override=connect_as,
                 database_override=database_override,
                 database_options=database_options,
+                credential_target=credential_target,
             )
             transient = self._transient_credentials(
                 endpoint, route, reference, password
@@ -386,13 +496,13 @@ class EndpointService:
             verified.get('evidence_reference'),
         )
         with self._principal_lock:
-            default_user = self._route_configuration(selected_route).get(
-                'user'
-            )
+            default_user = (credential_target.registration_user if
+                            secret_model(credential_target) else
+                            self._route_configuration(selected_route).get('user'))
             if connect_as and connect_as != default_user:
-                self._principal_overrides[endpoint.id] = connect_as
+                self._principal_overrides[principal_key] = connect_as
             else:
-                self._principal_overrides.pop(endpoint.id, None)
+                self._principal_overrides.pop(principal_key, None)
         return {
             'endpoint_id': endpoint.id,
             'profile_id': endpoint.profile_id,
@@ -437,7 +547,8 @@ class EndpointService:
         )
         reference_ids.add(primary.reference_id)
         models = {
-            item.id: item for item in endpoint.secret_references
+            item.id: item for item in [*endpoint.secret_references,
+                                      *secret_models(endpoint)]
         }
         for reference_id in sorted(reference_ids):
             model = models.get(reference_id)
@@ -451,9 +562,44 @@ class EndpointService:
         if endpoint is None:
             return
         with self._principal_lock:
-            self._principal_overrides.pop(endpoint.id, None)
-        for model in endpoint.secret_references:
+            for key in list(self._principal_overrides):
+                if key == endpoint.id or (isinstance(key, tuple) and key[0] == endpoint.id):
+                    self._principal_overrides.pop(key, None)
+        for model in [*getattr(endpoint, 'secret_references', ()),
+                      *secret_models(endpoint)]:
             self.resolver.forget(model.secret_reference)
+
+    @_connection_change
+    def clear_saved_credentials(self, server):
+        """Clear this endpoint and its aliases after pending-work admission."""
+        from pgadmin.model import db
+        from .registration_credentials import clear
+        self.forget_server_credentials(server)
+        with protected_configuration_write(db.session):
+            server.password = None
+            server.save_password = 0
+            clear(server)
+            db.session.commit()
+
+    @_connection_change
+    def release_native_connections(self, server, release):
+        """Protect shared SQL ownership while releasing preserved native handles."""
+        return release()
+
+    @_connection_change
+    def disconnect_server(self, server):
+        """Disconnect provider state without entering PostgreSQL drivers.
+
+        Active work must be explicitly completed/closed first; admission
+        refuses to erase credentials beneath a live transaction. Saved default
+        credentials remain encrypted, while prompted/alternate ones are erased.
+        Windows/macOS teams must repeat credential erasure and native release
+        tests with their platform's client library and password storage.
+        """
+        self.forget_server_credentials(server)
+        endpoint = getattr(server, 'endpoint_profile', None)
+        if endpoint is not None:
+            self._record_verification(endpoint, 'unverified')
 
     @contextmanager
     def _transient_credentials(self, endpoint, route, primary, values):
@@ -469,7 +615,8 @@ class EndpointService:
         )
         reference_ids.add(primary.reference_id)
         models = {
-            item.id: item for item in endpoint.secret_references
+            item.id: item for item in [*endpoint.secret_references,
+                                      *secret_models(endpoint)]
         }
         with ExitStack() as stack:
             for reference_id in sorted(reference_ids):
@@ -492,7 +639,7 @@ class EndpointService:
         if endpoint is not None and endpoint.provider_version is None and (
             endpoint.provider_id == 'org.pgadmin.postgresql'
         ):
-            return self._postgresql_workspace(server, endpoint)
+            return self._postgresql_workspace(server, endpoint, database_target_id)
         if endpoint is None or endpoint.provider_version is None:
             raise EndpointRegistrationError(
                 'server is not a provider-managed endpoint'
@@ -520,6 +667,7 @@ class EndpointService:
         )
         database_override = Ellipsis
         database_options = None
+        credential_target = None
         target_cache_id = None
         if database_target_id is not Ellipsis:
             if database_target_id is None:
@@ -530,6 +678,7 @@ class EndpointService:
                     endpoint, database_target_id
                 )
                 database_override = target.database
+                credential_target = target
                 database_options = self._database_target_configuration(
                     target
                 )
@@ -538,12 +687,14 @@ class EndpointService:
             server, endpoint, profile, route_model=candidates[0],
             database_override=database_override,
             database_options=database_options,
+            credential_target=credential_target,
         )
         route_candidates = [
             self._route_and_reference(
                 server, endpoint, profile, route_model=item,
                 database_override=database_override,
                 database_options=database_options,
+                credential_target=credential_target,
             )[0]
             for item in candidates
         ]
@@ -602,6 +753,19 @@ class EndpointService:
 
     def route_catalog(self, server):
         """Return owner-safe, credential-free persistent route definitions."""
+        if self._is_preserved_postgresql(server):
+            endpoint = server.endpoint_profile
+            return {
+                'endpoint_id': endpoint.id, 'profile_id': endpoint.profile_id,
+                'supports_multiple_routes': False, 'default_port': 5432,
+                'connection_fields': [], 'database_targeting': {},
+                'server_forms': {'forms': {}}, 'database_forms': {'forms': {}},
+                'routes': [{'route_id': f'postgresql-server:{server.id}',
+                            'route_kind': 'network', 'priority': 0,
+                            'configuration': {'host': server.host, 'port': server.port,
+                                              'user': server.username}, 'health': {}}],
+            }
+
         endpoint, profile = self._managed_endpoint(server)
         routes = []
         for model in sorted(
@@ -634,6 +798,28 @@ class EndpointService:
 
     def database_catalog(self, server):
         """Return database targets without confusing them with routes."""
+        if self._is_preserved_postgresql(server):
+            from pgadmin.utils.driver.registry import DriverRegistry
+            manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
+            connection = manager.connection()
+            if not connection.connected():
+                raise EndpointRegistrationError('PostgreSQL must be connected before reading databases')
+            status, result = connection.execute_dict(
+                'SELECT oid AS did, datname, datallowconn FROM pg_catalog.pg_database ORDER BY datname')
+            if not status:
+                raise EndpointRegistrationError('PostgreSQL database catalog could not be read')
+            targets = [{'target_id': f"postgresql-database:{row['did']}",
+                        'database': row['datname'], 'display_name': row['datname'],
+                        'active': row['datname'] == connection.db,
+                        'allow_connection': row['datallowconn'], 'configuration': {}}
+                       for row in result['rows']]
+            return {'endpoint_id': server.endpoint_profile.id, 'mode': 'required',
+                    'multiple': True, 'target_management': False,
+                    'server_verification': False, 'create_and_activate': False,
+                    'active_target_id': next((t['target_id'] for t in targets if t['active']), None),
+                    'legacy_route_database': None, 'targets': targets,
+                    'forms': {'forms': {}}}
+
         endpoint, profile = self._managed_endpoint(server)
         targeting = profile.get('database_targeting', {})
         targets = [self._database_target_value(item) for item in sorted(
@@ -681,13 +867,10 @@ class EndpointService:
         configuration = self._database_form_values(
             profile, 'define', data
         )
-        existing = next((
-            item for item in endpoint.database_targets
-            if item.database == database
-        ), None)
+        existing = self._unambiguous_database_target(endpoint, database)
         self._verify_database_target(
             server, endpoint, profile, database,
-            database_options=configuration,
+            database_options=configuration, credential_target=existing,
         )
         for item in endpoint.database_targets:
             item.active = False
@@ -732,7 +915,7 @@ class EndpointService:
         )
         self._verify_database_target(
             server, endpoint, profile, target.database,
-            database_options=configuration,
+            database_options=configuration, credential_target=target,
         )
         target.display_name = display_name.strip()
         target.configuration = self._encoded_route(configuration)
@@ -757,7 +940,7 @@ class EndpointService:
         configuration.update(connect_values)
         self._verify_database_target(
             server, endpoint, profile, target.database,
-            database_options=configuration,
+            database_options=configuration, credential_target=target,
         )
         for item in endpoint.database_targets:
             item.active = item.id == target.id
@@ -853,10 +1036,7 @@ class EndpointService:
         with self._database_catalog_transaction():
             for item in endpoint.database_targets:
                 item.active = False
-            model = next((
-                item for item in endpoint.database_targets
-                if item.database == database
-            ), None)
+            model = self._unambiguous_database_target(endpoint, database)
             if model is None:
                 model = EndpointDatabaseTarget(
                     id=str(uuid.uuid4()), endpoint_id=endpoint.id,
@@ -927,6 +1107,18 @@ class EndpointService:
         """Update one endpoint through its exact provider server form."""
         from pgadmin.model import db
 
+        try:
+            with protected_configuration_write(db.session):
+                return self._update_endpoint_profile(server, data)
+        except EndpointRegistrationError:
+            # A failed save must not leave newly supplied session-only secrets
+            # active against the rolled-back route or principal.
+            self.forget_server_credentials(server)
+            raise
+
+    def _update_endpoint_profile(self, server, data):
+        from pgadmin.model import db
+
         endpoint, profile = self._managed_endpoint(server)
         values = self._server_form_values(profile, 'edit', data)
         name = values.pop('name')
@@ -964,6 +1156,11 @@ class EndpointService:
             field_id = field['field_id']
             if field_id in values:
                 route_input[f'cde_route_{field_id}'] = values[field_id]
+            elif field_id in data and data[field_id] in (None, ''):
+                # An explicit clear differs from an omitted partial-update
+                # field. Required/visibility checks already ran above; route
+                # validation owns removal of this optional configuration key.
+                route_input[f'cde_route_{field_id}'] = data[field_id]
         route_configuration = self._validated_route(
             profile, route_input, existing
         )
@@ -990,22 +1187,14 @@ class EndpointService:
         if profile.get('secret_fields'):
             if save_password:
                 import config
-                from pgadmin.utils.crypto import encrypt
-                from pgadmin.utils.master_password import get_crypt_key
 
                 if not config.ALLOW_SAVE_PASSWORD:
                     raise EndpointRegistrationError(
                         'saving endpoint credentials is disabled'
                     )
                 if credential_values:
-                    key_present, key = get_crypt_key()
-                    if not key_present:
-                        raise EndpointRegistrationError(
-                            'the master password must be unlocked before '
-                            'credentials can be saved'
-                        )
-                    server.password = encrypt(
-                        encode_credential_bundle(credential_values), key
+                    server.password = encrypted_credentials(
+                        encode_credential_bundle(credential_values)
                     )
                 elif not getattr(server, 'password', None):
                     raise EndpointRegistrationError(
@@ -1028,9 +1217,18 @@ class EndpointService:
             self._principal_overrides.pop(endpoint.id, None)
         self.route_health.clear(endpoint.id, route.id)
         self._stale(endpoint)
+        # The navigator still reads these compatibility fields. Keep them in
+        # step with the validated primary route, not the pre-edit address.
+        if profile['route_kind'] == 'network':
+            server.host = route_configuration['host']
+            server.port = route_configuration['port']
+            server.username = route_configuration.get('user', '')
         db.session.commit()
         return {
             'display_name': server.name,
+            'navigator_label': server_display_name(
+                'localhost' if profile['route_kind'] == 'embedded_file'
+                else getattr(server, 'host', None), server.name),
             'route_catalog': self.route_catalog(server),
         }
 
@@ -1064,6 +1262,12 @@ class EndpointService:
         self._stale(endpoint)
         db.session.commit()
         return self.route_catalog(server)
+
+    @staticmethod
+    def _is_preserved_postgresql(server):
+        endpoint = getattr(server, 'endpoint_profile', None)
+        return (endpoint is not None and endpoint.provider_version is None and
+                endpoint.provider_id == 'org.pgadmin.postgresql')
 
     @staticmethod
     def _managed_endpoint(server):
@@ -1128,6 +1332,9 @@ class EndpointService:
             'database': target.database,
             'configuration': configuration,
             'active': bool(target.active),
+            'registration_credentials': bool(getattr(target, 'registration_credentials', False)),
+            'registration_user': getattr(target, 'registration_user', None),
+            'has_saved_registration_password': bool(getattr(target, 'registration_password', None)),
         }
 
     @staticmethod
@@ -1232,6 +1439,7 @@ class EndpointService:
             raise EndpointRegistrationError(
                 'server form input must be an object'
             )
+        _validate_firebird_auth_selection(profile, data)
         form = profile['form_contract']['server']['forms'].get(operation_id)
         if form is None:
             raise EndpointRegistrationError(
@@ -1245,7 +1453,15 @@ class EndpointService:
                 ', '.join(sorted(unknown))
             )
         values = {}
+        connection_fields = {
+            field['field_id'] for field in profile.get('connection_fields', [])
+        }
         for field_id, field in fields.items():
+            if (operation_id == 'edit' and field_id not in data and
+                    field_id in connection_fields):
+                # Preserve existing options on partial edits; creation
+                # defaults apply only when there is no existing route value.
+                continue
             if not _form_field_is_visible(field, form, data):
                 if data.get(field_id) not in (None, ''):
                     raise EndpointRegistrationError(
@@ -1293,7 +1509,14 @@ class EndpointService:
                 raise EndpointRegistrationError(
                     f'{field["label"]} is not an admitted option'
                 )
-            if isinstance(value, str) and (
+            # Firebird native text has already passed its exact grammar and
+            # 16-KiB UTF-8 limit above; it is intentionally multiline. Do not
+            # relax the single-line rules for unrelated provider fields.
+            native_text = field_id == 'wire_config' and (
+                profile.get('profile_id') or profile.get(
+                    'form_contract', {}).get('profile_id')
+            ) == 'firebird-native'
+            if not native_text and isinstance(value, str) and (
                 len(value) > 4096 or any(
                     character in value for character in ('\x00', '\r', '\n')
                 )
@@ -1314,6 +1537,15 @@ class EndpointService:
                 route_model.configuration = cls._encoded_route(configuration)
 
     @staticmethod
+    def _unambiguous_database_target(endpoint, database):
+        matches = [item for item in endpoint.database_targets
+                   if item.database == database]
+        if len(matches) > 1:
+            raise EndpointRegistrationError(
+                'multiple registrations use this filename; select the exact registration')
+        return matches[0] if matches else None
+
+    @staticmethod
     def _owned_database_target(endpoint, target_id):
         target_id = str(target_id or '')
         target = next((
@@ -1327,7 +1559,7 @@ class EndpointService:
         return target
 
     def _verify_database_target(self, server, endpoint, profile, database,
-                                database_options=None):
+                                database_options=None, credential_target=None):
         embedded = profile['route_kind'] == 'embedded_file'
         context = self._context(
             endpoint,
@@ -1342,6 +1574,7 @@ class EndpointService:
                 server, endpoint, profile, route_model=route_model,
                 database_override=database,
                 database_options=database_options,
+                credential_target=credential_target,
             )
             try:
                 self.provider_registry.resolve(
@@ -1420,12 +1653,22 @@ class EndpointService:
             raise EndpointRegistrationError(
                 'endpoint route input cannot contain credentials'
             )
+        _validate_firebird_auth_selection(profile, {
+            'auth_plugin_list': data.get('cde_route_auth_plugin_list'),
+            'trusted_auth': data.get('cde_route_trusted_auth'),
+            'service_expected_database': data.get(
+                'cde_route_service_expected_database')})
         result = provider_route_options(profile, data, existing)
+        _validate_firebird_auth_selection(profile, result)
         _validate_firebird_trap_selection(profile, result)
         if profile.get('route_kind') == 'embedded_file':
-            if not result.get('database') or not result.get(
-                'filesystem_root'
-            ):
+            # A multi-database endpoint keeps filenames in its target catalog.
+            # Editing its local runtime settings must not require restoring a
+            # legacy route-level database. Attachments still require a target.
+            needs_route_database = not profile.get(
+                'database_targeting', {}).get('multiple')
+            if not result.get('filesystem_root') or (
+                    needs_route_database and not result.get('database')):
                 raise EndpointRegistrationError(
                     'embedded endpoint route is incomplete'
                 )
@@ -1472,20 +1715,28 @@ class EndpointService:
         runtime.verification_evidence_reference = None
         runtime.verified_at = None
 
-    def _postgresql_workspace(self, server, endpoint):
+    def _postgresql_workspace(self, server, endpoint, database_target_id=Ellipsis):
         """Bridge a connected preserved PostgreSQL server to shared studios."""
         from pgadmin.cdeadmin.providers.postgresql.provider import (
             PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION,
         )
         from pgadmin.utils.driver.registry import DriverRegistry
 
+        from pgadmin.cdeadmin.providers.postgresql.connection_target import database_oid
+        try:
+            selected_oid = database_oid(database_target_id)
+        except ValueError as exc:
+            raise EndpointRegistrationError(str(exc)) from None
         manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
-        connection = manager.connection()
+        connection = manager.connection(did=selected_oid) if selected_oid is not None else manager.connection()
         if not connection.connected():
             raise EndpointRegistrationError(
                 'PostgreSQL must be connected before opening shared studios'
             )
-        observed = str(manager.ver or '')
+        native_version = manager.version
+        observed = (f'{native_version // 10000}.{native_version % 10000}'
+                    if type(native_version) is int and native_version >= 100000
+                    else str(native_version))
         if observed != PROFILE_VERSION:
             raise EndpointRegistrationError(
                 'connected PostgreSQL runtime does not match profile 18.3'
@@ -1510,6 +1761,10 @@ class EndpointService:
             'runtime_verification_state': 'verified',
             'runtime_evidence_reference': 'preserved-postgresql-connection',
         }
+        if selected_oid is not None:
+            for namespace in ('cache_namespace', 'session_namespace'):
+                identity[namespace] = str(uuid.uuid5(uuid.UUID(identity[namespace]),
+                                                    f'postgresql-database:{selected_oid}'))
         identity_context = EndpointContext.from_identity(identity)
         admitted_permissions = self.provider_registry.admitted_permissions(
             identity_context
@@ -1527,6 +1782,8 @@ class EndpointService:
             'server_id': server.id,
             'principal_reference': f'user:{server.user_id}',
         }
+        if selected_oid is not None:
+            route['database_id'] = selected_oid
         endpoint_payload = {
             'identity': provider_identity, 'endpoint_id': endpoint.id,
             'mode': 'legacy_native',
@@ -1590,7 +1847,7 @@ class EndpointService:
     def _route_and_reference(
         self, server, endpoint, profile=True, requires_secret=None,
         route_model=None, database_override=Ellipsis,
-        database_options=None, principal_override=Ellipsis,
+        database_options=None, principal_override=Ellipsis, credential_target=None,
     ):
         if requires_secret is not None:
             profile = requires_secret
@@ -1603,10 +1860,18 @@ class EndpointService:
                 'endpoint route or credential reference is unavailable'
             )
         route = json.loads(route_model.configuration)
+        if credential_target is None and database_override is Ellipsis:
+            credential_target = next((item for item in getattr(
+                endpoint, 'database_targets', ()) if item.active), None)
+        registration_secret = secret_model(credential_target)
+        principal_key = ((endpoint.id, credential_target.id)
+                         if registration_secret else getattr(endpoint, 'id', None))
         if principal_override is Ellipsis:
-            endpoint_id = getattr(endpoint, 'id', None)
             with self._principal_lock:
-                principal_override = self._principal_overrides.get(endpoint_id)
+                principal_override = self._principal_overrides.get(principal_key)
+        if registration_secret:
+            route['user'] = credential_target.registration_user
+            route['trusted_auth'] = False
         if principal_override:
             route['user'] = principal_override
         if database_override is not Ellipsis:
@@ -1648,7 +1913,9 @@ class EndpointService:
                 item.secret_kind: item
                 for item in endpoint.secret_references
             }
-            present = route.get('credential_kinds')
+            if registration_secret:
+                models['database_password'] = registration_secret
+            present = None if registration_secret else route.get('credential_kinds')
             if present is not None:
                 if not isinstance(present, list) or not all(
                     isinstance(item, str) for item in present

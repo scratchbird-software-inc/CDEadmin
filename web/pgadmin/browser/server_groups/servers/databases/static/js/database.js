@@ -11,7 +11,8 @@ import { getNodeAjaxOptions, getNodeListByName } from '../../../../../static/js/
 import { getNodePrivilegeRoleSchema } from '../../../static/js/privilege.ui';
 import { getNodeVariableSchema } from '../../../static/js/variable.ui';
 import DatabaseSchema from './database.ui';
-import { showServerPassword } from '../../../../../../static/js/Dialogs/index';
+import {removeSQLConnections} from 'sources/cdeadmin_ui/editors/SQLConnections';
+import { showPostgresqlMonitor, showProviderWorkspace, showServerPassword } from '../../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../../static/js/api_instance';
 import { AllPermissionTypes } from '../../../../../static/js/constants';
@@ -21,6 +22,27 @@ define('pgadmin.node.database', [
   'sources/pgadmin', 'pgadmin.browser.utils',
   'pgadmin.authenticate.kerberos', 'pgadmin.browser.collection',
 ], function(gettext, url_for, pgAdmin, pgBrowser, Kerberos) {
+
+  function sqlWorkspace(item, registerOnly=true) {
+    const tree = pgBrowser.tree;
+    const database = tree.itemData(item);
+    if (!database?.connected) return;
+    let serverItem = tree.parent(item);
+    while (serverItem && tree.itemData(serverItem)?._type !== 'server') serverItem = tree.parent(serverItem);
+    if (!serverItem) return;
+    const server = tree.itemData(serverItem);
+    showProviderWorkspace('SQL', pgBrowser.Nodes.server, server, serverItem,
+      'studio', {database_target_id: `postgresql-database:${database._id}`,
+        display_name: database.label || database._label}, undefined, registerOnly);
+  }
+
+  function monitoringWorkspace(item, policyMode) {
+    const tree = pgBrowser.tree, database = tree.itemData(item);
+    let parent = tree.parent(item);
+    while(parent && tree.itemData(parent)?._type !== 'server') parent = tree.parent(parent);
+    if(parent) showPostgresqlMonitor(tree.itemData(parent)._id,
+      `postgresql-database:${database._id}`, database.label || database._label, policyMode);
+  }
 
   function canDeleteWithForce(itemNodeData, item) {
     let treeData = pgBrowser.tree.getTreeNodeHierarchy(item),
@@ -74,6 +96,19 @@ define('pgadmin.node.database', [
         this.initialized = true;
 
         pgBrowser.add_menus([{
+          name: 'postgresql_monitor', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_monitor', priority: 7,
+          label: gettext('PostgreSQL dashboard...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_monitor_policy', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_monitor_policy', priority: 8,
+          label: gettext('Configure PostgreSQL monitoring...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_global_sql', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_global_sql',
+          category: 'connect', priority: 6, label: gettext('Open SQL workspace...'),
+          enable: 'is_connected',
+        },{
           name: 'create_database_on_server', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'show_obj_properties',
           category: 'create', priority: 4, label: gettext('Database...'),
@@ -227,6 +262,11 @@ define('pgadmin.node.database', [
         );
       },
       callbacks: {
+        open_monitor: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), false); },
+        open_monitor_policy: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), true); },
+        open_global_sql: function(args) {
+          sqlWorkspace(args?.item || pgBrowser.tree.selected(), false);
+        },
         /* Connect the database */
         connect_database: function(args){
           let input = args || {},
@@ -299,6 +339,7 @@ define('pgadmin.node.database', [
           }
 
           pgBrowser.tree.addIcon(item, {icon: data.icon});
+          if (data.connected) sqlWorkspace(item);
           if (!data.connected && data.allowConn && !data.is_connecting) {
             data.is_connecting = true;
             connect_to_database(this, data, pgBrowser.tree, item, true);
@@ -317,6 +358,7 @@ define('pgadmin.node.database', [
             connect_to_database(this, data, pgBrowser.tree, item, false);
           }
           if(data.connected){
+            sqlWorkspace(item);
             return pgBrowser.Node.callbacks.selected.apply(this, arguments);
           }
         },
@@ -537,6 +579,8 @@ define('pgadmin.node.database', [
               pgAdmin.Browser.notifier.success(res.info);
               t.removeIcon(i);
               data.connected = false;
+              const owner = t.getTreeNodeHierarchy(i).server;
+              removeSQLConnections(owner._id, `postgresql-database:${data._id}`);
               data.icon = data.isTemplate ? 'icon-database-template-not-connected':'icon-database-not-connected';
               d.label = label;
               t.setLabel(i, {label});

@@ -27,10 +27,16 @@ CONTEXT_ACTION_SCHEMA = 'cdeadmin.context-action.v1'
 _COMMAND_ID = re.compile(r'^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$')
 _HANDLERS = frozenset({
     'clear_credentials',
+    'disconnect_endpoint',
     'connector_info',
     'edit_endpoint',
     'forget_endpoint',
     'open_workspace',
+    'open_mysql_fleet', 'open_mysql_dashboard_editor',
+    'open_firebird_fleet',
+    'open_postgresql_fleet',
+    'open_firebird_docker',
+    'open_firebird_dashboard_editor',
     'refresh_node',
     'register_endpoint',
     'verify_endpoint',
@@ -172,9 +178,10 @@ def connector_context_actions(
             ]['form_id'],
         }
         if profile['route_kind'] == 'embedded_file':
+            suffix = f'.{profile_id}' if len(ordered) > 1 else ''
             actions.extend([
                 _action(
-                    f'connector.{engine_id}.create_database',
+                    f'connector.{engine_id}.create_database{suffix}',
                     f'Create new {display} database file...',
                     'register_endpoint', icon='action.create_database',
                     group='register', priority=10 + index * 10,
@@ -184,7 +191,7 @@ def connector_context_actions(
                     },
                 ),
                 _action(
-                    f'connector.{engine_id}.register_database',
+                    f'connector.{engine_id}.register_database{suffix}',
                     f'Open existing {display} database file...',
                     'register_endpoint', icon='action.attach',
                     group='register', priority=11 + index * 10,
@@ -233,6 +240,37 @@ def connector_context_actions(
                         disabled_reason=unavailable_reason,
                     ),
                 ])
+    if engine_id == 'mysql' and not localhost_placeholder:
+        actions.extend([
+            _action('connector.mysql.monitoring', 'MySQL engine dashboard...', 'open_mysql_fleet',
+                icon='tool.dashboard', group='information', priority=5),
+            _action('connector.mysql.dashboard_editor', 'Edit MySQL engine dashboard...', 'open_mysql_dashboard_editor',
+                icon='action.edit', group='information', priority=6, mutation='write'),
+        ])
+    if engine_id == 'postgresql' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.postgresql.monitoring', 'PostgreSQL engine dashboard...',
+            'open_postgresql_fleet', icon='tool.dashboard', group='information',
+            priority=70,
+        ))
+    if engine_id == 'firebird' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.firebird.docker', 'Provision Firebird in Docker...',
+            'open_firebird_docker', icon='action.create_database', group='register',
+            priority=30, mutation='admin', macro=False,
+        ))
+    if engine_id == 'firebird' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.firebird.monitoring', 'Firebird engine dashboard...',
+            'open_firebird_fleet', icon='tool.dashboard', group='information',
+            priority=70,
+        ))
+    if engine_id == 'firebird' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.firebird.dashboard_editor', 'Edit dashboard...',
+            'open_firebird_dashboard_editor', icon='action.edit',
+            group='information', priority=71, mutation='write',
+        ))
     info = {
         'engine_id': engine_id,
         'profile_ids': [item['profile_id'] for item in ordered],
@@ -653,10 +691,59 @@ def endpoint_context_actions(
     create_form = database_forms['forms']['create']
     actions = [_action(
         f'endpoint.{engine_id}.verify',
-        f'Verify {display} endpoint...', 'verify_endpoint',
+        f'Connect to {display} server...', 'verify_endpoint',
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
+    if engine_id == 'mysql':
+        for tab, label in (('monitoring', 'MySQL server dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(f'endpoint.mysql.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability', arguments={'tab': tab},
+                mutation='admin' if tab == 'monitoring_policy' else 'read', enabled=ready and can_manage,
+                disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
+        actions.append(_action('endpoint.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
+        actions.append(_action('endpoint.mysql.server_catalog', 'MySQL server metadata and DDN...', 'open_workspace',
+            icon='action.export', group='database', arguments={'tab': 'export', 'server_catalog': True}, enabled=ready and can_manage,
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
+    if engine_id == 'firebird':
+        # Firebird implements guarded native release; do not advertise this
+        # lifecycle action for providers without that release contract.
+        actions.append(_action(
+            f'endpoint.{engine_id}.disconnect',
+            f'Disconnect {display} endpoint...', 'disconnect_endpoint',
+            icon='action.disconnect', group='connection', priority=11,
+            mutation='admin', enabled=ready and can_manage,
+            disabled_reason=('Endpoint is not verified.' if not ready else
+                             '' if can_manage else
+                             'Only the endpoint owner can disconnect it.'),
+        ))
+        actions.append(_action(
+            'endpoint.firebird.catalogs', 'Capture registered database catalogs...',
+            'open_workspace', icon='action.view', group='database',
+            arguments={'tab': 'firebird-server-catalog'}, enabled=ready,
+            disabled_reason='' if ready else blocked,
+        ))
+        if profile.get('route_kind') == 'network':
+            actions.append(_action(
+                'endpoint.firebird.dashboard_editor', 'Edit dashboard...',
+                'open_firebird_dashboard_editor', icon='action.edit',
+                group='availability', mutation='write', enabled=can_manage,
+                disabled_reason='' if can_manage else 'Only the endpoint owner can edit its dashboard.',
+            ))
+            for tab, label in (
+                    ('monitoring', 'Firebird server dashboard...'),
+                    ('monitoring_policy', 'Configure monitoring collection...')):
+                actions.append(_action(
+                    f'endpoint.firebird.{tab}', label, 'open_workspace',
+                    icon='action.view', group='availability',
+                    mutation='admin' if tab == 'monitoring_policy' else 'read',
+                    arguments={'tab': tab}, enabled=ready and can_manage,
+                    disabled_reason=blocked if not ready else
+                    '' if can_manage else 'Only the endpoint owner can monitor it.',
+                ))
     actions.extend([
         _action(
             f'endpoint.{engine_id}.create_database',
@@ -697,7 +784,21 @@ def endpoint_context_actions(
                 'operation_id': 'check_upgrade_required',
             }, enabled=ready, disabled_reason=blocked,
         ))
-    if engine_id == 'firebird':
+    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
+        for priority, operation, label in (
+                (22, 'restore_logical', 'Restore database (gbak)...'),
+                (23, 'restore_physical', 'Restore physical backup (nbackup)...')):
+            actions.append(_action(
+                f'endpoint.firebird.{operation}', label, 'open_workspace',
+                icon='action.restore', group='database', priority=priority,
+                mutation='destructive', confirmation=True, macro=False,
+                arguments={'tab': 'administration', 'resource_kind': 'database',
+                           'operation_id': operation,
+                           'database_target_id': None},
+                enabled=ready and can_manage,
+                disabled_reason=(blocked if not ready else '' if can_manage else
+                                 'Endpoint management permission is required.'),
+            ))
         actions.append(_action(
             'endpoint.firebird.activate_shadow',
             'Recover a Firebird shadow...', 'open_workspace',
@@ -756,10 +857,8 @@ def database_target_context_actions(
         'firebird': (
             ('properties', 'Firebird database properties...',
              'action.properties'),
-            ('resources', 'Browse Firebird database objects...',
-             'action.view'),
             ('studio', 'Open Firebird SQL editor...', 'action.script'),
-            ('data', 'Browse and edit Firebird table data...', 'action.edit'),
+            ('export', 'Export...', 'action.export'),
         ),
         'sqlite': (
             ('properties', 'SQLite database file properties...',
@@ -805,6 +904,49 @@ def database_target_context_actions(
         icon=icon, group='database', priority=10 + index,
         arguments={**base, 'tab': tab},
     ) for index, (tab, label, icon) in enumerate(rows)]
+    if engine_id == 'firebird':
+        for operation in ('clone', 'move'):
+            actions.append(_action(
+                f'database.firebird.registration_{operation}',
+                f'{operation.capitalize()} Firebird registration...',
+                'open_workspace', icon='action.edit', group='register',
+                mutation='admin', macro=False,
+                arguments={**base, 'tab': 'firebird-registration',
+                           'registration_operation': operation},
+            ))
+        actions.append(_action(
+            'database.firebird.test_data', 'Generate Firebird test data...',
+            'open_workspace', icon='action.edit', group='database',
+            arguments={**base, 'tab': 'firebird-test-data'},
+        ))
+    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
+        actions.append(_action(
+            'database.firebird.isql', 'Open external Firebird ISQL...',
+            'open_workspace', icon='action.script', group='database',
+            arguments={**base, 'tab': 'firebird-isql'},
+        ))
+        actions.append(_action(
+            'database.firebird.dashboard_editor', 'Edit dashboard...',
+            'open_firebird_dashboard_editor', icon='action.edit',
+            group='availability', mutation='write', arguments=base,
+        ))
+        for tab, label in (
+                ('monitoring', 'Firebird database dashboard...'),
+                ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(
+                f'database.firebird.{tab}', label, 'open_workspace',
+                icon='action.view', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read',
+                arguments={**base, 'tab': tab},
+            ))
+        actions.append(_action(
+            'database.firebird.backup', 'Backup...', 'open_workspace',
+            icon='action.backup', group='database', priority=13,
+            mutation='admin', arguments={
+                **base, 'tab': 'administration', 'resource_kind': 'database',
+                'operation_id': 'backup_logical',
+            },
+        ))
     action_specs = (
         ('connect', f'Connect to {noun}...', 'action.connect', 'admin'),
         ('edit', f'Edit {noun} connection...', 'action.properties', 'admin'),
@@ -854,7 +996,29 @@ def database_target_context_actions(
             disabled_reason=form['disabled_reason'] or '',
             confirmation=False,
         ))
+    actions.append(_action(
+        f'database.{engine_id}.connect', 'Connect database...',
+        'verify_endpoint', icon='action.connect', group='connection',
+        priority=10, arguments=base,
+    ))
     if engine_id == 'firebird':
+        actions.append(_action(
+            'database.firebird.disconnect',
+            'Disconnect server (all databases)...', 'disconnect_endpoint',
+            icon='action.disconnect', group='connection', priority=11,
+            mutation='admin', arguments=base,
+        ))
+        if contract['forms'].get('drop', {}).get('supported') and contract['forms'].get(
+                'create', {}).get('supported'):
+            actions.append(_action(
+                'database.firebird.recreate_empty',
+                'Recreate empty Firebird database...', 'open_workspace',
+                icon='action.delete', group='database-lifecycle', priority=39,
+                mutation='destructive', arguments={
+                    **base, 'tab': 'connections',
+                    'database_mode': 'recreate_empty',
+                }, confirmation=False,
+            ))
         security_tasks = (
             ('user', 'Manage Firebird users...', 'action.security'),
             ('role', 'Manage Firebird roles...', 'action.security'),
@@ -867,19 +1031,18 @@ def database_target_context_actions(
                 f'database.firebird.security.{resource_kind}', label,
                 'open_workspace', icon=icon, group='security',
                 priority=45 + offset, mutation='admin', arguments={
-                    **base, 'tab': 'administration',
+                    # A collection task retains its database route, but
+                    # does not identify a native user/role/privilege object.
+                    'database_target_id': target_id, 'tab': 'administration',
                     'resource_kind': resource_kind,
+                    **({'operation_id': 'grant'} if resource_kind == 'privilege' else {}),
                 },
             ))
         tasks = (
             ('backup_logical', 'Logical backup (gbak)...',
              'action.backup', 'admin', 'backup'),
-            ('restore_logical', 'Logical restore (gbak)...',
-             'action.restore', 'destructive', 'restore'),
             ('backup_physical', 'Physical backup (nbackup)...',
              'action.backup', 'admin', 'backup'),
-            ('restore_physical', 'Physical restore (nbackup)...',
-             'action.restore', 'destructive', 'restore'),
             ('database_statistics', 'Database statistics (gstat)...',
              'tool.dashboard', 'read', 'diagnostics'),
             ('validate_database', 'Validate database...',
@@ -935,6 +1098,12 @@ def database_target_context_actions(
         )
         for offset, (operation_id, label, icon, mutation, group) in enumerate(
                 tasks):
+            if profile.get('route_kind') == 'embedded_file':
+                from .providers.relational_admin import (
+                    _FIREBIRD_SERVICE_OPERATIONS,
+                )
+                if operation_id in _FIREBIRD_SERVICE_OPERATIONS:
+                    continue
             actions.append(_action(
                 f'database.firebird.{operation_id}', label,
                 'open_workspace', icon=icon, group=group,
@@ -1012,6 +1181,24 @@ def database_target_context_actions(
                 }, confirmation=False, macro=True,
             ))
     if engine_id == 'mysql':
+        for tab, label in (('monitoring', 'MySQL database dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(
+                f'database.mysql.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read',
+                arguments={**base, 'tab': tab},
+            ))
+        actions.append(_action('database.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', arguments=base))
+        actions.append(_action(
+            'database.mysql.catalog_ddn', 'MySQL metadata and DDN diagrams...',
+            'open_workspace', icon='action.export', group='database',
+            priority=44, arguments={**base, 'tab': 'export'},
+        ))
+        actions.append(_action('database.mysql.test_data', 'Generate MySQL test data...',
+            'open_workspace', icon='action.insert', group='database', priority=45,
+            arguments={**base, 'tab': 'mysql-test-data'}))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

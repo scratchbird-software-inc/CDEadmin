@@ -29,6 +29,44 @@ def test_native_host_brackets(host, expected):
 
 
 @pytest.mark.parametrize('host', [
+    '::1', '[::1]', '0:0:0:0:0:0:0:1', 'fe80::1%eth0',
+    '[fe80::1%3]', '::ffff:192.0.2.1',
+])
+@pytest.mark.parametrize('protocol', [None, 'INET', 'INET6'])
+def test_ipv6_database_and_services_share_exact_address(host, protocol):
+    address = server_host(host)
+    prefix = ((protocol.lower() + '://' + address + ':53050/')
+              if protocol else address + '/53050:')
+    assert database_dsn('/srv/db:part/one.fdb', host, 53050, protocol) == (
+        prefix + '/srv/db:part/one.fdb')
+    assert service_dsn(host, 53050, protocol) == prefix + 'service_mgr'
+
+
+@pytest.mark.parametrize('host', [
+    '[::1]:3050', '[::1]/3050', '[::1]:service_mgr', 'inet6://[::1]',
+    '[::1]suffix', '2001:db8:::1', 'fe80::1%', 'fe80::1%eth0%extra',
+])
+def test_malformed_ipv6_rejected_without_address_reinterpretation(host):
+    with pytest.raises(RelationalClientError):
+        database_dsn('/db/one.fdb', host, 53050, 'INET6')
+
+
+@pytest.mark.parametrize('database,host', [
+    ('[::2]/53050:/db/one.fdb', '::1'),
+    ('[::1]/53051:/db/one.fdb', '::1'),
+    ('[fe80::1%eth1]/53050:/db/one.fdb', 'fe80::1%eth0'),
+])
+def test_ipv6_legacy_endpoint_cannot_redirect_route(database, host):
+    with pytest.raises(RelationalClientError):
+        target_path(database, host, 53050)
+
+
+def test_ipv6_scope_identity_is_preserved():
+    assert target_path('[fe80:0:0:0:0:0:0:1%eth0]/53050:inventory',
+                       'fe80::1%eth0', 53050) == 'inventory'
+
+
+@pytest.mark.parametrize('host', [
     'db/3050', 'db:3050', 'inet://db', 'db:service_mgr',
     '[::1', '::1]', '[[]]', '[]', 'db name', 'db\nname', 123,
 ])

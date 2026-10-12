@@ -320,7 +320,8 @@ class FoundationDBBackend:
                     options.set_tls_key_path(route['tls_key_file'])
                 if password:
                     options.set_tls_password(password)
-                options.set_tls_verify_peers(route['tls_verify_peers'])
+                options.set_tls_verify_peers(
+                    route['tls_verify_peers'].encode('utf-8'))
             if route.get('external_client_directory'):
                 options.set_external_client_directory(
                     route['external_client_directory'])

@@ -58,6 +58,8 @@ def test_database_selector(mode):
     {'using_mode': 'ANY', 'plugin': 'Srp'}, {'from_type': ''},
     {'from_name': ''}, {'from_name': 'x\0y'}, {'from_any': 1},
     {'to_type': 'GROUP'}, {'to_name': 'x\0y'},
+    {'from_name': '*'}, {'to_name': '*'},
+    {'from_name': '* '}, {'to_name': '* '},
 ])
 def test_invalid_choices_do_not_compile(changes):
     with pytest.raises(RelationalClientError):
@@ -83,6 +85,34 @@ def test_global_comment_projection_boundary_is_not_replayed_as_complete():
     assert '32767' in native['ddl_unavailable_reason']
     assert mappings.compile_mapping(mappings.KINDS[0], 'comment',
                                     {'description': 'a' * 40000}, target)
+
+
+@pytest.mark.parametrize('comment', ['short', '??', 'é', 'A' * 32767])
+def test_global_projection_does_not_claim_storage_verification(comment):
+    native = mappings.metadata(mappings.KINDS[1], (
+        'example', 'P', None, None, 'USER', '*', 0, None, comment))
+    assert native['description_storage_verified'] is False
+    assert native['recreation_metadata_verified'] is False
+    assert 'one security-database' in native['description_projection_warning']
+
+
+def test_global_authority_is_not_a_local_only_grant():
+    row = ('example', 'P', None, None, 'USER', '*', 0, None, None)
+    local = mappings.metadata(mappings.KINDS[0], row)
+    global_ = mappings.metadata(mappings.KINDS[1], row)
+    assert 'security-database' not in local['privileges_unavailable_reason']
+    assert 'security-database' in global_['privileges_unavailable_reason']
+    assert 'a local grant alone is insufficient' in (
+        global_['privileges_unavailable_reason'])
+
+
+def test_native_asterisk_target_is_recreated_as_preserve_source():
+    native = mappings.metadata(mappings.KINDS[0], (
+        'example', 'P', None, None, 'USER', '*', 0, '*', None))
+    assert native['mapping_draft']['to_name'] == ''
+    assert native['mapping_draft']['from_any'] is True
+    assert native['to'] == '*'
+    assert native['ddl'].endswith('FROM ANY "USER" TO USER;')
 
 
 def test_drop_requires_exact_confirmation_and_scope():

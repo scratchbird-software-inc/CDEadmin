@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -164,6 +164,7 @@ class _Cursor:
 
 class _Connection:
     def __init__(self, row=(1,)):
+        self.adapters = SimpleNamespace(register_dumper=Mock())
         self.cursor_value = _Cursor(row)
         self.closed = False
 
@@ -3087,6 +3088,7 @@ class DistributedProviderTests(unittest.TestCase):
         client = ImmudbDBAPIClient(
             config, module=_ConnectorModule(connection), opener=opener
         )
+        client._connections.append(connection)
         identity = client.runtime_identity({
             'route': {
                 'host': '127.0.0.1', 'web_host': '127.0.0.1',

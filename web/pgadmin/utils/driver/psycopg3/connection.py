@@ -417,12 +417,17 @@ class Connection(BaseConnection):
         try:
             status, msg = self._initialize(conn_id, **kwargs)
         except Exception as e:
-            manager.stop_ssh_tunnel()
             current_app.logger.exception(e)
-            self.conn = None
-            if not self.reconnecting:
-                self.wasConnected = False
-            raise e
+            try:
+                # Initialization can fail after libpq has attached. Release
+                # before discarding ownership; a failed close keeps the handle
+                # and wasConnected flag available for manager cleanup.
+                self._release()
+            except Exception:
+                current_app.logger.error(
+                    "Failed attachment cleanup remains owned by the manager")
+            manager.stop_ssh_tunnel()
+            raise
 
         if status and is_update_password:
             manager._update_password(encpass)
