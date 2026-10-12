@@ -52,9 +52,15 @@ def harness(sets):
     identity.fetchone.return_value = ('server-one', 7)
     connection = SimpleNamespace(
         cursor=lambda **kw: native if kw else identity,
-        python_charset='utf8', ping=Mock())
-    client = SimpleNamespace(_uncertain_sessions=set(),
-                             _require_usable_session=Mock())
+        python_charset='utf8', ping=Mock(), server_host='winning-endpoint',
+        server_port=3306, unix_socket=None)
+    control = Mock()
+    control.cursor.return_value.fetchone.return_value = ('server-one',)
+    client = SimpleNamespace(
+        _uncertain_sessions=set(), _require_usable_session=Mock(),
+        module=SimpleNamespace(connect=Mock()),
+        _invoke_connector=Mock(return_value=control),
+        _safe_close=lambda obj: obj.close() if obj is not None else None)
     return Executions(client), connection, native
 
 

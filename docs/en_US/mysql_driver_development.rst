@@ -583,3 +583,37 @@ A numeric variable may reject a quoted text value rather than coerce it. Native
 KILL QUERY acknowledgement means the interrupt was requested, not that every
 statement produces an error: MySQL 9.7's SLEEP expression can return its native
 interrupted value. The result and transaction state must remain native facts.
+
+Native InnoDB storage lifecycle
+------------------------------
+
+Tablespace discovery retains native InnoDB space type, state, allocation,
+encryption and autoextension observations. General and undo tablespaces expose
+native create, alter, rename where supported, and drop operations. File-per-table
+and system spaces remain managed through their native owning table/server
+contracts. General creation supports datafile, FILE_BLOCK_SIZE, AUTOEXTEND_SIZE,
+encryption and ENGINE_ATTRIBUTE. Alteration supports encryption, autoextension,
+engine attributes and the native undo ACTIVE/INACTIVE lifecycle. Undo spaces
+cannot be renamed through a general-tablespace command. Native default undo
+spaces cannot be removed through these controls.
+
+Datafile paths and JSON engine attributes are bound values, escaped by the
+selected native connection. Native FILE privilege, filesystem location rules,
+keyring/encryption availability, page-size compatibility and engine restrictions
+remain authoritative. An undo space must reach the native droppable state after
+INACTIVE; sweep/purge work is not replaced by a timer or presumed completion.
+Dropping a nonempty general space is a native refusal, not permission to remove
+its tables. Tablespace DDL commits independently; DROP can remove native files.
+NDB-only storage options are not admitted on the current InnoDB-qualified profile.
+
+MySQL 9.7 general-tablespace ALTER and DROP omit ENGINE: the native command
+handler rejects that clause in these contexts even though the grammar retains
+its production. CREATE and the admitted undo commands use their own native
+engine rules. Grammar inventory alone is not evidence of executable syntax.
+
+Native per-object administration subsets hide mutations for system, default undo
+and file-per-table spaces. Undo nodes omit rename; alter choices are filtered by
+native space type. General-space ENCRYPTION alteration is offered only when an
+active native component/plugin keyring was observed. Absence of an observation
+is not proof that a privileged raw SQL command cannot work; it grants no form
+capability. Native rediscovery and validation still govern each operation.

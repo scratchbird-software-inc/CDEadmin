@@ -180,6 +180,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['tablespace'] = frozenset({'inspect', 'create', 'alter', 'rename', 'drop'})
         common['system-variable'] = frozenset({'inspect', 'set_global', 'set_persist', 'set_persist_only', 'reset_persist'})
         common['session'] = frozenset({'inspect', 'terminate_query', 'terminate_connection'})
         common['resource-group'] = frozenset({'inspect', 'create', 'alter', 'assign', 'drop'})
@@ -1942,9 +1943,31 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         for name, engine in optional(tablespace_source):
             add('tablespace', [], name, {'engine': engine})
-        for name, status, plugin_type, library, license_name in optional(
-            'SHOW PLUGINS'
-        ):
+        plugin_rows = optional('SHOW PLUGINS')
+        if profile is MYSQL_PROFILE:
+            keyring_status = optional_records('SELECT STATUS_KEY, STATUS_VALUE FROM performance_schema.keyring_component_status')
+            keyring_active = any(row.get('status_key') == 'Component_status' and row.get('status_value') == 'Active' for row in keyring_status) or any(
+                str(row[0]).startswith('keyring_') and str(row[1]).upper() == 'ACTIVE' for row in plugin_rows)
+            for record in optional_records(
+                'SELECT s.NAME, s.SPACE_TYPE, s.STATE, s.ENCRYPTION, s.AUTOEXTEND_SIZE, '
+                's.FILE_SIZE, s.ALLOCATED_SIZE, s.PAGE_SIZE, s.ZIP_PAGE_SIZE, '
+                'e.ENGINE_ATTRIBUTE FROM information_schema.INNODB_TABLESPACES s '
+                'LEFT JOIN information_schema.TABLESPACES_EXTENSIONS e ON e.TABLESPACE_NAME=s.NAME '
+                'ORDER BY s.NAME'
+            ):
+                space_type = record['space_type']
+                allowed = ['inspect']
+                changes = []
+                if space_type == 'General':
+                    allowed += ['alter', 'rename', 'drop']
+                    changes = ['AUTOEXTEND_SIZE', 'ENGINE_ATTRIBUTE'] + (['ENCRYPTION'] if keyring_active else [])
+                elif space_type == 'Undo' and str(record['name']).lower() not in {'innodb_undo_001', 'innodb_undo_002'}:
+                    allowed += ['alter', 'drop']
+                    changes = ['ACTIVE', 'INACTIVE']
+                add('tablespace', [], record['name'], {**record, 'engine': 'InnoDB',
+                    'available_tablespace_changes': changes, 'keyring_observed_active': keyring_active,
+                    'administration': {'allowed_operations': allowed}})
+        for name, status, plugin_type, library, license_name in plugin_rows:
             add('plugin', [], name, {
                 'status': status,
                 'plugin_type': plugin_type,
