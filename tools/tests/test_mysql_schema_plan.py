@@ -62,3 +62,11 @@ def test_native_validation_prepares_and_deallocates_without_executing_changes():
     assert 'DEALLOCATE PREPARE sr_native_preview' in sources
     assert not any(source.startswith(('ALTER TABLE','EXECUTE ')) for source in sources)
     cursor.close.assert_called_once()
+
+
+def test_database_root_changes_are_blocked_instead_of_silently_skipped():
+    before=captured();desired=deepcopy(before)
+    root=next(row for row in desired['rows'].values() if row['kind']=='database')
+    root['native']['definition'] += ' DEFAULT CHARACTER SET latin1'
+    result=plan(before,desired,before)
+    assert not result['ready_for_review'] and any('Database-root changes' in row['reason'] for row in result['blockers'])

@@ -1056,3 +1056,15 @@ Simultaneous native-source and graphical rename edits require separate native
 reconciliation. Native PREPARE and reviewed durable application remain required.
 Changes MySQL propagates into other tables require fresh capture/review of those
 tables; a later batch baseline conflict is never bypassed or automatically retried.
+
+Unadmitted design intent must remain visible
+-------------------------------------------
+
+The relational handoff compares native relationship endpoints, identities,
+kind/enforcement and exact decoded facts. Changed or newly authored relationships
+currently require explicit native foreign-key reconciliation in the owning table
+definition; they must not be silently ignored or represented as deployed.
+Pure diagram label/layout changes remain presentation. Rebinding diagram aliases
+without changing native endpoints is presentation as well. Database-root native
+definition/removal changes are blocked with a native-administration requirement
+until a database deployment adapter is admitted; skipping the root is not success.

@@ -117,3 +117,32 @@ def test_graphical_rename_preserves_other_table_foreign_key_targets_and_updates_
     assert 'FOREIGN KEY (`new_id`) REFERENCES `t` (`new_id`)' in result['definition']
     desired['native']['definition']=desired['native']['definition'].replace('int','bigint')
     with pytest.raises(ValueError,match='simultaneous native edits'):merge_fields(before,desired,'',allow_column_renames=True)
+
+
+def test_graphical_native_relationship_changes_cannot_disappear_from_review(monkeypatch):
+    from pgadmin.cdeadmin.workspace import firebird_relational_review as review
+    from unittest.mock import Mock
+    owner={'uid':'mysql:ep:target:table','native':{},'native_json':'{}','graphical_relationships':[
+        {'uid':'foreign-key','source':'table','target':'parent','kind':'ref','enforcement':'database','native_json':'[]'}]}
+    original={'table':owner}
+    changed=deepcopy(original);changed['table']['graphical_relationships'][0]['target']='other'
+    monkeypatch.setattr(review,'read_catalog',Mock(return_value={'rows':{}}))
+    monkeypatch.setattr(review,'read_relations',Mock(side_effect=[original,changed]))
+    with pytest.raises(ValueError,match='foreign-key reconciliation'):
+        review.handoff({}, {}, {}, engine='mysql')
+
+
+def test_native_relationship_reader_captures_stable_endpoints_but_labels_are_presentation():
+    from pgadmin.cdeadmin.workspace.firebird_relational_review import read_relations
+    import json
+    source='ddn "0.6"; module "scratchrobin.mysql.relations"; data relations {'
+    for name in ('source','target'):
+        source+='object '+name+' '+json.dumps(name)+' {kind:table;uid:"mysql:ep:target:'+name+'";x_record:{resource_id:"'+name+'",native_json:"{}"};}'
+    source+='relation fk "display label" @source -> @target {kind:ref;enforcement:database;uid:"fk";x_record:{native_json:"[]"};}} view v {data:[@relations];projection {kind:graph;profile:"ddn@1";}}'
+    snapshot={'format':'ddn-workspace@1','entry':'relations.ddn','view':'v','files':{'relations.ddn':source}}
+    result=read_relations(snapshot,engine='mysql')
+    edges=next(row['graphical_relationships'] for row in result.values() if 'graphical_relationships' in row)
+    assert edges==[{'uid':'fk','kind':'ref','enforcement':'database','native_json':'[]','source':'source','target':'target'}]
+    snapshot['files']['relations.ddn']=source.replace('display label','new presentation label')
+    updated=read_relations(snapshot,engine='mysql')
+    assert next(row['graphical_relationships'] for row in updated.values() if 'graphical_relationships' in row)==edges

@@ -72,6 +72,8 @@ def read_relations(snapshot, *, engine="firebird"):
                     raise ValueError('Relational column facts lack their exact field identity')
                 children.append({**column, 'uid': uid, 'native_json': _exact_json(column['native']),
                                  'parent_resource_id': row['resource_id']})
+        if engine == "mysql" and rows:
+            rows[0]["graphical_relationships"] = parsed.get("relationships", [])
         combined = rows + children
         if len({row['resource_id'] for row in combined}) != len(combined):
             raise ValueError('Duplicate relational native identity')
@@ -89,6 +91,15 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         raise ValueError("Column-rename admission is available only for MySQL")
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
+    if engine == "mysql":
+        def relationships(rows):
+            values = [edge for row in rows.values() for edge in row.get('graphical_relationships', [])]
+            for edge in values:
+                if isinstance(edge.get('native_json'), str):edge['native_json'] = _decode(edge['native_json'])
+            return sorted(values, key=_exact_json)
+        previous={edge.get('uid'):edge for edge in relationships(before)}
+        if any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
+            raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; edit the owning table native definition for reviewed deployment')
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
     replacements = [[], []]
     changed = []

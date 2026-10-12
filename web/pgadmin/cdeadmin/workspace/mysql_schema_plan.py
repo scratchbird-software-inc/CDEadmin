@@ -125,7 +125,12 @@ def plan(baseline,desired,live):
             raise ValueError('DDN review belongs to another endpoint, database or native server')
     operations=[];blockers=[];ignored=[];conflicts=[]
     for key,after in sorted(desired['rows'].items()):
-        if after['kind']=='database':continue
+        if after['kind']=='database':
+            before=baseline['rows'].get(key)
+            if before is None or not _equal(schema(before),schema(after)) or after['native'].get('mysql_change'):
+                blockers.append({'resource_id':key,'name':after['name'],
+                    'reason':'Database-root changes require explicit native database administration; they cannot be silently omitted from a schema review'})
+            continue
         before,current=baseline['rows'].get(key),live['rows'].get(key)
         intent=after['native'].get('mysql_change')
         if before is not None and _equal(schema(before),schema(after)) and not intent:continue

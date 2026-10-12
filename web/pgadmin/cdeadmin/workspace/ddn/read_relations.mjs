@@ -9,8 +9,13 @@ try {
   }
   const engine = process.argv[2] || 'firebird';
   if (!['firebird', 'mysql'].includes(engine)) throw new Error();
-  const snapshot = JSON.parse(input), rows = [], fields = [], fieldRecords = [], ids = new Set();
-  const visit = (node, parent = null) => {
+  const snapshot = JSON.parse(input), rows = [], fields = [], fieldRecords = [], relations = [], objectIds = new Map(), ids = new Set();
+  const visit = (node, parent = null, namespace = null) => {
+    if (engine === 'mysql' && node.type === 'relation') {
+      relations.push({uid: node.props?.uid ?? null, namespace, from_ref: node.from?.$ref ?? null,
+        to_ref: node.to?.$ref ?? null, kind: node.props?.kind ?? null, enforcement: node.props?.enforcement ?? null,
+        native_json: node.props?.x_record?.native_json ?? null});
+    }
     if (engine === 'mysql' && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
     if (node.type === 'field' && typeof node.props?.uid === 'string') {
       fields.push(node.props.uid);
@@ -24,18 +29,28 @@ try {
       if (typeof facts.resource_id !== 'string' || typeof facts.native_json !== 'string' ||
           typeof node.props.uid !== 'string' || ids.has(facts.resource_id)) throw new Error();
       ids.add(facts.resource_id);
+      if (engine === 'mysql') {
+        const alias = namespace + '.' + node.id;
+        if (objectIds.has(alias)) throw new Error();
+        objectIds.set(alias, facts.resource_id);
+      }
       parent = facts.resource_id;
       rows.push({resource_id: facts.resource_id, uid: node.props.uid, native_json: facts.native_json});
       if (rows.length > 20000) throw new Error();
     }
-    for (const child of node.children || []) visit(child, parent);
+    for (const child of node.children || []) visit(child, parent, namespace);
   };
   for (const [name, source] of Object.entries(snapshot.files)) {
     const parsed = runtime.parse(source, name);
     if (parsed.module !== `scratchrobin.${engine}.relations` || parsed.imports.length) throw new Error();
-    for (const node of parsed.declarations) if (node.type === 'data') visit(node);
+    for (const node of parsed.declarations) if (node.type === 'data') visit(node, null, node.id);
   }
-  process.stdout.write(JSON.stringify({rows, fields, field_records: fieldRecords}));
+  const resolve = (namespace, reference) => typeof reference === 'string' ?
+    objectIds.get(reference.includes('.') ? reference : namespace + '.' + reference) ?? null : null;
+  const relationships = relations.map(({namespace, from_ref, to_ref, ...facts}) => ({...facts,
+    source: resolve(namespace, from_ref), target: resolve(namespace, to_ref)}));
+  process.stdout.write(JSON.stringify({rows, fields, field_records: fieldRecords,
+    ...(engine === 'mysql' ? {relationships} : {})}));
 } catch {
   process.stderr.write('Invalid or unsupported native relational DDN document.');
   process.exitCode = 1;
