@@ -81,9 +81,19 @@ def alteration(before,after,sql_mode):
     declared=intent.get('drop_columns',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=removals:
         raise ValueError('Column removal requires exact explicit mysql_change.drop_columns intent')
+    automatic_references=set()
+    if renames:
+        from .mysql_relational_fields import rename_definition
+        remapped=rename_definition(before,deepcopy(before['native']),renames,sql_mode)
+        _layout,renamed_clauses,_order=parts({'name':before['name'],'native':remapped},sql_mode)
+        automatic_references={key for key in columns if key[0] in {'foreign-key','index','primary'} and
+            key in desired and renamed_clauses.get(key)==desired[key]}
+    for key in columns.keys() & desired.keys():
+        if key[0]=='foreign-key' and columns[key]!=desired[key] and key not in automatic_references:
+            raise ValueError('Same-name foreign-key replacement requires separately reviewed DROP and ADD or an explicit new constraint name; foreign-key checks are never disabled')
     drops=[];mutations=[];additions=[]
     for key in sorted(columns):
-        if key in desired and columns[key]==desired[key]:continue
+        if key in automatic_references or key in desired and columns[key]==desired[key]:continue
         kind,value=key
         if kind=='column':
             if key not in desired and value not in renames:drops.append('DROP COLUMN '+identifier(value))
@@ -102,7 +112,7 @@ def alteration(before,after,sql_mode):
             mutations.append(('CHANGE COLUMN '+identifier(inverse[value])+' ' if value in inverse else
                 'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
-        if key[0]!='column' and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
+        if key[0]!='column' and key not in automatic_references and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
     if old['suffix'].strip()!=new['suffix'].strip():
         if not new['suffix'].strip():raise ValueError('Removing native table options requires an explicit option adapter')
         additions.append(new['suffix'].strip())

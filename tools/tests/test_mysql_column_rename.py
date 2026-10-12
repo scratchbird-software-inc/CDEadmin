@@ -42,5 +42,6 @@ def test_rename_retains_explicit_index_and_generated_expression_reconciliation()
     row['native']['mysql_change']={'rename_columns':{'note':'memo'}}
     result=plan(before,after,before);assert result['ready_for_review'],result
     source=result['operations'][0]['source']
-    assert 'DROP INDEX `by_note`' in source and 'ADD KEY `by_note` (`memo`)' in source
+    assert 'DROP INDEX `by_note`' not in source and 'ADD KEY `by_note`' not in source
+    assert 'CHANGE COLUMN `note` `memo`' in source
     assert 'MODIFY COLUMN `calculated` int GENERATED ALWAYS AS (length(`memo`)) STORED' in source

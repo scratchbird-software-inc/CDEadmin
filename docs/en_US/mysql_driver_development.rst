@@ -1068,3 +1068,23 @@ Pure diagram label/layout changes remain presentation. Rebinding diagram aliases
 without changing native endpoints is presentation as well. Database-root native
 definition/removal changes are blocked with a native-administration requirement
 until a database deployment adapter is admitted; skipping the root is not success.
+
+Foreign-key dependencies during locked application
+-------------------------------------------------
+
+An altered existing table locks its exact quoted source with WRITE and the
+distinct parent tables referenced by baseline/desired foreign-key clauses with
+READ, in deterministic order. Self references do not duplicate the owner lock.
+This preserves the existing table-lock baseline contract while admitting native
+foreign-key changes that need parent tables opened under LOCK TABLES. Malformed
+or ambiguous parent identities refuse dispatch. Native privilege, parent index,
+column compatibility and existing-data checks remain authoritative. All locks
+are released before retiring the independently owned application connection.
+
+Native MySQL 9.7 can reject DROP/ADD of a same-name foreign key within one ALTER
+with duplicate-constraint error 1826, even after PREPARE acceptance. Review
+therefore requires an explicit new constraint name or separately reviewed native
+DROP and ADD, with the intermediate unconstrained state visible. It never
+disables foreign-key checking or silently splits one reviewed statement. Column
+renames whose only FK difference is the corresponding native column references
+retain their FK identity and use MySQL's automatic reference propagation.

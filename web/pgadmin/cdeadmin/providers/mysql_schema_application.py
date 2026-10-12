@@ -92,7 +92,8 @@ def apply_review(connection, record):
                 result['concurrent_external_ddl_fenced']=False
                 result['concurrency_warning']='View/library/event baseline is observational; external DDL can change the object before dispatch'
             else:
-                cursor.execute('LOCK TABLES ' + target + ' WRITE')
+                from ..workspace.mysql_foreign_key_locks import lock_source
+                cursor.execute(lock_source(before,after,context['sql_mode']))
                 locked = True
             cursor.execute(show_source)
             observed = cursor.fetchone()
