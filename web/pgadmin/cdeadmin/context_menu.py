@@ -1188,6 +1188,11 @@ def database_target_context_actions(
             ))
         actions.append(_action('database.mysql.dashboard_editor', 'Edit MySQL dashboard...', 'open_mysql_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', arguments=base))
+        actions.append(_action(
+            'database.mysql.catalog_ddn', 'MySQL metadata and DDN diagrams...',
+            'open_workspace', icon='action.export', group='database',
+            priority=44, arguments={**base, 'tab': 'export'},
+        ))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

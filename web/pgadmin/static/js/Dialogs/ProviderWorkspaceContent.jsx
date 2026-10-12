@@ -23,6 +23,7 @@ import FirebirdTestData from './FirebirdTestData';
 import FirebirdMetadataSearch from './FirebirdMetadataSearch';
 import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
+import MySQLCatalog from './MySQLCatalog';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -63,6 +64,7 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
   'resource_page', 'resource_refresh', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',
@@ -8081,6 +8083,8 @@ export default function ProviderWorkspaceContent({
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
+        <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdExport onLoadMore={loadMoreResources} hasMore={Boolean(resourcePage?.next_cursor)} loadingMore={loadingMore}

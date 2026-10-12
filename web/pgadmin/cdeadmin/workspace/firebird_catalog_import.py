@@ -32,7 +32,9 @@ def _decode(value):
                       parse_constant=_invalid_constant)
 
 
-def read_catalog(source, node='node'):
+def read_catalog(source, node='node', *, engine='firebird'):
+    if engine not in {'firebird', 'mysql'}:
+        raise ValueError('Unsupported native catalog engine')
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Catalog document must be nonempty UTF-8 text within 8 MiB')
     snapshot = (_decode(source) if source.lstrip().startswith('{') else
@@ -56,15 +58,15 @@ def read_catalog(source, node='node'):
         raise ValueError('Catalog reader is busy; retry shortly')
     try:
         env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ}
-        result = subprocess.run([node, '--max-old-space-size=192', str(_RUNNER)],
+        result = subprocess.run([node, '--max-old-space-size=192', str(_RUNNER), engine],
                                 input=json.dumps(snapshot, ensure_ascii=False), text=True, encoding='utf-8',
                                 capture_output=True, timeout=15, env=env, check=False)
         if result.returncode:
-            raise ValueError('Invalid or unsupported Firebird catalog DDN document')
+            raise ValueError('Invalid or unsupported native catalog DDN document')
         parsed = json.loads(result.stdout)
         provenance = _decode(parsed['provenance'])
         if (not isinstance(provenance, dict) or
-                provenance.get('mapping') != 'scratchrobin.firebird.catalog@1' or
+                provenance.get('mapping') != f'scratchrobin.{engine}.catalog@1' or
                 provenance.get('deployment') != 'documentary-only' or
                 type(provenance.get('objects')) is not int or
                 provenance['objects'] != len(parsed['rows'])):
@@ -74,7 +76,7 @@ def read_catalog(source, node='node'):
                 raise ValueError('Missing catalog provenance identity')
         rows = {}
         for row in parsed['rows']:
-            expected_uid = 'firebird:' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':' + row['resource_id']
+            expected_uid = engine + ':' + provenance['endpoint_id'] + ':' + provenance['database_target_id'] + ':' + row['resource_id']
             if row['uid'] != expected_uid:
                 raise ValueError('Catalog object identity disagrees with provenance')
             native, path = _decode(row['native_json']), _decode(row['path_json'])
@@ -105,7 +107,7 @@ def _equal(left, right):
 
 
 def compare_catalogs(document, current):
-    for key in ('endpoint_id', 'database_target_id'):
+    for key in ('mapping', 'endpoint_id', 'database_target_id'):
         if document['provenance'][key] != current['provenance'][key]:
             raise ValueError('Document belongs to a different endpoint or registered database')
     changes = []

@@ -8,12 +8,14 @@ try {
     input += chunk;
     check(Buffer.byteLength(input) <= 16 * 1024 * 1024);
   }
+  const engine = process.argv[2] || 'firebird';
+  check(['firebird', 'mysql'].includes(engine));
   const snapshot = JSON.parse(input);
   const rows = [], identities = new Set(), uids = new Set();
   let provenance;
   for(const [filename, source] of Object.entries(snapshot.files)) {
   const parsed = runtime.parse(source, filename);
-  check(parsed.module === 'scratchrobin.firebird.catalog' && parsed.imports.length === 0);
+  check(parsed.module === `scratchrobin.${engine}.catalog` && parsed.imports.length === 0);
   check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)));
   if(filename === snapshot.entry) check(parsed.declarations.some((item) => item.type === 'view' && item.id === snapshot.view));
   const names = new Set();
@@ -29,7 +31,7 @@ try {
       if(block.id === 'provenance') {
         check(!provenance && block.children.length === 1 && row.id === 'capture');
         provenance = row.props.x_record;
-        check(provenance?.mapping === 'scratchrobin.firebird.catalog@1' && typeof provenance.native_json === 'string');
+        check(provenance?.mapping === `scratchrobin.${engine}.catalog@1` && typeof provenance.native_json === 'string');
         continue;
       }
       if(row.id === 'empty' && !row.props.x_record) continue;
@@ -49,6 +51,6 @@ try {
   check(provenance);
   process.stdout.write(JSON.stringify({provenance: provenance.native_json, rows}));
 } catch {
-  process.stderr.write('Invalid or unsupported Firebird catalog DDN document.');
+  process.stderr.write('Invalid or unsupported native catalog DDN document.');
   process.exitCode = 1;
 }

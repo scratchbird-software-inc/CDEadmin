@@ -75,3 +75,63 @@ def test_foreign_or_busy_target_cannot_be_captured(monkeypatch):
     connection.in_transaction = False
     monkeypatch.setattr('pgadmin.cdeadmin.providers.mysql_family.mysql_catalog.MAX_FACTS', 1)
     with pytest.raises(ValueError, match='limit'): capture(connection, 'demo')
+
+
+def test_documentary_ddn_roundtrip_and_native_comparison():
+    captured = capture(Connection(), 'demo')
+    options = {'endpoint_id': 'endpoint', 'target_id': 'target', 'generation': captured['generation'], 'engine': 'mysql'}
+    exported = build_export(captured['resources'], **options)
+    import json
+    decoded = read_catalog(json.dumps(exported['snapshot']), engine='mysql')
+    native = build_export(captured['resources'], **options, native_model=True)
+    result = compare_catalogs(decoded, native)
+    assert not result['changes']
+    assert decoded['provenance']['coverage'] == 'partial'
+    assert next(row for row in decoded['rows'].values() if row['kind'] == 'table')['native']['definition'].startswith('CREATE TABLE')
+
+
+def test_native_relation_projection_renders_through_consumed_ddn():
+    import json
+    import subprocess
+    from pathlib import Path
+    from pgadmin.cdeadmin.workspace.mysql_erd import build_diagram
+    captured = capture(Connection(), 'demo')
+    table = captured['resources'][1]
+    table['native']['children']['COLUMNS'][0].update(ordinal_position=1, is_nullable='NO')
+    table['native']['children']['KEY_COLUMN_USAGE'] = [{'constraint_name': 'self-reference',
+        'column_name': 'id', 'ordinal_position': 1, 'referenced_column_name': 'id',
+        'referenced_table_schema': 'demo', 'referenced_table_name': 'a:`b'}]
+    result = build_diagram(captured['resources'], {'endpoint_id': 'ep', 'database_target_id': 'target'})
+    assert result['foreign_keys'] == 1
+    runtime = (Path(__file__).resolve().parents[2] / 'web/pgadmin/static/vendor/ddn/current/ddn.mjs').as_uri()
+    script = f'''import runtime from {json.dumps(runtime)};
+      let input='';for await(const chunk of process.stdin)input+=chunk;
+      const snapshot=JSON.parse(input), workspace=runtime.createWorkspace(snapshot.files);
+      try {{const output=workspace.renderSync({{entry:snapshot.entry,view:snapshot.view}});
+        if(output.diagnostics.some(x=>x.severity==='error'))throw Error(JSON.stringify(output.diagnostics));
+        if(!output.svg.includes('a:`b'))throw Error('Missing native label');
+      }}finally{{workspace.destroy();}}'''
+    subprocess.run(['node', '--input-type=module', '-e', script], input=json.dumps(result['snapshot']),
+                   text=True, capture_output=True, timeout=15, check=True)
+
+
+def test_native_catalog_set_values_are_exact_and_deterministic():
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_catalog import _value
+    assert _value({'STRICT_TRANS_TABLES', 'NO_ENGINE_SUBSTITUTION'}) == {
+        'set': ['NO_ENGINE_SUBSTITUTION', 'STRICT_TRANS_TABLES']}
+    assert _value(set()) == {'set': []}
+    with pytest.raises(ValueError): _value({1, 'not-native-text'})
+
+
+def test_native_mysql_workspace_admits_its_real_transaction_controls():
+    from tools.tests.test_cdeadmin_relational_providers import context, Permissions, MYSQL_PROFILE
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MySQLDBAPIClient, MySQLPilotProvider
+    # No socket is needed to negotiate contribution contracts. Use the native
+    # client's declarations rather than a fake action list that masks drift.
+    client = object.__new__(MySQLDBAPIClient)
+    provider = MySQLPilotProvider(context(MYSQL_PROFILE), Permissions(), client)
+    contributions = provider.data_studio_contributions()
+    session = contributions['sessions'][0]
+    assert session.transaction_actions == frozenset(MySQLDBAPIClient.transaction_actions)
+    assert {'autocommit_on', 'autocommit_off'} <= session.transaction_actions
+    assert callable(session.control_transaction)

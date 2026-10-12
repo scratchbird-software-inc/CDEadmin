@@ -206,7 +206,8 @@ class SessionContribution:
         ):
             raise DataStudioError('session callbacks must be callable')
         actions = frozenset(self.transaction_actions)
-        if not actions.issubset({'begin', 'commit', 'rollback'}):
+        if not actions.issubset({'begin', 'commit', 'rollback',
+                                'autocommit_on', 'autocommit_off'}):
             raise DataStudioError('transaction action is unknown')
         object.__setattr__(self, 'transaction_actions', actions)
         if actions and not callable(self.control_transaction):

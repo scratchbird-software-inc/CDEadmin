@@ -24,6 +24,8 @@ def identifier(value):
 def _value(value):
     if value is None or type(value) in (str, int, bool):
         return value
+    if isinstance(value, (set, frozenset)) and all(isinstance(item, str) for item in value):
+        return {'set': sorted(value)}
     if isinstance(value, Decimal):
         return {'decimal': str(value)}
     if isinstance(value, (datetime, date, time)):
@@ -94,7 +96,8 @@ def capture(connection, database, *, include_system=False):
 
     identity = list(read('SELECT DATABASE() AS database_name, VERSION() AS version, '
                          '@@server_uuid AS server_uuid, @@lower_case_table_names AS lower_case_table_names, '
-                         '@@sql_mode AS sql_mode'))
+                         '@@sql_mode AS sql_mode, @@character_set_client AS character_set_client, '
+                         '@@collation_connection AS collation_connection'))
     if len(identity) != 1 or identity[0]['database_name'] != database:
         raise ValueError('Selected MySQL database identity changed')
     if identity[0]['version'].split('-')[0] != '9.7.0':
@@ -126,15 +129,18 @@ def capture(connection, database, *, include_system=False):
                 kind = 'materialized-view'
         item = add(kind, name, row, root['resource_id'])
         item['native']['definition'] = ddl
+        item['native']['definition_context'] = {key: value for key, value in (values[0].items() if values else ())
+            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
         item['native']['definition_available'] = bool(ddl)
         relations[name] = item
 
     for catalog in ('COLUMNS', 'STATISTICS', 'TABLE_CONSTRAINTS', 'KEY_COLUMN_USAGE',
-                    'REFERENTIAL_CONSTRAINTS', 'CHECK_CONSTRAINTS', 'PARTITIONS', 'VIEWS'):
-        schema_column = 'CONSTRAINT_SCHEMA' if catalog in {'REFERENTIAL_CONSTRAINTS', 'CHECK_CONSTRAINTS'} else 'TABLE_SCHEMA'
+                    'REFERENTIAL_CONSTRAINTS', 'CHECK_CONSTRAINTS', 'PARTITIONS', 'VIEWS', 'VIEW_TABLE_USAGE'):
+        schema_column = ('CONSTRAINT_SCHEMA' if catalog in {'REFERENTIAL_CONSTRAINTS', 'CHECK_CONSTRAINTS'} else
+                         'VIEW_SCHEMA' if catalog == 'VIEW_TABLE_USAGE' else 'TABLE_SCHEMA')
         values = section(catalog, 'SELECT * FROM information_schema.' + catalog + ' WHERE ' + schema_column + '=%s', (database,))
         for row in values:
-            parent = relations.get(row.get('table_name'))
+            parent = relations.get(row.get('view_name') if catalog == 'VIEW_TABLE_USAGE' else row.get('table_name'))
             if parent is not None:
                 parent['native'].setdefault('children', {}).setdefault(catalog, []).append(row)
             else:
@@ -155,6 +161,8 @@ def capture(connection, database, *, include_system=False):
             ddl = next((value for key, value in (definitions[0].items() if definitions else ())
                         if key.startswith('create ') or key == 'sql original statement'), None)
             item['native']['definition'] = ddl
+            item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
+                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
             item['native']['definition_available'] = bool(ddl)
             if ddl is None:
                 observations.append({'section': kind + ':' + name, 'available': False,

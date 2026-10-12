@@ -298,3 +298,48 @@ native server error text with errno/SQLSTATE, but not local connector exception
 text. Client dispatch timing covers cursor.execute only: it includes transport
 and the first native response, not subsequent result fetching, browser waits,
 or isolated server execution/preparation time.
+
+DDN to native metadata export
+-----------------------------
+
+A MySQL catalog DDN document can produce a downloadable native metadata script
+without executing it. Only native MySQL catalog modules and exact recorded
+endpoint/database identities are admitted. Imported definitions are user input;
+export does not certify their grammar or authorize their execution. A selected
+view does not limit the metadata model or imply object removal.
+
+Preserve each complete SHOW CREATE definition, including routine/trigger/event
+bodies, definers, table options and generated expressions. Capture its native
+creation context (SQL mode, client character set and connection collation).
+Restore those session settings around the export. Use a collision-free MySQL
+client DELIMITER directive rather than splitting routine bodies at semicolons.
+Emit database selection explicitly. The script never disables foreign-key
+checking, drops objects, or creates missing users/grants implicitly.
+
+Order captured tables by their foreign-key dependencies, views by visible
+VIEW_TABLE_USAGE, and triggers after their owning tables. Missing prerequisites
+remain explicit. Cycles, ambiguous identities, unavailable definitions/context,
+system objects, denied dependency observations and incompatible server identity
+block a runnable script. Observational capture is not a transactionally atomic
+DDL snapshot, and native script export is distinct from reviewed diff/apply.
+The response carries source and statement digests, native prerequisites,
+blockers and permission/consistency warnings; it never reports deployment.
+
+Catalog SET-valued cells (including native routine SQL-mode facts) use explicit
+sorted ``{set:[...]}`` JSON representations. Empty SET, null and empty text remain
+separate; arbitrary Python sets are not serialized as lossy strings. Native
+creation-context text supplied by SHOW CREATE remains its own recorded value.
+
+The native ``mysql`` client's delimiter is limited to 15 bytes. Generated tokens
+respect that limit and are absent from every emitted definition. The initial
+UTF-8 script adapter admits utf8mb4 and representable utf8mb3 creation contexts;
+other stored client encodings remain an explicit blocker, without silently
+converting their creation semantics. Native replay may canonicalize equivalent
+SHOW CREATE text (for example, make a column CHARACTER SET explicit); qualify
+exact type/default/generated/comment/collation facts and retain this difference.
+
+The shared session contribution contract admits native ``autocommit_on`` and
+``autocommit_off`` alongside begin/commit/rollback. Admission does not advertise
+an action for an engine: the selected provider's declared action set remains
+controlling. MySQL's advertised actions must pass host contribution validation
+before an explorer workspace can bootstrap.

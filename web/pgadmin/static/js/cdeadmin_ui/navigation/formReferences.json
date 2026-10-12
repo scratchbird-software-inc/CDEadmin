@@ -5533,6 +5533,10 @@
     "mysql-recent-observations": {
       "reference": "SR-F-001397",
       "title": "MySQL retained monitoring observations"
+    },
+    "mysql-catalog-ddn": {
+      "reference": "SR-F-001393",
+      "title": "MySQL native catalog and DDN views"
     }
   }
 }

@@ -15,8 +15,8 @@ def _units(text):
     return len(text.encode("utf-16-le")) // 2
 
 
-def native_metadata(resource):
-    return resource.get('extensions', {}).get('firebird', {}).get(
+def native_metadata(resource, engine="firebird"):
+    return resource.get('extensions', {}).get(engine, {}).get(
         'native', resource.get('native', {}))
 
 
@@ -27,7 +27,9 @@ def _json(value):
 
 def build_export(resources, *, endpoint_id, target_id, generation,
                  resource_id=None, include_system=False, refreshed=False,
-                 native_model=False):
+                 native_model=False, engine="firebird"):
+    if engine not in {"firebird", "mysql"}:
+        raise ValueError("Unsupported native catalog engine")
     if len(resources) > MAX_RESOURCES:
         raise ValueError('Catalog exceeds the 20,000-resource export limit')
     by_id = {item['resource_id']: item for item in resources}
@@ -35,10 +37,10 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         raise ValueError('Catalog contains ambiguous native identities')
     if resource_id is not None and resource_id not in by_id:
         raise ValueError('Selected resource is not in the current catalog')
-    databases = [item for item in resources if item['resource_kind'] == 'database']
+    databases = [item for item in resources if item['resource_kind'] in {'database', 'server'}]
     observations, warnings = [], []
     for database in databases:
-        native = native_metadata(database)
+        native = native_metadata(database, engine)
         observations.extend(native.get('catalog_observations') or [])
         warnings.extend(native.get('catalog_warnings') or [])
     selected = set(by_id)
@@ -46,7 +48,7 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         selected = {resource_id}
         children = {}
         for item in resources:
-            parent = native_metadata(item).get('navigator_parent_resource_id')
+            parent = native_metadata(item, engine).get('navigator_parent_resource_id')
             children.setdefault(parent, []).append(item['resource_id'])
         pending = [resource_id]
         while pending:
@@ -56,12 +58,14 @@ def build_export(resources, *, endpoint_id, target_id, generation,
                     pending.append(child)
     items = sorted((item for item in resources if item['resource_id'] in selected
                     and item['resource_kind'] not in {'service-operation', 'metric'}
-                    and (include_system or native_metadata(item).get('system_object') is not True)),
+                    and (include_system or native_metadata(item, engine).get('system_object') is not True)),
                    key=lambda item: (item['resource_kind'], item.get('display_path', []), item['resource_id']))
     coverage = ('unknown' if not observations else 'partial' if
-                any(not item.get('available') for item in observations) else 'visible-catalog')
+                any(not item.get('available') for item in observations) or
+                any(native_metadata(db, engine).get('coverage_complete') is False for db in databases)
+                else 'visible-catalog')
     provenance = {
-        'mapping': 'scratchrobin.firebird.catalog@1', 'endpoint_id': endpoint_id,
+        'mapping': f'scratchrobin.{engine}.catalog@1', 'endpoint_id': endpoint_id,
         'database_target_id': target_id, 'generation': generation,
         'exported_at': datetime.now(timezone.utc).isoformat(),
         'scope_resource_id': resource_id, 'include_system': include_system,
@@ -77,7 +81,7 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         from decimal import Decimal
         rows = {}
         for item in items:
-            native = native_metadata(item)
+            native = native_metadata(item, engine)
             rows[item['resource_id']] = {
                 'resource_id': item['resource_id'], 'kind': item['resource_kind'],
                 'name': item['display_name'], 'path': item.get('display_path', []),
@@ -85,7 +89,7 @@ def build_export(resources, *, endpoint_id, target_id, generation,
                            'false' if native.get('system_object') is False else 'unknown'),
                 'native': native,
             }
-        capture = _json({'format': 'scratchrobin.firebird.native-capture@1',
+        capture = _json({'format': f'scratchrobin.{engine}.native-capture@1',
                          'provenance': provenance, 'rows': rows})
         if len(capture.encode('utf-8')) > MAX_BYTES:
             raise ValueError('Native catalog capture exceeds the 8 MiB limit')
@@ -99,12 +103,12 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         fields = {
             'resource_id': item['resource_id'], 'kind': item['resource_kind'],
             'path_json': _json(item.get('display_path', [])),
-            'system': ('true' if native_metadata(item).get('system_object') is True else
-                       'false' if native_metadata(item).get('system_object') is False else 'unknown'),
-            'native_json': _json(native_metadata(item)),
+            'system': ('true' if native_metadata(item, engine).get('system_object') is True else
+                       'false' if native_metadata(item, engine).get('system_object') is False else 'unknown'),
+            'native_json': _json(native_metadata(item, engine)),
         }
         records.append('record ' + key + ' ' + _json(item['display_name']) +
-                       ' { uid: ' + _json('firebird:' + endpoint_id + ':' + str(target_id) + ':' + item['resource_id']) +
+                       ' { uid: ' + _json(engine + ':' + endpoint_id + ':' + str(target_id) + ':' + item['resource_id']) +
                        '; x_record: {' + ','.join(name + ':' + _json(value)
                        for name, value in fields.items()) + '}; }')
     if not records:
@@ -140,7 +144,7 @@ def build_export(resources, *, endpoint_id, target_id, generation,
     blocks.append('data provenance {record capture "Catalog provenance" { x_record: {'
                   'mapping:' + _json(provenance['mapping']) +
                   ', native_json:' + _json(_json(provenance)) + '}; }}')
-    header = 'ddn "0.5"; module "scratchrobin.firebird.catalog";\n'
+    header = f'ddn "0.5"; module "scratchrobin.{engine}.catalog";\n'
     files, parts = {}, [blocks[-1]]
     if _units(header + parts[0]) > MAX_DDN_UNITS:
         raise ValueError('Provenance exceeds the paired DDN per-file limit')
@@ -170,9 +174,12 @@ def build_export(resources, *, endpoint_id, target_id, generation,
     if len(download.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Catalog exceeds the 8 MiB DDN export limit')
     result = {'snapshot': snapshot, 'provenance': provenance, 'views': view_metadata,
-              'filename': 'firebird-catalog.ddn-workspace.json' if multi else 'firebird-catalog.ddn',
+              'filename': f'{engine}-catalog.ddn-workspace.json' if multi else f'{engine}-catalog.ddn',
               'sha256': hashlib.sha256(download.encode('utf-8')).hexdigest()}
-    from .firebird_erd import build_diagram
+    if engine == 'mysql':
+        from .mysql_erd import build_diagram
+    else:
+        from .firebird_erd import build_diagram
     try:
         result['diagram'] = build_diagram(items, provenance)
     except ValueError as error:
