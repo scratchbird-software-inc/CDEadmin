@@ -151,3 +151,71 @@ def test_creation_receipt_rejects_desired_fingerprint_drift(tmp_path):
     table(desired)['native']['definition']+=' COMMENT=\'changed\''
     with pytest.raises(SchemaApplyError,match='desired'):
         applications.review(preview,before,desired,'owner','binding','target')
+
+
+def batch_review(tmp_path):
+    from tools.tests.test_mysql_sql_export import model
+    before=model([('table',name,'CREATE TABLE `'+name+'` (`id` int PRIMARY KEY, `note` varchar(80))',{}) for name in ('a','b','c')])
+    desired=deepcopy(before)
+    for row in desired['rows'].values():
+        if row['kind']=='table':row['native']['definition']=row['native']['definition'].replace('varchar(80)','varchar(100)')
+    preview=plan(before,desired,before);preview['native_grammar_validated']=True
+    applications=MySQLSchemaApplications(tmp_path/'batch.json',clock=lambda:100)
+    receipt=applications.review(preview,before,desired,'owner','binding','target')
+    return applications,receipt,before,desired
+
+
+def test_batch_durably_retains_committed_prefix_and_uncertainty_across_process_death(tmp_path):
+    applications,receipt,_,_=batch_review(tmp_path)
+    class ProcessDeath(BaseException):pass
+    calls=[]
+    def execute(record):
+        calls.append(record['plan']['operations'][0]['name'])
+        # Each provider call receives the existing single-statement contract.
+        assert len(record['plan']['operations'])==1 and len(record['desired']['rows'])==1
+        from pgadmin.cdeadmin.workspace.firebird_schema_plan import digest
+        assert record['plan']['execution_sha256']==digest(record['plan']['operations'])
+        if len(calls)==2:raise ProcessDeath()
+        return {'state':'committed','rediscovery_verified':True}
+    with pytest.raises(ProcessDeath):applications.apply(request(receipt),'owner','binding',execute)
+    restarted=MySQLSchemaApplications(tmp_path/'batch.json',clock=lambda:101)
+    observed=restarted.get(receipt['review_id'],'owner','binding')
+    assert observed['state']=='unknown_outcome'
+    assert [entry['state'] for entry in observed['statement_outcomes']]==['committed','unknown_outcome','not_dispatched']
+    replay=Mock()
+    assert restarted.apply(request(receipt),'owner','binding',replay)==observed
+    replay.assert_not_called()
+    assert calls==['a','b']
+
+
+@pytest.mark.parametrize('second', [
+    {'state':'not_dispatched','rejection_reason':'changed baseline'},
+    {'state':'unknown_outcome'},
+    {'state':'committed','rediscovery_verified':False},
+])
+def test_batch_stops_without_replaying_or_undoing_committed_prefix(tmp_path,second):
+    applications,receipt,_,_=batch_review(tmp_path)
+    execute=Mock(side_effect=[{'state':'committed','rediscovery_verified':True},second])
+    result=applications.apply(request(receipt),'owner','binding',execute)
+    assert execute.call_count==2
+    assert result['statement_outcomes'][0]['state']=='committed'
+    assert result['statement_outcomes'][2]['state']=='not_dispatched'
+    assert result['state']==('unknown_outcome' if second['state']=='unknown_outcome' else 'partially_committed')
+    assert not result['outcome']['rediscovery_verified']
+    assert not result['outcome']['transactional_rollback_available']
+    assert applications.apply(request(receipt),'owner','binding',execute)==result
+    assert execute.call_count==2
+
+
+def test_batch_success_retains_each_statement_and_rejects_duplicate_targets(tmp_path):
+    applications,receipt,before,desired=batch_review(tmp_path)
+    execute=Mock(return_value={'state':'committed','rediscovery_verified':True})
+    result=applications.apply(request(receipt),'owner','binding',execute)
+    assert result['state']=='committed' and execute.call_count==3
+    assert result['outcome']['completed_statements']==3
+    assert all(entry['state']=='committed' for entry in result['statement_outcomes'])
+    preview=plan(before,desired,before);preview['native_grammar_validated']=True
+    preview['operations'].append(deepcopy(preview['operations'][0]))
+    from pgadmin.cdeadmin.workspace.firebird_schema_plan import digest
+    preview['execution_sha256']=digest(preview['operations'])
+    with pytest.raises(SchemaApplyError):applications.review(preview,before,desired,'owner','binding','target')

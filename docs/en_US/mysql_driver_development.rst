@@ -499,8 +499,9 @@ Reviewed single-table metadata application
 
 A MySQL application review binds one new-table CREATE, existing-table ALTER or explicitly confirmed
 DROP to the registration, database target, native server UUID, owner and exact
-compiled statement digest. Multi-object batches require separately admitted
-execution contracts. Reviews expire after five minutes. A durable receipt is
+compiled statement digest. Ordered batches use the multi-table application
+contract below and retain an independent outcome for every statement. Reviews
+expire after five minutes. A durable receipt is
 claimed as ``unknown_outcome`` before native access; a claimed token is never
 redispatched, including after process restart. This application receipt stores
 review/dispatch evidence, not database recovery or a substitute transaction log.
@@ -534,8 +535,9 @@ follow the ordinary three-way preview/review path. Field datatype, nullability
 and description edits on an existing native table update the corresponding exact
 SHOW CREATE column clause, preserving other attributes, defaults, expressions,
 indexes and options. Native and graphical edits to the same clause must agree.
-Field omissions and view filtering never remove columns. Unknown/new/renamed
-field identities require explicit native reconciliation; unsupported properties
+Field omissions and view filtering never remove columns. New field identities
+require the explicit graphical column admission below; renamed identities require
+separate native reconciliation; unsupported properties
 are not silently treated as deployed changes. Native PREPARE remains required:
 lexical clause editing is not a replacement grammar or deployment authority.
 
@@ -822,3 +824,23 @@ owner-bound reviewed application remain required before database mutation.
 A pending relational handoff disables parent catalog previews and mutations until
 the reviewed baseline/desired pair is installed or the handoff fails. A concurrent
 preview must not invalidate a handoff or leave the catalog in a busy state.
+
+Reviewed multi-table application receipts
+----------------------------------------
+
+A native-validated plan may contain 1 to 32 distinct user-table CREATE/ALTER/DROP
+operations, within 1 MiB of SQL and the existing 4 MiB review bound. Review seals
+its displayed order, exact baseline/desired fingerprints, owner and database
+binding. Application runs that order once, using the existing independently
+owned native connection, absence/table-lock revalidation and rediscovery contract
+for each statement. It does not promise atomic DDL or a hypothetical-schema
+preflight; native PREPARE acceptance precedes execution, and native privileges,
+dependencies and engine checks remain authoritative at execution time.
+
+The host durably records each statement as uncertain before its native call and
+records its returned outcome before advancing. It stops after a refusal, unknown
+outcome or unverified rediscovery. Earlier committed effects remain committed;
+remaining statements stay explicitly not dispatched. The receipt reports ordered
+per-statement results, including partial commitment. Crash/restart and repeat
+requests expose retained observations without redispatching any statement. The
+owner must reconcile native state and prepare a fresh review for remaining work.

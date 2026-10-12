@@ -184,7 +184,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     {schemaPlan && <Box>
       <FormReference formKey="mysql-native-schema-preview" />
-      <Alert severity="info">Review one existing-table ALTER or explicit DROP. MySQL DDL commits implicitly. Native table locking and baseline revalidation precede dispatch; unknown outcomes are never automatically retried.</Alert>
+      <Alert severity="info">Review the displayed table CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Native table locking and baseline revalidation precede dispatch; unknown outcomes are never automatically retried.</Alert>
       {schemaPlan.native_validation && <Alert severity={schemaPlan.native_grammar_validated ? 'success' : 'error'}>
         {schemaPlan.native_grammar_validated ? 'Native PREPARE accepted the change statements; none were executed.' : 'Native PREPARE rejected one or more change statements.'}
       </Alert>}
@@ -197,7 +197,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
       <Button disabled={busy || !schemaPlan?.ready_for_review || !schemaPlan.native_grammar_validated ||
-        schemaPlan.operations?.length !== 1 || !['create', 'alter', 'drop'].includes(schemaPlan.operations[0]?.operation)}
+        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => op.kind !== 'table' || !['create', 'alter', 'drop'].includes(op.operation))}
       onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
       <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
         disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />
@@ -213,6 +213,13 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         Schema receipt {review.review_id}: {review.state}. Automatic retry is disabled.
         {review.outcome && ` Rediscovery: ${review.outcome.rediscovery_verified ? 'observed' : 'unverified'}.`}
       </Alert>
+      {review.statement_outcomes && <Box sx={{height: 240}}>
+        <PagedDataGrid readOnly gridId="mysql/schema-statement-outcomes" aria-label="MySQL migration statement outcomes"
+          rows={review.statement_outcomes} rowKeyGetter={row => row.index} columns={[
+            {key: 'index', name: 'Order', width: 80}, {key: 'resource_id', name: 'Native object', minWidth: 220},
+            {key: 'state', name: 'Observed outcome', minWidth: 180},
+          ]} />
+      </Box>}
       {review.outcome?.rejection_reason && <Alert severity="warning">{review.outcome.rejection_reason}</Alert>}
       {review.outcome?.desired_definition_exact_match === false && <Alert severity="warning">
         Native SHOW CREATE differs from the desired text. Review the rediscovered definition before further changes.

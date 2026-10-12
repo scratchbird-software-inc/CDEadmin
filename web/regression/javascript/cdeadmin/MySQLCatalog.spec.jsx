@@ -78,7 +78,7 @@ describe('MySQL native catalog form', () => {
 
 describe('MySQL three-way native metadata preview', () => {
   it('binds saved baseline and desired DDN to fresh native review without applying', async () => {
-    const preview={operations: [{source: 'ALTER TABLE `demo`.`native` ADD COLUMN `value` int'}], ready_for_review: true,
+    const preview={operations: [{kind:'table',source: 'ALTER TABLE `demo`.`native` ADD COLUMN `value` int'}], ready_for_review: true,
       blockers: [], conflicts: [], ignored: [], executed: false};
     const post=jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(preview).mockResolvedValueOnce({
       ...preview, native_grammar_validated: true, native_validation: [{index: 0, accepted: true}]});
@@ -100,7 +100,7 @@ describe('MySQL three-way native metadata preview', () => {
 describe('MySQL reviewed schema controls', () => {
   it.each(['alter', 'create', 'drop'])('requires native validation, receipt and confirmation for %s, then shows the native outcome', async operationId => {
     const snapshot={view:'inventory_1',entry:'native.ddn',files:{'native.ddn':'native'}};
-    const operation={operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
+    const operation={kind:'table',operation:operationId,source:operationId === 'create' ? 'CREATE TABLE `db`.`t` (`extra` int)' : operationId === 'drop' ? 'DROP TABLE `db`.`t`' : 'ALTER TABLE `db`.`t` ADD COLUMN `extra` int'};
     const preview={ready_for_review:true,native_grammar_validated:false,execution_sha256:'digest',operations:[operation]};
     const receipt={review_id:'receipt',review_digest:'review-digest',state:'reviewed'};
     const post=jest.fn().mockImplementation(async ({action}) => {
@@ -138,6 +138,8 @@ describe('MySQL native encoded download', () => {
     const post=jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(metadata);
     const create=jest.fn().mockReturnValue('blob:native');
     const previous=URL.createObjectURL; URL.createObjectURL=create;
+    const revoke=URL.revokeObjectURL; URL.revokeObjectURL=jest.fn();
+    jest.useFakeTimers();
     const click=jest.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(() => {});
     try {
       render(<Component post={post} databaseTargetId="mysql-owned-target" />);
@@ -147,7 +149,7 @@ describe('MySQL native encoded download', () => {
       fireEvent.click(screen.getByRole('button',{name:'Download native SQL'}));
       const blob=create.mock.calls[0][0];expect(blob.type).toBe('application/octet-stream');expect(blob.size).toBe(2);
       expect(screen.getByText(/mysql --binary-mode/)).toBeVisible();expect(click).toHaveBeenCalledTimes(1);
-    } finally {URL.createObjectURL=previous;click.mockRestore();}
+    } finally {jest.runOnlyPendingTimers();jest.useRealTimers();URL.createObjectURL=previous;URL.revokeObjectURL=revoke;click.mockRestore();}
   });
 });
 
@@ -177,4 +179,34 @@ it('keeps parent previews disabled until the relational handoff installs its rev
   fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_schema_plan',request:{database_target_id:'mysql-target',baseline:'reviewed baseline',source:'reviewed desired'}}));
   await waitFor(() => expect(screen.getByRole('button',{name:'Capture metadata'})).toBeEnabled());
+});
+
+
+it('retains ordered native outcomes for a multi-table receipt and disables replay', async () => {
+  const operations=['a','b'].map(name => ({kind:'table',operation:'alter',resource_id:name,source:`ALTER TABLE \`db\`.\`${name}\` ADD COLUMN extra int`}));
+  const preview={ready_for_review:true,operations};
+  const entries=[{index:0,resource_id:'a',state:'committed'},{index:1,resource_id:'b',state:'unknown_outcome'}];
+  const receipt={review_id:'batch',review_digest:'sealed',state:'reviewed',statement_outcomes:entries.map(row => ({...row,state:'not_dispatched'}))};
+  const post=jest.fn().mockImplementation(async ({action}) => {
+    if(action==='mysql_catalog_export') return capture;
+    if(action==='mysql_schema_plan') return preview;
+    if(action==='mysql_schema_validate') return {...preview,native_grammar_validated:true,native_validation:operations.map((_,index) => ({index,accepted:true}))};
+    if(action==='mysql_schema_review') return receipt;
+    return {...receipt,state:'unknown_outcome',statement_outcomes:entries,outcome:{rediscovery_verified:false}};
+  });
+  render(<Component post={post} databaseTargetId="batch-target" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));
+  await screen.findByText('Native DDN viewer');
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  await screen.findByRole('textbox',{name:'Native MySQL change preview'});
+  fireEvent.click(screen.getByRole('button',{name:'Validate native changes'}));
+  await screen.findByText('Native PREPARE accepted the change statements; none were executed.');
+  fireEvent.click(screen.getByRole('button',{name:'Prepare reviewed change'}));
+  await screen.findByText(/Schema receipt batch: reviewed/);
+  expect(screen.getByLabelText('MySQL migration statement outcomes')).toHaveTextContent('2 changes');
+  fireEvent.click(screen.getByRole('checkbox',{name:'Confirm reviewed native DDL and implicit commit'}));
+  fireEvent.click(screen.getByRole('button',{name:'Apply reviewed change'}));
+  await screen.findByText(/Schema receipt batch: unknown_outcome/);
+  expect(screen.getByRole('button',{name:'Apply reviewed change'})).toBeDisabled();
+  expect(post.mock.calls.filter(([request]) => request.action==='mysql_schema_apply')).toHaveLength(1);
 });
