@@ -130,3 +130,23 @@ describe('MySQL reviewed schema controls', () => {
     expect(screen.getByText(/Native SHOW CREATE differs/)).toBeInTheDocument();
   });
 });
+
+
+describe('MySQL native encoded download', () => {
+  it('downloads the original bytes while displaying a documentary Unicode preview', async () => {
+    const metadata={script_available:true,script:null,script_preview:'SELECT \'é€\';',encoded_script:{data_base64:'6YA='}};
+    const post=jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(metadata);
+    const create=jest.fn().mockReturnValue('blob:native');
+    const previous=URL.createObjectURL; URL.createObjectURL=create;
+    const click=jest.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(() => {});
+    try {
+      render(<Component post={post} databaseTargetId="mysql-owned-target" />);
+      fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('Native DDN viewer');
+      fireEvent.click(screen.getByRole('button',{name:'Generate native SQL'}));
+      expect(await screen.findByRole('textbox',{name:'Native MySQL metadata script'})).toHaveValue(metadata.script_preview);
+      fireEvent.click(screen.getByRole('button',{name:'Download native SQL'}));
+      const blob=create.mock.calls[0][0];expect(blob.type).toBe('application/octet-stream');expect(blob.size).toBe(2);
+      expect(screen.getByText(/mysql --binary-mode/)).toBeVisible();expect(click).toHaveBeenCalledTimes(1);
+    } finally {URL.createObjectURL=previous;click.mockRestore();}
+  });
+});

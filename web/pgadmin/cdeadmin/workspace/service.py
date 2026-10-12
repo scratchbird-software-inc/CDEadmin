@@ -783,12 +783,15 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Invalid native MySQL metadata export request')
         try:
             target = request['database_target_id']
-            context, _endpoint, _provider = self._mysql_catalog_context(server, target)
+            context, endpoint, provider = self._mysql_catalog_context(server, target)
             document = read_catalog(request['source'], engine='mysql')
             if (document['provenance']['endpoint_id'] != context.endpoint_id or
                     document['provenance']['database_target_id'] != target):
                 raise ValueError('Document belongs to another endpoint or database')
-            return build_metadata(document)
+            metadata = build_metadata(document)
+            if metadata.get('native_encoding_required'):
+                metadata = provider.encode_native_metadata(endpoint['route'], metadata)
+            return metadata
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 

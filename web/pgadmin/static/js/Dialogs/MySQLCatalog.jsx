@@ -49,7 +49,8 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     finally {if(token === serial.current) setBusy(false);}
   };
   const downloadSQL = () => {
-    const url = URL.createObjectURL(new Blob([metadata.script], {type: 'text/plain;charset=utf-8'}));
+    const payload = metadata.encoded_script ? Uint8Array.from(atob(metadata.encoded_script.data_base64), value => value.charCodeAt(0)) : metadata.script;
+    const url = URL.createObjectURL(new Blob([payload], {type: metadata.encoded_script ? 'application/octet-stream' : 'text/plain;charset=utf-8'}));
     const link = document.createElement('a'); link.href = url; link.download = 'mysql-native-metadata.sql'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -161,8 +162,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       <Alert severity="info">Native SQL export only. Imported definitions have not been validated against the live server and this does not execute a migration.</Alert>
       {metadata.warnings?.map(warning => <Alert severity="warning" key={warning}>{warning}</Alert>)}
       {metadata.blockers?.map(item => <Alert severity="error" key={item.resource_id + item.reason}>{item.name}: {item.reason}</Alert>)}
-      {metadata.script && <TextField label="Native MySQL metadata script" multiline minRows={6} maxRows={16}
-        value={metadata.script} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
+      {metadata.encoded_script && <Alert severity="info">Mixed native encodings: download the original bytes and run with mysql --binary-mode --default-character-set=utf8mb4 in a fresh session. This UTF-8 display is a preview.</Alert>}
+      {(metadata.script || metadata.script_preview) && <TextField label="Native MySQL metadata script" multiline minRows={6} maxRows={16}
+        value={metadata.script || metadata.script_preview} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
       {!!metadata.prerequisites?.length && <Box sx={{height: 220, overflow: 'auto'}}>
         <PagedDataGrid readOnly gridId="mysql/native-prerequisites" aria-label="MySQL native prerequisites"
           rows={metadata.prerequisites.map((item, index) => ({...item, id: index}))} rowKeyGetter={row => row.id}

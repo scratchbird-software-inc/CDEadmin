@@ -102,9 +102,7 @@ def build_metadata(document):
             if kind in CONTEXTUAL and any(native.get('definition_context', {}).get(key) is None
                     for key in ('character_set_client', 'collation_connection')):
                 raise ValueError('Stored definition character context is unavailable')
-            if charset not in {'utf8mb4', 'utf8mb3', 'utf8'}:
-                raise ValueError('A UTF-8 script cannot preserve this stored client encoding; use a native encoding adapter')
-            if charset != 'utf8mb4' and any(ord(char) > 0xffff for char in statement):
+            if charset in {'utf8mb3', 'utf8'} and any(ord(char) > 0xffff for char in statement):
                 raise ValueError('Definition does not fit its native utf8mb3 creation context')
         except (ValueError, TypeError) as error:
             problem(row, str(error)); continue
@@ -176,11 +174,13 @@ def build_metadata(document):
             block for block in ordered if block['kind'] not in {'database', 'table'}]
     # Deterministically deduplicate composite-FK prerequisite observations.
     prerequisites = list({json.dumps(item, sort_keys=True): item for item in prerequisites}.values())
-    script = _script(ordered, database) if ordered and not blockers else None
+    encoding_required = any(block['context']['character_set_client'] not in {'utf8mb4','utf8mb3','utf8'} for block in ordered)
+    script = _script(ordered, database) if ordered and not blockers and not encoding_required else None
     return {'format': 'scratchrobin.mysql.native-metadata@1', 'engine_id': 'mysql',
         'mode': 'export-only', 'executed': False, 'deployment_authorized': False,
         'source_sha256': document.get('sha256'), 'database': database, 'server_uuid': root_facts['server_uuid'],
         'statements': ordered, 'statements_sha256': digest(ordered), 'script': script,
+        'native_encoding_required': encoding_required and not blockers,
         'script_sha256': hashlib.sha256(script.encode('utf8')).hexdigest() if script else None,
         'blockers': blockers, 'prerequisites': prerequisites, 'script_available': script is not None,
         'warnings': ['Imported definitions are user input; native grammar and live state have not been validated.',

@@ -1465,6 +1465,18 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
         finally:
             self.client._discard_failed_session(connection)
 
+    def encode_native_metadata(self, route, metadata):
+        from ..mysql_native_encoding import encode_metadata
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL encoding client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return encode_metadata(connection, metadata)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def validate_schema_plan(self, route, plan):
         from ..mysql_schema_validation import validate
         self._require('data_read', 'resource')

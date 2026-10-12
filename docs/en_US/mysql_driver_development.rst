@@ -678,3 +678,30 @@ and the durable token is never replayed. The desired definition is fingerprinted
 and recompiled from the same exact catalog representation. Successful creation
 is independently rediscovered using SHOW CREATE TABLE. This does not authorize
 unreviewed multi-object batches or infer atomic rollback across DDL statements.
+
+Native encoding-aware metadata scripts
+--------------------------------------
+
+Stored routine, trigger, view and event creation contexts can use native client
+encodings other than UTF-8. The SQL export adapter must preserve those contexts
+and exact Unicode definitions. It uses a separate idle native connection for
+charset/collation admission and MySQL CONVERT round trips; no imported DDL is
+executed during export. Unknown client encodings, incompatible collations or
+lossy conversion prevent download instead of replacing characters silently.
+
+An export containing different native client encodings is a binary mysql-client
+script. Each complete statement is encoded by MySQL in its admitted charset,
+with explicit mysql-client \C charset commands and original SQL mode/collation.
+The artifact retains byte size, SHA-256 and per-statement encoding facts. A UTF-8
+preview is documentary and must not be saved as the executable mixed-encoding
+file. Run the binary script in a fresh dedicated native mysql client; it is not
+a generic driver script or an in-place interactive-session restoration contract.
+Native delimiter selection avoids every encoded statement, and file generation
+retains the existing 8 MiB bound and dependency ordering. This export grants no
+execution authorization or DDL atomicity.
+
+The mixed-encoding consumer uses ``mysql --binary-mode
+--default-character-set=utf8mb4``. MySQL 9.7 disables long local commands by
+default in batch mode; the admitted short ``\C`` charset command and DELIMITER
+continue to work without enabling unrelated local commands. Consumer options
+are retained in the artifact manifest and shown with the download.
