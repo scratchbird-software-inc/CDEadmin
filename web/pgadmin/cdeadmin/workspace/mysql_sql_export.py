@@ -77,6 +77,7 @@ def build_metadata(document):
     observations = root['native'].get('catalog_observations', [])
     unavailable = {item.get('section') for item in observations if item.get('available') is not True}
     blocks, dependencies, blockers, prerequisites = {}, {}, [], []
+    deferred_foreign_keys = []
     names = {}
     def problem(row, reason):
         blockers.append({'resource_id': row['resource_id'], 'kind': row['kind'], 'name': row['name'], 'reason': reason})
@@ -129,9 +130,24 @@ def build_metadata(document):
         if kind == 'table':
             if 'KEY_COLUMN_USAGE' in unavailable or not any(item.get('section') == 'KEY_COLUMN_USAGE' for item in observations):
                 problem(row, 'Native foreign-key dependency observations are unavailable')
-            for fk in native.get('children', {}).get('KEY_COLUMN_USAGE', []):
-                if fk.get('referenced_table_name') is not None:
-                    require(row, fk.get('referenced_table_schema'), fk['referenced_table_name'], 'table')
+            foreign_keys = [fk for fk in native.get('children', {}).get('KEY_COLUMN_USAGE', [])
+                            if fk.get('referenced_table_name') is not None]
+            from .mysql_table_clauses import separate_foreign_keys
+            try:
+                body, clauses = separate_foreign_keys(block['statement'],
+                    {fk['constraint_name'] for fk in foreign_keys}, block['context']['sql_mode'])
+                block['statement'] = body
+                block['definition_sha256'] = hashlib.sha256(body.encode('utf8')).hexdigest()
+                for clause in clauses:
+                    source = 'ALTER TABLE ' + identifier(database) + '.' + identifier(block['name']) + ' ADD ' + clause
+                    deferred_foreign_keys.append({**block, 'kind': 'foreign-key', 'statement': source,
+                        'definition_sha256': hashlib.sha256(source.encode('utf8')).hexdigest()})
+            except ValueError as error:
+                problem(row, str(error))
+            for fk in foreign_keys:
+                if (fk.get('referenced_table_schema'), fk['referenced_table_name']) not in names:
+                    prerequisites.append({'resource_id': row['resource_id'], 'database': fk.get('referenced_table_schema'),
+                        'name': fk['referenced_table_name'], 'kind': 'table'})
         if kind in {'view', 'materialized-view'}:
             if 'VIEW_TABLE_USAGE' in unavailable or not any(item.get('section') == 'VIEW_TABLE_USAGE' for item in observations):
                 problem(row, 'Native view dependency observations are unavailable')
@@ -153,6 +169,11 @@ def build_metadata(document):
         for identity in ready:
             ordered.append(blocks[identity]); del pending[identity]
         for needs in pending.values(): needs.difference_update(ready)
+    if deferred_foreign_keys and not blockers:
+        # Table bodies must all exist before any FK is admitted. Other native
+        # object dependencies retain their previous topological order.
+        ordered = [block for block in ordered if block['kind'] in {'database', 'table'}] + deferred_foreign_keys + [
+            block for block in ordered if block['kind'] not in {'database', 'table'}]
     # Deterministically deduplicate composite-FK prerequisite observations.
     prerequisites = list({json.dumps(item, sort_keys=True): item for item in prerequisites}.values())
     script = _script(ordered, database) if ordered and not blockers else None

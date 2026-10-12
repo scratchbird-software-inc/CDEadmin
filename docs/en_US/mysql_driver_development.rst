@@ -427,3 +427,17 @@ permissions and role-edge validation remain MySQL's authority. These account
 administration statements can implicitly commit; they run through the existing
 reviewed native-operation path, never inside the user's pending query work.
 Unassigned locked accounts are not guessed to be roles during discovery.
+
+Cyclic foreign-key metadata export
+----------------------------------
+
+Native table exports create all table bodies before adding their foreign keys.
+The adapter separates only named, catalog-matched foreign-key clauses from the
+captured SHOW CREATE table body, respecting nested expressions, quoted values,
+SQL-mode escaping and comments. Every separated clause must match the captured
+KEY_COLUMN_USAGE constraint identity exactly. An ambiguous or incomplete match
+blocks script generation. Self references, composite keys and cycles therefore
+use the same staged path; foreign-key checking is never disabled. External
+referenced tables remain explicit prerequisites. Views and trigger/routine
+bodies retain their native dependency/context handling. This is metadata export,
+not an authorization to replay imported DDN or an atomic migration.

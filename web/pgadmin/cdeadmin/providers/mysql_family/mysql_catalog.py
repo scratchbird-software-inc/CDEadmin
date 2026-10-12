@@ -78,6 +78,9 @@ def capture(connection, database, *, include_system=False):
             observations.append({'section': name, 'available': False,
                 'error_code': error.errno, 'sqlstate': getattr(error, 'sqlstate', None)})
             return []
+        # information_schema does not promise row order without ORDER BY.
+        # Keep exact facts, including ordinal fields, in deterministic order.
+        values.sort(key=lambda row: json.dumps(row, sort_keys=True, ensure_ascii=False, allow_nan=False))
         observations.append({'section': name, 'available': True, 'rows': len(values)})
         return values
 
@@ -93,6 +96,12 @@ def capture(connection, database, *, include_system=False):
         account(item)
         resources.append(item)
         return item
+
+    quote_policy = connection.cursor(buffered=False)
+    try:
+        quote_policy.execute('SET SESSION sql_quote_show_create=1', None)
+    finally:
+        quote_policy.close()
 
     identity = list(read('SELECT DATABASE() AS database_name, VERSION() AS version, '
                          '@@server_uuid AS server_uuid, @@lower_case_table_names AS lower_case_table_names, '
