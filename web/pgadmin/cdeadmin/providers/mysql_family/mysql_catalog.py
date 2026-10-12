@@ -157,11 +157,12 @@ def capture(connection, database, *, include_system=False):
 
     specs = (('ROUTINES', 'ROUTINE_SCHEMA', 'routine_name'),
              ('TRIGGERS', 'TRIGGER_SCHEMA', 'trigger_name'),
-             ('EVENTS', 'EVENT_SCHEMA', 'event_name'))
+             ('EVENTS', 'EVENT_SCHEMA', 'event_name'),
+             ('LIBRARIES', 'LIBRARY_SCHEMA', 'library_name'))
     for catalog, schema_column, name_column in specs:
         values = section(catalog, 'SELECT * FROM information_schema.' + catalog + ' WHERE ' + schema_column + '=%s', (database,))
         for row in values:
-            kind = row['routine_type'].lower() if catalog == 'ROUTINES' else 'trigger' if catalog == 'TRIGGERS' else 'event'
+            kind = row['routine_type'].lower() if catalog == 'ROUTINES' else 'trigger' if catalog == 'TRIGGERS' else 'library' if catalog == 'LIBRARIES' else 'event'
             name = row[name_column]
             owner = relations.get(row.get('event_object_table'))
             item = add(kind, name, row, (owner or root)['resource_id'])
@@ -172,10 +173,25 @@ def capture(connection, database, *, include_system=False):
             item['native']['definition'] = ddl
             item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
                 if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
+            if kind == 'library':
+                # SHOW CREATE LIBRARY exposes SQL mode, but not the stored
+                # client charset/collation. Its decoded Unicode text is exported
+                # under explicit UTF8mb4; binary bodies remain native hex text.
+                item['native']['definition_context'].update(
+                    character_set_client='utf8mb4', collation_connection='utf8mb4_bin')
+                item['native']['definition_context_origin'] = (
+                    'Decoded native SHOW CREATE normalized to UTF8mb4; original library character context is not exposed')
             item['native']['definition_available'] = bool(ddl)
             if ddl is None:
                 observations.append({'section': kind + ':' + name, 'available': False,
                                      'reason': 'Native definition withheld or unavailable'})
+    library_dependencies = section('ROUTINE_LIBRARIES',
+        'SELECT * FROM information_schema.ROUTINE_LIBRARIES WHERE ROUTINE_SCHEMA=%s', (database,))
+    for item in resources:
+        if item['resource_kind'] in {'procedure', 'function'}:
+            item['native']['library_dependencies'] = [row for row in library_dependencies
+                if row['routine_name'] == item['display_name'] and
+                   row['routine_type'].lower() == item['resource_kind']]
     for catalog in ('SCHEMA_PRIVILEGES', 'TABLE_PRIVILEGES', 'COLUMN_PRIVILEGES'):
         column = 'TABLE_SCHEMA'
         values = section(catalog, 'SELECT * FROM information_schema.' + catalog + ' WHERE ' + column + '=%s', (database,))

@@ -20,7 +20,7 @@ def model(specs):
             native.update(catalog_row={'database_name': db, 'version': '9.7.0', 'server_uuid': 'server',
                 'sql_mode': 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES', 'character_set_client': 'utf8mb4',
                 'collation_connection': 'utf8mb4_0900_ai_ci'},
-                catalog_observations=[{'section': section, 'available': True} for section in ['KEY_COLUMN_USAGE','VIEW_TABLE_USAGE']])
+                catalog_observations=[{'section': section, 'available': True} for section in ['KEY_COLUMN_USAGE','VIEW_TABLE_USAGE','ROUTINE_LIBRARIES']])
         resources.append({'resource_id': identity, 'resource_kind': kind, 'display_name': name,
             'display_path': [db] + ([] if kind == 'database' else [name]), 'native': native})
     for resource in resources:
@@ -148,3 +148,18 @@ def test_host_routes_non_utf8_export_to_owned_native_encoding_adapter():
     assert result['script_available']
     args=provider.encode_native_metadata.call_args.args
     assert args[0]==route and args[1]['native_encoding_required'] and args[1]['script'] is None
+
+
+def test_library_dependencies_use_separate_namespace_and_require_native_observations():
+    context={'sql_mode':'','character_set_client':'utf8mb4','collation_connection':'utf8mb4_bin'}
+    document=model([('table','shared','CREATE TABLE shared(id int)',{}),
+        ('library','shared',"CREATE LIBRARY shared LANGUAGE JAVASCRIPT AS 'export const x=1'",{'definition_context':context}),
+        ('procedure','p','CREATE PROCEDURE p() SELECT 1',{'definition_context':context,
+            'library_dependencies':[{'library_schema':'demo`db','library_name':'shared'}]})])
+    result=build_metadata(document)
+    assert result['script_available']
+    kinds=[row['kind'] for row in result['statements']]
+    assert kinds.index('library')<kinds.index('procedure')
+    root=next(row for row in document['rows'].values() if row['kind']=='database')
+    root['native']['catalog_observations'][-1]['available']=False
+    assert any('routine/library' in row['reason'] for row in build_metadata(document)['blockers'])

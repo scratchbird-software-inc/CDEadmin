@@ -43,6 +43,8 @@ _KIND_LABELS = {
     'partition': 'Partitions',
     'plugin': 'Extensions and plugins',
     'component': 'Server components',
+    'library': 'Stored libraries',
+    'loadable-function': 'Server loadable functions',
     'group-replication': 'Group Replication',
     'group-replication-member': 'Group members',
     'privilege': 'Roles and grants',

@@ -1178,6 +1178,19 @@ def _relational_editor_evidence(provider, request, engine):
             if component is not None:
                 attempt('component.drop','component','drop',{'confirmation':'file://component_validate_password'},component)
 
+        if engine=='mysql':
+            if attempt('library.create','library','create',{'database':parent,'name':'cde_editor_library',
+                    'body':'export function value() { return 42; }','comment':'native library'}):
+                library=inspect_created('library.inspect-created','library','cde_editor_library')
+                if library is not None:
+                    attempt('library.alter','library','alter',{'comment':'updated native library','confirmation':'cde_editor_library'},library)
+                    attempt('library.drop','library','drop',{'confirmation':'cde_editor_library'},library)
+            if attempt('loadable-function.create','loadable-function','create',{'name':'keyring_key_type_fetch',
+                    'return_type':'STRING','library':'keyring_udf.so'}):
+                function=inspect_created('loadable-function.inspect-created','loadable-function','keyring_key_type_fetch')
+                if function is not None:
+                    attempt('loadable-function.drop','loadable-function','drop',{'confirmation':'keyring_key_type_fetch'},function)
+
         if engine == 'mariadb':
             def inspect_observed(kind, label, attempts=40):
                 resource = None

@@ -1206,6 +1206,8 @@
         {"resource_kind": "event", "title": "Event", "operation_profile": "definition"},
         {"resource_kind": "procedure", "title": "Procedure", "operation_profile": "definition"},
         {"resource_kind": "function", "title": "Function", "operation_profile": "definition"},
+        {"resource_kind": "library", "title": "Stored library", "operation_profile": "definition"},
+        {"resource_kind": "loadable-function", "title": "Server loadable function", "operation_profile": "definition"},
         {"resource_kind": "partition", "title": "Partition", "operation_profile": "operational"},
         {"resource_kind": "tablespace", "title": "Tablespace", "operation_profile": "namespace"},
         {"resource_kind": "user", "title": "User", "operation_profile": "security"},

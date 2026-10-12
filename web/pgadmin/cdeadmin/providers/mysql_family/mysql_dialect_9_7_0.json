@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 99,
+    "authoritative_task_count": 104,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -68,6 +68,11 @@
       "visual_admin.index.drop",
       "visual_admin.index.rename",
       "visual_admin.index.visibility",
+      "visual_admin.library.alter",
+      "visual_admin.library.create",
+      "visual_admin.library.drop",
+      "visual_admin.loadable-function.create",
+      "visual_admin.loadable-function.drop",
       "visual_admin.materialized-view.alter",
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
@@ -132,7 +137,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 99,
+    "implemented_task_count": 104,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44713,6 +44718,24 @@
       "format": "scratchrobin.native-group-replication-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "e142a2c648f533af02f0f06a7d55eb01f753e24cbebcf55ca7ed453a2c3d9054"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-programs-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_program_objects_qualification.py",
+      "format": "scratchrobin.native-program-objects-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "9445c1ebc456a7cff8dcc8592d578b0c4cacdcc2e97e6fe72cc08ec749814bf2"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-programs-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_program_objects_qualification.py",
+      "format": "scratchrobin.native-program-objects-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "9445c1ebc456a7cff8dcc8592d578b0c4cacdcc2e97e6fe72cc08ec749814bf2"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -45292,6 +45315,83 @@
       "source_format": "ordered_native_statements",
       "statements": [
         "ALTER TABLE `sr_objects`.`t``é` ALTER INDEX `renamed``é` INVISIBLE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.alter",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER LIBRARY `sr_programs`.`text``é` COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER LIBRARY `sr_programs`.`text``é` COMMENT %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.create",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "CREATE LIBRARY `sr_programs`.`text``é` LANGUAGE JAVASCRIPT COMMENT %s AS %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE LIBRARY `sr_programs`.`text``é` LANGUAGE JAVASCRIPT COMMENT %s AS %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.drop",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP LIBRARY `sr_programs`.`text``é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP LIBRARY `sr_programs`.`text``é`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.loadable-function.create",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "CREATE FUNCTION `keyring_key_type_fetch` RETURNS STRING SONAME %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE FUNCTION `keyring_key_type_fetch` RETURNS STRING SONAME %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.loadable-function.drop",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP FUNCTION `keyring_key_type_fetch`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP FUNCTION `keyring_key_type_fetch`"
       ]
     },
     {

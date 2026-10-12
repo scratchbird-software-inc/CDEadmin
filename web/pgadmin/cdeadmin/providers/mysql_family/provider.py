@@ -36,7 +36,7 @@ MYSQL_PROFILE = PilotProfile(
     'mysql-session-autocommit', 'tabular',
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
-     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component',
+     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
      'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
@@ -180,6 +180,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_program_objects import OPERATIONS as program_operations
+        for kind,operations in program_operations.items():common[kind]=operations | frozenset({'inspect'})
         from ..mysql_group_replication import OPERATIONS as group_operations
         common['group-replication']=group_operations | frozenset({'inspect'})
         common['group-replication-member']=frozenset({'inspect'})
@@ -1641,7 +1643,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             # Keep endpoint scans bounded, but never exclude the system
             # database the user explicitly selected in the navigator.
             return re.sub(
-                r"(?:WHERE|AND) (?:TABLE|TRIGGER|ROUTINE|EVENT)_SCHEMA "
+                r"(?:WHERE|AND) (?:TABLE|TRIGGER|ROUTINE|EVENT|LIBRARY)_SCHEMA "
                 r"NOT IN \('information_schema', 'mysql', "
                 r"'performance_schema', 'sys'\) ", '', source)
 
@@ -2076,6 +2078,19 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'library': library,
                 'license': license_name,
             })
+        if profile is MYSQL_PROFILE:
+            for record in optional_records("SELECT * FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY LIBRARY_SCHEMA,LIBRARY_NAME"):
+                from .mysql_catalog import identifier as quote_library_identifier
+                record['show_create']=optional_records('SHOW CREATE LIBRARY '+quote_library_identifier(record['library_schema'])+'.'+quote_library_identifier(record['library_name']))
+                add('library',[record['library_schema']],record['library_name'],record)
+            functions={}
+            for record in optional_records('SELECT name,ret,dl,type FROM mysql.func ORDER BY name'):
+                name=record['name'];functions[name]={**record,'registration_origin':'mysql.func'}
+            for record in optional_records('SELECT * FROM performance_schema.user_defined_functions ORDER BY UDF_NAME'):
+                name=record['udf_name'];functions.setdefault(name,{'registration_origin':'runtime-service'}).update(record)
+            for name,record in functions.items():
+                record['administration']={'allowed_operations':['inspect','drop'] if record['registration_origin']=='mysql.func' else ['inspect']}
+                add('loadable-function',[],name,record)
         if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
             members=optional_records('SELECT * FROM performance_schema.replication_group_members')
             stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')
@@ -2329,7 +2344,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
-            'plugin', 'component', 'resource-group', 'server-link', 'system-variable',
+            'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {

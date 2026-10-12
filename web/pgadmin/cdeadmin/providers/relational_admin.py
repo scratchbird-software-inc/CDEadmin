@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
+from . import mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,11 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
+                resource['operations']=[{'operation_id':'inspect','title':'Inspect native object','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
+                    'operation_id':operation,'title':mysql_program_objects.form(kind,operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
+                } for operation in sorted(mysql_program_objects.OPERATIONS[kind])]
             if self.dialect.engine_id == 'mysql' and kind=='group-replication':
                 resource['operations']=[{'operation_id':'inspect','title':'Inspect native group','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
                     'operation_id':operation,'title':mysql_group_replication.form(operation,self._field)['title'],
@@ -679,6 +684,10 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id=='mysql' and operation_id in mysql_program_objects.OPERATIONS.get(resource_kind,()):
+            try: mysql_program_objects.compile_operation(resource_kind,operation_id,draft,request.get('target_resource'))
+            except RelationalClientError as error: errors.append({'field_id':None,'code':'invalid_mysql_program_object','message':str(error)})
+            return {'errors':errors}
         if self.dialect.engine_id=='mysql' and resource_kind=='group-replication' and operation_id in mysql_group_replication.OPERATIONS:
             try: mysql_group_replication.compile_operation(operation_id,draft,request.get('target_resource'))
             except RelationalClientError as error: errors.append({'field_id':None,'code':'invalid_mysql_group_replication','message':str(error)})
@@ -3127,6 +3136,14 @@ class RelationalAdministration:
                 'transaction_finality_interpreted_by_common_code': False,
             }
         owns_connection = connection is None
+        global_function_scope = (self.dialect.engine_id == 'mysql' and
+                                 compiled.get('mysql_global_function_scope'))
+        if global_function_scope:
+            if not owns_connection:
+                raise RelationalClientError('Server loadable functions require an owned connection without a default database')
+            # DROP FUNCTION otherwise falls back to a same-name stored routine
+            # after a concurrent UDF removal. Never dispatch in database scope.
+            route = {**route, 'database': None}
         borrowed_firebird = (not owns_connection and
                              self.dialect.engine_id == 'firebird')
         connection = connection or client._connect({'route': route})
@@ -3158,6 +3175,10 @@ class RelationalAdministration:
                 if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
+            if global_function_scope:
+                cursor.execute('SELECT DATABASE()')
+                if cursor.fetchone() != (None,):
+                    raise RelationalClientError('Loadable-function connection unexpectedly selected a database; dispatch refused')
             if borrowed_firebird:
                 task_savepoint = NativeTaskSavepoint(cursor)
                 task_savepoint.begin()
@@ -3698,6 +3719,10 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(request['resource_kind'],()):
+            return {'statements':[mysql_program_objects.compile_operation(request['resource_kind'],operation,request['draft'],request.get('target_resource'))],
+                'mysql_global_function_scope': request['resource_kind']=='loadable-function',
+                'warnings':['Native library/function registration commits independently. Runtime services and native dependency/privilege checks remain authoritative.']}
         if self.dialect.engine_id=='mysql' and request['resource_kind']=='group-replication' and operation in mysql_group_replication.OPERATIONS:
             return {'statements':[mysql_group_replication.compile_operation(operation,request['draft'],request.get('target_resource'))],
                 'warnings':['Native Group Replication changes have distributed effects and are not rollbackable user transactions. Starting never implicitly bootstraps or reconfigures membership.']}
@@ -4983,6 +5008,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
+            return value
         if self.dialect.engine_id=='mysql' and kind=='group-replication':
             return value
         if self.dialect.engine_id == 'mysql' and kind=='component':
@@ -5247,6 +5274,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
+            return mysql_program_objects.form(kind,operation,self._field)
         if self.dialect.engine_id=='mysql' and kind=='group-replication' and operation in mysql_group_replication.OPERATIONS:
             return mysql_group_replication.form(operation,self._field)
         if self.dialect.engine_id == 'mysql' and kind=='component' and operation in mysql_components.OPERATIONS:

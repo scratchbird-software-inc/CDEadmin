@@ -962,3 +962,38 @@ applicability. Reset does not silently change that server setting.
 Qualification uses an isolated real group, preserves returned observations and
 removes its own servers/network. Single-node refusal tests do not establish
 multi-member election, mode-change or replicated-data correctness.
+
+Stored libraries and loadable functions
+---------------------------------------
+
+Stored libraries are database-scoped native objects, separate from routines and
+server loadable functions. MySQL 9.7 supplies CREATE LIBRARY (JAVASCRIPT, optional
+IF NOT EXISTS/comment, text or exact binary source), ALTER LIBRARY COMMENT, SHOW
+CREATE LIBRARY and DROP LIBRARY. Forms do not invent body/language replacement
+through ALTER. Native runtime availability and execution of imported code remain
+server decisions. Discovery preserves LIBRARIES facts, SHOW CREATE and native SQL mode.
+SHOW CREATE LIBRARY does not expose original client charset/collation; decoded
+Unicode definitions are explicitly exported under UTF8mb4, with that limitation
+recorded rather than claiming preservation of hidden character context. Binary
+bodies retain the native hexadecimal representation. DDN native exports retain libraries and ROUTINE_LIBRARIES
+edges, ordering captured dependencies or reporting external prerequisites.
+
+Loadable functions have server scope and distinct scalar/aggregate selection,
+STRING/REAL/INTEGER/DECIMAL return types and exact native SONAME. CREATE and DROP
+use their native statements on an independently owned connection verified to
+have no default database; stored-routine ALTER is unavailable. Borrowed user
+sessions are refused. This prevents a stale DROP FUNCTION from falling back to
+a same-name database stored routine when the global registration has vanished. Discovery reads
+persistent mysql.func and runtime performance_schema.user_defined_functions,
+keeping their native registration origins distinct. A runtime function installed
+by a component/plugin is inspect-only through this branch and is removed through
+its owning lifecycle. No native library is downloaded, fabricated or silently
+substituted. A successful registration does not prove the library's own runtime
+services are configured; ordinary SQL exposes native execution diagnostics.
+
+The reference 9.7 source also parses masking policy statements, but its community
+runtime requires an unavailable object-policy component to implement policy DDL.
+Grammar presence alone must not expose a working masking-policy administration
+feature or claim successful policy deployment. Native SQL diagnostics remain
+available; support for an admitted policy component needs its exact native
+catalog/operation contract and qualification rather than a placeholder.

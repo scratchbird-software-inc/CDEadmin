@@ -6,8 +6,8 @@ import re
 from ..providers.mysql_family.mysql_catalog import identifier, SYSTEM
 from .firebird_schema_plan import digest
 
-KINDS = {'database', 'table', 'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event'}
-CONTEXTUAL = {'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event'}
+KINDS = {'database', 'table', 'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event', 'library'}
+CONTEXTUAL = {'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event', 'library'}
 
 
 def _literal(value):
@@ -78,7 +78,7 @@ def build_metadata(document):
     unavailable = {item.get('section') for item in observations if item.get('available') is not True}
     blocks, dependencies, blockers, prerequisites = {}, {}, [], []
     deferred_foreign_keys = []
-    names = {}
+    names, library_names = {}, {}
     def problem(row, reason):
         blockers.append({'resource_id': row['resource_id'], 'kind': row['kind'], 'name': row['name'], 'reason': reason})
     for identity, row in sorted(rows.items()):
@@ -114,8 +114,13 @@ def build_metadata(document):
             if key in names:
                 problem(row, 'Ambiguous native relation name')
             names[key] = identity
+        if kind == 'library':
+            key = (database, name)
+            if key in library_names:
+                problem(row, 'Ambiguous native library name')
+            library_names[key] = identity
     def require(row, schema, name, kind):
-        target = names.get((schema, name))
+        target = (library_names if kind == 'library' else names).get((schema, name))
         if target is None:
             prerequisites.append({'resource_id': row['resource_id'], 'database': schema, 'name': name, 'kind': kind})
         elif target != row['resource_id']:
@@ -153,6 +158,15 @@ def build_metadata(document):
                 require(row, target.get('table_schema'), target.get('table_name'), 'relation')
         if kind == 'trigger':
             require(row, native.get('catalog_row', {}).get('event_object_schema'), native.get('catalog_row', {}).get('event_object_table'), 'table')
+        if kind in {'procedure', 'function'}:
+            if ('ROUTINE_LIBRARIES' in unavailable or not any(
+                    item.get('section') == 'ROUTINE_LIBRARIES' for item in observations)):
+                problem(row, 'Native routine/library dependency observations are unavailable')
+            for target in native.get('library_dependencies', []):
+                require(row, target.get('library_schema'), target.get('library_name'), 'library')
+        if kind == 'library':
+            prerequisites.append({'resource_id': identity, 'kind': 'native-library-runtime-and-owner',
+                'name': block['name'], 'database': database})
         # Routine bodies are preserved whole. Their dynamic/external references
         # cannot be inferred from lexical matches in SQL text.
         if kind in CONTEXTUAL:
