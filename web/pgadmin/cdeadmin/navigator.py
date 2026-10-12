@@ -43,6 +43,8 @@ _KIND_LABELS = {
     'partition': 'Partitions',
     'plugin': 'Extensions and plugins',
     'component': 'Server components',
+    'group-replication': 'Group Replication',
+    'group-replication-member': 'Group members',
     'privilege': 'Roles and grants',
     'procedure': 'Procedures',
     'publication': 'Replication objects',

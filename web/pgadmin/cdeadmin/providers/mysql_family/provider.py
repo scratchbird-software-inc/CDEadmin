@@ -37,7 +37,7 @@ MYSQL_PROFILE = PilotProfile(
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
      'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component',
-     'replication-channel', 'resource-group', 'system-variable', 'session', 'metric'),
+     'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
         'contract_complete': True,
@@ -180,6 +180,9 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_group_replication import OPERATIONS as group_operations
+        common['group-replication']=group_operations | frozenset({'inspect'})
+        common['group-replication-member']=frozenset({'inspect'})
         common['component'] = frozenset({'inspect','create','drop'})
         common['constraint'] = common['constraint'] | frozenset({'enforcement'})
         common['view'] = common['view'] | frozenset({'alter'})
@@ -2073,6 +2076,17 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'library': library,
                 'license': license_name,
             })
+        if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
+            members=optional_records('SELECT * FROM performance_schema.replication_group_members')
+            stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')
+            group={'group_replication_plugin_status':'ACTIVE','members':members,'member_statistics':stats}
+            for field,source in [('configuration','SELECT @@GLOBAL.group_replication_group_name AS group_name, @@GLOBAL.group_replication_single_primary_mode AS single_primary_mode'),
+                *([('communication_protocol','SELECT group_replication_get_communication_protocol() AS value'),
+                   ('write_concurrency','SELECT group_replication_get_write_concurrency() AS value')] if any(str(row.get('member_state')).upper()=='ONLINE' for row in members) else [])]:
+                group[field]=optional_records(source)
+            add('group-replication',[],'Group Replication',group)
+            for member in members:
+                if member.get('member_id'):add('group-replication-member',['Group Replication'],str(member['member_id']),member)
         replication_source = (
             'SELECT CHANNEL_NAME, HOST, PORT FROM performance_schema.'
             'replication_connection_configuration ORDER BY CHANNEL_NAME'
@@ -2319,7 +2333,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {
-            'server', 'replication-channel', 'session', 'lock', 'lock-wait',
+            'server', 'replication-channel', 'group-replication', 'group-replication-member', 'session', 'lock', 'lock-wait',
             'binary-log-status',
         }
         data_kinds = {

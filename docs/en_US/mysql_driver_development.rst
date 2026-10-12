@@ -932,3 +932,33 @@ No component is downloaded or an absent native library silently substituted.
 Successful install/remove is independently rediscovered; native implicit commits
 and component lifecycle side effects are not represented as user rollbackable.
 MariaDB does not inherit this MySQL-only component operation family.
+
+Native Group Replication administration
+---------------------------------------
+
+An active native group_replication plugin admits a distinct server Group
+Replication node, with observed members and member statistics. Its recovery and
+applier channels remain inspect-only through asynchronous-channel controls.
+The group node exposes START/STOP GROUP_REPLICATION; primary election; switching
+single/multi-primary mode; communication protocol and write concurrency; and
+member-action enable, disable and reset functions. Native membership, quorum,
+permissions, action-state and argument checks remain authoritative. Unsupported
+plugin state is not presented as an available group operation.
+
+START may supply an exact native recovery user, sensitive password and default
+authentication plugin. Credentials remain bound values and are not discovery
+facts. Configuration and persisted variables use the existing native variable
+forms. Starting never silently bootstraps a new group, forces membership,
+installs a plugin or alters recovery channels. Explicit native bootstrap is a
+separate operator-controlled variable action; operators must clear it according
+to MySQL's lifecycle. Group operations are independent administration with
+native distributed effects, not rollbackable user transactions.
+
+Forms require exact member UUIDs and bounded native integer/version arguments.
+Protocol/write-concurrency observations use native read functions only when a
+member is ONLINE. Member action reset remains available while the plugin is
+installed, the group is stopped and super_read_only is OFF; native MySQL decides
+applicability. Reset does not silently change that server setting.
+Qualification uses an isolated real group, preserves returned observations and
+removes its own servers/network. Single-node refusal tests do not establish
+multi-member election, mode-change or replicated-data correctness.
