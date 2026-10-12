@@ -59,6 +59,11 @@ def parts(row,sql_mode):
 def address(row,database):
     native=row['native'];identity='mysql:'+json.dumps([database,row['kind'],native.get('navigator_parent_resource_id'),row['name']],ensure_ascii=False,separators=(',',':'))
     parent='mysql:'+json.dumps([database,'database',None,database],ensure_ascii=False,separators=(',',':'))
+    if row['kind']=='database':
+        if (row['name']!=database or row['resource_id']!=parent or row.get('path')!=[database] or
+                native.get('database')!=database or native.get('navigator_parent_resource_id') is not None or row.get('system')!='false'):
+            raise ValueError('Native database root identity is inconsistent')
+        return
     if row['kind']=='trigger':
         facts=native.get('trigger_identity',{})
         if facts.get('database')!=database or not isinstance(facts.get('table'),str):
@@ -140,12 +145,6 @@ def plan(baseline,desired,live):
             raise ValueError('DDN review belongs to another endpoint, database or native server')
     operations=[];blockers=[];ignored=[];conflicts=[]
     for key,after in sorted(desired['rows'].items()):
-        if after['kind']=='database':
-            before=baseline['rows'].get(key)
-            if before is None or not _equal(schema(before),schema(after)) or after['native'].get('mysql_change'):
-                blockers.append({'resource_id':key,'name':after['name'],
-                    'reason':'Database-root changes require explicit native database administration; they cannot be silently omitted from a schema review'})
-            continue
         before,current=baseline['rows'].get(key),live['rows'].get(key)
         intent=after['native'].get('mysql_change')
         if before is not None and _equal(schema(before),schema(after)) and not intent:continue
@@ -156,7 +155,7 @@ def plan(baseline,desired,live):
                 if current is not None:address(current,database)
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
-            if after['kind'] not in {'table','view','library','event','procedure','function','trigger'}:raise ValueError('Native adapter for this object kind is not yet admitted')
+            if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database'}:raise ValueError('Native adapter for this object kind is not yet admitted')
             if before is not None and (current is None or not _equal(schema(before),schema(current))):
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
@@ -168,7 +167,11 @@ def plan(baseline,desired,live):
                     raise ValueError('Removal requires exact native name confirmation')
                 operation='drop'
             else:operation='alter'
-            if after['kind']=='trigger':
+            if after['kind']=='database':
+                from .mysql_database_plan import compile_database
+                source=compile_database(after,operation,database,before)
+                context={name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')}
+            elif after['kind']=='trigger':
                 from .mysql_trigger_plan import compile_trigger
                 source=compile_trigger(after,operation,database)
                 context={name:after['native'].get('definition_context',{}).get(name,identity[name])
@@ -215,4 +218,4 @@ def plan(baseline,desired,live):
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
             (['View/library/event/routine/trigger updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
-             if any(op['kind'] in {'view','library','event','procedure','function','trigger'} and op['operation']!='create' for op in operations) else [])}
+             if any(op['kind'] in {'view','library','event','procedure','function','trigger','database'} and op['operation']!='create' for op in operations) else [])}

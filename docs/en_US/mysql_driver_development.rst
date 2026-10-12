@@ -1164,3 +1164,24 @@ blocks export instead of silently changing execution order. Unselected sibling
 triggers make relative-order coverage partial and must be considered before
 applying to an existing target. The native server validates table availability,
 body semantics, trigger ordering clauses and privileges on execution.
+
+Reviewed selected-database option changes
+-----------------------------------------
+
+The selected live database root can carry explicit
+``mysql_change={action:"alter-options",character_set:"utf8mb4",
+collation:"utf8mb4_0900_ai_ci",encryption:"N"}``. At least one option is required;
+absent options are left unchanged. Character-set/collation names are exact native
+ASCII identifiers, and encryption is Y or N. The original root definition and
+context remain intact as the reviewed baseline; native MySQL validates option
+availability and privileges. Default character-set changes do not convert existing
+table data. Encryption changes do not claim table rewrites or key provisioning.
+
+The single selected database cannot be created, renamed or dropped through this
+schema-plan operation; those remain the explicit database lifecycle forms. A raw
+root definition edit without admitted option intent is a blocker. The native
+ALTER DATABASE statement uses parse-only validation when PREPARE reports 1295,
+and the durable reviewed pipeline rechecks SHOW CREATE DATABASE under a cooperating
+advisory lock before dispatch. External DDL remains unfenced. Native rediscovery
+is shown after application; normalized SHOW CREATE text need not equal the
+unchanged baseline text accompanying explicit option intent.

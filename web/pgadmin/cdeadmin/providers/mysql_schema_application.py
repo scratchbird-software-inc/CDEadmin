@@ -27,11 +27,14 @@ def apply_review(connection, record):
         if before is not None:
             address(before, database)
         address(after, database)
-        if after['kind'] not in {'table','view','library','event','procedure','function','trigger'} or (before is not None and before['kind'] != after['kind']):
+        if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database'} or (before is not None and before['kind'] != after['kind']):
             raise ValueError('Only exact user table/view/library/event/routine definitions are admitted')
         context = operation['context']
-        target = identifier(database) + '.' + identifier(after['name'])
-        if after['kind']=='trigger':
+        target = identifier(database) if after['kind']=='database' else identifier(database) + '.' + identifier(after['name'])
+        if after['kind']=='database':
+            from ..workspace.mysql_database_plan import compile_database
+            compiled=compile_database(after,operation['operation'],database,before)
+        elif after['kind']=='trigger':
             from ..workspace.mysql_trigger_plan import compile_trigger
             if (operation['operation']=='create') != (before is None):
                 raise ValueError('Native trigger operation disagrees with baseline presence')
@@ -80,7 +83,7 @@ def apply_review(connection, record):
         identity = cursor.fetchone()
         if str(identity[0]).split('-')[0] != '9.7.0' or identity[1] != plan['server_uuid'] or identity[2] != database:
             raise ValueError('Native application connection identity changed')
-        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else after['kind'].upper()+' ' if after['kind'] in {'procedure','function','trigger'} else 'TABLE ')+target
+        show_source='SHOW CREATE '+('LIBRARY ' if after['kind']=='library' else 'EVENT ' if after['kind']=='event' else after['kind'].upper()+' ' if after['kind'] in {'procedure','function','trigger','database'} else 'TABLE ')+target
         definition_index=2 if after['kind'] in {'library','procedure','function','trigger'} else 3 if after['kind']=='event' else 1
         absence_code=1360 if after['kind']=='trigger' else 1305 if after['kind'] in {'library','procedure','function'} else 1539 if after['kind']=='event' else 1146
         if before is None:
@@ -93,8 +96,8 @@ def apply_review(connection, record):
             else:
                 raise ValueError('Native creation target already exists')
         else:
-            if after['kind'] in {'view','library','event','procedure','function','trigger'}:
-                advisory='sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:40]
+            if after['kind'] in {'view','library','event','procedure','function','trigger','database'}:
+                advisory=('sr-ddn-'+after['kind']+':'+hashlib.sha256(target.encode('utf8')).hexdigest()[:48])[:64]
                 cursor.execute('SELECT GET_LOCK(%s,2)',(advisory,))
                 if cursor.fetchone()[0]!=1:
                     advisory=None

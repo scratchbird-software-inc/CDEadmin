@@ -42,7 +42,9 @@ def validate(connection,plan):
                 parsed_trigger=(code==1295 and operation.get('kind')=='trigger' and
                     operation.get('operation') in {'create','drop'} and
                     operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
-                parsed=parsed_view or parsed_routine or parsed_trigger
+                parsed_database=(code==1295 and operation.get('kind')=='database' and
+                    operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER DATABASE '))
+                parsed=parsed_view or parsed_routine or parsed_trigger or parsed_database
                 results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed,
                     'preparation_supported':False,'validation_stage':'parse-only' if parsed else 'rejected',
                     'error_code':code,'sqlstate':getattr(error,'sqlstate',None),'error_type':type(error).__name__})
