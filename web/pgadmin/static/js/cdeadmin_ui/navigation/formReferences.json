@@ -5549,6 +5549,10 @@
     "mysql-server-catalog": {
       "reference": "SR-F-001400",
       "title": "MySQL server inventory and explicit database DDN collection"
+    },
+    "mysql-test-data": {
+      "reference": "SR-F-001401",
+      "title": "MySQL native test-data recipe"
     }
   }
 }

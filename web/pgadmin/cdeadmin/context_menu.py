@@ -1196,6 +1196,9 @@ def database_target_context_actions(
             'open_workspace', icon='action.export', group='database',
             priority=44, arguments={**base, 'tab': 'export'},
         ))
+        actions.append(_action('database.mysql.test_data', 'Generate MySQL test data...',
+            'open_workspace', icon='action.insert', group='database', priority=45,
+            arguments={**base, 'tab': 'mysql-test-data'}))
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',
              'action.backup', 'admin', 'backup'),

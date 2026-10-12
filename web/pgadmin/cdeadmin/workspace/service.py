@@ -649,6 +649,21 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_test_data(self, server, request):
+        from .firebird_catalog_export import build_export
+        from .mysql_test_data import generate, template
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+            raise ProviderWorkspaceError('Invalid MySQL test-data request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        try:
+            captured = provider.capture_catalog(endpoint['route'])
+            model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mysql', native_model=True)
+            return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_data_capture(self, server, request):
         if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
             raise ProviderWorkspaceError('Invalid MySQL relation data request')

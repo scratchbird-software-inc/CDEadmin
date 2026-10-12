@@ -441,3 +441,27 @@ use the same staged path; foreign-key checking is never disabled. External
 referenced tables remain explicit prerequisites. Views and trigger/routine
 bodies retain their native dependency/context handling. This is metadata export,
 not an authorization to replay imported DDN or an atomic migration.
+
+Native test-data generation
+---------------------------
+
+An owner selects a registered MySQL database and explicitly loads visible user
+tables into a bounded recipe. Recipe generation runs on the server and performs
+no SQL writes or data sampling. The recipe binds endpoint/database identities,
+seed, exact native table IDs and column names. Sources include constants,
+native defaults, exact sequential/random integers, bounded choice/file arrays,
+references to explicitly generated parent columns, captured AUTO_INCREMENT
+parent values and existing-row scalar selections with an explicit unique order.
+Generated columns accept defaults only. Native types, constraints, privileges,
+triggers, transaction and autocommit behavior remain MySQL's authority.
+
+The output is a reviewable SQL script for the shared Query Tool. It inserts one
+row at a time, captures AUTO_INCREMENT values immediately with LAST_INSERT_ID,
+and never invents INSERT RETURNING support or toggles foreign-key checks. Parent
+references use generated row positions; empty existing selections yield NULL.
+Existing selections execute only when the user runs the script and can change
+between statements, especially under autocommit. The generator does not claim
+that MyISAM writes, sequence allocation or trigger effects are rollback-safe.
+Limits: 32 tables, 1000 rows per table, 5000 total rows, 4 MiB recipe and 1 MiB
+script. Recipes and downloaded scripts may include user data. SQL text literals
+use explicit UTF-8 hexadecimal conversion, independent of SQL-mode escaping.

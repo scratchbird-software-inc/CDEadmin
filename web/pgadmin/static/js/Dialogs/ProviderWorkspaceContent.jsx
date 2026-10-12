@@ -25,6 +25,7 @@ import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
 import MySQLCatalog from './MySQLCatalog';
 import MySQLServerCatalog from './MySQLServerCatalog';
+import MySQLTestData from './MySQLTestData';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -7765,6 +7766,7 @@ export default function ProviderWorkspaceContent({
           'firebird-events': gettext('Native Events'),
           'firebird-templates': gettext('Native Code Templates'),
           'firebird-test-data': gettext('Generate Test Data'),
+          'mysql-test-data': gettext('MySQL Test Data'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -8084,6 +8086,8 @@ export default function ProviderWorkspaceContent({
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
+      {workspace && tab === 'mysql-test-data' && workspace.endpoint?.profile_id === 'mysql-native' && queryDatabaseTargetId &&
+        <MySQLTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
           <MySQLServerCatalog post={post} />)}
@@ -8181,7 +8185,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,
