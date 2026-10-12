@@ -538,3 +538,19 @@ Field omissions and view filtering never remove columns. Unknown/new/renamed
 field identities require explicit native reconciliation; unsupported properties
 are not silently treated as deployed changes. Native PREPARE remains required:
 lexical clause editing is not a replacement grammar or deployment authority.
+
+Native resource-group administration
+------------------------------------
+
+MySQL resource groups expose structured create, alter, explicit thread
+assignment and drop operations. Creation selects native USER/SYSTEM type,
+optional VCPU numbers/ranges, native thread priority and enabled state. Alteration
+preserves omitted settings and exposes ENABLE/DISABLE with explicit FORCE.
+Assignment requires one or more exact performance_schema thread IDs; it never
+silently assigns an independent helper connection. Built-in groups cannot be
+removed through these forms. Native RESOURCE_GROUP_ADMIN/RESOURCE_GROUP_USER,
+platform support, CPU availability and operating-system scheduling privileges
+remain authoritative; a native refusal is not reported as successful change.
+FORCE may move assigned threads back to the native default group. These server
+operations commit independently of an interactive user's transaction. MariaDB
+must not inherit the MySQL resource-group syntax or controls.

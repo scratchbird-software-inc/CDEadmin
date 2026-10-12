@@ -180,6 +180,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['resource-group'] = frozenset({'inspect', 'create', 'alter', 'assign', 'drop'})
         common['role'] = common['role'] | frozenset({'grant', 'revoke', 'set_default'})
         common.pop('sequence')
         common['database'] = common['database'] | frozenset({

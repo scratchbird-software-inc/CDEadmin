@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 49,
+    "authoritative_task_count": 53,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -61,6 +61,10 @@
       "visual_admin.privilege.revoke",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
+      "visual_admin.resource-group.alter",
+      "visual_admin.resource-group.assign",
+      "visual_admin.resource-group.create",
+      "visual_admin.resource-group.drop",
       "visual_admin.role.create",
       "visual_admin.role.drop",
       "visual_admin.role.grant",
@@ -82,7 +86,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 49,
+    "implemented_task_count": 53,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44477,6 +44481,24 @@
       "format": "scratchrobin.native-role-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "5f0bffb4ce8d3816933c773aa59d25bdcee0c5322a9619668882a72285e0d2f0"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-resource-groups-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_resource_group_qualification.py",
+      "format": "scratchrobin.native-resource-group-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "f11049a9e35efb8bf05a4adfeecf939877c6094b5217a8ec935f00df8a3bd71c"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-resource-groups-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_resource_group_qualification.py",
+      "format": "scratchrobin.native-resource-group-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "f11049a9e35efb8bf05a4adfeecf939877c6094b5217a8ec935f00df8a3bd71c"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -44932,6 +44954,62 @@
         "DROP PROCEDURE `cde_live_f95bb4ef1e8e`.`cde_editor_procedure`"
       ],
       "task_id": "visual_admin.procedure.drop"
+    },
+    {
+      "task_id": "visual_admin.resource-group.alter",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER RESOURCE GROUP `sr_group_787456a3c7ee``é` DISABLE FORCE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER RESOURCE GROUP `sr_group_787456a3c7ee``é` DISABLE FORCE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.assign",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "SET RESOURCE GROUP `sr_group_787456a3c7ee``é` FOR 241",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SET RESOURCE GROUP `sr_group_787456a3c7ee``é` FOR 241"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.create",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "CREATE RESOURCE GROUP `sr_group_787456a3c7ee``é` TYPE=USER THREAD_PRIORITY=0 ENABLE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE RESOURCE GROUP `sr_group_787456a3c7ee``é` TYPE=USER THREAD_PRIORITY=0 ENABLE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.drop",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP RESOURCE GROUP `sr_group_787456a3c7ee``é` FORCE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP RESOURCE GROUP `sr_group_787456a3c7ee``é` FORCE"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",

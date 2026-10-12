@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_roles
+from . import mysql_roles, mysql_resource_groups
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +270,13 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
+                resource['operations'] = [item for item in resource.get('operations', [])
+                    if item['operation_id'] not in mysql_resource_groups.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_resource_groups.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': operation != 'create',
+                    'confirmation_required': operation != 'create',
+                } for operation in sorted(mysql_resource_groups.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'role':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_roles.OPERATIONS] + [{
@@ -624,6 +631,13 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if (self.dialect.engine_id == 'mysql' and resource_kind == 'resource-group' and
+                operation_id in mysql_resource_groups.OPERATIONS):
+            try:
+                mysql_resource_groups.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_resource_group', 'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and resource_kind == 'role' and
                 operation_id in mysql_roles.OPERATIONS):
             try:
@@ -3584,6 +3598,11 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'resource-group' and
+                operation in mysql_resource_groups.OPERATIONS):
+            return {'statements': [mysql_resource_groups.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Resource groups operate on native server threads independently of the interactive transaction.',
+                                 'FORCE can move assigned threads to the native default group. Native platform and scheduling privileges apply.']}
         if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
@@ -4830,6 +4849,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
+            return value
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
             return value
@@ -5078,6 +5099,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
+            return mysql_resource_groups.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:
             return mysql_roles.form(operation, self._field)
         title = operation.replace('_', ' ').title()
