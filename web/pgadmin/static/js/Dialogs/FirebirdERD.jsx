@@ -68,11 +68,11 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       capture={() => ({snapshot: snapshot(), baseline: baseline.current})}
       onLoad={value => {setDraft(value.snapshot); baseline.current = value.baseline;
         selected.current = {entry: value.snapshot.entry, view: value.snapshot.view}; setError(null);}} />
-    {post && onReview && <Button disabled={editing || merging || reviewing || !generation} onClick={async () => {
+    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && engine !== 'mysql')} onClick={async () => {
       const serial = ++fileToken.current; setReviewing(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {generation,
+        const result = await post({action: `${engine}_relational_review`, request: {...(engine === 'mysql' ? {database_target_id: databaseTargetId} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);

@@ -674,6 +674,16 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'original', 'snapshot'}:
+            raise ProviderWorkspaceError('Original and edited MySQL relational designs are required')
+        catalog = self.mysql_catalog(server, {'database_target_id': request['database_target_id']})
+        try:
+            return handoff(catalog['snapshot'], request['original'], request['snapshot'], engine='mysql')
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_schema_application(self, server, action, request):
         from dataclasses import asdict
         from .mysql_schema_apply import MySQLSchemaApplications

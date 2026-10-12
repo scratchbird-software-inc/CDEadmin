@@ -65,3 +65,13 @@ describe('Native relational DDN handoff', () => {
   });
 
 });
+
+it('binds MySQL relational review to the registered database target without Firebird generation admission', async () => {
+  const Component = withTheme(FirebirdERD);
+  const diagram = {snapshot: {format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before',desired:'after'}));
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',original:diagram.snapshot,snapshot:diagram.snapshot}});
+});

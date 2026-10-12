@@ -1191,3 +1191,12 @@ native objects require explicit catalog design reconciliation. Duplicate or
 foreign UIDs, changed adapter-only foreign-key column labels and unsupported
 definitions block the handoff. Preparing this handoff executes no metadata SQL;
 normal preview, durable review, confirmation and drift checks remain mandatory.
+
+MySQL's relational handoff additionally admits explicit datatype, nullable and
+column-description field properties for existing native table columns. It
+rewrites the corresponding preserved SHOW CREATE clause and then uses native
+PREPARE, the ordinary three-way review and separately confirmed application.
+Field omissions are presentation only. Native and graphical changes to the same
+clause must agree; new/renamed field identities need explicit reconciliation.
+This scoped adapter supersedes the presentation-only rule for those properties
+on MySQL; it does not change the native meaning of other engines' diagram fields.

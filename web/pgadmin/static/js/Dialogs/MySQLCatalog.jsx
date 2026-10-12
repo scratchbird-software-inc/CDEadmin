@@ -217,7 +217,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         value={review.outcome.native_definition} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
     </Box>}
     {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
-      <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId} />
+      <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId}
+        onReview={handoff => {serial.current++; setBaseline(handoff.baseline); setSource(handoff.desired);
+          setSchemaPlan(null); setReview(null); setConfirmed(false); setDisplay('inventory'); setView(result.snapshot.view);}} />
     </Box>}
     {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,

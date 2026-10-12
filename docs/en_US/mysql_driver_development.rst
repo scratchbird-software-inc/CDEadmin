@@ -523,3 +523,18 @@ an identical drop/recreate incarnation cannot be distinguished by these facts.
 Table locking fences concurrent operations during revalidation and execution,
 not the earlier documentary capture. Permission errors and lock timeouts are
 not an empty catalog. Cleanup always retires the independent connection.
+
+Relational DDN native review handoff
+----------------------------------
+
+MySQL relational designs bind table/view native facts and field UIDs to the exact
+endpoint, database target and object. An explicit handoff reconstructs baseline
+and desired catalog DDN against a fresh native capture. Edited native definitions
+follow the ordinary three-way preview/review path. Field datatype, nullability
+and description edits on an existing native table update the corresponding exact
+SHOW CREATE column clause, preserving other attributes, defaults, expressions,
+indexes and options. Native and graphical edits to the same clause must agree.
+Field omissions and view filtering never remove columns. Unknown/new/renamed
+field identities require explicit native reconciliation; unsupported properties
+are not silently treated as deployed changes. Native PREPARE remains required:
+lexical clause editing is not a replacement grammar or deployment authority.

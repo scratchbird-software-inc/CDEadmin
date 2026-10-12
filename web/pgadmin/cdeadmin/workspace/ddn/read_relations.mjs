@@ -7,26 +7,36 @@ try {
     input += chunk;
     if (Buffer.byteLength(input) > 16 * 1024 * 1024) throw new Error();
   }
-  const snapshot = JSON.parse(input), rows = [], fields = [], ids = new Set();
-  const visit = node => {
-    if (node.type === 'field' && typeof node.props?.uid === 'string') fields.push(node.props.uid);
+  const engine = process.argv[2] || 'firebird';
+  if (!['firebird', 'mysql'].includes(engine)) throw new Error();
+  const snapshot = JSON.parse(input), rows = [], fields = [], fieldRecords = [], ids = new Set();
+  const visit = (node, parent = null) => {
+    if (engine === 'mysql' && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
+    if (node.type === 'field' && typeof node.props?.uid === 'string') {
+      fields.push(node.props.uid);
+      fieldRecords.push({uid: node.props.uid, parent_resource_id: parent, label: node.label,
+        property_names: Object.keys(node.props || {}),
+        properties: Object.fromEntries(['nullable', 'description', 'datatype'].filter(key =>
+          Object.prototype.hasOwnProperty.call(node.props, key)).map(key => [key, node.props[key]]))});
+    }
     const facts = node.props?.x_record;
     if (facts?.resource_id !== undefined) {
       if (typeof facts.resource_id !== 'string' || typeof facts.native_json !== 'string' ||
           typeof node.props.uid !== 'string' || ids.has(facts.resource_id)) throw new Error();
       ids.add(facts.resource_id);
+      parent = facts.resource_id;
       rows.push({resource_id: facts.resource_id, uid: node.props.uid, native_json: facts.native_json});
       if (rows.length > 20000) throw new Error();
     }
-    for (const child of node.children || []) visit(child);
+    for (const child of node.children || []) visit(child, parent);
   };
   for (const [name, source] of Object.entries(snapshot.files)) {
     const parsed = runtime.parse(source, name);
-    if (parsed.module !== 'scratchrobin.firebird.relations' || parsed.imports.length) throw new Error();
+    if (parsed.module !== `scratchrobin.${engine}.relations` || parsed.imports.length) throw new Error();
     for (const node of parsed.declarations) if (node.type === 'data') visit(node);
   }
-  process.stdout.write(JSON.stringify({rows, fields}));
+  process.stdout.write(JSON.stringify({rows, fields, field_records: fieldRecords}));
 } catch {
-  process.stderr.write('Invalid or unsupported Firebird relational DDN document.');
+  process.stderr.write('Invalid or unsupported native relational DDN document.');
   process.exitCode = 1;
 }
