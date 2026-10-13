@@ -763,6 +763,54 @@ def test_reviewed_struct_field_drop_preserves_other_nested_values(tmp_path):
         provider.client.close()
 
 
+def test_reviewed_nested_struct_field_add_and_drop_preserve_values(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('ALTER TABLE existing ADD COLUMN shape '
+        'STRUCT(child STRUCT(a INTEGER, b VARCHAR), z INTEGER)')
+    connection.execute("INSERT INTO existing VALUES (1, {'child': {'a': 7, "
+        "'b': 'kept'}, 'z': 9})")
+    connection.close()
+    try:
+        for action, path, wanted_type in (
+            ('add-nested-field', ['child', 'c'],
+                'STRUCT(child STRUCT(a INTEGER, b VARCHAR, c INTEGER), z INTEGER)'),
+            ('drop-nested-field', ['child', 'a'],
+                'STRUCT(child STRUCT(b VARCHAR, c INTEGER), z INTEGER)'),
+        ):
+            observed = provider.capture_catalog(route)
+            baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+                target_id='file-1', generation=observed['generation'], refreshed=True,
+                engine='duckdb', native_model=True)
+            column = next(row for row in baseline['rows'].values()
+                if row['kind'] == 'column' and row['name'] == 'shape')
+            desired = deepcopy(baseline)
+            changed = desired['rows'][column['resource_id']]['native']
+            changed['catalog_metadata']['data_type'] = wanted_type
+            changed['duckdb_change'] = {'action': action, 'field_path': path}
+            if action == 'add-nested-field':
+                changed['duckdb_change']['data_type'] = 'INTEGER'
+            preview = plan(baseline, desired, baseline)
+            assert preview['application_supported'], preview['blockers']
+            assert '.'.join('"' + part + '"' for part in ['shape', *path]) in (
+                preview['operations'][0]['source'])
+            applications = DuckDBSchemaApplications(
+                tmp_path/f'{action}.json', clock=lambda: 100)
+            receipt = applications.review(preview, baseline, desired,
+                'owner', 'binding', 'file-1')
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+            assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+            assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT shape FROM existing').fetchall() == [
+            ({'child': {'b': 'kept', 'c': None}, 'z': 9},)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('kind', ('type', 'macro'))
 def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
     duckdb = pytest.importorskip('duckdb')

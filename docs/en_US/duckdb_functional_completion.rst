@@ -156,7 +156,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations including
-  top-level STRUCT field addition or removal, native
+  STRUCT field addition or removal, native
   enum extension, reviewed full type replacement, reviewed sequence replacement,
   single-overload scalar or
   table macro replacement and complete macro overload replacement,
@@ -181,13 +181,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   structure with exactly that one named field and native type appended; no
   other column property may change. The reviewed statement uses DuckDB's
   ``ALTER TABLE ... ADD COLUMN struct_column.field`` grammar, and fresh
-  discovery must match the complete resulting native column type. Nested
-  field edits remain blocked until their complete diff and preservation rules
-  are qualified. A top-level field removal requires an explicit ``drop-field``
+  discovery must match the complete resulting native column type. A top-level
+  field removal requires an explicit ``drop-field``
   intent naming one observed field and an unchanged remaining type. At least
   one field must remain. DuckDB's ``ALTER TABLE ... DROP COLUMN
   struct_column.field RESTRICT`` is reviewed as one statement and the complete
   resulting native type is checked after commit.
+  Nested ``STRUCT`` paths may use ``add-nested-field`` or
+  ``drop-nested-field`` with a complete simple-identifier path inside the
+  column. Each path segment must name an observed nested ``STRUCT`` field;
+  the desired type must equal exactly the old type with that one terminal
+  field added or removed. Existing nested values must survive native execution,
+  and fresh discovery verifies the whole column type. A nested parent cannot
+  be emptied by removal. Combined field edits remain blocked.
   An enum extension requires an observed native ENUM, preserves every existing
   label in order and appends distinct new labels. It uses one reviewed native
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already

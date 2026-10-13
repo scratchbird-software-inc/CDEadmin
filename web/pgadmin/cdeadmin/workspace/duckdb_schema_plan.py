@@ -293,6 +293,64 @@ def _validated_struct_field_drop(before, after, change):
     return source
 
 
+def _nested_struct_result(data_type, path, *, add_type=None):
+    members = _struct_members(data_type)
+    selected = [index for index, member in enumerate(members)
+                if re.match(re.escape(path[0]) + r'\s+', member)]
+    if len(path) == 1:
+        if add_type is not None:
+            if selected:
+                raise ValueError('Nested STRUCT field already exists')
+            members.append(path[0] + ' ' + add_type)
+        else:
+            if len(selected) != 1 or len(members) == 1:
+                raise ValueError('Nested STRUCT removal requires one field and a nonempty parent')
+            members.pop(selected[0])
+    else:
+        if len(selected) != 1:
+            raise ValueError('Nested STRUCT path must name one observed parent field')
+        match = re.fullmatch(re.escape(path[0]) + r'\s+(.+)', members[selected[0]], re.S)
+        members[selected[0]] = (path[0] + ' ' +
+            _nested_struct_result(match.group(1), path[1:], add_type=add_type))
+    return 'STRUCT(' + ', '.join(members) + ')'
+
+
+def _validated_nested_struct_change(before, after, change):
+    action = change.get('action')
+    add = action == 'add-nested-field'
+    expected_keys = {'action', 'field_path', 'data_type'} if add else {'action', 'field_path'}
+    path = change.get('field_path')
+    if (action not in {'add-nested-field', 'drop-nested-field'} or
+            set(change) != expected_keys or not isinstance(path, list) or
+            not 2 <= len(path) <= 8 or
+            any(not isinstance(part, str) or
+                not re.fullmatch(r'[a-z_][a-z0-9_]*', part) for part in path)):
+        raise ValueError('Nested STRUCT edit requires one exact simple-identifier path')
+    field_type = _native_column_type(change['data_type']) if add else None
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    old_type = _native_column_type(previous['catalog'].get('data_type'))
+    new_type = _native_column_type(desired['catalog'].get('data_type'))
+    if new_type != _nested_struct_result(old_type, path, add_type=field_type):
+        raise ValueError('Nested STRUCT edit must change exactly one terminal field')
+    for key in _TYPE_FIELDS:
+        previous['catalog'].pop(key, None)
+        desired['catalog'].pop(key, None)
+    if not _equal(previous, desired):
+        raise ValueError('Review other native column edits separately')
+    source = ('ALTER TABLE ' + '.'.join(_quote(part) for part in after['path'][:3]) +
+              (' ADD COLUMN ' if add else ' DROP COLUMN ') +
+              '.'.join(_quote(part) for part in [after['name'], *path]) +
+              (' ' + field_type if add else ' RESTRICT'))
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the nested STRUCT edit') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native nested STRUCT edit is required')
+    return source
+
+
 def _validated_enum_extension(before, after, target):
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
@@ -767,6 +825,10 @@ def plan(baseline, desired, live):
                   change.get('action') == 'drop-field'):
                 operation = 'alter'
                 source = _validated_struct_field_drop(before, after, change)
+            elif (after['kind'] == 'column' and isinstance(change, dict) and
+                  change.get('action') in {'add-nested-field', 'drop-nested-field'}):
+                operation = 'alter'
+                source = _validated_nested_struct_change(before, after, change)
             else:
                 raise ValueError('Alteration requires a qualified native adapter; only explicit view replacement is previewed')
             operation_record = {'resource_id': identity, 'kind': after['kind'],
@@ -782,7 +844,7 @@ def plan(baseline, desired, live):
                     'nullable': True,
                     'default': metadata.get('default'),
                 }
-            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field', 'drop-field'}:
+            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field', 'drop-field', 'add-nested-field', 'drop-nested-field'}:
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
             elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:
