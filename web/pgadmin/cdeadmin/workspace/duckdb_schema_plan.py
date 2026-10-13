@@ -432,6 +432,54 @@ def view_query_tokens(source):
     return None
 
 
+def create_definition_tokens(source, kind):
+    """Strictly compare the native body of a created table or index.
+
+    DuckDB rewrites the qualified target in its catalog SQL. If the submitted
+    form cannot be compared, the committed creation must remain unverified.
+    """
+    if kind not in {'table', 'index'} or not isinstance(source, str):
+        return None
+    import duckdb
+    try:
+        positions = duckdb.tokenize(source)
+    except duckdb.Error:
+        return None
+    encoded = source.encode('utf8')
+    tokens = []
+    for index, (offset, token_kind) in enumerate(positions):
+        following = positions[index + 1][0] if index + 1 < len(positions) else len(encoded)
+        word = encoded[offset:following].decode('utf8').strip()
+        if (token_kind == duckdb.token_type.identifier and
+                len(word) >= 2 and word[0] == word[-1] == '"'):
+            word = word[1:-1].replace('""', '"')
+        if token_kind in {duckdb.token_type.keyword, duckdb.token_type.identifier}:
+            word = word.casefold()
+        tokens.append((str(token_kind), word))
+    if not tokens or tokens[0] != (str(duckdb.token_type.keyword), 'create'):
+        return None
+    kind_index = next((index for index, token in enumerate(tokens)
+        if token == (str(duckdb.token_type.keyword), kind)), None)
+    if kind_index is None:
+        return None
+    unique = ((str(duckdb.token_type.keyword), 'unique') in tokens[:kind_index])
+    on_seen = False
+    for index in range(kind_index + 1, len(tokens)):
+        token = tokens[index]
+        if token == (str(duckdb.token_type.keyword), 'as') and kind == 'table':
+            return None
+        if token == (str(duckdb.token_type.keyword), 'on'):
+            on_seen = True
+        if token == (str(duckdb.token_type.operator), '('):
+            if kind == 'index' and not on_seen:
+                return None
+            body = tokens[index:]
+            if body and body[-1] == (str(duckdb.token_type.operator), ';'):
+                body = body[:-1]
+            return (unique, tuple(body)) if kind == 'index' else tuple(body)
+    return None
+
+
 def _validated_macro_replacement(before, after, target, change):
     if change != {'action': 'replace-definition',
                    'parameters_without_defaults_confirmed': True}:

@@ -6,7 +6,9 @@ import pytest
 
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb.provider import _resource_id
-from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan, view_query_tokens
+from pgadmin.cdeadmin.workspace.duckdb_schema_plan import (
+    create_definition_tokens, plan, view_query_tokens,
+)
 
 
 def row(kind, path, *, ddl=None, change=None):
@@ -78,6 +80,28 @@ def test_view_postcommit_body_comparison_ignores_header_and_terminal_separator()
     assert view_query_tokens(
         'CREATE OR REPLACE VIEW "file"."main"."report" (renamed) AS SELECT 2 AS x'
     ) != view_query_tokens(observed)
+
+
+def test_created_table_and_index_definition_tokens_ignore_native_target_rewriting():
+    pytest.importorskip('duckdb')
+    assert create_definition_tokens(
+        'CREATE TABLE "file"."main"."facts" (id INTEGER, amount DECIMAL(18,2))',
+        'table') == create_definition_tokens(
+        'CREATE TABLE facts(id INTEGER, amount DECIMAL(18,2));', 'table')
+    assert create_definition_tokens(
+        'CREATE INDEX "facts_amount" ON "file"."main"."facts"(amount)',
+        'index') == create_definition_tokens(
+        'CREATE INDEX facts_amount ON facts(amount);', 'index')
+    assert create_definition_tokens(
+        'CREATE TABLE "file"."main"."facts" (id INTEGER)', 'table') != (
+        create_definition_tokens('CREATE TABLE facts(id VARCHAR);', 'table'))
+    assert create_definition_tokens(
+        'CREATE INDEX "facts_amount" ON "file"."main"."facts"(amount)', 'index') != (
+        create_definition_tokens('CREATE INDEX facts_amount ON facts(id);', 'index'))
+    assert create_definition_tokens(
+        'CREATE UNIQUE INDEX "facts_amount" ON "file"."main"."facts"(amount)', 'index') != (
+        create_definition_tokens('CREATE INDEX facts_amount ON facts(amount);', 'index'))
+    assert create_definition_tokens('CREATE TABLE facts AS SELECT (1)', 'table') is None
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

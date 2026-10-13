@@ -66,6 +66,11 @@ def apply_review(provider, route, record):
                         expected = view_query_tokens(operation['source'])
                         verified = (expected is not None and expected == view_query_tokens(
                             current['native'].get('ddl')))
+                    if verified and operation['kind'] in {'table', 'index'}:
+                        from ...workspace.duckdb_schema_plan import create_definition_tokens
+                        expected = create_definition_tokens(operation['source'], operation['kind'])
+                        verified = (expected is not None and expected == create_definition_tokens(
+                            current['native'].get('ddl'), operation['kind']))
                     if verified and operation['kind'] == 'column':
                         metadata = current['native'].get('catalog_metadata', {})
                         verified = all(metadata.get(key) == value for key, value in
