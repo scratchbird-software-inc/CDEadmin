@@ -9,6 +9,7 @@ import {firebirdSQLConfig} from './firebirdSyntax';
 import {duckdbSQLConfig} from './duckdbSyntax';
 import {firebirdExecution} from './firebirdExecution';
 import {duckdbExecution} from './duckdbExecution';
+import {readSourceFile, saveSourceFile} from './scriptFiles';
 
 export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}'}) {
   const [syntax, setSyntax] = useState(true);
@@ -40,6 +41,17 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const generation = useRef(0);
   const mounted = useRef(true);
   const inFlight = useRef(false);
+  const fileGeneration = useRef(0);
+  useEffect(() => {fileGeneration.current++;}, [source, nativeProfile, databaseTargetId, disabled, running, plan]);
+  const loadFile = async event => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file || disabled || running || plan?.occurrence_id || plan?.unresolved) return;
+    const token = ++fileGeneration.current;
+    try {
+      const text = await readSourceFile(file);
+      if (mounted.current && token === fileGeneration.current) {onChange(text); setError('');}
+    } catch (failure) {if (mounted.current && token === fileGeneration.current) setError(failure.message);}
+  };
   const completionGeneration = useRef(0);
   useEffect(() => {
     completionGeneration.current++; setCompletion(null);
@@ -79,7 +91,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       if (mounted.current && current === generation.current) {setPrepared(null); setError(failure.message);}
     } finally {if (mounted.current) setChecking(false);}
   };
-  useEffect(() => {generation.current++;setValidation(null);}, [source, language?.language_profile]);
+  useEffect(() => {generation.current++;setValidation(null);setPrepared(null);}, [source, language?.language_profile, databaseTargetId]);
   useEffect(() => {mounted.current=true;return () => {mounted.current=false;generation.current++;};}, []);
   const send = (payload) => post({...payload, database_target_id: databaseTargetId});
   const inspect = async (script, executionSource=source) => {
@@ -126,13 +138,22 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       if(mounted.current){setPlan(result);setRunning(result.state==='waiting');onScriptLock(result.state==='waiting' || Boolean(result.unresolved));}
     } catch(e){if(mounted.current)setError(e.message);}
   };
-  return <FormReference formKey="query-editor">
-    <Box component="details"><summary>Source tools</summary>
+  return <FormReference formKey="query-editor" sx={{display: 'flex', flexDirection: 'column', height: '50%',
+    flex: '0 0 auto', minHeight: 160, maxHeight: '60%', resize: 'vertical', overflow: 'auto'}}>
+    <Box component="details" sx={{flexShrink: 0, maxHeight: '45%', overflow: 'auto'}}><summary>Source tools</summary>
+      <Button component="label" disabled={disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)}>
+        Load source file<input hidden type="file" accept={jsonLanguage ? '.json,.txt,application/json,text/plain' : '.sql,.txt,text/plain,application/sql'}
+          aria-label="Load source file" disabled={disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)} onChange={loadFile} />
+      </Button>
+      <Button disabled={!source} onClick={() => {
+        try {saveSourceFile(source, (nativeProfile.replace(/[^a-z0-9_-]/gi, '_') || 'query') + (jsonLanguage ? '.json' : '.sql')); setError('');}
+        catch (failure) {setError(failure.message);}
+      }}>Save source file</Button>
       {(firebird || nativeProfile === 'duckdb-sql') && <Box>
         {firebird && <><Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
           <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button></>}
         {['selection', 'current', 'from-cursor'].map(mode => <Button key={mode}
-          disabled={disabled || running || !onExecute || Boolean(plan?.occurrence_id)}
+          disabled={disabled || checking || running || !onExecute || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)}
           onClick={() => prepareExecution(mode)}>{({'selection': 'Prepare selection', 'current': 'Prepare current statement', 'from-cursor': 'Prepare from cursor'})[mode]}</Button>)}
       </Box>}
       {(firebird || nativeProfile === 'duckdb-sql') && prepared?.original === source && <Box sx={{my: 1}}>
@@ -141,7 +162,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
         No SQL has been executed by preparing this source.</Alert>
         <TextField multiline fullWidth minRows={3} maxRows={10} label="Prepared execution source"
           value={prepared.source} InputProps={{readOnly: true}} />
-        <Button disabled={disabled || running || !onExecute} onClick={() => {
+        <Button disabled={disabled || checking || running || !onExecute} onClick={() => {
           const value = prepared; setPrepared(null);
           if (!firebird && value.scriptMode) inspect(true, value.source);
           else onExecute(value.source, value.scriptMode);
@@ -158,12 +179,12 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       </FormReference>}
       {error && <Alert severity="error">{error}</Alert>}
       {validation && <Box role="status">
-        <Alert severity={validation.diagnostics?.length ? 'warning' : 'info'}>{validation.scope || validation.authority} Full grammar validation: {validation.grammar_valid===true ? 'confirmed by native validator' : 'not certified'}.</Alert>
+        <Alert severity={validation.diagnostics?.length ? 'warning' : 'info'}>{validation.scope || validation.authority} SQL grammar: {validation.grammar_valid===true ? 'accepted by the reported parser' : validation.grammar_valid===false ? 'rejected' : 'not checked'}.</Alert>
         {(validation.diagnostics || []).map((d,i)=><Alert key={i} severity="error">{d.line}:{d.column} — {d.message}</Alert>)}
       </Box>}
     </Box>
     {syntax ? <>
-      <Box sx={{height: 'clamp(120px, 22vh, 220px)', minHeight: 100, maxHeight: '60vh', resize: 'vertical', overflow: 'auto'}}><CodeEditor label="Query source" value={source} onChange={onChange}
+      <Box sx={{flex: '1 1 auto', minHeight: 100, overflow: 'auto'}}><CodeEditor label="Query source" value={source} onChange={onChange}
         language={jsonLanguage ? 'json' : firebird ? 'firebird' : 'sql'} sqlConfig={firebird ? sqlConfig : nativeProfile === 'duckdb-sql' ? duckdbConfig : nativeConfig} autocomplete autocompleteOnKeyPress
         currEditor={editor => {syntaxEditor.current = editor;}}
         formatOverride={firebird ? format : undefined} disabled={disabled || running || Boolean(plan?.occurrence_id)} /></Box>
