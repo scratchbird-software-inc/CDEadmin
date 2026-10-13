@@ -77,6 +77,17 @@ MARIA-COMP-05: Native DDN roundtrip
   are bounded observational documents, not atomic snapshots or permission to
   execute imported definitions. Sequence inspection must not advance values.
 
+  Server inventory reads explicitly named credential-free columns from native
+  SCHEMATA, mysql.user, roles_mapping, USER_PRIVILEGES, PLUGINS, CHARACTER_SETS,
+  COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES and mysql.servers. Distinguish roles
+  using native is_role. Plugin identity includes native name and plugin type;
+  MariaDB uuid DATA TYPE and FUNCTION plugins are separate entries. Preserve
+  the native name for commands. Do not read authentication_string, Password, global_priv
+  JSON or arbitrary server-link Options. Omitted confidential link options are
+  disclosed as a coverage limit. Native max_statement_time and lock_wait_timeout
+  bound probes. Database expansion requires explicit owned registered targets;
+  independently captured scopes must report the same native server_uid.
+
 MARIA-COMP-06: Dashboards and dedicated monitoring
   Provide engine/server/database display-only DDN dashboards with separately
   authorized dashboard editing. Use dedicated collector connections, selectable

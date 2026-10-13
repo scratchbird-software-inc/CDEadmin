@@ -5577,6 +5577,10 @@
     "mariadb-catalog-ddn": {
       "reference": "SR-F-001407",
       "title": "MariaDB native catalog and DDN views"
+    },
+    "mariadb-server-catalog": {
+      "reference": "SR-F-001408",
+      "title": "MariaDB native server and selected database DDN collection"
     }
   }
 }

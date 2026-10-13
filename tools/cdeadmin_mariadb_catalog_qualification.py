@@ -16,6 +16,9 @@ def qualify(route, evidence, *, password=None):
     evidence.mkdir(parents=True, exist_ok=False)
     proof = {'complete': False, 'checks': []}
     schema = 'owned_catalog_' + secrets.token_hex(8)
+    role = 'catalog_role_' + secrets.token_hex(6)
+    link = 'catalog_link_' + secrets.token_hex(6)
+    link_password = secrets.token_urlsafe(32)
     owner = mariadb.connect(**route, autocommit=True,
         **({'password': password} if password is not None else {}))
     cursor = owner.cursor()
@@ -82,6 +85,32 @@ def qualify(route, evidence, *, password=None):
         assert decoded['provenance']['mapping'] == 'scratchrobin.mariadb.catalog@1'
         assert 'scratchrobin.mariadb.relations' in exported['diagram']['snapshot']['files']['relations.ddn']
         proof['checks'].append('native_ddn_catalog_roundtrip_preserves_all_native_facts')
+        cursor.execute(f'CREATE ROLE `{role}`')
+        cursor.execute(f"CREATE SERVER `{link}` FOREIGN DATA WRAPPER mysql OPTIONS (HOST 'example.invalid', DATABASE '{schema}', USER 'link-user', PASSWORD '{link_password}', PORT 3306)")
+        cursor.execute('SELECT PLUGIN_NAME, PLUGIN_TYPE, PLUGIN_LIBRARY FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME, PLUGIN_TYPE')
+        (evidence / 'plugin-identities.json').write_text(json.dumps(cursor.fetchall(), indent=2) + '\n')
+        server = provider.capture_server_catalog(native_route)
+        assert server['server_uid'] == objects['database', schema]['native']['catalog_row']['server_uid']
+        assert all(row['available'] for row in server['observations']), server['observations']
+        assert any(row['resource_kind'] == 'role' and row['native']['catalog_row']['user'] == role for row in server['resources'])
+        link_row = next(row for row in server['resources'] if row['resource_kind'] == 'server-link' and row['display_name'] == link)
+        assert link_row['native']['catalog_row']['username'] == 'link-user'
+        assert 'password' not in link_row['native']['catalog_row'] and 'options' not in link_row['native']['catalog_row']
+        assert link_password not in json.dumps(server)
+        server_export = build_export(server['resources'], endpoint_id='owned-gate',
+            target_id='server:' + server['server_uid'], generation=server['generation'],
+            include_system=True, engine='mariadb')
+        decoded_server = read_catalog(json.dumps(server_export['snapshot']), engine='mariadb')
+        assert decoded_server['provenance']['objects'] == len(server['resources'])
+        proof['checks'].append('native_server_uid_roles_links_and_credential_free_ddn_inventory')
+        from pgadmin.cdeadmin.providers.mysql_family.provider import _resources
+        discovered = _resources(owner, {'route': {'database': schema}}, MARIADB_PROFILE)
+        uuid_plugins = [row for row in discovered if row['resource_kind'] == 'plugin' and row['display_name'] == 'uuid']
+        assert len(uuid_plugins) == 2 and len({row['resource_id'] for row in uuid_plugins}) == 2
+        assert {row['native']['plugin_type'] for row in uuid_plugins} == {'DATA TYPE', 'FUNCTION'}
+        proof['checks'].append('explorer_preserves_native_uuid_type_and_function_plugins')
+
+
 
         (evidence / 'catalog.json').write_text(json.dumps(result, indent=2) + '\n')
         proof['complete'] = True
@@ -91,6 +120,8 @@ def qualify(route, evidence, *, password=None):
         if interactive is not None:
             interactive.rollback()
             interactive.close()
+        cursor.execute(f'DROP SERVER IF EXISTS `{link}`')
+        cursor.execute(f'DROP ROLE IF EXISTS `{role}`')
         cursor.execute(f'DROP DATABASE IF EXISTS `{schema}`')
         cursor.close()
         owner.close()

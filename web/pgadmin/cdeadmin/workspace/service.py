@@ -593,6 +593,45 @@ class ProviderWorkspaceService:
             provider_route=endpoint['route'],
         ).to_dict()
 
+    def mariadb_server_catalog(self, server, request):
+        from ..providers.mysql_family.provider import MariaDBPilotProvider
+        from .firebird_catalog_export import build_export, MAX_BYTES
+        if not isinstance(request, dict) or set(request) - {'targets', 'include_system'}:
+            raise ProviderWorkspaceError('Invalid MariaDB server catalog request')
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native':
+            raise ProviderWorkspaceError('Select an owned native MariaDB server')
+        targets, include_system = request.get('targets', []), request.get('include_system', True)
+        if (not isinstance(targets, list) or len(targets) > 32 or any(not isinstance(value, str) or not value for value in targets) or
+                len(targets) != len(set(targets)) or type(include_system) is not bool):
+            raise ProviderWorkspaceError('Select at most 32 distinct registered database targets')
+        registered = self.endpoint_service.database_catalog(server)['targets']
+        if not set(targets) <= {item['target_id'] for item in registered}:
+            raise ProviderWorkspaceError('Database expansion requires owned registered targets')
+        context, endpoint, _root = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mariadb-native' or not isinstance(provider, MariaDBPilotProvider):
+            raise ProviderWorkspaceError('Select a native MariaDB endpoint')
+        try:
+            captured = provider.capture_server_catalog(endpoint['route'])
+            result = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + captured['server_uid'], generation=captured['generation'],
+                include_system=include_system, refreshed=True, engine='mariadb')
+            result.update(server_uid=captured['server_uid'], registered_targets=[{key: item.get(key)
+                for key in ('target_id', 'database', 'display_name')} for item in registered], databases=[])
+            for target in targets:
+                database = self.mariadb_catalog(server, {'database_target_id': target, 'include_system': include_system})
+                if database['server_uid'] != captured['server_uid']:
+                    raise ValueError('Database capture reported another native server UID')
+                result['databases'].append({'target_id': target, 'capture': database})
+                if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                    raise ValueError('Server/database DDN collection exceeds 8 MiB; select a smaller batch')
+            if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                raise ValueError('Server DDN collection exceeds 8 MiB')
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def _mariadb_catalog_context(self, server, target):
         from ..providers.mysql_family.provider import MariaDBPilotProvider
         self._principal_id(server)

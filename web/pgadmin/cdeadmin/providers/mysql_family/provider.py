@@ -1570,6 +1570,17 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def capture_server_catalog(self, route):
+        from .mariadb_server_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB server catalog client is unavailable')
+        connection = self.client._connect({'route': {**route, 'database': None, 'autocommit': True}})
+        try:
+            return capture(connection)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_catalog(self, route, *, include_system=False):
         """Observe native MariaDB metadata on an independently owned lease."""
         from .mariadb_catalog import capture
@@ -1696,10 +1707,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                              else 'query_failed'),
             })
 
-        def add(kind, path, name, native=None):
+        def add(kind, path, name, native=None, *, identity=None):
             path = [str(item) for item in path]
             name = str(name)
-            resource_id = ':'.join([kind, *path, name])
+            resource_id = identity or ':'.join([kind, *path, name])
             resource = resources.setdefault(resource_id, {
                 'resource_id': resource_id,
                 'resource_kind': kind,
@@ -2116,12 +2127,17 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             for record in optional_records('SELECT component_id,component_group_id,component_urn FROM mysql.component ORDER BY component_id'):
                 add('component',[],record['component_urn'],record)
         for name, status, plugin_type, library, license_name in plugin_rows:
+            # MariaDB's uuid is both a DATA TYPE and a FUNCTION plugin.
+            # Preserve native names for operations and distinct catalog IDs.
+            identity = ('mariadb:plugin:' + json.dumps([name, plugin_type],
+                ensure_ascii=False, separators=(',', ':'))) if profile is MARIADB_PROFILE else None
             add('plugin', [], name, {
+                **({'plugin_name': name} if profile is MARIADB_PROFILE else {}),
                 'status': status,
                 'plugin_type': plugin_type,
                 'library': library,
                 'license': license_name,
-            })
+            }, identity=identity)
         if profile is MYSQL_PROFILE:
             for record in optional_records("SELECT * FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY LIBRARY_SCHEMA,LIBRARY_NAME"):
                 from .mysql_catalog import identifier as quote_library_identifier

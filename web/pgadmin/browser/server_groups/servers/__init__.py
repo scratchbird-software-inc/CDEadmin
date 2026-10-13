@@ -2814,6 +2814,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action == 'mariadb_server_catalog':
+                    payload = service.mariadb_server_catalog(server, data.get('request'))
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
                 elif action == 'mysql_relational_review':

@@ -8149,8 +8149,9 @@ export default function ProviderWorkspaceContent({
           post={post} setError={setError} />}
       {workspace && tab === 'mysql-test-data' && workspace.endpoint?.profile_id === 'mysql-native' && queryDatabaseTargetId &&
         <MySQLTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
-      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
-        <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' &&
+        (!initialContext.server_catalog && queryDatabaseTargetId ? <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
+          <MySQLServerCatalog engine="mariadb" post={post} />)}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
           <MySQLServerCatalog post={post} />)}
