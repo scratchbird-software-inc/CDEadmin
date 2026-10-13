@@ -805,6 +805,64 @@ def test_sequence_replacement_does_not_drop_native_dependents(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('name, original_type, replacement_type, resolved, logical, size', (
+    ('payload', 'STRUCT(k INTEGER, l VARCHAR)',
+     'STRUCT(k INTEGER, l VARCHAR, m DOUBLE)',
+     'STRUCT(k INTEGER, l VARCHAR, m DOUBLE)', 'STRUCT', 0),
+    ('alias_number', 'INTEGER', 'BIGINT', 'BIGINT', 'BIGINT', 8),
+))
+def test_reviewed_native_complete_type_replacement(tmp_path, name, original_type,
+                                                   replacement_type, resolved, logical, size):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute(f'CREATE TYPE "{name}" AS {original_type}')
+    if name == 'payload':
+        connection.execute('CREATE TABLE typed_payload(value payload)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'type' and row['name'] == name)
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        changed['native']['catalog_metadata'].update(
+            resolved_type=resolved, logical_type=logical, size_bytes=size)
+        root = original['path'][0]
+        changed['native']['ddl'] = (
+            f'CREATE OR REPLACE TYPE "{root}"."main"."{name}" AS {replacement_type}')
+        changed['native']['duckdb_change'] = {
+            'action': 'replace-type', 'complete_definition_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        unconfirmed = deepcopy(desired)
+        unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'] = {
+            'action': 'replace-type'}
+        assert 'whole-definition confirmation' in plan(
+            baseline, unconfirmed, baseline)['blockers'][0]['reason']
+        applications = DuckDBSchemaApplications(tmp_path/f'{name}-type-replace.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute(
+            f'SELECT typeof(NULL::"{root}"."main"."{name}")').fetchone() == (resolved,)
+        if name == 'payload':
+            assert observer.execute("SELECT data_type FROM duckdb_columns() "
+                "WHERE table_name='typed_payload' AND column_name='value'").fetchone() == (
+                    'STRUCT(k INTEGER, l VARCHAR)',)
+        observer.close()
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

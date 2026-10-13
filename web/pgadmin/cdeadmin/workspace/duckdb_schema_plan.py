@@ -16,6 +16,7 @@ _TYPE_FIELDS = frozenset({'data_type', 'data_type_id',
     'character_maximum_length', 'numeric_precision',
     'numeric_precision_radix', 'numeric_scale'})
 _SEQUENCE_OPTIONS = ('start_value', 'min_value', 'max_value', 'increment_by', 'cycle')
+_TYPE_CATALOG_FIELDS = ('size_bytes', 'logical_type', 'category', 'labels', 'resolved_type')
 
 
 def _quote(value):
@@ -343,6 +344,33 @@ def _validated_sequence_replacement(before, after, change):
     return source, new_options
 
 
+def _validated_type_replacement(before, after, change):
+    if change != {'action': 'replace-type', 'complete_definition_confirmed': True}:
+        raise ValueError('Type replacement requires explicit whole-definition confirmation')
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
+            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
+        raise ValueError('Type replacement would discard native comment or tags')
+    old_fields = {key: previous['catalog'].pop(key, None) for key in _TYPE_CATALOG_FIELDS}
+    new_fields = {key: desired['catalog'].pop(key, None) for key in _TYPE_CATALOG_FIELDS}
+    resolved = new_fields['resolved_type']
+    if (old_fields == new_fields or
+            not isinstance(old_fields['resolved_type'], str) or
+            not isinstance(resolved, str) or not resolved.strip() or
+            len(resolved.encode('utf8')) > 8192 or '\x00' in resolved or
+            type(new_fields['size_bytes']) is not int or new_fields['size_bytes'] < 0 or
+            not isinstance(new_fields['logical_type'], str) or
+            (new_fields['category'] is not None and
+             not isinstance(new_fields['category'], str)) or
+            (new_fields['labels'] is not None and
+             (not isinstance(new_fields['labels'], list) or
+              any(not isinstance(label, str) for label in new_fields['labels']))) or
+            not _equal(previous, {**desired, 'ddl': previous['ddl']})):
+        raise ValueError('Type replacement requires one complete observed native type definition')
+    source = _validated_ddl(after['native'].get('ddl'), 'type', after['path'], replace=True)
+    return source, new_fields
+
+
 def _validated_rename(before, after, change, catalog):
     if after['kind'] not in {'table', 'view', 'column'} or before['kind'] != after['kind']:
         raise ValueError('Native rename is admitted only for tables, views and columns')
@@ -554,6 +582,10 @@ def plan(baseline, desired, live):
                   after['kind'] == 'sequence'):
                 operation = 'replace'
                 source, _sequence_options = _validated_sequence_replacement(before, after, change)
+            elif (isinstance(change, dict) and change.get('action') == 'replace-type' and
+                  after['kind'] == 'type'):
+                operation = 'replace'
+                source, _type_catalog = _validated_type_replacement(before, after, change)
             elif change == {'action': 'set-comment'}:
                 operation = 'alter'
                 source, _comment = _validated_comment(before, after, target)
@@ -584,6 +616,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'overloads': _macro_overloads}
             elif after['kind'] == 'sequence' and isinstance(change, dict) and change.get('action') == 'replace-sequence':
                 operation_record['postcondition'] = {'sequence_options': _sequence_options}
+            elif after['kind'] == 'type' and isinstance(change, dict) and change.get('action') == 'replace-type':
+                operation_record['postcondition'] = {'type_catalog': _type_catalog}
             elif change == {'action': 'set-comment'}:
                 operation_record['postcondition'] = {'comment': _comment}
             elif after['kind'] == 'table' and isinstance(change, dict) and change.get('action') == 'add-primary-key':

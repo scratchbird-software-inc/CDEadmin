@@ -156,7 +156,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations, native
-  enum extension, reviewed sequence replacement, single-overload scalar or
+  enum extension, reviewed full type replacement, reviewed sequence replacement,
+  single-overload scalar or
   table macro replacement and complete macro overload replacement,
   exact-identity table/view/column rename, explicit primary-key addition and
   isolated native object comments are previewed
@@ -212,6 +213,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   other dependency failures roll back the reviewed transaction. The historic
   generator position cannot be
   reconstructed from metadata and is never represented as retained design.
+  A ``replace-type`` intent requires a complete, exactly qualified native
+  ``CREATE OR REPLACE TYPE`` statement and an explicit whole-definition
+  confirmation. The edited design must declare the complete resolved type,
+  broad logical category, labels and native size it expects; changing other
+  metadata in the same review is blocked. A comment or tags on the old type
+  block replacement because native recreation can discard them. After commit,
+  capture the type again and compare its resolved definition and reported
+  metadata. Replacing a named type does not imply that columns already using
+  the old type are converted; those columns require separate reviewed changes.
   A rename requires the baseline source resource ID, unchanged native
   definition, unchanged parent, an absent target identity and an explicit old
   name confirmation. The plan binds both source and destination IDs, dispatches

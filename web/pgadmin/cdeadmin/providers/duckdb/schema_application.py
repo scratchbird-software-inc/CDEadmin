@@ -82,6 +82,10 @@ def apply_review(provider, route, record):
                             metadata = current['native'].get('catalog_metadata', {})
                             verified = all(metadata.get(key) == value for key, value in
                                 operation['postcondition']['sequence_options'].items())
+                        elif 'type_catalog' in operation['postcondition']:
+                            metadata = current['native'].get('catalog_metadata', {})
+                            verified = all(metadata.get(key) == value for key, value in
+                                operation['postcondition']['type_catalog'].items())
                         elif 'primary_key_columns' in operation['postcondition']:
                             verified = (current['native'].get('catalog_metadata', {})
                                 .get('has_primary_key') is True and any(
