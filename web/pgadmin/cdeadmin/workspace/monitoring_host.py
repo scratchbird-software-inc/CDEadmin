@@ -296,10 +296,12 @@ class MonitoringHost:
             mysql_released = mysql.close() if mysql is not None else True
             maria = self.app.extensions.get('cdeadmin_mariadb_monitoring_host')
             maria_released = maria.close() if maria is not None else True
+            duckdb = self.app.extensions.get('cdeadmin_duckdb_monitoring_host')
+            duckdb_released = duckdb.close() if duckdb is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
-            released = released and postgres_released and mysql_released and maria_released
+            released = released and postgres_released and mysql_released and maria_released and duckdb_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -433,4 +435,6 @@ def init_app(app, endpoint_service):
     init_mysql(app, host)
     from .mariadb_monitoring_host import init_app as init_mariadb
     init_mariadb(app, host)
+    from .duckdb_monitoring_host import init_app as init_duckdb
+    init_duckdb(app, host)
     return host

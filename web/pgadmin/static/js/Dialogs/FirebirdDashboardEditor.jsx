@@ -10,6 +10,7 @@ import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {validatePublication} from '../cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
 import {firebirdDashboardFiles, firebirdFleetFiles} from '../cdeadmin_ui/integrations/ddn/firebirdDashboard';
 import {mysqlDashboardFiles, mysqlFleetFiles} from '../cdeadmin_ui/integrations/ddn/mysqlDashboard';
+import {duckdbDashboardFiles, duckdbFleetFiles} from '../cdeadmin_ui/integrations/ddn/duckdbDashboard';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function FirebirdDashboardEditor({serverId, targetId, panelId, engine='firebird'}) {
@@ -30,13 +31,13 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
   useEffect(() => {
     let active = true;
     getApiInstance().get(endpoint).then(async ({data}) => {
-      if(['mysql', 'mariadb'].includes(engine) && !data.data.snapshot) {
+      if(['mysql', 'mariadb', 'duckdb'].includes(engine) && !data.data.snapshot) {
         const monitor = serverId == null ? url_for(`cdeadmin_${engine}_monitoring.fleet`) :
           url_for(`cdeadmin_${engine}_monitoring.monitoring`, {sid: serverId}) +
           (targetId ? `?target_id=${encodeURIComponent(targetId)}` : '');
         const current = (await getApiInstance().get(monitor)).data.data;
         const scope = serverId == null ? 'engine' : targetId ? 'database' : 'server';
-        const files = serverId == null ? mysqlFleetFiles(current, engine) : mysqlDashboardFiles(current, scope, engine);
+        const files = engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(current) : duckdbDashboardFiles(current, scope)) : serverId == null ? mysqlFleetFiles(current, engine) : mysqlDashboardFiles(current, scope, engine);
         const {viewer} = await loadDDNLibraries();
         // Discover binding identities, but never persist sampled telemetry in a draft.
         data = {...data, data: {...data.data, snapshot: validatePublication(viewer,
@@ -76,7 +77,7 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
   }, [panelId]);
   const snapshot = useMemo(() => definition?.snapshot || {
     format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: 'dashboard',
-    files: ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(null, engine) : mysqlDashboardFiles(null, targetId ? 'database' : 'server', engine)) :
+    files: engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(null) : duckdbDashboardFiles(null, targetId ? 'database' : 'server')) : ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(null, engine) : mysqlDashboardFiles(null, targetId ? 'database' : 'server', engine)) :
       serverId == null ? firebirdFleetFiles(null) : firebirdDashboardFiles(null,
         'Firebird dashboard draft', targetId ? 'database' : 'server'),
   }, [definition, serverId, targetId, engine]);
@@ -123,5 +124,5 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
       saveAsset={save} onExport={exportSVG} onReady={(value) => { controller.current = value; setReady(true); }} />}
   </Box>;
 }
-FirebirdDashboardEditor.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb']), serverId: PropTypes.number,
+FirebirdDashboardEditor.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'duckdb']), serverId: PropTypes.number,
   targetId: PropTypes.string, panelId: PropTypes.string.isRequired};

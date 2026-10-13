@@ -15,7 +15,7 @@ const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
   'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
-  'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
+  'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -96,6 +96,11 @@ function dispatch(action, args, context) {
   case 'open_firebird_docker':
     return import('sources/Dialogs').then(({showFirebirdDocker}) => showFirebirdDocker(
       registrationContext => serverNode.callbacks.register_engine_server.call(serverNode, {item, registrationContext})));
+  case 'open_duckdb_fleet':
+    return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('duckdb'));
+  case 'open_duckdb_dashboard_editor':
+    return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
+      endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id, 'duckdb'));
   case 'open_mariadb_fleet':
     return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('mariadb'));
   case 'open_mariadb_dashboard_editor':

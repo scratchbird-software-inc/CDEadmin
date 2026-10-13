@@ -165,7 +165,7 @@ export function showFirebirdDashboardEditor(serverId, targetId) {
 
 export function showMySQLDashboardEditor(serverId, targetId, engine='mysql') {
   const panelId = `id-${engine}-dashboard-editor-${++providerWorkspaceSequence}`;
-  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB dashboard draft') : gettext('MySQL dashboard draft'),
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB dashboard draft') : engine === 'duckdb' ? gettext('DuckDB dashboard draft') : gettext('MySQL dashboard draft'),
     closable: true, manualClose: true, floatable: true,
     content: <ErrorBoundary><FirebirdDashboardEditor engine={engine} serverId={serverId}
       targetId={targetId} panelId={panelId} /></ErrorBoundary>,
@@ -184,7 +184,7 @@ export function showMySQLMonitor(serverId, targetId, name='MySQL', engine='mysql
 
 export function showMySQLFleet(engine='mysql') {
   const panelId = `id-${engine}-fleet`;
-  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB engine dashboard') : gettext('MySQL engine dashboard'),
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB engine dashboard') : engine === 'duckdb' ? gettext('DuckDB engine dashboard') : gettext('MySQL engine dashboard'),
     closable: true, floatable: true,
     content: <ErrorBoundary><MySQLMonitoring engine={engine} engineMode onNavigate={(sid, target, name) => showMySQLMonitor(sid, target, name, engine)} /></ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
@@ -288,7 +288,7 @@ export function showProviderWorkspace(
           const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
           node?.callbacks?.refresh?.call(node, null, connector);
         }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
-        (['mysql-native', 'mariadb-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
+        (['mysql-native', 'mariadb-native', 'duckdb-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
           targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
           <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
             targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent

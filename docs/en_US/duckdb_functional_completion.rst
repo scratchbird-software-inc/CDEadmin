@@ -87,6 +87,19 @@ DUCK-COMP-06: Native dashboards and monitoring
   Configure sampling, bounded volatile retention, leases and optional heartbeat.
   A failed refresh cannot heartbeat. An independent :memory: connection is a
   different database; do not present it as monitoring the interactive instance.
+  The collector is admitted only for a registered, existing file in its
+  filesystem root. It has an independently owned connection and a scoped grant;
+  neither a database password nor a current-user credential selector is used.
+  The host requires single-process admission and a process lock. Each completed
+  probe opens a native read transaction and rolls it back; failure retires that
+  collector connection and cannot count as a heartbeat. The server dashboard
+  aggregates registered file collectors, not a remote process. The engine
+  dashboard lists owner-registered file targets and never deduplicates physical
+  aliases. All metric bindings are validated against DuckDB-specific public DDN
+  module and scope identifiers, with live values rebound after publication.
+  Published definitions contain no sampled values. Trends expose only bounded
+  volatile samples for the current process. Engine, server and database viewers
+  remain display-only; dashboard editing is a separately authorized destination.
 
 DUCK-COMP-07: Contextual compact forms
   Give native tree entries meaningful engine-specific destinations and stable
