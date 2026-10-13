@@ -3,6 +3,7 @@ import copy
 import json
 import queue
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -24,6 +25,7 @@ class Execution:
     cancelled: bool = False
     closed: bool = False
     error: object = None
+    statement_metrics: object = None
     cleanup_failed: bool = False
     poll_lock: object = field(default_factory=threading.Lock)
 
@@ -91,11 +93,21 @@ class Executions:
                 token.identity = (str(server), int(connection_id))
             finally:
                 identity_cursor.close()
+            if token.cancelled:
+                return  # Shutdown before dispatch has no native SQL outcome.
             cursor = Cursor(token.connection)
-            if bound:
-                cursor.execute(source, bound)
-            else:
-                cursor.execute(source)
+            started = time.perf_counter()
+            try:
+                if bound:
+                    cursor.execute(source, bound)
+                else:
+                    cursor.execute(source)
+            finally:
+                token.statement_metrics = {
+                    'dispatch_ms': round((time.perf_counter() - started) * 1000, 3),
+                    'scope': 'client-execute-through-first-response-excluding-fetch',
+                    'prepare_ms': None, 'execute_ms': None, 'plan': None,
+                }
             index = 0
             while True:
                 schema = columns(cursor)
@@ -180,6 +192,8 @@ class Executions:
                 'rows': [], 'has_page': False}}
         complete = token.finished.is_set() and token.pages.empty()
         payload = page['payload']
+        if token.statement_metrics is not None:
+            payload['statement_metrics'] = dict(token.statement_metrics)
         payload.update(cancelled=token.cancelled, streamed_by_provider=True)
         if complete:
             payload.update(error=token.error,

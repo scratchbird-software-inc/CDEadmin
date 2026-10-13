@@ -286,6 +286,9 @@ def _metric_records(profile):
 class MariaDBDBAPIClient(RelationalDBAPIClient):
     """Native MariaDB sessions with private pools and ordered result streams."""
 
+    transaction_actions = ('commit', 'rollback', 'autocommit_on',
+                           'autocommit_off')
+
     def __init__(self, config, pool_namespace, module=None, tool_runner=None):
         super().__init__(config, module)
         self._mariadb_connector = _MariaDBConnectorFacade(
@@ -380,6 +383,28 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._require_usable_session(handle)
         if action not in self.transaction_actions:
             return super().control_transaction(handle, action)
+        if action in {'autocommit_on', 'autocommit_off'}:
+            observation = self._describe_idle_transaction(handle)
+            if not observation.get('connection_usable'):
+                raise RelationalClientError('MariaDB session outcome is unknown')
+            enabled = action == 'autocommit_on'
+            if observation['autocommit'] == enabled:
+                return observation
+            if observation['in_transaction']:
+                raise RelationalClientError(
+                    'Commit or roll back the MariaDB transaction before '
+                    'changing autocommit')
+            try:
+                handle.autocommit = enabled
+                observed = self._describe_idle_transaction(handle)
+                if (not observed.get('connection_usable') or
+                        observed.get('autocommit') != enabled):
+                    raise RelationalClientError(
+                        'MariaDB autocommit acknowledgement is unknown')
+                return observed
+            except BaseException:
+                self._uncertain_sessions.add(id(handle))
+                raise
         try:
             return super().control_transaction(handle, action)
         except BaseException:

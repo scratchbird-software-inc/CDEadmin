@@ -7051,7 +7051,7 @@ export default function ProviderWorkspaceContent({
   const [querySessionBlocked, setQuerySessionBlocked] = useState(false);
   const [transaction, setTransaction] = useState(null);
   const [sessionAutocommit, setSessionAutocommit] = useState(null);
-  const managedAutocommit = (languageProfile === 'mysql-sql' && workspace?.languages?.find(
+  const managedAutocommit = (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && workspace?.languages?.find(
     item => item.language_profile === languageProfile)?.transaction_actions?.includes('autocommit_on'));
   const sessionPolicyUnknown = managedAutocommit &&
     Boolean(sessionId) && sessionAutocommit === null;
@@ -7395,7 +7395,7 @@ export default function ProviderWorkspaceContent({
       });
       querySessionIdRef.current = opened.session_id;
       setSessionId(opened.session_id);
-      if (language === 'mysql-sql' && managedAutocommit) {
+      if (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit) {
         const observed = await post({action: 'transaction', session_id: opened.session_id,
           database_target_id: queryDatabaseTargetId});
         setTransaction(observed);
@@ -7447,7 +7447,7 @@ export default function ProviderWorkspaceContent({
       const mysql = response.occurrence?.result?.extensions?.mysql?.payload
         || response.occurrence?.result?.extensions?.mariadb?.payload || postgres || sqlite || duck || cockroach || ysql || ycql || tidb || vitess || dolt || xtdb || immudb || ignite || cassandra || foundation || tikv || redis || mongodb || clickhouse || influxdb || neo4j || milvus || opensearch || searchsql;
       if (mysql?.has_page) setNativePage(mysql);
-      else if (languageProfile === 'mysql-sql' && (mysql?.statement_metrics || mysql?.error)) {
+      else if (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && (mysql?.statement_metrics || mysql?.error)) {
         setNativePage(previous => ({...previous,
           statement_metrics: mysql.statement_metrics || previous?.statement_metrics, error: mysql.error}));
       }
@@ -7493,7 +7493,7 @@ export default function ProviderWorkspaceContent({
           setError(gettext('This Firebird query session cannot be reused. Close it and explicitly reconnect.'));
         }
       }
-      if (languageProfile === 'mysql-sql' && managedAutocommit && response.occurrence?.operation?.terminal) {
+      if (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && managedAutocommit && response.occurrence?.operation?.terminal) {
         setSessionAutocommit(null);
         try {
           const observed = await post({action: 'transaction', session_id: querySessionIdRef.current,
@@ -8073,8 +8073,8 @@ export default function ProviderWorkspaceContent({
               disabled={busy || querySessionBlocked || !!occurrenceId}
               onExecute={(command) => execute(command, 'native', true)} />}
           </Box>
-          {languageProfile === 'mysql-sql' && nativePage?.error && <Box component="pre"
-            aria-label="MySQL diagnostic" sx={{whiteSpace: 'pre-wrap'}}>
+          {['mysql-sql', 'mariadb-sql'].includes(languageProfile) && nativePage?.error && <Box component="pre"
+            aria-label={languageProfile === 'mariadb-sql' ? 'MariaDB diagnostic' : 'MySQL diagnostic'} sx={{whiteSpace: 'pre-wrap'}}>
             {['sqlstate', 'errno', 'message_primary'].filter(key => nativePage.error[key] != null)
               .map(key => `${key}: ${nativePage.error[key]}`).join('\n')}
           </Box>}
@@ -8086,7 +8086,7 @@ export default function ProviderWorkspaceContent({
           {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
           {(rendered || nativePage) && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
           Buffered rows: {rendered?.page?.page_size ?? 0} · Server-retained rows: {rendered?.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
-            {languageProfile === 'mysql-sql' && <Box>
+            {['mysql-sql', 'mariadb-sql'].includes(languageProfile) && <Box>
               Client dispatch (first response; excludes result fetching): {nativePage?.statement_metrics?.dispatch_ms ?? 'Unavailable'} ms
             </Box>}
             <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>Plan used: {nativePage?.statement_metrics?.plan || 'Unavailable'}</Box>

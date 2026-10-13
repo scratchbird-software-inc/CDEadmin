@@ -361,6 +361,10 @@ def _relational_editor_evidence(provider, request, engine):
         passed.setdefault(kind, set()).add(operation)
 
     def attempt(label, kind, operation, draft, target=None):
+        # MariaDB's native DROP forms have no generic CASCADE switch.
+        # Build the fixture in its native shape; never suppress true intent.
+        if engine == 'mariadb' and draft.get('cascade') is False:
+            draft = {key: value for key, value in draft.items() if key != 'cascade'}
         try:
             result = _apply_editor(
                 provider, route, kind, operation, draft, target=target,
