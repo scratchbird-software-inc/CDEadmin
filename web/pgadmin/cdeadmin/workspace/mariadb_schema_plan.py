@@ -107,7 +107,7 @@ def creation(row,sql_mode,database):
 
 
 def schema(row):
-    return {key: deepcopy(row['native'].get(key)) for key in ('definition', 'definition_context')}
+    return {key: deepcopy(row['native'].get(key)) for key in (('definition', 'definition_context', 'trigger_identity') if row['kind']=='trigger' else ('definition', 'definition_context'))}
 
 
 def root(document):
@@ -136,7 +136,12 @@ def address(row, database):
         expected, expected_parent, path = parent, None, [database]
     else:
         expected_parent, path = parent, [database, row['name']]
-        expected = 'mariadb:' + json.dumps([database, row['kind'], parent, row['name']], ensure_ascii=False, separators=(',', ':'))
+        if row['kind']=='trigger':
+            facts=native.get('trigger_identity',{})
+            if facts.get('database')!=database or not isinstance(facts.get('table'),str):
+                raise ValueError('Native trigger owner is unavailable')
+            expected_parent='mariadb:'+json.dumps([database,'table',parent,facts['table']],ensure_ascii=False,separators=(',',':'))
+        expected = 'mariadb:' + json.dumps([database, row['kind'], expected_parent, row['name']], ensure_ascii=False, separators=(',', ':'))
     if (row.get('resource_id') != expected or row.get('path') != path or
             native.get('navigator_parent_resource_id') != expected_parent or
             native.get('database') != database or row.get('system') != 'false' or native.get('system_object') is not False):
@@ -186,14 +191,47 @@ def plan(baseline, desired, live):
             if before is None: operation = 'create'
             elif isinstance(intent, dict) and intent.get('action') == 'drop': operation = 'drop'
             else: operation = 'alter'
-            source = compile_table(before, after, operation, context, database)
-            operation_context=deepcopy(context)
+            ordering=None;ordering_baseline=None
+            if after['kind']=='table':
+                source = compile_table(before, after, operation, context, database)
+                operation_context=deepcopy(context)
+            else:
+                from .mariadb_object_plan import compile_object, KINDS
+                if after['kind'] not in KINDS: raise ValueError('Native object adapter is unavailable')
+                if before is None and any(row['kind']==after['kind'] and row['name']==after['name'] for row in live['rows'].values()):
+                    raise ValueError('Native named creation target already exists under another parent')
+                if after['kind']=='package' and operation=='alter' and any(row['kind']=='package-body' and row['name']==after['name'] for row in live['rows'].values()):
+                    raise ValueError('Replace a package declaration only after separately reviewing removal of its existing body; declaration replacement must not silently discard desired body metadata')
+                if after['kind']=='trigger' and operation!='drop':
+                    trigger_facts=after['native'].get('trigger_identity',{})
+                    grouping=tuple(trigger_facts.get(key) for key in ('database','table','timing','event'))
+                    siblings=[row for row in live['rows'].values() if row['kind']=='trigger' and
+                        tuple(row['native'].get('trigger_identity',{}).get(key) for key in ('database','table','timing','event'))==grouping]
+                    if operation=='alter' and trigger_facts!=before['native'].get('trigger_identity'):
+                        raise ValueError('Trigger body replacement preserves its native owner, event, timing and sibling order')
+                    ordering_baseline=[{'name':row['name'],'identity':row['native']['trigger_identity']} for row in sorted(siblings,key=lambda row:row['name'])]
+                    position=trigger_facts.get('action_order')
+                    if type(position) is not int or not 1<=position<=len(siblings)+(operation=='create'):
+                        raise ValueError('Native desired trigger position is outside the reviewed sibling group')
+                    if not siblings or operation=='alter' and len(siblings)==1:ordering={'single':True}
+                    else:
+                        predecessor=(position>1)
+                        neighbour_position=position-1 if predecessor else (1 if operation=='create' else 2)
+                        neighbour=next((row for row in siblings if row['native']['trigger_identity'].get('action_order')==neighbour_position),None)
+                        if neighbour is None:raise ValueError('Native trigger neighbour/order is unavailable')
+                        ordering={'position':'FOLLOWS' if predecessor else 'PRECEDES','name':neighbour['name']}
+                source=compile_object(before,after,operation,database,ordering)
+                operation_context={**context,**{key:value for key,value in after['native'].get('definition_context',{}).items()
+                    if key in {'sql_mode','character_set_client','collation_connection','time_zone'}}}
+                if after['kind']=='event' and not isinstance(after['native'].get('definition_context',{}).get('time_zone'),str):
+                    raise ValueError('Stored native event time zone is unavailable')
             if isinstance(intent,dict) and intent.get('temporal_history')=='KEEP':
                 operation_context['system_versioning_alter_history']='KEEP'
             operations.append({'resource_id': key, 'kind': after['kind'], 'name': after['name'],
                 'database': database, 'operation': operation, 'source': source, 'context': operation_context,
                 'baseline_schema_sha256': digest(schema(before)) if before else None,
-                'desired_schema_sha256': digest(schema(after))})
+                'desired_schema_sha256': digest(schema(after)),
+                **({'trigger_order':ordering,'trigger_order_baseline':ordering_baseline} if after['kind']=='trigger' else {})})
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': key, 'name': after['name'], 'reason': str(error)})
     for key in baseline['rows'].keys() - desired['rows'].keys():
@@ -206,4 +244,5 @@ def plan(baseline, desired, live):
         'warnings': ['Native clause separation is not grammar validation or permission to execute.',
             'MariaDB DDL commits independently; rollback cannot make a sequence of changes atomic.',
             'The current table adapter preserves temporal clauses. Temporal history removal requires separate explicit lifecycle review.',
+            'Package declaration replacement can discard its body and invalidate callers. Sequence restart changes future allocation.',
             'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.']}

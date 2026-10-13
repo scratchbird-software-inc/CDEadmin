@@ -7,5 +7,5 @@ class MariaDBSchemaApplications(MySQLSchemaApplications):
     engine = 'mariadb'
     identity_key = 'server_uid'
     intent_key = 'mariadb_change'
-    kinds = frozenset({'table'})
+    kinds = frozenset({'table', 'view', 'sequence', 'procedure', 'function', 'package', 'package-body', 'trigger', 'event', 'database'})
     schema = staticmethod(schema)

@@ -172,6 +172,6 @@ def build_metadata(document):
         'warnings': ['Imported definitions are user input; native grammar and live state have not been validated.',
             'MariaDB DDL commits implicitly. This export is not an atomic migration or a reviewed apply plan.',
             'Privilege-filtered observational metadata does not prove complete coverage or dependency discovery.',
-            'Sequence definitions retain current native state; replay on an existing sequence can change future values.',
+            'Sequence definitions retain native configuration, not the cached next value; recreation can restart allocation.',
             'Only current-visible system-versioned schema is exported; historical rows are not silently included.',
             'Account/grant creation and data are excluded; visible privilege facts remain documentary.']}

@@ -148,6 +148,24 @@ MARIA-COMP-05: Native DDN roundtrip
   design does not execute native DDL. Use the sister DDN designer for relation
   layout and manual design; stale captures require an explicit reviewed merge.
 
+  Reviewed object changes retain complete native definitions, stored creation
+  context and event time zone. Views and events use native ALTER; replacing a
+  routine, package declaration/body or trigger requires exact explicit replacement
+  intent. Package declaration replacement can invalidate/discard its body and
+  callers; no transaction rollback is promised. An existing package body must
+  first be removed through a separate reviewed operation before replacing its
+  declaration, then recreated against the new declaration. Replacements use
+  mariadb_change action=replace and exact name confirmation; database/sequence
+  settings use action=alter-options. Sequence restart additionally confirms its
+  native name. Preserve trigger ownership and
+  native sibling order. CREATE resolves the desired action_order against the
+  live group; replacement preserves its recorded owner/timing/event/order.
+  Record and recheck the complete visible sibling group before native dispatch.
+  An unresolved ordering dependency blocks admission.
+  Sequence option changes are explicit and separate from confirmed restart.
+  SHOW CREATE SEQUENCE describes configuration, not the currently cached next value.
+  Capture and export must not claim it is an exact continuation-state backup.
+
   Native SQL generation is export-only and preserves SHOW CREATE definitions,
   per-object SQL mode, character context and event time zone. It must preserve
   system-versioned/application-period tables, sequences and separate package
