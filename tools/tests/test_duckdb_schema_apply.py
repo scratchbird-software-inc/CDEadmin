@@ -229,6 +229,54 @@ def test_explicit_drop_and_view_replace_are_native_and_one_time(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('kind,old,new,source_sql', [
+    ('table', 'existing', 'renamed_table', None),
+    ('view', 'old_view', 'renamed_view', 'CREATE VIEW old_view AS SELECT 1 AS x'),
+    ('column', 'id', 'renamed_id', None),
+])
+def test_reviewed_native_rename_rebinds_identity_and_rediscovery(
+        tmp_path, kind, old, new, source_sql):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        if source_sql:
+            connection = duckdb.connect(route['database'])
+            connection.execute(source_sql)
+            connection.close()
+            observed = provider.capture_catalog(route)
+            baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+                target_id='file-1', generation=observed['generation'],
+                refreshed=True, engine='duckdb', native_model=True)
+        source_row = next(item for item in baseline['rows'].values()
+            if item['kind'] == kind and item['name'] == old)
+        destination = deepcopy(source_row)
+        destination['name'] = new
+        destination['path'][-1] = new
+        destination['resource_id'] = _resource_id(kind, destination['path'][:-1], new)
+        destination['native']['duckdb_change'] = {'action': 'rename',
+            'from_resource_id': source_row['resource_id'], 'confirmation': old}
+        desired = deepcopy(baseline)
+        desired['rows'].pop(source_row['resource_id'])
+        desired['rows'][destination['resource_id']] = destination
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/f'{kind}-rename.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        assert outcome['outcome']['rediscovered_resource_id'] == destination['resource_id']
+        observed = provider.capture_catalog(route)
+        fresh = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'],
+            refreshed=True, engine='duckdb', native_model=True)
+        assert destination['resource_id'] in fresh['rows']
+        assert source_row['resource_id'] not in fresh['rows']
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

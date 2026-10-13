@@ -24,10 +24,15 @@ class DuckDBSchemaApplications(SchemaApplications):
             raise SchemaApplyError('Only one admitted, native-validated DuckDB operation can be reviewed')
         operation = operations[0]
         identity = operation['resource_id']
-        before, after = baseline['rows'].get(identity), desired['rows'].get(identity)
+        source_id = operation.get('source_resource_id', identity)
+        before, after = baseline['rows'].get(source_id), desired['rows'].get(identity)
         if after is None or operation['desired_sha256'] != digest(_definition(after)):
             raise SchemaApplyError('Native desired definition differs from the reviewed plan')
-        if before is None:
+        if operation['operation'] == 'rename':
+            if (source_id == identity or before is None or identity in baseline['rows'] or
+                    operation['baseline_sha256'] != digest(_definition(before))):
+                raise SchemaApplyError('Native rename requires an exact baseline source and absent target')
+        elif before is None:
             if operation['operation'] != 'create' or operation['baseline_sha256'] is not None:
                 raise SchemaApplyError('Native creation requires an absent baseline target')
         elif operation['baseline_sha256'] != digest(_definition(before)):
@@ -37,15 +42,16 @@ class DuckDBSchemaApplications(SchemaApplications):
                     for key in ('endpoint_id', 'database_target_id'))):
             raise SchemaApplyError('Native design scope differs from the reviewed file')
 
-        def reduced(document):
+        def reduced(document, selected):
             rows = {key: deepcopy(row) for key, row in document['rows'].items()
-                    if row['kind'] == 'database' or key == identity}
+                    if row['kind'] == 'database' or key == selected}
             return {'provenance': deepcopy(document['provenance']), 'rows': rows}
 
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed',
             'created_at': self.clock(), 'expires_at': self.clock() + 300,
             'owner': owner, 'binding': binding, 'database': database,
-            'plan': deepcopy(preview), 'baseline': reduced(baseline), 'desired': reduced(desired),
+            'plan': deepcopy(preview), 'baseline': reduced(baseline, source_id),
+            'desired': reduced(desired, identity),
             'file_identity': file_identity}
         record['review_digest'] = digest(record)
         if len(json.dumps(record, ensure_ascii=False).encode()) > 4 * 1024 * 1024:

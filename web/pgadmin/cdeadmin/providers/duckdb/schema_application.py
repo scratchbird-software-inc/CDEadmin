@@ -59,6 +59,10 @@ def apply_review(provider, route, record):
             elif operation['operation'] == 'create':
                 result['rediscovery_verified'] = (current is not None and
                     current['kind'] == operation['kind'] and current['name'] == operation['name'])
+            elif operation['operation'] == 'rename':
+                result['rediscovery_verified'] = (current is not None and
+                    current['kind'] == operation['kind'] and current['name'] == operation['name'] and
+                    observed['rows'].get(operation['source_resource_id']) is None)
             else:
                 from ...workspace.duckdb_schema_plan import _definition
                 from ...workspace.firebird_schema_plan import digest

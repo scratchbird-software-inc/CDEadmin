@@ -62,6 +62,41 @@ def test_stale_live_definition_and_foreign_scope_are_refused():
         plan(model(before, endpoint='foreign'), model(desired), model(before))
 
 
+@pytest.mark.parametrize('kind,parent,old,new,statement', [
+    ('table', ['file', 'main'], 'facts', 'renamed',
+     'ALTER TABLE "file"."main"."facts" RENAME TO "renamed"'),
+    ('view', ['file', 'main'], 'facts', 'renamed',
+     'ALTER VIEW "file"."main"."facts" RENAME TO "renamed"'),
+    ('column', ['file', 'main', 'facts'], 'value', 'amount',
+     'ALTER TABLE "file"."main"."facts" RENAME COLUMN "value" TO "amount"'),
+])
+def test_exact_native_rename_binds_old_and_new_identity(kind, parent, old, new, statement):
+    pytest.importorskip('duckdb')
+    before = row(kind, [*parent, old])
+    after = deepcopy(before)
+    after.update(name=new, path=[*parent, new],
+                 resource_id=_resource_id(kind, parent, new))
+    after['native']['duckdb_change'] = {'action': 'rename',
+        'from_resource_id': before['resource_id'], 'confirmation': old}
+    baseline, desired = model(before), model(after)
+    result = plan(baseline, desired, baseline)
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == statement
+    assert result['operations'][0]['source_resource_id'] == before['resource_id']
+    assert result['operations'][0]['resource_id'] == after['resource_id']
+    wrong = deepcopy(after)
+    wrong['native']['duckdb_change']['confirmation'] = new
+    assert plan(baseline, model(wrong), baseline)['blockers']
+    changed = deepcopy(after)
+    changed['native']['catalog_metadata']['comment'] = 'other edit'
+    assert plan(baseline, model(changed), baseline)['blockers']
+    occupied = plan(baseline, desired, model(before, row(kind, [*parent, new])))
+    assert occupied['blockers'] and not occupied['application_supported']
+    stale = deepcopy(before)
+    stale['native']['catalog_metadata']['comment'] = 'changed'
+    assert plan(baseline, desired, model(stale))['conflicts']
+
+
 @pytest.mark.parametrize('source', [
     'CREATE TABLE "other"."main"."facts" (x INTEGER)',
     'CREATE TABLE "file"."main"."facts" (',

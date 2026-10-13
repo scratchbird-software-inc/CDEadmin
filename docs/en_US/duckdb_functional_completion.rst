@@ -143,7 +143,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations, native
-  enum extension and single-overload scalar macro replacement are previewed
+  enum extension, single-overload scalar macro replacement and exact-identity
+  table/view/column rename are previewed
   through the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
   One-field column default or nullability alterations require explicit change
@@ -163,6 +164,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   explicit new bounded definition. Table macros, overload groups and parameter
   edits remain blockers. Both operations verify their native postconditions
   after commit; an uncertain or mismatched observation is never replayed.
+  A rename requires the baseline source resource ID, unchanged native
+  definition, unchanged parent, an absent target identity and an explicit old
+  name confirmation. The plan binds both source and destination IDs, dispatches
+  one native ``ALTER`` and verifies that the source disappeared and the
+  destination appeared. Child resource identities generated from a renamed
+  parent path must be refreshed in the design before further native changes.
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.

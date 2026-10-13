@@ -260,6 +260,33 @@ def _validated_macro_replacement(before, after, target):
     return source, new_definition
 
 
+def _validated_rename(before, after, change, catalog):
+    if after['kind'] not in {'table', 'view', 'column'} or before['kind'] != after['kind']:
+        raise ValueError('Native rename is admitted only for tables, views and columns')
+    if change != {'action': 'rename', 'from_resource_id': before['resource_id'],
+                  'confirmation': before['name']}:
+        raise ValueError('Rename requires the exact baseline source and name confirmation')
+    if before['path'][:-1] != after['path'][:-1] or before['name'] == after['name']:
+        raise ValueError('Native rename must retain its parent and change its name')
+    if not _equal(_definition(before), _definition(after)):
+        raise ValueError('Review native definition edits separately from rename')
+    source_target = _address(before, catalog)
+    if after['kind'] == 'column':
+        statement = ('ALTER TABLE ' + '.'.join(_quote(part) for part in before['path'][:3]) +
+                     ' RENAME COLUMN ' + _quote(before['name']) + ' TO ' + _quote(after['name']))
+    else:
+        statement = ('ALTER ' + _KINDS[after['kind']] + ' ' + source_target +
+                     ' RENAME TO ' + _quote(after['name']))
+    import duckdb
+    try:
+        parsed = duckdb.extract_statements(statement)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the rename') from None
+    if len(parsed) != 1 or parsed[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native rename statement is required')
+    return statement
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -281,7 +308,26 @@ def plan(baseline, desired, live):
                     conflicts.append({'resource_id': identity, 'reason': 'Live native definition changed since baseline'})
                     continue
             change = after['native'].get('duckdb_change')
-            if before is None:
+            if (before is None and isinstance(change, dict) and
+                    change.get('action') == 'rename'):
+                source_id = change.get('from_resource_id')
+                if not isinstance(source_id, str):
+                    raise ValueError('Rename requires a baseline source resource ID')
+                source_before = baseline['rows'].get(source_id)
+                source_current = live['rows'].get(source_id)
+                if source_before is None or source_current is None:
+                    raise ValueError('Rename source is absent from baseline or live catalog')
+                _address(source_before, catalog)
+                _address(source_current, catalog)
+                if (source_current['kind'] != source_before['kind'] or
+                        not _equal(_definition(source_current), _definition(source_before))):
+                    conflicts.append({'resource_id': identity,
+                        'reason': 'Live rename source changed since baseline'})
+                    continue
+                operation = 'rename'
+                source = _validated_rename(source_before, after, change, catalog)
+                before = source_before
+            elif before is None:
                 if change is not None:
                     raise ValueError('Creation cannot carry replacement or deletion intent')
                 if after['kind'] in {'index', 'column'}:
@@ -336,6 +382,8 @@ def plan(baseline, desired, live):
                 'name': after['name'], 'operation': operation, 'target': target,
                 'source': source, 'baseline_sha256': digest(_definition(before)) if before else None,
                 'desired_sha256': digest(_definition(after))}
+            if operation == 'rename':
+                operation_record['source_resource_id'] = before['resource_id']
             if after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
