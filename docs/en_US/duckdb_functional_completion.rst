@@ -369,15 +369,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   retargeting intents above are separate. An
   isolated ``rebuild-foreign-keys`` intent may add, remove or replace the
   complete outgoing foreign-key set of one child table. It retains unchanged
-  CHECK, primary-key and NOT NULL facts, and uses the same staged copy,
+  CHECK, primary-key, NOT NULL and independent UNIQUE facts, and uses the same staged copy,
   index/comment replay and exact post-commit child verification. The
   referenced parent tables must be observed in the same catalog and schema,
   differ from the child, and have unchanged semantic definitions bound into
   the review receipt. Global native constraint ordinals can shift when the
   child is recreated and are excluded from that parent comparison. No other
   table may have a foreign key in this first native
-  subset; this also excludes inbound references to the child. Unchanged
-  independent UNIQUE constraints are not yet admitted alongside this action.
+  subset; this also excludes inbound references to the child. An unchanged
+  UNIQUE set must match the reviewed child catalog before the staged copy or
+  old-table drop; changed or omitted UNIQUE definitions roll back.
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
   constraints on a parent referenced by exactly one unchanged child table
   when that simple-name child has only one outgoing foreign key to the parent,

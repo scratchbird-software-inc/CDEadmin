@@ -1233,7 +1233,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     new_column.get('nullable') is not
                         (new_column['name'] not in stage_key_columns)):
                 raise ValueError('Primary-key rebuild nullability must follow key membership')
-    retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK'} if
+    retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK', 'UNIQUE'} if
         action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL', 'UNIQUE'} if
         action == 'rebuild-check-constraints' else set() if
         action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}
@@ -1368,7 +1368,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     'catalog_metadata', {}).get('automatic_dependency_observed') is True):
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
         if row['kind'] == 'table':
-            blocked_types = ({'UNIQUE'} if action == 'rebuild-foreign-keys' else
+            blocked_types = (set() if action == 'rebuild-foreign-keys' else
                 {'FOREIGN KEY'} | ({'UNIQUE'} if action ==
                     'rebuild-check-with-inbound-child' or action ==
                     'rebuild-check-with-inbound-children' else set())) if (
@@ -1402,10 +1402,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     body = create_definition_tokens(source, 'table')
     original_sections = _table_definition_sections(before['native'].get('ddl'),
         inline_unique=action in {'rebuild-unique-constraints',
-            'rebuild-check-constraints'})
+            'rebuild-check-constraints', 'rebuild-foreign-keys'})
     desired_sections = _table_definition_sections(source,
         inline_unique=action in {'rebuild-unique-constraints',
-            'rebuild-check-constraints'})
+            'rebuild-check-constraints', 'rebuild-foreign-keys'})
     old_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
         for item in old_constraints)
     new_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
@@ -1421,7 +1421,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                  ({'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
-                    'rebuild-check-constraints'} else set()))
+                    'rebuild-check-constraints', 'rebuild-foreign-keys'} else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
@@ -1874,7 +1874,8 @@ def plan(baseline, desired, live):
                         'constraint_text': item['constraint_text']}
                         for item in _expected_constraints
                         if item['constraint_type'] == 'UNIQUE']
-                        if change.get('action') == 'rebuild-check-constraints' else None),
+                        if change.get('action') in {'rebuild-check-constraints',
+                            'rebuild-foreign-keys'} else None),
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),
