@@ -8,6 +8,7 @@ import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb import catalog
 from pgadmin.cdeadmin.providers.duckdb.provider import DuckDBPilotProvider, _create_client
 from pgadmin.cdeadmin.sdk import RelationalClientError
+from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
 
 
 def test_attachment_options_and_foreign_locations_do_not_export_credentials():
@@ -29,6 +30,7 @@ def test_owned_capture_preserves_interactive_work_and_sequence_state(tmp_path):
         owner.execute('CREATE TABLE committed(id INT PRIMARY KEY, amount DECIMAL(30,4))')
         owner.execute('CREATE SEQUENCE native_seq START 20')
         owner.execute('CREATE MACRO overloaded(x) AS x+1, (x,y) AS x+y')
+        owner.execute('CREATE TYPE native_shape AS STRUCT(k INTEGER, l VARCHAR)')
         owner.execute('BEGIN TRANSACTION')
         owner.execute('INSERT INTO committed VALUES (7, 1.2300)')
         owner.execute('CREATE TEMP TABLE session_only(id INT)')
@@ -36,6 +38,14 @@ def test_owned_capture_preserves_interactive_work_and_sequence_state(tmp_path):
         rows = result['resources']
         assert result['consistency'] == 'owned-native-transaction' and not result['complete']
         assert next(row for row in rows if row['display_name'] == 'overloaded')['native']['overload_count'] == 2
+        native_type = next(row for row in rows if row['display_name'] == 'native_shape')
+        assert native_type['native']['catalog_metadata']['resolved_type'] == (
+            'STRUCT(k INTEGER, l VARCHAR)')
+        design = build_export(rows, endpoint_id='endpoint-1', target_id='file-1',
+            generation=result['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        assert design['rows'][native_type['resource_id']]['native']['catalog_metadata'][
+            'resolved_type'] == 'STRUCT(k INTEGER, l VARCHAR)'
         assert not any(row['display_name'] == 'session_only' for row in rows)
         assert owner.execute('SELECT id FROM committed').fetchall() == [(7,)]
         assert owner.execute("SELECT nextval('native_seq')").fetchone() == (20,)

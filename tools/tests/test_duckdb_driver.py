@@ -396,3 +396,19 @@ def test_native_type_catalog_resolves_struct_union_and_alias_details(client, tmp
     assert types['detail type'] == 'STRUCT("field one" INTEGER, flag BOOLEAN)'
     assert types['payload'] == 'UNION(number INTEGER, "text" VARCHAR)'
     assert types['alias_number'] == 'DECIMAL(11,3)'
+
+
+def test_native_type_resolution_keeps_attached_catalog_identity(client, tmp_path):
+    import duckdb
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    attached = tmp_path/'typed-attachment.duckdb'
+    owner = duckdb.connect(str(attached))
+    owner.execute('CREATE TYPE details AS STRUCT(x INT, y VARCHAR)')
+    owner.close()
+    handle, _ = open_database(client, tmp_path)
+    handle.execute(f"ATTACH '{attached}' AS other_catalog")
+    resource = next(item for item in _resources(handle, {})
+        if item['resource_kind'] == 'type' and
+        item['display_path'] == ['other_catalog', 'main', 'details'])
+    assert resource['native']['catalog_metadata']['resolved_type'] == (
+        'STRUCT(x INTEGER, y VARCHAR)')
