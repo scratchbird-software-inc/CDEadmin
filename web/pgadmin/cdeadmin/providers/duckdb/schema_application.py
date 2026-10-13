@@ -72,19 +72,26 @@ def apply_review(provider, route, record):
                         macro_descriptors[macro_id] = bindings
                 old_rows = connection.execute('SELECT count(*) FROM ' +
                     operation['target']).fetchone()[0]
-                inbound = operation.get('inbound_child')
-                parent_offset = inbound['parent_offset'] if inbound else 0
-                if inbound:
+                inbounds = operation.get('inbound_children', [])
+                parent_offset = inbounds[0]['parent_offset'] if inbounds else 0
+                if inbounds:
                     from ...workspace.duckdb_schema_plan import _quote
-                    child = record['baseline']['rows'][inbound['child_resource_id']]
-                    child_target = '.'.join(_quote(part) for part in child['path'])
-                    inbound_rows[inbound['child_resource_id']] = connection.execute(
-                        'SELECT count(*) FROM ' + child_target).fetchone()[0]
+                    for inbound in inbounds:
+                        child = record['baseline']['rows'][inbound['child_resource_id']]
+                        child_target = '.'.join(_quote(part) for part in child['path'])
+                        inbound_rows[inbound['child_resource_id']] = connection.execute(
+                            'SELECT count(*) FROM ' + child_target).fetchone()[0]
+                child_creates = {offset: (item, phase)
+                    for item in inbounds for phase, offset in
+                    enumerate((item['first_offset'], item['final_offset']))}
+                child_copies = {offset + 1: (item, phase)
+                    for offset, (item, phase) in child_creates.items()}
                 for index, statement in enumerate(operation['statements']):
                     result['statement_dispatched'] = True
                     connection.execute(statement)
-                    if inbound and index in (0, inbound['final_offset']):
-                        phase = 0 if index == 0 else 1
+                    if index in child_creates:
+                        inbound, phase = child_creates[index]
+                        child = record['baseline']['rows'][inbound['child_resource_id']]
                         scope = (child['path'][0], child['path'][1],
                             inbound['stage_names'][phase])
                         columns = connection.execute(
@@ -104,8 +111,8 @@ def apply_review(provider, route, record):
                             fact['referenced_table'], fact['referenced_column_names'])])
                         if columns != expected_columns or constraints != expected_constraints:
                             raise ValueError('Inbound child staging differs from reviewed model')
-                    if inbound and index in (1, inbound['final_offset'] + 1):
-                        phase = 0 if index == 1 else 1
+                    if index in child_copies:
+                        inbound, phase = child_copies[index]
                         if connection.execute(inbound['data_checks'][phase]).fetchone()[0] != 0:
                             raise ValueError('Inbound child stage rows differ from original')
                     if index == parent_offset and operation.get('stage_columns') is not None:
@@ -276,14 +283,13 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][column_id])) ==
                                     operation['desired_view_column_sha256'][column_id]
                                 for column_id in operation.get('affected_view_column_ids', []))
-                        if verified and operation.get('inbound_child'):
-                            inbound = operation['inbound_child']
-                            child_id = inbound['child_resource_id']
+                        if verified and operation.get('inbound_children'):
                             from ...workspace.duckdb_schema_plan import _quote
-                            child = record['baseline']['rows'][child_id]
-                            child_target = '.'.join(_quote(part) for part in child['path'])
-                            verified = (connection.execute('SELECT count(*) FROM ' +
-                                child_target).fetchone()[0] == inbound_rows[child_id] and
+                            verified = (all(connection.execute('SELECT count(*) FROM ' +
+                                '.'.join(_quote(part) for part in record['baseline']['rows'][
+                                    item['child_resource_id']]['path'])).fetchone()[0] ==
+                                inbound_rows[item['child_resource_id']]
+                                for item in operation['inbound_children']) and
                                 all(observed['rows'].get(identity) is not None and
                                     digest(_definition(observed['rows'][identity])) ==
                                     operation['desired_inbound_sha256'][identity]

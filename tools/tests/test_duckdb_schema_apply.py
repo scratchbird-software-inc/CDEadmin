@@ -1346,7 +1346,9 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
 
 
 @pytest.mark.parametrize('invalid', [False, True])
-def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid):
+@pytest.mark.parametrize('child_count', [1, 2, 3])
+def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
+        tmp_path, invalid, child_count):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1354,9 +1356,15 @@ def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid)
         'payload VARCHAR CHECK(length(payload) > 0))')
     connection.execute('CREATE TABLE child(id INTEGER, parent_id INTEGER, '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    for number in range(2, child_count + 1):
+        connection.execute(f'CREATE TABLE child{number}(id INTEGER, parent_id INTEGER, '
+            'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute('INSERT INTO parent VALUES (1, ?), (2, ?)',
         ['a' if invalid else 'aa', 'bb'])
     connection.execute('INSERT INTO child VALUES (10, 1), (11, 2)')
+    for number in range(2, child_count + 1):
+        connection.execute(f'INSERT INTO child{number} VALUES '
+            f'({number * 10}, 1), ({number * 10 + 1}, 2)')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1365,8 +1373,10 @@ def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid)
             engine='duckdb', native_model=True)
         parent = next(row for row in baseline['rows'].values()
             if row['kind'] == 'table' and row['name'] == 'parent')
-        child = next(row for row in baseline['rows'].values()
-            if row['kind'] == 'table' and row['name'] == 'child')
+        children = [next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == name)
+            for name in ['child', *(f'child{number}'
+                for number in range(2, child_count + 1))]]
         root = parent['path'][0]
         desired = deepcopy(baseline)
         edited = desired['rows'][parent['resource_id']]['native']
@@ -1379,19 +1389,36 @@ def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid)
         edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
             '(id INTEGER PRIMARY KEY, payload VARCHAR, '
             'CHECK((length(payload) >= 2)))')
-        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
-            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
-            'inbound_child_resource_id': child['resource_id'],
-            'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
-                '(id INTEGER, parent_id INTEGER)'}
+        change = {'action': ('rebuild-check-with-inbound-child' if child_count == 1
+                else 'rebuild-check-with-inbound-children'),
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        intermediate = lambda name: (f'CREATE TABLE "{root}"."main"."{name}" '
+            '(id INTEGER, parent_id INTEGER)')
+        if child_count == 1:
+            change.update(inbound_child_resource_id=children[0]['resource_id'],
+                intermediate_child_ddl=intermediate('child'))
+        else:
+            change['inbound_children'] = [{'resource_id': item['resource_id'],
+                'intermediate_ddl': intermediate(item['name'])} for item in children]
+        edited['duckdb_change'] = change
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
-        assert len(preview['operations'][0]['statements']) >= 12
+        assert len(preview['operations'][0]['statements']) >= 4 + child_count * 8
+        if child_count > 1:
+            missing = deepcopy(desired)
+            missing['rows'][parent['resource_id']]['native'][
+                'duckdb_change']['inbound_children'].pop()
+            assert not plan(baseline, missing, baseline)['application_supported']
         unsafe = deepcopy(desired)
         unsafe_change = unsafe['rows'][parent['resource_id']]['native']['duckdb_change']
-        unsafe_change['intermediate_child_ddl'] = (
-            unsafe_change['intermediate_child_ddl'].replace(
-                'parent_id INTEGER', 'parent_id VARCHAR'))
+        if child_count == 1:
+            unsafe_change['intermediate_child_ddl'] = (
+                unsafe_change['intermediate_child_ddl'].replace(
+                    'parent_id INTEGER', 'parent_id VARCHAR'))
+        else:
+            unsafe_change['inbound_children'][1]['intermediate_ddl'] = (
+                unsafe_change['inbound_children'][1]['intermediate_ddl'].replace(
+                    'parent_id INTEGER', 'parent_id VARCHAR'))
         assert not plan(baseline, unsafe, baseline)['application_supported']
         applications = DuckDBSchemaApplications(tmp_path/'inbound-check.json',
             clock=lambda: 100)
@@ -1407,6 +1434,11 @@ def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid)
             (10, 1), (11, 2)]
         assert observer.execute("SELECT constraint_type FROM duckdb_constraints() "
             "WHERE table_name='child'").fetchall() == [('FOREIGN KEY',)]
+        for number in range(2, child_count + 1):
+            assert observer.execute(f'SELECT id,parent_id FROM child{number} ORDER BY id').fetchall() == [
+                (number * 10, 1), (number * 10 + 1, 2)]
+            assert observer.execute("SELECT constraint_type FROM duckdb_constraints() "
+                f"WHERE table_name='child{number}'").fetchall() == [('FOREIGN KEY',)]
         assert observer.execute('SELECT id,payload FROM parent ORDER BY id').fetchall() == [
             (1, 'a' if invalid else 'aa'), (2, 'bb')]
         assert observer.execute("SELECT constraint_text FROM duckdb_constraints() "

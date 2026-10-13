@@ -392,7 +392,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   native columns and constraint facts and preserve row multisets before its
   predecessor is dropped. Any failure rolls back both tables; fresh discovery
   verifies both table definitions, rows and the restored foreign key. More
-  complex inbound graphs remain blocked.
+  complex inbound graphs remain blocked. The companion
+  ``rebuild-check-with-inbound-children`` intent accepts two or three distinct
+  qualifying children, each with its own complete intermediate definition.
+  All child foreign keys are detached before the parent swap, then each child
+  is restored and independently row-checked within the same transaction and
+  receipt. A partial child set, overlapping child identities or a batch above
+  the statement budget is refused before dispatch.
   Native staging validates existing rows against new references before the
   original child is dropped; a failure rolls back. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain
