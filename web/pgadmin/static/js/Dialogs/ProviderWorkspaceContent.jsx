@@ -26,6 +26,7 @@ import FirebirdMetadataSearch from './FirebirdMetadataSearch';
 import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
 import MySQLCatalog from './MySQLCatalog';
+import MariaDBCatalog from './MariaDBCatalog';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import FirebirdFormLayout from './FirebirdFormLayout';
@@ -68,6 +69,7 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'mariadb_catalog_export', 'mariadb_catalog_compare',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
@@ -8147,6 +8149,8 @@ export default function ProviderWorkspaceContent({
           post={post} setError={setError} />}
       {workspace && tab === 'mysql-test-data' && workspace.endpoint?.profile_id === 'mysql-native' && queryDatabaseTargetId &&
         <MySQLTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
+        <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
           <MySQLServerCatalog post={post} />)}

@@ -5573,6 +5573,10 @@
     "mariadb-recent-observations": {
       "reference": "SR-F-001406",
       "title": "MariaDB retained monitoring observations"
+    },
+    "mariadb-catalog-ddn": {
+      "reference": "SR-F-001407",
+      "title": "MariaDB native catalog and DDN views"
     }
   }
 }

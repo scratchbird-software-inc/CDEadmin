@@ -1213,6 +1213,9 @@ def database_target_context_actions(
             actions.append(_action(f'database.mariadb.{tab}', label, 'open_workspace',
                 icon='tool.dashboard', group='availability',
                 mutation='admin' if tab == 'monitoring_policy' else 'read', arguments={**base, 'tab': tab}))
+        actions.append(_action('database.mariadb.catalog_ddn', 'MariaDB metadata and DDN diagrams...',
+            'open_workspace', icon='action.export', group='database', priority=44,
+            arguments={**base, 'tab': 'export'}))
         actions.append(_action('database.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', arguments=base))
     if engine_id == 'mysql':
