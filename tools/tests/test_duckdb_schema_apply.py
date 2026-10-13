@@ -271,6 +271,117 @@ def test_committed_view_replacement_requires_matching_native_body(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('tamper', (None, 'view', 'column'))
+def test_view_replacement_restores_native_comment_in_one_transaction(tmp_path, tamper):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE VIEW observed_view AS SELECT 1 AS x')
+    connection.execute("COMMENT ON VIEW observed_view IS 'retained note'")
+    connection.execute("COMMENT ON COLUMN observed_view.x IS 'column note'")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        current = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'view' and row['name'] == 'observed_view')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][current['resource_id']]['native']
+        edited.update(ddl=f'CREATE OR REPLACE VIEW "{current["path"][0]}"."main".'
+            '"observed_view" AS SELECT 2 AS x', duckdb_change={'action': 'replace'})
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) == 3
+        changed_comment = deepcopy(desired)
+        changed_comment['rows'][current['resource_id']]['native'][
+            'catalog_metadata']['comment'] = 'different note'
+        assert not plan(baseline, changed_comment, baseline)['application_supported']
+        missing_column = deepcopy(desired)
+        missing_column['rows'][current['resource_id']]['native']['columns'] = []
+        assert not plan(baseline, missing_column, baseline)['application_supported']
+        combined = deepcopy(desired)
+        child_id = current['native']['columns'][0]['resource_id']
+        combined['rows'][child_id]['native']['catalog_metadata']['comment'] = 'new note'
+        combined['rows'][child_id]['native']['duckdb_change'] = {
+            'action': 'set-comment'}
+        assert not plan(baseline, combined, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'view-with-comment.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        from pgadmin.cdeadmin.providers.duckdb import schema_application
+        actual_model = schema_application._model
+
+        def conflicting_observation(connection, record, *, in_transaction):
+            model = actual_model(connection, record, in_transaction=in_transaction)
+            if not in_transaction:
+                if tamper == 'view':
+                    model['rows'][current['resource_id']]['native'][
+                        'catalog_metadata']['comment'] = 'different note'
+                else:
+                    model['rows'][current['resource_id']]['native'][
+                        'columns'][0]['comment'] = 'different note'
+            return model
+
+        if tamper:
+            with patch.object(schema_application, '_model', conflicting_observation):
+                outcome = applications.apply(request(receipt), 'owner', 'binding',
+                    lambda record: apply_review(provider, route, record))
+        else:
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'] is (tamper is None), outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT x FROM observed_view').fetchall() == [(2,)]
+        assert observer.execute("SELECT comment FROM duckdb_views() "
+            "WHERE view_name='observed_view'").fetchone()[0] == 'retained note'
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='observed_view' AND column_name='x'").fetchone()[0] == 'column note'
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_view_replacement_rolls_back_when_commented_column_disappears(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE VIEW observed_view AS SELECT 1 AS x')
+    connection.execute("COMMENT ON COLUMN observed_view.x IS 'column note'")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        current = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'view' and row['name'] == 'observed_view')
+        desired = deepcopy(baseline)
+        desired['rows'][current['resource_id']]['native'].update(
+            ddl=f'CREATE OR REPLACE VIEW "{current["path"][0]}"."main".'
+                '"observed_view" AS SELECT 2 AS y',
+            duckdb_change={'action': 'replace'})
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'missing-commented-column.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'rolled_back', outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT x FROM observed_view').fetchall() == [(1,)]
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='observed_view' AND column_name='x'").fetchone()[0] == 'column note'
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_committed_view_creation_requires_matching_native_body(tmp_path):
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
     root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')

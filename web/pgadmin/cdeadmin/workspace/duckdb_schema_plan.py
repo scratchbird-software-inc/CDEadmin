@@ -387,11 +387,29 @@ def _validated_enum_extension(before, after, target):
 
 
 def _validated_view_replacement(before, after):
-    for row in (before, after):
-        metadata = row['native'].get('catalog_metadata', {})
-        if metadata.get('comment') is not None or metadata.get('tags'):
-            raise ValueError('View replacement would discard native comment or tags')
-    return _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
+    old = before['native'].get('catalog_metadata', {})
+    new = after['native'].get('catalog_metadata', {})
+    if old.get('tags') or new.get('tags') or old.get('comment') != new.get('comment'):
+        raise ValueError('View replacement requires unchanged comment and no native tags')
+    old_columns = before['native'].get('columns')
+    new_columns = after['native'].get('columns')
+    if not isinstance(old_columns, list) or not isinstance(new_columns, list):
+        raise ValueError('View replacement requires complete native column facts')
+    old_comments = {column['name']: column['comment'] for column in old_columns
+        if column.get('comment') is not None}
+    new_comments = {column['name']: column['comment'] for column in new_columns
+        if column.get('comment') is not None}
+    if old_comments != new_comments:
+        raise ValueError('View replacement requires unchanged commented columns')
+    source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
+    target = '.'.join(_quote(part) for part in after['path'])
+    replay = _validated_replayed_comment('view', target, old.get('comment'))
+    statements = [replay] if replay is not None else []
+    for column in sorted(old_columns, key=lambda item: item['ordinal_position']):
+        if column.get('comment') is not None:
+            statements.append(_validated_replayed_comment('column',
+                target + '.' + _quote(column['name']), column['comment']))
+    return source, statements, old_comments
 
 
 def view_query_tokens(source):
@@ -1140,6 +1158,13 @@ def _ordered_operations(operations, desired):
         raise ValueError('Rename requires a separate review and descendant refresh')
     if len(operations) > 1 and any(item['operation'] == 'rebuild' for item in operations):
         raise ValueError('Constraint table rebuild requires a separate review')
+    replaced_views = {item['resource_id'] for item in operations
+        if item['kind'] == 'view' and item['operation'] == 'replace'}
+    if replaced_views and any(item['kind'] == 'column' and
+            _resource_id('view', desired['rows'][item['resource_id']]['path'][:2],
+                desired['rows'][item['resource_id']]['path'][2]) in replaced_views
+            for item in operations):
+        raise ValueError('View replacement and child comment edits require separate reviews')
     by_id = {item['resource_id']: item for item in operations}
     for item in operations:
         row = desired['rows'][item['resource_id']]
@@ -1282,7 +1307,8 @@ def plan(baseline, desired, live):
                     raise ValueError('Native removal grammar is unavailable')
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
-                source = _validated_view_replacement(before, after)
+                (source, _view_comment_replays,
+                 _view_column_comments) = _validated_view_replacement(before, after)
             elif change == {'action': 'extend-enum'} and after['kind'] == 'type':
                 operation = 'replace'
                 source, _labels = _validated_enum_extension(before, after, target)
@@ -1342,6 +1368,12 @@ def plan(baseline, desired, live):
                 'name': after['name'], 'operation': operation, 'target': target,
                 'source': source, 'baseline_sha256': digest(_definition(before)) if before else None,
                 'desired_sha256': digest(_definition(after))}
+            if operation == 'replace' and after['kind'] == 'view':
+                operation_record['preserved_comment'] = after['native'].get(
+                    'catalog_metadata', {}).get('comment')
+                operation_record['preserved_column_comments'] = _view_column_comments
+                if _view_comment_replays:
+                    operation_record['statements'] = [source, *_view_comment_replays]
             if operation == 'rename':
                 operation_record['source_resource_id'] = before['resource_id']
             if operation == 'create' and after['kind'] == 'column':

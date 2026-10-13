@@ -68,8 +68,9 @@ def apply_review(provider, route, record):
                             raise ValueError('Native sequence default has no observed dependency')
                 rebuild_rows[operation['resource_id']] = old_rows
             else:
-                result['statement_dispatched'] = True
-                connection.execute(operation['source'])
+                for statement in operation.get('statements', [operation['source']]):
+                    result['statement_dispatched'] = True
+                    connection.execute(statement)
         result['commit_requested'] = True
         connection.execute('COMMIT')
         result.update(state='committed', native_commit_returned=True)
@@ -164,7 +165,13 @@ def apply_review(provider, route, record):
                         from ...workspace.duckdb_schema_plan import view_query_tokens
                         expected = view_query_tokens(operation['source'])
                         verified = (expected is not None and expected == view_query_tokens(
-                            current['native'].get('ddl')))
+                            current['native'].get('ddl')) and
+                            current['native'].get('catalog_metadata', {}).get('comment') ==
+                            operation['preserved_comment'] and
+                            {column['name']: column['comment'] for column in
+                                current['native'].get('columns', [])
+                                if column.get('comment') is not None} ==
+                            operation['preserved_column_comments'])
                     if verified and operation.get('postcondition'):
                         if 'overloads' in operation['postcondition']:
                             from ...workspace.duckdb_schema_plan import _macro_overload_postcondition

@@ -198,10 +198,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   label in order and appends distinct new labels. It uses one reviewed native
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
   reference the prior type definition; any such column conversion requires a
-  separate reviewed column alteration. A native view replacement or enum
-  extension is blocked when the old object has a comment or tags, because
-  ``CREATE OR REPLACE`` discards those facts and the one-statement adapter
-  cannot restore them. After a committed view creation or replacement, compare the native
+  separate reviewed column alteration. A native enum extension is blocked
+  when the old object has a comment or tags, because ``CREATE OR REPLACE``
+  discards those facts and the one-statement adapter cannot restore them.
+  A view replacement replays unchanged view and column comments in the same
+  native transaction after ``CREATE OR REPLACE VIEW``; a changed comment,
+  a missing commented column in the desired model or any native tags block
+  review. A view replacement and a separate child-column comment edit cannot
+  share one review. Native execution rolls back if the submitted replacement SQL no
+  longer exposes a commented column despite its desired model. After a
+  committed view creation or replacement, compare
+  the preserved comments and the native
   catalog's parsed view-query tokens and explicit column aliases with the
   submitted definition. A changed
   object name or merely different definition is insufficient verification;

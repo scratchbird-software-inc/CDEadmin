@@ -227,6 +227,8 @@ def test_whole_table_replacement_cannot_silently_replace_data_and_dependents():
 def test_stale_live_definition_and_foreign_scope_are_refused():
     before = row('view', ['file', 'main', 'report'],
         ddl='CREATE VIEW "file"."main"."report" AS SELECT 1')
+    before['native']['columns'] = [
+        {'name': 'x', 'ordinal_position': 0, 'comment': None}]
     desired = deepcopy(before)
     desired['native'].update(ddl='CREATE OR REPLACE VIEW "file"."main"."report" AS SELECT 2',
         duckdb_change={'action': 'replace'})
@@ -239,8 +241,10 @@ def test_stale_live_definition_and_foreign_scope_are_refused():
     commented['native']['catalog_metadata']['comment'] = 'preserve'
     commented_desired = deepcopy(desired)
     commented_desired['native']['catalog_metadata']['comment'] = 'preserve'
-    assert 'discard native comment' in plan(
-        model(commented), model(commented_desired), model(commented))['blockers'][0]['reason']
+    commented_desired['native']['columns'] = deepcopy(commented['native']['columns'])
+    comment_preview = plan(model(commented), model(commented_desired), model(commented))
+    assert comment_preview['application_supported'], comment_preview['blockers']
+    assert len(comment_preview['operations'][0]['statements']) == 2
     with pytest.raises(ValueError, match='another endpoint'):
         plan(model(before, endpoint='foreign'), model(desired), model(before))
 
