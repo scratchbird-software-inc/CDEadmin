@@ -287,6 +287,32 @@ def _validated_rename(before, after, change, catalog):
     return statement
 
 
+def _validated_comment(before, after, target):
+    if after['kind'] not in {'table', 'view', 'column', 'sequence', 'type', 'macro', 'index'}:
+        raise ValueError('Native comments are unavailable for this object kind')
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    old_comment = previous['catalog'].pop('comment', None)
+    new_comment = desired['catalog'].pop('comment', None)
+    if old_comment == new_comment or not _equal(previous, desired):
+        raise ValueError('Review the one native comment edit separately')
+    if new_comment is not None and (not isinstance(new_comment, str) or
+            len(new_comment.encode('utf8')) > 8192 or '\x00' in new_comment):
+        raise ValueError('Native comment must be bounded text or NULL')
+    if after['kind'] == 'index':
+        target = '.'.join(_quote(part) for part in
+            [after['path'][0], after['path'][1], after['name']])
+    literal = 'NULL' if new_comment is None else "'" + new_comment.replace("'", "''") + "'"
+    source = 'COMMENT ON ' + _KINDS[after['kind']] + ' ' + target + ' IS ' + literal
+    import duckdb
+    try:
+        parsed = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the comment') from None
+    if len(parsed) != 1 or parsed[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native COMMENT ON statement is required')
+    return source, new_comment
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -372,6 +398,9 @@ def plan(baseline, desired, live):
             elif change == {'action': 'replace-definition'} and after['kind'] == 'macro':
                 operation = 'replace'
                 source, _definition_text = _validated_macro_replacement(before, after, target)
+            elif change == {'action': 'set-comment'}:
+                operation = 'alter'
+                source, _comment = _validated_comment(before, after, target)
             elif (after['kind'] == 'column' and isinstance(change, dict) and
                   change.get('action') in {'set-default', 'set-nullable', 'set-type'}):
                 operation = 'alter'
@@ -391,6 +420,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'labels': _labels}
             elif after['kind'] == 'macro' and change == {'action': 'replace-definition'}:
                 operation_record['postcondition'] = {'definition': _definition_text}
+            elif change == {'action': 'set-comment'}:
+                operation_record['postcondition'] = {'comment': _comment}
             operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': identity, 'name': after.get('name'), 'reason': str(error)})

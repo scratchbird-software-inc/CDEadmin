@@ -70,7 +70,9 @@ def apply_review(provider, route, record):
                     digest(_definition(current)) != operation['baseline_sha256'])
                 if result['rediscovery_verified'] and operation.get('postcondition'):
                     metadata = (current['native'].get('catalog_metadata', {})
-                        if operation['kind'] in {'column', 'type'} else
+                        if operation['kind'] in {'column', 'type'} or
+                            (operation['operation'] == 'alter' and
+                             'comment' in operation['postcondition']) else
                         {'definition': (current['native'].get('overloads') or [{}])[0]
                             .get('definition')})
                     result['rediscovery_verified'] = all(

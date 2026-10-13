@@ -97,6 +97,44 @@ def test_exact_native_rename_binds_old_and_new_identity(kind, parent, old, new, 
     assert plan(baseline, desired, model(stale))['conflicts']
 
 
+@pytest.mark.parametrize('kind,path,target', [
+    ('table', ['file', 'main', 'facts'], '"file"."main"."facts"'),
+    ('view', ['file', 'main', 'facts'], '"file"."main"."facts"'),
+    ('column', ['file', 'main', 'facts', 'value'], '"file"."main"."facts"."value"'),
+    ('sequence', ['file', 'main', 'facts'], '"file"."main"."facts"'),
+    ('type', ['file', 'main', 'facts'], '"file"."main"."facts"'),
+    ('macro', ['file', 'main', 'facts'], '"file"."main"."facts"'),
+    ('index', ['file', 'main', 'facts', 'facts_ix'], '"file"."main"."facts_ix"'),
+])
+def test_isolated_native_comment_uses_exact_target_and_escaped_literal(kind, path, target):
+    pytest.importorskip('duckdb')
+    before = row(kind, path)
+    before['native']['catalog_metadata']['comment'] = None
+    after = deepcopy(before)
+    after['native']['catalog_metadata']['comment'] = "owner's note"
+    after['native']['duckdb_change'] = {'action': 'set-comment'}
+    result = plan(model(before), model(after), model(before))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        f"COMMENT ON {kind.upper()} {target} IS 'owner''s note'")
+    assert result['operations'][0]['postcondition'] == {'comment': "owner's note"}
+    after['native']['catalog_metadata']['tags'] = {'other': 'edit'}
+    assert plan(model(before), model(after), model(before))['blockers']
+    after['native']['catalog_metadata'].pop('tags')
+    after['native']['catalog_metadata']['comment'] = "a'; DROP TABLE facts; --"
+    safe = plan(model(before), model(after), model(before))
+    assert safe['application_supported']
+    assert safe['operations'][0]['source'].count("DROP TABLE facts") == 1
+
+
+def test_schema_comment_is_blocked_by_native_version():
+    before = row('schema', ['file', 'main'])
+    after = deepcopy(before)
+    after['native']['catalog_metadata']['comment'] = 'unsupported'
+    after['native']['duckdb_change'] = {'action': 'set-comment'}
+    assert plan(model(before), model(after), model(before))['blockers']
+
+
 @pytest.mark.parametrize('source', [
     'CREATE TABLE "other"."main"."facts" (x INTEGER)',
     'CREATE TABLE "file"."main"."facts" (',

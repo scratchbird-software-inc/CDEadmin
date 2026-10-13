@@ -277,6 +277,50 @@ def test_reviewed_native_rename_rebinds_identity_and_rediscovery(
         provider.client.close()
 
 
+@pytest.mark.parametrize('kind,name,setup', [
+    ('table', 'existing', None),
+    ('view', 'commented_view', 'CREATE VIEW commented_view AS SELECT 1 AS x'),
+    ('column', 'id', None),
+    ('sequence', 'commented_seq', 'CREATE SEQUENCE commented_seq'),
+    ('type', 'commented_type', "CREATE TYPE commented_type AS ENUM ('a', 'b')"),
+    ('macro', 'commented_macro', 'CREATE MACRO commented_macro(x) AS x + 1'),
+    ('index', 'existing_id_ix', 'CREATE INDEX existing_id_ix ON existing(id)'),
+])
+def test_native_comment_review_apply_and_fresh_postcondition(tmp_path, kind, name, setup):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        if setup:
+            connection = duckdb.connect(route['database'])
+            connection.execute(setup)
+            connection.close()
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'],
+            refreshed=True, engine='duckdb', native_model=True)
+        current = next(item for item in baseline['rows'].values()
+            if item['kind'] == kind and item['name'] == name)
+        desired = deepcopy(baseline)
+        after = desired['rows'][current['resource_id']]
+        after['native']['catalog_metadata']['comment'] = "owner's note"
+        after['native']['duckdb_change'] = {'action': 'set-comment'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/f'{kind}-comment.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observed = provider.capture_catalog(route)
+        fresh = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'],
+            refreshed=True, engine='duckdb', native_model=True)
+        assert fresh['rows'][current['resource_id']]['native']['catalog_metadata']['comment'] == "owner's note"
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
