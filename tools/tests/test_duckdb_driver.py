@@ -383,3 +383,16 @@ def test_single_macro_keeps_its_unambiguous_definition(client, tmp_path):
     assert native['definition'] == '(x + 1)'
     assert native['parameters'] == [{'name': 'x', 'data_type': None}]
     assert native['overloads'][0]['definition'] == native['definition']
+
+
+def test_native_type_catalog_resolves_struct_union_and_alias_details(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE TYPE "detail type" AS STRUCT("field one" INTEGER, flag BOOL)')
+    handle.execute('CREATE TYPE payload AS UNION(number INTEGER, text VARCHAR)')
+    handle.execute('CREATE TYPE alias_number AS DECIMAL(11, 3)')
+    types = {item['display_name']: item['native']['catalog_metadata']['resolved_type']
+             for item in _resources(handle, {}) if item['resource_kind'] == 'type'}
+    assert types['detail type'] == 'STRUCT("field one" INTEGER, flag BOOLEAN)'
+    assert types['payload'] == 'UNION(number INTEGER, "text" VARCHAR)'
+    assert types['alias_number'] == 'DECIMAL(11,3)'

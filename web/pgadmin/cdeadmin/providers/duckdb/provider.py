@@ -207,6 +207,9 @@ def _resources(connection, request):
     generation = str(request.get('capability_generation') or 'current')
     resources = {}
 
+    def qualified(parts):
+        return '.'.join('"' + str(part).replace('"', '""') + '"' for part in parts)
+
     def add(kind, path, name, native=None, *, discriminator=None):
         path = [str(item) for item in path]
         name = str(name)
@@ -469,11 +472,13 @@ def _resources(connection, request):
     )
     for row in cursor.fetchall():
         database, schema, name, *values = row
+        cursor.execute('SELECT typeof(NULL::' + qualified((database, schema, name)) + ')')
+        resolved_type = cursor.fetchone()[0]
         add('type', [database, schema], name, {
             'catalog_metadata': dict(zip((
                 'oid', 'size_bytes', 'logical_type', 'category',
                 'comment', 'tags', 'labels',
-            ), values)),
+            ), values)) | {'resolved_type': resolved_type},
         })
     cursor.execute(
         'SELECT database_name, schema_name, function_name, '

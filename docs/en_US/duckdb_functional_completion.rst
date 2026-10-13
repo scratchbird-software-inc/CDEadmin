@@ -27,6 +27,11 @@ DUCK-COMP-01: Native catalog and administration
   Catalog capture presents overloads in a stable signature-and-definition
   order so repeated captures of unchanged native objects do not generate
   order-only design differences.
+  For user-defined types, capture DuckDB's catalog-resolved type expression
+  with an exact qualified ``typeof(NULL::type)`` query. This preserves STRUCT
+  fields, UNION alternatives and alias targets that ``duckdb_types()`` names
+  only by broad logical category. The resolved expression describes current
+  native semantics; it is not proof of the author's original DDL spelling.
   Attachments are session-owned native objects, not remote authenticated servers.
   Do not offer unsupported server accounts, roles, triggers, procedures,
   replication, savepoints, or MySQL-style administrative executables.
