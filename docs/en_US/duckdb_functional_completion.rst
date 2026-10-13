@@ -45,6 +45,11 @@ DUCK-COMP-03: Shared SQL editor and native language
   Preserve native Arrow exact and nested values, duplicate column identities and
   ordered result sets. Report preparation, dispatch and fetch measurements only
   for the scope actually measured. EXPLAIN ANALYZE executes native work.
+  Source checking on a retained DuckDB session uses the pinned 1.5.2 native
+  parse-only API. It returns native statement boundaries and grammar status
+  without executing SQL. Parse errors are scrubbed because native diagnostics
+  may echo source literals. This check does not establish semantic validity,
+  permissions or side-effect safety; those remain execution-time concerns.
 
 DUCK-COMP-04: Data and file workflows
   Implement native row editing with qualified identity, paging, commit/rollback,

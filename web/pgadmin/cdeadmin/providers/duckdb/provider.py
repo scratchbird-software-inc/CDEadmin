@@ -149,6 +149,16 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def validate_source_without_execution(self, request):
+        from .language import analyze
+        if not isinstance(request, dict) or request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('DuckDB SQL language binding required')
+        session = self._sessions.get(request.get('session_id'))
+        if session is None:
+            raise RelationalClientError('DuckDB session is unavailable')
+        self.client._require_idle(session.handle)
+        return analyze(request.get('source'), script=request.get('script', False))
+
     def capture_catalog(self, route, *, include_system=False):
         from .catalog import capture
         self._require('data_read', 'resource')
