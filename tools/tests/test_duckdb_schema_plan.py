@@ -7,7 +7,8 @@ import pytest
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb.provider import _resource_id
 from pgadmin.cdeadmin.workspace.duckdb_schema_plan import (
-    create_definition_tokens, plan, type_expression_tokens, view_query_tokens,
+    create_definition_tokens, plan, sequence_creation_postcondition,
+    type_expression_tokens, view_query_tokens,
 )
 
 
@@ -116,6 +117,26 @@ def test_created_type_expression_matches_catalog_resolution_without_target_spell
     assert type_expression_tokens(
         'CREATE TYPE "file"."main"."state" AS ENUM (\'ready\')',
         created=True) != type_expression_tokens("ENUM('done')", created=False)
+
+
+def test_sequence_creation_effective_options_and_ownership_blocker():
+    pytest.importorskip('duckdb')
+    path = ['file', 'main', 'counter']
+    target = 'CREATE SEQUENCE "file"."main"."counter"'
+    assert sequence_creation_postcondition(target, path) == {
+        'start_value': 1, 'min_value': 1, 'max_value': 2 ** 63 - 1,
+        'increment_by': 1, 'cycle': False}
+    assert sequence_creation_postcondition(
+        target + ' INCREMENT BY -2 MAXVALUE 9 CYCLE', path) == {
+        'start_value': 9, 'min_value': -(2 ** 63), 'max_value': 9,
+        'increment_by': -2, 'cycle': True}
+    for suffix in ('OWNED BY "file"."main"."existing".id',
+                   'MINVALUE -3 INCREMENT BY -1',
+                   'INCREMENT BY 2 INCREMENT BY 3'):
+        assert sequence_creation_postcondition(target + ' ' + suffix, path) is None
+        preview = plan(model(), model(row('sequence', path, ddl=target + ' ' + suffix)),
+            model())
+        assert not preview['application_supported'] and preview['blockers']
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

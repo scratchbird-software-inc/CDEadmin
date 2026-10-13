@@ -515,6 +515,62 @@ def type_expression_tokens(source, *, created):
     return tuple(tokens) if tokens else None
 
 
+def sequence_creation_postcondition(source, path):
+    """Derive the effective options of one canonical DuckDB 1.5.2 CREATE."""
+    if not isinstance(source, str):
+        return None
+    target = '.'.join(_quote(part) for part in path)
+    prefix = re.match(r'^\s*CREATE\s+SEQUENCE\s+' + re.escape(target) +
+        r'(?=\s|;|$)', source, re.I)
+    if prefix is None:
+        return None
+    remainder = source[prefix.end():].strip()
+    if remainder.endswith(';'):
+        remainder = remainder[:-1].strip()
+    patterns = (
+        ('increment_by', r'INCREMENT(?:\s+BY)?\s+([+-]?\d+)(?=\s|$)'),
+        ('min_value', r'MINVALUE\s+([+-]?\d+)(?=\s|$)'),
+        ('min_value', r'NO\s+MINVALUE(?=\s|$)'),
+        ('max_value', r'MAXVALUE\s+([+-]?\d+)(?=\s|$)'),
+        ('max_value', r'NO\s+MAXVALUE(?=\s|$)'),
+        ('start_value', r'START(?:\s+WITH)?\s+([+-]?\d+)(?=\s|$)'),
+        ('cycle', r'CYCLE(?=\s|$)'),
+        ('cycle', r'NO\s+CYCLE(?=\s|$)'),
+    )
+    precedence = {'increment_by': 0, 'min_value': 1, 'max_value': 2,
+        'start_value': 3, 'cycle': 4}
+    explicit = {}
+    last = -1
+    while remainder:
+        match = next(((key, re.match(pattern, remainder, re.I))
+            for key, pattern in patterns if re.match(pattern, remainder, re.I)), None)
+        if match is None:
+            return None
+        key, found = match
+        if key in explicit or precedence[key] <= last:
+            return None
+        if found.lastindex:
+            explicit[key] = int(found.group(1))
+        elif key == 'cycle':
+            explicit[key] = remainder[:found.end()].upper() == 'CYCLE'
+        else:
+            explicit[key] = None
+        last = precedence[key]
+        remainder = remainder[found.end():].strip()
+    increment = explicit.get('increment_by', 1)
+    if increment == 0:
+        return None
+    ascending = increment > 0
+    minimum = explicit.get('min_value')
+    maximum = explicit.get('max_value')
+    minimum = (1 if ascending else -(2 ** 63)) if minimum is None else minimum
+    maximum = ((2 ** 63) - 1 if ascending else -1) if maximum is None else maximum
+    start = explicit.get('start_value')
+    return {'start_value': (minimum if ascending else maximum) if start is None else start,
+        'min_value': minimum, 'max_value': maximum,
+        'increment_by': increment, 'cycle': explicit.get('cycle', False)}
+
+
 def _validated_macro_replacement(before, after, target, change):
     if change != {'action': 'replace-definition',
                    'parameters_without_defaults_confirmed': True}:
@@ -851,6 +907,11 @@ def plan(baseline, desired, live):
                           if after['kind'] == 'index' else
                           _validated_column_add(after) if after['kind'] == 'column' else
                           _validated_ddl(after['native'].get('ddl'), after['kind'], after['path']))
+                if after['kind'] == 'sequence':
+                    _sequence_creation_options = sequence_creation_postcondition(
+                        source, after['path'])
+                    if _sequence_creation_options is None:
+                        raise ValueError('Sequence creation requires ordered numeric native options without ownership')
             elif change == {'action': 'drop', 'confirmation': before['name']}:
                 retained = deepcopy(after)
                 retained['native'].pop('duckdb_change')
@@ -933,6 +994,9 @@ def plan(baseline, desired, live):
                     'nullable': True,
                     'default': metadata.get('default'),
                 }
+            elif operation == 'create' and after['kind'] == 'sequence':
+                operation_record['postcondition'] = {
+                    'sequence_options': _sequence_creation_options}
             elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field', 'drop-field', 'add-nested-field', 'drop-nested-field'}:
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}

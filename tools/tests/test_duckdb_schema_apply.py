@@ -389,6 +389,48 @@ def test_committed_type_creation_requires_matching_resolved_expression(tmp_path)
         provider.client.close()
 
 
+def test_committed_sequence_creation_requires_matching_generator_options(tmp_path):
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    root = next(row['name'] for row in baseline['rows'].values()
+        if row['kind'] == 'database')
+    desired = deepcopy(baseline)
+    path = [root, 'main', 'counter']
+    identity = _resource_id('sequence', path[:-1], path[-1])
+    desired['rows'][identity] = {'resource_id': identity, 'kind': 'sequence',
+        'name': 'counter', 'path': path, 'system': 'false',
+        'native': {'system_object': False, 'catalog_metadata': {},
+            'ddl': f'CREATE SEQUENCE "{root}"."main"."counter" '
+                'INCREMENT BY 2 START 3 CYCLE'}}
+    preview = plan(baseline, desired, baseline)
+    assert preview['application_supported'], preview['blockers']
+    assert preview['operations'][0]['postcondition']['sequence_options'] == {
+        'start_value': 3, 'min_value': 1, 'max_value': 2 ** 63 - 1,
+        'increment_by': 2, 'cycle': True}
+    applications = DuckDBSchemaApplications(tmp_path/'sequence-creation.json', clock=lambda: 100)
+    receipt = applications.review(preview, baseline, desired,
+        'owner', 'binding', 'file-1')
+    from pgadmin.cdeadmin.providers.duckdb import schema_application
+    actual_model = schema_application._model
+
+    def conflicting_observation(connection, record, *, in_transaction):
+        model = actual_model(connection, record, in_transaction=in_transaction)
+        if not in_transaction:
+            model['rows'][identity]['native']['catalog_metadata']['increment_by'] = 3
+        return model
+
+    try:
+        with patch.object(schema_application, '_model', conflicting_observation):
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_checks'] == [
+            {'resource_id': identity, 'verified': False}]
+        assert outcome['outcome']['rediscovery_verified'] is False
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('kind,old,new,source_sql', [
     ('table', 'existing', 'renamed_table', None),
     ('view', 'old_view', 'renamed_view', 'CREATE VIEW old_view AS SELECT 1 AS x'),

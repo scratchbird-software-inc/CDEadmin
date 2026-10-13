@@ -77,6 +77,10 @@ def apply_review(provider, route, record):
                         verified = (expected is not None and expected == type_expression_tokens(
                             current['native'].get('catalog_metadata', {}).get('resolved_type'),
                             created=False))
+                    if verified and operation['kind'] == 'sequence':
+                        metadata = current['native'].get('catalog_metadata', {})
+                        expected = operation['postcondition']['sequence_options']
+                        verified = all(metadata.get(key) == value for key, value in expected.items())
                     if verified and operation['kind'] == 'column':
                         metadata = current['native'].get('catalog_metadata', {})
                         verified = all(metadata.get(key) == value for key, value in

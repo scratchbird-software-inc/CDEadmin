@@ -300,6 +300,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   after ``AS`` with the catalog-resolved type expression. A canonical rewrite
   that cannot be proven equal leaves the committed result unverified; the
   creation is not replayed.
+  Sequence creation admits only the native 1.5.2 numeric START, INCREMENT,
+  MINVALUE, MAXVALUE and CYCLE options in one exactly qualified statement.
+  Preview derives DuckDB's positive/negative increment defaults and refuses
+  duplicate or unrecognized clauses, including OWNED BY. After commit, compare
+  every effective generator option with fresh native catalog metadata; matching
+  the sequence name alone is insufficient. This does not reconstruct current
+  generator position or claim ownership durability.
   A committed column addition is verified against its requested native type,
   nullable state and default as well as its identity. Canonical spelling
   differences leave the committed result unverified without automatic replay.
