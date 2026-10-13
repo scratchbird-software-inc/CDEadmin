@@ -309,3 +309,35 @@ def test_reviewed_nullable_column_add_and_drop_are_native(tmp_path):
         observer.close()
     finally:
         provider.client.close()
+
+
+def test_reviewed_column_default_and_nullability_are_native(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        for ordinal, action, field, value in (
+                (1, 'set-default', 'default', '7'),
+                (2, 'set-nullable', 'nullable', False),
+                (3, 'set-default', 'default', None)):
+            current = next(row for row in baseline['rows'].values()
+                if row['kind'] == 'column' and row['name'] == 'id' and row['path'][2] == 'existing')
+            desired = deepcopy(baseline)
+            desired_row = desired['rows'][current['resource_id']]
+            desired_row['native']['catalog_metadata'][field] = value
+            desired_row['native']['duckdb_change'] = {'action': action}
+            preview = plan(baseline, desired, baseline)
+            assert preview['application_supported'], preview['blockers']
+            applications = DuckDBSchemaApplications(tmp_path/f'column-alter-{ordinal}.json', clock=lambda: 100)
+            receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+            result = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+            assert result['state'] == 'committed' and result['outcome']['rediscovery_verified'], result
+            observed = provider.capture_catalog(route)
+            baseline = build_export(observed['resources'], endpoint_id='endpoint-1', target_id='file-1',
+                generation=observed['generation'], refreshed=True, engine='duckdb', native_model=True)
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT column_default, is_nullable FROM duckdb_columns() "
+            "WHERE table_name='existing' AND column_name='id'").fetchone() == (None, False)
+        observer.close()
+    finally:
+        provider.client.close()

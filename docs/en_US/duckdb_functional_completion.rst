@@ -137,6 +137,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   explicit DROP intent and view replacement are currently previewed through
   the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
+  One-field column default or nullability alterations require explicit change
+  intent and an otherwise unchanged baseline definition; combined edits remain
+  blockers. Each alteration is one parsed native statement and one review.
   An
   index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by

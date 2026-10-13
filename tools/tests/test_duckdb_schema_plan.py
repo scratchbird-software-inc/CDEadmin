@@ -121,3 +121,26 @@ def test_column_add_and_explicit_drop_use_qualified_parent():
     assert drop['application_supported']
     assert drop['operations'][0]['source'] == (
         'ALTER TABLE "file"."main"."facts" DROP COLUMN "amount" RESTRICT')
+
+
+def test_column_default_and_nullability_edits_are_one_field_each():
+    pytest.importorskip('duckdb')
+    table = row('table', ['file', 'main', 'facts'])
+    existing = row('column', ['file', 'main', 'facts', 'amount'])
+    existing['native']['catalog_metadata'] = {
+        'data_type': 'INTEGER', 'nullable': True, 'default': None}
+    changed = deepcopy(existing)
+    changed['native']['catalog_metadata']['default'] = '7'
+    changed['native']['duckdb_change'] = {'action': 'set-default'}
+    result = plan(model(table, existing), model(table, changed), model(table, existing))
+    assert result['application_supported']
+    assert result['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" ALTER COLUMN "amount" SET DEFAULT 7')
+    changed['native']['catalog_metadata']['nullable'] = False
+    assert plan(model(table, existing), model(table, changed), model(table, existing))['blockers']
+    changed = deepcopy(existing)
+    changed['native']['catalog_metadata']['nullable'] = False
+    changed['native']['duckdb_change'] = {'action': 'set-nullable'}
+    result = plan(model(table, existing), model(table, changed), model(table, existing))
+    assert result['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" ALTER COLUMN "amount" SET NOT NULL')

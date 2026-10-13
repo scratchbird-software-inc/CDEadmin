@@ -129,6 +129,41 @@ def _validated_column_add(row):
     return source
 
 
+def _validated_column_alter(before, after, action):
+    previous = before['native'].get('catalog_metadata', {})
+    desired = after['native'].get('catalog_metadata', {})
+    field = {'set-default': 'default', 'set-nullable': 'nullable'}.get(action)
+    if field is None or _equal(previous.get(field), desired.get(field)):
+        raise ValueError('Column alteration must change its one declared native field')
+    if not _equal({k: v for k, v in previous.items() if k != field},
+                  {k: v for k, v in desired.items() if k != field}) or (
+            before['native'].get('ddl') != after['native'].get('ddl')):
+        raise ValueError('Review other native column edits separately')
+    prefix = ('ALTER TABLE ' + '.'.join(_quote(part) for part in after['path'][:3]) +
+              ' ALTER COLUMN ' + _quote(after['name']) + ' ')
+    if field == 'default':
+        value = desired.get('default')
+        if value is None:
+            source = prefix + 'DROP DEFAULT'
+        elif isinstance(value, str) and value.strip() and len(value.encode('utf8')) <= 8192 and '\x00' not in value:
+            source = prefix + 'SET DEFAULT ' + value.strip()
+        else:
+            raise ValueError('Column default requires one bounded native SQL expression')
+    else:
+        value = desired.get('nullable')
+        if type(value) is not bool:
+            raise ValueError('Column nullability requires an explicit Boolean')
+        source = prefix + ('DROP NOT NULL' if value else 'SET NOT NULL')
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the column alteration') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native ALTER COLUMN statement is required')
+    return source
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -189,6 +224,10 @@ def plan(baseline, desired, live):
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
                 source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
+            elif after['kind'] == 'column' and change in (
+                    {'action': 'set-default'}, {'action': 'set-nullable'}):
+                operation = 'alter'
+                source = _validated_column_alter(before, after, change['action'])
             else:
                 raise ValueError('Alteration requires a qualified native adapter; only explicit view replacement is previewed')
             operations.append({'resource_id': identity, 'kind': after['kind'],
