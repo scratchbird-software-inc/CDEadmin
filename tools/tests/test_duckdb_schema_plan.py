@@ -91,6 +91,27 @@ def test_missing_row_does_not_drop_and_explicit_drop_is_separate():
     assert result['operations'][0]['source'] == 'DROP TABLE "file"."main"."facts" RESTRICT'
 
 
+@pytest.mark.parametrize('field,value', [
+    ('kind', 'view'),
+    ('path', ['file', 'other', 'facts']),
+    ('name', 'renamed'),
+    ('system', 'true'),
+    ('resource_id', 'duckdb:forged'),
+])
+def test_unchanged_row_identity_tampering_blocks_other_native_operations(field, value):
+    existing = row('table', ['file', 'main', 'facts'],
+        ddl='CREATE TABLE "file"."main"."facts" (x INTEGER)')
+    addition = row('view', ['file', 'main', 'report'],
+        ddl='CREATE VIEW "file"."main"."report" AS SELECT 1 AS x')
+    baseline = model(existing)
+    desired = deepcopy(baseline)
+    desired['rows'][existing['resource_id']][field] = value
+    desired['rows'][addition['resource_id']] = addition
+    result = plan(baseline, desired, baseline)
+    assert not result['application_supported']
+    assert any('identity changed' in item['reason'] for item in result['blockers'])
+
+
 def test_stale_live_definition_and_foreign_scope_are_refused():
     before = row('view', ['file', 'main', 'report'],
         ddl='CREATE VIEW "file"."main"."report" AS SELECT 1')

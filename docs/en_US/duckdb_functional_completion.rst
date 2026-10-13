@@ -258,8 +258,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   nullable state and default as well as its identity. Canonical spelling
   differences leave the committed result unverified without automatic replay.
   Other native edits are blockers. Missing desired rows are
-  ignored rather than treated as deletion. A bounded plan of up to 32 native
-  statements may be reviewed together when their identities and dependencies
+  ignored rather than treated as deletion. A plan rejects an unchanged row
+  whose object kind, path, name, system
+  classification or resource ID has been changed under its existing key;
+  such a row cannot silently pass through beside a valid operation. Up to 32
+  native statements may be reviewed together when their identities and dependencies
   are unambiguous. Create schemas before their tables and tables before their
   indexes; apply added columns before indexes on those columns. Drop children
   before their parents. A new table's columns belong in its one CREATE TABLE

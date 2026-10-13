@@ -552,6 +552,12 @@ def plan(baseline, desired, live):
     operations, blockers, conflicts, ignored = [], [], [], []
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
+        if before is not None and (after.get('resource_id') != identity or
+                any(not _equal(before.get(field), after.get(field)) for field in
+                    ('kind', 'path', 'name', 'system'))):
+            blockers.append({'resource_id': identity, 'name': after.get('name'),
+                'reason': 'Existing native object identity changed under its resource ID'})
+            continue
         if before is not None and _equal(_definition(before), _definition(after)) and not after['native'].get('duckdb_change'):
             continue
         try:
