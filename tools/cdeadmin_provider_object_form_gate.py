@@ -928,6 +928,18 @@ def _preview_values(kind, operation, target, engine_id):
                 values['library'] = 'cdeadmin_ui_preview.so'
         return rendered(values)
     if operation_id == 'alter':
+        if engine_id == 'duckdb' and kind in {'view', 'macro'}:
+            values = {'complete_definition_confirmed': True,
+                      'metadata_reset_acknowledged': True}
+            if kind == 'view':
+                values['query'] = 'SELECT id, value FROM qualification'
+            else:
+                path = target.get('display_path') or []
+                if len(path) != 3:
+                    raise RuntimeError('DuckDB macro preview lacks native catalog path')
+                quoted = '.'.join('"' + str(part).replace('"', '""') + '"' for part in path)
+                values['source'] = f'CREATE OR REPLACE MACRO {quoted}(x) AS x + 2'
+            return rendered(values)
         if kind == 'table':
             return rendered({
                 'add_columns': '[{"name":"ui_note","type":"TEXT"}]',

@@ -777,6 +777,10 @@ def _relational_editor_evidence(provider, request, engine):
                 if provider.client.supports_admin_operation('view', 'alter'):
                     attempt(
                         'view.alter', 'view', 'alter', {
+                            **({
+                                'complete_definition_confirmed': True,
+                                'metadata_reset_acknowledged': True,
+                            } if engine == 'duckdb' else {}),
                             **({'algorithm': 'UNDEFINED', 'sql_security': 'DEFINER',
                                 'check_option': 'NONE', 'confirmation': 'alter-live-editor-view'}
                                if engine == 'mysql' else {}),
@@ -794,12 +798,23 @@ def _relational_editor_evidence(provider, request, engine):
                             ),
                         }, view,
                     )
-                attempt(
-                    'view.drop', 'view', 'drop', {
-                        'cascade': False,
-                        'confirmation': 'drop-live-editor-view',
+                if engine == 'duckdb' and provider.client.supports_admin_operation(
+                        'view', 'rename') and attempt(
+                    'view.rename', 'view', 'rename', {
+                        'new_name': 'cde_editor_view_renamed',
                     }, view,
-                )
+                ):
+                    view = inspect_created(
+                        'view.inspect-renamed', 'view',
+                        'cde_editor_view_renamed',
+                    )
+                if view is not None:
+                    attempt(
+                        'view.drop', 'view', 'drop', {
+                            'cascade': False,
+                            'confirmation': 'drop-live-editor-view',
+                        }, view,
+                    )
 
         if engine == 'mysql' and attempt(
             'materialized-view.create', 'materialized-view', 'create', {
@@ -2548,8 +2563,12 @@ def _relational_editor_evidence(provider, request, engine):
             if macro is not None:
                 attempt(
                     'macro.alter', 'macro', 'alter', {
-                        'parameters': ['value'], 'table_macro': False,
-                        'expression': 'value * 3',
+                        'source': 'CREATE OR REPLACE MACRO ' + '.'.join(
+                            '"' + part.replace('"', '""') + '"'
+                            for part in macro['display_path']
+                        ) + ' ("value") AS value * 3',
+                        'complete_definition_confirmed': True,
+                        'metadata_reset_acknowledged': True,
                     }, macro,
                 )
                 attempt(
@@ -4163,7 +4182,7 @@ class _FirebirdAccount:
 
 def _live_result(provider, operation, engine):
     """Consume the native asynchronous contract before inspecting evidence."""
-    if engine not in {'mysql', 'mariadb'}:
+    if engine not in {'mysql', 'mariadb', 'duckdb'}:
         return provider.describe_result(operation)
     rows = []
     deadline = time.monotonic() + 30
@@ -4809,11 +4828,15 @@ def verify_embedded(engine, dialect_qualification=False):
 
             invalid_failed = False
             try:
-                provider.execute({
+                invalid_operation = provider.execute({
                     'session_id': session['session_id'],
                     'execution_id': f'{engine}-live-fault',
                     'source': 'SELECT * FROM cdeadmin_live_missing_object',
                 })
+                if engine == 'duckdb':
+                    invalid_result = _live_result(provider, invalid_operation, engine)
+                    invalid_failed = bool(invalid_result['extensions'][engine][
+                        'payload'].get('error'))
             except Exception:
                 invalid_failed = True
             escape_failed = False

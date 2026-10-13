@@ -304,6 +304,11 @@ DUCK-COMP-07: Contextual compact forms
   acknowledgement, validate one native CREATE statement before dispatch,
   and show the reviewed statement. The DDN preservation path remains stricter
   and blocks a replacement that would silently discard metadata.
+  The exact DuckDB 1.5.2 dialect contract must cover all 35 executable
+  generated tasks, including view Alter and Rename; a missing task blocks the
+  entire provider dialect gate and therefore all generated forms. Qualification
+  consumes live parser and execution evidence from the current provider and
+  retains the evidence digest with the contract.
 
 DUCK-COMP-08: Qualification and cleanup
   Qualify native driver, catalog, structured administration, SQL, data, file,

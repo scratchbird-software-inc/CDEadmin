@@ -121,6 +121,9 @@ def _prepare_database(source, target, attached, import_directory):
             'SELECT id, value FROM qualification'
         )
         connection.execute(
+            'CREATE MACRO IF NOT EXISTS qualification_macro(x) AS x + 1'
+        )
+        connection.execute(
             'CREATE SEQUENCE IF NOT EXISTS qualification_sequence START 1'
         )
         connection.execute(
