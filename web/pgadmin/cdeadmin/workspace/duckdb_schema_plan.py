@@ -208,6 +208,50 @@ def _validated_column_alter(before, after, change):
     return source
 
 
+def _validated_column_properties(before, after, change):
+    """Order independently admitted ALTERs for one atomic column review."""
+    if (not isinstance(change, dict) or
+            set(change) not in ({'action'}, {'action', 'using'}) or
+            change.get('action') != 'alter-column-properties'):
+        raise ValueError('Combined column alteration requires one exact native intent')
+    previous = before['native'].get('catalog_metadata', {})
+    desired = after['native'].get('catalog_metadata', {})
+    type_changed = previous.get('data_type') != desired.get('data_type')
+    default_changed = previous.get('default') != desired.get('default')
+    nullable_changed = previous.get('nullable') != desired.get('nullable')
+    if (sum((type_changed, default_changed, nullable_changed)) < 2 or
+            ('using' in change and not type_changed) or
+            (not type_changed and any(previous.get(key) != desired.get(key)
+                for key in _TYPE_FIELDS))):
+        raise ValueError('Combined column alteration requires two admitted property changes')
+    state, statements = deepcopy(before), []
+    def advance(action, fields, overrides=None):
+        nonlocal state
+        next_state = deepcopy(state)
+        metadata = next_state['native']['catalog_metadata']
+        for key in fields:
+            metadata[key] = (overrides[key] if overrides and key in overrides
+                else desired.get(key))
+        intent = {'action': action}
+        if action == 'set-type' and 'using' in change:
+            intent['using'] = change['using']
+        statements.append(_validated_column_alter(state, next_state, intent))
+        state = next_state
+    if (default_changed and previous.get('default') is not None and
+            (desired.get('default') is None or type_changed)):
+        advance('set-default', {'default'}, {'default': None})
+    if type_changed:
+        advance('set-type', _TYPE_FIELDS)
+    if default_changed and desired.get('default') is not None:
+        advance('set-default', {'default'})
+    if nullable_changed:
+        advance('set-nullable', {'nullable'})
+    if not _equal(_definition(state), _definition(after)):
+        raise ValueError('Combined column alteration contains other native edits')
+    return statements, {key: desired.get(key) for key in
+        ('data_type', 'default', 'nullable')}
+
+
 def _validated_struct_field_add(before, after, change):
     if set(change) != {'action', 'field', 'data_type'}:
         raise ValueError('STRUCT field addition requires one exact field and type')
@@ -1542,6 +1586,13 @@ def plan(baseline, desired, live):
                 operation = 'alter'
                 source = _validated_column_alter(before, after, change)
             elif (after['kind'] == 'column' and isinstance(change, dict) and
+                  change.get('action') == 'alter-column-properties'):
+                operation = 'alter'
+                _column_property_statements, _column_property_postcondition = (
+                    _validated_column_properties(before, after, change))
+                source = ';\n'.join(item.rstrip().rstrip(';')
+                    for item in _column_property_statements) + ';'
+            elif (after['kind'] == 'column' and isinstance(change, dict) and
                   change.get('action') == 'add-field'):
                 operation = 'alter'
                 source = _validated_struct_field_add(before, after, change)
@@ -1579,6 +1630,10 @@ def plan(baseline, desired, live):
                     operation_record['statements'] = [source, _macro_comment_replay]
             if operation == 'rename':
                 operation_record['source_resource_id'] = before['resource_id']
+            if (after['kind'] == 'column' and isinstance(change, dict) and
+                    change.get('action') == 'alter-column-properties'):
+                operation_record['statements'] = _column_property_statements
+                operation_record['postcondition'] = _column_property_postcondition
             if operation == 'create' and after['kind'] == 'column':
                 metadata = after['native'].get('catalog_metadata', {})
                 operation_record['postcondition'] = {

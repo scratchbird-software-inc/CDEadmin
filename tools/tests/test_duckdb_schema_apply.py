@@ -2455,6 +2455,111 @@ def test_reviewed_native_complete_type_replacement(tmp_path, name, original_type
         provider.client.close()
 
 
+@pytest.mark.parametrize('replacement_default', [None, '3'])
+def test_combined_column_properties_drop_incompatible_default_before_type(
+        tmp_path, replacement_default):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute("CREATE TABLE combined(id VARCHAR DEFAULT 'bad')")
+    connection.execute('CREATE TABLE typed(id INTEGER' +
+        (' DEFAULT 3' if replacement_default else '') + ')')
+    connection.execute("INSERT INTO combined VALUES ('1')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['path'][2] == 'combined')
+        typed = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['path'][2] == 'typed')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        for key in ('data_type', 'data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale',
+                    'default'):
+            edited['catalog_metadata'][key] = typed['native']['catalog_metadata'][key]
+        edited['duckdb_change'] = {'action': 'alter-column-properties'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        statements = preview['operations'][0]['statements']
+        assert len(statements) == (3 if replacement_default else 2)
+        assert statements[0].endswith('DROP DEFAULT') and ' TYPE ' in statements[1]
+        if replacement_default:
+            assert statements[2].endswith('SET DEFAULT 3')
+        applications = DuckDBSchemaApplications(tmp_path/'drop-default-first.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id FROM combined').fetchall() == [(1,)]
+        assert observer.execute("SELECT data_type,column_default FROM duckdb_columns() "
+            "WHERE table_name='combined'").fetchone() == ('INTEGER', replacement_default)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+@pytest.mark.parametrize('invalid', [False, True])
+def test_combined_column_properties_apply_atomically(tmp_path, invalid):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute("CREATE TABLE combined(id VARCHAR DEFAULT '1')")
+    connection.execute('CREATE TABLE typed(id INTEGER DEFAULT 3 NOT NULL)')
+    connection.execute('INSERT INTO combined VALUES (?), (?)',
+        ['1', 'bad' if invalid else '2'])
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['path'][2] == 'combined')
+        typed = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['path'][2] == 'typed')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        for key in ('data_type', 'data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale',
+                    'default', 'nullable'):
+            edited['catalog_metadata'][key] = typed['native']['catalog_metadata'][key]
+        edited['duckdb_change'] = {'action': 'alter-column-properties'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) == 4
+        assert preview['operations'][0]['statements'][0].endswith('DROP DEFAULT')
+        assert ' TYPE ' in preview['operations'][0]['statements'][1]
+        assert ' SET DEFAULT ' in preview['operations'][0]['statements'][2]
+        assert preview['operations'][0]['statements'][3].endswith('SET NOT NULL')
+        applications = DuckDBSchemaApplications(tmp_path/'column-properties.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if invalid else 'committed'), outcome
+        if not invalid:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        column = observer.execute("SELECT data_type,column_default,is_nullable "
+            "FROM duckdb_columns() WHERE table_name='combined'").fetchone()
+        assert column == (('VARCHAR', "'1'", True) if invalid else
+            ('INTEGER', '3', False))
+        assert observer.execute('SELECT id FROM combined ORDER BY id').fetchall() == (
+            [('1',), ('bad',)] if invalid else [(1,), (2,)])
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

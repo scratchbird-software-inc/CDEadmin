@@ -174,8 +174,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   optional separately reviewed ``USING`` expression; it does not infer a
   conversion or alter constraints. After commit, rediscovery must verify the
   requested native type, even when its canonical spelling differs and review
-  is consequently marked unverified. Combined edits remain blockers. Each
-  alteration is one parsed native statement and one review.
+  is consequently marked unverified. A separate ``alter-column-properties``
+  intent may combine two or three changes among type, default and nullability
+  on one observed column. It uses only the already qualified native ALTER
+  statements, each parsed and reviewed in order. An existing default that
+  changes is dropped before type conversion; a new default follows it; SET
+  NOT NULL is last. The batch
+  runs in one native transaction and verifies all three final column facts
+  after commit. Any conversion, default or nullability failure rolls back the
+  batch. Changes to other column metadata or constraints remain blocked.
+  Each isolated alteration is one parsed native statement and one review.
   A top-level field may be added to an observed ``STRUCT`` column through a
   separate ``add-field`` review. The desired native type must be the observed
   structure with exactly that one named field and native type appended; no
