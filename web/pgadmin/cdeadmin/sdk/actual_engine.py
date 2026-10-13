@@ -909,8 +909,9 @@ class ActualEnginePilotProvider:
                 'provider result records must be an array'
             )
         columns = result.get('schema', {}).get('columns', [])
-        names = [
-            item.get('name') for item in columns
+        keys = [
+            str(item['key']) if item.get('key') is not None else item.get('name')
+            for item in columns
             if isinstance(item, Mapping) and isinstance(item.get('name'), str)
         ]
         normalized = []
@@ -919,10 +920,10 @@ class ActualEnginePilotProvider:
                 normalized.append(copy.deepcopy(dict(record)))
             elif (
                 isinstance(record, (list, tuple)) and
-                len(names) == len(record)
+                len(keys) == len(record)
             ):
                 normalized.append(dict(zip(
-                    names, copy.deepcopy(list(record))
+                    keys, copy.deepcopy(list(record))
                 )))
             else:
                 normalized.append(copy.deepcopy(record))

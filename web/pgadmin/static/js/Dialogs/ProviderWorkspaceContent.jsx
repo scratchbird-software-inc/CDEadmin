@@ -2668,8 +2668,14 @@ function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   useEffect(() => {setLocalPage(0);}, [gridId]);
   const pageCount = Math.ceil(rows.length / rowsPerPage);
   const selectedPage = Math.min(localPage, Math.max(0, pageCount - 1));
-  const gridRows = rows.map((row) => row && typeof row === 'object' &&
-    !Array.isArray(row) ? row : {value: row});
+  const gridRows = rows.map((row) => {
+    if (Array.isArray(row) && columns.length) {
+      return Object.fromEntries(row.map((value, index) => [
+        String(columns[index]?.key ?? columns[index]?.name ?? index), value,
+      ]));
+    }
+    return row && typeof row === 'object' && !Array.isArray(row) ? row : {value: row};
+  });
   const inferredColumns = columns.length || !gridRows.length ? columns :
     Object.keys(gridRows[0]).map((name) => ({
       key: name, name,

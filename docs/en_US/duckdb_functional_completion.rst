@@ -43,7 +43,12 @@ DUCK-COMP-03: Shared SQL editor and native language
   files, persistent optional owner/target/language-scoped history, result paging,
   cancellation, transaction controls, diagnostics and physical/profiling plans.
   Preserve native Arrow exact and nested values, duplicate column identities and
-  ordered result sets. Report preparation, dispatch and fetch measurements only
+  ordered result sets. The SQL result grid must display each returned value in
+  its corresponding ordinal column, including rows encoded as arrays by the
+  native driver; a nonempty buffered result must not render blank cells.
+  Result admission binds positional driver values to unique native column keys,
+  not display names, so repeated output names remain distinct.
+  Report preparation, dispatch and fetch measurements only
   for the scope actually measured. EXPLAIN ANALYZE executes native work.
   Source checking on a retained DuckDB session uses the pinned 1.5.2 native
   parse-only API. It returns native statement boundaries and grammar status

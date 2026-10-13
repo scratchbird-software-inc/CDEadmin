@@ -341,8 +341,25 @@ def ensure_data_explorer(wait):
 
     state = wait.until(ready)
     if state != 'open':
-        if state.get_attribute('data-selected') != 'true':
-            state.click()
+        wait.until(expected.invisibility_of_element_located(
+            (By.ID, 'pg-spinner')
+        ))
+
+        def click_when_ready(driver):
+            current = ready(driver)
+            if current == 'open':
+                return True
+            if current is None or not current.is_enabled():
+                return False
+            try:
+                if current.get_attribute('data-selected') != 'true':
+                    current.click()
+                return True
+            except (ElementClickInterceptedException,
+                    StaleElementReferenceException):
+                return False
+
+        wait.until(click_when_ready)
         wait.until(lambda driver: ready(driver) == 'open')
 
 

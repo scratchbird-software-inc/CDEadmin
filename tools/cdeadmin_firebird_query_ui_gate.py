@@ -92,10 +92,17 @@ def arguments():
 
 
 def _query_editor(driver):
-    return next((
+    legacy = next((
         item for item in driver.find_elements(By.CSS_SELECTOR, 'textarea')
         if item.is_displayed() and
         item.get_attribute('aria-label') == 'Query source'
+    ), None)
+    if legacy is not None:
+        return legacy
+    return next((
+        item for item in driver.find_elements(By.CSS_SELECTOR,
+            '[data-code-editor][aria-label="Query source"] .cm-content[contenteditable="true"]')
+        if item.is_displayed()
     ), None)
 
 
@@ -110,6 +117,11 @@ def _visible_text(driver, expected):
 
 
 def _set_text(driver, element, value):
+    if element.get_attribute('contenteditable') == 'true':
+        element.click()
+        element.send_keys(Keys.CONTROL, 'a')
+        element.send_keys(value)
+        return
     driver.execute_script('''
         const element = arguments[0];
         const prototype = element.tagName === 'TEXTAREA'

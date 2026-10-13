@@ -227,6 +227,23 @@ def _retarget_config(database, desktop_user, target_database, attached):
             """,
             (endpoint_id,),
         )
+        connector = connection.execute(
+            "SELECT id FROM preferences WHERE name = 'show_connector_duckdb'"
+        ).fetchone()
+        owner = connection.execute(
+            'SELECT id FROM user WHERE email = ?', (desktop_user,)
+        ).fetchone()
+        if connector is None or owner is None:
+            raise RuntimeError('QA configuration lacks DuckDB connector visibility metadata')
+        updated = connection.execute(
+            'UPDATE user_preferences SET value = ? WHERE pid = ? AND uid = ?',
+            ('True', connector[0], owner[0]),
+        ).rowcount
+        if updated == 0:
+            connection.execute(
+                'INSERT INTO user_preferences (pid, uid, value) VALUES (?, ?, ?)',
+                (connector[0], owner[0], 'True'),
+            )
         connection.commit()
 
 
