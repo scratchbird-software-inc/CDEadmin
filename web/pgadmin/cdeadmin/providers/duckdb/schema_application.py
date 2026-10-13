@@ -61,6 +61,11 @@ def apply_review(provider, route, record):
                 elif operation['operation'] == 'create':
                     verified = (current is not None and
                         current['kind'] == operation['kind'] and current['name'] == operation['name'])
+                    if verified and operation['kind'] == 'view':
+                        from ...workspace.duckdb_schema_plan import view_query_tokens
+                        expected = view_query_tokens(operation['source'])
+                        verified = (expected is not None and expected == view_query_tokens(
+                            current['native'].get('ddl')))
                 elif operation['operation'] == 'rename':
                     verified = (current is not None and
                         current['kind'] == operation['kind'] and current['name'] == operation['name'] and

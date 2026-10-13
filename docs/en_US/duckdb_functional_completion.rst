@@ -178,7 +178,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   separate reviewed column alteration. A native view replacement or enum
   extension is blocked when the old object has a comment or tags, because
   ``CREATE OR REPLACE`` discards those facts and the one-statement adapter
-  cannot restore them. After a committed view replacement, compare the native
+  cannot restore them. After a committed view creation or replacement, compare the native
   catalog's parsed view-query tokens and explicit column aliases with the
   submitted definition. A changed
   object name or merely different definition is insufficient verification;

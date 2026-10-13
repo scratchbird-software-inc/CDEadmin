@@ -271,6 +271,43 @@ def test_committed_view_replacement_requires_matching_native_body(tmp_path):
         provider.client.close()
 
 
+def test_committed_view_creation_requires_matching_native_body(tmp_path):
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+    desired = deepcopy(baseline)
+    path = [root, 'main', 'created_view']
+    identity = _resource_id('view', path[:-1], path[-1])
+    desired['rows'][identity] = {'resource_id': identity, 'kind': 'view',
+        'name': 'created_view', 'path': path, 'system': 'false',
+        'native': {'system_object': False, 'catalog_metadata': {},
+            'ddl': f'CREATE VIEW "{root}"."main"."created_view" AS SELECT 2 AS x'}}
+    preview = plan(baseline, desired, baseline)
+    assert preview['application_supported'], preview['blockers']
+    applications = DuckDBSchemaApplications(tmp_path/'created-view.json', clock=lambda: 100)
+    receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+    from pgadmin.cdeadmin.providers.duckdb import schema_application
+    actual_model = schema_application._model
+
+    def conflicting_observation(connection, record, *, in_transaction):
+        model = actual_model(connection, record, in_transaction=in_transaction)
+        if not in_transaction:
+            model['rows'][identity]['native']['ddl'] = (
+                'CREATE VIEW created_view AS SELECT 3 AS x;')
+        return model
+
+    try:
+        with patch.object(schema_application, '_model', conflicting_observation):
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed'
+        assert outcome['outcome']['rediscovery_verified'] is False
+        assert outcome['outcome']['rediscovery_checks'] == [
+            {'resource_id': identity, 'verified': False}]
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('kind,old,new,source_sql', [
     ('table', 'existing', 'renamed_table', None),
     ('view', 'old_view', 'renamed_view', 'CREATE VIEW old_view AS SELECT 1 AS x'),
