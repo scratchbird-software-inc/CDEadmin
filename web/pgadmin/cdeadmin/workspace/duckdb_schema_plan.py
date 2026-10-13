@@ -231,6 +231,68 @@ def _validated_struct_field_add(before, after, change):
     return source
 
 
+def _struct_members(data_type):
+    if not re.fullmatch(r'STRUCT\(.+\)', data_type, re.I | re.S):
+        raise ValueError('STRUCT field removal requires an observed native STRUCT column')
+    body = data_type[data_type.index('(') + 1:-1]
+    members, start, depth, quote = [], 0, 0, None
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if quote is not None:
+            if char == quote:
+                if index + 1 < len(body) and body[index + 1] == quote:
+                    index += 1
+                else:
+                    quote = None
+        elif char in {'"', "'"}:
+            quote = char
+        elif char == '(':
+            depth += 1
+        elif char == ')':
+            depth -= 1
+            if depth < 0:
+                raise ValueError('Native STRUCT definition is malformed')
+        elif char == ',' and depth == 0:
+            members.append(body[start:index].strip())
+            start = index + 1
+        index += 1
+    members.append(body[start:].strip())
+    if quote is not None or depth != 0 or any(not member for member in members):
+        raise ValueError('Native STRUCT definition is malformed')
+    return members
+
+
+def _validated_struct_field_drop(before, after, change):
+    field = change.get('field') if isinstance(change, dict) else None
+    if (set(change) != {'action', 'field'} or not isinstance(field, str) or
+            not re.fullmatch(r'[a-z_][a-z0-9_]*', field)):
+        raise ValueError('STRUCT field removal requires one exact simple field name')
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    old_type = _native_column_type(previous['catalog'].get('data_type'))
+    new_type = _native_column_type(desired['catalog'].get('data_type'))
+    members = _struct_members(old_type)
+    kept = [member for member in members
+            if not re.match(re.escape(field) + r'\s+', member)]
+    if len(members) - len(kept) != 1 or not kept or new_type != 'STRUCT(' + ', '.join(kept) + ')':
+        raise ValueError('STRUCT field removal must drop exactly one observed field')
+    for key in _TYPE_FIELDS:
+        previous['catalog'].pop(key, None)
+        desired['catalog'].pop(key, None)
+    if not _equal(previous, desired):
+        raise ValueError('Review other native column edits separately')
+    source = ('ALTER TABLE ' + '.'.join(_quote(part) for part in after['path'][:3]) +
+              ' DROP COLUMN ' + _quote(after['name']) + '.' + _quote(field) + ' RESTRICT')
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the STRUCT field removal') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native STRUCT field removal is required')
+    return source
+
+
 def _validated_enum_extension(before, after, target):
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
@@ -701,6 +763,10 @@ def plan(baseline, desired, live):
                   change.get('action') == 'add-field'):
                 operation = 'alter'
                 source = _validated_struct_field_add(before, after, change)
+            elif (after['kind'] == 'column' and isinstance(change, dict) and
+                  change.get('action') == 'drop-field'):
+                operation = 'alter'
+                source = _validated_struct_field_drop(before, after, change)
             else:
                 raise ValueError('Alteration requires a qualified native adapter; only explicit view replacement is previewed')
             operation_record = {'resource_id': identity, 'kind': after['kind'],
@@ -716,7 +782,7 @@ def plan(baseline, desired, live):
                     'nullable': True,
                     'default': metadata.get('default'),
                 }
-            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field'}:
+            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field', 'drop-field'}:
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
             elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:
