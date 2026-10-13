@@ -6,6 +6,7 @@ import FormReference from '../navigation/FormReference';
 import CodeEditor from './CodeEditor';
 import {formatFirebird} from './firebirdFormatting';
 import {firebirdSQLConfig} from './firebirdSyntax';
+import {duckdbSQLConfig} from './duckdbSyntax';
 import {firebirdExecution} from './firebirdExecution';
 
 export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute}) {
@@ -23,6 +24,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     /postgres|cockroach|ysql|xtdb/.test(nativeProfile) ? PostgreSQL : /sqlite/.test(nativeProfile) ? SQLite : StandardSQL;
   const nativeConfig = useMemo(() => ({dialect: language?.editor?.keywords ?
     SQLDialect.define({keywords: language.editor.keywords}) : nativeDialect}), [language?.editor, nativeDialect]);
+  const duckdbConfig = useMemo(() => duckdbSQLConfig(language?.editor, resources), [language?.editor, resources]);
   const [validation, setValidation] = useState(null);
   const [plan, setPlan] = useState(null);
   const [preparedSource, setPreparedSource] = useState(null);
@@ -142,7 +144,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     </Box>
     {syntax ? <>
       <Box sx={{height: 'clamp(120px, 22vh, 220px)', minHeight: 100, maxHeight: '60vh', resize: 'vertical', overflow: 'auto'}}><CodeEditor label="Query source" value={source} onChange={onChange}
-        language={jsonLanguage ? 'json' : firebird ? 'firebird' : 'sql'} sqlConfig={firebird ? sqlConfig : nativeConfig} autocomplete autocompleteOnKeyPress
+        language={jsonLanguage ? 'json' : firebird ? 'firebird' : 'sql'} sqlConfig={firebird ? sqlConfig : nativeProfile === 'duckdb-sql' ? duckdbConfig : nativeConfig} autocomplete autocompleteOnKeyPress
         currEditor={editor => {syntaxEditor.current = editor;}}
         formatOverride={firebird ? format : undefined} disabled={disabled || running || Boolean(plan?.occurrence_id)} /></Box>
       {firebird && <Button disabled={disabled || checking || running} onClick={loadCompletion}>Refresh metadata completion</Button>}

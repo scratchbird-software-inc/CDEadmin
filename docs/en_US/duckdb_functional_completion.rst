@@ -56,6 +56,10 @@ DUCK-COMP-03: Shared SQL editor and native language
   local buffering; it can include consumer backpressure. No plan is inferred
   from an ordinary execution. An explicit EXPLAIN result is shown as result
   data, and EXPLAIN ANALYZE may perform the work being profiled.
+  Visible native catalog resources supply qualified catalog/schema/relation and
+  column completions in the shared editor. Identifier insertion quotes and
+  escapes exact native names. This page-scoped completion never claims a
+  truncated or inaccessible catalog is empty or complete.
 
 DUCK-COMP-04: Data and file workflows
   Implement native row editing with qualified identity, paging, commit/rollback,
