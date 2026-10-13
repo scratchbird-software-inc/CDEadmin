@@ -64,9 +64,20 @@ def apply_review(provider, route, record):
                             item['default'], item['nullable']) for item in
                             operation['stage_columns']]
                         constraints = connection.execute(
-                            'SELECT count(*) FROM duckdb_constraints() WHERE database_name=? '
-                            'AND schema_name=? AND table_name=?', scope).fetchone()[0]
-                        if columns != expected_columns or constraints:
+                            'SELECT constraint_type, constraint_column_names '
+                            'FROM duckdb_constraints() WHERE database_name=? '
+                            'AND schema_name=? AND table_name=? ORDER BY constraint_index',
+                            scope).fetchall()
+                        key_columns = operation.get('stage_key_columns') or []
+                        primary_keys = [names for kind, names in constraints
+                            if kind == 'PRIMARY KEY']
+                        nulls = [names for kind, names in constraints
+                            if kind == 'NOT NULL']
+                        if (columns != expected_columns or
+                                primary_keys != ([key_columns] if key_columns else []) or
+                                sorted(tuple(names) for names in nulls) !=
+                                    sorted((name,) for name in key_columns) or
+                                len(constraints) != len(key_columns) + bool(key_columns)):
                             raise ValueError('Native staged columns or constraints differ from review')
                     if index == 1:
                         difference = connection.execute(

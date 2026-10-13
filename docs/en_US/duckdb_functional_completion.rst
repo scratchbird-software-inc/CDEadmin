@@ -302,7 +302,18 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   constraint rebuild. Before copying rows, the staged table's exact native
   column names, types, defaults and nullability and absence of constraints
   must match the reviewed desired model. Changed key identity, retention of
-  explicit NOT NULL and other primary-key rebuilds remain blocked.
+  explicit NOT NULL remains blocked. A separate
+  ``rebuild-retarget-primary-key`` intent may replace the sole primary key
+  with a different ordered set of existing columns. The old and new tables
+  may contain only the respective key and its implicit NOT NULL constraints.
+  Columns leaving the key become nullable; newly keyed columns become NOT
+  NULL. All other column facts stay fixed. Before copying rows, the staged
+  table's columns and exact ordered primary-key and implicit NOT NULL facts
+  must match the reviewed desired model. DuckDB checks old rows against the
+  new key during the copy; a duplicate or NULL rolls back the transaction.
+  The same dependency, sequence-default, index, comment and rediscovery
+  safeguards as key removal apply. Explicit NOT NULL retention, an unchanged
+  key and general primary-key rebuilds remain blocked.
   ``CREATE OR REPLACE TABLE`` is not a safe substitute for a general table
   migration: it clears rows, indexes and comments. It can leave a dependent
   view reporting ``is_bound = true`` while a query against that view fails to
@@ -328,8 +339,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
   key and its implicit NOT NULL constraint may be retained only when their
   complete native definitions and child catalog facts are unchanged. Primary
-  key creation or alteration remain outside this migration; the isolated
-  key-removal intent above is separate. An
+  key creation remains outside this migration; the isolated key-removal and
+  retargeting intents above are separate. An
   isolated ``rebuild-foreign-keys`` intent may add, remove or replace the
   complete outgoing foreign-key set of one child table. It retains unchanged
   CHECK, primary-key and NOT NULL facts, and uses the same staged copy,

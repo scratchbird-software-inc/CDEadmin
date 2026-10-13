@@ -1328,6 +1328,81 @@ def test_isolated_foreign_key_rebuild_adds_constraint_or_rolls_back(
         provider.client.close()
 
 
+@pytest.mark.parametrize('invalid', [None, 'duplicate', 'null'])
+def test_isolated_primary_key_retarget_validates_existing_rows(tmp_path, invalid):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, code VARCHAR)')
+    connection.execute('INSERT INTO checked VALUES (1, ?), (2, ?)',
+        ['first', None if invalid == 'null' else
+            'first' if invalid == 'duplicate' else 'second'])
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        root = original['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."checked" '
+            '(id INTEGER, code VARCHAR PRIMARY KEY)')
+        edited['duckdb_change'] = {'action': 'rebuild-retarget-primary-key',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        for column in edited['columns']:
+            column['nullable'] = column['name'] == 'id'
+        for row in desired['rows'].values():
+            if row['kind'] == 'column' and row['path'][:3] == original['path']:
+                row['native']['catalog_metadata']['nullable'] = row['name'] == 'id'
+        for key, row in list(desired['rows'].items()):
+            if row['kind'] == 'constraint' and row['path'][:3] == original['path']:
+                del desired['rows'][key]
+        constraints = []
+        for number, (name, kind, source) in enumerate([
+                ('checked_code_pkey', 'PRIMARY KEY', 'PRIMARY KEY(code)'),
+                ('checked_code_not_null', 'NOT NULL', 'NOT NULL')]):
+            child_id = _resource_id('constraint', original['path'], name,
+                discriminator=number)
+            item = {'resource_id': child_id, 'name': name, 'constraint_index': number,
+                'constraint_type': kind, 'constraint_text': source,
+                'expression': None, 'column_indexes': [1], 'column_names': ['code'],
+                'referenced_table': None, 'referenced_column_names': []}
+            constraints.append(item)
+            desired['rows'][child_id] = {'resource_id': child_id,
+                'kind': 'constraint', 'name': name,
+                'path': [*original['path'], name], 'system': 'false',
+                'native': {'system_object': False,
+                    'catalog_metadata': {key: value for key, value in item.items()
+                        if key not in {'resource_id', 'name'}}}}
+        edited['constraints'] = constraints
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'primary-key-retarget.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if invalid else 'committed'), outcome
+        if not invalid:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT constraint_column_names FROM duckdb_constraints() "
+            "WHERE table_name='checked' AND constraint_type='PRIMARY KEY'").fetchone()[0] == (
+            ['id'] if invalid else ['code'])
+        assert observer.execute('SELECT count(*) FROM checked').fetchone()[0] == 2
+        if not invalid:
+            observer.execute("INSERT INTO checked VALUES (NULL, 'third')")
+            with pytest.raises(duckdb.ConstraintException):
+                observer.execute("INSERT INTO checked VALUES (3, 'third')")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('bad_stage', [False, True])
 @pytest.mark.parametrize('composite', [False, True])
 def test_isolated_primary_key_removal_relaxes_key_and_checks_stage(
