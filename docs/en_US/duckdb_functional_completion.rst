@@ -287,13 +287,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   does not preserve these facts. General whole-table replacement remains
   blocked; a separate migration must preserve data and dependent metadata.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
-  remain identical, no tag, primary key or foreign-key edge needs
-  preservation, and the captured file has no user view, macro or sequence
+  remain identical, no tag or foreign-key edge needs preservation, and
+  the captured file has no user view, macro or sequence
   dependency whose binding could change. The reviewer supplies a complete
   CREATE TABLE definition and explicitly confirms the corresponding isolated
   constraint rebuild. The CHECK intent accepts only CHECK constraints; the
-  UNIQUE intent accepts CHECK and UNIQUE constraints. Foreign keys and primary
-  keys remain outside this migration. Unchanged independent indexes are
+  UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
+  key and its implicit NOT NULL constraint may be retained only when their
+  complete native definitions and child catalog facts are unchanged. Primary
+  key creation, removal or alteration and all foreign-key changes remain
+  outside this migration. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain
   identical in the reviewed native CREATE TABLE body and catalog; the data
   copy names every column explicitly, so it never evaluates those defaults.

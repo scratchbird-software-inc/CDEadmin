@@ -1006,9 +1006,15 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
     old, new = deepcopy(_definition(before)), deepcopy(_definition(after))
     old_constraints, new_constraints = old.pop('constraints'), new.pop('constraints')
     old.pop('ddl'); new.pop('ddl')
+    retained_types = {'PRIMARY KEY', 'NOT NULL'}
+    old_retained = [item for item in old_constraints
+        if item.get('constraint_type') in retained_types] if isinstance(old_constraints, list) else []
+    new_retained = [item for item in new_constraints
+        if item.get('constraint_type') in retained_types] if isinstance(new_constraints, list) else []
     if (not _equal(old, new) or _equal(old_constraints, new_constraints) or
             not isinstance(old_constraints, list) or not isinstance(new_constraints, list) or
-            any(item.get('constraint_type') not in allowed for item in
+            not _equal(old_retained, new_retained) or
+            any(item.get('constraint_type') not in (allowed | retained_types) for item in
                 [*old_constraints, *new_constraints])):
         raise ValueError('Constraint rebuild may change only its admitted native constraint kinds')
     if action == 'rebuild-unique-constraints' and not any(
@@ -1017,7 +1023,9 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         raise ValueError('UNIQUE rebuild requires an observed or desired UNIQUE constraint')
     metadata = before['native'].get('catalog_metadata', {})
     columns = before['native'].get('columns')
-    if (metadata.get('has_primary_key') is not False or metadata.get('tags') or
+    if (type(metadata.get('has_primary_key')) is not bool or metadata.get('tags') or
+            (metadata['has_primary_key'] != any(item.get('constraint_type') ==
+                'PRIMARY KEY' for item in old_retained)) or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
             any(not isinstance(item, dict) or not isinstance(item.get('name'), str)
                 for item in columns) or
@@ -1038,7 +1046,7 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         if row['kind'] in {'view', 'macro', 'sequence', 'attached-database'}:
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
         if row['kind'] == 'table' and any(item.get('constraint_type') in
-                ({'FOREIGN KEY', 'PRIMARY KEY'} | ({'UNIQUE'} if action ==
+                ({'FOREIGN KEY'} | ({'UNIQUE'} if action ==
                  'rebuild-check-constraints' else set()) if
                  row['resource_id'] == before['resource_id'] else {'FOREIGN KEY'}) for item in
                 row['native'].get('constraints', [])):
@@ -1051,10 +1059,10 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         inline_unique=action == 'rebuild-unique-constraints')
     if (body is None or original_sections is None or desired_sections is None or
             not original_sections[0] or original_sections[0] != desired_sections[0] or
-            len(original_sections[1]) != len(old_constraints) or
-            len(desired_sections[1]) != len(new_constraints) or any(
+            len(original_sections[1]) != len(old_constraints) - len(old_retained) or
+            len(desired_sections[1]) != len(new_constraints) - len(new_retained) or any(
             kind == 'token_type.keyword' and word in
-                ({'primary', 'foreign', 'references', 'generated'} |
+                ({'foreign', 'references', 'generated'} |
                  ({'unique'} if action == 'rebuild-check-constraints' else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
