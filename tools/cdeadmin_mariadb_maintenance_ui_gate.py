@@ -274,18 +274,23 @@ def _open_form(driver, wait, options, action, operation, password):
 
 
 def _set_boolean(driver, wait, label, selected):
-    control = wait.until(lambda current: visible_named_control(
-        current, label
-    ))
-    checked = (
-        control.is_selected() or
-        control.get_attribute('aria-checked') == 'true'
-    )
+    control = wait.until(lambda current: visible_named_control(current, label))
+    nested = control.find_elements(By.CSS_SELECTOR, 'input[type="checkbox"]')
+    native = nested[0] if nested else control
+    checked = native.is_selected() or native.get_attribute('aria-checked') == 'true'
     if checked != selected:
-        driver.execute_script('arguments[0].click()', control)
+        control.click()
 
 
 def _set_multiselect(driver, wait, field, values):
+    # Compact native forms present small choice sets as labelled checkboxes.
+    compact = driver.find_elements(
+        By.XPATH, '//fieldset[legend[normalize-space(.)=' +
+        json.dumps(field['label']) + ']]')
+    if compact:
+        for option in field.get('options', []):
+            _set_boolean(driver, wait, option['label'], option['value'] in values)
+        return
     control = wait.until(
         lambda current: visible_named_control(current, field['label'])
     )

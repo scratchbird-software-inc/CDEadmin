@@ -45,6 +45,7 @@ if __package__:
         apply_presentation,
         assert_form_controls,
         create_driver,
+        close_workspace_with_keyboard,
         evidence_variant,
         layout_observation,
         screenshot,
@@ -64,6 +65,7 @@ else:
         apply_presentation,
         assert_form_controls,
         create_driver,
+        close_workspace_with_keyboard,
         evidence_variant,
         layout_observation,
         screenshot,
@@ -313,7 +315,7 @@ def _open_form(driver, wait, mode, database_label=None):
     if not form_id:
         raise RuntimeError(f'{mode} context command has no form identity')
     wait.until(expected.visibility_of_element_located((
-        By.CSS_SELECTOR, '[role="dialog"]',
+        By.CSS_SELECTOR, '[aria-label="Engine database form"]',
     )))
     return action, form_id
 
@@ -337,7 +339,7 @@ def _form_contract(driver, mode):
 def _visible_form_fields(driver):
     return driver.execute_script(
         """
-        const dialog = document.querySelector('[role="dialog"]');
+        const dialog = document.querySelector('[aria-label="Engine database form"]');
         return [...dialog.querySelectorAll(
           'input, textarea, select, [role="combobox"]'
         )].filter(element => {
@@ -356,7 +358,7 @@ def _catalog_forms(driver):
         const done = arguments[arguments.length - 1];
         const app = window.pgAdmin;
         const tree = app.Browser.tree;
-        let item = tree.selected();
+        let item = window.__cdeadminQaEndpointItem || tree.selected();
         while (item && tree.itemData(item)?._type !== 'server') {
           item = tree.hasParent(item) ? tree.parent(item) : null;
         }
@@ -437,16 +439,12 @@ def _database_state(path):
 
 
 def _close_with_escape(driver, wait):
-    dialog = wait.until(expected.visibility_of_element_located((
-        By.CSS_SELECTOR, '[role="dialog"]',
-    )))
-    ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-    wait.until(expected.staleness_of(dialog))
+    close_workspace_with_keyboard(driver, wait)
 
 
 def _close(driver, wait):
     dialog = wait.until(expected.visibility_of_element_located((
-        By.CSS_SELECTOR, '[role="dialog"]',
+        By.CSS_SELECTOR, '[aria-label="Engine database form"]',
     )))
     close = wait.until(lambda value: visible_named_control(value, 'Close'))
     close.click()
@@ -555,8 +553,10 @@ def _render_case(driver, wait, options, forms, mode, database_label=None):
         'validation': validation,
         'validation_layout': validation_layout,
         'cancellation': {
-            'dialog_dismissed': True,
-            'dismissal_input': 'keyboard_escape',
+            'workspace_dismissed': True,
+            'dialog_dismissed': True,  # Legacy gate-summary key also covers docks.
+            'dismissal_input': driver.execute_script(
+                'return window.__cdeadminQaDismissalInput'),
             'provider_operation_executed': False,
         },
         'cancelled_without_target_mutation': True,
@@ -580,7 +580,7 @@ def _render_case(driver, wait, options, forms, mode, database_label=None):
 def _submit_target_form(driver, wait, mode, values):
     fill_fields(wait, [f'{label}={value}' for label, value in values.items()])
     title = driver.find_elements(
-        By.CSS_SELECTOR, '[role="dialog"] h2'
+        By.CSS_SELECTOR, '[aria-label="Engine database form"] h2'
     )[-1].text
     button = wait.until(lambda value: visible_named_control(value, title))
     wait.until(lambda _driver: button.is_enabled())
@@ -625,7 +625,7 @@ def _submit_lifecycle(driver, wait, options, mode, values):
     wait.until(lambda _driver: preview.is_enabled())
     preview.click()
     plan = wait.until(expected.visibility_of_element_located((
-        By.CSS_SELECTOR, '[role="dialog"] pre',
+        By.CSS_SELECTOR, '[aria-label="Engine database form"] pre',
     )))
     plan_value = json.loads(plan.text)
     if plan_value.get('state') != 'ready' or (
@@ -643,7 +643,7 @@ def _submit_lifecycle(driver, wait, options, mode, values):
     if confirmation is not None:
         driver.execute_script('arguments[0].click()', confirmation)
     title = driver.find_elements(
-        By.CSS_SELECTOR, '[role="dialog"] h2'
+        By.CSS_SELECTOR, '[aria-label="Engine database form"] h2'
     )[-1].text
     apply_button = wait.until(
         lambda value: visible_named_control(value, title)
@@ -652,7 +652,7 @@ def _submit_lifecycle(driver, wait, options, mode, values):
     apply_button.click()
     wait.until(lambda value: (
         'completed the native database operation' in
-        value.find_element(By.CSS_SELECTOR, '[role="dialog"]').text
+        value.find_element(By.CSS_SELECTOR, '[aria-label="Engine database form"]').text
     ))
     completed_layout = layout_observation(driver)
     return {
