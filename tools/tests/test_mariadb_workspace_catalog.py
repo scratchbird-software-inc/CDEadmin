@@ -54,3 +54,19 @@ def test_native_uid_and_documentary_comparison_preserve_ownership():
         with pytest.raises(ProviderWorkspaceError, match='another endpoint or database'):
             service.mariadb_catalog(server, {'database_target_id': 'owned-target', 'source': json.dumps(other['snapshot'])}, compare=True)
         provider.capture_catalog.assert_not_called()
+
+
+def test_explicit_data_capture_forwards_native_identity_and_rejects_unknown_fields():
+    service, server, provider, _, _ = fixture()
+    provider.capture_data = Mock(return_value={'acquisition': {'engine_id': 'mariadb'}})
+    request = {'database_target_id': 'owned-target', 'resource_id': 'native-table',
+        'expected_server_uid': 'native-server', 'mode': 'full', 'row_limit': 42}
+    assert service.mariadb_data_capture(server, request)['acquisition']['engine_id'] == 'mariadb'
+    provider.capture_data.assert_called_once_with({'database': 'demo'}, 'native-table',
+        endpoint_id='owned-endpoint', target_id='owned-target', expected_server_uid='native-server', mode='full', row_limit=42)
+    provider.capture_data.reset_mock()
+    for invalid in ({**request, 'source': 'SELECT * FROM another_database.secret'},
+                    {**request, 'database_target_id': 'foreign-target'}):
+        with pytest.raises(ProviderWorkspaceError):
+            service.mariadb_data_capture(server, invalid)
+        provider.capture_data.assert_not_called()

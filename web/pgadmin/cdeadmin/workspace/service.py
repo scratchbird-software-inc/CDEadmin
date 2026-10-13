@@ -649,6 +649,17 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Select a native MariaDB endpoint')
         return context, endpoint, provider
 
+    def mariadb_data_capture(self, server, request):
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit', 'expected_server_uid'}:
+            raise ProviderWorkspaceError('Invalid MariaDB relation data request')
+        context, endpoint, provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        try:
+            return provider.capture_data(endpoint['route'], request.get('resource_id'),
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'], expected_server_uid=request.get('expected_server_uid'),
+                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mariadb_catalog(self, server, request, *, compare=False):
         from .firebird_catalog_export import build_export
         from .firebird_catalog_import import read_catalog, compare_catalogs

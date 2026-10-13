@@ -45,8 +45,8 @@ def qualify(route, evidence, *, password=None):
         with interactive.cursor() as pending:
             pending.execute("INSERT INTO temporal VALUES (1,'pending')")
         native_route, permissions = provider_access(route, password)
-        def require(permission_id, scope):
-            assert (permission_id, scope) == ('data_read', 'resource')
+        def require(permission_id, scope=None):
+            assert (permission_id, scope) in {('data_read', 'resource'), ('execute', 'endpoint')}
         permissions.require = require
         context = SimpleNamespace(pool_namespace='catalog:' + secrets.token_hex(8))
         client = _create_client(MARIADB_PROFILE, permissions, context)
@@ -109,6 +109,39 @@ def qualify(route, evidence, *, password=None):
         assert len(uuid_plugins) == 2 and len({row['resource_id'] for row in uuid_plugins}) == 2
         assert {row['native']['plugin_type'] for row in uuid_plugins} == {'DATA TYPE', 'FUNCTION'}
         proof['checks'].append('explorer_preserves_native_uuid_type_and_function_plugins')
+        cursor.execute("SET SESSION sql_mode=''")
+        cursor.execute('CREATE TABLE exact_values (id BIGINT UNSIGNED PRIMARY KEY, amount DECIMAL(65,30), d DATE, dt DATETIME(6), duration TIME(6), payload VARBINARY(20)) ENGINE=InnoDB')
+        cursor.execute("INSERT INTO exact_values VALUES (18446744073709551615,12345678901234567890123456789012345.123456789012345678901234567890,'0000-00-00','0000-00-00 00:00:00.123456','-838:59:59.999999',X'00ff0100')")
+        data_catalog = provider.capture_catalog({**native_route, 'database': schema})
+        relation = next(row['resource_id'] for row in data_catalog['resources'] if row['resource_kind'] == 'table' and row['display_name'] == 'exact_values')
+        data_options = {'endpoint_id': 'owned-gate', 'target_id': schema,
+            'expected_server_uid': server['server_uid'], 'mode': 'full', 'row_limit': 10}
+        data = provider.capture_data({**native_route, 'database': schema}, relation, **data_options)
+        assert data['acquisition']['engine_id'] == 'mariadb'
+        assert data['acquisition']['rows'] == 1 and data['acquisition']['transaction_completed']
+        assert data['acquisition']['consistent_innodb_table_snapshot']
+        text = json.dumps(data['snapshot'])
+        for exact in ['18446744073709551615','12345678901234567890123456789012345.123456789012345678901234567890',
+                      '0000-00-00','0000-00-00 00:00:00.123456','-838:59:59.999999','AP8BAA==']:
+            assert exact in text, exact
+        (evidence / 'exact-data.json').write_text(json.dumps(data, indent=2) + '\n')
+        cursor.execute("INSERT INTO exact_values(id) VALUES (1)")
+        try:
+            provider.capture_data({**native_route, 'database': schema}, relation, **{**data_options, 'row_limit': 1})
+        except ValueError as error:
+            assert 'Full data capture exceeds' in str(error)
+        else:
+            raise AssertionError('Full capture returned a partial download')
+        sampled = provider.capture_data({**native_route, 'database': schema}, relation,
+            **{**data_options, 'mode': 'sample', 'row_limit': 1})
+        assert sampled['acquisition']['more_rows_observed']
+        assert sampled['acquisition']['rows'] == 1
+        current = provider.capture_data({**native_route, 'database': schema}, objects['table', 'temporal']['resource_id'], **data_options)
+        assert current['acquisition']['rows'] == 0 and current['acquisition']['transaction_completed']
+        assert interactive.server_status & 1
+        assert current['acquisition']['temporal_scope'].startswith('current-visible-rows')
+        proof['checks'].append('exact_native_current_relation_data_and_bounded_sample_full_capture')
+
 
 
 

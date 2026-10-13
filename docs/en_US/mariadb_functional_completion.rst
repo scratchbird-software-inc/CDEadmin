@@ -77,6 +77,19 @@ MARIA-COMP-05: Native DDN roundtrip
   are bounded observational documents, not atomic snapshots or permission to
   execute imported definitions. Sequence inspection must not advance values.
 
+  Explicit relation data capture supports user tables and views, including
+  current visible rows of system-versioned tables. The selected canonical
+  relation identity and captured server_uid must both match before the native
+  data read. It never advances a sequence
+  or implicitly reads historical FOR SYSTEM_TIME versions. Own a separate
+  read-only REPEATABLE READ transaction, refresh and finish it within the
+  capture, and retain exact patched-connector temporal, numeric and binary
+  values. Sample/full modes have explicit row, byte, column and elapsed-time
+  budgets. A full capture exceeding a budget returns no partial download.
+  InnoDB table snapshots are distinguished from observational views and
+  nontransactional engines. All paths retire the owned attachment, without
+  altering interactive work or retrying interrupted reads.
+
   Server inventory reads explicitly named credential-free columns from native
   SCHEMATA, mysql.user, roles_mapping, USER_PRIVILEGES, PLUGINS, CHARACTER_SETS,
   COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES and mysql.servers. Distinguish roles

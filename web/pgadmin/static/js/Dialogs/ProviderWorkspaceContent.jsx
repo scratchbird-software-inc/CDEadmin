@@ -69,7 +69,7 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
-  'mariadb_catalog_export', 'mariadb_catalog_compare',
+  'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',

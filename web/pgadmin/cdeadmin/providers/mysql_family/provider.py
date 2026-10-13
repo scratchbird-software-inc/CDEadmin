@@ -1581,6 +1581,19 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
         finally:
             self.client._discard_failed_session(connection)
 
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id, expected_server_uid, mode='sample', row_limit=100):
+        from .mariadb_data_capture import capture
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB data client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return capture(connection, route.get('database'), resource_id, endpoint_id=endpoint_id,
+                target_id=target_id, expected_server_uid=expected_server_uid, mode=mode, row_limit=row_limit)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_catalog(self, route, *, include_system=False):
         """Observe native MariaDB metadata on an independently owned lease."""
         from .mariadb_catalog import capture

@@ -38,4 +38,24 @@ describe('MariaDB native catalog form', () => {
     expect(screen.queryByText('Native DDN viewer')).not.toBeInTheDocument();
   });
 
+
+  it('reads current relation data only after explicit selection with the captured server UID and row budget', async () => {
+    const catalog = {...capture, objects: [{resource_id: 'native-table', kind: 'table', name: 'Exact values'},
+      {resource_id: 'native-sequence', kind: 'sequence', name: 'Never advance'}]};
+    const data = {snapshot: {format: 'ddn-workspace@1', entry: 'result-1.ddn', view: 'result_1',
+      files: {'result-1.ddn': 'exact native data'}}, views: [{id: 'result_1', label: 'Data page 1', entry: 'result-1.ddn'}],
+    acquisition: {rows: 1, relation: 'Exact values', mode: 'sample', server_uid: 'native-server'}, warnings: ['Explicit sample coverage']};
+    const post = jest.fn().mockResolvedValueOnce(catalog).mockResolvedValueOnce(data);
+    render(<Component post={post} databaseTargetId="mariadb-owned-target" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    expect(post).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Data row budget'}), {target: {value: '3'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Capture selected data'}));
+    await screen.findByText('Explicit sample coverage');
+    expect(post).toHaveBeenLastCalledWith({action: 'mariadb_data_capture', request: {
+      database_target_id: 'mariadb-owned-target', resource_id: 'native-table', expected_server_uid: 'native-server', mode: 'sample', row_limit: 3}});
+    expect(mockViewer.snapshot.files).toEqual(data.snapshot.files);
+    expect(mockViewer.presentation).toBe(true);
+  });
 });
