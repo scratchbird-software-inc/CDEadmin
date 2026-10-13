@@ -387,8 +387,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   table-level child CHECK constraints may accompany the sole outgoing foreign
   key; the intermediate child definition must retain their exact native body,
   and both stages verify their catalog text and columns before any child drop.
-  Each child may also carry one unchanged plain, nonunique independent index.
-  Its exact observed native definition is replayed after the final child swap
+  Each child may also carry up to eight unchanged plain, nonunique independent
+  indexes, subject to the 32-statement review budget. Their exact observed
+  native definitions are replayed after the final child swap
   in the same transaction, with its catalog identity bound into the receipt and
   checked again after commit. Unchanged table, column and admitted index
   comments may be replayed after that final swap, in the same reviewed
@@ -396,7 +397,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   A missing child object row, changed comment or replay failure blocks or
   rolls back the review. DuckDB assigns a new native index OID during
   replay; that transient OID is not part of retained design identity. Index
-  native tags and additional child indexes remain blocked in this bounded
+  native tags and child indexes beyond the review budget remain blocked in this bounded
   subset.
   The captured file has no user views or
   macros in this first inbound subset. The reviewer

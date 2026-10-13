@@ -1599,11 +1599,12 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
         provider.client.close()
 
 
-@pytest.mark.parametrize('child_count,indexed_child,with_comments', [
-    (1, 1, False), (1, 1, True), (2, 1, False), (2, 1, True),
-    (2, 2, False), (2, 2, True), (3, 2, False)])
-def test_inbound_rebuild_replays_one_child_index(
-        tmp_path, child_count, indexed_child, with_comments):
+@pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
+    (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
+    (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),
+    (1, 1, False, 3), (2, 2, False, 3)])
+def test_inbound_rebuild_replays_child_indexes(
+        tmp_path, child_count, indexed_child, with_comments, index_count):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1617,6 +1618,10 @@ def test_inbound_rebuild_replays_one_child_index(
         connection.execute(f'INSERT INTO {name} VALUES ({number * 10}, 1)')
         if number == indexed_child:
             connection.execute(f'CREATE INDEX {name}_id_idx ON {name}(id)')
+            if index_count >= 2:
+                connection.execute(f'CREATE INDEX {name}_parent_idx ON {name}(parent_id)')
+            if index_count >= 3:
+                connection.execute(f'CREATE INDEX {name}_pair_idx ON {name}(id,parent_id)')
         if with_comments:
             connection.execute(f"COMMENT ON TABLE {name} IS 'table note'")
             connection.execute(f"COMMENT ON COLUMN {name}.id IS 'column note'")
@@ -1688,9 +1693,14 @@ def test_inbound_rebuild_replays_one_child_index(
                 assert observer.execute('SELECT comment FROM duckdb_columns() '
                     "WHERE table_name=? AND column_name='id'", [name]).fetchone()[0] == (
                     'column note')
-        assert observer.execute('SELECT index_name FROM duckdb_indexes() '
-            'WHERE table_name=?', [children[indexed_child - 1]['name']]).fetchall() == [
-            (index['name'],)]
+        expected_indexes = [index['name']]
+        if index_count >= 2:
+            expected_indexes.append(children[indexed_child - 1]['name'] + '_parent_idx')
+        if index_count >= 3:
+            expected_indexes.append(children[indexed_child - 1]['name'] + '_pair_idx')
+        assert sorted(observer.execute('SELECT index_name FROM duckdb_indexes() '
+            'WHERE table_name=?', [children[indexed_child - 1]['name']]).fetchall()) == [
+            (name,) for name in sorted(expected_indexes)]
         if with_comments:
             assert observer.execute('SELECT comment FROM duckdb_indexes() '
                 'WHERE index_name=?', [index['name']]).fetchone()[0] == 'index note'

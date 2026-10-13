@@ -1117,7 +1117,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     if (metadata.get('tags') or
             metadata.get('temporary') is not False or
             metadata.get('has_primary_key') is not False or
-            not isinstance(native.get('indexes'), list) or len(indexes) > 1 or
+            not isinstance(native.get('indexes'), list) or len(indexes) > 8 or
             {item.get('resource_id') for item in native['indexes']} !=
                 {item['resource_id'] for item in indexes} or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
@@ -1142,7 +1142,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 not _equal(_definition(observed_index), _definition(index)) or
                 not _equal(_definition(desired_index), _definition(index)) or
                 index_metadata.get('tags') or index_metadata.get('unique') is not False):
-            raise ValueError('Inbound child requires one unchanged plain independent index')
+            raise ValueError('Inbound child requires unchanged plain independent indexes')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     original = native.get('ddl')
     original_sections = _table_definition_sections(original)
