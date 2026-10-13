@@ -8,8 +8,9 @@ import {formatFirebird} from './firebirdFormatting';
 import {firebirdSQLConfig} from './firebirdSyntax';
 import {duckdbSQLConfig} from './duckdbSyntax';
 import {firebirdExecution} from './firebirdExecution';
+import {duckdbExecution} from './duckdbExecution';
 
-export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute}) {
+export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}'}) {
   const [syntax, setSyntax] = useState(true);
   const [completion, setCompletion] = useState(null);
   const [prepared, setPrepared] = useState(null);
@@ -19,6 +20,11 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const sqlConfig = useMemo(() => firebirdSQLConfig(language?.editor?.keywords || '', clientSqlDialect, completion?.resources || resources, language?.editor?.reserved_words),
     [language?.editor, clientSqlDialect, resources, completion]);
   const nativeProfile = language?.language_profile || '';
+  const scriptParameters = useMemo(() => {
+    try {const value = JSON.parse(parameterSource || '{}');
+      return value && typeof value === 'object' && Object.keys(value).length === 0 ? value : null;
+    } catch {return null;}
+  }, [parameterSource]);
   const jsonLanguage = /json|keyvalue|query-api|query-search-api|query-dsl|resp3/.test(nativeProfile);
   const nativeDialect = /mysql|maria|tidb|vitess|dolt/.test(nativeProfile) ? MySQL :
     /postgres|cockroach|ysql|xtdb/.test(nativeProfile) ? PostgreSQL : /sqlite/.test(nativeProfile) ? SQLite : StandardSQL;
@@ -53,28 +59,39 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     try {onChange(formatFirebird(source)); setError('');}
     catch(failure) {setError(failure.message);}
   };
-  const prepareExecution = (mode) => {
+  const prepareExecution = async (mode) => {
+    const current = ++generation.current;
+    setChecking(true);
     try {
       const selection = syntax ? syntaxEditor.current?.state.selection.main : null;
       const cursor = selection?.head ?? (plainEditor.current?.selectionDirection === 'backward' ?
         plainEditor.current.selectionStart : (plainEditor.current?.selectionEnd ?? 0));
       const from = mode === 'selection' ? (selection?.from ?? plainEditor.current?.selectionStart ?? 0) : cursor;
       const to = mode === 'selection' ? (selection?.to ?? plainEditor.current?.selectionEnd ?? from) : cursor;
-      setPrepared({...firebirdExecution(source, mode, from, to), original: source});
+      const value = firebird ? firebirdExecution(source, mode, from, to) :
+        await duckdbExecution(source, mode, from, to, async input => send({
+          action: 'source_validate', session_id: await ensureSession(), source: input,
+        }));
+      if (!mounted.current || current !== generation.current) return;
+      setPrepared({...value, original: source});
       setError('');
-    } catch(failure) {setPrepared(null); setError(failure.message);}
+    } catch(failure) {
+      if (mounted.current && current === generation.current) {setPrepared(null); setError(failure.message);}
+    } finally {if (mounted.current) setChecking(false);}
   };
   useEffect(() => {generation.current++;setValidation(null);}, [source, language?.language_profile]);
   useEffect(() => {mounted.current=true;return () => {mounted.current=false;generation.current++;};}, []);
   const send = (payload) => post({...payload, database_target_id: databaseTargetId});
-  const inspect = async (script) => {
+  const inspect = async (script, executionSource=source) => {
     const current=++generation.current;setChecking(true);setError('');
     try {
+      if (script && !scriptParameters) throw new Error('Retained scripts require empty parameter bindings.');
       if (script && plan?.plan_id) {
         await send({action:'native_script_discard',plan_id:plan.plan_id});
       }
       const result=await send({action:script ? 'native_script_prepare' : 'source_validate',
-        session_id:await ensureSession(), source,
+        session_id:await ensureSession(), source:executionSource,
+        ...(script ? {parameters: scriptParameters} : {}),
         ...(script && language?.language_profile === 'firebird-sql' ?
           {history_sensitive: historySensitive, client_sql_dialect: clientSqlDialect} : {}),
         ...(script && ['mysql-sql', 'mariadb-sql', 'duckdb-sql'].includes(language?.language_profile) ? {history_sensitive: historySensitive} : {})});
@@ -111,27 +128,30 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   };
   return <FormReference formKey="query-editor">
     <Box component="details"><summary>Source tools</summary>
-      {firebird && <Box>
-        <Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
-        <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button>
+      {(firebird || nativeProfile === 'duckdb-sql') && <Box>
+        {firebird && <><Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
+          <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button></>}
         {['selection', 'current', 'from-cursor'].map(mode => <Button key={mode}
           disabled={disabled || running || !onExecute || Boolean(plan?.occurrence_id)}
           onClick={() => prepareExecution(mode)}>{({'selection': 'Prepare selection', 'current': 'Prepare current statement', 'from-cursor': 'Prepare from cursor'})[mode]}</Button>)}
       </Box>}
-      {firebird && prepared?.original === source && <Box sx={{my: 1}}>
+      {(firebird || nativeProfile === 'duckdb-sql') && prepared?.original === source && <Box sx={{my: 1}}>
         <Alert severity="info">Review the prepared {prepared.scriptMode ? 'script, including inherited client settings and any transaction commands' : 'native statement'}.
-          {prepared.scriptMode ? ' Scripts require an empty parameter array.' : ' Existing ordered parameters apply.'}
+          {prepared.scriptMode ? ' Scripts require empty parameter bindings.' : ' Existing ordered parameters apply.'}
         No SQL has been executed by preparing this source.</Alert>
         <TextField multiline fullWidth minRows={3} maxRows={10} label="Prepared execution source"
           value={prepared.source} InputProps={{readOnly: true}} />
         <Button disabled={disabled || running || !onExecute} onClick={() => {
-          const value = prepared; setPrepared(null); onExecute(value.source, value.scriptMode);
-        }}>Run prepared source</Button>
+          const value = prepared; setPrepared(null);
+          if (!firebird && value.scriptMode) inspect(true, value.source);
+          else onExecute(value.source, value.scriptMode);
+        }}>{!firebird && prepared.scriptMode ? 'Preview prepared script' : 'Run prepared source'}</Button>
       </Box>}
       <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(false)}>Check source</Button>
       {language?.tooling?.script_framing && <FormReference formKey="script">
+        {!scriptParameters && <Alert severity="info">Clear query bindings to prepare or run a retained script.</Alert>}
         <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(true)}>Preview script</Button>
-        <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled}
+        <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled || !scriptParameters}
           onClick={() => {setRunning(true);onScriptLock(true);}}>Run / resume retained script</Button>
         <Button disabled={!plan?.plan_id || ['stopped','complete'].includes(plan.state)} onClick={stop}>Stop after current statement</Button>
         {plan && <Box component="pre" aria-label="Script progress" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({plan_id:plan.plan_id,state:plan.state,next_statement:plan.next_statement,statements:plan.statements?.map(s=>({ordinal:s.ordinal,source:s.source})),history:plan.history,stop_reason:plan.stop_reason},null,2)}</Box>}
@@ -159,4 +179,4 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
   </FormReference>;
 }
-LanguageSourceEditor.propTypes={onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};
+LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};

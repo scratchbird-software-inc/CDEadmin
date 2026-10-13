@@ -63,6 +63,10 @@ DUCK-COMP-03: Shared SQL editor and native language
   one statement at a time on the same session, observes each terminal result,
   stops on error or unknown outcome, and never automatically replays a
   submitted statement. An error plus blocked session is an unknown outcome.
+  Editor preparation of a selection, current statement or remaining source
+  from the cursor uses those same native parser boundaries without execution.
+  A prepared multi-statement result enters retained script review; it is not
+  passed to the ordinary single-statement Run path.
   Visible native catalog resources supply qualified catalog/schema/relation and
   column completions in the shared editor. Identifier insertion quotes and
   escapes exact native names. This page-scoped completion never claims a
