@@ -412,6 +412,36 @@ def test_native_batch_adds_column_before_index_on_existing_table(tmp_path):
         provider.client.close()
 
 
+def test_native_primary_key_addition_verifies_columns_and_rolls_back_bad_data(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        existing = next(item for item in baseline['rows'].values()
+            if item['kind'] == 'table' and item['name'] == 'existing')
+        desired = deepcopy(baseline)
+        desired['rows'][existing['resource_id']]['native']['duckdb_change'] = {
+            'action': 'add-primary-key', 'columns': ['id']}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'primary-key.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        result = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert result['state'] == 'committed', result
+        assert result['outcome']['rediscovery_verified'], result
+        observed = provider.capture_catalog(route)
+        fresh = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'],
+            refreshed=True, engine='duckdb', native_model=True)
+        assert fresh['rows'][existing['resource_id']]['native']['catalog_metadata']['has_primary_key']
+        connection = duckdb.connect(route['database'])
+        with pytest.raises(duckdb.Error):
+            connection.execute('INSERT INTO existing VALUES (NULL)')
+        connection.close()
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

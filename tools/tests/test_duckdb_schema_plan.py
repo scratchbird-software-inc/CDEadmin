@@ -158,6 +158,29 @@ def test_native_batch_orders_parent_creation_and_added_column_before_index():
     assert with_column['blockers']
 
 
+def test_primary_key_addition_requires_explicit_observed_columns_and_no_other_edit():
+    pytest.importorskip('duckdb')
+    before = row('table', ['file', 'main', 'facts'])
+    before['native']['catalog_metadata']['has_primary_key'] = False
+    before['native']['columns'] = [{'name': 'id'}, {'name': 'region'}]
+    after = deepcopy(before)
+    after['native']['duckdb_change'] = {'action': 'add-primary-key',
+        'columns': ['id', 'region']}
+    result = plan(model(before), model(after), model(before))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" ADD PRIMARY KEY ("id", "region")')
+    assert result['operations'][0]['postcondition'] == {
+        'primary_key_columns': ['id', 'region']}
+    after['native']['duckdb_change']['columns'] = ['id', 'missing']
+    assert plan(model(before), model(after), model(before))['blockers']
+    after['native']['duckdb_change']['columns'] = ['id', 'id']
+    assert plan(model(before), model(after), model(before))['blockers']
+    after['native']['duckdb_change']['columns'] = ['id']
+    after['native']['catalog_metadata']['comment'] = 'combined'
+    assert plan(model(before), model(after), model(before))['blockers']
+
+
 @pytest.mark.parametrize('source', [
     'CREATE TABLE "other"."main"."facts" (x INTEGER)',
     'CREATE TABLE "file"."main"."facts" (',

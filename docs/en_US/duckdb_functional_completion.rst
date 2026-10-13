@@ -144,7 +144,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations, native
   enum extension, single-overload scalar macro replacement and exact-identity
-  table/view/column rename and isolated native object comments are previewed
+  table/view/column rename, explicit primary-key addition and isolated native
+  object comments are previewed
   through the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
   One-field column default or nullability alterations require explicit change
@@ -174,6 +175,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   cleared through one parsed ``COMMENT ON`` statement when the only edited
   native field is the comment. DuckDB 1.5.2 cannot comment on schemas; those
   edits remain blocked. The resulting comment is verified by fresh discovery.
+  A primary key may be added to an existing table only by explicit intent
+  naming one or more distinct observed columns when the baseline has no
+  primary key. No other table edit is bundled with this operation. DuckDB
+  checks existing data and nullability during native execution; a failure
+  rolls back the reviewed transaction. Fresh discovery must observe the key
+  and the exact ordered key columns. Dropping or changing a primary key is
+  unavailable through DuckDB 1.5.2 ``ALTER TABLE`` and remains blocked.
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.

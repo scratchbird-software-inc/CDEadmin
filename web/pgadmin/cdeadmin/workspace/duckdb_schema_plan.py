@@ -313,6 +313,30 @@ def _validated_comment(before, after, target):
     return source, new_comment
 
 
+def _validated_primary_key(before, after, change, target):
+    if after['kind'] != 'table' or before['native'].get('catalog_metadata', {}).get('has_primary_key') is not False:
+        raise ValueError('Primary-key addition requires an observed table without a key')
+    if not _equal(_definition(before), _definition(after)) or set(change) != {'action', 'columns'}:
+        raise ValueError('Review native table edits separately from key addition')
+    columns = change['columns']
+    observed = {item.get('name') for item in before['native'].get('columns', [])
+                if isinstance(item, dict)}
+    if (not isinstance(columns, list) or not 1 <= len(columns) <= 16 or
+            any(not isinstance(name, str) or name not in observed for name in columns) or
+            len(set(columns)) != len(columns)):
+        raise ValueError('Primary key requires distinct observed native columns')
+    source = ('ALTER TABLE ' + target + ' ADD PRIMARY KEY (' +
+              ', '.join(_quote(name) for name in columns) + ')')
+    import duckdb
+    try:
+        parsed = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected primary-key addition') from None
+    if len(parsed) != 1 or parsed[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native ADD PRIMARY KEY statement is required')
+    return source, columns
+
+
 def _ordered_operations(operations, desired):
     if len(operations) > 32 or sum(len(item['source'].encode('utf8')) for item in operations) > 1024 * 1024:
         raise ValueError('Native batch exceeds 32 statements or 1 MiB')
@@ -440,6 +464,10 @@ def plan(baseline, desired, live):
             elif change == {'action': 'set-comment'}:
                 operation = 'alter'
                 source, _comment = _validated_comment(before, after, target)
+            elif (after['kind'] == 'table' and isinstance(change, dict) and
+                  change.get('action') == 'add-primary-key'):
+                operation = 'alter'
+                source, _pk_columns = _validated_primary_key(before, after, change, target)
             elif (after['kind'] == 'column' and isinstance(change, dict) and
                   change.get('action') in {'set-default', 'set-nullable', 'set-type'}):
                 operation = 'alter'
@@ -461,6 +489,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'definition': _definition_text}
             elif change == {'action': 'set-comment'}:
                 operation_record['postcondition'] = {'comment': _comment}
+            elif after['kind'] == 'table' and isinstance(change, dict) and change.get('action') == 'add-primary-key':
+                operation_record['postcondition'] = {'primary_key_columns': _pk_columns}
             operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': identity, 'name': after.get('name'), 'reason': str(error)})

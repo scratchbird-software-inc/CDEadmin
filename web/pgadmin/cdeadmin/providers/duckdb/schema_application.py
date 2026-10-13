@@ -71,14 +71,21 @@ def apply_review(provider, route, record):
                     verified = (current is not None and
                         digest(_definition(current)) != operation['baseline_sha256'])
                     if verified and operation.get('postcondition'):
-                        metadata = (current['native'].get('catalog_metadata', {})
-                            if operation['kind'] in {'column', 'type'} or
-                                (operation['operation'] == 'alter' and
-                                 'comment' in operation['postcondition']) else
-                            {'definition': (current['native'].get('overloads') or [{}])[0]
-                                .get('definition')})
-                        verified = all(metadata.get(key) == value for key, value in
-                            operation['postcondition'].items())
+                        if 'primary_key_columns' in operation['postcondition']:
+                            verified = (current['native'].get('catalog_metadata', {})
+                                .get('has_primary_key') is True and any(
+                                item.get('constraint_type') == 'PRIMARY KEY' and
+                                item.get('column_names') == operation['postcondition']['primary_key_columns']
+                                for item in current['native'].get('constraints', [])))
+                        else:
+                            metadata = (current['native'].get('catalog_metadata', {})
+                                if operation['kind'] in {'column', 'type'} or
+                                    (operation['operation'] == 'alter' and
+                                     'comment' in operation['postcondition']) else
+                                {'definition': (current['native'].get('overloads') or [{}])[0]
+                                    .get('definition')})
+                            verified = all(metadata.get(key) == value for key, value in
+                                operation['postcondition'].items())
                 checks.append({'resource_id': operation['resource_id'], 'verified': verified})
                 rediscovered.append(current['resource_id'] if current else None)
             result['rediscovery_checks'] = checks
