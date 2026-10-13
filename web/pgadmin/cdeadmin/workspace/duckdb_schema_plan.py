@@ -1151,7 +1151,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
             not isinstance(constraints, list) or len(parent_foreign) != 1 or
-            len(other_foreign) > 1 or
+            len(other_foreign) > 8 or
             len(checks) > 2 or len(uniques) > 2 or
             len(constraints) != len(checks) + len(uniques) +
                 len(primary) + len(nulls) + len(foreign) or
@@ -1162,7 +1162,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 for item in foreign) or
             any(not isinstance(item, dict) or
                 not constant_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires one parent key, at most one other key, bounded constraints and admitted defaults')
+        raise ValueError('Inbound child requires one parent key, at most eight other keys, bounded constraints and admitted defaults')
     other_parent_sha256 = {}
     for edge in other_foreign:
         referenced = edge.get('referenced_table')

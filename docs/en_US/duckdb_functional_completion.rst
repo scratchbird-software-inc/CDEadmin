@@ -401,12 +401,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   native inline or table-level syntax; the intermediate child definition must
   retain their exact native body,
   and both stages verify their catalog text and columns before any child drop.
-  The child may also have one unchanged foreign key to a second, unchanged
-  same-schema parent. That second parent's semantic definition is bound into
-  the review and checked after commit. The intermediate definition removes
-  only the key to the rebuilt parent; native staging must retain the other key
-  and verify both edges before dropping their predecessors. More outgoing keys
-  or changed referenced parents remain blocked.
+  The child may also have up to eight unchanged foreign keys to other unchanged
+  same-schema parents. Each referenced parent's semantic definition is bound
+  into the review and checked after commit. The intermediate definition removes
+  only the key to the rebuilt parent; native staging must retain and verify
+  every other edge before dropping its predecessor. More outgoing keys or
+  changed referenced parents remain blocked.
   Each child may also carry up to eight unchanged plain, nonunique independent
   indexes, subject to the 64-statement isolated-rebuild review budget. Their exact observed
   native definitions are replayed after the final child swap
