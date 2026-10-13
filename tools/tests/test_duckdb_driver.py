@@ -317,3 +317,36 @@ def test_returning_union_never_replays_dml(client, tmp_path):
     updated = execute(client, h, 'UPDATE effects SET i=i+1 RETURNING i,u')
     assert rows(updated) == [[2, dict(tag='y', type_code=1, value=None)]]
     assert rows(execute(client, h, 'SELECT i FROM effects')) == [[2]]
+
+
+def test_native_catalog_preserves_all_function_and_macro_overloads(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE MACRO owned_overloads(x) AS x+1, (x,y) AS x+y')
+    handle.execute('CREATE TABLE pending_catalog(id INTEGER)')
+    handle.execute('INSERT INTO pending_catalog VALUES (7)')
+    expected = handle.execute('SELECT COUNT(*) FROM duckdb_functions()').fetchone()[0]
+    resources = _resources(handle, {})
+    functions = [item for item in resources if item['resource_kind'] in ('function', 'macro')]
+    assert sum(item['native']['overload_count'] for item in functions) == expected
+    group = next(item for item in functions if item['display_name'] == 'owned_overloads')
+    native = group['native']
+    assert native['overload_count'] == 2
+    assert {tuple(p['name'] for p in item['parameters']) for item in native['overloads']} == {('x',), ('x', 'y')}
+    assert {item['definition'] for item in native['overloads']} == {'(x + 1)', '(x + y)'}
+    assert 'definition' not in native and 'parameters' not in native
+    assert native['catalog_metadata']['function_type'] == 'macro'
+    assert handle.execute('SELECT * FROM pending_catalog').fetchall() == [(7,)]
+    client.control_transaction(handle, 'rollback')
+    assert not handle.execute("SELECT * FROM duckdb_tables() WHERE table_name='pending_catalog'").fetchall()
+
+
+def test_single_macro_keeps_its_unambiguous_definition(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE MACRO owned_single(x) AS x+1')
+    native = next(item['native'] for item in _resources(handle, {}) if item['display_name'] == 'owned_single')
+    assert native['overload_count'] == 1
+    assert native['definition'] == '(x + 1)'
+    assert native['parameters'] == [{'name': 'x', 'data_type': None}]
+    assert native['overloads'][0]['definition'] == native['definition']

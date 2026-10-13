@@ -446,7 +446,7 @@ def _resources(connection, request):
             has_side_effects, internal, oid, examples, stability,
             categories,
         ) = values
-        add(kind, [database, schema], name, {
+        overload = {
             'catalog_metadata': {
                 'function_type': function_type,
                 'alias_of': alias_of, 'description': description,
@@ -464,7 +464,27 @@ def _resources(connection, request):
                 )
             ],
             **({'definition': definition} if definition else {}),
-        })
+        }
+        resource_id = ':'.join([kind, str(database), str(schema), str(name)])
+        group = resources.get(resource_id)
+        if group is None:
+            group = add(kind, [database, schema], name, {
+                **overload, 'overloads': [],
+            })
+        native = group['native']
+        native['overloads'].append(overload)
+        native['overload_count'] = len(native['overloads'])
+        if native['overload_count'] > 1:
+            # A group is not an arbitrary last overload. Keep only common
+            # convenience fields; the complete native facts remain below.
+            native['catalog_metadata'] = {
+                key: value for key, value in native['catalog_metadata'].items()
+                if key in overload['catalog_metadata'] and
+                value == overload['catalog_metadata'][key]
+            }
+            for key in ('parameters', 'definition'):
+                if native.get(key) != overload.get(key):
+                    native.pop(key, None)
     cursor.execute(
         'SELECT extension_name, loaded, installed, extension_version '
         'FROM duckdb_extensions() ORDER BY extension_name'
