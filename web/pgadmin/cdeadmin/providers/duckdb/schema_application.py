@@ -113,7 +113,9 @@ def apply_review(provider, route, record):
                     verified = (current is not None and current['kind'] == 'table' and
                         expected is not None and expected == create_definition_tokens(
                             current['native'].get('ddl'), 'table') and
-                        current['native'].get('columns') == baseline['native'].get('columns'))
+                        current['native'].get('columns') == baseline['native'].get('columns') and
+                        current['native'].get('catalog_metadata', {}).get('comment') ==
+                            baseline['native'].get('catalog_metadata', {}).get('comment'))
                     if verified:
                         from ...workspace.duckdb_schema_plan import _definition
                         from ...workspace.firebird_schema_plan import digest
@@ -126,6 +128,9 @@ def apply_review(provider, route, record):
                             {item['resource_id'] for item in
                                 current['native'].get('constraints', [])} ==
                             set(operation['desired_child_sha256']) and
+                            {item['resource_id'] for item in
+                                current['native'].get('indexes', [])} ==
+                            set(operation['affected_index_ids']) and
                             connection.execute('SELECT count(*) FROM ' +
                                 operation['target']).fetchone()[0] ==
                             rebuild_rows[operation['resource_id']])
@@ -137,6 +142,11 @@ def apply_review(provider, route, record):
                                 operation['desired_child_sha256'][child_id] ==
                                 digest(_definition(observed['rows'][child_id])))
                                 for child_id in operation['affected_child_ids'])
+                        if verified:
+                            verified = all(observed['rows'].get(index_id) is not None and
+                                digest(_definition(observed['rows'][index_id])) ==
+                                operation['desired_index_sha256'][index_id]
+                                for index_id in operation['affected_index_ids'])
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
                     from ...workspace.firebird_schema_plan import digest

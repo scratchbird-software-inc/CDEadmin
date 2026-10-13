@@ -287,8 +287,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   does not preserve these facts. General whole-table replacement remains
   blocked; a separate migration must preserve data and dependent metadata.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
-  remain identical, no independent index, comment, tag, primary key or
-  foreign-key edge needs
+  remain identical, no tag, primary key or foreign-key edge needs
   preservation, and the captured file has no user view, macro or sequence
   dependency whose binding could change. The reviewer supplies a complete
   CREATE TABLE definition and explicitly confirms the corresponding isolated
@@ -297,9 +296,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   keys and independent indexes remain outside this migration.
   A deterministic staging table receives every old row in the same native
   transaction; both EXCEPT ALL directions must be empty before the original
-  table is dropped and the staging table renamed. Any failed constraint or
-  copy check rolls back the original table and data. Fresh rediscovery and
-  row-count/constraint checks after commit can leave a committed result
+  table is dropped and the staging table renamed. The same transaction must
+  then recreate each observed independent index and its comment, and restore
+  the table and column comments from the exact reviewed catalog. Native tags
+  still block the rebuild. Any failed constraint, copy or metadata replay
+  rolls back the original table and data. Fresh rediscovery and
+  row-count, constraint, index and comment checks after commit can leave a committed result
   unverified, never automatically replayed. Other rebuilds remain blocked.
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by

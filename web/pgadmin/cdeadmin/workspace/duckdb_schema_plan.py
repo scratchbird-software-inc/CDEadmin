@@ -952,6 +952,49 @@ def _validated_primary_key(before, after, change, target):
     return source, columns
 
 
+def _validated_replayed_index(index, table_target):
+    import duckdb
+    ddl = index['native'].get('ddl')
+    if not isinstance(ddl, str) or not ddl or len(ddl.encode('utf8')) > 1024 * 1024:
+        raise ValueError('Independent index has no bounded native definition to preserve')
+    encoded = ddl.encode('utf8')
+    try:
+        tokens = duckdb.tokenize(ddl)
+    except duckdb.Error:
+        raise ValueError('Independent index definition cannot be tokenized') from None
+    on = next((number for number, (offset, kind) in enumerate(tokens)
+        if kind == duckdb.token_type.keyword and
+        encoded[offset:tokens[number + 1][0] if number + 1 < len(tokens) else len(encoded)]
+            .decode('utf8').strip().casefold() == 'on'), None)
+    opening = next((offset for offset, kind in tokens[on + 1:]
+        if kind == duckdb.token_type.operator and encoded[offset:offset + 1] == b'('), None) if on is not None else None
+    if opening is None:
+        raise ValueError('Independent index expression cannot be reconstructed')
+    metadata = index['native'].get('catalog_metadata', {})
+    if metadata.get('primary') or metadata.get('tags') or type(metadata.get('unique')) is not bool:
+        raise ValueError('Independent index has unsupported native metadata')
+    source = ('CREATE ' + ('UNIQUE ' if metadata['unique'] else '') + 'INDEX ' +
+        _quote(index['name']) + ' ON ' + table_target + encoded[opening:].decode('utf8'))
+    return _validated_index_ddl(source, index['path'])
+
+
+def _validated_replayed_comment(kind, target, comment):
+    if comment is None:
+        return None
+    if not isinstance(comment, str) or len(comment.encode('utf8')) > 8192 or '\x00' in comment:
+        raise ValueError('Native comment cannot be preserved within the review budget')
+    source = ('COMMENT ON ' + kind.upper() + ' ' + target + ' IS ' +
+        "'" + comment.replace("'", "''") + "'")
+    import duckdb
+    try:
+        parsed = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native comment replay is not parseable') from None
+    if len(parsed) != 1 or parsed[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Native comment replay requires one ALTER statement')
+    return source
+
+
 def _validated_check_rebuild(before, after, change, target, live, desired):
     action = change.get('action') if isinstance(change, dict) else None
     allowed = {'rebuild-check-constraints': {'CHECK'},
@@ -974,14 +1017,24 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         raise ValueError('UNIQUE rebuild requires an observed or desired UNIQUE constraint')
     metadata = before['native'].get('catalog_metadata', {})
     columns = before['native'].get('columns')
-    if (metadata.get('has_primary_key') is not False or metadata.get('comment') is not None or
-            metadata.get('tags') or before['native'].get('indexes') or
+    if (metadata.get('has_primary_key') is not False or metadata.get('tags') or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
             any(not isinstance(item, dict) or not isinstance(item.get('name'), str) or
-                item.get('comment') is not None or item.get('default') is not None
+                item.get('default') is not None
                 for item in columns) or
             len({item['name'] for item in columns}) != len(columns)):
-        raise ValueError('Constraint rebuild requires plain unchanged columns without independent indexes or comments')
+        raise ValueError('Constraint rebuild requires plain unchanged columns without native tags')
+    indexes = sorted((row for row in live['rows'].values()
+        if row['kind'] == 'index' and row.get('path', [])[:3] == before['path']),
+        key=lambda row: row['resource_id'])
+    if {row['resource_id'] for row in indexes} != {
+            item.get('resource_id') for item in before['native'].get('indexes', [])}:
+        raise ValueError('Constraint rebuild cannot account for every native independent index')
+    for index in indexes:
+        desired_index = desired['rows'].get(index['resource_id'])
+        if (desired_index is None or not _equal(_definition(index), _definition(desired_index)) or
+                index['native'].get('catalog_metadata', {}).get('tags')):
+            raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
     for row in live['rows'].values():
         if row['kind'] in {'view', 'macro', 'sequence', 'attached-database'}:
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
@@ -1020,21 +1073,35 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         'INSERT INTO ' + stage + ' (' + names + ') SELECT ' + names + ' FROM ' + target,
         'DROP TABLE ' + target + ' RESTRICT',
         'ALTER TABLE ' + stage + ' RENAME TO ' + _quote(after['name'])]
+    expected_types = ['CREATE', 'INSERT', 'DROP', 'ALTER']
+    for index in indexes:
+        statements.append(_validated_replayed_index(index, target))
+        expected_types.append('CREATE')
+    for kind, comment_target, comment in [
+            ('table', target, metadata.get('comment')),
+            *(( 'column', target + '.' + _quote(column['name']), column.get('comment'))
+              for column in columns),
+            *(( 'index', '.'.join(_quote(part) for part in
+                [index['path'][0], index['path'][1], index['name']]),
+                index['native'].get('catalog_metadata', {}).get('comment'))
+              for index in indexes)]:
+        replay = _validated_replayed_comment(kind, comment_target, comment)
+        if replay is not None:
+            statements.append(replay)
+            expected_types.append('ALTER')
     check = ('SELECT count(*) FROM ((SELECT ' + names + ' FROM ' + target +
         ' EXCEPT ALL SELECT ' + names + ' FROM ' + stage + ') UNION ALL (SELECT ' +
         names + ' FROM ' + stage + ' EXCEPT ALL SELECT ' + names + ' FROM ' +
         target + ')) AS differences')
     import duckdb
-    for statement, expected in zip(statements,
-            (duckdb.StatementType.CREATE, duckdb.StatementType.INSERT,
-             duckdb.StatementType.DROP, duckdb.StatementType.ALTER)):
+    for statement, expected in zip(statements, expected_types):
         try:
             parsed = duckdb.extract_statements(statement)
         except duckdb.Error:
             raise ValueError('Native constraint rebuild statement is not parseable') from None
-        if len(parsed) != 1 or parsed[0].type != expected:
-            raise ValueError('Native constraint rebuild requires four exact statements')
-    return statements, check, source, new_constraints
+        if len(parsed) != 1 or parsed[0].type != getattr(duckdb.StatementType, expected):
+            raise ValueError('Native constraint rebuild requires exact reviewed statements')
+    return statements, check, source, new_constraints, indexes
 
 
 def _ordered_operations(operations, desired):
@@ -1219,7 +1286,7 @@ def plan(baseline, desired, live):
                   change.get('action') in
                   {'rebuild-check-constraints', 'rebuild-unique-constraints'}):
                 operation = 'rebuild'
-                _rebuild_statements, _data_check, _original_source, _expected_constraints = (
+                _rebuild_statements, _data_check, _original_source, _expected_constraints, _replayed_indexes = (
                     _validated_check_rebuild(before, after, change, target, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
                     _rebuild_statements) + ';'
@@ -1298,6 +1365,11 @@ def plan(baseline, desired, live):
                     baseline_child_sha256={key: digest(_definition(row))
                         for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']},
+                    affected_index_ids=[row['resource_id'] for row in _replayed_indexes],
+                    desired_index_sha256={row['resource_id']: digest(_definition(
+                        desired['rows'][row['resource_id']])) for row in _replayed_indexes},
+                    baseline_index_sha256={row['resource_id']: digest(_definition(
+                        baseline['rows'][row['resource_id']])) for row in _replayed_indexes},
                     postcondition={'constraints': _expected_constraints})
             operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:

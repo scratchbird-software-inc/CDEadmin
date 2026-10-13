@@ -53,6 +53,17 @@ class DuckDBSchemaApplications(SchemaApplications):
                             operation['desired_child_sha256'].get(child_id) !=
                             (digest(_definition(new_child)) if new_child else None)):
                         raise SchemaApplyError('Constraint rebuild child facts differ from reviewed plan')
+                for index_id in operation['affected_index_ids']:
+                    old_index = baseline['rows'].get(index_id)
+                    new_index = desired['rows'].get(index_id)
+                    if (old_index is None or new_index is None or
+                            operation['baseline_index_sha256'].get(index_id) !=
+                                digest(_definition(old_index)) or
+                            operation['desired_index_sha256'].get(index_id) !=
+                                digest(_definition(new_index))):
+                        raise SchemaApplyError('Constraint rebuild index facts differ from reviewed plan')
+                    baseline_ids.add(index_id)
+                    desired_ids.add(index_id)
         if (_root(baseline) != preview['catalog'] or _root(desired) != preview['catalog'] or
                 any(baseline['provenance'].get(key) != desired['provenance'].get(key)
                     for key in ('endpoint_id', 'database_target_id'))):

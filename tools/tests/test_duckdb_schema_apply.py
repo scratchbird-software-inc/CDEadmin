@@ -680,9 +680,7 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
 
 
 @pytest.mark.parametrize('dependent_sql', (
-    'CREATE INDEX checked_id_idx ON checked(id)',
     'CREATE VIEW checked_view AS SELECT id FROM checked',
-    "COMMENT ON TABLE checked IS 'keep this comment'",
 ))
 def test_check_rebuild_blocks_unpreserved_native_dependents(tmp_path, dependent_sql):
     duckdb = pytest.importorskip('duckdb')
@@ -851,6 +849,62 @@ def test_isolated_unique_rebuild_adds_constraint_or_rolls_back_duplicate_data(tm
             assert outcome['state'] == 'committed', outcome
             assert outcome['outcome']['rediscovery_verified'], outcome
             assert constraint_count == 1
+    finally:
+        provider.client.close()
+
+
+def test_constraint_rebuild_replays_index_and_table_column_index_comments(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0), value VARCHAR)')
+    connection.execute("INSERT INTO checked VALUES (1, 'one'), (2, 'two')")
+    connection.execute('CREATE INDEX checked_value_idx ON checked(value)')
+    connection.execute('CREATE INDEX checked_lower_idx ON checked(lower(value))')
+    connection.execute("COMMENT ON TABLE checked IS 'table note'")
+    connection.execute("COMMENT ON COLUMN checked.id IS 'column note'")
+    connection.execute("COMMENT ON INDEX checked_value_idx IS 'index note'")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, "value" VARCHAR, CHECK((id >= 0)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['affected_index_ids']) == 2
+        applications = DuckDBSchemaApplications(tmp_path/'rebuild-with-index.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id, value FROM checked ORDER BY id').fetchall() == [
+            (1, 'one'), (2, 'two')]
+        assert observer.execute("SELECT comment FROM duckdb_tables() "
+            "WHERE table_name='checked'").fetchone()[0] == 'table note'
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='checked' AND column_name='id'").fetchone()[0] == 'column note'
+        assert observer.execute("SELECT comment FROM duckdb_indexes() "
+            "WHERE index_name='checked_value_idx'").fetchone()[0] == 'index note'
+        assert observer.execute("SELECT count(*) FROM duckdb_indexes() "
+            "WHERE table_name='checked' AND index_name='checked_lower_idx'").fetchone()[0] == 1
+        observer.close()
     finally:
         provider.client.close()
 
