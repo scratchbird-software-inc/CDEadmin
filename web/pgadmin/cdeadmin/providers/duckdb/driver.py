@@ -70,8 +70,10 @@ class Execution:
             parse_started = time.perf_counter_ns()
             statements = self.connection.extract_statements(self.source)
             parse_ms = round((time.perf_counter_ns() - parse_started) / 1_000_000, 3)
-            if len(statements) != 1 and self.bound:
-                self.error = {'type': 'ParameterShapeError',
+            if len(statements) != 1:
+                # The retained script coordinator alone sequences multiple
+                # statements. Never dispatch a prefix of an ordinary Run.
+                self.error = {'type': 'StatementCountError',
                               'statement_index': None}
                 return
             for self.index, statement in enumerate(statements):

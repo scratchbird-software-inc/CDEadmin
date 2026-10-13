@@ -87,17 +87,18 @@ def test_exact_arrow_types_and_bindings(client, tmp_path):
     assert rows(execute(client, h, 'SELECT ?', [42])) == [[42]]
 
 
-def test_scripts_order_pages_and_first_error(client, tmp_path):
+def test_ordinary_run_refuses_multiple_statements_before_effects(client, tmp_path):
     h, _ = open_database(client, tmp_path)
-    pages = execute(
-        client, h, "SELECT ';' AS text; SELECT i FROM range(777) t(i)")
-    assert len(rows(pages)) == 778
-    assert max(len(p['payload']['rows']) for p in pages) <= 256
-    assert [p['payload']['result_set_index'] for p in pages
-            if p['payload'].get('has_page')] == [0, 1, 1, 1, 1]
-    pages = execute(client, h, 'SELECT 1; SELECT missing; SELECT 3')
-    assert pages[-1]['payload']['error']['type'] == 'BinderException'
-    assert [r for p in pages for r in p['payload']['rows']] == [[1]]
+    pages = execute(client, h, 'CREATE TABLE forbidden(i INT); SELECT 3')
+    assert pages[-1]['payload']['error']['type'] == 'StatementCountError'
+    assert h.execute("SELECT count(*) FROM duckdb_tables() "
+                     "WHERE table_name='forbidden'").fetchone() == (0,)
+    pages = execute(client, h, 'EXPLAIN SELECT 1; CREATE TABLE forbidden(i INT)')
+    assert pages[-1]['payload']['error']['type'] == 'StatementCountError'
+    assert h.execute("SELECT count(*) FROM duckdb_tables() "
+                     "WHERE table_name='forbidden'").fetchone() == (0,)
+    assert execute(client, h, '-- comment only')[-1]['payload']['error'][
+        'type'] == 'StatementCountError'
     assert rows(execute(client, h, 'SELECT 4')) == [[4]]
 
 

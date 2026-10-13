@@ -149,6 +149,16 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def script_statement_outcome(self, occurrence):
+        from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
+        result = occurrence.get('result') or {}
+        payload = (result.get('extensions', {}).get('duckdb') or {}).get('payload')
+        if isinstance(payload, dict) and payload.get('session_reuse_blocked'):
+            # A native I/O or internal failure can leave the dispatch outcome
+            # unknown even when the driver also reports an error type.
+            return 'unknown'
+        return retained_outcome(occurrence, 'duckdb')
+
     def validate_source_without_execution(self, request):
         from .language import analyze
         if not isinstance(request, dict) or request.get('language_profile') != 'duckdb-sql':

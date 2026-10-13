@@ -46,3 +46,14 @@ def test_provider_requires_retained_idle_session_but_never_runs_sql():
     with pytest.raises(Exception, match='binding'):
         provider.validate_source_without_execution({
             'session_id': 'owned', 'language_profile': 'postgresql-sql', 'source': 'SELECT 1'})
+
+
+def test_script_outcome_preserves_unknown_native_dispatch():
+    provider = object.__new__(DuckDBPilotProvider)
+    def occurrence(*, error=None, blocked=False):
+        return {'operation': {'terminal': True}, 'result': {'complete': True,
+            'extensions': {'duckdb': {'payload': {
+                'error': error, 'session_reuse_blocked': blocked}}}}}
+    assert provider.script_statement_outcome(occurrence()) == 'success'
+    assert provider.script_statement_outcome(occurrence(error={'type': 'BinderException'})) == 'error'
+    assert provider.script_statement_outcome(occurrence(error={'type': 'IOException'}, blocked=True)) == 'unknown'
