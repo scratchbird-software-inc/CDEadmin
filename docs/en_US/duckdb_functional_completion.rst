@@ -250,6 +250,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.
+  A committed column addition is verified against its requested native type,
+  nullable state and default as well as its identity. Canonical spelling
+  differences leave the committed result unverified without automatic replay.
   Other native edits are blockers. Missing desired rows are
   ignored rather than treated as deletion. A bounded plan of up to 32 native
   statements may be reviewed together when their identities and dependencies

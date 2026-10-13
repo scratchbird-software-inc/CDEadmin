@@ -66,6 +66,10 @@ def apply_review(provider, route, record):
                         expected = view_query_tokens(operation['source'])
                         verified = (expected is not None and expected == view_query_tokens(
                             current['native'].get('ddl')))
+                    if verified and operation['kind'] == 'column':
+                        metadata = current['native'].get('catalog_metadata', {})
+                        verified = all(metadata.get(key) == value for key, value in
+                            operation['postcondition'].items())
                 elif operation['operation'] == 'rename':
                     verified = (current is not None and
                         current['kind'] == operation['kind'] and current['name'] == operation['name'] and

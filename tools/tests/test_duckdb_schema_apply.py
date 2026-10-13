@@ -603,6 +603,43 @@ def test_reviewed_nullable_column_add_and_drop_are_native(tmp_path):
         provider.client.close()
 
 
+def test_committed_column_add_rejects_mismatched_native_default(tmp_path):
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+    path = [root, 'main', 'existing', 'label']
+    identity = _resource_id('column', path[:-1], path[-1])
+    desired = deepcopy(baseline)
+    desired['rows'][identity] = {'resource_id': identity, 'kind': 'column',
+        'name': 'label', 'path': path, 'system': 'false',
+        'native': {'system_object': False, 'catalog_metadata': {
+            'data_type': 'VARCHAR', 'nullable': True, 'default': "'ready'"}}}
+    preview = plan(baseline, desired, baseline)
+    assert preview['application_supported'] and preview['operations'][0]['postcondition'] == {
+        'data_type': 'VARCHAR', 'nullable': True, 'default': "'ready'"}
+    applications = DuckDBSchemaApplications(tmp_path/'column-postcondition.json', clock=lambda: 100)
+    receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+    from pgadmin.cdeadmin.providers.duckdb import schema_application
+    actual_model = schema_application._model
+
+    def conflicting_observation(connection, record, *, in_transaction):
+        model = actual_model(connection, record, in_transaction=in_transaction)
+        if not in_transaction:
+            model['rows'][identity]['native']['catalog_metadata']['default'] = "'wrong'"
+        return model
+
+    try:
+        with patch.object(schema_application, '_model', conflicting_observation):
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed'
+        assert outcome['outcome']['rediscovery_verified'] is False
+        assert outcome['outcome']['rediscovery_checks'] == [
+            {'resource_id': identity, 'verified': False}]
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_type_conversion_preserves_rows_and_is_not_replayed(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)

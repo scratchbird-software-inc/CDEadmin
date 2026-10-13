@@ -654,7 +654,14 @@ def plan(baseline, desired, live):
                 'desired_sha256': digest(_definition(after))}
             if operation == 'rename':
                 operation_record['source_resource_id'] = before['resource_id']
-            if after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
+            if operation == 'create' and after['kind'] == 'column':
+                metadata = after['native'].get('catalog_metadata', {})
+                operation_record['postcondition'] = {
+                    'data_type': metadata['data_type'],
+                    'nullable': True,
+                    'default': metadata.get('default'),
+                }
+            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
             elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:
