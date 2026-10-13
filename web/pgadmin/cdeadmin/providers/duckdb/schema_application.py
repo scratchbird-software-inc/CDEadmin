@@ -71,7 +71,14 @@ def apply_review(provider, route, record):
                     verified = (current is not None and
                         digest(_definition(current)) != operation['baseline_sha256'])
                     if verified and operation.get('postcondition'):
-                        if 'primary_key_columns' in operation['postcondition']:
+                        if 'overloads' in operation['postcondition']:
+                            from ...workspace.duckdb_schema_plan import _macro_overload_postcondition
+                            try:
+                                verified = (_macro_overload_postcondition(current) ==
+                                    operation['postcondition']['overloads'])
+                            except ValueError:
+                                verified = False
+                        elif 'primary_key_columns' in operation['postcondition']:
                             verified = (current['native'].get('catalog_metadata', {})
                                 .get('has_primary_key') is True and any(
                                 item.get('constraint_type') == 'PRIMARY KEY' and

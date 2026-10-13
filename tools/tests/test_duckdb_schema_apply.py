@@ -647,6 +647,69 @@ def test_reviewed_native_table_macro_replacement(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('third_definition, verified', (
+    ('((x + y) + z)', True),
+    ('(x + y + z)', False),
+))
+def test_reviewed_native_complete_macro_overload_replacement(tmp_path, third_definition, verified):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE MACRO overloaded(x) AS x + 1, (x, y) AS x + y')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'macro' and row['name'] == 'overloaded')
+        assert original['native']['overload_count'] == 2
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        overloads = changed['native']['overloads']
+        overloads[0]['definition'] = '(x + 2)'
+        third = deepcopy(overloads[1])
+        third['parameters'].append({'name': 'z', 'data_type': None})
+        third['definition'] = third_definition
+        overloads.append(third)
+        changed['native']['overload_count'] = 3
+        root = original['path'][0]
+        source = ('CREATE OR REPLACE MACRO ' +
+            f'"{root}"."main"."overloaded" (x) AS x + 2, '
+            '(x, y) AS x + y, (x, y, z) AS x + y + z')
+        changed['native']['duckdb_change'] = {'action': 'replace-macro',
+            'source': source, 'complete_signature_set_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['postcondition']['overloads']) == 3
+        unconfirmed = deepcopy(desired)
+        unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'].pop(
+            'complete_signature_set_confirmed')
+        assert 'complete-signature confirmation' in plan(
+            baseline, unconfirmed, baseline)['blockers'][0]['reason']
+        wrong_target = deepcopy(desired)
+        wrong_target['rows'][original['resource_id']]['native']['duckdb_change']['source'] = (
+            source.replace('"overloaded"', '"unrelated"'))
+        assert 'exact fully qualified native CREATE target' in plan(
+            baseline, wrong_target, baseline)['blockers'][0]['reason']
+        applications = DuckDBSchemaApplications(tmp_path/'macro-group-replace.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'] is verified, outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT overloaded(5), overloaded(5, 6), '
+            'overloaded(5, 6, 7)').fetchone() == (7, 11, 18)
+        observer.close()
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

@@ -268,6 +268,62 @@ def _validated_macro_replacement(before, after, target, change):
     return source, new_definition
 
 
+def _macro_overload_postcondition(row):
+    native = row['native']
+    overloads = native.get('overloads')
+    if (not isinstance(overloads, list) or not 1 <= len(overloads) <= 32 or
+            native.get('overload_count') != len(overloads)):
+        raise ValueError('Macro replacement requires a complete bounded overload group')
+    kinds = set()
+    result = []
+    for overload in overloads:
+        metadata = overload.get('catalog_metadata')
+        parameters = overload.get('parameters')
+        definition = overload.get('definition')
+        if (not isinstance(metadata, dict) or
+                metadata.get('function_type') not in {'macro', 'table_macro'} or
+                metadata.get('internal') is not False or metadata.get('varargs') is not None or
+                metadata.get('comment') is not None or metadata.get('tags') or
+                not isinstance(parameters, list) or len(parameters) > 64 or
+                not isinstance(definition, str) or not definition.strip() or
+                len(definition.encode('utf8')) > 8192 or '\x00' in definition):
+            raise ValueError('Macro overload has unsupported native metadata or definition')
+        names = []
+        for parameter in parameters:
+            if (not isinstance(parameter, dict) or set(parameter) != {'name', 'data_type'} or
+                    not isinstance(parameter['name'], str) or not parameter['name'] or
+                    '\x00' in parameter['name'] or len(parameter['name'].encode('utf8')) > 256 or
+                    (parameter['data_type'] is not None and
+                     (not isinstance(parameter['data_type'], str) or
+                      not parameter['data_type'].strip() or
+                      len(parameter['data_type'].encode('utf8')) > 1024))):
+                raise ValueError('Macro overload has unsupported native parameters')
+            names.append(parameter['name'])
+        if len(set(names)) != len(names):
+            raise ValueError('Macro overload parameters must be distinct')
+        kinds.add(metadata['function_type'])
+        result.append({'kind': metadata['function_type'],
+                       'parameters': deepcopy(parameters), 'definition': definition})
+    if len(kinds) != 1:
+        raise ValueError('One macro group cannot mix scalar and table overloads')
+    return sorted(result, key=digest)
+
+
+def _validated_macro_group_replacement(before, after, change):
+    if (set(change) != {'action', 'source', 'complete_signature_set_confirmed'} or
+            change.get('complete_signature_set_confirmed') is not True):
+        raise ValueError('Whole macro replacement requires explicit complete-signature confirmation')
+    if (before['native'].get('catalog_metadata', {}).get('comment') is not None or
+            after['native'].get('catalog_metadata', {}).get('comment') is not None):
+        raise ValueError('Whole macro replacement would discard an existing native comment')
+    previous = _macro_overload_postcondition(before)
+    desired = _macro_overload_postcondition(after)
+    if previous == desired:
+        raise ValueError('Whole macro replacement needs an observable desired overload change')
+    source = _validated_ddl(change.get('source'), 'macro', after['path'], replace=True)
+    return source, desired
+
+
 def _validated_rename(before, after, change, catalog):
     if after['kind'] not in {'table', 'view', 'column'} or before['kind'] != after['kind']:
         raise ValueError('Native rename is admitted only for tables, views and columns')
@@ -470,6 +526,11 @@ def plan(baseline, desired, live):
                   after['kind'] == 'macro'):
                 operation = 'replace'
                 source, _definition_text = _validated_macro_replacement(before, after, target, change)
+            elif (isinstance(change, dict) and change.get('action') == 'replace-macro' and
+                  after['kind'] == 'macro'):
+                operation = 'replace'
+                source, _macro_overloads = _validated_macro_group_replacement(
+                    before, after, change)
             elif change == {'action': 'set-comment'}:
                 operation = 'alter'
                 source, _comment = _validated_comment(before, after, target)
@@ -496,6 +557,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'labels': _labels}
             elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-definition':
                 operation_record['postcondition'] = {'definition': _definition_text}
+            elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-macro':
+                operation_record['postcondition'] = {'overloads': _macro_overloads}
             elif change == {'action': 'set-comment'}:
                 operation_record['postcondition'] = {'comment': _comment}
             elif after['kind'] == 'table' and isinstance(change, dict) and change.get('action') == 'add-primary-key':

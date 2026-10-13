@@ -180,9 +180,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   clears that comment; a future adapter must preserve and verify it explicitly.
   Table replacement uses
   ``CREATE OR REPLACE MACRO ... AS TABLE``; scalar replacement omits ``TABLE``.
-  Overload groups and parameter edits remain blockers. Both operations verify
-  their native postconditions after commit; an uncertain or mismatched
-  observation is never replayed.
+  A distinct ``replace-macro`` intent may replace a complete overload group or
+  change its signatures only when the reviewer supplies the exact fully
+  qualified ``CREATE OR REPLACE MACRO`` source and explicitly confirms it is
+  the complete desired signature set. DuckDB cannot expose existing parameter
+  defaults, so this source is a deliberate whole-group replacement rather than
+  an inferred preservation of hidden defaults. The plan accepts one bounded
+  native CREATE statement, requires a consistent desired scalar or table kind,
+  checks every declared desired overload's parameters and definition, and
+  refuses an existing comment that replacement would erase. Application verifies
+  the complete observed overload signature and definition set after commit.
+  Desired definitions must use DuckDB's catalog-normalized expression form;
+  a parsed statement alone cannot prove that the desired capture will match.
+  Both replacement paths preserve uncertain outcomes without automatic replay.
   A rename requires the baseline source resource ID, unchanged native
   definition, unchanged parent, an absent target identity and an explicit old
   name confirmation. The plan binds both source and destination IDs, dispatches
