@@ -60,8 +60,10 @@ def apply_review(provider, route, record):
                             'DESCRIBE SELECT * FROM ' + target).fetchall())
                     for macro_id in operation.get('affected_macro_ids', []):
                         macro = record['baseline']['rows'][macro_id]
-                        target = '.'.join(_quote(part) for part in macro['path']) + '()'
-                        kind = macro['native']['overloads'][0]['catalog_metadata']['function_type']
+                        overload = macro['native']['overloads'][0]
+                        target = ('.'.join(_quote(part) for part in macro['path']) +
+                            '(' + ', '.join('NULL' for _ in overload['parameters']) + ')')
+                        kind = overload['catalog_metadata']['function_type']
                         source = ('DESCRIBE SELECT * FROM ' if kind == 'table_macro'
                             else 'DESCRIBE SELECT ') + target
                         macro_descriptors[macro_id] = (source,

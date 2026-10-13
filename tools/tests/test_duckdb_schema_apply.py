@@ -795,9 +795,9 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
     ('CREATE MACRO checked_count() AS (SELECT count(*) FROM checked)', True),
     ('CREATE MACRO checked_rows() AS TABLE (SELECT id FROM checked)', True),
     ('CREATE MACRO checked_count(n) AS '
-        '(SELECT count(*) FROM checked WHERE id > n)', False),
+        '(SELECT count(*) FROM checked WHERE id > n)', True),
 ))
-def test_check_rebuild_preserves_views_and_zero_argument_macros(
+def test_check_rebuild_preserves_views_and_single_overload_macros(
         tmp_path, dependent_sql, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -856,11 +856,59 @@ def test_check_rebuild_preserves_views_and_zero_argument_macros(
                 if 'AS TABLE' in dependent_sql:
                     assert observer.execute('SELECT id FROM checked_rows() ORDER BY id').fetchall() == [
                         (1,), (2,)]
+                elif 'checked_count(n)' in dependent_sql:
+                    assert observer.execute('SELECT checked_count(1)').fetchone()[0] == 1
                 else:
                     assert observer.execute('SELECT checked_count()').fetchone()[0] == 2
             observer.close()
         else:
             assert preview['operations'] == [] and preview['blockers']
+    finally:
+        provider.client.close()
+
+
+def test_check_rebuild_refuses_macro_that_cannot_bind_placeholder(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0))')
+    connection.execute('INSERT INTO checked VALUES (1)')
+    connection.execute('CREATE MACRO dynamic_table(n) AS TABLE (FROM query_table(n))')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, CHECK((id >= 0)))')
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        child_id = edited['constraints'][0]['resource_id']
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'unbindable-macro.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'not_dispatched', outcome
+        assert outcome['outcome']['native_rollback_returned']
+        assert not outcome['outcome'].get('statement_dispatched')
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id FROM checked').fetchall() == [(1,)]
+        assert observer.execute('SELECT constraint_text FROM duckdb_constraints() '
+            "WHERE table_name='checked'").fetchone()[0] == 'CHECK((id > 0))'
+        observer.close()
     finally:
         provider.client.close()
 

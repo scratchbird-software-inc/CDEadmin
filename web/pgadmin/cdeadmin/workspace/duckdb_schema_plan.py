@@ -1165,12 +1165,16 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             overloads = row['native'].get('overloads')
             overload = overloads[0] if isinstance(overloads, list) and len(overloads) == 1 else None
             metadata = overload.get('catalog_metadata', {}) if overload else {}
+            parameters = overload.get('parameters') if overload else None
             if (len(preserved_views) + len(preserved_macros) >= 16 or
                     row['path'][0] != before['path'][0] or row['system'] != 'false' or
                     old_macro is None or new_macro is None or
                     old_macro['path'] != row['path'] or new_macro['path'] != row['path'] or
                     new_macro['native'].get('duckdb_change') is not None or
-                    overload is None or overload.get('parameters') != [] or
+                    overload is None or not isinstance(parameters, list) or
+                    len(parameters) > 8 or any(not isinstance(item, dict) or
+                        not isinstance(item.get('name'), str) or not item['name']
+                        for item in parameters) or
                     metadata.get('varargs') is not None or
                     metadata.get('has_side_effects') is not False or
                     metadata.get('function_type') not in {'macro', 'table_macro'} or
