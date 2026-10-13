@@ -531,6 +531,15 @@ def _resources(connection, request):
             for key in ('parameters', 'definition'):
                 if native.get(key) != overload.get(key):
                     native.pop(key, None)
+    for group in resources.values():
+        native = group['native']
+        if group['resource_kind'] in {'macro', 'function'} and native.get('overload_count', 0) > 1:
+            native['overloads'].sort(key=lambda item: (len(item['parameters']), json.dumps({
+                'function_type': item['catalog_metadata'].get('function_type'),
+                'parameters': item['parameters'],
+                'varargs': item['catalog_metadata'].get('varargs'),
+                'definition': item.get('definition'),
+            }, sort_keys=True, default=str)))
     cursor.execute(
         'SELECT extension_name, loaded, installed, extension_version '
         'FROM duckdb_extensions() ORDER BY extension_name'

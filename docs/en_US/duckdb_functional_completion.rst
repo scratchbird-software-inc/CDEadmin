@@ -24,6 +24,9 @@ DUCK-COMP-01: Native catalog and administration
   parameter names/types, return type, definition, examples and stability.
   A group exposes common fields only when all overloads agree; selecting one
   group must never silently select an arbitrary overload as its definition.
+  Catalog capture presents overloads in a stable signature-and-definition
+  order so repeated captures of unchanged native objects do not generate
+  order-only design differences.
   Attachments are session-owned native objects, not remote authenticated servers.
   Do not offer unsupported server accounts, roles, triggers, procedures,
   replication, savepoints, or MySQL-style administrative executables.
@@ -167,7 +170,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   reference the prior type definition; any such column conversion requires a
   separate reviewed column alteration. A macro replacement requires exactly
   one observed scalar or table overload, unchanged macro kind, parameters and
-  metadata, and an explicit new bounded definition. Table replacement uses
+  metadata, an explicit new bounded definition, and an affirmative
+  ``parameters_without_defaults_confirmed`` review assertion. DuckDB 1.5.2
+  ``duckdb_functions()`` does not expose macro parameter default expressions;
+  names and types alone cannot prove that reconstruction preserves optional
+  arguments. A reviewer must independently verify the original signature has
+  no defaults before the plan may synthesize a replacement statement. A macro
+  with an existing native comment is blocked because ``CREATE OR REPLACE``
+  clears that comment; a future adapter must preserve and verify it explicitly.
+  Table replacement uses
   ``CREATE OR REPLACE MACRO ... AS TABLE``; scalar replacement omits ``TABLE``.
   Overload groups and parameter edits remain blockers. Both operations verify
   their native postconditions after commit; an uncertain or mismatched

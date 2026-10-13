@@ -354,7 +354,7 @@ def test_returning_union_never_replays_dml(client, tmp_path):
 def test_native_catalog_preserves_all_function_and_macro_overloads(client, tmp_path):
     from pgadmin.cdeadmin.providers.duckdb.provider import _resources
     handle, _ = open_database(client, tmp_path)
-    handle.execute('CREATE MACRO owned_overloads(x) AS x+1, (x,y) AS x+y')
+    handle.execute('CREATE MACRO owned_overloads(x,y) AS x+y, (x) AS x+1')
     handle.execute('CREATE TABLE pending_catalog(id INTEGER)')
     handle.execute('INSERT INTO pending_catalog VALUES (7)')
     expected = handle.execute('SELECT COUNT(*) FROM duckdb_functions()').fetchone()[0]
@@ -365,6 +365,7 @@ def test_native_catalog_preserves_all_function_and_macro_overloads(client, tmp_p
     native = group['native']
     assert native['overload_count'] == 2
     assert {tuple(p['name'] for p in item['parameters']) for item in native['overloads']} == {('x',), ('x', 'y')}
+    assert [tuple(p['name'] for p in item['parameters']) for item in native['overloads']] == [('x',), ('x', 'y')]
     assert {item['definition'] for item in native['overloads']} == {'(x + 1)', '(x + y)'}
     assert 'definition' not in native and 'parameters' not in native
     assert native['catalog_metadata']['function_type'] == 'macro'

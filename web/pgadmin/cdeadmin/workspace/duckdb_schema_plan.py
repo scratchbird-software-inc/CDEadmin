@@ -217,9 +217,14 @@ def _validated_enum_extension(before, after, target):
     return source, new_labels
 
 
-def _validated_macro_replacement(before, after, target):
+def _validated_macro_replacement(before, after, target, change):
+    if change != {'action': 'replace-definition',
+                   'parameters_without_defaults_confirmed': True}:
+        raise ValueError('Macro replacement requires explicit confirmation that the original signature has no parameter defaults')
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
+    if previous['catalog'].get('comment') is not None:
+        raise ValueError('Macro replacement would discard the existing native comment')
     old_overloads, new_overloads = previous['overloads'], desired['overloads']
     if (not isinstance(old_overloads, list) or len(old_overloads) != 1 or
             not isinstance(new_overloads, list) or len(new_overloads) != 1 or
@@ -461,9 +466,10 @@ def plan(baseline, desired, live):
             elif change == {'action': 'extend-enum'} and after['kind'] == 'type':
                 operation = 'replace'
                 source, _labels = _validated_enum_extension(before, after, target)
-            elif change == {'action': 'replace-definition'} and after['kind'] == 'macro':
+            elif (isinstance(change, dict) and change.get('action') == 'replace-definition' and
+                  after['kind'] == 'macro'):
                 operation = 'replace'
-                source, _definition_text = _validated_macro_replacement(before, after, target)
+                source, _definition_text = _validated_macro_replacement(before, after, target, change)
             elif change == {'action': 'set-comment'}:
                 operation = 'alter'
                 source, _comment = _validated_comment(before, after, target)
@@ -488,7 +494,7 @@ def plan(baseline, desired, live):
                     'data_type': after['native']['catalog_metadata']['data_type']}
             elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:
                 operation_record['postcondition'] = {'labels': _labels}
-            elif after['kind'] == 'macro' and change == {'action': 'replace-definition'}:
+            elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-definition':
                 operation_record['postcondition'] = {'definition': _definition_text}
             elif change == {'action': 'set-comment'}:
                 operation_record['postcondition'] = {'comment': _comment}

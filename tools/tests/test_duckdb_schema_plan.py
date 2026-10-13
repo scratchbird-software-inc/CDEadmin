@@ -338,19 +338,31 @@ def test_scalar_macro_definition_replacement_rejects_other_edits():
     changed = deepcopy(existing)
     changed['native']['definition'] = '(x + 2)'
     changed['native']['overloads'][0]['definition'] = '(x + 2)'
-    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    changed['native']['duckdb_change'] = {
+        'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
     result = plan(model(existing), model(changed), model(existing))
     assert result['application_supported'], result['blockers']
     assert result['operations'][0]['source'] == (
         'CREATE OR REPLACE MACRO "file"."main"."plusone"("x") AS (x + 2)')
     assert result['operations'][0]['postcondition'] == {'definition': '(x + 2)'}
+    unconfirmed = deepcopy(changed)
+    unconfirmed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    assert 'no parameter defaults' in plan(
+        model(existing), model(unconfirmed), model(existing))['blockers'][0]['reason']
+    commented = deepcopy(existing)
+    commented['native']['catalog_metadata']['comment'] = 'preserve this'
+    commented_desired = deepcopy(changed)
+    commented_desired['native']['catalog_metadata']['comment'] = 'preserve this'
+    assert 'discard the existing native comment' in plan(
+        model(commented), model(commented_desired), model(commented))['blockers'][0]['reason']
     changed['native']['parameters'].append({'name': 'y', 'data_type': None})
     assert plan(model(existing), model(changed), model(existing))['blockers']
     changed = deepcopy(existing)
     changed['native']['definition'] = '(x + 2)'
     changed['native']['overloads'][0]['definition'] = '(x + 2)'
     changed['native']['overloads'][0]['catalog_metadata']['function_type'] = 'table_macro'
-    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    changed['native']['duckdb_change'] = {
+        'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
     assert plan(model(existing), model(changed), model(existing))['blockers']
 
 
@@ -366,7 +378,8 @@ def test_table_macro_definition_replacement_preserves_native_kind():
     changed = deepcopy(existing)
     changed['native']['definition'] = 'SELECT (x + 2) AS "value"'
     changed['native']['overloads'][0]['definition'] = changed['native']['definition']
-    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    changed['native']['duckdb_change'] = {
+        'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
     result = plan(model(existing), model(changed), model(existing))
     assert result['application_supported'], result['blockers']
     assert result['operations'][0]['source'] == (

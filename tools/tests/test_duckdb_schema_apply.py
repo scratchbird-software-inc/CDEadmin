@@ -589,7 +589,8 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
         else:
             changed['native']['definition'] = '(x + 2)'
             changed['native']['overloads'][0]['definition'] = '(x + 2)'
-            changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+            changed['native']['duckdb_change'] = {
+                'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
         applications = DuckDBSchemaApplications(tmp_path/f'{kind}-replace.json',
@@ -628,7 +629,8 @@ def test_reviewed_native_table_macro_replacement(tmp_path):
         changed = desired['rows'][original['resource_id']]
         changed['native']['definition'] = 'SELECT (x + 2) AS "value"'
         changed['native']['overloads'][0]['definition'] = changed['native']['definition']
-        changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+        changed['native']['duckdb_change'] = {
+            'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
         applications = DuckDBSchemaApplications(tmp_path/'table-macro-replace.json',
