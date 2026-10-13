@@ -1083,12 +1083,22 @@ def _validated_replayed_comment(kind, target, comment):
 def _validated_inbound_child(before, child_id, intermediate_ddl,
         baseline, live, desired):
     """Bind one plain FK child for a three-phase parent rebuild."""
-    def literal_default(value):
+    def constant_default(value):
         if value is None:
             return True
-        return (isinstance(value, str) and len(value) <= 256 and
-            re.fullmatch(r"(?:[+-]?[0-9]+(?:\.[0-9]+)?|'(?:[^']|'')*'|TRUE|FALSE|NULL)",
-                value.strip(), re.I) is not None)
+        if not isinstance(value, str) or len(value.encode('utf8')) > 256:
+            return False
+        atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
+            r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
+        token = re.compile(r'\s*(?:' + atom + r'|\|\||[()+*/%-])', re.I)
+        offset, literal = 0, False
+        while offset < len(value) and value[offset:].strip():
+            matched = token.match(value, offset)
+            if matched is None:
+                return False
+            literal = literal or re.fullmatch(atom, matched.group().strip(), re.I) is not None
+            offset = matched.end()
+        return literal
 
     child = live['rows'].get(child_id)
     old_child = baseline['rows'].get(child_id)
@@ -1136,8 +1146,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             len(foreign[0]['column_names']) !=
                 len(foreign[0]['referenced_column_names']) or
             any(not isinstance(item, dict) or
-                not literal_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and plain literal defaults')
+                not constant_default(item.get('default')) for item in columns)):
+        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and constant defaults')
     for index in indexes:
         observed_index = baseline['rows'].get(index['resource_id'])
         desired_index = desired['rows'].get(index['resource_id'])

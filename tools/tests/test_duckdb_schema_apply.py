@@ -1417,11 +1417,11 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
 @pytest.mark.parametrize('invalid', [False, True])
 @pytest.mark.parametrize('child_count', [1, 2, 3, 4, 7])
 @pytest.mark.parametrize('retained_unique', [False, True])
-@pytest.mark.parametrize('literal_defaults', [False, True])
+@pytest.mark.parametrize('default_style', [None, 'literal', 'expression'])
 @pytest.mark.parametrize('child_checks,child_unique_style', [
     (0, None), (1, None), (2, None), (0, 'inline'), (2, 'table')])
 def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
-        tmp_path, invalid, child_count, retained_unique, literal_defaults,
+        tmp_path, invalid, child_count, retained_unique, default_style,
         child_checks, child_unique_style):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -1429,8 +1429,12 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
     unique_definition = 'code INTEGER UNIQUE, ' if retained_unique else ''
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, ' +
         unique_definition + 'payload VARCHAR CHECK(length(payload) > 0))')
-    child_columns = ('id INTEGER DEFAULT(7), parent_id INTEGER DEFAULT(1)'
-        if literal_defaults else 'id INTEGER, parent_id INTEGER')
+    child_columns = ({
+        None: 'id INTEGER, parent_id INTEGER',
+        'literal': 'id INTEGER DEFAULT(7), parent_id INTEGER DEFAULT(1)',
+        'expression': ('id INTEGER DEFAULT((7 + 0)), '
+            'parent_id INTEGER DEFAULT((1 + 0))'),
+    })[default_style]
     if child_unique_style == 'inline':
         child_columns = child_columns.replace(', parent_id', ' UNIQUE, parent_id')
     child_check = (', CHECK((id > 0))' if child_checks else '') + (
@@ -1553,7 +1557,7 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
             "WHERE table_name='parent' AND constraint_type='CHECK'").fetchone()[0] == (
             'CHECK((length(payload) > 0))' if invalid else
             'CHECK((length(payload) >= 2))')
-        if literal_defaults and not invalid:
+        if default_style and not invalid:
             observer.execute('INSERT INTO child DEFAULT VALUES')
             assert observer.execute('SELECT id,parent_id FROM child WHERE id=7').fetchall() == [
                 (7, 1)]
@@ -1609,7 +1613,7 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
                 '(id DOUBLE DEFAULT random(), parent_id INTEGER)'}
         preview = plan(baseline, desired, baseline)
         assert not preview['application_supported']
-        assert any('plain literal defaults' in item['reason']
+        assert any('constant defaults' in item['reason']
             for item in preview['blockers'])
     finally:
         provider.client.close()

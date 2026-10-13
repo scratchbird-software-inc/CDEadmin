@@ -423,9 +423,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   is restored and independently row-checked within the same transaction and
   receipt. A partial child set, overlapping child identities or a batch above
   the statement budget is refused before dispatch. A child's unchanged numeric,
-  string, boolean or NULL literal defaults may survive both stages; explicit
-  column-list copies never evaluate those defaults. Sequence and expression
-  defaults remain blocked pending dependency and side-effect qualification.
+  string, boolean or NULL literal defaults, or bounded constant expressions
+  composed only of those literals, parentheses, arithmetic operators and string
+  concatenation, may survive both stages. The complete native CREATE definitions
+  must parse, and explicit column-list copies never evaluate the defaults.
+  Function calls, identifiers, casts and sequence defaults remain blocked pending
+  dependency and side-effect qualification.
   Each stage's native default facts must match the reviewed child columns
   before the old child is dropped.
   Native staging validates existing rows against new references before the
