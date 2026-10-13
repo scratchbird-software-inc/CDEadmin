@@ -151,7 +151,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations, native
-  enum extension, single-overload scalar or table macro replacement,
+  enum extension, reviewed sequence replacement, single-overload scalar or
+  table macro replacement and complete macro overload replacement,
   exact-identity table/view/column rename, explicit primary-key addition and
   isolated native object comments are previewed
   through the 1.5.2 native parser. A column addition requires an observed persistent
@@ -193,6 +194,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Desired definitions must use DuckDB's catalog-normalized expression form;
   a parsed statement alone cannot prove that the desired capture will match.
   Both replacement paths preserve uncertain outcomes without automatic replay.
+  DuckDB ``CREATE OR REPLACE SEQUENCE`` recreates the generator and resets its
+  value. A ``replace-sequence`` design intent therefore requires a complete,
+  exactly qualified native statement and an explicit ``reset_state_confirmed``
+  assertion. Review changes only observed start, minimum, maximum, increment
+  and cycle options; a sequence with a comment or tags is blocked because
+  replacement could discard that metadata. Application rechecks the old
+  definition in its transaction, dispatches the statement once, and verifies
+  the new option values after commit. Native dependency checks govern
+  replacement; do not use ``CASCADE`` or silently detach dependents. DuckDB
+  1.5.2 preserves a simple table default referencing a replaced sequence;
+  other dependency failures roll back the reviewed transaction. The historic
+  generator position cannot be
+  reconstructed from metadata and is never represented as retained design.
   A rename requires the baseline source resource ID, unchanged native
   definition, unchanged parent, an absent target identity and an explicit old
   name confirmation. The plan binds both source and destination IDs, dispatches

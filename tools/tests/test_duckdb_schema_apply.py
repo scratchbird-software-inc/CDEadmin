@@ -710,6 +710,101 @@ def test_reviewed_native_complete_macro_overload_replacement(tmp_path, third_def
         provider.client.close()
 
 
+def test_reviewed_native_sequence_replacement_requires_reset_intent(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE SEQUENCE counter START 3 INCREMENT 2')
+    assert connection.execute("SELECT nextval('counter')").fetchone() == (3,)
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'sequence' and row['name'] == 'counter')
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        changed['native']['catalog_metadata']['start_value'] = 20
+        changed['native']['catalog_metadata']['increment_by'] = 3
+        root = original['path'][0]
+        changed['native']['ddl'] = (
+            f'CREATE OR REPLACE SEQUENCE "{root}"."main"."counter" '
+            'START 20 INCREMENT 3')
+        changed['native']['duckdb_change'] = {
+            'action': 'replace-sequence', 'reset_state_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        unconfirmed = deepcopy(desired)
+        unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'] = {
+            'action': 'replace-sequence'}
+        assert 'reset confirmation' in plan(
+            baseline, unconfirmed, baseline)['blockers'][0]['reason']
+        commented_baseline = deepcopy(baseline)
+        commented_desired = deepcopy(desired)
+        commented_baseline['rows'][original['resource_id']]['native']['catalog_metadata']['comment'] = 'keep'
+        commented_desired['rows'][original['resource_id']]['native']['catalog_metadata']['comment'] = 'keep'
+        assert 'discard native comment' in plan(
+            commented_baseline, commented_desired, commented_baseline)['blockers'][0]['reason']
+        applications = DuckDBSchemaApplications(tmp_path/'sequence-replace.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT nextval('counter')").fetchone() == (20,)
+        observer.close()
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
+def test_sequence_replacement_does_not_drop_native_dependents(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE SEQUENCE counter START 3')
+    connection.execute("CREATE TABLE dependent(id INTEGER DEFAULT nextval('counter'))")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'sequence' and row['name'] == 'counter')
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        changed['native']['catalog_metadata']['start_value'] = 20
+        root = original['path'][0]
+        changed['native']['ddl'] = (
+            f'CREATE OR REPLACE SEQUENCE "{root}"."main"."counter" START 20')
+        changed['native']['duckdb_change'] = {
+            'action': 'replace-sequence', 'reset_state_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'sequence-dependency.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT start_value FROM duckdb_sequences() "
+            "WHERE sequence_name='counter'").fetchone() == (20,)
+        assert observer.execute("SELECT count(*) FROM duckdb_tables() "
+            "WHERE table_name='dependent'").fetchone() == (1,)
+        observer.execute('INSERT INTO dependent DEFAULT VALUES')
+        assert observer.execute('SELECT id FROM dependent').fetchone() == (20,)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

@@ -15,6 +15,7 @@ _NAME = r'"(?:""|[^"])+"'
 _TYPE_FIELDS = frozenset({'data_type', 'data_type_id',
     'character_maximum_length', 'numeric_precision',
     'numeric_precision_radix', 'numeric_scale'})
+_SEQUENCE_OPTIONS = ('start_value', 'min_value', 'max_value', 'increment_by', 'cycle')
 
 
 def _quote(value):
@@ -324,6 +325,24 @@ def _validated_macro_group_replacement(before, after, change):
     return source, desired
 
 
+def _validated_sequence_replacement(before, after, change):
+    if change != {'action': 'replace-sequence', 'reset_state_confirmed': True}:
+        raise ValueError('Sequence replacement requires explicit generator reset confirmation')
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
+            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
+        raise ValueError('Sequence replacement would discard native comment or tags')
+    old_options = {key: previous['catalog'].pop(key, None) for key in _SEQUENCE_OPTIONS}
+    new_options = {key: desired['catalog'].pop(key, None) for key in _SEQUENCE_OPTIONS}
+    if (old_options == new_options or
+            any(type(new_options[key]) is not int for key in _SEQUENCE_OPTIONS[:-1]) or
+            type(new_options['cycle']) is not bool or
+            not _equal(previous, {**desired, 'ddl': previous['ddl']})):
+        raise ValueError('Sequence replacement may change only its complete native generator options')
+    source = _validated_ddl(after['native'].get('ddl'), 'sequence', after['path'], replace=True)
+    return source, new_options
+
+
 def _validated_rename(before, after, change, catalog):
     if after['kind'] not in {'table', 'view', 'column'} or before['kind'] != after['kind']:
         raise ValueError('Native rename is admitted only for tables, views and columns')
@@ -531,6 +550,10 @@ def plan(baseline, desired, live):
                 operation = 'replace'
                 source, _macro_overloads = _validated_macro_group_replacement(
                     before, after, change)
+            elif (isinstance(change, dict) and change.get('action') == 'replace-sequence' and
+                  after['kind'] == 'sequence'):
+                operation = 'replace'
+                source, _sequence_options = _validated_sequence_replacement(before, after, change)
             elif change == {'action': 'set-comment'}:
                 operation = 'alter'
                 source, _comment = _validated_comment(before, after, target)
@@ -559,6 +582,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'definition': _definition_text}
             elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-macro':
                 operation_record['postcondition'] = {'overloads': _macro_overloads}
+            elif after['kind'] == 'sequence' and isinstance(change, dict) and change.get('action') == 'replace-sequence':
+                operation_record['postcondition'] = {'sequence_options': _sequence_options}
             elif change == {'action': 'set-comment'}:
                 operation_record['postcondition'] = {'comment': _comment}
             elif after['kind'] == 'table' and isinstance(change, dict) and change.get('action') == 'add-primary-key':
