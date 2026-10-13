@@ -72,3 +72,28 @@ def test_unqualified_invalid_or_multiple_ddl_is_a_blocker(source):
     result = plan(model(), model(addition), model())
     assert result['blockers'] and not result['ready_for_review']
     assert not result['operations']
+
+
+def test_index_preview_binds_local_name_and_qualified_parent():
+    pytest.importorskip('duckdb')
+    table = row('table', ['file', 'main', 'facts'],
+        ddl='CREATE TABLE "file"."main"."facts" ("x" INTEGER)')
+    index = row('index', ['file', 'main', 'facts', 'facts_x'],
+        ddl='CREATE INDEX "facts_x" ON "file"."main"."facts"("x")')
+    created = plan(model(table), model(table, index), model(table))
+    assert created['application_supported'] and created['operations'][0]['kind'] == 'index'
+    assert created['operations'][0]['source'] == index['native']['ddl']
+    omitted_parent = plan(model(), model(index), model())
+    assert omitted_parent['blockers']
+    for source in (
+            'CREATE INDEX "wrong" ON "file"."main"."facts"("x")',
+            'CREATE INDEX "facts_x" ON "main"."facts"("x")',
+            index['native']['ddl'] + '; DROP TABLE "file"."main"."facts"'):
+        edited = deepcopy(index)
+        edited['native']['ddl'] = source
+        assert plan(model(table), model(table, edited), model(table))['blockers']
+    deleted = deepcopy(index)
+    deleted['native']['duckdb_change'] = {'action': 'drop', 'confirmation': 'facts_x'}
+    dropped = plan(model(table, index), model(table, deleted), model(table, index))
+    assert dropped['application_supported']
+    assert dropped['operations'][0]['source'] == 'DROP INDEX "file"."main"."facts_x" RESTRICT'

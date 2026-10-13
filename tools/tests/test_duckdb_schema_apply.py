@@ -227,3 +227,44 @@ def test_explicit_drop_and_view_replace_are_native_and_one_time(tmp_path):
         observer.close()
     finally:
         provider.client.close()
+
+
+def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+        path = [root, 'main', 'existing', 'existing_id_ix']
+        identity = _resource_id('index', path[:-1], path[-1])
+        desired = deepcopy(baseline)
+        desired['rows'][identity] = {'resource_id': identity, 'kind': 'index',
+            'name': 'existing_id_ix', 'path': path, 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': {},
+                'ddl': f'CREATE INDEX "existing_id_ix" ON "{root}"."main"."existing"("id")'}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'index-create.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        result = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert result['state'] == 'committed' and result['outcome']['rediscovery_verified'], result
+        observed = provider.capture_catalog(route)
+        fresh = build_export(observed['resources'], endpoint_id='endpoint-1', target_id='file-1',
+            generation=observed['generation'], refreshed=True, engine='duckdb', native_model=True)
+        assert identity in fresh['rows']
+        remove = deepcopy(fresh)
+        remove['rows'][identity]['native']['duckdb_change'] = {
+            'action': 'drop', 'confirmation': 'existing_id_ix'}
+        drop = plan(fresh, remove, fresh)
+        assert drop['application_supported'] and drop['operations'][0]['source'] == (
+            f'DROP INDEX "{root}"."main"."existing_id_ix" RESTRICT')
+        applications = DuckDBSchemaApplications(tmp_path/'index-drop.json', clock=lambda: 100)
+        receipt = applications.review(drop, fresh, remove, 'owner', 'binding', 'file-1')
+        result = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert result['state'] == 'committed' and result['outcome']['rediscovery_verified'], result
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT count(*) FROM duckdb_indexes() WHERE index_name='existing_id_ix'").fetchone() == (0,)
+        observer.close()
+    finally:
+        provider.client.close()

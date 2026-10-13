@@ -9,7 +9,8 @@ from ..providers.duckdb.provider import _resource_id
 
 
 _KINDS = {'schema': 'SCHEMA', 'table': 'TABLE', 'view': 'VIEW',
-          'sequence': 'SEQUENCE', 'type': 'TYPE', 'macro': 'MACRO'}
+          'sequence': 'SEQUENCE', 'type': 'TYPE', 'macro': 'MACRO',
+          'index': 'INDEX'}
 _NAME = r'"(?:""|[^"])+"'
 
 
@@ -32,7 +33,8 @@ def _address(row, catalog):
     kind, path = row['kind'], row['path']
     if kind not in _KINDS or not isinstance(path, list):
         raise ValueError('Native adapter for this object kind is not admitted')
-    if len(path) != (2 if kind == 'schema' else 3) or path[0] != catalog or path[-1] != row['name']:
+    expected = 2 if kind == 'schema' else 4 if kind == 'index' else 3
+    if len(path) != expected or path[0] != catalog or path[-1] != row['name']:
         raise ValueError('Object must identify this exact catalog and native schema')
     if row['resource_id'] != _resource_id(kind, path[:-1], path[-1]) or row['system'] != 'false':
         raise ValueError('Native object identity or system classification changed')
@@ -75,6 +77,28 @@ def _validated_ddl(source, kind, path, *, replace=False):
     return source
 
 
+def _validated_index_ddl(source, path):
+    if (not isinstance(source, str) or not source or '\x00' in source or
+            len(source.encode('utf8')) > 1024 * 1024):
+        raise ValueError('One bounded native index DDL statement is required')
+    # DuckDB qualifies the table, but its CREATE INDEX grammar accepts a
+    # separate local index name. Exact quoted segments prevent name confusion.
+    table = '.'.join(_quote(part) for part in path[:3])
+    index = _quote(path[3])
+    prefix = (r'^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+' +
+              re.escape(index) + r'\s+ON\s+' + re.escape(table) + r'(?=\s*\()')
+    if not re.match(prefix, source, re.I):
+        raise ValueError('Index DDL must name the exact index and fully qualified native table')
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected this index DDL') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.CREATE:
+        raise ValueError('Exactly one native CREATE INDEX statement is required')
+    return source
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -99,15 +123,27 @@ def plan(baseline, desired, live):
             if before is None:
                 if change is not None:
                     raise ValueError('Creation cannot carry replacement or deletion intent')
+                if after['kind'] == 'index':
+                    parent_path = after['path'][:3]
+                    parent_id = _resource_id('table', parent_path[:2], parent_path[2])
+                    parent = live['rows'].get(parent_id)
+                    if parent is None:
+                        raise ValueError('Index creation requires an observed native parent table')
+                    _address(parent, catalog)
                 operation = 'create'
-                source = _validated_ddl(after['native'].get('ddl'), after['kind'], after['path'])
+                source = (_validated_index_ddl(after['native'].get('ddl'), after['path'])
+                          if after['kind'] == 'index' else
+                          _validated_ddl(after['native'].get('ddl'), after['kind'], after['path']))
             elif change == {'action': 'drop', 'confirmation': before['name']}:
                 retained = deepcopy(after)
                 retained['native'].pop('duckdb_change')
                 if not _equal(_definition(retained), _definition(before)):
                     raise ValueError('Review deletion separately from other native edits')
                 operation = 'drop'
-                source = 'DROP ' + _KINDS[after['kind']] + ' ' + target + ' RESTRICT'
+                drop_target = ('.'.join(_quote(part) for part in
+                    [after['path'][0], after['path'][1], after['name']])
+                    if after['kind'] == 'index' else target)
+                source = 'DROP ' + _KINDS[after['kind']] + ' ' + drop_target + ' RESTRICT'
                 import duckdb
                 try:
                     statements = duckdb.extract_statements(source)
