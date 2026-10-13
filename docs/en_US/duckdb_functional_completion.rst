@@ -67,6 +67,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   native/expanded facts, 8 MiB and 30 seconds. Overflow or interruption returns
   no partial successful capture. A known missing registered file is refused
   before connection creation. Independent capture of :memory: is refused.
+  Selected relation data uses a separate registered-file connection and native
+  read transaction, exact catalog/schema/table-or-view identity, 1–6,000 rows,
+  a 4 MiB value budget and 30-second deadline. A full request exceeding its
+  row budget fails; a sample records truncation. Attached session-only catalogs
+  are not independently captured. Values use the driver's exact Arrow encoding,
+  and no capture borrows or commits an interactive transaction.
   Separate native sequence observations from resumable sequence state; discovery
   must not call nextval. Preserve native file effects and uncertain apply state.
 

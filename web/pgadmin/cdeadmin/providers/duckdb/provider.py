@@ -163,6 +163,12 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
         finally:
             self.client._discard_failed_session(connection)
 
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id,
+                     mode='sample', row_limit=100):
+        from .data_capture import capture
+        return capture(self, route, resource_id, endpoint_id=endpoint_id,
+                       target_id=target_id, mode=mode, row_limit=row_limit)
+
 
 
 def _route_arguments(route):

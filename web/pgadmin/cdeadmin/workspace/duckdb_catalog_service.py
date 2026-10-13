@@ -38,3 +38,20 @@ def catalog(service, server, request, *, compare=False):
                           'kind': item['resource_kind'], 'path': item['display_path']}
                          for item in captured['resources']]
     return result
+
+
+def data(service, server, request):
+    if not isinstance(request, dict) or set(request) != {
+            'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+        raise ValueError('Invalid DuckDB data capture request')
+    target = request['database_target_id']
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered DuckDB database file')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+        raise ValueError('Select a native DuckDB endpoint')
+    return provider.capture_data(endpoint['route'], request['resource_id'],
+        endpoint_id=context.endpoint_id, target_id=target,
+        mode=request['mode'], row_limit=request['row_limit'])

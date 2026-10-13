@@ -1099,6 +1099,13 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_data_capture(self, server, request):
+        from .duckdb_catalog_service import data
+        try:
+            return data(self, server, request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def export_firebird_catalog(self, server, request, *, _native_model=False):
         """Capture one admitted catalog generation into documentary DDN."""
         from .firebird_catalog_export import build_export, MAX_RESOURCES

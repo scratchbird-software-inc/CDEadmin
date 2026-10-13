@@ -11,9 +11,11 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   const [source, setSource] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
+  const [data, setData] = useState(null), [relation, setRelation] = useState('');
+  const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const serial = useRef(0);
   useEffect(() => {
-    serial.current++; setResult(null); setComparison(null); setSource(''); setError('');
+    serial.current++; setResult(null); setComparison(null); setSource(''); setData(null); setRelation(''); setError('');
     setBusy(false); setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -26,11 +28,24 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           ...(compare ? {source} : {})}});
       if(token !== serial.current) return;
       if(compare) setComparison(value);
-      else {setResult(value); setComparison(null); setDisplay('inventory'); setView(value.snapshot.view);}
+      else {setResult(value); setComparison(null); setData(null);
+        setRelation(value.objects?.find(item => ['table', 'view'].includes(item.kind))?.resource_id || '');
+        setDisplay('inventory'); setView(value.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB catalog capture failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
-  const shown = display === 'relations' ? result?.diagram : result;
+  const captureData = async () => {
+    const token = ++serial.current;
+    setBusy(true); setError(''); setData(null);
+    try {
+      const value = await post({action: 'duckdb_data_capture', request: {
+        database_target_id: databaseTargetId, resource_id: relation,
+        mode: dataMode, row_limit: Number(rowLimit)}});
+      if(token === serial.current) {setData(value); setDisplay('data'); setView(value.snapshot.view);}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB data capture failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const shown = display === 'relations' ? result?.diagram : display === 'data' ? data : result;
   const download = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(shown.snapshot)], {type: 'application/json'}));
     const link = document.createElement('a'); link.href = url;
@@ -56,15 +71,33 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => capture(true)}>Compare DDN with live catalog</Button>
       <TextField select size="small" label="Display" value={display} disabled={busy || !result}
-        onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : result.snapshot.view);}}>
+        onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : event.target.value === 'data' ? data.snapshot.view : result.snapshot.view);}}>
         <MenuItem value="inventory">Native inventory</MenuItem>
         <MenuItem value="relations" disabled={!result?.diagram?.snapshot}>Relations</MenuItem>
+        <MenuItem value="data" disabled={!data?.snapshot}>Captured relation data</MenuItem>
       </TextField>
       {shown?.views && <TextField select size="small" label="DDN view" value={view} disabled={busy}
         onChange={event => setView(event.target.value)}>
         {shown.views.map(item => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
       </TextField>}
     </Box>
+    {result && <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
+      <TextField select size="small" label="Native table or view" value={relation} disabled={busy} sx={{minWidth: 220}}
+        onChange={event => setRelation(event.target.value)}>
+        {(result.objects || []).filter(item => ['table', 'view'].includes(item.kind)).map(item =>
+          <MenuItem key={item.resource_id} value={item.resource_id}>{item.kind}: {item.path.join('.')}</MenuItem>)}
+      </TextField>
+      <TextField select size="small" label="Data capture mode" value={dataMode} disabled={busy}
+        onChange={event => setDataMode(event.target.value)}>
+        <MenuItem value="sample">Bounded sample</MenuItem><MenuItem value="full">Full relation within budget</MenuItem>
+      </TextField>
+      <TextField size="small" type="number" label="Data row budget" value={rowLimit} disabled={busy} sx={{width: 150}}
+        slotProps={{htmlInput: {min: 1, max: 6000, step: 1}}} onChange={event => setRowLimit(event.target.value)} />
+      <Button disabled={busy || !relation || !Number.isInteger(Number(rowLimit)) || Number(rowLimit) < 1 || Number(rowLimit) > 6000}
+        onClick={captureData}>Capture selected data</Button>
+    </Box>}
+    {display === 'data' && data?.acquisition && <Alert severity="info">Captured {data.acquisition.rows} visible rows from {data.acquisition.relation}. Mode: {data.acquisition.mode}.</Alert>}
+    {display === 'data' && data?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {result && <Alert severity="info">Visible objects: {result.provenance.objects}. Coverage: {result.provenance.coverage}.</Alert>}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>

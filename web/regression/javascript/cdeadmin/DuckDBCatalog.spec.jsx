@@ -39,4 +39,22 @@ describe('DuckDB native catalog form', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'Capture metadata'})).toBeEnabled());
     expect(screen.queryByText('Native DDN viewer')).not.toBeInTheDocument();
   });
+
+  it('captures selected native relation data with an explicit row budget', async () => {
+    const catalog = {...capture, objects: [{resource_id: 'native-table', kind: 'table',
+      path: ['owned', 'main', 'facts']}]};
+    const data = {snapshot: {...snapshot, view: 'result_1'},
+      views: [{id: 'result_1', label: 'Data page 1', entry: 'catalog.ddn'}],
+      acquisition: {rows: 1, relation: 'facts', mode: 'sample'}, warnings: []};
+    const post = jest.fn().mockResolvedValueOnce(catalog).mockResolvedValueOnce(data);
+    render(<Component post={post} databaseTargetId="owned-duckdb-file" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Data row budget'}), {target: {value: '3'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Capture selected data'}));
+    await screen.findByText(/Captured 1 visible rows from facts/);
+    expect(post).toHaveBeenLastCalledWith({action: 'duckdb_data_capture', request: {
+      database_target_id: 'owned-duckdb-file', resource_id: 'native-table', mode: 'sample', row_limit: 3}});
+    expect(viewer.snapshot.view).toBe('result_1');
+  });
 });

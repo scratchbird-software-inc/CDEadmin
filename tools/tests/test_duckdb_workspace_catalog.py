@@ -50,3 +50,24 @@ def test_owned_target_export_compare_and_foreign_document_rejection(tmp_path):
         provider.capture_catalog.assert_not_called()
     finally:
         provider.client.close(); connection.close()
+
+
+def test_data_capture_uses_registered_route_and_rejects_unexpected_fields(tmp_path):
+    provider = DuckDBPilotProvider(SimpleNamespace(), SimpleNamespace(require=Mock()), _create_client())
+    provider.capture_data = Mock(return_value={'acquisition': {'engine_id': 'duckdb'}})
+    context = SimpleNamespace(profile_id='duckdb-native', endpoint_id='owned-endpoint')
+    route = {'database': str(tmp_path / 'owned.duckdb'), 'filesystem_root': str(tmp_path)}
+    service = object.__new__(ProviderWorkspaceService)
+    service.endpoint_service = SimpleNamespace(
+        workspace=Mock(return_value=(context, {'route': route}, None)),
+        provider_registry=SimpleNamespace(resolve=Mock(return_value=SimpleNamespace(instance=provider))))
+    request = {'database_target_id': 'owned-target', 'resource_id': 'native-table',
+               'mode': 'sample', 'row_limit': 12}
+    assert service.duckdb_data_capture(SimpleNamespace(), request)['acquisition']['engine_id'] == 'duckdb'
+    provider.capture_data.assert_called_once_with(route, 'native-table', endpoint_id='owned-endpoint',
+        target_id='owned-target', mode='sample', row_limit=12)
+    provider.capture_data.reset_mock()
+    with pytest.raises(ProviderWorkspaceError):
+        service.duckdb_data_capture(SimpleNamespace(), {**request, 'sql': 'SELECT * FROM secret'})
+    provider.capture_data.assert_not_called()
+    provider.client.close()
