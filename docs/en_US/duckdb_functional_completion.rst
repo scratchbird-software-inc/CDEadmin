@@ -10,6 +10,11 @@ DUCK-COMP-01: Native catalog and administration
   Preserve database/catalog, schema and object identity, including attached
   catalogs, temporary objects, columns, constraints, indexes, sequences, native
   types, scalar/table macros, functions, extensions and secret descriptors.
+  The registered primary file's schemas are direct children of its database
+  tree node. Attached-catalog schemas retain their attached-database parent.
+  Navigator ownership must make actual schema descendants reachable, including
+  indexes, sequences, types and views; a catalog capture without tree routes
+  does not qualify object management.
   Resource IDs encode native path segments unambiguously; punctuation in names
   is not an identity delimiter. Distinct native constraint indexes remain
   distinct even when their reported names coincide. IDs are opaque; refresh

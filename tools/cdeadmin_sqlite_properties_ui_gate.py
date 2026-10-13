@@ -260,17 +260,29 @@ def run(options):
         volatile_names = (
             {'memory usage'} if options.engine == 'DuckDB' else set()
         )
+        # These are provider presentation and redaction descriptors, not
+        # fields returned by DuckDB's pragma_database_size() observation.
+        presentation_names = (
+            {'options redacted', 'path redacted', 'property sections'}
+            if options.engine == 'DuckDB' else set()
+        )
+        presentation = {key: rendered.get(key) for key in presentation_names}
+        if options.engine == 'DuckDB' and (
+                presentation.get('options redacted') not in {'true', 'false'} or
+                presentation.get('path redacted') not in {'true', 'false'} or
+                not presentation.get('property sections')):
+            raise RuntimeError('DuckDB property presentation metadata is incomplete')
         volatile = {
             key: {'rendered': rendered.get(key), 'native': expected.get(key)}
             for key in volatile_names
         }
         stable_rendered = {
             key: value for key, value in rendered.items()
-            if key not in volatile_names
+            if key not in volatile_names | presentation_names
         }
         stable_expected = {
             key: value for key, value in expected.items()
-            if key not in volatile_names
+            if key not in volatile_names | presentation_names
         }
         if stable_rendered != stable_expected:
             differing = {
@@ -322,6 +334,7 @@ def run(options):
             'all_properties_match_native_state': not volatile,
             'all_stable_properties_match_native_state': True,
             'volatile_observations': volatile,
+            'provider_presentation': presentation,
             'connection_target_rendered': True,
             'verified_interface_rendered': True,
             'credential_values_exported': False,

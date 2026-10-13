@@ -38,10 +38,12 @@ def arguments(argv=None):
     parser.add_argument('--source-database', type=Path, required=True)
     parser.add_argument('--desktop-user', required=True)
     parser.add_argument('--browser-binary')
+    parser.add_argument('--resource-kind', action='append', default=[])
+    parser.add_argument('--operation-id', action='append', default=[])
     parser.add_argument(
         '--gate-kind', choices=(
             'object', 'grid', 'query', 'lifecycle', 'maintenance',
-            'properties',
+            'properties', 'editor',
         ),
         default='object',
     )
@@ -96,6 +98,12 @@ def _prepare_database(source, target, attached, import_directory):
     with duckdb.connect(
         str(target), config={'secret_directory': str(secret_directory)}
     ) as connection:
+        # The shared editable-grid gate exercises four native values. Keep
+        # those extra fields in the disposable clone; the seed stays intact.
+        connection.execute('ALTER TABLE service.customers ADD COLUMN IF NOT EXISTS city VARCHAR')
+        connection.execute('ALTER TABLE service.customers ADD COLUMN IF NOT EXISTS region VARCHAR')
+        connection.execute("UPDATE service.customers SET city = COALESCE(city, 'Toronto'), "
+                           "region = COALESCE(region, 'ON')")
         connection.execute(
             'CREATE TABLE IF NOT EXISTS qualification('
             'id INTEGER PRIMARY KEY, value VARCHAR, event_date DATE)'
@@ -107,6 +115,10 @@ def _prepare_database(source, target, attached, import_directory):
         connection.execute(
             'CREATE INDEX IF NOT EXISTS qualification_value_idx '
             'ON qualification(value)'
+        )
+        connection.execute(
+            'CREATE OR REPLACE VIEW qualification_view AS '
+            'SELECT id, value FROM qualification'
         )
         connection.execute(
             'CREATE SEQUENCE IF NOT EXISTS qualification_sequence START 1'
@@ -317,6 +329,7 @@ def run(options):
                 ),
                 'maintenance': 'cdeadmin_sqlite_maintenance_ui_gate.py',
                 'properties': 'cdeadmin_sqlite_properties_ui_gate.py',
+                'editor': 'cdeadmin_duckdb_editor_ui_gate.py',
             }[options.gate_kind]
             command = [
                 sys.executable,
@@ -354,6 +367,10 @@ def run(options):
                     '--interface-id', 'duckdb-native',
                     '--reference-version', '1.5.2',
                 ])
+                for kind in options.resource_kind:
+                    command.extend(['--resource-kind', kind])
+                for operation_id in options.operation_id:
+                    command.extend(['--operation-id', operation_id])
             elif options.gate_kind in {'grid', 'properties'}:
                 command.extend(['--database-path', str(database)])
             elif options.gate_kind == 'maintenance':

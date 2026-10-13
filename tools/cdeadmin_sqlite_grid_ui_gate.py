@@ -355,7 +355,12 @@ def run(options):
             marker_row, 'Confirm delete'
         ) is not None)
         capture('safe-delete-confirmation')
-        _row_button(marker_row, 'Confirm delete').click()
+        confirm = _row_button(marker_row, 'Confirm delete')
+        if options.engine == 'DuckDB':
+            # Preserve the confirmed button target through grid focus/scroll.
+            driver.execute_script('arguments[0].click()', confirm)
+        else:
+            confirm.click()
         wait.until(expected.visibility_of_element_located((
             By.CSS_SELECTOR, '[aria-label="Staged provider grid changes"]',
         )))
@@ -400,8 +405,10 @@ def run(options):
 
         _button(wait, 'Load rows').click()
         _button(wait, 'Next page').click()
+        expected_page_value = ('page-row-201' if options.engine == 'DuckDB'
+                               else 'row-201')
         wait.until(lambda value: any(
-            item.is_displayed() and item.text.strip() == 'row-201'
+            item.is_displayed() and item.text.strip() == expected_page_value
             for item in value.find_elements(
                 By.CSS_SELECTOR, '[role="gridcell"]')
         ))

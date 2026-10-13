@@ -554,7 +554,12 @@ def _resources(connection, request):
     for resource in resources.values():
         path = resource['display_path']
         if resource['resource_kind'] == 'schema':
-            parent = _resource_id('database' if path[0] == current_database else 'attached-database', [], path[0])
+            # The registered file node is supplied by the host navigator, not
+            # by a resource-node state. Its first child request has no
+            # resource_id, so primary schemas must be direct children there.
+            if path[0] == current_database:
+                continue
+            parent = _resource_id('attached-database', [], path[0])
         elif len(path) == 3:
             parent = _resource_id('schema', [path[0]], path[1])
         else:
