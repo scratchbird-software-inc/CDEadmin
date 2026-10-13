@@ -10,6 +10,10 @@ DUCK-COMP-01: Native catalog and administration
   Preserve database/catalog, schema and object identity, including attached
   catalogs, temporary objects, columns, constraints, indexes, sequences, native
   types, scalar/table macros, functions, extensions and secret descriptors.
+  Resource IDs encode native path segments unambiguously; punctuation in names
+  is not an identity delimiter. Distinct native constraint indexes remain
+  distinct even when their reported names coincide. IDs are opaque; refresh
+  discovery after activation rather than reusing a cached older identity format.
   Do not silently overwrite same-name native function overloads. A function or
   macro group retains every observed overload, its native function type,
   parameter names/types, return type, definition, examples and stability.

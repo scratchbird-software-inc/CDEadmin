@@ -1,6 +1,7 @@
 """DuckDB embedded-helper semantic provider pilot."""
 
 import os
+import json
 import re
 import stat
 from collections.abc import Mapping
@@ -168,15 +169,22 @@ def _route_arguments(route):
     return duckdb_arguments(route)
 
 
+def _resource_id(kind, path, name, discriminator=None):
+    identity = [kind, *[str(part) for part in path], str(name)]
+    if discriminator is not None:
+        identity.append({'native_index': discriminator})
+    return 'duckdb:' + json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
+
+
 def _resources(connection, request):
     cursor = connection
     generation = str(request.get('capability_generation') or 'current')
     resources = {}
 
-    def add(kind, path, name, native=None):
+    def add(kind, path, name, native=None, *, discriminator=None):
         path = [str(item) for item in path]
         name = str(name)
-        resource_id = ':'.join([kind, *path, name])
+        resource_id = _resource_id(kind, path, name, discriminator)
         resources[resource_id] = {
             'resource_id': resource_id,
             'resource_kind': kind,
@@ -325,14 +333,11 @@ def _resources(connection, request):
             ), values)),
         }
         column = add('column', [database, schema, parent], name, native)
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id not in resources:
-            parent_id = ':'.join([
-                'view', str(database), str(schema), str(parent),
-            ])
+            parent_id = _resource_id('view', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             resources[parent_id]['native']['columns'].append({
                 'resource_id': column['resource_id'],
                 'name': str(name),
@@ -356,10 +361,9 @@ def _resources(connection, request):
             'ddl': sql,
         }
         index = add('index', [database, schema, parent], name, native)
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             resources[parent_id]['native']['indexes'].append({
                 'resource_id': index['resource_id'],
                 'name': str(name),
@@ -392,12 +396,11 @@ def _resources(connection, request):
                 'referenced_columns': values[7],
             }]
         constraint = add(
-            'constraint', [database, schema, parent], name, native
+            'constraint', [database, schema, parent], name, native, discriminator=values[0]
         )
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             summary = {
                 'resource_id': constraint['resource_id'],
                 'name': str(name),
@@ -482,7 +485,7 @@ def _resources(connection, request):
             ],
             **({'definition': definition} if definition else {}),
         }
-        resource_id = ':'.join([kind, str(database), str(schema), str(name)])
+        resource_id = _resource_id(kind, [database, schema], name)
         group = resources.get(resource_id)
         if group is None:
             group = add(kind, [database, schema], name, {
@@ -522,6 +525,16 @@ def _resources(connection, request):
             'persistent': persistent, 'storage': storage,
             'scope': scope,
         })
+    for resource in resources.values():
+        path = resource['display_path']
+        if resource['resource_kind'] == 'schema':
+            parent = _resource_id('database' if path[0] == current_database else 'attached-database', [], path[0])
+        elif len(path) == 3:
+            parent = _resource_id('schema', [path[0]], path[1])
+        else:
+            continue
+        if parent in resources:
+            resource.setdefault('native', {})['navigator_parent_resource_id'] = parent
     return list(resources.values())
 
 
