@@ -175,7 +175,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   label in order and appends distinct new labels. It uses one reviewed native
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
   reference the prior type definition; any such column conversion requires a
-  separate reviewed column alteration. A macro replacement requires exactly
+  separate reviewed column alteration. A native view replacement or enum
+  extension is blocked when the old object has a comment or tags, because
+  ``CREATE OR REPLACE`` discards those facts and the one-statement adapter
+  cannot restore them. A macro replacement requires exactly
   one observed scalar or table overload, unchanged macro kind, parameters and
   metadata, an explicit new bounded definition, and an affirmative
   ``parameters_without_defaults_confirmed`` review assertion. DuckDB 1.5.2

@@ -58,6 +58,12 @@ def test_stale_live_definition_and_foreign_scope_are_refused():
     result = plan(model(before), model(desired), model(current))
     assert result['conflicts'] and not result['operations']
     assert plan(model(before), model(desired), model(before))['operations'][0]['operation'] == 'replace'
+    commented = deepcopy(before)
+    commented['native']['catalog_metadata']['comment'] = 'preserve'
+    commented_desired = deepcopy(desired)
+    commented_desired['native']['catalog_metadata']['comment'] = 'preserve'
+    assert 'discard native comment' in plan(
+        model(commented), model(commented_desired), model(commented))['blockers'][0]['reason']
     with pytest.raises(ValueError, match='another endpoint'):
         plan(model(before, endpoint='foreign'), model(desired), model(before))
 
@@ -324,6 +330,11 @@ def test_native_enum_extension_is_append_only_and_warns_about_existing_columns()
     changed['native']['catalog_metadata']['labels'] = ['ok', 'bad', 'great']
     changed['native']['catalog_metadata']['comment'] = 'other edit'
     assert plan(model(existing), model(changed), model(existing))['blockers']
+    commented = deepcopy(existing)
+    commented['native']['catalog_metadata']['comment'] = 'preserve'
+    changed['native']['catalog_metadata']['comment'] = 'preserve'
+    assert 'discard native comment' in plan(
+        model(commented), model(changed), model(commented))['blockers'][0]['reason']
 
 
 def test_scalar_macro_definition_replacement_rejects_other_edits():

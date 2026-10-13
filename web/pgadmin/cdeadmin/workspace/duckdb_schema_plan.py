@@ -193,6 +193,9 @@ def _validated_column_alter(before, after, change):
 def _validated_enum_extension(before, after, target):
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
+    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
+            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
+        raise ValueError('Enum replacement would discard native comment or tags')
     old_labels = previous['catalog'].pop('labels', None)
     new_labels = desired['catalog'].pop('labels', None)
     if (previous['catalog'].get('logical_type') != 'ENUM' or
@@ -217,6 +220,14 @@ def _validated_enum_extension(before, after, target):
     if len(statements) != 1 or statements[0].type != duckdb.StatementType.CREATE:
         raise ValueError('Exactly one native enum replacement is required')
     return source, new_labels
+
+
+def _validated_view_replacement(before, after):
+    for row in (before, after):
+        metadata = row['native'].get('catalog_metadata', {})
+        if metadata.get('comment') is not None or metadata.get('tags'):
+            raise ValueError('View replacement would discard native comment or tags')
+    return _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
 
 
 def _validated_macro_replacement(before, after, target, change):
@@ -565,7 +576,7 @@ def plan(baseline, desired, live):
                     raise ValueError('Native removal grammar is unavailable')
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
-                source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
+                source = _validated_view_replacement(before, after)
             elif change == {'action': 'extend-enum'} and after['kind'] == 'type':
                 operation = 'replace'
                 source, _labels = _validated_enum_extension(before, after, target)
