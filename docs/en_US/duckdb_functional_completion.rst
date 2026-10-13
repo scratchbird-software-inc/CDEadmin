@@ -292,8 +292,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   dependency whose binding could change. The reviewer supplies a complete
   CREATE TABLE definition and explicitly confirms the corresponding isolated
   constraint rebuild. The CHECK intent accepts only CHECK constraints; the
-  UNIQUE intent accepts CHECK and UNIQUE constraints. Foreign keys, primary
-  keys and independent indexes remain outside this migration.
+  UNIQUE intent accepts CHECK and UNIQUE constraints. Foreign keys and primary
+  keys remain outside this migration. Unchanged independent indexes are
+  replayed after the table swap. Existing column defaults must remain
+  identical in the reviewed native CREATE TABLE body and catalog; the data
+  copy names every column explicitly, so it never evaluates those defaults.
+  Generated columns remain outside this migration because native INSERT
+  cannot write their derived values explicitly.
   A deterministic staging table receives every old row in the same native
   transaction; both EXCEPT ALL directions must be empty before the original
   table is dropped and the staging table renamed. The same transaction must

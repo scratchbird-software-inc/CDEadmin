@@ -909,6 +909,91 @@ def test_constraint_rebuild_replays_index_and_table_column_index_comments(tmp_pa
         provider.client.close()
 
 
+def test_constraint_rebuild_preserves_column_defaults_without_evaluating_them_for_copied_rows(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute("CREATE TABLE checked(id INTEGER DEFAULT 7 CHECK(id > 0), "
+        "value VARCHAR DEFAULT 'ready')")
+    connection.execute("INSERT INTO checked VALUES (1, 'one'), (2, 'two')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            "(id INTEGER DEFAULT(7), \"value\" VARCHAR DEFAULT('ready'), CHECK((id >= 0)))")
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        changed_default = deepcopy(desired)
+        changed_default['rows'][original['resource_id']]['native']['ddl'] = (
+            edited['ddl'].replace('DEFAULT(7)', 'DEFAULT(8)'))
+        assert not plan(baseline, changed_default, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'rebuild-with-default.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id, value FROM checked ORDER BY id').fetchall() == [
+            (1, 'one'), (2, 'two')]
+        observer.execute('INSERT INTO checked DEFAULT VALUES')
+        assert observer.execute('SELECT id, value FROM checked WHERE id=7').fetchall() == [
+            (7, 'ready')]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_constraint_rebuild_blocks_generated_columns_before_dispatch(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0), '
+        'derived INTEGER GENERATED ALWAYS AS (id + 1))')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, derived INTEGER GENERATED ALWAYS AS((id + 1)), '
+            'CHECK((id >= 0)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert not preview['application_supported']
+        assert any('plain CREATE TABLE body' in blocker['reason']
+            for blocker in preview['blockers'])
+    finally:
+        provider.client.close()
+
+
 def test_native_batch_rolls_back_all_statements_on_late_failure(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

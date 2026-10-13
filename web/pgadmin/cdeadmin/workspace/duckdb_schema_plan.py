@@ -1019,8 +1019,7 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
     columns = before['native'].get('columns')
     if (metadata.get('has_primary_key') is not False or metadata.get('tags') or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
-            any(not isinstance(item, dict) or not isinstance(item.get('name'), str) or
-                item.get('default') is not None
+            any(not isinstance(item, dict) or not isinstance(item.get('name'), str)
                 for item in columns) or
             len({item['name'] for item in columns}) != len(columns)):
         raise ValueError('Constraint rebuild requires plain unchanged columns without native tags')
@@ -1055,7 +1054,7 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
             len(original_sections[1]) != len(old_constraints) or
             len(desired_sections[1]) != len(new_constraints) or any(
             kind == 'token_type.keyword' and word in
-                ({'primary', 'foreign', 'references', 'default'} |
+                ({'primary', 'foreign', 'references', 'generated'} |
                  ({'unique'} if action == 'rebuild-check-constraints' else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
