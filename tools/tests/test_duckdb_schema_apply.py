@@ -1613,9 +1613,76 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
                 '(id DOUBLE DEFAULT random(), parent_id INTEGER)'}
         preview = plan(baseline, desired, baseline)
         assert not preview['application_supported']
-        assert any('constant defaults' in item['reason']
+        assert any('admitted defaults' in item['reason']
             for item in preview['blockers'])
     finally:
+        provider.client.close()
+
+
+@pytest.mark.parametrize('owned', [False, True])
+def test_inbound_child_sequence_default_preserves_position_and_dependency(
+        tmp_path, owned):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE SEQUENCE child_seq START 100')
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa')")
+    connection.execute("CREATE TABLE child(id BIGINT DEFAULT nextval('child_seq'), "
+        'parent_id INTEGER DEFAULT(1), FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO child DEFAULT VALUES')
+    if owned:
+        connection.execute('ALTER SEQUENCE child_seq OWNED BY child')
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
+                "(id BIGINT DEFAULT(nextval('child_seq')), "
+                'parent_id INTEGER DEFAULT(1))'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'child-sequence.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if owned else 'committed'), outcome['outcome']
+        if not owned:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,parent_id FROM child').fetchall() == [(100, 1)]
+        assert observer.execute("SELECT last_value FROM duckdb_sequences() "
+            "WHERE sequence_name='child_seq'").fetchone()[0] == 100
+        if not owned:
+            observer.execute('INSERT INTO child DEFAULT VALUES')
+            assert observer.execute('SELECT id FROM child ORDER BY id').fetchall() == [
+                (100,), (101,)]
+        observer.close()
+    finally:
+        connection.close()
         provider.client.close()
 
 

@@ -117,6 +117,13 @@ def apply_review(provider, route, record):
                         if (columns != expected_columns or
                                 normalized(constraints) != normalized(expected_constraints)):
                             raise ValueError('Inbound child staging differs from reviewed model')
+                        if connection.execute(inbound[
+                                'sequence_dependency_checks'][phase]).fetchone()[0] != 0:
+                            raise ValueError('Inbound child staged sequence dependencies differ')
+                        if (inbound['requires_sequence_dependency'] and
+                                connection.execute(inbound[
+                                    'sequence_dependency_counts'][phase]).fetchone()[0] == 0):
+                            raise ValueError('Inbound child sequence default has no observed dependency')
                     if index in child_copies:
                         inbound, phase = child_copies[index]
                         if connection.execute(inbound['data_checks'][phase]).fetchone()[0] != 0:

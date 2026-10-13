@@ -427,8 +427,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   composed only of those literals, parentheses, arithmetic operators and string
   concatenation, may survive both stages. The complete native CREATE definitions
   must parse, and explicit column-list copies never evaluate the defaults.
-  Function calls, identifiers, casts and sequence defaults remain blocked pending
-  dependency and side-effect qualification.
+  A direct ``nextval('name')`` or ``nextval('schema.name')`` default may also
+  survive when each staging table has exactly the original child's observed
+  native sequence dependencies before its predecessor is dropped, at least one
+  dependency exists, and no sequence has observed ownership of the child.
+  DuckDB 1.5.2 may fail to expose an ``OWNED BY`` dependency through an
+  independent catalog capture; in that case native ``DROP ... RESTRICT`` must
+  refuse the child swap and roll back the entire transaction.
+  The explicit copy must not advance the sequence; fresh rows retain its
+  native default after final rediscovery. Other function calls, identifiers,
+  casts and sequence expressions remain blocked pending dependency and
+  side-effect qualification.
   Each stage's native default facts must match the reviewed child columns
   before the old child is dropped.
   Native staging validates existing rows against new references before the

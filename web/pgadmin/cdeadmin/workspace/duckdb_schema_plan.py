@@ -1088,6 +1088,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             return True
         if not isinstance(value, str) or len(value.encode('utf8')) > 256:
             return False
+        if re.fullmatch(r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)",
+                value.strip(), re.I):
+            return True
         atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
             r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
         token = re.compile(r'\s*(?:' + atom + r'|\|\||[()+*/%-])', re.I)
@@ -1147,7 +1150,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 len(foreign[0]['referenced_column_names']) or
             any(not isinstance(item, dict) or
                 not constant_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and constant defaults')
+        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and admitted defaults')
     for index in indexes:
         observed_index = baseline['rows'].get(index['resource_id'])
         desired_index = desired['rows'].get(index['resource_id'])
@@ -1188,6 +1191,28 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             in desired['rows'] for name in stage_names):
         raise ValueError('Inbound child stage identity already exists')
     names = ', '.join(_quote(item['name']) for item in columns)
+    def sequence_dependencies(table_name):
+        literals = ["'" + value.replace("'", "''") + "'" for value in
+            [*child['path'][:2], table_name]]
+        return ('SELECT sequence_oid FROM duckdb_sequences() AS s '
+            'JOIN duckdb_dependencies() AS d ON d.objid = s.sequence_oid '
+            "WHERE d.deptype = 'n' AND d.refobjid = (SELECT table_oid "
+            'FROM duckdb_tables() WHERE database_name = ' + literals[0] +
+            ' AND schema_name = ' + literals[1] + ' AND table_name = ' +
+            literals[2] + ')')
+    original_dependencies = sequence_dependencies(child['name'])
+    sequence_checks = []
+    sequence_counts = []
+    for stage_name in stage_names:
+        staged = sequence_dependencies(stage_name)
+        sequence_checks.append('SELECT count(*) FROM ((' + original_dependencies +
+            ' EXCEPT ALL ' + staged + ') UNION ALL (' + staged +
+            ' EXCEPT ALL ' + original_dependencies + ')) AS differences')
+        sequence_counts.append('SELECT count(*) FROM (' +
+            original_dependencies + ') AS dependencies')
+    requires_sequence_dependency = any(isinstance(item.get('default'), str) and
+        item['default'].strip().casefold().startswith('nextval(')
+        for item in columns)
     def phase(definition, stage_name):
         stage = '.'.join(_quote(part) for part in [*child['path'][:2], stage_name])
         prefix = re.match(r'^\s*CREATE\s+TABLE\s+' + re.escape(target), definition, re.I)
@@ -1235,6 +1260,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             raise ValueError('Inbound child rebuild requires exact native statements')
     return child, first, final, {'child_resource_id': child_id,
         'stage_names': stage_names, 'data_checks': [first_check, final_check],
+        'sequence_dependency_checks': sequence_checks,
+        'sequence_dependency_counts': sequence_counts,
+        'requires_sequence_dependency': requires_sequence_dependency,
         'columns': [{key: item.get(key) for key in
             ('name', 'data_type', 'default', 'nullable')} for item in columns],
         'constraints_by_phase': [[{key: item.get(key) for key in
