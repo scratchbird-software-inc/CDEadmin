@@ -543,6 +543,9 @@ def _validated_sequence_replacement(before, after, change):
     if change != {'action': 'replace-sequence', 'reset_state_confirmed': True}:
         raise ValueError('Sequence replacement requires explicit generator reset confirmation')
     previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    if (previous['catalog'].get('automatic_dependency_observed') or
+            desired['catalog'].get('automatic_dependency_observed')):
+        raise ValueError('Sequence replacement is blocked by an observed automatic dependency')
     if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
             desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
         raise ValueError('Sequence replacement would discard native comment or tags')

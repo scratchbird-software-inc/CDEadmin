@@ -236,7 +236,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   exactly qualified native statement and an explicit ``reset_state_confirmed``
   assertion. Review changes only observed start, minimum, maximum, increment
   and cycle options; a sequence with a comment or tags is blocked because
-  replacement could discard that metadata. Application rechecks the old
+  replacement could discard that metadata. An automatic ownership dependency
+  observed on the current native catalog also blocks replacement before
+  dispatch; this observation does not assert that ownership survives a file
+  reopen. Application rechecks the old
   definition in its transaction, dispatches the statement once, and verifies
   the new option values after commit. Native dependency checks govern
   replacement; do not use ``CASCADE`` or silently detach dependents. DuckDB

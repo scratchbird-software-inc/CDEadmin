@@ -465,6 +465,17 @@ def _resources(connection, request):
             'ddl': sql,
         })
 
+    sequence_oids = {}
+    for resource in resources.values():
+        if resource['resource_kind'] == 'sequence':
+            oid = resource['native']['catalog_metadata'].get('oid')
+            if oid is not None:
+                sequence_oids.setdefault(oid, []).append(resource)
+    cursor.execute("SELECT objid FROM duckdb_dependencies() WHERE deptype = 'a'")
+    for (oid,) in cursor.fetchall():
+        for sequence in sequence_oids.get(oid, []):
+            sequence['native']['catalog_metadata']['automatic_dependency_observed'] = True
+
     cursor.execute(
         'SELECT database_name, schema_name, type_name, type_oid, '
         'type_size, logical_type, type_category, comment, tags, labels '

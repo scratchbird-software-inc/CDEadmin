@@ -1,6 +1,7 @@
 """Native catalog capture preserves ownership, bounds and attachment privacy."""
 from types import SimpleNamespace
 from unittest.mock import Mock
+from copy import deepcopy
 import json
 import pytest
 
@@ -9,6 +10,7 @@ from pgadmin.cdeadmin.providers.duckdb import catalog
 from pgadmin.cdeadmin.providers.duckdb.provider import DuckDBPilotProvider, _create_client
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
+from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan
 
 
 def test_attachment_options_and_foreign_locations_do_not_export_credentials():
@@ -53,6 +55,39 @@ def test_owned_capture_preserves_interactive_work_and_sequence_state(tmp_path):
         assert owner.execute('SELECT COUNT(*) FROM committed').fetchone() == (0,)
         assert client._connections == []
         provider.permissions.require.assert_called_once_with('data_read', 'resource')
+    finally:
+        client.close(); owner.close()
+
+
+def test_transient_sequence_ownership_blocks_replacement_review(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    path = tmp_path/'owned.duckdb'
+    owner = duckdb.connect(str(path))
+    client = _create_client()
+    provider = DuckDBPilotProvider(SimpleNamespace(),
+        SimpleNamespace(require=Mock()), client)
+    try:
+        owner.execute('CREATE TABLE owner_table(id INTEGER)')
+        owner.execute('CREATE SEQUENCE owned_seq')
+        owner.execute('ALTER SEQUENCE owned_seq OWNED BY owner_table')
+        observed = provider.capture_catalog({
+            'database': str(path), 'filesystem_root': str(tmp_path)})
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        sequence = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'sequence' and row['name'] == 'owned_seq')
+        assert sequence['native']['catalog_metadata']['automatic_dependency_observed'] is True
+        desired = deepcopy(baseline)
+        changed = desired['rows'][sequence['resource_id']]['native']
+        changed['catalog_metadata']['start_value'] = 20
+        changed['ddl'] = (f'CREATE OR REPLACE SEQUENCE "{sequence["path"][0]}".'
+            '"main"."owned_seq" START 20')
+        changed['duckdb_change'] = {'action': 'replace-sequence',
+            'reset_state_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert not preview['application_supported']
+        assert 'automatic dependency' in preview['blockers'][0]['reason']
     finally:
         client.close(); owner.close()
 
