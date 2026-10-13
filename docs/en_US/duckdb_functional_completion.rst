@@ -284,9 +284,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   migration: it clears rows, indexes and comments. It can leave a dependent
   view reporting ``is_bound = true`` while a query against that view fails to
   bind. Native rollback restores the original table, but a successful commit
-  does not preserve these facts. DDN plans therefore block whole-table
-  replacement, including non-primary constraint changes, until a separate
-  dependency-aware data-preserving migration and postcommit check are qualified.
+  does not preserve these facts. General whole-table replacement remains
+  blocked; a separate migration must preserve data and dependent metadata.
+  A narrow CHECK-only migration may be admitted when all observed columns
+  remain identical, no index, comment, tag, key or foreign-key edge needs
+  preservation, and the captured file has no user view, macro or sequence
+  dependency whose binding could change. The reviewer supplies a complete
+  CREATE TABLE definition and explicitly confirms a CHECK-only rebuild.
+  A deterministic staging table receives every old row in the same native
+  transaction; both EXCEPT ALL directions must be empty before the original
+  table is dropped and the staging table renamed. Any failed constraint or
+  copy check rolls back the original table and data. Fresh rediscovery and
+  row-count/constraint checks after commit can leave a committed result
+  unverified, never automatically replayed. Other rebuilds remain blocked.
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.

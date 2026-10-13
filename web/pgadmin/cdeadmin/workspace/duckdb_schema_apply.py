@@ -40,6 +40,19 @@ class DuckDBSchemaApplications(SchemaApplications):
                     raise SchemaApplyError('Native creation requires an absent baseline target')
             elif operation['baseline_sha256'] != digest(_definition(before)):
                 raise SchemaApplyError('Native baseline differs from the reviewed plan')
+            if operation['operation'] == 'rebuild':
+                for child_id in operation['affected_child_ids']:
+                    old_child = baseline['rows'].get(child_id)
+                    new_child = desired['rows'].get(child_id)
+                    if old_child is not None:
+                        baseline_ids.add(child_id)
+                    if new_child is not None:
+                        desired_ids.add(child_id)
+                    if (operation['baseline_child_sha256'].get(child_id) !=
+                            (digest(_definition(old_child)) if old_child else None) or
+                            operation['desired_child_sha256'].get(child_id) !=
+                            (digest(_definition(new_child)) if new_child else None)):
+                        raise SchemaApplyError('CHECK rebuild child facts differ from reviewed plan')
         if (_root(baseline) != preview['catalog'] or _root(desired) != preview['catalog'] or
                 any(baseline['provenance'].get(key) != desired['provenance'].get(key)
                     for key in ('endpoint_id', 'database_target_id'))):

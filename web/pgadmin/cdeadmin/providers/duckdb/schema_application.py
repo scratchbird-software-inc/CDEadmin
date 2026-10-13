@@ -45,9 +45,23 @@ def apply_review(provider, route, record):
             connection.execute('ROLLBACK')
             result['native_rollback_returned'] = True
             return result
+        rebuild_rows = {}
         for operation in fresh['operations']:
-            result['statement_dispatched'] = True
-            connection.execute(operation['source'])
+            if operation['operation'] == 'rebuild':
+                old_rows = connection.execute('SELECT count(*) FROM ' +
+                    operation['target']).fetchone()[0]
+                for index, statement in enumerate(operation['statements']):
+                    result['statement_dispatched'] = True
+                    connection.execute(statement)
+                    if index == 1:
+                        difference = connection.execute(
+                            operation['data_check']).fetchone()[0]
+                        if difference != 0:
+                            raise ValueError('Native staging rows differ from original rows')
+                rebuild_rows[operation['resource_id']] = old_rows
+            else:
+                result['statement_dispatched'] = True
+                connection.execute(operation['source'])
         result['commit_requested'] = True
         connection.execute('COMMIT')
         result.update(state='committed', native_commit_returned=True)
@@ -92,6 +106,37 @@ def apply_review(provider, route, record):
                     verified = (current is not None and
                         current['kind'] == operation['kind'] and current['name'] == operation['name'] and
                         observed['rows'].get(operation['source_resource_id']) is None)
+                elif operation['operation'] == 'rebuild':
+                    from ...workspace.duckdb_schema_plan import create_definition_tokens
+                    baseline = record['baseline']['rows'][operation['resource_id']]
+                    expected = create_definition_tokens(operation['original_source'], 'table')
+                    verified = (current is not None and current['kind'] == 'table' and
+                        expected is not None and expected == create_definition_tokens(
+                            current['native'].get('ddl'), 'table') and
+                        current['native'].get('columns') == baseline['native'].get('columns'))
+                    if verified:
+                        from ...workspace.duckdb_schema_plan import _definition
+                        from ...workspace.firebird_schema_plan import digest
+                        def signatures(items):
+                            return sorted((item.get('constraint_type'),
+                                item.get('constraint_text'), tuple(item.get('column_names') or []))
+                                for item in items)
+                        verified = (signatures(current['native'].get('constraints', [])) ==
+                            signatures(operation['postcondition']['constraints']) and
+                            {item['resource_id'] for item in
+                                current['native'].get('constraints', [])} ==
+                            set(operation['desired_child_sha256']) and
+                            connection.execute('SELECT count(*) FROM ' +
+                                operation['target']).fetchone()[0] ==
+                            rebuild_rows[operation['resource_id']])
+                        if verified:
+                            verified = all((
+                                observed['rows'].get(child_id) is None
+                                if child_id not in operation['desired_child_sha256'] else
+                                observed['rows'].get(child_id) is not None and
+                                operation['desired_child_sha256'][child_id] ==
+                                digest(_definition(observed['rows'][child_id])))
+                                for child_id in operation['affected_child_ids'])
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
                     from ...workspace.firebird_schema_plan import digest
