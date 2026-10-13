@@ -584,6 +584,9 @@ class ContextMenuTests(unittest.TestCase):
             'target_id': 'duckdb-one', 'display_name': 'example.duckdb',
         })
         by_id = {item['command_id']: item for item in actions}
+        catalog = by_id['database.duckdb.catalog_ddn']
+        self.assertEqual('export', catalog['arguments']['tab'])
+        self.assertEqual('duckdb-one', catalog['arguments']['database_target_id'])
         expected = {
             'checkpoint': ('Checkpoint database...', 'maintenance'),
             'force_checkpoint': ('Force checkpoint...', 'maintenance'),

@@ -2,6 +2,10 @@
   "schema": "scratchrobin.form-references.v1",
   "allocation": "Append only; never renumber or recycle an existing reference. Identity belongs to a reusable form, not an object instance.",
   "forms": {
+    "duckdb-catalog-ddn": {
+      "reference": "SR-F-010000",
+      "title": "DuckDB catalog and DDN diagrams"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

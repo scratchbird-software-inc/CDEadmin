@@ -925,6 +925,12 @@ def database_target_context_actions(
         icon=icon, group='database', priority=10 + index,
         arguments={**base, 'tab': tab},
     ) for index, (tab, label, icon) in enumerate(rows)]
+    if engine_id == 'duckdb':
+        actions.append(_action(
+            'database.duckdb.catalog_ddn', 'DuckDB metadata and DDN diagrams...',
+            'open_workspace', icon='action.export', group='database',
+            arguments={**base, 'tab': 'export'},
+        ))
     if engine_id == 'firebird':
         for operation in ('clone', 'move'):
             actions.append(_action(
