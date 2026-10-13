@@ -43,6 +43,9 @@ def test_view_postcommit_body_comparison_ignores_header_and_terminal_separator()
     wrong = 'CREATE VIEW report AS SELECT 3 AS x;'
     assert view_query_tokens(submitted) == view_query_tokens(observed)
     assert view_query_tokens(submitted) != view_query_tokens(wrong)
+    assert view_query_tokens(
+        'CREATE OR REPLACE VIEW "file"."main"."report" (renamed) AS SELECT 2 AS x'
+    ) != view_query_tokens(observed)
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

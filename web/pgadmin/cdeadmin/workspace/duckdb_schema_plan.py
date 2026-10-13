@@ -231,7 +231,7 @@ def _validated_view_replacement(before, after):
 
 
 def view_query_tokens(source):
-    """Compare a submitted view body with the catalog's normalized body.
+    """Compare submitted view aliases/body with the catalog's normalized SQL.
 
     Native CREATE VIEW text may rewrite the target and remove OR REPLACE.
     Token comparison is deliberately strict: an equivalent rewrite that does
@@ -252,15 +252,19 @@ def view_query_tokens(source):
         if kind in {duckdb.token_type.keyword, duckdb.token_type.identifier}:
             word = word.casefold()
         tokens.append((str(kind), word))
-    view_seen = False
+    view_index = None
     for index, (kind, word) in enumerate(tokens):
         if kind == str(duckdb.token_type.keyword) and word == 'view':
-            view_seen = True
-        elif view_seen and kind == str(duckdb.token_type.keyword) and word == 'as':
+            view_index = index
+        elif view_index is not None and kind == str(duckdb.token_type.keyword) and word == 'as':
+            header = tokens[view_index + 1:index]
+            alias_start = next((offset for offset, token in enumerate(header)
+                if token == (str(duckdb.token_type.operator), '(')), None)
+            aliases = tuple(header[alias_start:]) if alias_start is not None else ()
             body = tokens[index + 1:]
             if body and body[-1] == (str(duckdb.token_type.operator), ';'):
                 body = body[:-1]
-            return tuple(body) if body else None
+            return (aliases, tuple(body)) if body else None
     return None
 
 

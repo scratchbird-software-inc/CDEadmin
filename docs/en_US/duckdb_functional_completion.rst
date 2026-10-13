@@ -179,7 +179,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   extension is blocked when the old object has a comment or tags, because
   ``CREATE OR REPLACE`` discards those facts and the one-statement adapter
   cannot restore them. After a committed view replacement, compare the native
-  catalog's parsed view-query tokens with the submitted query body. A changed
+  catalog's parsed view-query tokens and explicit column aliases with the
+  submitted definition. A changed
   object name or merely different definition is insufficient verification;
   canonical spelling differences may leave a successful commit explicitly
   unverified, and must not trigger automatic replay. A macro replacement requires exactly
