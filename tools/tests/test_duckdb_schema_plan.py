@@ -144,3 +144,39 @@ def test_column_default_and_nullability_edits_are_one_field_each():
     result = plan(model(table, existing), model(table, changed), model(table, existing))
     assert result['operations'][0]['source'] == (
         'ALTER TABLE "file"."main"."facts" ALTER COLUMN "amount" SET NOT NULL')
+
+
+def test_column_type_change_requires_isolated_native_intent_and_one_statement():
+    pytest.importorskip('duckdb')
+    table = row('table', ['file', 'main', 'facts'])
+    existing = row('column', ['file', 'main', 'facts', 'amount'])
+    existing['native']['catalog_metadata'] = {
+        'data_type': 'VARCHAR', 'data_type_id': 12,
+        'nullable': True, 'default': None,
+    }
+    changed = deepcopy(existing)
+    changed['native']['catalog_metadata'].update(
+        data_type='INTEGER', data_type_id=13)
+    changed['native']['duckdb_change'] = {
+        'action': 'set-type', 'using': '"amount"::INTEGER',
+    }
+    result = plan(model(table, existing), model(table, changed),
+                  model(table, existing))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" ALTER COLUMN "amount" '
+        'TYPE INTEGER USING "amount"::INTEGER')
+    assert result['operations'][0]['postcondition'] == {'data_type': 'INTEGER'}
+    changed['native']['catalog_metadata']['nullable'] = False
+    assert plan(model(table, existing), model(table, changed),
+                model(table, existing))['blockers']
+    changed['native']['catalog_metadata']['nullable'] = True
+    for unsafe in ('INTEGER; DROP TABLE facts', 'INTEGER USING 1',
+                   'INTEGER -- hidden'):
+        changed['native']['catalog_metadata']['data_type'] = unsafe
+        assert plan(model(table, existing), model(table, changed),
+                    model(table, existing))['blockers']
+    changed['native']['catalog_metadata']['data_type'] = 'INTEGER'
+    changed['native']['duckdb_change']['using'] = '1; DROP TABLE facts'
+    assert plan(model(table, existing), model(table, changed),
+                model(table, existing))['blockers']

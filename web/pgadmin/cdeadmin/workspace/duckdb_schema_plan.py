@@ -12,6 +12,9 @@ _KINDS = {'schema': 'SCHEMA', 'table': 'TABLE', 'view': 'VIEW',
           'sequence': 'SEQUENCE', 'type': 'TYPE', 'macro': 'MACRO',
           'index': 'INDEX', 'column': 'COLUMN'}
 _NAME = r'"(?:""|[^"])+"'
+_TYPE_FIELDS = frozenset({'data_type', 'data_type_id',
+    'character_maximum_length', 'numeric_precision',
+    'numeric_precision_radix', 'numeric_scale'})
 
 
 def _quote(value):
@@ -99,21 +102,25 @@ def _validated_index_ddl(source, path):
     return source
 
 
+def _native_column_type(data_type):
+    if (not isinstance(data_type, str) or not data_type.strip() or
+            len(data_type.encode('utf8')) > 1024 or '\x00' in data_type):
+        raise ValueError('Column change requires one bounded native data type')
+    if (any(marker in data_type for marker in (';', '--', '/*', '*/')) or
+            re.search(r'\b(?:DEFAULT|CONSTRAINT|CHECK|GENERATED|PRIMARY|UNIQUE|REFERENCES|USING)\b',
+                      data_type, re.I)):
+        raise ValueError('Column data type cannot contain SQL clauses or comments')
+    return data_type.strip()
+
+
 def _validated_column_add(row):
     native = row['native']
     metadata = native.get('catalog_metadata', {})
-    data_type = metadata.get('data_type')
-    if (not isinstance(data_type, str) or not data_type.strip() or
-            len(data_type.encode('utf8')) > 1024 or '\x00' in data_type):
-        raise ValueError('Column addition requires one bounded native data type')
-    if (any(marker in data_type for marker in (';', '--', '/*', '*/')) or
-            re.search(r'\b(?:DEFAULT|CONSTRAINT|CHECK|GENERATED|PRIMARY|UNIQUE|REFERENCES)\b',
-                      data_type, re.I)):
-        raise ValueError('Column data type cannot contain SQL clauses or comments')
+    data_type = _native_column_type(metadata.get('data_type'))
     if metadata.get('nullable') is False or metadata.get('comment') or native.get('ddl'):
         raise ValueError('Column constraints, comments and direct DDL are not admitted by ADD COLUMN')
     parent = '.'.join(_quote(part) for part in row['path'][:3])
-    source = 'ALTER TABLE ' + parent + ' ADD COLUMN ' + _quote(row['name']) + ' ' + data_type.strip()
+    source = 'ALTER TABLE ' + parent + ' ADD COLUMN ' + _quote(row['name']) + ' ' + data_type
     default = metadata.get('default')
     if default is not None:
         if not isinstance(default, str) or not default.strip():
@@ -129,14 +136,19 @@ def _validated_column_add(row):
     return source
 
 
-def _validated_column_alter(before, after, action):
+def _validated_column_alter(before, after, change):
     previous = before['native'].get('catalog_metadata', {})
     desired = after['native'].get('catalog_metadata', {})
-    field = {'set-default': 'default', 'set-nullable': 'nullable'}.get(action)
+    action = change.get('action')
+    field = {'set-default': 'default', 'set-nullable': 'nullable',
+             'set-type': 'data_type'}.get(action)
     if field is None or _equal(previous.get(field), desired.get(field)):
         raise ValueError('Column alteration must change its one declared native field')
-    if not _equal({k: v for k, v in previous.items() if k != field},
-                  {k: v for k, v in desired.items() if k != field}) or (
+    if set(change) - ({'action', 'using'} if action == 'set-type' else {'action'}):
+        raise ValueError('Column alteration has unsupported change options')
+    allowed = _TYPE_FIELDS if action == 'set-type' else {field}
+    if not _equal({k: v for k, v in previous.items() if k not in allowed},
+                  {k: v for k, v in desired.items() if k not in allowed}) or (
             before['native'].get('ddl') != after['native'].get('ddl')):
         raise ValueError('Review other native column edits separately')
     prefix = ('ALTER TABLE ' + '.'.join(_quote(part) for part in after['path'][:3]) +
@@ -149,11 +161,20 @@ def _validated_column_alter(before, after, action):
             source = prefix + 'SET DEFAULT ' + value.strip()
         else:
             raise ValueError('Column default requires one bounded native SQL expression')
-    else:
+    elif field == 'nullable':
         value = desired.get('nullable')
         if type(value) is not bool:
             raise ValueError('Column nullability requires an explicit Boolean')
         source = prefix + ('DROP NOT NULL' if value else 'SET NOT NULL')
+    else:
+        source = prefix + 'TYPE ' + _native_column_type(desired.get('data_type'))
+        if 'using' in change:
+            expression = change['using']
+            if (not isinstance(expression, str) or not expression.strip() or
+                    len(expression.encode('utf8')) > 8192 or '\x00' in expression or
+                    any(marker in expression for marker in (';', '--', '/*', '*/'))):
+                raise ValueError('USING requires one bounded native expression')
+            source += ' USING ' + expression.strip()
     import duckdb
     try:
         statements = duckdb.extract_statements(source)
@@ -224,16 +245,20 @@ def plan(baseline, desired, live):
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
                 source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
-            elif after['kind'] == 'column' and change in (
-                    {'action': 'set-default'}, {'action': 'set-nullable'}):
+            elif (after['kind'] == 'column' and isinstance(change, dict) and
+                  change.get('action') in {'set-default', 'set-nullable', 'set-type'}):
                 operation = 'alter'
-                source = _validated_column_alter(before, after, change['action'])
+                source = _validated_column_alter(before, after, change)
             else:
                 raise ValueError('Alteration requires a qualified native adapter; only explicit view replacement is previewed')
-            operations.append({'resource_id': identity, 'kind': after['kind'],
+            operation_record = {'resource_id': identity, 'kind': after['kind'],
                 'name': after['name'], 'operation': operation, 'target': target,
                 'source': source, 'baseline_sha256': digest(_definition(before)) if before else None,
-                'desired_sha256': digest(_definition(after))})
+                'desired_sha256': digest(_definition(after))}
+            if after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
+                operation_record['postcondition'] = {
+                    'data_type': after['native']['catalog_metadata']['data_type']}
+            operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': identity, 'name': after.get('name'), 'reason': str(error)})
     for identity, row in baseline['rows'].items():

@@ -64,6 +64,11 @@ def apply_review(provider, route, record):
                 from ...workspace.firebird_schema_plan import digest
                 result['rediscovery_verified'] = (current is not None and
                     digest(_definition(current)) != operation['baseline_sha256'])
+                if result['rediscovery_verified'] and operation.get('postcondition'):
+                    metadata = current['native'].get('catalog_metadata', {})
+                    result['rediscovery_verified'] = all(
+                        metadata.get(key) == value for key, value in
+                        operation['postcondition'].items())
             result['rediscovered_resource_id'] = current['resource_id'] if current else None
         except Exception as error:
             result['rediscovery_error_type'] = type(error).__name__

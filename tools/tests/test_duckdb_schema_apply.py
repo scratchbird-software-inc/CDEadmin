@@ -311,6 +311,44 @@ def test_reviewed_nullable_column_add_and_drop_are_native(tmp_path):
         provider.client.close()
 
 
+def test_reviewed_column_type_conversion_preserves_rows_and_is_not_replayed(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('ALTER TABLE existing ADD COLUMN amount VARCHAR')
+    connection.execute("INSERT INTO existing VALUES (1, '7')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        column = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['name'] == 'amount')
+        desired = deepcopy(baseline)
+        changed = desired['rows'][column['resource_id']]
+        changed['native']['catalog_metadata']['data_type'] = 'INTEGER'
+        changed['native']['duckdb_change'] = {
+            'action': 'set-type', 'using': '"amount"::INTEGER'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'column-type.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT amount FROM existing').fetchall() == [(7,)]
+        assert observer.execute("SELECT data_type FROM duckdb_columns() "
+            "WHERE table_name='existing' AND column_name='amount'").fetchone() == ('INTEGER',)
+        observer.close()
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
