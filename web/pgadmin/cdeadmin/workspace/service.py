@@ -1852,9 +1852,19 @@ class ProviderWorkspaceService:
     def _history_context(self, server, target, dialect):
         from .query_history import HistoryScope
         profile = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
-        if profile not in {'mysql-native', 'mariadb-native', 'firebird-native', 'firebird-embedded'}:
+        if profile not in {'mysql-native', 'mariadb-native', 'firebird-native', 'firebird-embedded', 'duckdb-native'}:
             raise ProviderWorkspaceError('SQL history is not admitted for this engine')
         context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        if profile == 'duckdb-native':
+            if context.profile_id != profile or dialect is not None:
+                raise ProviderWorkspaceError('DuckDB history requires its native database target and language')
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item for item in targets if item['target_id'] == target]
+            if (not isinstance(target, str) or not target or len(matches) != 1 or
+                    not matches[0].get('database') or
+                    matches[0]['database'] != endpoint['route'].get('database')):
+                raise ProviderWorkspaceError('Select an explicit registered DuckDB file for history')
+            return HistoryScope(self._principal_id(server), server.id, target, 'duckdb-sql', engine='duckdb')
         if profile in {'mysql-native', 'mariadb-native'}:
             engine = 'mariadb' if profile == 'mariadb-native' else 'mysql'
             label = 'MariaDB' if engine == 'mariadb' else 'MySQL'
@@ -2014,7 +2024,7 @@ class ProviderWorkspaceService:
     def _record_query_request(self, server, target, dialect, source, sensitive, kind, execute):
         factory = getattr(self, 'query_history_factory', None)
         firebird = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
-            'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native'}
+            'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native'}
         if factory is None or not firebird:
             return execute()
         history = scope = entry = None
