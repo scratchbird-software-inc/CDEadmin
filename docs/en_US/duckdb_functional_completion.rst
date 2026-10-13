@@ -398,7 +398,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   complex inbound graphs remain blocked. The companion
   ``rebuild-check-with-inbound-children`` intent accepts two or three distinct
   qualifying children, each with its own complete intermediate definition.
-  All child foreign keys are detached before the parent swap, then each child
+  The parent may also retain an independent unchanged UNIQUE constraint set;
+  staging verifies its exact native columns and definition before copying rows
+  or dropping the old parent. All child foreign keys are detached before the parent swap, then each child
   is restored and independently row-checked within the same transaction and
   receipt. A partial child set, overlapping child identities or a batch above
   the statement budget is refused before dispatch.

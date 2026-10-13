@@ -1235,7 +1235,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 raise ValueError('Primary-key rebuild nullability must follow key membership')
     retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK', 'UNIQUE'} if
         action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL', 'UNIQUE'} if
-        action == 'rebuild-check-constraints' else set() if
+        action in {'rebuild-check-constraints', 'rebuild-check-with-inbound-child',
+            'rebuild-check-with-inbound-children'} else set() if
         action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}
         else {'PRIMARY KEY', 'NOT NULL'})
     old_retained = [item for item in old_constraints
@@ -1369,9 +1370,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
         if row['kind'] == 'table':
             blocked_types = (set() if action == 'rebuild-foreign-keys' else
-                {'FOREIGN KEY'} | ({'UNIQUE'} if action ==
-                    'rebuild-check-with-inbound-child' or action ==
-                    'rebuild-check-with-inbound-children' else set())) if (
+                {'FOREIGN KEY'}) if (
                 row['resource_id'] == before['resource_id']) else (
                     set() if any(row['resource_id'] == item[0]['resource_id']
                         for item in inbound) else {'FOREIGN KEY'})
@@ -1402,10 +1401,12 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     body = create_definition_tokens(source, 'table')
     original_sections = _table_definition_sections(before['native'].get('ddl'),
         inline_unique=action in {'rebuild-unique-constraints',
-            'rebuild-check-constraints', 'rebuild-foreign-keys'})
+            'rebuild-check-constraints', 'rebuild-foreign-keys',
+            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children'})
     desired_sections = _table_definition_sections(source,
         inline_unique=action in {'rebuild-unique-constraints',
-            'rebuild-check-constraints', 'rebuild-foreign-keys'})
+            'rebuild-check-constraints', 'rebuild-foreign-keys',
+            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children'})
     old_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
         for item in old_constraints)
     new_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
@@ -1421,7 +1422,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                  ({'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
-                    'rebuild-check-constraints', 'rebuild-foreign-keys'} else set()))
+                    'rebuild-check-constraints', 'rebuild-foreign-keys',
+                    'rebuild-check-with-inbound-child',
+                    'rebuild-check-with-inbound-children'} else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
@@ -1875,7 +1878,8 @@ def plan(baseline, desired, live):
                         for item in _expected_constraints
                         if item['constraint_type'] == 'UNIQUE']
                         if change.get('action') in {'rebuild-check-constraints',
-                            'rebuild-foreign-keys'} else None),
+                            'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
+                            'rebuild-check-with-inbound-children'} else None),
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),
