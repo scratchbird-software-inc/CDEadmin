@@ -1,10 +1,47 @@
 """DuckDB retained-session administration and catalog-aware row identity."""
 from contextlib import contextmanager
+import os
 
 from ..relational_admin import RelationalAdministration
+from ...sdk.relational import RelationalClientError
 
 
 class DuckDBAdministration(RelationalAdministration):
+    def _form(self, kind, operation):
+        if kind == 'database' and operation in {'export_database', 'import_database'}:
+            exporting = operation == 'export_database'
+            fields = [self._field('directory', 'Export directory' if exporting else 'Import directory',
+                'text', True, 'Absolute path under the registered filesystem root.')]
+            if exporting:
+                fields.append(self._field('format', 'Native format', 'select', False,
+                    default='PARQUET', options=('PARQUET', 'CSV')))
+            return {'form_id': f'duckdb.database.{operation}',
+                'title': 'Export DuckDB logical database' if exporting else 'Import DuckDB logical database',
+                'fields': fields}
+        return super()._form(kind, operation)
+
+    @staticmethod
+    def _duckdb_operation_directory(route, value, importing=False):
+        directory = RelationalAdministration._duckdb_operation_directory(route, value, importing)
+        if importing:
+            for name in ('schema.sql', 'load.sql'):
+                path = os.path.join(directory, name)
+                if os.path.islink(path) or os.path.dirname(os.path.realpath(path)) != directory:
+                    raise RelationalClientError('DuckDB import control files must reside in the reviewed directory')
+        return directory
+
+    def _compile_duckdb_database_operation(self, request):
+        compiled = super()._compile_duckdb_database_operation(request)
+        if request['operation_id'] == 'export_database':
+            compiled.setdefault('warnings', []).extend((
+                'EXPORT DATABASE is a logical native export, not a physical backup.',
+                'Rollback does not remove files already written by EXPORT DATABASE.',
+            ))
+        elif request['operation_id'] == 'import_database':
+            compiled.setdefault('warnings', []).append(
+                'IMPORT DATABASE reads native export files; review their contents before execution.')
+        return compiled
+
     @contextmanager
     def _borrow(self, client, connection):
         if connection is None:

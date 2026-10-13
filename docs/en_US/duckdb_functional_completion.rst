@@ -68,6 +68,13 @@ DUCK-COMP-04: Data and file workflows
   workflows. Do not claim EXPORT is a physical backup, or that SQL rollback
   removes files written externally. Validate registered filesystem ownership
   without claiming that authorized arbitrary SQL/extensions are sandboxed.
+  The database administration form requires an absolute directory under the
+  registered filesystem root for native EXPORT/IMPORT DATABASE. EXPORT offers
+  PARQUET or CSV and requires a new or empty destination. IMPORT requires an
+  existing export with schema.sql and load.sql and targets the active file;
+  it does not replace that file. Refuse export control-file symlinks that
+  escape the reviewed import directory. Checkpoint, force checkpoint, vacuum
+  and analyze expose only their native supported options.
   Native test-data recipes are scoped to one registered file and fresh catalog
   capture, bounded to 32 tables, 5000 rows, a 4 MiB recipe and 1 MiB generated
   SQL. Generation validates 1.5.2 native statement boundaries and performs no
