@@ -133,6 +133,14 @@ def qualify(route, evidence, *, password=None):
         assert len(uuid_plugins) == 2 and len({row['resource_id'] for row in uuid_plugins}) == 2
         assert {row['native']['plugin_type'] for row in uuid_plugins} == {'DATA TYPE', 'FUNCTION'}
         proof['checks'].append('explorer_preserves_native_uuid_type_and_function_plugins')
+        package = next(row for row in discovered if row['resource_kind'] == 'package' and row['display_name'] == 'pkg')
+        assert package['native']['routine_type'] == 'PACKAGE'
+        assert package['native']['package_specification']['show_create']
+        assert package['native']['package_body']['show_create']
+        assert 'Create Package Body' in package['native']['package_body']['show_create'][0] or any(
+            'package body' in key for key in package['native']['package_body']['show_create'][0])
+        proof['checks'].append('explorer_retains_package_specification_and_body_without_overwrite')
+
         cursor.execute("SET SESSION sql_mode=''")
         cursor.execute('CREATE TABLE exact_values (id BIGINT UNSIGNED PRIMARY KEY, amount DECIMAL(65,30), d DATE, dt DATETIME(6), duration TIME(6), payload VARBINARY(20)) ENGINE=InnoDB')
         cursor.execute("INSERT INTO exact_values VALUES (18446744073709551615,12345678901234567890123456789012345.123456789012345678901234567890,'0000-00-00','0000-00-00 00:00:00.123456','-838:59:59.999999',X'00ff0100')")
@@ -218,6 +226,30 @@ def qualify(route, evidence, *, password=None):
         assert cursor.fetchone()[0] == 'é€'
         (evidence / 'native-metadata.sql').write_bytes(payload)
         proof['checks'].append('native_mixed_charset_metadata_client_roundtrip_temporal_sequence_package_trigger_event')
+
+        from pgadmin.cdeadmin.providers.mysql_family.provider import MARIADB_ADMINISTRATION
+        def package_operation(operation, draft, target=None):
+            compiled = MARIADB_ADMINISTRATION._compile({'resource_kind': 'package',
+                'operation_id': operation, 'draft': draft, 'target_resource': target})
+            for statement in compiled['statements']:
+                cursor.execute(statement['source'], statement.get('parameters', ()))
+        package_operation('create_specification', {'database': schema, 'name': 'lifecycle',
+            'sql_mode': 'oracle', 'definition': 'AS FUNCTION answer RETURN INT; END'})
+        discovered = _resources(owner, {'route': {'database': schema}}, MARIADB_PROFILE)
+        target = next(row for row in discovered if row['resource_kind'] == 'package' and row['display_name'] == 'lifecycle')
+        assert 'package_specification' in target['native'] and 'package_body' not in target['native']
+        package_operation('create_body', {'definition': 'AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END'}, target)
+        cursor.execute('SELECT lifecycle.answer()');assert cursor.fetchone()[0] == 42
+        discovered = _resources(owner, {'route': {'database': schema}}, MARIADB_PROFILE)
+        target = next(row for row in discovered if row['resource_kind'] == 'package' and row['display_name'] == 'lifecycle')
+        package_operation('replace_body', {'definition': 'AS FUNCTION answer RETURN INT AS BEGIN RETURN 43; END; END'}, target)
+        cursor.execute('SELECT lifecycle.answer()');assert cursor.fetchone()[0] == 43
+        package_operation('drop_body', {}, target)
+        discovered = _resources(owner, {'route': {'database': schema}}, MARIADB_PROFILE)
+        retained = next(row for row in discovered if row['resource_kind'] == 'package' and row['display_name'] == 'lifecycle')
+        assert retained['native']['package_specification']['show_create'] and 'package_body' not in retained['native']
+        package_operation('replace_specification', {'definition': 'AS FUNCTION replacement RETURN INT; END'}, retained)
+        proof['checks'].append('native_independent_oracle_package_specification_body_create_replace_drop_preserves_declaration')
 
         (evidence / 'catalog.json').write_text(json.dumps(result, indent=2) + '\n')
         proof['complete'] = True

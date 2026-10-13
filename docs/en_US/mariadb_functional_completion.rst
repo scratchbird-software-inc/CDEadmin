@@ -25,6 +25,16 @@ MARIA-COMP-01: Native navigation and administration
   MySQL Shell or MySQL materialized views as MariaDB features. Discovery failure
   or denied metadata must not appear as an empty successful catalog.
 
+  Package discovery retains declaration and body observations separately on the
+  package node, including both native SHOW CREATE results. A same-name body must
+  never overwrite declaration metadata. In addition to combined create/replace,
+  expose independent declaration creation/replacement and body creation,
+  replacement and removal. Removing a body preserves its declaration; replacing
+  a declaration can invalidate its body and dependent callers. Existing-object
+  forms offer stored, current or Oracle SQL mode; stored mode requires observed
+  native context and must not be guessed. DDL remains independently committed,
+  with no retry or claim that a multi-statement operation is atomic.
+
 MARIA-COMP-02: Connections and native ownership
   Explorer, active connection selection and SQL sessions agree on exact engine,
   endpoint and database. Provide explicit connect/disconnect, independently

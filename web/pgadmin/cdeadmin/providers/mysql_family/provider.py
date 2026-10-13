@@ -235,9 +235,8 @@ def _administration(profile):
             'repair_objects', 'checksum_tables', 'backup_logical',
             'restore_logical',
         })
-        common['package'] = frozenset({
-            'inspect', 'create', 'alter', 'drop',
-        })
+        from ..mariadb_packages import OPERATIONS as package_operations
+        common['package'] = frozenset({'inspect', 'create', 'alter', 'drop'}) | package_operations
     return RelationalAdministration(RelationalAdminDialect(
         engine_id=profile.engine_id,
         quote_open='`',
@@ -2016,10 +2015,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             if kind in {'package', 'package body'} and (
                 profile is MARIADB_PROFILE
             ):
-                add('package', [schema_name], name, {
-                    'routine_type': str(routine_type).upper(),
-                    'data_type': data_type,
-                })
+                from .mariadb_catalog import identifier as quote_package
+                part = 'package_body' if kind == 'package body' else 'package_specification'
+                native = {'routine_type': 'PACKAGE', part: {
+                    'routine_type': str(routine_type).upper(), 'data_type': data_type,
+                    'show_create': optional_records('SHOW CREATE ' + str(routine_type).upper() + ' ' +
+                        quote_package(schema_name) + '.' + quote_package(name))}}
+                add('package', [schema_name], name, native)
                 continue
             if kind not in {'procedure', 'function'}:
                 continue
