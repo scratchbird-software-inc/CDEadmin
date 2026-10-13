@@ -1345,6 +1345,79 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('invalid', [False, True])
+def test_check_rebuild_with_one_inbound_foreign_key_is_atomic(tmp_path, invalid):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute('CREATE TABLE child(id INTEGER, parent_id INTEGER, '
+        'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO parent VALUES (1, ?), (2, ?)',
+        ['a' if invalid else 'aa', 'bb'])
+    connection.execute('INSERT INTO child VALUES (10, 1), (11, 2)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
+                '(id INTEGER, parent_id INTEGER)'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) >= 12
+        unsafe = deepcopy(desired)
+        unsafe_change = unsafe['rows'][parent['resource_id']]['native']['duckdb_change']
+        unsafe_change['intermediate_child_ddl'] = (
+            unsafe_change['intermediate_child_ddl'].replace(
+                'parent_id INTEGER', 'parent_id VARCHAR'))
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'inbound-check.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if invalid else 'committed'), outcome
+        if not invalid:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,parent_id FROM child ORDER BY id').fetchall() == [
+            (10, 1), (11, 2)]
+        assert observer.execute("SELECT constraint_type FROM duckdb_constraints() "
+            "WHERE table_name='child'").fetchall() == [('FOREIGN KEY',)]
+        assert observer.execute('SELECT id,payload FROM parent ORDER BY id').fetchall() == [
+            (1, 'a' if invalid else 'aa'), (2, 'bb')]
+        assert observer.execute("SELECT constraint_text FROM duckdb_constraints() "
+            "WHERE table_name='parent' AND constraint_type='CHECK'").fetchone()[0] == (
+            'CHECK((length(payload) > 0))' if invalid else
+            'CHECK((length(payload) >= 2))')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('invalid,parent_drift', (
     (False, False), (True, False), (False, True),
 ))

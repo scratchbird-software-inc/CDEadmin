@@ -46,6 +46,7 @@ def apply_review(provider, route, record):
             result['native_rollback_returned'] = True
             return result
         rebuild_rows = {}
+        inbound_rows = {}
         view_descriptors = {}
         macro_descriptors = {}
         for operation in fresh['operations']:
@@ -71,10 +72,43 @@ def apply_review(provider, route, record):
                         macro_descriptors[macro_id] = bindings
                 old_rows = connection.execute('SELECT count(*) FROM ' +
                     operation['target']).fetchone()[0]
+                inbound = operation.get('inbound_child')
+                parent_offset = inbound['parent_offset'] if inbound else 0
+                if inbound:
+                    from ...workspace.duckdb_schema_plan import _quote
+                    child = record['baseline']['rows'][inbound['child_resource_id']]
+                    child_target = '.'.join(_quote(part) for part in child['path'])
+                    inbound_rows[inbound['child_resource_id']] = connection.execute(
+                        'SELECT count(*) FROM ' + child_target).fetchone()[0]
                 for index, statement in enumerate(operation['statements']):
                     result['statement_dispatched'] = True
                     connection.execute(statement)
-                    if index == 0 and operation.get('stage_columns') is not None:
+                    if inbound and index in (0, inbound['final_offset']):
+                        phase = 0 if index == 0 else 1
+                        scope = (child['path'][0], child['path'][1],
+                            inbound['stage_names'][phase])
+                        columns = connection.execute(
+                            'SELECT column_name, data_type, column_default, is_nullable '
+                            'FROM duckdb_columns() WHERE database_name=? AND schema_name=? '
+                            'AND table_name=? ORDER BY column_index', scope).fetchall()
+                        expected_columns = [(item['name'], item['data_type'],
+                            item['default'], item['nullable']) for item in inbound['columns']]
+                        constraints = connection.execute(
+                            'SELECT constraint_type, constraint_column_names, '
+                            'referenced_table, referenced_column_names '
+                            'FROM duckdb_constraints() WHERE database_name=? '
+                            'AND schema_name=? AND table_name=?', scope).fetchall()
+                        fact = inbound['constraint']
+                        expected_constraints = ([] if phase == 0 else [(
+                            fact['constraint_type'], fact['column_names'],
+                            fact['referenced_table'], fact['referenced_column_names'])])
+                        if columns != expected_columns or constraints != expected_constraints:
+                            raise ValueError('Inbound child staging differs from reviewed model')
+                    if inbound and index in (1, inbound['final_offset'] + 1):
+                        phase = 0 if index == 1 else 1
+                        if connection.execute(inbound['data_checks'][phase]).fetchone()[0] != 0:
+                            raise ValueError('Inbound child stage rows differ from original')
+                    if index == parent_offset and operation.get('stage_columns') is not None:
                         stage_path = record['desired']['rows'][operation['resource_id']]['path']
                         scope = (stage_path[0], stage_path[1], operation['stage_name'])
                         columns = connection.execute(
@@ -100,7 +134,7 @@ def apply_review(provider, route, record):
                                     sorted((name,) for name in key_columns) or
                                 len(constraints) != len(key_columns) + bool(key_columns)):
                             raise ValueError('Native staged columns or constraints differ from review')
-                    if index == 1:
+                    if index == parent_offset + 1:
                         difference = connection.execute(
                             operation['data_check']).fetchone()[0]
                         if difference != 0:
@@ -242,6 +276,18 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][column_id])) ==
                                     operation['desired_view_column_sha256'][column_id]
                                 for column_id in operation.get('affected_view_column_ids', []))
+                        if verified and operation.get('inbound_child'):
+                            inbound = operation['inbound_child']
+                            child_id = inbound['child_resource_id']
+                            from ...workspace.duckdb_schema_plan import _quote
+                            child = record['baseline']['rows'][child_id]
+                            child_target = '.'.join(_quote(part) for part in child['path'])
+                            verified = (connection.execute('SELECT count(*) FROM ' +
+                                child_target).fetchone()[0] == inbound_rows[child_id] and
+                                all(observed['rows'].get(identity) is not None and
+                                    digest(_definition(observed['rows'][identity])) ==
+                                    operation['desired_inbound_sha256'][identity]
+                                    for identity in operation['affected_inbound_ids']))
                         if verified:
                             verified = all(observed['rows'].get(macro_id) is not None and
                                 digest(_definition(observed['rows'][macro_id])) ==

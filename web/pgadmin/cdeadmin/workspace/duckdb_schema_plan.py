@@ -1077,16 +1077,117 @@ def _validated_replayed_comment(kind, target, comment):
     return source
 
 
+def _validated_inbound_child(before, change, baseline, live, desired):
+    """Bound one plain FK child for a three-phase parent rebuild."""
+    child_id = change.get('inbound_child_resource_id')
+    child = live['rows'].get(child_id)
+    old_child = baseline['rows'].get(child_id)
+    new_child = desired['rows'].get(child_id)
+    if (not isinstance(child_id, str) or child is None or old_child is None or
+            new_child is None or child['kind'] != 'table' or
+            child['path'][:2] != before['path'][:2] or child_id == before['resource_id'] or
+            child['system'] != 'false' or new_child['native'].get('duckdb_change') is not None or
+            not re.fullmatch(r'[a-z_][a-z0-9_]*', child['name']) or
+            not _equal(_definition(old_child), _definition(child)) or
+            not _equal(_definition(new_child), _definition(child))):
+        raise ValueError('Inbound rebuild requires one unchanged same-schema child')
+    native = child['native']
+    metadata = native.get('catalog_metadata', {})
+    columns = native.get('columns')
+    constraints = native.get('constraints')
+    if (metadata.get('comment') is not None or metadata.get('tags') or
+            metadata.get('temporary') is not False or
+            metadata.get('has_primary_key') is not False or native.get('indexes') or
+            not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
+            len({item.get('name') for item in columns if isinstance(item, dict)}) !=
+                len(columns) or
+            not isinstance(constraints, list) or len(constraints) != 1 or
+            constraints[0].get('constraint_type') != 'FOREIGN KEY' or
+            constraints[0].get('referenced_table') != before['name'] or
+            not isinstance(constraints[0].get('column_names'), list) or
+            not isinstance(constraints[0].get('referenced_column_names'), list) or
+            not constraints[0]['column_names'] or
+            len(constraints[0]['column_names']) !=
+                len(constraints[0]['referenced_column_names']) or
+            any(not isinstance(item, dict) or item.get('comment') is not None or
+                item.get('default') is not None for item in columns)):
+        raise ValueError('Inbound child must have only its foreign key and plain columns')
+    source = _validated_ddl(change.get('intermediate_child_ddl'), 'table', child['path'])
+    original = native.get('ddl')
+    original_sections = _table_definition_sections(original)
+    interim_sections = _table_definition_sections(source)
+    if (original_sections is None or interim_sections is None or
+            any(token == ('token_type.keyword', 'generated') for token in
+                create_definition_tokens(original, 'table') or ()) or
+            original_sections[0] != interim_sections[0] or
+            len(original_sections[1]) != 1 or interim_sections[1]):
+        raise ValueError('Intermediate child must retain exact columns and remove its sole foreign key')
+    original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
+        re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
+        r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
+    if original_prefix is None:
+        raise ValueError('Inbound child native definition cannot be reconstructed')
+    target = '.'.join(_quote(part) for part in child['path'])
+    restore = 'CREATE TABLE ' + target + original[original_prefix.end():]
+    _validated_ddl(restore, 'table', child['path'])
+    stage_names = ['__scratchrobin_inbound_' + digest(source + suffix)[:16]
+        for suffix in ('_without_key', '_restore_key')]
+    if len(set(stage_names)) != 2 or any(_resource_id('table', child['path'][:2], name)
+            in live['rows'] or _resource_id('table', child['path'][:2], name)
+            in desired['rows'] for name in stage_names):
+        raise ValueError('Inbound child stage identity already exists')
+    names = ', '.join(_quote(item['name']) for item in columns)
+    def phase(definition, stage_name):
+        stage = '.'.join(_quote(part) for part in [*child['path'][:2], stage_name])
+        prefix = re.match(r'^\s*CREATE\s+TABLE\s+' + re.escape(target), definition, re.I)
+        if prefix is None:
+            raise ValueError('Inbound child requires an exact qualified definition')
+        creation = 'CREATE TABLE ' + stage + definition[prefix.end():]
+        _validated_ddl(creation, 'table', [*child['path'][:2], stage_name])
+        statements = [creation,
+            'INSERT INTO ' + stage + ' (' + names + ') SELECT ' + names + ' FROM ' + target,
+            'DROP TABLE ' + target + ' RESTRICT',
+            'ALTER TABLE ' + stage + ' RENAME TO ' + _quote(child['name'])]
+        check = ('SELECT count(*) FROM ((SELECT ' + names + ' FROM ' + target +
+            ' EXCEPT ALL SELECT ' + names + ' FROM ' + stage + ') UNION ALL (SELECT ' +
+            names + ' FROM ' + stage + ' EXCEPT ALL SELECT ' + names + ' FROM ' +
+            target + ')) AS differences')
+        return statements, check
+    first, first_check = phase(source, stage_names[0])
+    final, final_check = phase(restore, stage_names[1])
+    import duckdb
+    for statement, expected in zip([*first, *final],
+            ['CREATE', 'INSERT', 'DROP', 'ALTER'] * 2):
+        try:
+            parsed = duckdb.extract_statements(statement)
+        except duckdb.Error:
+            raise ValueError('Inbound child rebuild statement cannot be parsed') from None
+        if len(parsed) != 1 or parsed[0].type != getattr(duckdb.StatementType, expected):
+            raise ValueError('Inbound child rebuild requires exact native statements')
+    return child, first, final, {'child_resource_id': child_id,
+        'stage_names': stage_names, 'data_checks': [first_check, final_check],
+        'columns': [{key: item.get(key) for key in
+            ('name', 'data_type', 'default', 'nullable')} for item in columns],
+        'constraint': {key: constraints[0].get(key) for key in
+            ('constraint_type', 'column_names', 'referenced_table',
+             'referenced_column_names')}}
+
+
 def _validated_check_rebuild(before, after, change, target, baseline, live, desired):
     action = change.get('action') if isinstance(change, dict) else None
     allowed = {'rebuild-check-constraints': {'CHECK'},
+        'rebuild-check-with-inbound-child': {'CHECK'},
         'rebuild-unique-constraints': {'CHECK', 'UNIQUE'},
         'rebuild-foreign-keys': {'FOREIGN KEY'},
         'rebuild-drop-primary-key': {'PRIMARY KEY', 'NOT NULL'},
         'rebuild-retarget-primary-key': {'PRIMARY KEY', 'NOT NULL'}}.get(action)
-    if allowed is None or change != {'action': action,
-                  'complete_definition_confirmed': True,
-                  'preserve_rows_confirmed': True}:
+    expected_change = {'action': action,
+        'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+    if action == 'rebuild-check-with-inbound-child':
+        expected_change.update(inbound_child_resource_id=change.get(
+            'inbound_child_resource_id'), intermediate_child_ddl=change.get(
+            'intermediate_child_ddl'))
+    if allowed is None or change != expected_change:
         raise ValueError('Constraint rebuild needs complete-definition and row-preservation confirmation')
     old, new = deepcopy(_definition(before)), deepcopy(_definition(after))
     old_constraints, new_constraints = old.pop('constraints'), new.pop('constraints')
@@ -1172,8 +1273,12 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if (desired_index is None or not _equal(_definition(index), _definition(desired_index)) or
                 index['native'].get('catalog_metadata', {}).get('tags')):
             raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
+    inbound = (_validated_inbound_child(before, change, baseline, live, desired)
+        if action == 'rebuild-check-with-inbound-child' else None)
     preserved_views, preserved_macros = [], []
     for row in live['rows'].values():
+        if inbound is not None and row['kind'] in {'view', 'macro'}:
+            raise ValueError('Inbound child rebuild cannot preserve views or macros')
         if row['kind'] == 'view':
             view_id = row['resource_id']
             old_view = baseline['rows'].get(view_id)
@@ -1245,8 +1350,11 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if row['kind'] == 'table':
             blocked_types = ({'UNIQUE'} if action == 'rebuild-foreign-keys' else
                 {'FOREIGN KEY'} | ({'UNIQUE'} if action ==
-                    'rebuild-check-constraints' else set())) if (
-                row['resource_id'] == before['resource_id']) else {'FOREIGN KEY'}
+                    'rebuild-check-constraints' or action ==
+                    'rebuild-check-with-inbound-child' else set())) if (
+                row['resource_id'] == before['resource_id']) else (
+                    set() if inbound is not None and row['resource_id'] ==
+                        inbound[0]['resource_id'] else {'FOREIGN KEY'})
             if any(item.get('constraint_type') in blocked_types for item in
                     row['native'].get('constraints', [])):
                 raise ValueError('Constraint rebuild is blocked by native key dependencies')
@@ -1353,6 +1461,12 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             raise ValueError('Native constraint rebuild statement is not parseable') from None
         if len(parsed) != 1 or parsed[0].type != getattr(duckdb.StatementType, expected):
             raise ValueError('Native constraint rebuild requires exact reviewed statements')
+    inbound_details = None
+    if inbound is not None:
+        child, first, final, inbound_details = inbound
+        inbound_details['parent_offset'] = len(first)
+        inbound_details['final_offset'] = len(first) + len(statements)
+        statements = [*first, *statements, *final]
     stage_columns = ([{key: column.get(key) for key in
         ('name', 'data_type', 'default', 'nullable')}
         for column in after['native']['columns']]
@@ -1361,7 +1475,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     return (statements, check, dependency_check, dependency_count,
         requires_sequence_dependency, source, new_constraints, indexes,
         fk_parents, stage_name, stage_columns, stage_key_columns,
-        preserved_views, preserved_macros)
+        preserved_views, preserved_macros, inbound_details)
 
 
 def _ordered_operations(operations, desired):
@@ -1422,7 +1536,8 @@ def plan(baseline, desired, live):
         if row['kind'] == 'table' and isinstance(row['native'].get('duckdb_change'), dict)
         and row['native']['duckdb_change'].get('action') in
             {'rebuild-check-constraints', 'rebuild-unique-constraints',
-             'rebuild-foreign-keys', 'rebuild-drop-primary-key',
+             'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
+             'rebuild-drop-primary-key',
              'rebuild-retarget-primary-key'}}
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
@@ -1569,14 +1684,15 @@ def plan(baseline, desired, live):
             elif (after['kind'] == 'table' and isinstance(change, dict) and
                   change.get('action') in
                   {'rebuild-check-constraints', 'rebuild-unique-constraints',
-                   'rebuild-foreign-keys', 'rebuild-drop-primary-key',
+                   'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
+                   'rebuild-drop-primary-key',
                    'rebuild-retarget-primary-key'}):
                 operation = 'rebuild'
                 (_rebuild_statements, _data_check, _dependency_check,
                  _dependency_count, _requires_sequence_dependency,
                  _original_source, _expected_constraints, _replayed_indexes,
                  _fk_parents, _stage_name, _stage_columns, _stage_key_columns,
-                 _preserved_views, _preserved_macros) = (
+                 _preserved_views, _preserved_macros, _inbound_details) = (
                     _validated_check_rebuild(before, after, change, target,
                         baseline, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
@@ -1662,6 +1778,27 @@ def plan(baseline, desired, live):
             elif after['kind'] == 'table' and isinstance(change, dict) and change.get('action') == 'add-primary-key':
                 operation_record['postcondition'] = {'primary_key_columns': _pk_columns}
             elif operation == 'rebuild':
+                if _inbound_details is not None:
+                    inbound_id = _inbound_details['child_resource_id']
+                    inbound_path = baseline['rows'][inbound_id]['path']
+                    inbound_rows = {key: row for key, row in baseline['rows'].items()
+                        if key == inbound_id or (row['kind'] in {'column', 'constraint'} and
+                            row.get('path', [])[:3] == inbound_path)}
+                    desired_inbound_ids = {key for key, row in desired['rows'].items()
+                        if key == inbound_id or (row['kind'] in {'column', 'constraint'} and
+                            row.get('path', [])[:3] == inbound_path)}
+                    if (not inbound_rows or set(inbound_rows) != desired_inbound_ids or
+                            any(key not in desired['rows'] or
+                            desired['rows'][key]['native'].get('duckdb_change') is not None or
+                            not _equal(_definition(row), _definition(desired['rows'][key]))
+                            for key, row in inbound_rows.items())):
+                        raise ValueError('Inbound child and descendants must remain unchanged')
+                    operation_record.update(inbound_child=_inbound_details,
+                        affected_inbound_ids=sorted(inbound_rows),
+                        baseline_inbound_sha256={key: digest(_definition(row))
+                            for key, row in inbound_rows.items()},
+                        desired_inbound_sha256={key: digest(_definition(
+                            desired['rows'][key])) for key in inbound_rows})
                 if _stage_columns is not None:
                     old_columns = {row['resource_id']: row for row in baseline['rows'].values()
                         if row['kind'] == 'column' and row.get('path', [])[:3] == after['path']}

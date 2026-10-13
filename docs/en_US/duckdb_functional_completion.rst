@@ -376,6 +376,23 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   table may have a foreign key in this first native
   subset; this also excludes inbound references to the child. Unchanged
   independent UNIQUE constraints are not yet admitted alongside this action.
+  A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
+  constraints on a parent referenced by exactly one unchanged child table
+  when that simple-name child has only one outgoing foreign key to the parent,
+  plain unchanged columns, and no indexes, comments, defaults, other
+  constraints or sequence ownership. The captured file has no user views or
+  macros in this first inbound subset. The reviewer
+  supplies the complete intermediate child CREATE TABLE definition without
+  the foreign key. The one-time receipt binds the parent, child, their
+  columns and constraint children, and both complete CREATE definitions.
+  In one transaction the child is copied to a constraint-free stage and
+  swapped; the parent is rebuilt under the ordinary row, index, comment and
+  dependency checks; then the child is copied into a second stage carrying
+  its original foreign key and swapped again. Each stage must match reviewed
+  native columns and constraint facts and preserve row multisets before its
+  predecessor is dropped. Any failure rolls back both tables; fresh discovery
+  verifies both table definitions, rows and the restored foreign key. More
+  complex inbound graphs remain blocked.
   Native staging validates existing rows against new references before the
   original child is dropped; a failure rolls back. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain
