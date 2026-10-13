@@ -1174,6 +1174,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     nulls = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'NOT NULL'] if (
             isinstance(constraints, list)) else []
+    original = native.get('ddl')
+    original_sections = _table_definition_sections(original, inline_unique=True)
+    generated_names = _admitted_generated_columns(original_sections, columns)
     parent_foreign = [item for item in foreign
         if item.get('referenced_table') == before['name']]
     other_foreign = [item for item in foreign
@@ -1186,6 +1189,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             {item.get('resource_id') for item in native['indexes']} !=
                 {item['resource_id'] for item in indexes} or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
+            generated_names is None or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
             not isinstance(constraints, list) or len(parent_foreign) != 1 or
@@ -1199,7 +1203,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 len(item['column_names']) != len(item['referenced_column_names'])
                 for item in foreign) or
             any(not isinstance(item, dict) or
-                not constant_default(item.get('default')) for item in columns)):
+                (item.get('name') not in generated_names and
+                    not constant_default(item.get('default'))) for item in columns)):
         raise ValueError('Inbound child requires one parent key, at most eight other keys, bounded constraints and admitted defaults')
     other_parent_sha256 = {}
     for edge in other_foreign:
@@ -1226,8 +1231,6 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 index_metadata.get('tags') or index_metadata.get('unique') is not False):
             raise ValueError('Inbound child requires unchanged plain independent indexes')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
-    original = native.get('ddl')
-    original_sections = _table_definition_sections(original, inline_unique=True)
     interim_sections = _table_definition_sections(source, inline_unique=True)
     original_secondary = original_sections[1] if original_sections else ()
     parent_clause = parent_foreign[0].get('constraint_text')
@@ -1240,8 +1243,6 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         if parent_sections is not None and len(parent_sections[1]) == 1 and
             section == parent_sections[1][0]]
     if (original_sections is None or interim_sections is None or
-            any(token == ('token_type.keyword', 'generated') for token in
-                create_definition_tokens(original, 'table') or ()) or
             original_sections[0] != interim_sections[0] or
             len(original_secondary) != len(checks) + len(uniques) + len(foreign) or
             len(retained_sections) != 1 or
@@ -1262,6 +1263,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             in desired['rows'] for name in stage_names):
         raise ValueError('Inbound child stage identity already exists')
     names = ', '.join(_quote(item['name']) for item in columns)
+    copy_names = ', '.join(_quote(item['name']) for item in columns
+        if item['name'] not in generated_names)
     def sequence_dependencies(table_name):
         literals = ["'" + value.replace("'", "''") + "'" for value in
             [*child['path'][:2], table_name]]
@@ -1292,7 +1295,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         creation = 'CREATE TABLE ' + stage + definition[prefix.end():]
         _validated_ddl(creation, 'table', [*child['path'][:2], stage_name])
         statements = [creation,
-            'INSERT INTO ' + stage + ' (' + names + ') SELECT ' + names + ' FROM ' + target,
+            'INSERT INTO ' + stage + ' (' + copy_names + ') SELECT ' + copy_names + ' FROM ' + target,
             'DROP TABLE ' + target + ' RESTRICT',
             'ALTER TABLE ' + stage + ' RENAME TO ' + _quote(child['name'])]
         check = ('SELECT count(*) FROM ((SELECT ' + names + ' FROM ' + target +

@@ -458,6 +458,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   side-effect qualification.
   Each stage's native default facts must match the reviewed child columns
   before the old child is dropped.
+  An unchanged virtual generated child column may survive both stages under
+  the same simple-expression whitelist as the parent constraint rebuild.
+  Both copies name only base columns, while each stage compares the complete
+  row multiset including recomputed generated values. Function or sequence
+  expressions in generated child columns remain pre-dispatch blockers.
   Native staging validates existing rows against new references before the
   original child is dropped; a failure rolls back. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain
