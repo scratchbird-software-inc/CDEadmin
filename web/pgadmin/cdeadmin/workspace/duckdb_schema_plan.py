@@ -224,16 +224,18 @@ def _validated_macro_replacement(before, after, target):
     if (not isinstance(old_overloads, list) or len(old_overloads) != 1 or
             not isinstance(new_overloads, list) or len(new_overloads) != 1 or
             previous['overload_count'] != 1 or desired['overload_count'] != 1):
-        raise ValueError('Only one native scalar macro overload can be replaced')
+        raise ValueError('Only one native macro overload can be replaced')
     old_definition = old_overloads[0].pop('definition', None)
     new_definition = new_overloads[0].pop('definition', None)
-    if (old_overloads[0].get('catalog_metadata', {}).get('function_type') != 'macro' or
+    macro_kind = old_overloads[0].get('catalog_metadata', {}).get('function_type')
+    if (macro_kind not in {'macro', 'table_macro'} or
+            new_overloads[0].get('catalog_metadata', {}).get('function_type') != macro_kind or
             old_overloads[0].get('catalog_metadata', {}).get('varargs') or
             not isinstance(new_definition, str) or not new_definition.strip() or
             new_definition == old_definition or
             len(new_definition.encode('utf8')) > 8192 or '\x00' in new_definition or
             any(marker in new_definition for marker in (';', '--', '/*', '*/'))):
-        raise ValueError('Macro replacement requires one changed bounded scalar definition')
+        raise ValueError('Macro replacement requires one changed bounded definition of the same native kind')
     if (previous['definition'] != old_definition or
             desired['definition'] != new_definition):
         raise ValueError('Macro group and overload definitions must agree')
@@ -246,17 +248,18 @@ def _validated_macro_replacement(before, after, target):
                 not isinstance(parameter.get('name'), str) or
                 parameter.get('data_type') is not None
                 for parameter in parameters)):
-        raise ValueError('Macro replacement requires unchanged scalar parameters')
+        raise ValueError('Macro replacement requires unchanged native parameters')
     source = ('CREATE OR REPLACE MACRO ' + target + '(' +
               ', '.join(_quote(parameter['name']) for parameter in parameters) +
-              ') AS ' + new_definition.strip())
+              ') AS ' + ('TABLE ' if macro_kind == 'table_macro' else '') +
+              new_definition.strip())
     import duckdb
     try:
         statements = duckdb.extract_statements(source)
     except duckdb.Error:
         raise ValueError('Native DuckDB parser rejected the macro replacement') from None
     if len(statements) != 1 or statements[0].type != duckdb.StatementType.CREATE:
-        raise ValueError('Exactly one native scalar macro replacement is required')
+        raise ValueError('Exactly one native macro replacement is required')
     return source, new_definition
 
 

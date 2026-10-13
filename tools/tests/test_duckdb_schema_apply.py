@@ -610,6 +610,41 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
         provider.client.close()
 
 
+def test_reviewed_native_table_macro_replacement(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE MACRO rowplus(x) AS TABLE SELECT x + 1 AS value')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'macro' and row['name'] == 'rowplus')
+        assert original['native']['overloads'][0]['catalog_metadata']['function_type'] == 'table_macro'
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        changed['native']['definition'] = 'SELECT (x + 2) AS "value"'
+        changed['native']['overloads'][0]['definition'] = changed['native']['definition']
+        changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'table-macro-replace.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT * FROM rowplus(5)').fetchone() == (7,)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

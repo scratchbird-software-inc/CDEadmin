@@ -148,9 +148,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
   explicit DROP intent, view replacement, isolated column alterations, native
-  enum extension, single-overload scalar macro replacement and exact-identity
-  table/view/column rename, explicit primary-key addition and isolated native
-  object comments are previewed
+  enum extension, single-overload scalar or table macro replacement,
+  exact-identity table/view/column rename, explicit primary-key addition and
+  isolated native object comments are previewed
   through the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
   One-field column default or nullability alterations require explicit change
@@ -166,10 +166,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
   reference the prior type definition; any such column conversion requires a
   separate reviewed column alteration. A macro replacement requires exactly
-  one observed scalar overload, unchanged parameters and metadata, and an
-  explicit new bounded definition. Table macros, overload groups and parameter
-  edits remain blockers. Both operations verify their native postconditions
-  after commit; an uncertain or mismatched observation is never replayed.
+  one observed scalar or table overload, unchanged macro kind, parameters and
+  metadata, and an explicit new bounded definition. Table replacement uses
+  ``CREATE OR REPLACE MACRO ... AS TABLE``; scalar replacement omits ``TABLE``.
+  Overload groups and parameter edits remain blockers. Both operations verify
+  their native postconditions after commit; an uncertain or mismatched
+  observation is never replayed.
   A rename requires the baseline source resource ID, unchanged native
   definition, unchanged parent, an absent target identity and an explicit old
   name confirmation. The plan binds both source and destination IDs, dispatches

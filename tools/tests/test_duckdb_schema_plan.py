@@ -352,3 +352,27 @@ def test_scalar_macro_definition_replacement_rejects_other_edits():
     changed['native']['overloads'][0]['catalog_metadata']['function_type'] = 'table_macro'
     changed['native']['duckdb_change'] = {'action': 'replace-definition'}
     assert plan(model(existing), model(changed), model(existing))['blockers']
+
+
+def test_table_macro_definition_replacement_preserves_native_kind():
+    pytest.importorskip('duckdb')
+    existing = row('macro', ['file', 'main', 'rows_for'])
+    overload = {'catalog_metadata': {'function_type': 'table_macro', 'varargs': None},
+                'parameters': [{'name': 'x', 'data_type': None}],
+                'definition': 'SELECT (x + 1) AS "value"'}
+    existing['native'].update(
+        definition=overload['definition'], parameters=deepcopy(overload['parameters']),
+        overloads=[overload], overload_count=1)
+    changed = deepcopy(existing)
+    changed['native']['definition'] = 'SELECT (x + 2) AS "value"'
+    changed['native']['overloads'][0]['definition'] = changed['native']['definition']
+    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    result = plan(model(existing), model(changed), model(existing))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        'CREATE OR REPLACE MACRO "file"."main"."rows_for"("x") '
+        'AS TABLE SELECT (x + 2) AS "value"')
+    assert result['operations'][0]['postcondition'] == {
+        'definition': 'SELECT (x + 2) AS "value"'}
+    changed['native']['overloads'][0]['catalog_metadata']['function_type'] = 'macro'
+    assert plan(model(existing), model(changed), model(existing))['blockers']
