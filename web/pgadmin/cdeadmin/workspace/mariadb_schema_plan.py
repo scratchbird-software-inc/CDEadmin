@@ -46,14 +46,24 @@ def parts(row,sql_mode):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mariadb_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns','drop_periods','temporal_history'}:raise ValueError('Unknown table alteration intent')
+    if not isinstance(intent,dict) or set(intent)-{'drop_columns','drop_periods','temporal_history','rename_columns'}:raise ValueError('Unknown table alteration intent')
     temporal='WITH SYSTEM VERSIONING' in old['suffix'].upper()
     if temporal and intent.get('temporal_history') != 'KEEP':
         raise ValueError('System-versioned schema alteration requires explicit mariadb_change.temporal_history=KEEP acceptance of native history semantics')
     if 'temporal_history' in intent and (not temporal or intent['temporal_history'] != 'KEEP'):
         raise ValueError('Native temporal history policy is KEEP on an existing system-versioned table')
-    inverse={};renames={};automatic_references=set()
-    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column'}
+    renames=intent.get('rename_columns',{})
+    if (not isinstance(renames,dict) or len(renames)>128 or
+            any(not isinstance(value,str) or not 1<=len(value)<=64 or '\x00' in value
+                for pair in renames.items() for value in pair) or
+            len(set(renames.values()))!=len(renames) or any(
+                ('column',old) not in columns or ('column',old) in desired or
+                ('column',new) in columns or ('column',new) not in desired
+                for old,new in renames.items())):
+        raise ValueError('Column rename requires distinct exact baseline and desired native names')
+    inverse={new:old for old,new in renames.items()}
+    automatic_references=set();renamed_periods=set()
+    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column' and key[1] not in renames}
     declared=intent.get('drop_columns',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=removals:
         raise ValueError('Column removal requires exact explicit mariadb_change.drop_columns intent')
@@ -63,11 +73,20 @@ def alteration(before,after,sql_mode):
         raise ValueError('Period removal requires exact explicit mariadb_change.drop_periods intent')
     if ('period','SYSTEM_TIME') in columns and ('period','SYSTEM_TIME') not in desired:
         raise ValueError('Removing system-time history requires a separate explicit native temporal lifecycle operation')
+    if renames:
+        from .mysql_relational_fields import rename_definition
+        remapped=rename_definition(before,deepcopy(before['native']),renames,sql_mode,engine='mariadb')
+        _layout,renamed_clauses,_order=parts({'name':before['name'],'native':remapped},sql_mode)
+        automatic_references={key for key in columns if key[0] in {'foreign-key','index','primary'} and
+            key in desired and renamed_clauses.get(key)==desired[key]}
+        renamed_periods={key for key in columns if key[0]=='period' and key in desired and columns[key]!=desired[key] and renamed_clauses.get(key)==desired[key]}
+        if ('period','SYSTEM_TIME') in renamed_periods:
+            raise ValueError('System-time boundary rename requires a separate explicit native temporal lifecycle operation')
     for key in columns.keys() & desired.keys():
         if key[0]=='foreign-key' and columns[key]!=desired[key] and key not in automatic_references:
             raise ValueError('Same-name foreign-key replacement requires separately reviewed DROP and ADD or an explicit new constraint name; foreign-key checks are never disabled')
     for key in columns.keys() & desired.keys():
-        if key[0]=='period' and columns[key]!=desired[key]:
+        if key[0]=='period' and key not in renamed_periods and columns[key]!=desired[key]:
             raise ValueError('Period boundary replacement requires separately reviewed native DROP and ADD')
     drops=[];mutations=[];additions=[]
     for key in sorted(columns):

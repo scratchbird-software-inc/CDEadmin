@@ -932,6 +932,25 @@ class ProviderWorkspaceService:
         except (ValueError, RecursionError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mariadb_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if (not isinstance(request, dict) or not {'database_target_id', 'original', 'snapshot'} <= set(request) or
+                set(request) - {'database_target_id', 'original', 'snapshot', 'allow_new_columns', 'allow_column_renames', 'allow_foreign_keys', 'allow_temporal_history'} or
+                type(request.get('allow_new_columns', False)) is not bool or
+                type(request.get('allow_column_renames', False)) is not bool or
+                type(request.get('allow_foreign_keys', False)) is not bool or
+                type(request.get('allow_temporal_history', False)) is not bool):
+            raise ProviderWorkspaceError('Original and edited MariaDB relational designs and boolean column admission are required')
+        catalog = self.mariadb_catalog(server, {'database_target_id': request['database_target_id']})
+        try:
+            return handoff(catalog['snapshot'], request['original'], request['snapshot'], engine='mariadb',
+                           allow_new_columns=request.get('allow_new_columns', False),
+                           allow_column_renames=request.get('allow_column_renames', False),
+                           allow_foreign_keys=request.get('allow_foreign_keys', False),
+                allow_temporal_history=request.get('allow_temporal_history', False))
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mariadb_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mariadb_test_data import generate, template

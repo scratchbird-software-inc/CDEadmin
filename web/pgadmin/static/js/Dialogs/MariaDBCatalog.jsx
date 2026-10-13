@@ -12,6 +12,7 @@ import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 export default function MariaDBCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
   const [metadata, setMetadata] = useState(null);
+  const [reviewBaseline, setReviewBaseline] = useState(null);
   const [source, setSource] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
@@ -19,7 +20,7 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
   const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const serial = useRef(0);
   useEffect(() => {
-    serial.current++; setMetadata(null); setData(null); setRelation(''); setResult(null); setComparison(null); setSource(''); setError(''); setBusy(false);
+    serial.current++; setReviewBaseline(null); setMetadata(null); setData(null); setRelation(''); setResult(null); setComparison(null); setSource(''); setError(''); setBusy(false);
     setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -83,7 +84,7 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
           const file = event.target.files?.[0], token = ++serial.current; event.target.value = '';
           if(!file) return;
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {const text = await file.text(); if(token === serial.current) {setSource(text); setMetadata(null); setComparison(null); setError('');}}
+          try {const text = await file.text(); if(token === serial.current) {setSource(text); setReviewBaseline(null); setMetadata(null); setComparison(null); setError('');}}
           catch {if(token === serial.current) setError('Unable to read catalog file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => capture(true)}>Compare with live catalog</Button>
@@ -119,11 +120,11 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
     {result && <Alert severity="info">Server UID: {result.server_uid}. Coverage: {result.provenance.coverage}. Objects: {result.provenance.objects}.</Alert>}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {result?.snapshot && <FirebirdDesignStorage engine="mariadb" post={post} databaseTargetId={databaseTargetId} kind="catalog" disabled={busy}
-      capture={() => ({snapshot: source ? JSON.parse(source) : result.snapshot, baseline: result.snapshot})}
-      onLoad={value => {setSource(JSON.stringify(value.snapshot)); setMetadata(null); setComparison(null);}} />}
+      capture={() => ({snapshot: source ? JSON.parse(source) : result.snapshot, baseline: reviewBaseline ? JSON.parse(reviewBaseline) : result.snapshot})}
+      onLoad={value => {setReviewBaseline(JSON.stringify(value.baseline || result.snapshot)); setSource(JSON.stringify(value.snapshot)); setMetadata(null); setComparison(null);}} />}
     {(result?.snapshot || source) && <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
       <Box component="small">Native SQL source: {source ? 'imported or saved DDN' : 'latest native capture'}.</Box>
-      <Button disabled={busy || !source} onClick={() => {setSource(''); setMetadata(null); setComparison(null);}}>Use latest native capture</Button>
+      <Button disabled={busy || !source} onClick={() => {setSource(''); setReviewBaseline(null); setMetadata(null); setComparison(null);}}>Use latest native capture</Button>
     </Box>}
     {metadata && <Box>
       <Alert severity="info">Native SQL export only. Imported definitions do not authorize execution. Statements: {metadata.statements.length}.</Alert>
@@ -134,7 +135,7 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
         slotProps={{input: {readOnly: true}}} />
     </Box>}
     {result?.snapshot && <MariaDBSchemaChanges post={post} databaseTargetId={databaseTargetId}
-      baseline={JSON.stringify(result.snapshot)} source={source} />}
+      baseline={reviewBaseline || JSON.stringify(result.snapshot)} source={source} />}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="mariadb/catalog-comparison" aria-label="MariaDB catalog differences"
         rows={comparison.changes} rowKeyGetter={row => row.resource_id} columns={[
@@ -144,7 +145,8 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
         ]} />
     </Box>}
     {display === 'relations' && result?.diagram?.snapshot && <FirebirdERD engine="mariadb" diagram={result.diagram}
-      post={post} databaseTargetId={databaseTargetId} generation={result.generation} />}
+      post={post} databaseTargetId={databaseTargetId} generation={result.generation} onReviewBusyChange={setBusy}
+      onReview={value => {setReviewBaseline(value.baseline); setSource(value.desired); setMetadata(null); setComparison(null); setDisplay('inventory'); setView(result.snapshot.view);}} />}
     {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />

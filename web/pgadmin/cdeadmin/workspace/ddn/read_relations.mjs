@@ -8,15 +8,15 @@ try {
     if (Buffer.byteLength(input) > 16 * 1024 * 1024) throw new Error();
   }
   const engine = process.argv[2] || 'firebird';
-  if (!['firebird', 'mysql'].includes(engine)) throw new Error();
+  if (!['firebird', 'mysql', 'mariadb'].includes(engine)) throw new Error();
   const snapshot = JSON.parse(input), rows = [], fields = [], fieldRecords = [], relations = [], objectIds = new Map(), ids = new Set();
   const visit = (node, parent = null, namespace = null) => {
-    if (engine === 'mysql' && node.type === 'relation') {
+    if (['mysql', 'mariadb'].includes(engine) && node.type === 'relation') {
       relations.push({uid: node.props?.uid ?? null, namespace, from_ref: node.from?.$ref ?? null,
         to_ref: node.to?.$ref ?? null, kind: node.props?.kind ?? null, enforcement: node.props?.enforcement ?? null,
         native_json: node.props?.x_record?.native_json ?? null});
     }
-    if (engine === 'mysql' && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
+    if (['mysql', 'mariadb'].includes(engine) && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
     if (node.type === 'field' && typeof node.props?.uid === 'string') {
       fields.push(node.props.uid);
       fieldRecords.push({uid: node.props.uid, parent_resource_id: parent, label: node.label,
@@ -29,7 +29,7 @@ try {
       if (typeof facts.resource_id !== 'string' || typeof facts.native_json !== 'string' ||
           typeof node.props.uid !== 'string' || ids.has(facts.resource_id)) throw new Error();
       ids.add(facts.resource_id);
-      if (engine === 'mysql') {
+      if (['mysql', 'mariadb'].includes(engine)) {
         const alias = namespace + '.' + node.id;
         if (objectIds.has(alias)) throw new Error();
         objectIds.set(alias, facts.resource_id);
@@ -50,7 +50,7 @@ try {
   const relationships = relations.map(({namespace, from_ref, to_ref, ...facts}) => ({...facts,
     source: resolve(namespace, from_ref), target: resolve(namespace, to_ref)}));
   process.stdout.write(JSON.stringify({rows, fields, field_records: fieldRecords,
-    ...(engine === 'mysql' ? {relationships} : {})}));
+    ...(['mysql', 'mariadb'].includes(engine) ? {relationships} : {})}));
 } catch {
   process.stderr.write('Invalid or unsupported native relational DDN document.');
   process.exitCode = 1;

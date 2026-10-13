@@ -10,6 +10,19 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   </div>,
 }));
 
+it('binds MariaDB graphical edits and temporal acceptance to its own target', async () => {
+  const Component = withTheme(FirebirdERD);
+  const snapshot = {format:'ddn-workspace@1', entry:'relations.ddn', view:'relations_1', files:{'relations.ddn':'native design'}};
+  const post = jest.fn().mockResolvedValue({baseline:'before', desired:'after'}), onReview = jest.fn();
+  render(<Component diagram={{snapshot, views:[]}} engine="mariadb" databaseTargetId="maria-target" post={post} onReview={onReview} />);
+  fireEvent.click(screen.getByLabelText('Include graphical column renames'));
+  fireEvent.click(screen.getByLabelText('Accept native KEEP-history semantics for temporal schema changes'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before', desired:'after'}));
+  expect(post).toHaveBeenCalledWith({action:'mariadb_relational_review', request:{database_target_id:'maria-target',
+    original:snapshot, snapshot, allow_column_renames:true, allow_temporal_history:true}});
+});
+
 describe('Native relational DDN handoff', () => {
   const Component = withTheme(FirebirdERD);
   const diagram = {snapshot: {format: 'ddn-workspace@1', entry: 'relations.ddn', view: 'relations_1', files: {'relations.ddn': 'native design'}},

@@ -22,7 +22,7 @@ def _exact_json(value):
 
 
 def read_relations(snapshot, *, engine="firebird"):
-    if engine not in {"firebird", "mysql"}:
+    if engine not in {"firebird", "mysql", "mariadb"}:
         raise ValueError("Unsupported relational engine")
     if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
             snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
@@ -52,7 +52,7 @@ def read_relations(snapshot, *, engine="firebird"):
             raise ValueError('Duplicate relational field identity')
         children = []
         for row in rows:
-            if engine == 'mysql':
+            if engine in {'mysql', 'mariadb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
                     '_property_names': field['property_names']} for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
@@ -72,7 +72,7 @@ def read_relations(snapshot, *, engine="firebird"):
                     raise ValueError('Relational column facts lack their exact field identity')
                 children.append({**column, 'uid': uid, 'native_json': _exact_json(column['native']),
                                  'parent_resource_id': row['resource_id']})
-        if engine == "mysql" and rows:
+        if engine in {"mysql", "mariadb"} and rows:
             rows[0]["graphical_relationships"] = parsed.get("relationships", [])
         combined = rows + children
         if len({row['resource_id'] for row in combined}) != len(combined):
@@ -84,17 +84,19 @@ def read_relations(snapshot, *, engine="firebird"):
         _SLOTS.release()
 
 
-def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False):
-    if type(allow_new_columns) is not bool or (allow_new_columns and engine != "mysql"):
-        raise ValueError("New-column admission is available only for MySQL")
-    if type(allow_column_renames) is not bool or (allow_column_renames and engine != "mysql"):
-        raise ValueError("Column-rename admission is available only for MySQL")
-    if type(allow_foreign_keys) is not bool or (allow_foreign_keys and engine != "mysql"):
-        raise ValueError("Foreign-key design admission is available only for MySQL")
+def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new_columns=False, allow_column_renames=False, allow_foreign_keys=False, allow_temporal_history=False):
+    if type(allow_new_columns) is not bool or (allow_new_columns and engine not in {"mysql", "mariadb"}):
+        raise ValueError("New-column admission is available only for MySQL/MariaDB")
+    if type(allow_column_renames) is not bool or (allow_column_renames and engine not in {"mysql", "mariadb"}):
+        raise ValueError("Column-rename admission is available only for MySQL/MariaDB")
+    if type(allow_foreign_keys) is not bool or (allow_foreign_keys and engine not in {"mysql", "mariadb"}):
+        raise ValueError("Foreign-key design admission is available only for MySQL/MariaDB")
+    if type(allow_temporal_history) is not bool or (allow_temporal_history and engine!='mariadb'):
+        raise ValueError('Temporal KEEP-history admission applies only to MariaDB')
     constraint_changes = {}
     current = read_catalog(_json(catalog_snapshot), engine=engine)
     before, after = read_relations(original, engine=engine), read_relations(desired, engine=engine)
-    if engine == "mysql":
+    if engine in {"mysql", "mariadb"}:
         def relationships(rows):
             values = [edge for row in rows.values() for edge in row.get('graphical_relationships', [])]
             for edge in values:
@@ -103,7 +105,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         previous={edge.get('uid'):edge for edge in relationships(before)}
         if allow_foreign_keys:
             from .mysql_relational_constraints import relationship_changes
-            constraint_changes = relationship_changes(relationships(before), relationships(after), current['rows'])
+            constraint_changes = relationship_changes(relationships(before), relationships(after), current['rows'],engine=engine)
         elif any(edge.get('uid') is None or not _equal(previous.get(edge['uid']),edge) for edge in relationships(after)):
             raise ValueError('Graphical relationship changes require explicit native foreign-key reconciliation; enable foreign-key design admission or edit the owning table native definition')
     baseline, proposed = deepcopy(catalog_snapshot), deepcopy(catalog_snapshot)
@@ -117,17 +119,23 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
         if old['uid'] != live['uid'] or row['uid'] != live['uid']:
             raise ValueError('Relational design belongs to another database or object')
         facts = [deepcopy(old['native']), deepcopy(row['native'])]
-        if engine == 'mysql':
+        if engine in {'mysql', 'mariadb'}:
             from .mysql_relational_fields import merge_fields
             roots = [item for item in current['rows'].values() if item['kind'] == 'database']
             if len(roots) != 1: raise ValueError('Native relational review requires one database')
+            mode=roots[0]['native'].get('definition_context',{}).get('sql_mode',roots[0]['native']['catalog_row'].get('sql_mode',''))
             facts[1] = merge_fields({**old, 'name': live['name'], 'kind': live['kind']},
                 {**row, 'name': live['name'], 'kind': live['kind']},
-                roots[0]['native']['catalog_row']['sql_mode'], allow_new_columns=allow_new_columns, allow_column_renames=allow_column_renames)
+                mode, allow_new_columns=allow_new_columns, allow_column_renames=allow_column_renames,engine=engine)
             if identity in constraint_changes:
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
-                    constraint_changes[identity],roots[0]['native']['catalog_row']['sql_mode'])
+                    constraint_changes[identity],mode,engine=engine)
+        if engine=='mariadb' and facts[0].get('definition')!=facts[1].get('definition') and 'WITH SYSTEM VERSIONING' in facts[0].get('definition','').upper():
+            if not allow_temporal_history:raise ValueError('Graphical system-versioned schema edits require explicit native KEEP-history acceptance')
+            intent=facts[1].setdefault('mariadb_change',{})
+            if not isinstance(intent,dict):raise ValueError('Invalid native MariaDB change intent')
+            intent['temporal_history']='KEEP'
         if engine == 'firebird' and live['kind'] == 'constraint':
             for key in ('source_columns', 'target_columns'):
                 if not _equal(facts[0].get(key), facts[1].get(key)):

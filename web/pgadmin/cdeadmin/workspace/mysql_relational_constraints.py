@@ -13,7 +13,7 @@ FORMAT='scratchrobin.mysql.foreign-key@1'
 ACTIONS={'RESTRICT','CASCADE','SET NULL','NO ACTION','SET DEFAULT'}
 
 
-def relationship_changes(before,after,current):
+def relationship_changes(before,after,current, *, engine='mysql'):
     previous={edge.get('uid'):edge for edge in before}
     if len(previous)!=len(before):raise ValueError('Duplicate original relationship UID')
     changes={};seen=set()
@@ -27,7 +27,7 @@ def relationship_changes(before,after,current):
             raise ValueError('Native foreign keys require exact visible source and target tables')
         if edge.get('kind')!='ref' or edge.get('enforcement')!='database':raise ValueError('Native foreign keys require ref/database enforcement')
         intent=edge.get('native_json')
-        if not isinstance(intent,dict) or intent.get('format')!=FORMAT:raise ValueError('Relationship changes require explicit native foreign-key design intent')
+        if not isinstance(intent,dict) or intent.get('format')!=(FORMAT if engine=='mysql' else 'scratchrobin.mariadb.foreign-key@1'):raise ValueError('Relationship changes require explicit native foreign-key design intent')
         action=intent.get('action');old_name=None
         if old is not None:
             if old['source']!=edge['source']:raise ValueError('Existing native foreign keys cannot move between source tables')
@@ -53,7 +53,7 @@ def relationship_changes(before,after,current):
                     len(set(source_columns))!=len(source_columns) or len(set(target_columns))!=len(target_columns)):
                 raise ValueError('Native foreign-key columns require 1 to 16 distinct ordered name pairs')
             delete=intent.get('on_delete','RESTRICT');update=intent.get('on_update','RESTRICT')
-            if delete not in ACTIONS or update not in ACTIONS:raise ValueError('Select native foreign-key update/delete rules')
+            if delete not in (ACTIONS-{'SET DEFAULT'} if engine=='mariadb' else ACTIONS) or update not in (ACTIONS-{'SET DEFAULT'} if engine=='mariadb' else ACTIONS):raise ValueError('Select native foreign-key update/delete rules')
             target_path=target.get('path')
             if not isinstance(target_path,list) or len(target_path)!=2:raise ValueError('Exact native parent database/table identity is required')
             clause='CONSTRAINT '+identifier(name)+' FOREIGN KEY ('+', '.join(identifier(value) for value in source_columns)+') REFERENCES '+'.'.join(identifier(value) for value in target_path)+' ('+', '.join(identifier(value) for value in target_columns)+') ON DELETE '+delete+' ON UPDATE '+update
@@ -64,9 +64,12 @@ def relationship_changes(before,after,current):
     return changes
 
 
-def merge_constraints(before,native,changes,mode):
-    _layout,original,_order=parts(before,mode)
-    layout,desired,_order=parts({'name':before['name'],'native':native},mode)
+def merge_constraints(before,native,changes,mode, *, engine='mysql'):
+    parse=parts
+    if engine=='mariadb':
+        from .mariadb_schema_plan import parts as parse
+    _layout,original,_order=parse(before,mode)
+    layout,desired,_order=parse({'name':before['name'],'native':native},mode)
     replacements={};additions=[]
     for change in changes:
         old_key=('foreign-key',change['old_name']);new_key=('foreign-key',change['name'])

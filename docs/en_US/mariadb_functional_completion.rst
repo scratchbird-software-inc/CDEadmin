@@ -78,6 +78,16 @@ MARIA-COMP-05: Native DDN roundtrip
   deletion intent. Do not claim catalog reads are an atomic DDL snapshot or
   translate MySQL-only grammar into a MariaDB deployment.
 
+  Graphical relational edits retain native field UIDs and exact table clauses.
+  Translate explicit datatype/nullability/comment edits, admitted new columns,
+  column renames and foreign-key intents into a catalog review before execution.
+  Native MariaDB UUID/INET4/INET6 types remain available. Preserve generated
+  expressions, periods, indexes, comments and literals during column renames.
+  Graphical omissions never remove columns or constraints. System-versioned
+  graphical schema changes require explicit native KEEP-history acceptance.
+  Retain the original native baseline when loading a saved design or preparing
+  a graphical handoff; a fresh capture does not silently replace that baseline.
+
   Three-way table previews bind the baseline, desired and live catalog to the
   endpoint, registered database and native server_uid. Compile named CHECK removal
   using MariaDB DROP CONSTRAINT. Preserve generated-column and temporal clauses;
@@ -248,3 +258,8 @@ Persistent monitoring history and its ScratchBird backend remain deferred.
 Windows/macOS work and platform QA belong to the separate platform teams.
 Persistent SQL history, dashboard definitions, recipes and native DDN conversion
 are in scope. MariaDB completion does not authorize starting DuckDB.
+
+Application-period boundary renames compile an explicit DROP PERIOD and ADD PERIOD
+in the same native ALTER as the column rename, preserving its final period and
+constraint. MariaDB does not automatically rename the period reference. System-time
+boundary renames require separate temporal lifecycle review.
