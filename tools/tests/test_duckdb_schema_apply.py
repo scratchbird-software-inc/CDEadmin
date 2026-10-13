@@ -790,15 +790,21 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
         provider.client.close()
 
 
-@pytest.mark.parametrize('dependent_sql', (
-    'CREATE VIEW checked_view AS SELECT id FROM checked',
+@pytest.mark.parametrize('dependent_sql,admitted', (
+    ('CREATE VIEW checked_view AS SELECT id FROM checked', True),
+    ('CREATE MACRO checked_count() AS (SELECT count(*) FROM checked)', False),
 ))
-def test_check_rebuild_blocks_unpreserved_native_dependents(tmp_path, dependent_sql):
+def test_check_rebuild_preserves_views_and_blocks_unqualified_macros(
+        tmp_path, dependent_sql, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0))')
+    connection.execute('INSERT INTO checked VALUES (1), (2)')
     connection.execute(dependent_sql)
+    if admitted:
+        connection.execute("COMMENT ON VIEW checked_view IS 'retained view'")
+        connection.execute("COMMENT ON COLUMN checked_view.id IS 'retained column'")
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -819,8 +825,30 @@ def test_check_rebuild_blocks_unpreserved_native_dependents(tmp_path, dependent_
         edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         preview = plan(baseline, desired, baseline)
-        assert not preview['application_supported']
-        assert preview['operations'] == [] and preview['blockers']
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if admitted:
+            operation = preview['operations'][0]
+            assert len(operation['affected_view_ids']) == 1
+            assert len(operation['affected_view_column_ids']) == 1
+            applications = DuckDBSchemaApplications(tmp_path/'check-view.json',
+                clock=lambda: 100)
+            receipt = applications.review(preview, baseline, desired,
+                'owner', 'binding', 'file-1')
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+            assert outcome['state'] == 'committed', outcome
+            assert outcome['outcome']['rediscovery_verified'], outcome
+            observer = duckdb.connect(route['database'])
+            assert observer.execute('SELECT id FROM checked_view ORDER BY id').fetchall() == [
+                (1,), (2,)]
+            assert observer.execute("SELECT comment FROM duckdb_views() "
+                "WHERE view_name='checked_view'").fetchone()[0] == 'retained view'
+            assert observer.execute("SELECT comment FROM duckdb_columns() "
+                "WHERE table_name='checked_view' AND column_name='id'").fetchone()[0] == (
+                'retained column')
+            observer.close()
+        else:
+            assert preview['operations'] == [] and preview['blockers']
     finally:
         provider.client.close()
 

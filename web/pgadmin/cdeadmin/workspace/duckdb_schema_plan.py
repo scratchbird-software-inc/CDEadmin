@@ -1128,8 +1128,36 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if (desired_index is None or not _equal(_definition(index), _definition(desired_index)) or
                 index['native'].get('catalog_metadata', {}).get('tags')):
             raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
+    preserved_views = []
     for row in live['rows'].values():
-        if row['kind'] in {'view', 'macro', 'attached-database'} or (
+        if row['kind'] == 'view':
+            view_id = row['resource_id']
+            old_view = baseline['rows'].get(view_id)
+            new_view = desired['rows'].get(view_id)
+            if (len(preserved_views) >= 16 or row['path'][0] != before['path'][0] or
+                    row['system'] != 'false' or
+                    row['native'].get('catalog_metadata', {}).get('temporary') or
+                    old_view is None or new_view is None or
+                    old_view['path'] != row['path'] or new_view['path'] != row['path'] or
+                    new_view['native'].get('duckdb_change') is not None or
+                    not _equal(_definition(old_view), _definition(row)) or
+                    not _equal(_definition(new_view), _definition(row))):
+                raise ValueError('Constraint rebuild requires unchanged persistent views in one catalog')
+            view_columns = [child for child in live['rows'].values()
+                if child['kind'] == 'column' and child.get('path', [])[:3] == row['path']]
+            if {child['resource_id'] for child in view_columns} != {
+                    item.get('resource_id') for item in row['native'].get('columns', [])}:
+                raise ValueError('Constraint rebuild cannot account for every view column')
+            for child in view_columns:
+                old_child = baseline['rows'].get(child['resource_id'])
+                new_child = desired['rows'].get(child['resource_id'])
+                if (old_child is None or new_child is None or
+                        new_child['native'].get('duckdb_change') is not None or
+                        not _equal(_definition(old_child), _definition(child)) or
+                        not _equal(_definition(new_child), _definition(child))):
+                    raise ValueError('Constraint rebuild requires unchanged view columns')
+            preserved_views.append(row)
+        if row['kind'] in {'macro', 'attached-database'} or (
                 row['kind'] == 'sequence' and row['native'].get(
                     'catalog_metadata', {}).get('automatic_dependency_observed') is True):
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
@@ -1251,7 +1279,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         else None)
     return (statements, check, dependency_check, dependency_count,
         requires_sequence_dependency, source, new_constraints, indexes,
-        fk_parents, stage_name, stage_columns, stage_key_columns)
+        fk_parents, stage_name, stage_columns, stage_key_columns,
+        preserved_views)
 
 
 def _ordered_operations(operations, desired):
@@ -1465,7 +1494,8 @@ def plan(baseline, desired, live):
                 (_rebuild_statements, _data_check, _dependency_check,
                  _dependency_count, _requires_sequence_dependency,
                  _original_source, _expected_constraints, _replayed_indexes,
-                 _fk_parents, _stage_name, _stage_columns, _stage_key_columns) = (
+                 _fk_parents, _stage_name, _stage_columns, _stage_key_columns,
+                 _preserved_views) = (
                     _validated_check_rebuild(before, after, change, target,
                         baseline, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
@@ -1590,6 +1620,26 @@ def plan(baseline, desired, live):
                     baseline_index_sha256={row['resource_id']: digest(_definition(
                         baseline['rows'][row['resource_id']])) for row in _replayed_indexes},
                     fk_parent_sha256=_fk_parents,
+                    affected_view_ids=[row['resource_id'] for row in _preserved_views],
+                    baseline_view_sha256={row['resource_id']: digest(_definition(row))
+                        for row in _preserved_views},
+                    desired_view_sha256={row['resource_id']: digest(_definition(
+                        desired['rows'][row['resource_id']]))
+                        for row in _preserved_views},
+                    affected_view_column_ids=sorted(child['resource_id']
+                        for view in _preserved_views for child in live['rows'].values()
+                        if child['kind'] == 'column' and child.get('path', [])[:3] ==
+                            view['path']),
+                    baseline_view_column_sha256={child['resource_id']:
+                        digest(_definition(baseline['rows'][child['resource_id']]))
+                        for view in _preserved_views for child in live['rows'].values()
+                        if child['kind'] == 'column' and child.get('path', [])[:3] ==
+                            view['path']},
+                    desired_view_column_sha256={child['resource_id']:
+                        digest(_definition(desired['rows'][child['resource_id']]))
+                        for view in _preserved_views for child in live['rows'].values()
+                        if child['kind'] == 'column' and child.get('path', [])[:3] ==
+                            view['path']},
                     stage_name=_stage_name, stage_columns=_stage_columns,
                     stage_key_columns=_stage_key_columns,
                     postcondition={'constraints': _expected_constraints})

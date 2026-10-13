@@ -322,9 +322,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   blocked; a separate migration must preserve data and dependent metadata.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical, no tag or foreign-key edge needs preservation, and
-  the captured file has no user view or macro dependency whose binding
-  could change. Independent sequences may coexist with the table, including
-  a sequence referenced by an unchanged column default: the explicit-column
+  the captured file has no user macro dependency whose binding could change.
+  A bounded set of unchanged, persistent user views in the same catalog may
+  coexist with the rebuild. Their exact catalog definitions and child columns
+  are bound into the review. The apply transaction binds every view with
+  native DESCRIBE before staging and again after the table swap; any failure
+  or changed projection rolls back. Fresh post-commit discovery must retain
+  each view definition and column facts, and native DESCRIBE must still bind
+  to the same projection. Temporary views, attached catalogs, missing desired
+  view rows and unqualified view bindings remain blockers. Independent
+  sequences may coexist with the table, including a sequence referenced by
+  an unchanged column default: the explicit-column
   data copy must not advance it. Before the old table is dropped, the
   transaction compares the native sequence dependency identities of the old
   and staged tables; a direct ``nextval`` default also requires an observed

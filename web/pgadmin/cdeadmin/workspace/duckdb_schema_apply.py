@@ -41,6 +41,28 @@ class DuckDBSchemaApplications(SchemaApplications):
             elif operation['baseline_sha256'] != digest(_definition(before)):
                 raise SchemaApplyError('Native baseline differs from the reviewed plan')
             if operation['operation'] == 'rebuild':
+                for view_id in operation.get('affected_view_ids', []):
+                    old_view = baseline['rows'].get(view_id)
+                    new_view = desired['rows'].get(view_id)
+                    if (old_view is None or new_view is None or
+                            operation['baseline_view_sha256'].get(view_id) !=
+                                digest(_definition(old_view)) or
+                            operation['desired_view_sha256'].get(view_id) !=
+                                digest(_definition(new_view))):
+                        raise SchemaApplyError('Preserved view differs from reviewed plan')
+                    baseline_ids.add(view_id)
+                    desired_ids.add(view_id)
+                for column_id in operation.get('affected_view_column_ids', []):
+                    old_column = baseline['rows'].get(column_id)
+                    new_column = desired['rows'].get(column_id)
+                    if (old_column is None or new_column is None or
+                            operation['baseline_view_column_sha256'].get(column_id) !=
+                                digest(_definition(old_column)) or
+                            operation['desired_view_column_sha256'].get(column_id) !=
+                                digest(_definition(new_column))):
+                        raise SchemaApplyError('Preserved view column differs from reviewed plan')
+                    baseline_ids.add(column_id)
+                    desired_ids.add(column_id)
                 for column_id in operation.get('affected_column_ids', []):
                     old_column = baseline['rows'].get(column_id)
                     new_column = desired['rows'].get(column_id)

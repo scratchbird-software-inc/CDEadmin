@@ -46,8 +46,16 @@ def apply_review(provider, route, record):
             result['native_rollback_returned'] = True
             return result
         rebuild_rows = {}
+        view_descriptors = {}
         for operation in fresh['operations']:
             if operation['operation'] == 'rebuild':
+                if operation.get('affected_view_ids'):
+                    from ...workspace.duckdb_schema_plan import _quote
+                    for view_id in operation['affected_view_ids']:
+                        view = record['baseline']['rows'][view_id]
+                        target = '.'.join(_quote(part) for part in view['path'])
+                        view_descriptors[view_id] = (target, connection.execute(
+                            'DESCRIBE SELECT * FROM ' + target).fetchall())
                 old_rows = connection.execute('SELECT count(*) FROM ' +
                     operation['target']).fetchone()[0]
                 for index, statement in enumerate(operation['statements']):
@@ -92,6 +100,11 @@ def apply_review(provider, route, record):
                                 connection.execute(operation[
                                     'sequence_dependency_count']).fetchone()[0] == 0):
                             raise ValueError('Native sequence default has no observed dependency')
+                for view_id in operation.get('affected_view_ids', []):
+                    target, original_projection = view_descriptors[view_id]
+                    if connection.execute('DESCRIBE SELECT * FROM ' +
+                            target).fetchall() != original_projection:
+                        raise ValueError('Native view projection changed during table rebuild')
                 rebuild_rows[operation['resource_id']] = old_rows
             else:
                 for statement in operation.get('statements', [operation['source']]):
@@ -198,6 +211,20 @@ def apply_review(provider, route, record):
                                     parent_sha
                                 for parent_id, parent_sha in operation.get(
                                     'fk_parent_sha256', {}).items())
+                        if verified:
+                            verified = all(observed['rows'].get(view_id) is not None and
+                                observed['rows'][view_id]['native'].get('state', {}).get('bound') is True and
+                                digest(_definition(observed['rows'][view_id])) ==
+                                    operation['desired_view_sha256'][view_id] and
+                                connection.execute('DESCRIBE SELECT * FROM ' +
+                                    view_descriptors[view_id][0]).fetchall() ==
+                                    view_descriptors[view_id][1]
+                                for view_id in operation.get('affected_view_ids', []))
+                        if verified:
+                            verified = all(observed['rows'].get(column_id) is not None and
+                                digest(_definition(observed['rows'][column_id])) ==
+                                    operation['desired_view_column_sha256'][column_id]
+                                for column_id in operation.get('affected_view_column_ids', []))
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
                     from ...workspace.firebird_schema_plan import digest
