@@ -3,6 +3,7 @@ import copy
 import json
 import queue
 import threading
+import time
 import uuid
 
 from pgadmin.cdeadmin.sdk import (
@@ -44,6 +45,7 @@ class Execution:
         self.finished, self.stop = threading.Event(), threading.Event()
         self.lock = threading.Lock()
         self.error, self.final = None, None
+        self.metrics = None
         self.uncertain = False
         self.index = 0
         self.worker = threading.Thread(target=self._run, daemon=True,
@@ -53,7 +55,7 @@ class Execution:
         page = {'schema': {'columns': columns}, 'payload': {
             'rows': rows, 'has_page': True, 'row_offset': offset,
             'result_set_index': self.index, 'result_set_end': end,
-            'rowcount': None}}
+            'rowcount': None, 'statement_metrics': copy.deepcopy(self.metrics)}}
         while not self.stop.is_set():
             try:
                 self.pages.put(page, timeout=.05)
@@ -65,7 +67,9 @@ class Execution:
         import duckdb
         reader = None
         try:
+            parse_started = time.perf_counter_ns()
             statements = self.connection.extract_statements(self.source)
+            parse_ms = round((time.perf_counter_ns() - parse_started) / 1_000_000, 3)
             if len(statements) != 1 and self.bound:
                 self.error = {'type': 'ParameterShapeError',
                               'statement_index': None}
@@ -73,6 +77,12 @@ class Execution:
             for self.index, statement in enumerate(statements):
                 if self.stop.is_set():
                     break
+                self.metrics = {'prepare_ms': parse_ms if self.index == 0 else None,
+                                'execute_ms': None, 'dispatch_ms': None,
+                                'fetch_ms': None, 'rows_buffered': 0,
+                                'plan': None,
+                                'measurement_scope': 'native parse; dispatch and local fetch/encode, including consumer backpressure'}
+                dispatch_started = time.perf_counter_ns()
                 if statement.type != duckdb.StatementType.TRANSACTION:
                     self.connection.execute(
                         'SET arrow_lossless_conversion=true')
@@ -84,6 +94,9 @@ class Execution:
                     if relation is None:
                         # sql() executes non-returning DML once; this API does
                         # not expose its count. Never replay to obtain one.
+                        self.metrics['dispatch_ms'] = round((time.perf_counter_ns() - dispatch_started) / 1_000_000, 3)
+                        self.metrics['execute_ms'] = self.metrics['dispatch_ms']
+                        self.metrics['fetch_ms'] = 0.0
                         self._put([], [], 0, True)
                         continue
                     names = list(relation.columns)
@@ -98,6 +111,8 @@ class Execution:
                             'native_type': str(native[i][1]),
                             'arrow_type': str(field.type)}
                            for i, field in enumerate(reader.schema)]
+                self.metrics['dispatch_ms'] = round((time.perf_counter_ns() - dispatch_started) / 1_000_000, 3)
+                fetch_started = time.perf_counter_ns()
                 offset, rows, size = 0, [], 0
                 for batch in reader:
                     for index in range(batch.num_rows):
@@ -111,6 +126,9 @@ class Execution:
                         length = len(json.dumps(row, ensure_ascii=True))
                         if rows and (len(rows) >= 256 or
                                      size + length > 1024 * 1024):
+                            self.metrics['rows_buffered'] = offset + len(rows)
+                            self.metrics['fetch_ms'] = round((time.perf_counter_ns() - fetch_started) / 1_000_000, 3)
+                            self.metrics['execute_ms'] = round((time.perf_counter_ns() - dispatch_started) / 1_000_000, 3)
                             self._put(columns, rows, offset, False)
                             offset += len(rows)
                             rows, size = [], 0
@@ -120,6 +138,9 @@ class Execution:
                         break
                 reader.close()
                 reader = None
+                self.metrics['rows_buffered'] = offset + len(rows)
+                self.metrics['fetch_ms'] = round((time.perf_counter_ns() - fetch_started) / 1_000_000, 3)
+                self.metrics['execute_ms'] = round((time.perf_counter_ns() - dispatch_started) / 1_000_000, 3)
                 self._put(columns, rows, offset, True)
         except Exception as exc:
             self.error = dict(identity(exc), statement_index=self.index)
@@ -160,6 +181,7 @@ class Execution:
             if complete:
                 page['payload'].update(error=self.error,
                                        session_reuse_blocked=self.uncertain)
+                page['payload'].setdefault('statement_metrics', copy.deepcopy(self.metrics))
                 self.final = copy.deepcopy(page)
             return page
 

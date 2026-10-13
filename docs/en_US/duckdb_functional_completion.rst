@@ -50,6 +50,12 @@ DUCK-COMP-03: Shared SQL editor and native language
   without executing SQL. Parse errors are scrubbed because native diagnostics
   may echo source literals. This check does not establish semantic validity,
   permissions or side-effect safety; those remain execution-time concerns.
+  Query metrics report native parsing time, client dispatch/reader setup time,
+  and local fetch/encode time with a buffered-row count. The displayed total
+  execution interval starts at dispatch and ends after native iteration and
+  local buffering; it can include consumer backpressure. No plan is inferred
+  from an ordinary execution. An explicit EXPLAIN result is shown as result
+  data, and EXPLAIN ANALYZE may perform the work being profiled.
 
 DUCK-COMP-04: Data and file workflows
   Implement native row editing with qualified identity, paging, commit/rollback,

@@ -101,6 +101,19 @@ def test_scripts_order_pages_and_first_error(client, tmp_path):
     assert rows(execute(client, h, 'SELECT 4')) == [[4]]
 
 
+def test_native_statement_metrics_identify_their_measured_scope(client, tmp_path):
+    handle, _ = open_database(client, tmp_path)
+    pages = execute(client, handle, 'SELECT i FROM range(600) t(i)')
+    metrics = pages[-1]['payload']['statement_metrics']
+    assert metrics['rows_buffered'] == 600
+    assert metrics['prepare_ms'] is not None and metrics['prepare_ms'] >= 0
+    assert metrics['dispatch_ms'] is not None and metrics['dispatch_ms'] >= 0
+    assert metrics['fetch_ms'] is not None and metrics['fetch_ms'] >= 0
+    assert metrics['execute_ms'] >= metrics['dispatch_ms']
+    assert metrics['plan'] is None
+    assert 'consumer backpressure' in metrics['measurement_scope']
+
+
 def test_unsafe_parameters_refused_before_effects(client, tmp_path):
     h, _ = open_database(client, tmp_path)
     with pytest.raises(RuntimeError):

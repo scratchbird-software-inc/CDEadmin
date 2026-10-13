@@ -8092,6 +8092,10 @@ export default function ProviderWorkspaceContent({
           {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
           {(rendered || nativePage) && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
           Buffered rows: {rendered?.page?.page_size ?? 0} · Server-retained rows: {rendered?.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+            {languageProfile === 'duckdb-sql' && nativePage?.statement_metrics && <Box>
+              Buffered rows: {nativePage.statement_metrics.rows_buffered ?? 'Unavailable'} · Native dispatch and reader setup: {nativePage.statement_metrics.dispatch_ms ?? 'Unavailable'} ms · Local fetch and encoding: {nativePage.statement_metrics.fetch_ms ?? 'Unavailable'} ms.
+              {' '}{nativePage.statement_metrics.measurement_scope}
+            </Box>}
             {['mysql-sql', 'mariadb-sql'].includes(languageProfile) && <Box>
               Client dispatch (first response; excludes result fetching): {nativePage?.statement_metrics?.dispatch_ms ?? 'Unavailable'} ms
             </Box>}
