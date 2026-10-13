@@ -142,8 +142,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Three-way design preview compares a saved baseline and edited DDN with a
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
-  explicit DROP intent and view replacement are currently previewed through
-  the 1.5.2 native parser. A column addition requires an observed persistent
+  explicit DROP intent, view replacement, isolated column alterations, native
+  enum extension and single-overload scalar macro replacement are previewed
+  through the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
   One-field column default or nullability alterations require explicit change
   intent and an otherwise unchanged baseline definition. An explicit column
@@ -153,8 +154,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   requested native type, even when its canonical spelling differs and review
   is consequently marked unverified. Combined edits remain blockers. Each
   alteration is one parsed native statement and one review.
-  An
-  index's native identity includes its table, but DuckDB CREATE INDEX names
+  An enum extension requires an observed native ENUM, preserves every existing
+  label in order and appends distinct new labels. It uses one reviewed native
+  ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
+  reference the prior type definition; any such column conversion requires a
+  separate reviewed column alteration. A macro replacement requires exactly
+  one observed scalar overload, unchanged parameters and metadata, and an
+  explicit new bounded definition. Table macros, overload groups and parameter
+  edits remain blockers. Both operations verify their native postconditions
+  after commit; an uncertain or mismatched observation is never replayed.
+  An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.
   Other native edits are blockers. Missing desired rows are

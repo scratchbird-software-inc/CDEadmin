@@ -56,7 +56,10 @@ def _definition(row):
             'columns': native.get('columns') if row['kind'] in {'table', 'view'} else None,
             'constraints': native.get('constraints') if row['kind'] == 'table' else None,
             'indexes': native.get('indexes') if row['kind'] == 'table' else None,
-            'overloads': native.get('overloads') if row['kind'] == 'macro' else None}
+            'overloads': native.get('overloads') if row['kind'] == 'macro' else None,
+            'definition': native.get('definition') if row['kind'] == 'macro' else None,
+            'parameters': native.get('parameters') if row['kind'] == 'macro' else None,
+            'overload_count': native.get('overload_count') if row['kind'] == 'macro' else None}
 
 
 def _validated_ddl(source, kind, path, *, replace=False):
@@ -185,6 +188,78 @@ def _validated_column_alter(before, after, change):
     return source
 
 
+def _validated_enum_extension(before, after, target):
+    previous = deepcopy(_definition(before))
+    desired = deepcopy(_definition(after))
+    old_labels = previous['catalog'].pop('labels', None)
+    new_labels = desired['catalog'].pop('labels', None)
+    if (previous['catalog'].get('logical_type') != 'ENUM' or
+            not _equal(previous, desired)):
+        raise ValueError('Enum extension may change only native labels')
+    if (not isinstance(old_labels, list) or not old_labels or
+            not isinstance(new_labels, list) or len(new_labels) <= len(old_labels) or
+            len(new_labels) > 1000 or new_labels[:len(old_labels)] != old_labels or
+            any(not isinstance(label, str) or not label or '\x00' in label or
+                len(label.encode('utf8')) > 256 for label in new_labels) or
+            len(set(new_labels)) != len(new_labels)):
+        raise ValueError('Enum extension requires distinct appended native labels')
+    source = ('CREATE OR REPLACE TYPE ' + target + ' AS ENUM (' +
+              ', '.join("'" + label.replace("'", "''") + "'" for label in new_labels) + ')')
+    if len(source.encode('utf8')) > 64 * 1024:
+        raise ValueError('Enum extension exceeds the native statement budget')
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the enum extension') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.CREATE:
+        raise ValueError('Exactly one native enum replacement is required')
+    return source, new_labels
+
+
+def _validated_macro_replacement(before, after, target):
+    previous = deepcopy(_definition(before))
+    desired = deepcopy(_definition(after))
+    old_overloads, new_overloads = previous['overloads'], desired['overloads']
+    if (not isinstance(old_overloads, list) or len(old_overloads) != 1 or
+            not isinstance(new_overloads, list) or len(new_overloads) != 1 or
+            previous['overload_count'] != 1 or desired['overload_count'] != 1):
+        raise ValueError('Only one native scalar macro overload can be replaced')
+    old_definition = old_overloads[0].pop('definition', None)
+    new_definition = new_overloads[0].pop('definition', None)
+    if (old_overloads[0].get('catalog_metadata', {}).get('function_type') != 'macro' or
+            old_overloads[0].get('catalog_metadata', {}).get('varargs') or
+            not isinstance(new_definition, str) or not new_definition.strip() or
+            new_definition == old_definition or
+            len(new_definition.encode('utf8')) > 8192 or '\x00' in new_definition or
+            any(marker in new_definition for marker in (';', '--', '/*', '*/'))):
+        raise ValueError('Macro replacement requires one changed bounded scalar definition')
+    if (previous['definition'] != old_definition or
+            desired['definition'] != new_definition):
+        raise ValueError('Macro group and overload definitions must agree')
+    previous['definition'] = desired['definition'] = None
+    if not _equal(previous, desired):
+        raise ValueError('Macro replacement may change only its native definition')
+    parameters = after['native'].get('parameters')
+    if (not isinstance(parameters, list) or len(parameters) > 64 or
+            any(not isinstance(parameter, dict) or
+                not isinstance(parameter.get('name'), str) or
+                parameter.get('data_type') is not None
+                for parameter in parameters)):
+        raise ValueError('Macro replacement requires unchanged scalar parameters')
+    source = ('CREATE OR REPLACE MACRO ' + target + '(' +
+              ', '.join(_quote(parameter['name']) for parameter in parameters) +
+              ') AS ' + new_definition.strip())
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the macro replacement') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.CREATE:
+        raise ValueError('Exactly one native scalar macro replacement is required')
+    return source, new_definition
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -245,6 +320,12 @@ def plan(baseline, desired, live):
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
                 source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
+            elif change == {'action': 'extend-enum'} and after['kind'] == 'type':
+                operation = 'replace'
+                source, _labels = _validated_enum_extension(before, after, target)
+            elif change == {'action': 'replace-definition'} and after['kind'] == 'macro':
+                operation = 'replace'
+                source, _definition_text = _validated_macro_replacement(before, after, target)
             elif (after['kind'] == 'column' and isinstance(change, dict) and
                   change.get('action') in {'set-default', 'set-nullable', 'set-type'}):
                 operation = 'alter'
@@ -258,6 +339,10 @@ def plan(baseline, desired, live):
             if after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
+            elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:
+                operation_record['postcondition'] = {'labels': _labels}
+            elif after['kind'] == 'macro' and change == {'action': 'replace-definition'}:
+                operation_record['postcondition'] = {'definition': _definition_text}
             operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:
             blockers.append({'resource_id': identity, 'name': after.get('name'), 'reason': str(error)})
@@ -274,4 +359,7 @@ def plan(baseline, desired, live):
         'executed': False,
         'warnings': ['This native preview does not authorize or execute SQL.',
             'Catalog capture may be partial; absent desired rows never authorize drops.',
-            'A separate durable review and fresh in-transaction baseline check are required before execution.']}
+            'A separate durable review and fresh in-transaction baseline check are required before execution.'] +
+            (['Replacing a native enum does not retarget existing typed columns; review their conversions separately.']
+             if any(item['kind'] == 'type' and item['operation'] == 'replace' for item in operations)
+             else [])}

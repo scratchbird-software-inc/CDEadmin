@@ -180,3 +180,56 @@ def test_column_type_change_requires_isolated_native_intent_and_one_statement():
     changed['native']['duckdb_change']['using'] = '1; DROP TABLE facts'
     assert plan(model(table, existing), model(table, changed),
                 model(table, existing))['blockers']
+
+
+def test_native_enum_extension_is_append_only_and_warns_about_existing_columns():
+    pytest.importorskip('duckdb')
+    existing = row('type', ['file', 'main', 'mood'])
+    existing['native']['catalog_metadata'] = {
+        'logical_type': 'ENUM', 'labels': ['ok', 'bad'], 'comment': None}
+    changed = deepcopy(existing)
+    changed['native']['catalog_metadata']['labels'] = ['ok', 'bad', "it's good"]
+    changed['native']['duckdb_change'] = {'action': 'extend-enum'}
+    result = plan(model(existing), model(changed), model(existing))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        'CREATE OR REPLACE TYPE "file"."main"."mood" '
+        "AS ENUM ('ok', 'bad', 'it''s good')")
+    assert result['operations'][0]['postcondition'] == {
+        'labels': ['ok', 'bad', "it's good"]}
+    assert any('existing typed columns' in warning for warning in result['warnings'])
+    for labels in (['ok'], ['bad', 'ok', "it's good"],
+                   ['ok', 'bad', 'bad']):
+        changed['native']['catalog_metadata']['labels'] = labels
+        assert plan(model(existing), model(changed), model(existing))['blockers']
+    changed['native']['catalog_metadata']['labels'] = ['ok', 'bad', 'great']
+    changed['native']['catalog_metadata']['comment'] = 'other edit'
+    assert plan(model(existing), model(changed), model(existing))['blockers']
+
+
+def test_scalar_macro_definition_replacement_rejects_other_edits():
+    pytest.importorskip('duckdb')
+    existing = row('macro', ['file', 'main', 'plusone'])
+    overload = {'catalog_metadata': {'function_type': 'macro', 'varargs': None},
+                'parameters': [{'name': 'x', 'data_type': None}],
+                'definition': '(x + 1)'}
+    existing['native'].update(
+        definition='(x + 1)', parameters=deepcopy(overload['parameters']),
+        overloads=[overload], overload_count=1)
+    changed = deepcopy(existing)
+    changed['native']['definition'] = '(x + 2)'
+    changed['native']['overloads'][0]['definition'] = '(x + 2)'
+    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    result = plan(model(existing), model(changed), model(existing))
+    assert result['application_supported'], result['blockers']
+    assert result['operations'][0]['source'] == (
+        'CREATE OR REPLACE MACRO "file"."main"."plusone"("x") AS (x + 2)')
+    assert result['operations'][0]['postcondition'] == {'definition': '(x + 2)'}
+    changed['native']['parameters'].append({'name': 'y', 'data_type': None})
+    assert plan(model(existing), model(changed), model(existing))['blockers']
+    changed = deepcopy(existing)
+    changed['native']['definition'] = '(x + 2)'
+    changed['native']['overloads'][0]['definition'] = '(x + 2)'
+    changed['native']['overloads'][0]['catalog_metadata']['function_type'] = 'table_macro'
+    changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+    assert plan(model(existing), model(changed), model(existing))['blockers']

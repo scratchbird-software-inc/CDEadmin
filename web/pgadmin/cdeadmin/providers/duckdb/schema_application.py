@@ -65,7 +65,10 @@ def apply_review(provider, route, record):
                 result['rediscovery_verified'] = (current is not None and
                     digest(_definition(current)) != operation['baseline_sha256'])
                 if result['rediscovery_verified'] and operation.get('postcondition'):
-                    metadata = current['native'].get('catalog_metadata', {})
+                    metadata = (current['native'].get('catalog_metadata', {})
+                        if operation['kind'] in {'column', 'type'} else
+                        {'definition': (current['native'].get('overloads') or [{}])[0]
+                            .get('definition')})
                     result['rediscovery_verified'] = all(
                         metadata.get(key) == value for key, value in
                         operation['postcondition'].items())

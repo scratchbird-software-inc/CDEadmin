@@ -349,6 +349,54 @@ def test_reviewed_column_type_conversion_preserves_rows_and_is_not_replayed(tmp_
         provider.client.close()
 
 
+@pytest.mark.parametrize('kind', ('type', 'macro'))
+def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    if kind == 'type':
+        connection.execute("CREATE TYPE mood AS ENUM ('ok', 'bad')")
+        name = 'mood'
+    else:
+        connection.execute('CREATE MACRO plusone(x) AS x + 1')
+        name = 'plusone'
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == kind and row['name'] == name)
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]
+        if kind == 'type':
+            changed['native']['catalog_metadata']['labels'].append('great')
+            changed['native']['duckdb_change'] = {'action': 'extend-enum'}
+        else:
+            changed['native']['definition'] = '(x + 2)'
+            changed['native']['overloads'][0]['definition'] = '(x + 2)'
+            changed['native']['duckdb_change'] = {'action': 'replace-definition'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/f'{kind}-replace.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        if kind == 'type':
+            assert observer.execute("SELECT labels FROM duckdb_types() "
+                "WHERE type_name='mood'").fetchone()[0] == ['ok', 'bad', 'great']
+        else:
+            assert observer.execute('SELECT plusone(5)').fetchone() == (7,)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_column_default_and_nullability_are_native(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
