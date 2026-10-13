@@ -56,9 +56,12 @@ DUCK-COMP-03: Shared SQL editor and native language
   local buffering; it can include consumer backpressure. No plan is inferred
   from an ordinary execution. An explicit EXPLAIN result is shown as result
   data, and EXPLAIN ANALYZE may perform the work being profiled.
-  A normal Run request admits exactly one statement under the pinned native
-  parser, including explicit EXPLAIN requests. Empty or multi-statement
-  requests fail before dispatch and have no SQL effects. Multi-statement work
+  A normal Run request admits exactly one user-authored SQL statement,
+  including explicit EXPLAIN requests. Empty requests or a second SQL
+  statement after a native-tokenized semicolon fail before dispatch and have
+  no SQL effects. Native IMPORT DATABASE may expand that one command into
+  several internal statements; this is not a second user-authored command.
+  Multi-statement work
   uses the retained script coordinator: it reviews native boundaries, sends
   one statement at a time on the same session, observes each terminal result,
   stops on error or unknown outcome, and never automatically replays a

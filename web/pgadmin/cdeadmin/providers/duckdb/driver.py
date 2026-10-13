@@ -70,10 +70,25 @@ class Execution:
             parse_started = time.perf_counter_ns()
             statements = self.connection.extract_statements(self.source)
             parse_ms = round((time.perf_counter_ns() - parse_started) / 1_000_000, 3)
-            if len(statements) != 1:
-                # The retained script coordinator alone sequences multiple
-                # statements. Never dispatch a prefix of an ordinary Run.
+            source_bytes = self.source.encode('utf8')
+            tokens = duckdb.tokenize(self.source)
+            trailing_separator = False
+            multiple_user_statements = False
+            for position, _token_type in tokens:
+                if source_bytes[position:position + 1] == b';':
+                    trailing_separator = True
+                elif trailing_separator:
+                    multiple_user_statements = True
+                    break
+            if not statements or multiple_user_statements:
+                # IMPORT DATABASE expands one user command into native
+                # internal statements. Native token byte offsets distinguish
+                # that expansion from a second authored SQL command.
                 self.error = {'type': 'StatementCountError',
+                              'statement_index': None}
+                return
+            if len(statements) != 1 and self.bound:
+                self.error = {'type': 'ParameterShapeError',
                               'statement_index': None}
                 return
             for self.index, statement in enumerate(statements):

@@ -99,7 +99,25 @@ def test_ordinary_run_refuses_multiple_statements_before_effects(client, tmp_pat
                      "WHERE table_name='forbidden'").fetchone() == (0,)
     assert execute(client, h, '-- comment only')[-1]['payload']['error'][
         'type'] == 'StatementCountError'
+    assert rows(execute(client, h, "SELECT 'é;😀';")) == [['é;😀']]
+    assert rows(execute(client, h, 'SELECT 5;;')) == [[5]]
     assert rows(execute(client, h, 'SELECT 4')) == [[4]]
+
+
+def test_one_import_command_may_expand_into_native_internal_statements(client, tmp_path):
+    duckdb = native()
+    source = tmp_path / 'export-source.duckdb'
+    export = tmp_path / 'export-directory'
+    quoted_export = str(export).replace("'", "''")
+    owner = duckdb.connect(str(source))
+    owner.execute('CREATE TABLE imported(i INTEGER)')
+    owner.execute('INSERT INTO imported VALUES (7)')
+    owner.execute(f"EXPORT DATABASE '{quoted_export}'")
+    owner.close()
+    handle, _ = open_database(client, tmp_path)
+    pages = execute(client, handle, f"IMPORT DATABASE '{quoted_export}'")
+    assert not pages[-1]['payload'].get('error'), pages[-1]
+    assert rows(execute(client, handle, 'SELECT * FROM imported')) == [[7]]
 
 
 def test_native_statement_metrics_identify_their_measured_scope(client, tmp_path):
