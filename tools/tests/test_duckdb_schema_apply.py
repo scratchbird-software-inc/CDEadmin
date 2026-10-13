@@ -1418,10 +1418,11 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
 @pytest.mark.parametrize('child_count', [1, 2, 3, 4, 7])
 @pytest.mark.parametrize('retained_unique', [False, True])
 @pytest.mark.parametrize('literal_defaults', [False, True])
-@pytest.mark.parametrize('child_checks', [0, 1, 2])
+@pytest.mark.parametrize('child_checks,child_unique_style', [
+    (0, None), (1, None), (2, None), (0, 'inline'), (2, 'table')])
 def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
         tmp_path, invalid, child_count, retained_unique, literal_defaults,
-        child_checks):
+        child_checks, child_unique_style):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1430,12 +1431,15 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
         unique_definition + 'payload VARCHAR CHECK(length(payload) > 0))')
     child_columns = ('id INTEGER DEFAULT(7), parent_id INTEGER DEFAULT(1)'
         if literal_defaults else 'id INTEGER, parent_id INTEGER')
+    if child_unique_style == 'inline':
+        child_columns = child_columns.replace(', parent_id', ' UNIQUE, parent_id')
     child_check = (', CHECK((id > 0))' if child_checks else '') + (
         ', CHECK((parent_id > 0))' if child_checks == 2 else '')
-    connection.execute('CREATE TABLE child(' + child_columns + child_check + ', '
+    child_unique = ', UNIQUE(id)' if child_unique_style == 'table' else ''
+    connection.execute('CREATE TABLE child(' + child_columns + child_check + child_unique + ', '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     for number in range(2, child_count + 1):
-        connection.execute(f'CREATE TABLE child{number}(' + child_columns + child_check + ', '
+        connection.execute(f'CREATE TABLE child{number}(' + child_columns + child_check + child_unique + ', '
             'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute(('INSERT INTO parent VALUES (1, 100, ?), (2, 200, ?)'
         if retained_unique else 'INSERT INTO parent VALUES (1, ?), (2, ?)'),
@@ -1472,7 +1476,7 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
                 else 'rebuild-check-with-inbound-children'),
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         intermediate = lambda name: (f'CREATE TABLE "{root}"."main"."{name}" '
-            '(' + child_columns + child_check + ')')
+            '(' + child_columns + child_check + child_unique + ')')
         if child_count == 1:
             change.update(inbound_child_resource_id=children[0]['resource_id'],
                 intermediate_child_ddl=intermediate('child'))
@@ -1534,7 +1538,8 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
         observer = duckdb.connect(route['database'])
         assert observer.execute('SELECT id,parent_id FROM child ORDER BY id').fetchall() == [
             (10, 1), (11, 2)]
-        expected_child_types = [('CHECK',)] * child_checks + [('FOREIGN KEY',)]
+        expected_child_types = ([('CHECK',)] * child_checks + [('FOREIGN KEY',)] +
+            ([('UNIQUE',)] if child_unique_style else []))
         assert sorted(observer.execute("SELECT constraint_type FROM duckdb_constraints() "
             "WHERE table_name='child'").fetchall()) == expected_child_types
         for number in range(2, child_count + 1):
@@ -1555,6 +1560,9 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
         if child_checks and not invalid:
             with pytest.raises(duckdb.ConstraintException):
                 observer.execute('INSERT INTO child VALUES (-1, 1)')
+        if child_unique_style and not invalid:
+            with pytest.raises(duckdb.ConstraintException):
+                observer.execute('INSERT INTO child VALUES (10, 1)')
         if retained_unique:
             assert observer.execute("SELECT constraint_column_names FROM duckdb_constraints() "
                 "WHERE table_name='parent' AND constraint_type='UNIQUE'").fetchall() == [

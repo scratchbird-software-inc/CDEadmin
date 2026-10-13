@@ -1114,6 +1114,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     checks = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'CHECK'] if (
             isinstance(constraints, list)) else []
+    uniques = [item for item in constraints
+        if isinstance(item, dict) and item.get('constraint_type') == 'UNIQUE'] if (
+            isinstance(constraints, list)) else []
     if (metadata.get('tags') or
             metadata.get('temporary') is not False or
             metadata.get('has_primary_key') is not False or
@@ -1124,7 +1127,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
             not isinstance(constraints, list) or len(foreign) != 1 or
-            len(checks) > 2 or len(constraints) != len(checks) + 1 or
+            len(checks) > 2 or len(uniques) > 2 or
+            len(constraints) != len(checks) + len(uniques) + 1 or
             foreign[0].get('referenced_table') != before['name'] or
             not isinstance(foreign[0].get('column_names'), list) or
             not isinstance(foreign[0].get('referenced_column_names'), list) or
@@ -1133,7 +1137,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 len(foreign[0]['referenced_column_names']) or
             any(not isinstance(item, dict) or
                 not literal_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires one foreign key, bounded CHECKs and plain literal defaults')
+        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and plain literal defaults')
     for index in indexes:
         observed_index = baseline['rows'].get(index['resource_id'])
         desired_index = desired['rows'].get(index['resource_id'])
@@ -1145,8 +1149,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             raise ValueError('Inbound child requires unchanged plain independent indexes')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     original = native.get('ddl')
-    original_sections = _table_definition_sections(original)
-    interim_sections = _table_definition_sections(source)
+    original_sections = _table_definition_sections(original, inline_unique=True)
+    interim_sections = _table_definition_sections(source, inline_unique=True)
     foreign_token = ('token_type.keyword', 'foreign')
     original_secondary = original_sections[1] if original_sections else ()
     retained_sections = tuple(section for section in original_secondary
@@ -1156,9 +1160,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 create_definition_tokens(original, 'table') or ()) or
             original_sections[0] != interim_sections[0] or
             len(original_secondary) != len(constraints) or
-            len(retained_sections) != len(checks) or
+            len(retained_sections) != len(checks) + len(uniques) or
             interim_sections[1] != retained_sections):
-        raise ValueError('Intermediate child must retain exact columns and CHECKs and remove its sole foreign key')
+        raise ValueError('Intermediate child must retain exact columns, CHECKs and UNIQUEs and remove its sole foreign key')
     original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
         re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
         r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
@@ -1226,7 +1230,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         'constraints_by_phase': [[{key: item.get(key) for key in
             ('constraint_type', 'column_names', 'referenced_table',
              'referenced_column_names', 'constraint_text')}
-            for item in phase] for phase in (checks, constraints)]}
+            for item in phase] for phase in ([*checks, *uniques], constraints)]}
 
 
 def _validated_check_rebuild(before, after, change, target, baseline, live, desired):

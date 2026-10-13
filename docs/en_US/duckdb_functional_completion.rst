@@ -380,12 +380,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE set must match the reviewed child catalog before the staged copy or
   old-table drop; changed or omitted UNIQUE definitions roll back.
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
-  constraints on a parent referenced by exactly one unchanged child table
+  constraints on a parent referenced by an unchanged child table
   when that simple-name child has only one outgoing foreign key to the parent,
   plain unchanged columns and no nonliteral defaults,
-  non-CHECK secondary constraints or sequence ownership. Up to two unchanged
-  table-level child CHECK constraints may accompany the sole outgoing foreign
-  key; the intermediate child definition must retain their exact native body,
+  unsupported secondary constraints or sequence ownership. Up to two unchanged
+  table-level child CHECK constraints and two unchanged UNIQUE constraints
+  may accompany the sole outgoing foreign key. A UNIQUE constraint may use
+  native inline or table-level syntax; the intermediate child definition must
+  retain their exact native body,
   and both stages verify their catalog text and columns before any child drop.
   Each child may also carry up to eight unchanged plain, nonunique independent
   indexes, subject to the 64-statement isolated-rebuild review budget. Their exact observed
