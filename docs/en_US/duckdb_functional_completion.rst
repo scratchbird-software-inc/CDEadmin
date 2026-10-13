@@ -277,6 +277,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   rolls back the reviewed transaction. Fresh discovery must observe the key
   and the exact ordered key columns. Dropping or changing a primary key is
   unavailable through DuckDB 1.5.2 ``ALTER TABLE`` and remains blocked.
+  ``CREATE OR REPLACE TABLE`` is not a safe substitute for a general table
+  migration: it clears rows, indexes and comments. It can leave a dependent
+  view reporting ``is_bound = true`` while a query against that view fails to
+  bind. Native rollback restores the original table, but a successful commit
+  does not preserve these facts. DDN plans therefore block whole-table
+  replacement, including non-primary constraint changes, until a separate
+  dependency-aware data-preserving migration and postcommit check are qualified.
   An index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.

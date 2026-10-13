@@ -129,6 +129,20 @@ def test_sequence_ownership_is_not_admitted_as_durable_design_change():
     assert preview['operations'] == [] and preview['blockers']
 
 
+def test_whole_table_replacement_cannot_silently_replace_data_and_dependents():
+    original = row('table', ['file', 'main', 'facts'],
+        ddl='CREATE TABLE "file"."main"."facts" (id INTEGER)')
+    baseline = model(original)
+    desired = deepcopy(baseline)
+    changed = desired['rows'][original['resource_id']]['native']
+    changed['ddl'] = 'CREATE OR REPLACE TABLE "file"."main"."facts" (id VARCHAR)'
+    changed['duckdb_change'] = {'action': 'replace-table',
+        'data_loss_confirmed': True}
+    preview = plan(baseline, desired, baseline)
+    assert not preview['application_supported']
+    assert preview['operations'] == [] and preview['blockers']
+
+
 def test_stale_live_definition_and_foreign_scope_are_refused():
     before = row('view', ['file', 'main', 'report'],
         ddl='CREATE VIEW "file"."main"."report" AS SELECT 1')
