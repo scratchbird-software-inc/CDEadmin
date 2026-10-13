@@ -95,6 +95,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   the design baseline with each revision, permit source merge through the paired
   public DDN workflow, and treat an edited design as documentary until native
   plan review and application are separately qualified.
+  Three-way design preview compares a saved baseline and edited DDN with a
+  fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
+  explicit DROP intent and view replacement are currently previewed through the
+  1.5.2 native parser. Other native edits are blockers. Missing desired rows are
+  ignored rather than treated as deletion. The preview is nonexecuting and does
+  not grant an apply right; full native adapters and reviewed application remain
+  required before this requirement is complete.
 
 DUCK-COMP-06: Native dashboards and monitoring
   Provide display-only DDN engine/embedded-instance/database dashboards with a

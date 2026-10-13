@@ -1128,6 +1128,34 @@ class ProviderWorkspaceService:
             assets.repository.rollback()
             raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
 
+    def duckdb_schema_plan(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_catalog_export import build_export
+        from .duckdb_schema_plan import plan
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'desired'}:
+            raise ProviderWorkspaceError('DuckDB schema preview requires exact baseline and desired DDN')
+        target = request['database_target_id']
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        try:
+            baseline = read_catalog(request['baseline'], engine='duckdb')
+            desired = read_catalog(request['desired'], engine='duckdb')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+                raise ValueError('Select a native DuckDB endpoint')
+            if any(model['provenance']['endpoint_id'] != str(context.endpoint_id) or
+                   model['provenance']['database_target_id'] != target for model in (baseline, desired)):
+                raise ValueError('Design belongs to another endpoint or registered DuckDB file')
+            captured = provider.capture_catalog(endpoint['route'], include_system=False)
+            live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+                target_id=target, generation=captured['generation'], include_system=False,
+                refreshed=True, engine='duckdb', native_model=True)
+            return plan(baseline, desired, live)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def export_firebird_catalog(self, server, request, *, _native_model=False):
         """Capture one admitted catalog generation into documentary DDN."""
         from .firebird_catalog_export import build_export, MAX_RESOURCES

@@ -10,13 +10,14 @@ import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 export default function DuckDBCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
   const [source, setSource] = useState(''), [error, setError] = useState('');
+  const [baselineSource, setBaselineSource] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
   const [data, setData] = useState(null), [relation, setRelation] = useState('');
   const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const serial = useRef(0);
   useEffect(() => {
-    serial.current++; setResult(null); setComparison(null); setSource(''); setData(null); setRelation(''); setError('');
+    serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setData(null); setRelation(''); setError('');
     setBusy(false); setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -29,7 +30,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           ...(compare ? {source} : {})}});
       if(token !== serial.current) return;
       if(compare) setComparison(value);
-      else {setResult(value); setComparison(null); setData(null);
+      else {setResult(value); setComparison(null); setSchemaPlan(null); setData(null);
         setRelation(value.objects?.find(item => ['table', 'view'].includes(item.kind))?.resource_id || '');
         setDisplay('inventory'); setView(value.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB catalog capture failed');}
@@ -44,6 +45,16 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
         mode: dataMode, row_limit: Number(rowLimit)}});
       if(token === serial.current) {setData(value); setDisplay('data'); setView(value.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB data capture failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const previewSchema = async () => {
+    const token = ++serial.current;
+    setBusy(true); setError(''); setSchemaPlan(null);
+    try {
+      const value = await post({action: 'duckdb_schema_plan', request: {
+        database_target_id: databaseTargetId, baseline: baselineSource, desired: source}});
+      if(token === serial.current) setSchemaPlan(value);
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB schema preview failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
   const shown = display === 'relations' ? result?.diagram : display === 'data' ? data : result;
@@ -67,10 +78,11 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           const file = event.target.files?.[0]; event.target.value = '';
           if(!file) return;
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {setSource(await file.text()); setComparison(null); setError('');}
+          try {setSource(await file.text()); setBaselineSource(''); setSchemaPlan(null); setComparison(null); setError('');}
           catch(failure) {setError(failure.message || 'Could not read DDN file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => capture(true)}>Compare DDN with live catalog</Button>
+      <Button disabled={busy || !source || !baselineSource || !databaseTargetId} onClick={previewSchema}>Preview native changes</Button>
       <TextField select size="small" label="Display" value={display} disabled={busy || !result}
         onChange={event => {setDisplay(event.target.value); setView(event.target.value === 'relations' ? result.diagram.snapshot.view : event.target.value === 'data' ? data.snapshot.view : result.snapshot.view);}}>
         <MenuItem value="inventory">Native inventory</MenuItem>
@@ -102,7 +114,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
     {result && <Alert severity="info">Visible objects: {result.provenance.objects}. Coverage: {result.provenance.coverage}.</Alert>}
     {result?.snapshot && <FirebirdCatalogDesigner engine="duckdb" baseline={JSON.stringify(result.snapshot)}
       post={post} databaseTargetId={databaseTargetId} disabled={busy}
-      onReview={desired => {setSource(desired); setComparison(null);}} />}
+      onReview={(desired, baseline) => {setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null);}} />}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="duckdb/catalog-comparison" aria-label="DuckDB catalog differences"
@@ -111,6 +123,17 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           {key: 'status', name: 'Difference', width: 140},
           {key: 'fields', name: 'Changed native fields', minWidth: 260, renderCell: ({row}) => row.fields.join(', ')},
         ]} />
+    </Box>}
+    {schemaPlan && <Box>
+      <Alert severity={schemaPlan.blockers.length || schemaPlan.conflicts.length ? 'warning' : 'info'}>
+        Native preview only; no SQL was executed. {schemaPlan.operations.length} operations, {schemaPlan.blockers.length} blockers, {schemaPlan.conflicts.length} conflicts. Missing desired objects do not authorize deletion.
+      </Alert>
+      <Box sx={{height: 260, overflow: 'auto'}}><PagedDataGrid readOnly gridId="duckdb/schema-preview"
+        aria-label="DuckDB native schema preview" rows={[...schemaPlan.operations, ...schemaPlan.blockers, ...schemaPlan.conflicts]}
+        rowKeyGetter={(row, index) => `${row.resource_id}/${row.operation || row.reason || index}`} columns={[
+          {key: 'name', name: 'Native object', minWidth: 170}, {key: 'operation', name: 'Operation', width: 110},
+          {key: 'source', name: 'Native SQL', minWidth: 340}, {key: 'reason', name: 'Blocker or conflict', minWidth: 260},
+        ]} /></Box>
     </Box>}
     {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,

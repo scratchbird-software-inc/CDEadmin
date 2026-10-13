@@ -5,7 +5,10 @@ import {withTheme} from '../fake_theme';
 let viewer;
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: props => {viewer = props; return <div>Native DDN viewer</div>;},
-  DDNDesignerSurface: () => <div>Native DDN designer</div>,
+  DDNDesignerSurface: props => <div>Native DDN designer
+    <button onClick={() => props.onReady({snapshot: () => ({...props.snapshot,
+      files: {'catalog.ddn': 'authored native facts'}})})}>Prepare DDN draft</button>
+  </div>,
 }));
 jest.mock('sources/cdeadmin_ui/data/PagedDataGrid', () => function MockGrid(props) {
   return <div aria-label={props['aria-label']}>{props.rows.length} changes</div>;
@@ -71,5 +74,24 @@ describe('DuckDB native catalog form', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Edit catalog design in DDN'}));
     expect(screen.getByText('SR-F-010004')).toBeVisible();
     expect(screen.getByText('Native DDN designer')).toBeVisible();
+  });
+
+  it('previews native differences only with an explicit edited baseline', async () => {
+    const preview = {operations: [{resource_id: 't', name: 't', operation: 'create', source: 'CREATE TABLE t(x INT)'}],
+      blockers: [], conflicts: [], ignored: [], executed: false};
+    const post = jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(preview);
+    render(<Component post={post} databaseTargetId="owned-duckdb-file" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    expect(screen.getByRole('button', {name: 'Preview native changes'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Edit catalog design in DDN'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Prepare DDN draft'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Use design for native review'}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', {name: 'Preview native changes'}));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith({action: 'duckdb_schema_plan', request: {
+      database_target_id: 'owned-duckdb-file', baseline: JSON.stringify(snapshot),
+      desired: JSON.stringify({...snapshot, files: {'catalog.ddn': 'authored native facts'}})}}));
+    expect(screen.getByText(/Native preview only; no SQL was executed/)).toBeVisible();
   });
 });

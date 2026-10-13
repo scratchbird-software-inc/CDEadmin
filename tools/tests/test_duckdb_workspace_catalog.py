@@ -37,12 +37,20 @@ def test_owned_target_export_compare_and_foreign_document_rejection(tmp_path):
         source = json.dumps(result['snapshot'])
         assert not service.duckdb_catalog(server, {'database_target_id': 'owned-target',
             'source': source}, compare=True)['changes']
+        preview = service.duckdb_schema_plan(server, {'database_target_id': 'owned-target',
+            'baseline': source, 'desired': source})
+        assert preview['operations'] == [] and not preview['executed']
+        assert not preview['application_supported']
         other = build_export(provider.capture_catalog.return_value['resources'],
             endpoint_id='foreign-endpoint', target_id='owned-target', generation='native-1', engine='duckdb')
         provider.capture_catalog.reset_mock()
         with pytest.raises(ProviderWorkspaceError, match='another endpoint'):
             service.duckdb_catalog(server, {'database_target_id': 'owned-target',
                 'source': json.dumps(other['snapshot'])}, compare=True)
+        provider.capture_catalog.assert_not_called()
+        with pytest.raises(ProviderWorkspaceError, match='another endpoint'):
+            service.duckdb_schema_plan(server, {'database_target_id': 'owned-target',
+                'baseline': json.dumps(other['snapshot']), 'desired': source})
         provider.capture_catalog.assert_not_called()
         for invalid in ({'database_target_id': ''},
                         {'database_target_id': 'owned-target', 'source': source, 'sql': 'DROP TABLE native_fact'}):
