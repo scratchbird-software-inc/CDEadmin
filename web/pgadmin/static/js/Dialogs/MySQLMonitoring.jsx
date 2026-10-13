@@ -14,10 +14,10 @@ import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 const defaults = {interval_seconds: 5, retain_samples: 120, lease_seconds: 3600,
   metadata_interval_seconds: 60, heartbeat_enabled: false, heartbeat_timeout_seconds: null};
 
-export default function MySQLMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate}) {
+export default function MySQLMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate, engine='mysql'}) {
   const scope = engineMode ? 'engine' : targetId ? 'database' : 'server', showPolicy = policyMode && !engineMode;
-  const endpoint = `/cdeadmin/api/monitoring/mysql${engineMode ? '' : '/' + serverId}${targetId ? '?target_id=' + encodeURIComponent(targetId) : ''}`;
-  const definitionEndpoint = `/cdeadmin/api/monitoring/mysql/definition?published=1${engineMode ? '' : '&sid=' + serverId}${targetId ? '&target_id=' + encodeURIComponent(targetId) : ''}`;
+  const endpoint = `/cdeadmin/api/monitoring/${engine}${engineMode ? '' : '/' + serverId}${targetId ? '?target_id=' + encodeURIComponent(targetId) : ''}`;
+  const definitionEndpoint = `/cdeadmin/api/monitoring/${engine}/definition?published=1${engineMode ? '' : '&sid=' + serverId}${targetId ? '&target_id=' + encodeURIComponent(targetId) : ''}`;
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [publishedView, setPublishedView] = useState(null), [display, setDisplay] = useState('dashboard');
   const [page, setPage] = useState('dashboard');
@@ -44,8 +44,8 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           const definition = (await getApiInstance().get(definitionEndpoint)).data.data;
           if(definition?.state === 'published') {
             const {viewer} = await loadDDNLibraries();
-            const live = engineMode ? mysqlFleetFiles(response.data.data) : mysqlDashboardFiles(response.data.data, scope);
-            publication = bindPublication(viewer, definition.snapshot, scope, live, 'mysql');
+            const live = engineMode ? mysqlFleetFiles(response.data.data, engine) : mysqlDashboardFiles(response.data.data, scope, engine);
+            publication = bindPublication(viewer, definition.snapshot, scope, live, engine);
           }
         }
         if(active && token === serial.current) {setSnapshot(response.data.data); setPublishedView(publication); setError('');}
@@ -54,7 +54,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     };
     read(); const timer = setInterval(read, 5000);
     return () => {active = false; serial.current++; clearInterval(timer);};
-  }, [endpoint, targetId, definitionEndpoint, showPolicy, scope, engineMode]);
+  }, [endpoint, targetId, definitionEndpoint, showPolicy, scope, engineMode, engine]);
   const change = async stop => {
     const token = ++serial.current;
     changing.current = true; setBusy(true); setActionError('');
@@ -65,8 +65,8 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     } catch(failure) {if(token === serial.current) setActionError(failure.response?.data?.errormsg || 'Monitoring policy change failed');}
     finally {if(token === serial.current) {changing.current = false; setBusy(false); setCredentials(value => ({...value, password: ''}));}}
   };
-  const {files, pages} = useMemo(() => engineMode ? mysqlFleetPublication(snapshot) :
-    {files: mysqlDashboardFiles(snapshot, scope), pages: ['dashboard']}, [snapshot, scope, engineMode]);
+  const {files, pages} = useMemo(() => engineMode ? mysqlFleetPublication(snapshot, 128, engine) :
+    {files: mysqlDashboardFiles(snapshot, scope, engine), pages: ['dashboard']}, [snapshot, scope, engineMode, engine]);
   const active = Boolean(snapshot && snapshot.state !== 'disabled');
   const valid = Number.isInteger(policy.interval_seconds) && policy.interval_seconds >= (targetId ? 5 : 15) && policy.interval_seconds <= 300 &&
     Number.isInteger(policy.retain_samples) && policy.retain_samples >= 1 && policy.retain_samples <= 720 &&
@@ -75,7 +75,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     (policy.heartbeat_timeout_seconds === null || (Number.isInteger(policy.heartbeat_timeout_seconds) &&
       policy.heartbeat_timeout_seconds >= policy.interval_seconds + 5 && policy.heartbeat_timeout_seconds <= 3600));
   return <Box sx={{...compactFormSx, p: 1, height: '100%', overflow: 'auto'}}>
-    <FormReference formKey={showPolicy ? 'mysql-monitoring-policy' : 'mysql-dashboard'} />
+    <FormReference formKey={showPolicy ? `${engine}-monitoring-policy` : `${engine}-dashboard`} />
     {error && <Alert severity="error">{error}</Alert>}
     {actionError && <Alert severity="error">{actionError}</Alert>}
     {showPolicy ? <>
@@ -126,11 +126,11 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           ...(server.databases || []).map(database => <MenuItem key={`${server.server_id}/${database.target_id}`} value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
         ])}
       </TextField>}
-      {display === 'trends' && !engineMode ? <MySQLTrendView snapshot={snapshot} scope={scope} /> :
+      {display === 'trends' && !engineMode ? <MySQLTrendView snapshot={snapshot} scope={scope} engine={engine} /> :
         <Box sx={{height: 'calc(100% - 76px)', minHeight: 300}}><DDNViewerSurface presentation snapshot={publishedView || {
           format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: pages.includes(page) ? page : 'dashboard', files}} /></Box>}
     </>}
   </Box>;
 }
 MySQLMonitoring.propTypes = {serverId: PropTypes.number, targetId: PropTypes.string, policyMode: PropTypes.bool,
-  engineMode: PropTypes.bool, onNavigate: PropTypes.func};
+  engineMode: PropTypes.bool, onNavigate: PropTypes.func, engine: PropTypes.oneOf(['mysql', 'mariadb'])};

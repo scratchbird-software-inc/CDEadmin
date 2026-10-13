@@ -38,7 +38,7 @@ class MonitoringGrant:
     def issue(cls, policy, route, generation, permissions, key_ring,
               authorize, *, clock=time.monotonic, credentials=None,
               engine='firebird'):
-        if engine not in ('firebird', 'postgresql', 'mysql'):
+        if engine not in ('firebird', 'postgresql', 'mysql', 'mariadb'):
             raise MonitoringGrantError('Unsupported monitoring engine')
         if not key_ring.available:
             raise MonitoringGrantError('Monitoring worker key authority is unavailable')
@@ -194,6 +194,9 @@ class MonitoringGrant:
                 elif self.engine == 'mysql':
                     from pgadmin.cdeadmin.providers.mysql_family.mysql_monitoring import MySQLMonitor
                     source_factory = MySQLMonitor
+                elif self.engine == 'mariadb':
+                    from pgadmin.cdeadmin.providers.mysql_family.mariadb_monitoring import MariaDBMonitor
+                    source_factory = MariaDBMonitor
                 elif self.engine == 'firebird':
                     from pgadmin.cdeadmin.providers.firebird.monitoring import FirebirdMonitor
                     source_factory = FirebirdMonitor

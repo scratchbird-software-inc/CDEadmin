@@ -95,6 +95,11 @@ function dispatch(action, args, context) {
   case 'open_firebird_docker':
     return import('sources/Dialogs').then(({showFirebirdDocker}) => showFirebirdDocker(
       registrationContext => serverNode.callbacks.register_engine_server.call(serverNode, {item, registrationContext})));
+  case 'open_mariadb_fleet':
+    return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('mariadb'));
+  case 'open_mariadb_dashboard_editor':
+    return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
+      endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id, 'mariadb'));
   case 'open_mysql_fleet':
     return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet());
   case 'open_mysql_dashboard_editor':

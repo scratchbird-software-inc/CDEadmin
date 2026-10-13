@@ -76,6 +76,16 @@ MARIA-COMP-06: Dashboards and dedicated monitoring
   scope every sample and continue collection without a viewer. Distinguish
   unavailable, denied and zero measurements. Retain bounded volatile samples.
 
+  Native probes use MariaDB's ``server_uid`` identity, information_schema
+  GLOBAL_STATUS, PROCESSLIST and SLAVE_STATUS, plus explicitly named native
+  settings and selected-database TABLES storage estimates. Do not depend on
+  MySQL's server_uuid, super_read_only, replication_connection_status or enabled
+  performance_schema. Server-wide counters remain server scoped on database
+  dashboards. Exact counter deltas require the same collector epoch and native
+  server UID and valid uptime/reset observations; missing/reset counters are
+  gaps. A sample completes only after verifying autocommit with no retained
+  native transaction. Lost authorization or a failed probe cannot heartbeat.
+
 MARIA-COMP-07: Contextual compact forms
   Route native tree items to engine-appropriate information/forms with stable
   form references. Share controls where appropriate without hiding supported

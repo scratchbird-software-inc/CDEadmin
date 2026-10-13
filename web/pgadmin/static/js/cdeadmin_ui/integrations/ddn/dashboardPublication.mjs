@@ -14,19 +14,22 @@ const postgresCounts = {engine: {inventory: 3}, server: {status: 13, databases: 
   database: {status: 13, databases: 3, activity: 10, locks: 3, replication: 4, io: 3, settings: 4, tables: 3}};
 const mysqlCounts = {engine: {inventory: 5}, server: {availability: 9, native_status: 5, native_settings: 5, native_storage: 5, native_activity: 5, native_replication: 5},
   database: {availability: 9, native_status: 5, native_settings: 5, native_storage: 5, native_activity: 5, native_replication: 5}};
-function mysqlDynamic(id, scope) {
+function mysqlDynamic(id, scope, engine='mysql') {
+  const maria = engine === 'mariadb';
+  if(!id.startsWith(engine + '_')) return false;
+  if(maria) id = 'mysql_' + id.slice('mariadb_'.length);
   const hex = value => [...new TextEncoder().encode(value)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   if(scope === 'engine') {
     const match = /^mysql_fleet_[1-9][0-9]*_[a-f0-9]{2,1024}_([a-f0-9]{2,128})$/.exec(id);
-    return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
+    return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', maria ? 'server_uid' : 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
   }
   const match = /^mysql_(status|settings|storage|activity|replication)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
   if(!match) return false;
-  const fields = {status: ['variable_name', 'variable_value'],
-    settings: ['max_connections', 'innodb_page_size', 'innodb_buffer_pool_size', 'read_only', 'super_read_only', 'event_scheduler'],
+  const fields = {status: ['variable_name', 'variable_value', ...(maria ? ['native_variable_name'] : [])],
+    settings: ['max_connections', 'innodb_page_size', 'innodb_buffer_pool_size', 'read_only', ...(!maria ? ['super_read_only'] : []), 'event_scheduler'],
     storage: ['engine', 'tables_count', 'estimated_rows', 'data_bytes', 'index_bytes'],
     activity: ['processlist_id', 'processlist_user', 'processlist_db', 'processlist_command', 'processlist_time', 'processlist_state'],
-    replication: ['channel_name', 'service_state', 'last_error_number']};
+    replication: maria ? ['channel_name', 'slave_io_running', 'slave_sql_running', 'last_io_errno', 'last_sql_errno', 'seconds_behind_master', 'gtid_io_pos'] : ['channel_name', 'service_state', 'last_error_number']};
   if(!fields[match[1]].some(field => hex(field) === match[3])) return false;
   if(match[1] === 'settings') return match[2] === hex('settings');
   if(match[1] !== 'status') return true;
@@ -61,8 +64,8 @@ function records(runtime, files) {
   return {parsed, rows: blocks[0].children};
 }
 export function validatePublication(runtime, snapshot, scope, engine='firebird') {
-  check(['firebird', 'postgresql', 'mysql'].includes(engine), 'Unknown dashboard engine.');
-  const bindings = engine === 'postgresql' ? postgresCounts : engine === 'mysql' ? mysqlCounts : counts;
+  check(['firebird', 'postgresql', 'mysql', 'mariadb'].includes(engine), 'Unknown dashboard engine.');
+  const bindings = engine === 'postgresql' ? postgresCounts : ['mysql', 'mariadb'].includes(engine) ? mysqlCounts : counts;
   check(bindings[scope], 'Unknown dashboard scope.');
   check(snapshot?.format === 'ddn-workspace@1', 'Unsupported dashboard format.');
   check(Object.keys(snapshot.files || {}).join() === 'dashboard.ddn', 'Use one dashboard.ddn file.');
@@ -70,7 +73,7 @@ export function validatePublication(runtime, snapshot, scope, engine='firebird')
   const source = snapshot.files['dashboard.ddn'];
   check(typeof source === 'string' && new TextEncoder().encode(source).length <= 512 * 1024, 'Dashboard source exceeds its limit.');
   const {parsed, rows} = records(runtime, snapshot.files);
-  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring'].includes(parsed.module) :
+  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring', 'scratchrobin.mariadb.monitoring'].includes(parsed.module) :
     parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
   check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)), 'Unsupported dashboard declaration.');
   const allowed = new Set(Object.entries(bindings[scope]).flatMap(([prefix, count]) =>
@@ -79,7 +82,7 @@ export function validatePublication(runtime, snapshot, scope, engine='firebird')
   const seen = new Set();
   for(const row of rows) {
     check((allowed.has(row.id) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
-      (engine === 'mysql' && mysqlDynamic(row.id, scope))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
+      (['mysql', 'mariadb'].includes(engine) && mysqlDynamic(row.id, scope, engine))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
     seen.add(row.id);
     check(row.type === 'object' && row.props.kind === 'record' && !row.children.length,
       'Only metric records are admitted.');

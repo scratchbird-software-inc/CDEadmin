@@ -5,11 +5,11 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {MYSQL_TREND_METRICS, mysqlTrendFiles} from '../cdeadmin_ui/integrations/ddn/mysqlTrends';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
-export default function MySQLTrendView({snapshot, scope}) {
+export default function MySQLTrendView({snapshot, scope, engine='mysql'}) {
   const [metric, setMetric] = useState('Questions'), [limit, setLimit] = useState(120);
-  const files = useMemo(() => mysqlTrendFiles(snapshot, scope, metric, limit), [snapshot, scope, metric, limit]);
+  const files = useMemo(() => mysqlTrendFiles(snapshot, scope, metric, limit, engine), [snapshot, scope, metric, limit, engine]);
   return <Box sx={{minHeight: 450}}>
-    <FormReference formKey="mysql-recent-observations" />
+    <FormReference formKey={`${engine}-recent-observations`} />
     <Alert severity="info">Past observations from this process only. Collection: {snapshot?.state || 'Unknown'}.
       Retained: {snapshot?.samples?.length || 0}. Evicted: {snapshot?.retention_evictions || 0}.
       Server-wide counters include other databases and collectors. Chart values are approximate;
@@ -25,4 +25,4 @@ export default function MySQLTrendView({snapshot, scope}) {
     <DDNViewerSurface files={files} entry="trends.ddn" view="trends" presentation />
   </Box>;
 }
-MySQLTrendView.propTypes = {snapshot: PropTypes.object, scope: PropTypes.oneOf(['server', 'database']).isRequired};
+MySQLTrendView.propTypes = {snapshot: PropTypes.object, engine: PropTypes.oneOf(['mysql', 'mariadb']), scope: PropTypes.oneOf(['server', 'database']).isRequired};

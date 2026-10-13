@@ -8,6 +8,9 @@ from .monitoring_delegation import route_fingerprint
 
 class MySQLMonitoringHost(MonitoringHost):
     engine = 'mysql'
+    profile_id = 'mysql-native'
+    provider_id = 'org.cdeadmin.mysql'
+    identity_key = 'server_uuid'
     policy_fields = frozenset({'interval_seconds', 'retain_samples', 'lease_seconds',
         'heartbeat_enabled', 'heartbeat_timeout_seconds', 'metadata_interval_seconds'})
 
@@ -20,9 +23,9 @@ class MySQLMonitoringHost(MonitoringHost):
         from pgadmin.model import Server, User
         server = Server.query.filter_by(id=sid, user_id=owner).first()
         if (server is None or User.query.filter_by(id=owner, active=True).first() is None or
-                server.endpoint_profile is None or server.endpoint_profile.profile_id != 'mysql-native' or
-                server.endpoint_profile.provider_id != 'org.cdeadmin.mysql'):
-            raise PermissionError('MySQL monitoring endpoint is unavailable')
+                server.endpoint_profile is None or server.endpoint_profile.profile_id != self.profile_id or
+                server.endpoint_profile.provider_id != self.provider_id):
+            raise PermissionError(f'{self.engine} monitoring endpoint is unavailable')
         return server
 
     @staticmethod
@@ -55,15 +58,15 @@ class MySQLMonitoringHost(MonitoringHost):
 
     def enable(self, owner, sid, target, body):
         if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
-            raise ValueError('Unsupported MySQL monitoring fields')
+            raise ValueError(f'Unsupported {self.engine} monitoring fields')
         key = owner, sid, target
         with self._lock:
             if key not in self._grants:
                 server = self._owned_server(owner, sid)
                 context, endpoint, _ = self.endpoints.workspace(server, database_target_id=target)
                 binding = self.endpoints.provider_registry.resolve(context)
-                if context.profile_id != 'mysql-native':
-                    raise PermissionError('Select a native MySQL endpoint')
+                if context.profile_id != self.profile_id:
+                    raise PermissionError(f'Select a native {self.engine} endpoint')
                 self._admissions[key] = {'endpoint_id': server.endpoint_profile.id,
                     'generation': server.endpoint_profile.profile_generation or server.endpoint_profile.cache_namespace,
                     'configuration': self._configuration(server), 'route': copy.deepcopy(endpoint['route'])}
@@ -109,7 +112,7 @@ class MySQLMonitoringHost(MonitoringHost):
             registrations = []
             for server in Server.query.filter_by(user_id=owner).all():
                 endpoint = server.endpoint_profile
-                if endpoint is None or endpoint.profile_id != 'mysql-native' or endpoint.provider_id != 'org.cdeadmin.mysql':
+                if endpoint is None or endpoint.profile_id != self.profile_id or endpoint.provider_id != self.provider_id:
                     continue
                 registrations.append({'server_id': server.id, 'name': server.name,
                     'databases': sorted([{'target_id': row.id, 'name': row.display_name}
@@ -125,7 +128,7 @@ class MySQLMonitoringHost(MonitoringHost):
                 samples = []
                 for sample in current.get('samples', [])[-1:]:
                     identity = {key: value for key, value in sample.get('identity', {}).items()
-                        if key in {'database_name', 'version', 'server_uuid'}}
+                        if key in {'database_name', 'version', self.identity_key}}
                     samples.append({key: value for key, value in {**sample, 'identity': identity}.items()
                         if key not in {'groups', 'rates'}})
                 return {key: value for key, value in {**current, 'samples': samples}.items()
@@ -139,7 +142,7 @@ class MySQLMonitoringHost(MonitoringHost):
             sid = registered['server_id']
             servers.append({**registered, 'snapshot': read(sid, None),
                 'databases': [{**target, 'snapshot': read(sid, target['target_id'])} for target in registered['databases']]})
-        return {'scope': 'engine', 'engine_id': 'mysql', 'registered_endpoints': len(servers),
+        return {'scope': 'engine', 'engine_id': self.engine, 'registered_endpoints': len(servers),
             'servers': servers, 'history': 'volatile', 'inventory': 'owner-registrations-not-physical-instances'}
 
     def definition_scope(self, owner, sid, target):
@@ -148,9 +151,9 @@ class MySQLMonitoringHost(MonitoringHost):
                 if target is not None:
                     raise ValueError('Engine scope cannot include a database')
                 self._registrations(owner)
-                return {'engine': 'mysql', 'kind': 'engine', 'owner': owner}
+                return {'engine': self.engine, 'kind': 'engine', 'owner': owner}
             server = self._owned_server(owner, sid)
-            scope = {'engine': 'mysql', 'kind': 'database' if target is not None else 'server',
+            scope = {'engine': self.engine, 'kind': 'database' if target is not None else 'server',
                 'owner': owner, 'server_id': sid, 'endpoint_id': server.endpoint_profile.id}
             if target is not None:
                 registered = next((row for row in server.endpoint_profile.database_targets if row.id == target), None)
@@ -167,19 +170,20 @@ class MySQLMonitoringHost(MonitoringHost):
         return result
 
 
-def init_app(app, shared_host):
-    key = 'cdeadmin_mysql_monitoring_host'
+def init_app(app, shared_host, host_class=MySQLMonitoringHost):
+    engine = host_class.engine
+    key = f'cdeadmin_{engine}_monitoring_host'
     if key in app.extensions:
         return app.extensions[key]
-    host = MySQLMonitoringHost(app, shared_host)
+    host = host_class(app, shared_host)
     app.extensions[key] = host
     atexit.register(host.close)
     from flask import Blueprint, jsonify, request
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
-    api = Blueprint('cdeadmin_mysql_monitoring', __name__)
+    api = Blueprint(f'cdeadmin_{engine}_monitoring', __name__)
 
-    @api.route('/cdeadmin/api/monitoring/mysql', methods=['GET'])
+    @api.route(f'/cdeadmin/api/monitoring/{engine}', methods=['GET'])
     @pga_login_required
     def fleet():
         try:
@@ -191,7 +195,7 @@ def init_app(app, shared_host):
         except Exception:
             return jsonify(success=0, errormsg='Monitoring inventory is unavailable'), 503
 
-    @api.route('/cdeadmin/api/monitoring/mysql/definition', methods=['GET', 'PUT', 'POST'])
+    @api.route(f'/cdeadmin/api/monitoring/{engine}/definition', methods=['GET', 'PUT', 'POST'])
     @pga_login_required
     def definition():
         from .assets import service_for_app, ProjectAssetError, ProjectAssetConflict, ProjectAssetForbidden
@@ -205,7 +209,7 @@ def init_app(app, shared_host):
                 raise ValueError('Invalid target')
             definitions = DashboardDefinitions(service_for_app(app), host.definition_scope,
                 lambda snapshot, scope: validate_dashboard(snapshot, scope,
-                    app.config.get('CDEADMIN_DDN_NODE', 'node'), engine='mysql'))
+                    app.config.get('CDEADMIN_DDN_NODE', 'node'), engine=engine))
             if request.method == 'GET':
                 data = (definitions.published(current_user.id, sid, target) if request.args.get('published') == '1'
                     else definitions.read(current_user.id, sid, target))
@@ -225,7 +229,7 @@ def init_app(app, shared_host):
         except Exception:
             return jsonify(success=0, errormsg='Dashboard draft request failed'), 503
 
-    @api.route('/cdeadmin/api/monitoring/mysql/<int:sid>', methods=['GET', 'POST', 'DELETE'])
+    @api.route(f'/cdeadmin/api/monitoring/{engine}/<int:sid>', methods=['GET', 'POST', 'DELETE'])
     @pga_login_required
     def monitoring(sid):
         target = request.args.get('target_id')

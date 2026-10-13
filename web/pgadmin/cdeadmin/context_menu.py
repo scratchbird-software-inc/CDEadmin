@@ -33,6 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
+    'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_firebird_fleet',
     'open_postgresql_fleet',
     'open_firebird_docker',
@@ -240,6 +241,13 @@ def connector_context_actions(
                         disabled_reason=unavailable_reason,
                     ),
                 ])
+    if engine_id == 'mariadb' and not localhost_placeholder:
+        actions.extend([
+            _action('connector.mariadb.monitoring', 'MariaDB engine dashboard...', 'open_mariadb_fleet',
+                icon='tool.dashboard', group='information', priority=5),
+            _action('connector.mariadb.dashboard_editor', 'Edit MariaDB engine dashboard...', 'open_mariadb_dashboard_editor',
+                icon='action.edit', group='information', priority=6, mutation='write'),
+        ])
     if engine_id == 'mysql' and not localhost_placeholder:
         actions.extend([
             _action('connector.mysql.monitoring', 'MySQL engine dashboard...', 'open_mysql_fleet',
@@ -695,6 +703,16 @@ def endpoint_context_actions(
         icon='action.connect', group='connection', priority=10,
         arguments={'profile_id': profile['profile_id']},
     )]
+    if engine_id == 'mariadb':
+        for tab, label in (('monitoring', 'MariaDB server dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(f'endpoint.mariadb.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability', arguments={'tab': tab},
+                mutation='admin' if tab == 'monitoring_policy' else 'read', enabled=ready and can_manage,
+                disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
+        actions.append(_action('endpoint.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
         for tab, label in (('monitoring', 'MySQL server dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
@@ -1189,6 +1207,14 @@ def database_target_context_actions(
                     'operation_id': operation_id,
                 }, confirmation=False, macro=True,
             ))
+    if engine_id == 'mariadb':
+        for tab, label in (('monitoring', 'MariaDB database dashboard...'),
+                           ('monitoring_policy', 'Configure monitoring collection...')):
+            actions.append(_action(f'database.mariadb.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read', arguments={**base, 'tab': tab}))
+        actions.append(_action('database.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
+            icon='action.edit', group='availability', mutation='write', arguments=base))
     if engine_id == 'mysql':
         for tab, label in (('monitoring', 'MySQL database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):

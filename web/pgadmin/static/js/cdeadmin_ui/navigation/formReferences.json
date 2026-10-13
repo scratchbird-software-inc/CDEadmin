@@ -5557,6 +5557,22 @@
     "mysql-native-schema-preview": {
       "reference": "SR-F-001402",
       "title": "MySQL native DDN semantic change preview"
+    },
+    "mariadb-monitoring-policy": {
+      "reference": "SR-F-001403",
+      "title": "MariaDB dedicated monitoring credentials and policy"
+    },
+    "mariadb-dashboard": {
+      "reference": "SR-F-001404",
+      "title": "MariaDB display-only native dashboard"
+    },
+    "mariadb-dashboard-editor": {
+      "reference": "SR-F-001405",
+      "title": "MariaDB DDN dashboard draft and publication"
+    },
+    "mariadb-recent-observations": {
+      "reference": "SR-F-001406",
+      "title": "MariaDB retained monitoring observations"
     }
   }
 }

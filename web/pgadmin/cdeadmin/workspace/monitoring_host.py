@@ -294,10 +294,12 @@ class MonitoringHost:
             postgres_released = postgres.close() if postgres is not None else True
             mysql = self.app.extensions.get('cdeadmin_mysql_monitoring_host')
             mysql_released = mysql.close() if mysql is not None else True
+            maria = self.app.extensions.get('cdeadmin_mariadb_monitoring_host')
+            maria_released = maria.close() if maria is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
-            released = released and postgres_released and mysql_released
+            released = released and postgres_released and mysql_released and maria_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -429,4 +431,6 @@ def init_app(app, endpoint_service):
     init_postgresql(app, host)
     from .mysql_monitoring_host import init_app as init_mysql
     init_mysql(app, host)
+    from .mariadb_monitoring_host import init_app as init_mariadb
+    init_mariadb(app, host)
     return host
