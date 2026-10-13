@@ -52,7 +52,7 @@ class DuckDBSchemaApplications(SchemaApplications):
                             (digest(_definition(old_child)) if old_child else None) or
                             operation['desired_child_sha256'].get(child_id) !=
                             (digest(_definition(new_child)) if new_child else None)):
-                        raise SchemaApplyError('CHECK rebuild child facts differ from reviewed plan')
+                        raise SchemaApplyError('Constraint rebuild child facts differ from reviewed plan')
         if (_root(baseline) != preview['catalog'] or _root(desired) != preview['catalog'] or
                 any(baseline['provenance'].get(key) != desired['provenance'].get(key)
                     for key in ('endpoint_id', 'database_target_id'))):

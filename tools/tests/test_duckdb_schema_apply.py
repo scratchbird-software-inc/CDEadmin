@@ -756,6 +756,105 @@ def test_check_rebuild_can_remove_the_complete_check_child_set(tmp_path):
         provider.client.close()
 
 
+def test_isolated_unique_rebuild_can_remove_the_complete_unique_child_set(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE unique_item(id INTEGER UNIQUE)')
+    connection.execute('INSERT INTO unique_item VALUES (1), (2)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'unique_item')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'] = []
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."unique_item" '
+            '(id INTEGER)')
+        edited['duckdb_change'] = {'action': 'rebuild-unique-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        del desired['rows'][child_id]
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'unique-removal.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id FROM unique_item ORDER BY id').fetchall() == [(1,), (2,)]
+        assert observer.execute("SELECT count(*) FROM duckdb_constraints() "
+            "WHERE table_name='unique_item'").fetchone()[0] == 0
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+@pytest.mark.parametrize('duplicate', (False, True))
+def test_isolated_unique_rebuild_adds_constraint_or_rolls_back_duplicate_data(tmp_path, duplicate):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE plain_item(id INTEGER)')
+    connection.execute('CREATE TABLE prototype_item(id INTEGER UNIQUE)')
+    connection.execute('INSERT INTO plain_item VALUES (1), (?)', [1 if duplicate else 2])
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'plain_item')
+        prototype = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'prototype_item')
+        template_id = prototype['native']['constraints'][0]['resource_id']
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child = deepcopy(baseline['rows'][template_id])
+        child['name'] = 'plain_item_id_key'
+        child['path'] = [*original['path'], child['name']]
+        child_id = _resource_id('constraint', original['path'], child['name'], discriminator=0)
+        child['resource_id'] = child_id
+        child['native']['navigator_parent_resource_id'] = original['resource_id']
+        desired['rows'][child_id] = child
+        summary = deepcopy(prototype['native']['constraints'][0])
+        summary.update(resource_id=child_id, name=child['name'])
+        edited['constraints'] = [summary]
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."plain_item" '
+            '(id INTEGER UNIQUE)')
+        edited['duckdb_change'] = {'action': 'rebuild-unique-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'unique-addition.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT count(*) FROM plain_item').fetchone()[0] == 2
+        constraint_count = observer.execute("SELECT count(*) FROM duckdb_constraints() "
+            "WHERE table_name='plain_item' AND constraint_type='UNIQUE'").fetchone()[0]
+        observer.close()
+        if duplicate:
+            assert outcome['state'] == 'rolled_back', outcome
+            assert constraint_count == 0
+        else:
+            assert outcome['state'] == 'committed', outcome
+            assert outcome['outcome']['rediscovery_verified'], outcome
+            assert constraint_count == 1
+    finally:
+        provider.client.close()
+
+
 def test_native_batch_rolls_back_all_statements_on_late_failure(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

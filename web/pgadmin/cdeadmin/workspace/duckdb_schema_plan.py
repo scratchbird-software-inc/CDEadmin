@@ -480,7 +480,7 @@ def create_definition_tokens(source, kind):
     return None
 
 
-def _table_definition_sections(source):
+def _table_definition_sections(source, *, inline_unique=False):
     body = create_definition_tokens(source, 'table')
     if not body or body[0] != ('token_type.operator', '(') or body[-1] != ('token_type.operator', ')'):
         return None
@@ -500,11 +500,18 @@ def _table_definition_sections(source):
         if not section:
             return None
         if section[0] in {('token_type.keyword', 'check'),
+                          ('token_type.keyword', 'unique'),
                           ('token_type.keyword', 'constraint')}:
-            if ('token_type.keyword', 'check') not in section:
+            if not any(token in section for token in
+                    (('token_type.keyword', 'check'), ('token_type.keyword', 'unique'))):
                 return None
             checks.append(section)
         else:
+            if inline_unique and section[-1] == ('token_type.keyword', 'unique'):
+                checks.append((section[-1],))
+                section = section[:-1]
+                if not section:
+                    return None
             columns.append(section)
     return tuple(columns), tuple(checks)
 
@@ -946,18 +953,25 @@ def _validated_primary_key(before, after, change, target):
 
 
 def _validated_check_rebuild(before, after, change, target, live, desired):
-    if change != {'action': 'rebuild-check-constraints',
+    action = change.get('action') if isinstance(change, dict) else None
+    allowed = {'rebuild-check-constraints': {'CHECK'},
+        'rebuild-unique-constraints': {'CHECK', 'UNIQUE'}}.get(action)
+    if allowed is None or change != {'action': action,
                   'complete_definition_confirmed': True,
                   'preserve_rows_confirmed': True}:
-        raise ValueError('CHECK rebuild needs complete-definition and row-preservation confirmation')
+        raise ValueError('Constraint rebuild needs complete-definition and row-preservation confirmation')
     old, new = deepcopy(_definition(before)), deepcopy(_definition(after))
     old_constraints, new_constraints = old.pop('constraints'), new.pop('constraints')
     old.pop('ddl'); new.pop('ddl')
     if (not _equal(old, new) or _equal(old_constraints, new_constraints) or
             not isinstance(old_constraints, list) or not isinstance(new_constraints, list) or
-            any(item.get('constraint_type') != 'CHECK' for item in
+            any(item.get('constraint_type') not in allowed for item in
                 [*old_constraints, *new_constraints])):
-        raise ValueError('CHECK rebuild may change only complete native CHECK constraints')
+        raise ValueError('Constraint rebuild may change only its admitted native constraint kinds')
+    if action == 'rebuild-unique-constraints' and not any(
+            item.get('constraint_type') == 'UNIQUE' for item in
+            [*old_constraints, *new_constraints]):
+        raise ValueError('UNIQUE rebuild requires an observed or desired UNIQUE constraint')
     metadata = before['native'].get('catalog_metadata', {})
     columns = before['native'].get('columns')
     if (metadata.get('has_primary_key') is not False or metadata.get('comment') is not None or
@@ -967,32 +981,36 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
                 item.get('comment') is not None or item.get('default') is not None
                 for item in columns) or
             len({item['name'] for item in columns}) != len(columns)):
-        raise ValueError('CHECK rebuild requires plain unchanged columns without indexes or comments')
+        raise ValueError('Constraint rebuild requires plain unchanged columns without independent indexes or comments')
     for row in live['rows'].values():
         if row['kind'] in {'view', 'macro', 'sequence', 'attached-database'}:
-            raise ValueError('CHECK rebuild is blocked by a native dependent object category')
+            raise ValueError('Constraint rebuild is blocked by a native dependent object category')
         if row['kind'] == 'table' and any(item.get('constraint_type') in
-                ({'FOREIGN KEY', 'PRIMARY KEY', 'UNIQUE'} if
+                ({'FOREIGN KEY', 'PRIMARY KEY'} | ({'UNIQUE'} if action ==
+                 'rebuild-check-constraints' else set()) if
                  row['resource_id'] == before['resource_id'] else {'FOREIGN KEY'}) for item in
                 row['native'].get('constraints', [])):
-            raise ValueError('CHECK rebuild is blocked by native key dependencies')
+            raise ValueError('Constraint rebuild is blocked by native key dependencies')
     source = _validated_ddl(after['native'].get('ddl'), 'table', after['path'])
     body = create_definition_tokens(source, 'table')
-    original_sections = _table_definition_sections(before['native'].get('ddl'))
-    desired_sections = _table_definition_sections(source)
+    original_sections = _table_definition_sections(before['native'].get('ddl'),
+        inline_unique=action == 'rebuild-unique-constraints')
+    desired_sections = _table_definition_sections(source,
+        inline_unique=action == 'rebuild-unique-constraints')
     if (body is None or original_sections is None or desired_sections is None or
             not original_sections[0] or original_sections[0] != desired_sections[0] or
             len(original_sections[1]) != len(old_constraints) or
             len(desired_sections[1]) != len(new_constraints) or any(
             kind == 'token_type.keyword' and word in
-                {'primary', 'unique', 'foreign', 'references', 'default'}
+                ({'primary', 'foreign', 'references', 'default'} |
+                 ({'unique'} if action == 'rebuild-check-constraints' else set()))
             for kind, word in body)):
-        raise ValueError('CHECK rebuild requires a complete plain CREATE TABLE body')
+        raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
     stage_path = [*after['path'][:2], stage_name]
     stage_id = _resource_id('table', stage_path[:2], stage_name)
     if stage_id in live['rows'] or stage_id in desired['rows']:
-        raise ValueError('CHECK rebuild staging identity already exists')
+        raise ValueError('Constraint rebuild staging identity already exists')
     stage = '.'.join(_quote(part) for part in stage_path)
     source_prefix = re.match(r'^\s*CREATE\s+TABLE\s+' + re.escape(target), source, re.I)
     creation = 'CREATE TABLE ' + stage + source[source_prefix.end():]
@@ -1013,9 +1031,9 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         try:
             parsed = duckdb.extract_statements(statement)
         except duckdb.Error:
-            raise ValueError('Native CHECK rebuild statement is not parseable') from None
+            raise ValueError('Native constraint rebuild statement is not parseable') from None
         if len(parsed) != 1 or parsed[0].type != expected:
-            raise ValueError('Native CHECK rebuild requires four exact statements')
+            raise ValueError('Native constraint rebuild requires four exact statements')
     return statements, check, source, new_constraints
 
 
@@ -1026,7 +1044,7 @@ def _ordered_operations(operations, desired):
     if len(operations) > 1 and any(item['operation'] == 'rename' for item in operations):
         raise ValueError('Rename requires a separate review and descendant refresh')
     if len(operations) > 1 and any(item['operation'] == 'rebuild' for item in operations):
-        raise ValueError('CHECK table rebuild requires a separate review')
+        raise ValueError('Constraint table rebuild requires a separate review')
     by_id = {item['resource_id']: item for item in operations}
     for item in operations:
         row = desired['rows'][item['resource_id']]
@@ -1068,7 +1086,8 @@ def plan(baseline, desired, live):
     operations, blockers, conflicts, ignored = [], [], [], []
     rebuild_tables = {identity for identity, row in desired['rows'].items()
         if row['kind'] == 'table' and isinstance(row['native'].get('duckdb_change'), dict)
-        and row['native']['duckdb_change'].get('action') == 'rebuild-check-constraints'}
+        and row['native']['duckdb_change'].get('action') in
+            {'rebuild-check-constraints', 'rebuild-unique-constraints'}}
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
         if before is not None and (after.get('resource_id') != identity or
@@ -1086,7 +1105,7 @@ def plan(baseline, desired, live):
                     after['native'].get('system_object') is not False or
                     after['native'].get('duckdb_change') is not None):
                 blockers.append({'resource_id': identity, 'name': after.get('name'),
-                    'reason': 'CHECK rebuild child identity or intent is not native'})
+                    'reason': 'Constraint rebuild child identity or intent is not native'})
             continue
         if before is not None and _equal(_definition(before), _definition(after)) and not after['native'].get('duckdb_change'):
             continue
@@ -1197,7 +1216,8 @@ def plan(baseline, desired, live):
                 operation = 'alter'
                 source, _pk_columns = _validated_primary_key(before, after, change, target)
             elif (after['kind'] == 'table' and isinstance(change, dict) and
-                  change.get('action') == 'rebuild-check-constraints'):
+                  change.get('action') in
+                  {'rebuild-check-constraints', 'rebuild-unique-constraints'}):
                 operation = 'rebuild'
                 _rebuild_statements, _data_check, _original_source, _expected_constraints = (
                     _validated_check_rebuild(before, after, change, target, live, desired))
@@ -1259,7 +1279,7 @@ def plan(baseline, desired, live):
                     if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}
                 expected_ids = {item.get('resource_id') for item in _expected_constraints}
                 if set(child_rows) != expected_ids:
-                    raise ValueError('CHECK rebuild requires complete desired constraint child rows')
+                    raise ValueError('Constraint rebuild requires complete desired child rows')
                 for constraint in _expected_constraints:
                     child = child_rows[constraint['resource_id']]
                     metadata = child['native'].get('catalog_metadata', {})
@@ -1267,7 +1287,7 @@ def plan(baseline, desired, live):
                             ('constraint_index', 'constraint_type', 'constraint_text',
                              'expression', 'column_indexes', 'column_names',
                              'referenced_table', 'referenced_column_names')):
-                        raise ValueError('CHECK rebuild child and parent constraint facts differ')
+                        raise ValueError('Constraint rebuild child and parent facts differ')
                 operation_record.update(statements=_rebuild_statements,
                     data_check=_data_check, original_source=_original_source,
                     affected_child_ids=sorted(set(child_rows) | {
@@ -1303,7 +1323,7 @@ def plan(baseline, desired, live):
         'warnings': ['This native preview does not authorize or execute SQL.',
             'Catalog capture may be partial; absent desired rows never authorize drops.',
             'A separate durable review and fresh in-transaction baseline check are required before execution.'] +
-            (['CHECK rebuild assigns a new table object; refresh native table and constraint identities after application.']
+            (['Constraint rebuild assigns a new table object; refresh native table and constraint identities after application.']
              if any(item['operation'] == 'rebuild' for item in operations) else []) +
             (['Replacing a native enum does not retarget existing typed columns; review their conversions separately.']
              if any(item['kind'] == 'type' and item['operation'] == 'replace' for item in operations)

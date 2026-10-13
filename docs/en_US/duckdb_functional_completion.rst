@@ -286,11 +286,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   bind. Native rollback restores the original table, but a successful commit
   does not preserve these facts. General whole-table replacement remains
   blocked; a separate migration must preserve data and dependent metadata.
-  A narrow CHECK-only migration may be admitted when all observed columns
-  remain identical, no index, comment, tag, key or foreign-key edge needs
+  A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
+  remain identical, no independent index, comment, tag, primary key or
+  foreign-key edge needs
   preservation, and the captured file has no user view, macro or sequence
   dependency whose binding could change. The reviewer supplies a complete
-  CREATE TABLE definition and explicitly confirms a CHECK-only rebuild.
+  CREATE TABLE definition and explicitly confirms the corresponding isolated
+  constraint rebuild. The CHECK intent accepts only CHECK constraints; the
+  UNIQUE intent accepts CHECK and UNIQUE constraints. Foreign keys, primary
+  keys and independent indexes remain outside this migration.
   A deterministic staging table receives every old row in the same native
   transaction; both EXCEPT ALL directions must be empty before the original
   table is dropped and the staging table renamed. Any failed constraint or
