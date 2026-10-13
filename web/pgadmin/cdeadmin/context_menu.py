@@ -1244,6 +1244,9 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.test_data', 'Generate DuckDB test data...',
             'open_workspace', icon='action.insert', group='database', priority=45,
             arguments={**base, 'tab': 'duckdb-test-data'}))
+        actions.append(_action('database.duckdb.copy', 'Native DuckDB COPY...',
+            'open_workspace', icon='action.export', group='database', priority=46,
+            arguments={**base, 'tab': 'duckdb-copy'}))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
@@ -1535,6 +1538,12 @@ def resource_context_actions(
             group='object', priority=11,
             arguments={**base, 'tab': 'data'},
         ))
+    if (engine_id == 'duckdb' and resource_kind == 'table' and database_target_id and
+            resource_native(resource).get('system_object') is not True and
+            resource_native(resource).get('catalog_metadata', {}).get('temporary') is not True):
+        actions.append(_action('resource.duckdb.table.copy', 'Native DuckDB COPY...',
+            'open_workspace', icon='action.export', group='object', priority=12,
+            arguments={**base, 'tab': 'duckdb-copy'}))
     for index, operation in enumerate(operations):
         operation_id = operation.get('operation_id')
         if (

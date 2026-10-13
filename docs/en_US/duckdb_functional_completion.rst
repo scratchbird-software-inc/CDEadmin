@@ -79,6 +79,13 @@ DUCK-COMP-04: Data and file workflows
   capture, bounded to 32 tables, 5000 rows, a 4 MiB recipe and 1 MiB generated
   SQL. Generation validates 1.5.2 native statement boundaries and performs no
   writes. The shared Query Tool owns execution, transaction outcome and effects.
+  Native table COPY planning is similarly nonexecuting. It captures the exact
+  registered-file table identity, requires a contained regular source file for
+  import or an absent destination under the registered root for export, quotes
+  the full catalog/schema/table and path, and emits one parsed native CSV or
+  PARQUET statement. Import is a database write; export creates an external
+  file that SQL rollback cannot promise to remove. Execution remains in the
+  shared Query Tool with its explicit transaction controls.
 
 DUCK-COMP-05: DDN catalog, data and design exchange
   Capture native catalog and selected data into DDN views using the sister

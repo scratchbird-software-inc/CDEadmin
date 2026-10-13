@@ -1113,6 +1113,13 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_copy_plan(self, server, request):
+        from .duckdb_catalog_service import copy_plan
+        try:
+            return copy_plan(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def duckdb_design_asset(self, server, action, request):
         from .assets import ProjectAssetError
         from .firebird_design_assets import NativeDesignAssets
