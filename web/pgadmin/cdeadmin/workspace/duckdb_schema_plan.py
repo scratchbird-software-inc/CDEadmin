@@ -211,6 +211,9 @@ def _validated_struct_field_add(before, after, change):
     new_type = _native_column_type(desired['catalog'].get('data_type'))
     if not re.fullmatch(r'STRUCT\(.+\)', old_type, re.I | re.S):
         raise ValueError('STRUCT field addition requires an observed native STRUCT column')
+    if any(re.match(re.escape(field) + r'\s+', member)
+           for member in _struct_members(old_type)):
+        raise ValueError('STRUCT field addition cannot duplicate an observed field')
     expected = old_type[:-1] + ', ' + field + ' ' + field_type + ')'
     if new_type != expected:
         raise ValueError('STRUCT field addition must append exactly one native field')

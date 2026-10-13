@@ -706,6 +706,13 @@ def test_reviewed_struct_field_add_preserves_existing_values(tmp_path):
         wrong['rows'][column['resource_id']]['native']['catalog_metadata'][
             'data_type'] = 'STRUCT(a INTEGER, other VARCHAR)'
         assert not plan(baseline, wrong, baseline)['application_supported']
+        duplicate = deepcopy(desired)
+        duplicate['rows'][column['resource_id']]['native'][
+            'catalog_metadata']['data_type'] = 'STRUCT(a INTEGER, a INTEGER)'
+        duplicate['rows'][column['resource_id']]['native'][
+            'duckdb_change'].update(field='a', data_type='INTEGER')
+        assert 'duplicate an observed field' in plan(
+            baseline, duplicate, baseline)['blockers'][0]['reason']
         applications = DuckDBSchemaApplications(tmp_path/'struct-field.json', clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
         outcome = applications.apply(request(receipt), 'owner', 'binding',
