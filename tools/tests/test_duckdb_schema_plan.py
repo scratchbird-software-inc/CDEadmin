@@ -30,7 +30,7 @@ def test_create_plan_is_qualified_parsed_and_never_executes():
     addition = row('table', ['file', 'main', 'facts'],
         ddl='CREATE TABLE "file"."main"."facts" ("x" INTEGER)')
     result = plan(model(), model(addition), model())
-    assert result['ready_for_review'] and not result['application_supported']
+    assert result['ready_for_review'] and result['application_supported']
     assert result['operations'][0]['operation'] == 'create'
     assert result['operations'][0]['source'] == addition['native']['ddl']
     assert not result['executed'] and result['native_grammar_validated']

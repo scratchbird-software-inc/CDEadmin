@@ -22,7 +22,7 @@ def database_location(path, database_type, options):
             'options': safe, 'options_redacted': len(safe) != len(options)}
 
 
-def capture(connection, *, include_system=False):
+def capture(connection, *, include_system=False, _in_transaction=False):
     from .provider import _resources
     if type(include_system) is not bool:
         raise ValueError('DuckDB system-object selection must be Boolean')
@@ -51,7 +51,8 @@ def capture(connection, *, include_system=False):
             return row
     # The provider supplies this dedicated connection. BEGIN refusing an
     # already active transaction prevents accidentally adopting caller work.
-    connection.execute('BEGIN TRANSACTION')
+    if not _in_transaction:
+        connection.execute('BEGIN TRANSACTION')
     timer = threading.Timer(MAX_SECONDS, connection.interrupt)
     timer.daemon = True
     timer.start()
@@ -87,4 +88,5 @@ def capture(connection, *, include_system=False):
         return result
     finally:
         timer.cancel(); timer.join()
-        connection.execute('ROLLBACK')
+        if not _in_transaction:
+            connection.execute('ROLLBACK')

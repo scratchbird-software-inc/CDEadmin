@@ -1,0 +1,90 @@
+"""One-statement DuckDB DDN apply with native transaction and rediscovery."""
+
+import os
+
+from ..embedded_route import contained_database
+from ...workspace.duckdb_schema_plan import plan
+from ...workspace.firebird_catalog_export import build_export
+
+
+def _model(connection, record, *, in_transaction):
+    from .catalog import capture
+    observed = capture(connection, include_system=False, _in_transaction=in_transaction)
+    provenance = record['baseline']['provenance']
+    return build_export(observed['resources'], endpoint_id=provenance['endpoint_id'],
+        target_id=provenance['database_target_id'], generation=observed['generation'],
+        include_system=False, refreshed=True, engine='duckdb', native_model=True)
+
+
+def apply_review(provider, route, record):
+    for permission in ('administer', 'execute', 'data_read'):
+        provider._require(permission, 'resource')
+    result = {'state': 'not_dispatched', 'commit_requested': False,
+        'native_commit_returned': False, 'native_rollback_returned': False,
+        'rediscovery_verified': False, 'automatic_retry': False}
+    connection = None
+    transaction_started = False
+    try:
+        path = contained_database(route)
+        if path == ':memory:' or not os.path.isfile(path) or route.get('read_only') is True:
+            raise ValueError('Native schema application requires a writable registered DuckDB file')
+        if not record['plan'].get('application_supported'):
+            raise ValueError('Native application is not admitted for this plan')
+        connection = provider.client._connect({'route': route})
+        identity = record.get('file_identity')
+        details = os.stat(path)
+        if identity is not None and [details.st_dev, details.st_ino] != identity:
+            raise ValueError('Registered DuckDB file identity changed since review')
+        connection.execute('BEGIN TRANSACTION')
+        transaction_started = True
+        live = _model(connection, record, in_transaction=True)
+        fresh = plan(record['baseline'], record['desired'], live)
+        if (not fresh['application_supported'] or
+                fresh['execution_sha256'] != record['plan']['execution_sha256']):
+            result['rejection_reason'] = 'Native file definition changed since review'
+            connection.execute('ROLLBACK')
+            result['native_rollback_returned'] = True
+            return result
+        operation = fresh['operations'][0]
+        result['statement_dispatched'] = True
+        connection.execute(operation['source'])
+        result['commit_requested'] = True
+        connection.execute('COMMIT')
+        result.update(state='committed', native_commit_returned=True)
+        try:
+            observed = _model(connection, record, in_transaction=False)
+            current = observed['rows'].get(operation['resource_id'])
+            if operation['operation'] == 'drop':
+                result['rediscovery_verified'] = current is None
+            elif operation['operation'] == 'create':
+                result['rediscovery_verified'] = (current is not None and
+                    current['kind'] == operation['kind'] and current['name'] == operation['name'])
+            else:
+                from ...workspace.duckdb_schema_plan import _definition
+                from ...workspace.firebird_schema_plan import digest
+                result['rediscovery_verified'] = (current is not None and
+                    digest(_definition(current)) != operation['baseline_sha256'])
+            result['rediscovered_resource_id'] = current['resource_id'] if current else None
+        except Exception as error:
+            result['rediscovery_error_type'] = type(error).__name__
+        return result
+    except Exception as error:
+        result['error_type'] = type(error).__name__
+        result['state'] = 'unknown_outcome' if result['commit_requested'] else (
+            'rolled_back' if result.get('statement_dispatched') else 'not_dispatched')
+        if connection is not None and transaction_started:
+            try:
+                connection.execute('ROLLBACK')
+                result['native_rollback_returned'] = True
+            except Exception as rollback_error:
+                result['rollback_error_type'] = type(rollback_error).__name__
+                if result.get('statement_dispatched'):
+                    result['state'] = 'unknown_outcome'
+        return result
+    finally:
+        if connection is not None:
+            try:
+                provider.client._discard_failed_session(connection)
+                result['attachment_released'] = True
+            except Exception as error:
+                result['attachment_release_error_type'] = type(error).__name__

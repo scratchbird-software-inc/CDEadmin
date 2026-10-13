@@ -11,13 +11,14 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
   const [source, setSource] = useState(''), [error, setError] = useState('');
   const [baselineSource, setBaselineSource] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
+  const [schemaReceipt, setSchemaReceipt] = useState(null), [confirmApply, setConfirmApply] = useState(false);
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
   const [data, setData] = useState(null), [relation, setRelation] = useState('');
   const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const serial = useRef(0);
   useEffect(() => {
-    serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setData(null); setRelation(''); setError('');
+    serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setData(null); setRelation(''); setError('');
     setBusy(false); setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -30,7 +31,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           ...(compare ? {source} : {})}});
       if(token !== serial.current) return;
       if(compare) setComparison(value);
-      else {setResult(value); setComparison(null); setSchemaPlan(null); setData(null);
+      else {setResult(value); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setData(null);
         setRelation(value.objects?.find(item => ['table', 'view'].includes(item.kind))?.resource_id || '');
         setDisplay('inventory'); setView(value.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB catalog capture failed');}
@@ -49,12 +50,41 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   };
   const previewSchema = async () => {
     const token = ++serial.current;
-    setBusy(true); setError(''); setSchemaPlan(null);
+    setBusy(true); setError(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);
     try {
       const value = await post({action: 'duckdb_schema_plan', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source}});
       if(token === serial.current) setSchemaPlan(value);
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB schema preview failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const reviewSchema = async () => {
+    const token = ++serial.current; setBusy(true); setError('');
+    try {
+      const value = await post({action: 'duckdb_schema_review', request: {
+        database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
+        execution_sha256: schemaPlan.execution_sha256}});
+      if(token === serial.current) {setSchemaReceipt(value); setConfirmApply(false);}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB review failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const applySchema = async () => {
+    const token = ++serial.current; setBusy(true); setError('');
+    try {
+      const value = await post({action: 'duckdb_schema_apply', request: {
+        database_target_id: databaseTargetId, review_id: schemaReceipt.review_id,
+        review_digest: schemaReceipt.review_digest, confirmed: true}});
+      if(token === serial.current) {setSchemaReceipt(value); setConfirmApply(false); setSchemaPlan(null);}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB application outcome is unavailable; read the receipt before any new review');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const readReceipt = async () => {
+    const token = ++serial.current; setBusy(true); setError('');
+    try {
+      const value = await post({action: 'duckdb_schema_receipt', request: {
+        database_target_id: databaseTargetId, review_id: schemaReceipt.review_id}});
+      if(token === serial.current) setSchemaReceipt(value);
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB receipt is unavailable');}
     finally {if(token === serial.current) setBusy(false);}
   };
   const shown = display === 'relations' ? result?.diagram : display === 'data' ? data : result;
@@ -78,7 +108,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           const file = event.target.files?.[0]; event.target.value = '';
           if(!file) return;
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {setSource(await file.text()); setBaselineSource(''); setSchemaPlan(null); setComparison(null); setError('');}
+          try {setSource(await file.text()); setBaselineSource(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setComparison(null); setError('');}
           catch(failure) {setError(failure.message || 'Could not read DDN file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => capture(true)}>Compare DDN with live catalog</Button>
@@ -114,7 +144,7 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
     {result && <Alert severity="info">Visible objects: {result.provenance.objects}. Coverage: {result.provenance.coverage}.</Alert>}
     {result?.snapshot && <FirebirdCatalogDesigner engine="duckdb" baseline={JSON.stringify(result.snapshot)}
       post={post} databaseTargetId={databaseTargetId} disabled={busy}
-      onReview={(desired, baseline) => {setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null);}} />}
+      onReview={(desired, baseline) => {setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);}} />}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="duckdb/catalog-comparison" aria-label="DuckDB catalog differences"
@@ -134,6 +164,17 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           {key: 'name', name: 'Native object', minWidth: 170}, {key: 'operation', name: 'Operation', width: 110},
           {key: 'source', name: 'Native SQL', minWidth: 340}, {key: 'reason', name: 'Blocker or conflict', minWidth: 260},
         ]} /></Box>
+      {schemaPlan.application_supported && !schemaReceipt &&
+        <Button disabled={busy} onClick={reviewSchema}>Prepare one-statement native review</Button>}
+    </Box>}
+    {schemaReceipt && <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
+      <Alert severity={schemaReceipt.state === 'committed' ? 'success' : schemaReceipt.state === 'unknown_outcome' ? 'warning' : 'info'}>
+        Native receipt {schemaReceipt.review_id}: {schemaReceipt.state}. Rediscovery {schemaReceipt.outcome?.rediscovery_verified ? 'verified' : 'unverified'}.
+      </Alert>
+      {schemaReceipt.state === 'reviewed' && <FormControlLabel label="Confirm this reviewed DuckDB statement"
+        control={<Checkbox checked={confirmApply} disabled={busy} onChange={event => setConfirmApply(event.target.checked)} />} />}
+      {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed statement</Button>}
+      <Button disabled={busy} onClick={readReceipt}>Read native receipt</Button>
     </Box>}
     {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,

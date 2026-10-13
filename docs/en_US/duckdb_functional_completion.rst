@@ -110,9 +110,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   explicit DROP intent and view replacement are currently previewed through the
   1.5.2 native parser. Other native edits are blockers. Missing desired rows are
-  ignored rather than treated as deletion. The preview is nonexecuting and does
-  not grant an apply right; full native adapters and reviewed application remain
-  required before this requirement is complete.
+  ignored rather than treated as deletion. A separate owner/file-bound review
+  must bind one displayed operation fingerprint to a durable receipt before
+  native dispatch. Application opens its own connection, begins one DuckDB
+  transaction, verifies the registered file identity and rechecks the live
+  baseline in that transaction, dispatches at
+  most one native statement, commits and rediscoveries. A failed/uncertain
+  commit is never replayed automatically. The limited admitted operation set
+  does not complete the full native DDN adapter obligation.
 
 DUCK-COMP-06: Native dashboards and monitoring
   Provide display-only DDN engine/embedded-instance/database dashboards with a

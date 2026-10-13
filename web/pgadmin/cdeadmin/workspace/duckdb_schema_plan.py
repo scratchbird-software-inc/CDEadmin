@@ -135,7 +135,8 @@ def plan(baseline, desired, live):
         'conflicts': conflicts, 'ignored': ignored,
         'execution_sha256': digest(operations), 'native_grammar_validated': True,
         'ready_for_review': bool(operations) and not blockers and not conflicts,
-        'application_supported': False, 'executed': False,
+        'application_supported': len(operations) == 1 and not blockers and not conflicts,
+        'executed': False,
         'warnings': ['This native preview does not authorize or execute SQL.',
             'Catalog capture may be partial; absent desired rows never authorize drops.',
-            'Fresh target and baseline verification plus reviewed apply are required before execution.']}
+            'A separate durable review and fresh in-transaction baseline check are required before execution.']}

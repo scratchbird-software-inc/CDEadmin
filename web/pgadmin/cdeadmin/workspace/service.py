@@ -1163,6 +1163,70 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        import os
+        import stat
+        from .duckdb_schema_apply import DuckDBSchemaApplications
+        from .firebird_catalog_import import read_catalog
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.duckdb.schema_application import apply_review
+        from ..providers.embedded_route import contained_database
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select an exact DuckDB registered file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+            raise ProviderWorkspaceError('Native application requires DuckDB')
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        try:
+            path = contained_database(endpoint['route'])
+            if path == ':memory:':
+                raise ValueError('Native application requires an existing writable registered file')
+            info = os.stat(path)
+            if not stat.S_ISREG(info.st_mode) or endpoint['route'].get('read_only') is True:
+                raise ValueError('Native application requires an existing writable registered file')
+            applications = DuckDBSchemaApplications(str(store.path) + '.duckdb-schema-applications.json')
+            owner = self._principal_id(server)
+            binding = digest({'context': asdict(context), 'route': endpoint['route'],
+                'target': target, 'file_identity': [info.st_dev, info.st_ino]})
+            if action == 'duckdb_schema_review':
+                if set(request) != {'database_target_id', 'baseline', 'desired', 'execution_sha256'}:
+                    raise ValueError('Invalid native schema review request')
+                preview = self.duckdb_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='duckdb'),
+                    read_catalog(request['desired'], engine='duckdb'), owner, binding, target,
+                    file_identity=[info.st_dev, info.st_ino])
+            if action == 'duckdb_schema_receipt':
+                if set(request) != {'database_target_id', 'review_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid native schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'duckdb_schema_apply' or set(request) != {
+                    'database_target_id', 'review_id', 'review_digest', 'confirmed'}:
+                raise ValueError('Invalid native schema application request')
+            def execute(record):
+                outcome = apply_review(provider, endpoint['route'], record)
+                if outcome['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        outcome['explorer_invalidated'] = True
+                    except Exception as error:
+                        outcome.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return outcome
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def export_firebird_catalog(self, server, request, *, _native_model=False):
         """Capture one admitted catalog generation into documentary DDN."""
         from .firebird_catalog_export import build_export, MAX_RESOURCES
