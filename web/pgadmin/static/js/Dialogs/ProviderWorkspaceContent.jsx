@@ -7976,7 +7976,7 @@ export default function ProviderWorkspaceContent({
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
-            {languageProfile === 'mysql-sql' && <MySQLQueryOptions transaction={transaction} />}
+            {['mysql-sql', 'mariadb-sql'].includes(languageProfile) && <MySQLQueryOptions engine={languageProfile === 'mariadb-sql' ? 'mariadb' : 'mysql'} transaction={transaction} />}
             {['firebird-sql', 'mysql-sql', 'mariadb-sql'].includes(languageProfile) && <>
               <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
                 checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}

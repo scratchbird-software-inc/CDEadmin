@@ -36,8 +36,9 @@ class MySQLMonitoringHost(MonitoringHost):
             'owner': server.user_id, 'username': server.username, 'password_revision': str(server.password),
             'provider': [endpoint.provider_id, endpoint.provider_version, endpoint.profile_id, endpoint.profile_version],
             'generation': endpoint.profile_generation or endpoint.cache_namespace,
+            # Reverification timestamps are observations, not registration changes.
             'verification': [runtime.verification_state, runtime.verified_runtime_family,
-                runtime.verified_runtime_version, str(runtime.verified_at),
+                runtime.verified_runtime_version,
                 runtime.verification_evidence_reference] if runtime is not None else None,
             'tls': [endpoint.tls_profile.tls_mode, endpoint.tls_profile.configuration_reference]
                 if endpoint.tls_profile is not None else None,
@@ -72,7 +73,9 @@ class MySQLMonitoringHost(MonitoringHost):
                     'configuration': self._configuration(server), 'route': copy.deepcopy(endpoint['route'])}
                 self._issuing_permissions[key] = binding.permissions
             try:
-                return super().enable(owner, sid, target, body)
+                result = super().enable(owner, sid, target, body)
+                policy = self._grants[key].policy
+                return {**result, 'policy': {field: getattr(policy, field) for field in self.policy_fields}}
             finally:
                 self._issuing_permissions.pop(key, None)
                 if key not in self._grants:
@@ -102,7 +105,8 @@ class MySQLMonitoringHost(MonitoringHost):
             current = self._authorizer(owner, sid, target)
             result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                 current(policy, purpose, grant.generation, grant.route_digest))
-            return {**result, 'navigation': navigation, 'authentication': dict(grant.authentication)}
+            return {**result, 'navigation': navigation, 'authentication': dict(grant.authentication),
+                'policy': {key: getattr(grant.policy, key) for key in self.policy_fields}}
 
     def _registrations(self, owner):
         from pgadmin.model import Server, User

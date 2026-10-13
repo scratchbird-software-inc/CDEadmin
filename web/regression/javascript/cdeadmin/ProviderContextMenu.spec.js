@@ -132,4 +132,13 @@ describe('provider-owned Object Explorer menus', () => {
     }));
     expect(typeof groups[1].children[0].execute).toBe('function');
   });
+  it('admits native MariaDB fleet and dashboard-editor commands alongside the other engine handlers', () => {
+    const menus = providerContextMenuItems({cde_context_actions: [
+      action({command_id: 'engine.mariadb.dashboard', handler: 'open_mariadb_fleet', label: 'MariaDB engine dashboard...'}),
+      action({command_id: 'database.mariadb.dashboard_editor', handler: 'open_mariadb_dashboard_editor', label: 'Edit MariaDB dashboard...'}),
+      action({command_id: 'untrusted', handler: 'unregistered_handler'}),
+    ]});
+    expect(menus.map(menu => menu.commandId)).toEqual(['engine.mariadb.dashboard', 'database.mariadb.dashboard_editor']);
+    expect(menus.every(menu => typeof menu.commandHandler === 'function')).toBe(true);
+  });
 });

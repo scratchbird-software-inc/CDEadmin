@@ -72,6 +72,10 @@ def test_dedicated_credentials_are_sealed_and_common_lock_is_released(tmp_path, 
         result = host.enable(1, 7, 'database', {'credentials': {
             'username': 'monitor', 'password': 'dedicated-private', 'role': 'read_metrics'}, 'heartbeat_enabled': True})
         assert result['authentication']['username'] == 'monitor'
+        assert set(result['policy']) == host.policy_fields
+        assert result['policy']['heartbeat_enabled'] is True
+        assert 'dedicated-private' not in str(result)
+        assert 'credentials' not in result['policy']
         grant = host._grants[(1, 7, 'database')]
         assert grant.engine == 'mariadb' and grant.policy.heartbeat_enabled
         assert 'dedicated-private' not in repr(grant._credentials)
@@ -109,4 +113,18 @@ def test_definition_scope_matches_native_owner_and_database_without_connecting(t
         with pytest.raises(PermissionError): host.definition_scope(1, 7, 'other')
         with pytest.raises(PermissionError): host.definition_scope(2, 7, 'database')
         permission.acquire_secret.assert_not_called()
+    finally: shared.close()
+
+
+def test_same_runtime_reverification_does_not_revoke_browser_free_collector(tmp_path, monkeypatch):
+    host, shared, server, permission = make_host(tmp_path, monkeypatch)
+    try:
+        host.enable(1, 7, 'database', {})
+        grant = host._grants[(1, 7, 'database')]
+        permission.acquire_secret.side_effect = AssertionError('Browser credential resolver reused')
+        server.endpoint_profile.runtime_identity.verified_at = 'later native verification'
+        assert grant.require(grant.policy, 'collect')
+        assert host.snapshot(1, 7, 'database')['policy']['interval_seconds'] > 0
+        server.endpoint_profile.runtime_identity.verified_runtime_version = 'changed'
+        with pytest.raises(PermissionError): grant.require(grant.policy, 'collect')
     finally: shared.close()

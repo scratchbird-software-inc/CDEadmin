@@ -114,4 +114,22 @@ describe('MariaDB native dashboard freshness', () => {
     if(reason === 'scope') snapshot.samples[0].scope = 'server';
     expect(mysqlDashboardFiles(snapshot, 'database', 'mariadb')['dashboard.ddn']).not.toContain('NATIVE_VISIBLE_SETTING');
   });
+  it('reopens the active native policy and dedicated account without exposing a password or MySQL role host', async () => {
+    const api = {get: jest.fn()};
+    getApiInstance.mockReturnValue(api);
+    api.get.mockResolvedValue({data: {data: {state: 'collecting', samples: [],
+      policy: {interval_seconds: 20, retain_samples: 42, lease_seconds: 600, metadata_interval_seconds: 120,
+        heartbeat_enabled: true, heartbeat_timeout_seconds: 40},
+      authentication: {mode: 'dedicated', username: 'native-monitor', role: 'native-role'}}}});
+    render(<Component engine="mariadb" serverId={7} targetId="demo" policyMode />);
+    await waitFor(() => expect(screen.getByLabelText('Monitoring username')).toHaveValue('native-monitor'));
+    expect(screen.getByLabelText('Monitoring role (optional)')).toHaveValue('native-role');
+    expect(screen.getByLabelText('Monitoring password')).toHaveValue('');
+    expect(screen.getByLabelText('Sample interval (seconds)')).toHaveValue(20);
+    expect(screen.getByLabelText('Retained samples')).toHaveValue(42);
+    expect(screen.getByLabelText('Collection lease (seconds)')).toHaveValue(600);
+    expect(screen.getByLabelText('Use completed refreshes as availability heartbeats')).toBeChecked();
+    expect(screen.getByLabelText('Monitoring username')).toBeDisabled();
+    expect(screen.queryByLabelText(/default role host/)).toBeNull();
+  });
 });

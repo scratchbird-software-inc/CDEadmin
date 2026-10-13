@@ -15,6 +15,7 @@ const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
   'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
+  'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 

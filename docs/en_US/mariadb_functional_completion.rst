@@ -167,6 +167,15 @@ MARIA-COMP-06: Dashboards and dedicated monitoring
   scope every sample and continue collection without a viewer. Distinguish
   unavailable, denied and zero measurements. Retain bounded volatile samples.
 
+  Reopening an active policy shows the admitted sampling, retention, lease,
+  heartbeat and dedicated-account/role settings, rather than editor defaults.
+  Return only safe policy fields and account identity; never return a password.
+  Active settings remain disabled until collection is stopped. MariaDB roles
+  have no MySQL role-host suffix. Successful native reverification with the same
+  runtime family/version/evidence does not revoke collection merely because its
+  observation timestamp changed. Persisted route, target, credentials, generation,
+  runtime identity or verification-state changes still invalidate admission.
+
   Native probes use MariaDB's ``server_uid`` identity, information_schema
   GLOBAL_STATUS, PROCESSLIST and SLAVE_STATUS, plus explicitly named native
   settings and selected-database TABLES storage estimates. Do not depend on

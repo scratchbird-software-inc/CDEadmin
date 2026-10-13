@@ -55,6 +55,15 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     read(); const timer = setInterval(read, 5000);
     return () => {active = false; serial.current++; clearInterval(timer);};
   }, [endpoint, targetId, definitionEndpoint, showPolicy, scope, engineMode, engine]);
+  useEffect(() => {
+    if(!showPolicy || !snapshot?.policy || snapshot.state === 'disabled') return;
+    setPolicy(value => ({...value, ...Object.fromEntries(Object.keys(defaults)
+      .filter(key => Object.hasOwn(snapshot.policy, key)).map(key => [key, snapshot.policy[key]]))}));
+    if(snapshot.authentication) {
+      setMode(snapshot.authentication.mode === 'dedicated' ? 'dedicated' : 'current');
+      setCredentials({username: snapshot.authentication.username || '', role: snapshot.authentication.role || '', password: ''});
+    }
+  }, [showPolicy, snapshot]);
   const change = async stop => {
     const token = ++serial.current;
     changing.current = true; setBusy(true); setActionError('');
@@ -93,7 +102,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           <MenuItem value="current">Current connection credentials</MenuItem><MenuItem value="dedicated">Dedicated monitoring account</MenuItem>
         </TextField>
         {mode === 'dedicated' && ['username', 'password', 'role'].map(key => <TextField key={key} size="small"
-          label={`Monitoring ${key}${key === 'role' ? ' (optional; default role host %)' : ''}`} value={credentials[key]}
+          label={`Monitoring ${key}${key === 'role' ? (engine === 'mariadb' ? ' (optional)' : ' (optional; default role host %)') : ''}`} value={credentials[key]}
           type={key === 'password' && !showPassword ? 'password' : 'text'} autoComplete={key === 'password' ? 'new-password' : 'off'}
           disabled={busy || active} onChange={event => setCredentials({...credentials, [key]: event.target.value})} />)}
         {mode === 'dedicated' && <FormControlLabel label="Show password" control={<Checkbox checked={showPassword} onChange={event => setShowPassword(event.target.checked)} />} />}
