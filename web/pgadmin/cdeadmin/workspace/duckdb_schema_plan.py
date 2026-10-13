@@ -744,8 +744,9 @@ def _validated_macro_replacement(before, after, target, change):
         raise ValueError('Macro replacement requires explicit confirmation that the original signature has no parameter defaults')
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
-    if previous['catalog'].get('comment') is not None or previous['catalog'].get('tags'):
-        raise ValueError('Macro replacement would discard existing native comment or tags')
+    if (previous['catalog'].get('comment') != desired['catalog'].get('comment') or
+            previous['catalog'].get('tags') or desired['catalog'].get('tags')):
+        raise ValueError('Macro replacement requires unchanged comment and no native tags')
     old_overloads, new_overloads = previous['overloads'], desired['overloads']
     if (not isinstance(old_overloads, list) or len(old_overloads) != 1 or
             not isinstance(new_overloads, list) or len(new_overloads) != 1 or
@@ -754,6 +755,8 @@ def _validated_macro_replacement(before, after, target, change):
     old_definition = old_overloads[0].pop('definition', None)
     new_definition = new_overloads[0].pop('definition', None)
     macro_kind = old_overloads[0].get('catalog_metadata', {}).get('function_type')
+    if macro_kind == 'table_macro' and previous['catalog'].get('comment') is not None:
+        raise ValueError('DuckDB 1.5.2 cannot comment on table macros')
     if (macro_kind not in {'macro', 'table_macro'} or
             new_overloads[0].get('catalog_metadata', {}).get('function_type') != macro_kind or
             old_overloads[0].get('catalog_metadata', {}).get('varargs') or
@@ -792,8 +795,10 @@ def _validated_macro_replacement(before, after, target, change):
 def _macro_overload_postcondition(row):
     native = row['native']
     overloads = native.get('overloads')
+    group_comment = native.get('catalog_metadata', {}).get('comment')
     if (not isinstance(overloads, list) or not 1 <= len(overloads) <= 32 or
-            native.get('overload_count') != len(overloads)):
+            native.get('overload_count') != len(overloads) or
+            native.get('catalog_metadata', {}).get('tags')):
         raise ValueError('Macro replacement requires a complete bounded overload group')
     kinds = set()
     result = []
@@ -804,7 +809,7 @@ def _macro_overload_postcondition(row):
         if (not isinstance(metadata, dict) or
                 metadata.get('function_type') not in {'macro', 'table_macro'} or
                 metadata.get('internal') is not False or metadata.get('varargs') is not None or
-                metadata.get('comment') is not None or metadata.get('tags') or
+                metadata.get('comment') != group_comment or metadata.get('tags') or
                 not isinstance(parameters, list) or len(parameters) > 64 or
                 not isinstance(definition, str) or not definition.strip() or
                 len(definition.encode('utf8')) > 8192 or '\x00' in definition):
@@ -834,15 +839,19 @@ def _validated_macro_group_replacement(before, after, change):
     if (set(change) != {'action', 'source', 'complete_signature_set_confirmed'} or
             change.get('complete_signature_set_confirmed') is not True):
         raise ValueError('Whole macro replacement requires explicit complete-signature confirmation')
-    if (before['native'].get('catalog_metadata', {}).get('comment') is not None or
-            after['native'].get('catalog_metadata', {}).get('comment') is not None):
-        raise ValueError('Whole macro replacement would discard an existing native comment')
+    old_comment = before['native'].get('catalog_metadata', {}).get('comment')
+    new_comment = after['native'].get('catalog_metadata', {}).get('comment')
+    if old_comment != new_comment:
+        raise ValueError('Whole macro replacement requires unchanged native comment')
     previous = _macro_overload_postcondition(before)
     desired = _macro_overload_postcondition(after)
     if previous == desired:
         raise ValueError('Whole macro replacement needs an observable desired overload change')
+    if old_comment is not None and desired[0]['kind'] == 'table_macro':
+        raise ValueError('DuckDB 1.5.2 cannot comment on table macros')
     source = _validated_ddl(change.get('source'), 'macro', after['path'], replace=True)
-    return source, desired
+    target = '.'.join(_quote(part) for part in after['path'])
+    return source, desired, _validated_replayed_comment('macro', target, old_comment)
 
 
 def _validated_sequence_replacement(before, after, change):
@@ -1316,10 +1325,12 @@ def plan(baseline, desired, live):
                   after['kind'] == 'macro'):
                 operation = 'replace'
                 source, _definition_text = _validated_macro_replacement(before, after, target, change)
+                _macro_comment_replay = _validated_replayed_comment('macro', target,
+                    before['native'].get('catalog_metadata', {}).get('comment'))
             elif (isinstance(change, dict) and change.get('action') == 'replace-macro' and
                   after['kind'] == 'macro'):
                 operation = 'replace'
-                source, _macro_overloads = _validated_macro_group_replacement(
+                source, _macro_overloads, _macro_comment_replay = _validated_macro_group_replacement(
                     before, after, change)
             elif (isinstance(change, dict) and change.get('action') == 'replace-sequence' and
                   after['kind'] == 'sequence'):
@@ -1374,6 +1385,12 @@ def plan(baseline, desired, live):
                 operation_record['preserved_column_comments'] = _view_column_comments
                 if _view_comment_replays:
                     operation_record['statements'] = [source, *_view_comment_replays]
+            if (operation == 'replace' and after['kind'] == 'macro' and
+                    change.get('action') in {'replace-definition', 'replace-macro'}):
+                operation_record['preserved_comment'] = after['native'].get(
+                    'catalog_metadata', {}).get('comment')
+                if _macro_comment_replay is not None:
+                    operation_record['statements'] = [source, _macro_comment_replay]
             if operation == 'rename':
                 operation_record['source_resource_id'] = before['resource_id']
             if operation == 'create' and after['kind'] == 'column':

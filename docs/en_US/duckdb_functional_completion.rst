@@ -220,9 +220,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``duckdb_functions()`` does not expose macro parameter default expressions;
   names and types alone cannot prove that reconstruction preserves optional
   arguments. A reviewer must independently verify the original signature has
-  no defaults before the plan may synthesize a replacement statement. A macro
-  with an existing native comment or tags is blocked because ``CREATE OR REPLACE``
-  clears those facts; a future adapter must preserve and verify them explicitly.
+  no defaults before the plan may synthesize a replacement statement. A
+  single-overload scalar macro replacement with an unchanged native comment
+  replays that comment in the same transaction and verifies it after commit.
+  A complete scalar overload-group replacement likewise replays a common,
+  unchanged comment on every overload and verifies it after commit. DuckDB
+  1.5.2 does not admit ``COMMENT ON MACRO`` for table macros. Native tags
+  remain blocked because ``CREATE OR REPLACE`` clears them.
   Table replacement uses
   ``CREATE OR REPLACE MACRO ... AS TABLE``; scalar replacement omits ``TABLE``.
   A distinct ``replace-macro`` intent may replace a complete overload group or

@@ -1649,6 +1649,7 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
         name = 'mood'
     else:
         connection.execute('CREATE MACRO plusone(x) AS x + 1')
+        connection.execute("COMMENT ON MACRO plusone IS 'scalar note'")
         name = 'plusone'
     connection.close()
     try:
@@ -1670,6 +1671,8 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
                 'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
+        if kind == 'macro':
+            assert len(preview['operations'][0]['statements']) == 2
         applications = DuckDBSchemaApplications(tmp_path/f'{kind}-replace.json',
             clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired,
@@ -1683,6 +1686,8 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
                 "WHERE type_name='mood'").fetchone()[0] == ['ok', 'bad', 'great']
         else:
             assert observer.execute('SELECT plusone(5)').fetchone() == (7,)
+            assert observer.execute("SELECT comment FROM duckdb_functions() "
+                "WHERE function_name='plusone'").fetchone()[0] == 'scalar note'
         observer.close()
     finally:
         provider.client.close()
@@ -1724,6 +1729,56 @@ def test_reviewed_native_table_macro_replacement(tmp_path):
         provider.client.close()
 
 
+def test_commented_scalar_macro_replacement_requires_comment_rediscovery(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE MACRO plusone(x) AS x + 1')
+    connection.execute("COMMENT ON MACRO plusone IS 'retained note'")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'macro' and row['name'] == 'plusone')
+        desired = deepcopy(baseline)
+        changed = desired['rows'][original['resource_id']]['native']
+        changed['definition'] = '(x + 2)'
+        changed['overloads'][0]['definition'] = '(x + 2)'
+        changed['duckdb_change'] = {
+            'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'macro-comment-verify.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        from pgadmin.cdeadmin.providers.duckdb import schema_application
+        actual_model = schema_application._model
+
+        def conflicting_observation(connection, record, *, in_transaction):
+            model = actual_model(connection, record, in_transaction=in_transaction)
+            if not in_transaction:
+                model['rows'][original['resource_id']]['native'][
+                    'catalog_metadata']['comment'] = None
+            return model
+
+        with patch.object(schema_application, '_model', conflicting_observation):
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'] is False, outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT plusone(5)').fetchone() == (7,)
+        assert observer.execute("SELECT comment FROM duckdb_functions() "
+            "WHERE function_name='plusone'").fetchone()[0] == 'retained note'
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('third_definition, verified', (
     ('((x + y) + z)', True),
     ('(x + y + z)', False),
@@ -1733,6 +1788,7 @@ def test_reviewed_native_complete_macro_overload_replacement(tmp_path, third_def
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE MACRO overloaded(x) AS x + 1, (x, y) AS x + y')
+    connection.execute("COMMENT ON MACRO overloaded IS 'group note'")
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1760,6 +1816,7 @@ def test_reviewed_native_complete_macro_overload_replacement(tmp_path, third_def
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
         assert len(preview['operations'][0]['postcondition']['overloads']) == 3
+        assert len(preview['operations'][0]['statements']) == 2
         unconfirmed = deepcopy(desired)
         unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'].pop(
             'complete_signature_set_confirmed')
@@ -1781,6 +1838,8 @@ def test_reviewed_native_complete_macro_overload_replacement(tmp_path, third_def
         observer = duckdb.connect(route['database'])
         assert observer.execute('SELECT overloaded(5), overloaded(5, 6), '
             'overloaded(5, 6, 7)').fetchone() == (7, 11, 18)
+        assert {row[0] for row in observer.execute("SELECT comment FROM duckdb_functions() "
+            "WHERE function_name='overloaded'").fetchall()} == {'group note'}
         observer.close()
         assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
     finally:

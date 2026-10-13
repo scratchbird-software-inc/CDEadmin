@@ -245,6 +245,10 @@ def test_stale_live_definition_and_foreign_scope_are_refused():
     comment_preview = plan(model(commented), model(commented_desired), model(commented))
     assert comment_preview['application_supported'], comment_preview['blockers']
     assert len(comment_preview['operations'][0]['statements']) == 2
+    changed_comment = deepcopy(commented_desired)
+    changed_comment['native']['catalog_metadata']['comment'] = 'another note'
+    assert not plan(model(commented), model(changed_comment),
+        model(commented))['application_supported']
     with pytest.raises(ValueError, match='another endpoint'):
         plan(model(before, endpoint='foreign'), model(desired), model(before))
 
@@ -544,15 +548,18 @@ def test_scalar_macro_definition_replacement_rejects_other_edits():
         model(existing), model(unconfirmed), model(existing))['blockers'][0]['reason']
     commented = deepcopy(existing)
     commented['native']['catalog_metadata']['comment'] = 'preserve this'
+    commented['native']['overloads'][0]['catalog_metadata']['comment'] = 'preserve this'
     commented_desired = deepcopy(changed)
     commented_desired['native']['catalog_metadata']['comment'] = 'preserve this'
-    assert 'discard existing native comment or tags' in plan(
-        model(commented), model(commented_desired), model(commented))['blockers'][0]['reason']
+    commented_desired['native']['overloads'][0]['catalog_metadata']['comment'] = 'preserve this'
+    comment_preview = plan(model(commented), model(commented_desired), model(commented))
+    assert comment_preview['application_supported'], comment_preview['blockers']
+    assert len(comment_preview['operations'][0]['statements']) == 2
     tagged = deepcopy(existing)
     tagged['native']['catalog_metadata']['tags'] = {'owner': 'user'}
     tagged_desired = deepcopy(changed)
     tagged_desired['native']['catalog_metadata']['tags'] = {'owner': 'user'}
-    assert 'discard existing native comment or tags' in plan(
+    assert 'unchanged comment and no native tags' in plan(
         model(tagged), model(tagged_desired), model(tagged))['blockers'][0]['reason']
     changed['native']['parameters'].append({'name': 'y', 'data_type': None})
     assert plan(model(existing), model(changed), model(existing))['blockers']
