@@ -1,4 +1,4 @@
-"""Durable, owner-bound review of one DuckDB native DDN statement."""
+"""Durable, owner-bound review of a bounded DuckDB native DDN batch."""
 
 from copy import deepcopy
 import json
@@ -19,24 +19,27 @@ class DuckDBSchemaApplications(SchemaApplications):
                 preview.get('ready_for_review') is not True or
                 preview.get('application_supported') is not True or
                 preview.get('native_grammar_validated') is not True or
-                not isinstance(operations, list) or len(operations) != 1 or
+                not isinstance(operations, list) or not 1 <= len(operations) <= 32 or
                 preview.get('execution_sha256') != digest(operations)):
-            raise SchemaApplyError('Only one admitted, native-validated DuckDB operation can be reviewed')
-        operation = operations[0]
-        identity = operation['resource_id']
-        source_id = operation.get('source_resource_id', identity)
-        before, after = baseline['rows'].get(source_id), desired['rows'].get(identity)
-        if after is None or operation['desired_sha256'] != digest(_definition(after)):
-            raise SchemaApplyError('Native desired definition differs from the reviewed plan')
-        if operation['operation'] == 'rename':
-            if (source_id == identity or before is None or identity in baseline['rows'] or
-                    operation['baseline_sha256'] != digest(_definition(before))):
-                raise SchemaApplyError('Native rename requires an exact baseline source and absent target')
-        elif before is None:
-            if operation['operation'] != 'create' or operation['baseline_sha256'] is not None:
-                raise SchemaApplyError('Native creation requires an absent baseline target')
-        elif operation['baseline_sha256'] != digest(_definition(before)):
-            raise SchemaApplyError('Native baseline differs from the reviewed plan')
+            raise SchemaApplyError('Only bounded, native-validated DuckDB operations can be reviewed')
+        baseline_ids, desired_ids = set(), set()
+        for operation in operations:
+            identity = operation['resource_id']
+            source_id = operation.get('source_resource_id', identity)
+            before, after = baseline['rows'].get(source_id), desired['rows'].get(identity)
+            desired_ids.add(identity)
+            baseline_ids.add(source_id)
+            if after is None or operation['desired_sha256'] != digest(_definition(after)):
+                raise SchemaApplyError('Native desired definition differs from the reviewed plan')
+            if operation['operation'] == 'rename':
+                if (source_id == identity or before is None or identity in baseline['rows'] or
+                        operation['baseline_sha256'] != digest(_definition(before))):
+                    raise SchemaApplyError('Native rename requires an exact baseline source and absent target')
+            elif before is None:
+                if operation['operation'] != 'create' or operation['baseline_sha256'] is not None:
+                    raise SchemaApplyError('Native creation requires an absent baseline target')
+            elif operation['baseline_sha256'] != digest(_definition(before)):
+                raise SchemaApplyError('Native baseline differs from the reviewed plan')
         if (_root(baseline) != preview['catalog'] or _root(desired) != preview['catalog'] or
                 any(baseline['provenance'].get(key) != desired['provenance'].get(key)
                     for key in ('endpoint_id', 'database_target_id'))):
@@ -44,14 +47,14 @@ class DuckDBSchemaApplications(SchemaApplications):
 
         def reduced(document, selected):
             rows = {key: deepcopy(row) for key, row in document['rows'].items()
-                    if row['kind'] == 'database' or key == selected}
+                    if row['kind'] == 'database' or key in selected}
             return {'provenance': deepcopy(document['provenance']), 'rows': rows}
 
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed',
             'created_at': self.clock(), 'expires_at': self.clock() + 300,
             'owner': owner, 'binding': binding, 'database': database,
-            'plan': deepcopy(preview), 'baseline': reduced(baseline, source_id),
-            'desired': reduced(desired, identity),
+            'plan': deepcopy(preview), 'baseline': reduced(baseline, baseline_ids),
+            'desired': reduced(desired, desired_ids),
             'file_identity': file_identity}
         record['review_digest'] = digest(record)
         if len(json.dumps(record, ensure_ascii=False).encode()) > 4 * 1024 * 1024:

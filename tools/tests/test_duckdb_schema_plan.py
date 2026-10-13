@@ -135,6 +135,29 @@ def test_schema_comment_is_blocked_by_native_version():
     assert plan(model(before), model(after), model(before))['blockers']
 
 
+def test_native_batch_orders_parent_creation_and_added_column_before_index():
+    pytest.importorskip('duckdb')
+    schema = row('schema', ['file', 'design'], ddl='CREATE SCHEMA "file"."design"')
+    table = row('table', ['file', 'design', 'facts'],
+        ddl='CREATE TABLE "file"."design"."facts" ("x" INTEGER)')
+    index = row('index', ['file', 'design', 'facts', 'facts_x'],
+        ddl='CREATE INDEX "facts_x" ON "file"."design"."facts"("x")')
+    result = plan(model(), model(index, table, schema), model())
+    assert result['application_supported'], result['blockers']
+    assert [item['kind'] for item in result['operations']] == ['schema', 'table', 'index']
+    existing = row('table', ['file', 'main', 'old'])
+    column = row('column', ['file', 'main', 'old', 'value'])
+    column['native']['catalog_metadata'] = {'data_type': 'INTEGER', 'nullable': True}
+    new_index = row('index', ['file', 'main', 'old', 'old_value_ix'],
+        ddl='CREATE INDEX "old_value_ix" ON "file"."main"."old"("value")')
+    added = plan(model(existing), model(existing, new_index, column), model(existing))
+    assert added['application_supported'], added['blockers']
+    assert [item['kind'] for item in added['operations']] == ['column', 'index']
+    with_column = plan(model(), model(schema, table, row('column',
+        ['file', 'design', 'facts', 'x'])), model())
+    assert with_column['blockers']
+
+
 @pytest.mark.parametrize('source', [
     'CREATE TABLE "other"."main"."facts" (x INTEGER)',
     'CREATE TABLE "file"."main"."facts" (',

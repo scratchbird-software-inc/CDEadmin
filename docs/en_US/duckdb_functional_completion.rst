@@ -178,14 +178,22 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.
   Other native edits are blockers. Missing desired rows are
-  ignored rather than treated as deletion. A separate owner/file-bound review
-  must bind one displayed operation fingerprint to a durable receipt before
-  native dispatch. Application opens its own connection, begins one DuckDB
-  transaction, verifies the registered file identity and rechecks the live
-  baseline in that transaction, dispatches at
-  most one native statement, commits and rediscoveries. A failed/uncertain
-  commit is never replayed automatically. The limited admitted operation set
-  does not complete the full native DDN adapter obligation.
+  ignored rather than treated as deletion. A bounded plan of up to 32 native
+  statements may be reviewed together when their identities and dependencies
+  are unambiguous. Create schemas before their tables and tables before their
+  indexes; apply added columns before indexes on those columns. Drop children
+  before their parents. A new table's columns belong in its one CREATE TABLE
+  statement, and cannot also be added as separate operations. Rename remains
+  a single-operation review until descendant identities are recaptured.
+  Reject conflicting create/drop actions under one parent, unresolved targets
+  and an aggregate source above 1 MiB. The durable owner/file-bound receipt
+  binds the exact ordered statement list and affected baseline/desired rows.
+  Application opens its own connection, begins one DuckDB transaction,
+  verifies the registered file identity and rechecks the live baseline in that
+  transaction, dispatches each native statement once in dependency order,
+  commits once and rediscovers every target. A failed/uncertain commit is never
+  replayed automatically. The limited admitted operation set does not complete
+  the full native DDN adapter obligation.
 
 DUCK-COMP-06: Native dashboards and monitoring
   Provide display-only DDN engine/embedded-instance/database dashboards with a

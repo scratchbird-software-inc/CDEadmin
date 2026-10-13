@@ -321,6 +321,97 @@ def test_native_comment_review_apply_and_fresh_postcondition(tmp_path, kind, nam
         provider.client.close()
 
 
+def test_native_batch_creates_schema_table_and_index_in_one_commit(tmp_path):
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+        desired = deepcopy(baseline)
+        for kind, path, source in (
+            ('schema', [root, 'design'], f'CREATE SCHEMA "{root}"."design"'),
+            ('table', [root, 'design', 'facts'],
+             f'CREATE TABLE "{root}"."design"."facts" ("x" INTEGER)'),
+            ('index', [root, 'design', 'facts', 'facts_x'],
+             f'CREATE INDEX "facts_x" ON "{root}"."design"."facts"("x")'),
+        ):
+            identity = _resource_id(kind, path[:-1], path[-1])
+            desired['rows'][identity] = {'resource_id': identity, 'kind': kind,
+                'name': path[-1], 'path': path, 'system': 'false',
+                'native': {'system_object': False, 'catalog_metadata': {}, 'ddl': source}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert [item['kind'] for item in preview['operations']] == ['schema', 'table', 'index']
+        applications = DuckDBSchemaApplications(tmp_path/'batch.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        assert len(outcome['outcome']['rediscovery_checks']) == 3
+    finally:
+        provider.client.close()
+
+
+def test_native_batch_rolls_back_all_statements_on_late_failure(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+        desired = deepcopy(baseline)
+        for kind, name, source in (
+            ('table', 'batch_first', f'CREATE TABLE "{root}"."main"."batch_first" (x INTEGER)'),
+            ('view', 'batch_late',
+             f'CREATE VIEW "{root}"."main"."batch_late" AS SELECT x FROM missing_source'),
+        ):
+            path = [root, 'main', name]
+            identity = _resource_id(kind, path[:-1], name)
+            desired['rows'][identity] = {'resource_id': identity, 'kind': kind,
+                'name': name, 'path': path, 'system': 'false',
+                'native': {'system_object': False, 'catalog_metadata': {}, 'ddl': source}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'batch-failure.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'rolled_back', outcome
+        assert outcome['outcome']['native_rollback_returned'], outcome
+        connection = duckdb.connect(route['database'])
+        assert connection.execute("SELECT count(*) FROM duckdb_tables() WHERE table_name='batch_first'").fetchone()[0] == 0
+        connection.close()
+    finally:
+        provider.client.close()
+
+
+def test_native_batch_adds_column_before_index_on_existing_table(tmp_path):
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+        desired = deepcopy(baseline)
+        column_path = [root, 'main', 'existing', 'amount']
+        column_id = _resource_id('column', column_path[:-1], column_path[-1])
+        desired['rows'][column_id] = {'resource_id': column_id, 'kind': 'column',
+            'name': 'amount', 'path': column_path, 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': {
+                'data_type': 'INTEGER', 'nullable': True}}}
+        index_path = [root, 'main', 'existing', 'existing_amount_ix']
+        index_id = _resource_id('index', index_path[:-1], index_path[-1])
+        desired['rows'][index_id] = {'resource_id': index_id, 'kind': 'index',
+            'name': 'existing_amount_ix', 'path': index_path, 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': {},
+                'ddl': f'CREATE INDEX "existing_amount_ix" ON "{root}"."main"."existing"("amount")'}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert [item['kind'] for item in preview['operations']] == ['column', 'index']
+        applications = DuckDBSchemaApplications(tmp_path/'column-index.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+    finally:
+        provider.client.close()
+
+
 def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

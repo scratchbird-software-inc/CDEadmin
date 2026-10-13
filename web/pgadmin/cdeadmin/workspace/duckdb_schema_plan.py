@@ -313,6 +313,43 @@ def _validated_comment(before, after, target):
     return source, new_comment
 
 
+def _ordered_operations(operations, desired):
+    if len(operations) > 32 or sum(len(item['source'].encode('utf8')) for item in operations) > 1024 * 1024:
+        raise ValueError('Native batch exceeds 32 statements or 1 MiB')
+    if len(operations) > 1 and any(item['operation'] == 'rename' for item in operations):
+        raise ValueError('Rename requires a separate review and descendant refresh')
+    by_id = {item['resource_id']: item for item in operations}
+    for item in operations:
+        row = desired['rows'][item['resource_id']]
+        if item['kind'] in {'column', 'index'}:
+            parent = _resource_id('table', row['path'][:2], row['path'][2])
+            parent_op = by_id.get(parent)
+            if parent_op and parent_op['operation'] == 'drop' and item['operation'] != 'drop':
+                raise ValueError('Cannot change a child while dropping its parent table')
+            if parent_op and parent_op['operation'] == 'create' and item['kind'] == 'column':
+                raise ValueError('New table columns belong in its CREATE TABLE statement')
+        elif item['kind'] not in {'schema'} and len(row['path']) >= 3:
+            parent = _resource_id('schema', row['path'][:1], row['path'][1])
+            parent_op = by_id.get(parent)
+            if parent_op and parent_op['operation'] == 'drop' and item['operation'] != 'drop':
+                raise ValueError('Cannot create or change an object while dropping its schema')
+
+    def order(item):
+        operation, kind = item['operation'], item['kind']
+        if operation == 'drop':
+            priority = {'index': 0, 'column': 0, 'view': 55, 'macro': 55,
+                        'table': 60, 'sequence': 65, 'type': 65,
+                        'schema': 70}.get(kind, 60)
+        elif operation == 'create':
+            priority = {'schema': 10, 'sequence': 15, 'type': 15,
+                        'macro': 15, 'table': 20, 'view': 25,
+                        'column': 30, 'index': 40}.get(kind, 25)
+        else:
+            priority = 35 if kind == 'column' else 50
+        return (priority, item['target'], item['resource_id'])
+    return sorted(operations, key=order)
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -360,9 +397,11 @@ def plan(baseline, desired, live):
                     parent_path = after['path'][:3]
                     parent_id = _resource_id('table', parent_path[:2], parent_path[2])
                     parent = live['rows'].get(parent_id)
-                    if parent is None:
+                    parent_new = desired['rows'].get(parent_id) if parent is None else None
+                    if parent is None and (parent_new is None or parent_new['kind'] != 'table' or
+                            parent_id in baseline['rows']):
                         raise ValueError('Child creation requires an observed native parent table')
-                    _address(parent, catalog)
+                    _address(parent if parent is not None else parent_new, catalog)
                 operation = 'create'
                 source = (_validated_index_ddl(after['native'].get('ddl'), after['path'])
                           if after['kind'] == 'index' else
@@ -429,12 +468,17 @@ def plan(baseline, desired, live):
         if identity not in desired['rows']:
             ignored.append({'resource_id': identity, 'name': row['name'],
                 'reason': 'Missing desired selection is not deletion intent'})
+    if not blockers and not conflicts:
+        try:
+            operations = _ordered_operations(operations, desired)
+        except ValueError as error:
+            blockers.append({'resource_id': None, 'name': None, 'reason': str(error)})
     return {'format': 'scratchrobin.duckdb.schema-plan@1', 'engine_id': 'duckdb',
         'catalog': catalog, 'operations': operations, 'blockers': blockers,
         'conflicts': conflicts, 'ignored': ignored,
         'execution_sha256': digest(operations), 'native_grammar_validated': True,
         'ready_for_review': bool(operations) and not blockers and not conflicts,
-        'application_supported': len(operations) == 1 and not blockers and not conflicts,
+        'application_supported': bool(operations) and not blockers and not conflicts,
         'executed': False,
         'warnings': ['This native preview does not authorize or execute SQL.',
             'Catalog capture may be partial; absent desired rows never authorize drops.',

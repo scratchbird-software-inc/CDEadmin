@@ -1,4 +1,4 @@
-"""One-statement DuckDB DDN apply with native transaction and rediscovery."""
+"""Bounded DuckDB DDN apply with one native transaction and rediscovery."""
 
 import os
 
@@ -45,40 +45,46 @@ def apply_review(provider, route, record):
             connection.execute('ROLLBACK')
             result['native_rollback_returned'] = True
             return result
-        operation = fresh['operations'][0]
-        result['statement_dispatched'] = True
-        connection.execute(operation['source'])
+        for operation in fresh['operations']:
+            result['statement_dispatched'] = True
+            connection.execute(operation['source'])
         result['commit_requested'] = True
         connection.execute('COMMIT')
         result.update(state='committed', native_commit_returned=True)
         try:
             observed = _model(connection, record, in_transaction=False)
-            current = observed['rows'].get(operation['resource_id'])
-            if operation['operation'] == 'drop':
-                result['rediscovery_verified'] = current is None
-            elif operation['operation'] == 'create':
-                result['rediscovery_verified'] = (current is not None and
-                    current['kind'] == operation['kind'] and current['name'] == operation['name'])
-            elif operation['operation'] == 'rename':
-                result['rediscovery_verified'] = (current is not None and
-                    current['kind'] == operation['kind'] and current['name'] == operation['name'] and
-                    observed['rows'].get(operation['source_resource_id']) is None)
-            else:
-                from ...workspace.duckdb_schema_plan import _definition
-                from ...workspace.firebird_schema_plan import digest
-                result['rediscovery_verified'] = (current is not None and
-                    digest(_definition(current)) != operation['baseline_sha256'])
-                if result['rediscovery_verified'] and operation.get('postcondition'):
-                    metadata = (current['native'].get('catalog_metadata', {})
-                        if operation['kind'] in {'column', 'type'} or
-                            (operation['operation'] == 'alter' and
-                             'comment' in operation['postcondition']) else
-                        {'definition': (current['native'].get('overloads') or [{}])[0]
-                            .get('definition')})
-                    result['rediscovery_verified'] = all(
-                        metadata.get(key) == value for key, value in
-                        operation['postcondition'].items())
-            result['rediscovered_resource_id'] = current['resource_id'] if current else None
+            checks, rediscovered = [], []
+            for operation in fresh['operations']:
+                current = observed['rows'].get(operation['resource_id'])
+                if operation['operation'] == 'drop':
+                    verified = current is None
+                elif operation['operation'] == 'create':
+                    verified = (current is not None and
+                        current['kind'] == operation['kind'] and current['name'] == operation['name'])
+                elif operation['operation'] == 'rename':
+                    verified = (current is not None and
+                        current['kind'] == operation['kind'] and current['name'] == operation['name'] and
+                        observed['rows'].get(operation['source_resource_id']) is None)
+                else:
+                    from ...workspace.duckdb_schema_plan import _definition
+                    from ...workspace.firebird_schema_plan import digest
+                    verified = (current is not None and
+                        digest(_definition(current)) != operation['baseline_sha256'])
+                    if verified and operation.get('postcondition'):
+                        metadata = (current['native'].get('catalog_metadata', {})
+                            if operation['kind'] in {'column', 'type'} or
+                                (operation['operation'] == 'alter' and
+                                 'comment' in operation['postcondition']) else
+                            {'definition': (current['native'].get('overloads') or [{}])[0]
+                                .get('definition')})
+                        verified = all(metadata.get(key) == value for key, value in
+                            operation['postcondition'].items())
+                checks.append({'resource_id': operation['resource_id'], 'verified': verified})
+                rediscovered.append(current['resource_id'] if current else None)
+            result['rediscovery_checks'] = checks
+            result['rediscovery_verified'] = all(item['verified'] for item in checks)
+            result['rediscovered_resource_ids'] = rediscovered
+            result['rediscovered_resource_id'] = rediscovered[0]
         except Exception as error:
             result['rediscovery_error_type'] = type(error).__name__
         return result
