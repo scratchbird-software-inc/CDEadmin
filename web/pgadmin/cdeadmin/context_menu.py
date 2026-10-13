@@ -1241,6 +1241,9 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.dashboard_editor', 'Edit DuckDB dashboard...',
             'open_duckdb_dashboard_editor', icon='action.edit', group='availability',
             mutation='write', arguments=base))
+        actions.append(_action('database.duckdb.test_data', 'Generate DuckDB test data...',
+            'open_workspace', icon='action.insert', group='database', priority=45,
+            arguments={**base, 'tab': 'duckdb-test-data'}))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):

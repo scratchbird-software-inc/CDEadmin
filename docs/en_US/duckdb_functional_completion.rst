@@ -68,6 +68,10 @@ DUCK-COMP-04: Data and file workflows
   workflows. Do not claim EXPORT is a physical backup, or that SQL rollback
   removes files written externally. Validate registered filesystem ownership
   without claiming that authorized arbitrary SQL/extensions are sandboxed.
+  Native test-data recipes are scoped to one registered file and fresh catalog
+  capture, bounded to 32 tables, 5000 rows, a 4 MiB recipe and 1 MiB generated
+  SQL. Generation validates 1.5.2 native statement boundaries and performs no
+  writes. The shared Query Tool owns execution, transaction outcome and effects.
 
 DUCK-COMP-05: DDN catalog, data and design exchange
   Capture native catalog and selected data into DDN views using the sister

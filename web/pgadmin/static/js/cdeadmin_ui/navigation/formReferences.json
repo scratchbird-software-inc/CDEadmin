@@ -10,6 +10,7 @@
     "duckdb-monitoring-policy": {"reference": "SR-F-010002", "title": "DuckDB monitoring policy"},
     "duckdb-dashboard-editor": {"reference": "SR-F-010003", "title": "DuckDB dashboard editor"},
     "duckdb-catalog-designer": {"reference": "SR-F-010004", "title": "DuckDB DDN catalog designer"},
+    "duckdb-test-data": {"reference": "SR-F-010005", "title": "DuckDB native test-data recipes"},
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

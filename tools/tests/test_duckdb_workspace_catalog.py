@@ -32,8 +32,23 @@ def test_owned_target_export_compare_and_foreign_document_rejection(tmp_path):
         assert result['provenance']['mapping'] == 'scratchrobin.duckdb.catalog@1'
         assert result['diagram']['snapshot']['format'] == 'ddn-workspace@1'
         assert any(item['name'] == 'native_fact' for item in result['objects'])
-        assert result['generation'] == provider.capture_catalog.return_value['generation']
         provider.capture_catalog.assert_called_once_with(endpoint['route'], include_system=False)
+        provider.capture_catalog.reset_mock()
+        offered = service.duckdb_test_data(server, {'database_target_id': 'owned-target'})
+        selected = next(item for item in offered['tables'] if item['name'] == 'native_fact')
+        recipe = {'format': 'scratchrobin.duckdb.test-data@1', 'scope': offered['scope'],
+            'seed': 1, 'tables': [{'table': selected['resource_id'], 'count': 1,
+                'columns': {'id': {'kind': 'constant', 'value': 14}}}]}
+        generated = service.duckdb_test_data(server, {'database_target_id': 'owned-target', 'recipe': recipe})
+        assert generated['executed'] is False and 'INSERT INTO' in generated['source']
+        assert connection.execute('SELECT count(*) FROM native_fact').fetchone()[0] == 0
+        with pytest.raises(ProviderWorkspaceError):
+            service.duckdb_test_data(server, {'database_target_id': 'owned-target', 'recipe': recipe,
+                'sql': 'DROP TABLE native_fact'})
+        with pytest.raises(ProviderWorkspaceError, match='another endpoint'):
+            service.duckdb_test_data(server, {'database_target_id': 'owned-target',
+                'recipe': {**recipe, 'scope': {'endpoint_id': 'foreign', 'database_target_id': 'owned-target'}}})
+        assert result['generation'] == provider.capture_catalog.return_value['generation']
         source = json.dumps(result['snapshot'])
         assert not service.duckdb_catalog(server, {'database_target_id': 'owned-target',
             'source': source}, compare=True)['changes']

@@ -2641,7 +2641,7 @@ class ServerNode(PGChildNodeView):
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan',
+                        'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
@@ -2849,6 +2849,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.mariadb_native_metadata(server, data.get('request'))
                 elif action == 'duckdb_data_capture':
                     payload = service.duckdb_data_capture(server, data.get('request'))
+                elif action == 'duckdb_test_data':
+                    payload = service.duckdb_test_data(server, data.get('request'))
                 elif action in {'duckdb_design_read', 'duckdb_design_save'}:
                     payload = service.duckdb_design_asset(server, action.rsplit('_', 1)[1], data.get('request'))
                 elif action == 'duckdb_schema_plan':

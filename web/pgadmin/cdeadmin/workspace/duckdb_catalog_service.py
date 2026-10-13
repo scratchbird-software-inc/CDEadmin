@@ -55,3 +55,23 @@ def data(service, server, request):
     return provider.capture_data(endpoint['route'], request['resource_id'],
         endpoint_id=context.endpoint_id, target_id=target,
         mode=request['mode'], row_limit=request['row_limit'])
+
+
+def test_data(service, server, request):
+    from .firebird_catalog_export import build_export
+    from .duckdb_test_data import generate, template
+    if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+        raise ValueError('Invalid DuckDB test-data request')
+    target = request.get('database_target_id')
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered DuckDB database file')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+        raise ValueError('Select a native DuckDB endpoint')
+    captured = provider.capture_catalog(endpoint['route'], include_system=False)
+    model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+        target_id=target, generation=captured['generation'], include_system=False,
+        refreshed=True, engine='duckdb', native_model=True)
+    return generate(model, request['recipe']) if 'recipe' in request else template(model)
