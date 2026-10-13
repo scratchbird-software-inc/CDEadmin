@@ -186,8 +186,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   names and types alone cannot prove that reconstruction preserves optional
   arguments. A reviewer must independently verify the original signature has
   no defaults before the plan may synthesize a replacement statement. A macro
-  with an existing native comment is blocked because ``CREATE OR REPLACE``
-  clears that comment; a future adapter must preserve and verify it explicitly.
+  with an existing native comment or tags is blocked because ``CREATE OR REPLACE``
+  clears those facts; a future adapter must preserve and verify them explicitly.
   Table replacement uses
   ``CREATE OR REPLACE MACRO ... AS TABLE``; scalar replacement omits ``TABLE``.
   A distinct ``replace-macro`` intent may replace a complete overload group or

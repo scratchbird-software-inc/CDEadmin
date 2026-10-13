@@ -364,8 +364,14 @@ def test_scalar_macro_definition_replacement_rejects_other_edits():
     commented['native']['catalog_metadata']['comment'] = 'preserve this'
     commented_desired = deepcopy(changed)
     commented_desired['native']['catalog_metadata']['comment'] = 'preserve this'
-    assert 'discard the existing native comment' in plan(
+    assert 'discard existing native comment or tags' in plan(
         model(commented), model(commented_desired), model(commented))['blockers'][0]['reason']
+    tagged = deepcopy(existing)
+    tagged['native']['catalog_metadata']['tags'] = {'owner': 'user'}
+    tagged_desired = deepcopy(changed)
+    tagged_desired['native']['catalog_metadata']['tags'] = {'owner': 'user'}
+    assert 'discard existing native comment or tags' in plan(
+        model(tagged), model(tagged_desired), model(tagged))['blockers'][0]['reason']
     changed['native']['parameters'].append({'name': 'y', 'data_type': None})
     assert plan(model(existing), model(changed), model(existing))['blockers']
     changed = deepcopy(existing)

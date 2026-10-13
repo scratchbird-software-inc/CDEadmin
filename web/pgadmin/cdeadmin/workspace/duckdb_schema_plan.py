@@ -236,8 +236,8 @@ def _validated_macro_replacement(before, after, target, change):
         raise ValueError('Macro replacement requires explicit confirmation that the original signature has no parameter defaults')
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
-    if previous['catalog'].get('comment') is not None:
-        raise ValueError('Macro replacement would discard the existing native comment')
+    if previous['catalog'].get('comment') is not None or previous['catalog'].get('tags'):
+        raise ValueError('Macro replacement would discard existing native comment or tags')
     old_overloads, new_overloads = previous['overloads'], desired['overloads']
     if (not isinstance(old_overloads, list) or len(old_overloads) != 1 or
             not isinstance(new_overloads, list) or len(new_overloads) != 1 or
