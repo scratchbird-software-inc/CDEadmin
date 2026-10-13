@@ -121,5 +121,5 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     </Dialog>
   </Box>;
 }
-FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
+FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
   generation: PropTypes.string, onReview: PropTypes.func, onReviewBusyChange: PropTypes.func};

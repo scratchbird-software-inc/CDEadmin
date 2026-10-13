@@ -5581,6 +5581,10 @@
     "mariadb-server-catalog": {
       "reference": "SR-F-001408",
       "title": "MariaDB native server and selected database DDN collection"
+    },
+    "mariadb-relational-diagram": {
+      "reference": "SR-F-001409",
+      "title": "MariaDB relational DDN design"
     }
   }
 }

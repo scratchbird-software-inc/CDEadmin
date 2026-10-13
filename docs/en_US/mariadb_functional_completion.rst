@@ -99,6 +99,13 @@ MARIA-COMP-05: Native DDN roundtrip
   retrieval context. Oracle-mode connections must not silently omit native
   ENGINE, character set, row format, field comments or index options.
 
+  Saved catalog and relational designs use the shared project-asset repository
+  under a MariaDB-specific namespace. Scope includes owner, endpoint, registered
+  database and design family. Preserve original native baseline, authored DDN,
+  historical revisions and optimistic version checks. Saving or editing a DDN
+  design does not execute native DDL. Use the sister DDN designer for relation
+  layout and manual design; stale captures require an explicit reviewed merge.
+
   Native SQL generation is export-only and preserves SHOW CREATE definitions,
   per-object SQL mode, character context and event time zone. It must preserve
   system-versioned/application-period tables, sequences and separate package

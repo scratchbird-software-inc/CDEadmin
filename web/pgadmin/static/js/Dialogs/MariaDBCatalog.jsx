@@ -1,6 +1,8 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
+import FirebirdDesignStorage from './FirebirdDesignStorage';
+import FirebirdERD from './FirebirdERD';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
@@ -115,6 +117,13 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
     {display === 'data' && data?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {result && <Alert severity="info">Server UID: {result.server_uid}. Coverage: {result.provenance.coverage}. Objects: {result.provenance.objects}.</Alert>}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
+    {result?.snapshot && <FirebirdDesignStorage engine="mariadb" post={post} databaseTargetId={databaseTargetId} kind="catalog" disabled={busy}
+      capture={() => ({snapshot: source ? JSON.parse(source) : result.snapshot, baseline: result.snapshot})}
+      onLoad={value => {setSource(JSON.stringify(value.snapshot)); setMetadata(null); setComparison(null);}} />}
+    {(result?.snapshot || source) && <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+      <Box component="small">Native SQL source: {source ? 'imported or saved DDN' : 'latest native capture'}.</Box>
+      <Button disabled={busy || !source} onClick={() => {setSource(''); setMetadata(null); setComparison(null);}}>Use latest native capture</Button>
+    </Box>}
     {metadata && <Box>
       <Alert severity="info">Native SQL export only. Imported definitions do not authorize execution. Statements: {metadata.statements.length}.</Alert>
       {metadata.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
@@ -131,7 +140,9 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
           {key: 'fields', name: 'Changed native fields', minWidth: 260, renderCell: ({row}) => row.fields.join(', ')},
         ]} />
     </Box>}
-    {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
+    {display === 'relations' && result?.diagram?.snapshot && <FirebirdERD engine="mariadb" diagram={result.diagram}
+      post={post} databaseTargetId={databaseTargetId} generation={result.generation} />}
+    {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />
     </Box>}
