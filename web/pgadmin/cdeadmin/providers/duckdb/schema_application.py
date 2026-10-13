@@ -47,15 +47,25 @@ def apply_review(provider, route, record):
             return result
         rebuild_rows = {}
         view_descriptors = {}
+        macro_descriptors = {}
         for operation in fresh['operations']:
             if operation['operation'] == 'rebuild':
-                if operation.get('affected_view_ids'):
+                if (operation.get('affected_view_ids') or
+                        operation.get('affected_macro_ids')):
                     from ...workspace.duckdb_schema_plan import _quote
                     for view_id in operation['affected_view_ids']:
                         view = record['baseline']['rows'][view_id]
                         target = '.'.join(_quote(part) for part in view['path'])
                         view_descriptors[view_id] = (target, connection.execute(
                             'DESCRIBE SELECT * FROM ' + target).fetchall())
+                    for macro_id in operation.get('affected_macro_ids', []):
+                        macro = record['baseline']['rows'][macro_id]
+                        target = '.'.join(_quote(part) for part in macro['path']) + '()'
+                        kind = macro['native']['overloads'][0]['catalog_metadata']['function_type']
+                        source = ('DESCRIBE SELECT * FROM ' if kind == 'table_macro'
+                            else 'DESCRIBE SELECT ') + target
+                        macro_descriptors[macro_id] = (source,
+                            connection.execute(source).fetchall())
                 old_rows = connection.execute('SELECT count(*) FROM ' +
                     operation['target']).fetchone()[0]
                 for index, statement in enumerate(operation['statements']):
@@ -105,6 +115,10 @@ def apply_review(provider, route, record):
                     if connection.execute('DESCRIBE SELECT * FROM ' +
                             target).fetchall() != original_projection:
                         raise ValueError('Native view projection changed during table rebuild')
+                for macro_id in operation.get('affected_macro_ids', []):
+                    source, original_projection = macro_descriptors[macro_id]
+                    if connection.execute(source).fetchall() != original_projection:
+                        raise ValueError('Native macro projection changed during table rebuild')
                 rebuild_rows[operation['resource_id']] = old_rows
             else:
                 for statement in operation.get('statements', [operation['source']]):
@@ -225,6 +239,13 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][column_id])) ==
                                     operation['desired_view_column_sha256'][column_id]
                                 for column_id in operation.get('affected_view_column_ids', []))
+                        if verified:
+                            verified = all(observed['rows'].get(macro_id) is not None and
+                                digest(_definition(observed['rows'][macro_id])) ==
+                                    operation['desired_macro_sha256'][macro_id] and
+                                connection.execute(macro_descriptors[macro_id][0]).fetchall() ==
+                                    macro_descriptors[macro_id][1]
+                                for macro_id in operation.get('affected_macro_ids', []))
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
                     from ...workspace.firebird_schema_plan import digest

@@ -1128,13 +1128,14 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if (desired_index is None or not _equal(_definition(index), _definition(desired_index)) or
                 index['native'].get('catalog_metadata', {}).get('tags')):
             raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
-    preserved_views = []
+    preserved_views, preserved_macros = [], []
     for row in live['rows'].values():
         if row['kind'] == 'view':
             view_id = row['resource_id']
             old_view = baseline['rows'].get(view_id)
             new_view = desired['rows'].get(view_id)
-            if (len(preserved_views) >= 16 or row['path'][0] != before['path'][0] or
+            if (len(preserved_views) + len(preserved_macros) >= 16 or
+                    row['path'][0] != before['path'][0] or
                     row['system'] != 'false' or
                     row['native'].get('catalog_metadata', {}).get('temporary') or
                     old_view is None or new_view is None or
@@ -1157,7 +1158,27 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                         not _equal(_definition(new_child), _definition(child))):
                     raise ValueError('Constraint rebuild requires unchanged view columns')
             preserved_views.append(row)
-        if row['kind'] in {'macro', 'attached-database'} or (
+        if row['kind'] == 'macro':
+            macro_id = row['resource_id']
+            old_macro = baseline['rows'].get(macro_id)
+            new_macro = desired['rows'].get(macro_id)
+            overloads = row['native'].get('overloads')
+            overload = overloads[0] if isinstance(overloads, list) and len(overloads) == 1 else None
+            metadata = overload.get('catalog_metadata', {}) if overload else {}
+            if (len(preserved_views) + len(preserved_macros) >= 16 or
+                    row['path'][0] != before['path'][0] or row['system'] != 'false' or
+                    old_macro is None or new_macro is None or
+                    old_macro['path'] != row['path'] or new_macro['path'] != row['path'] or
+                    new_macro['native'].get('duckdb_change') is not None or
+                    overload is None or overload.get('parameters') != [] or
+                    metadata.get('varargs') is not None or
+                    metadata.get('has_side_effects') is not False or
+                    metadata.get('function_type') not in {'macro', 'table_macro'} or
+                    not _equal(_definition(old_macro), _definition(row)) or
+                    not _equal(_definition(new_macro), _definition(row))):
+                raise ValueError('Constraint rebuild requires a complete unchanged zero-argument macro')
+            preserved_macros.append(row)
+        if row['kind'] == 'attached-database' or (
                 row['kind'] == 'sequence' and row['native'].get(
                     'catalog_metadata', {}).get('automatic_dependency_observed') is True):
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
@@ -1280,7 +1301,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     return (statements, check, dependency_check, dependency_count,
         requires_sequence_dependency, source, new_constraints, indexes,
         fk_parents, stage_name, stage_columns, stage_key_columns,
-        preserved_views)
+        preserved_views, preserved_macros)
 
 
 def _ordered_operations(operations, desired):
@@ -1495,7 +1516,7 @@ def plan(baseline, desired, live):
                  _dependency_count, _requires_sequence_dependency,
                  _original_source, _expected_constraints, _replayed_indexes,
                  _fk_parents, _stage_name, _stage_columns, _stage_key_columns,
-                 _preserved_views) = (
+                 _preserved_views, _preserved_macros) = (
                     _validated_check_rebuild(before, after, change, target,
                         baseline, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
@@ -1626,6 +1647,12 @@ def plan(baseline, desired, live):
                     desired_view_sha256={row['resource_id']: digest(_definition(
                         desired['rows'][row['resource_id']]))
                         for row in _preserved_views},
+                    affected_macro_ids=[row['resource_id'] for row in _preserved_macros],
+                    baseline_macro_sha256={row['resource_id']: digest(_definition(row))
+                        for row in _preserved_macros},
+                    desired_macro_sha256={row['resource_id']: digest(_definition(
+                        desired['rows'][row['resource_id']]))
+                        for row in _preserved_macros},
                     affected_view_column_ids=sorted(child['resource_id']
                         for view in _preserved_views for child in live['rows'].values()
                         if child['kind'] == 'column' and child.get('path', [])[:3] ==

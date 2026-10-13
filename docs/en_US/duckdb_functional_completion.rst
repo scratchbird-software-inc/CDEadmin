@@ -321,8 +321,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   does not preserve these facts. General whole-table replacement remains
   blocked; a separate migration must preserve data and dependent metadata.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
-  remain identical, no tag or foreign-key edge needs preservation, and
-  the captured file has no user macro dependency whose binding could change.
+  remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may
   coexist with the rebuild. Their exact catalog definitions and child columns
   are bound into the review. The apply transaction binds every view with
@@ -331,6 +330,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   each view definition and column facts, and native DESCRIBE must still bind
   to the same projection. Temporary views, attached catalogs, missing desired
   view rows and unqualified view bindings remain blockers. Independent
+  zero-argument scalar or table macros with one complete unchanged overload
+  in the same catalog may also coexist. Each is bound with native DESCRIBE
+  before and after the swap, with exact projection equality, and its full
+  catalog definition is checked again after commit. Argument-bearing,
+  overloaded, variadic, changed or unbindable macros remain blockers.
+  Independent
   sequences may coexist with the table, including a sequence referenced by
   an unchanged column default: the explicit-column
   data copy must not advance it. Before the old table is dropped, the

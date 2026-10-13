@@ -792,9 +792,12 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
 
 @pytest.mark.parametrize('dependent_sql,admitted', (
     ('CREATE VIEW checked_view AS SELECT id FROM checked', True),
-    ('CREATE MACRO checked_count() AS (SELECT count(*) FROM checked)', False),
+    ('CREATE MACRO checked_count() AS (SELECT count(*) FROM checked)', True),
+    ('CREATE MACRO checked_rows() AS TABLE (SELECT id FROM checked)', True),
+    ('CREATE MACRO checked_count(n) AS '
+        '(SELECT count(*) FROM checked WHERE id > n)', False),
 ))
-def test_check_rebuild_preserves_views_and_blocks_unqualified_macros(
+def test_check_rebuild_preserves_views_and_zero_argument_macros(
         tmp_path, dependent_sql, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -802,7 +805,8 @@ def test_check_rebuild_preserves_views_and_blocks_unqualified_macros(
     connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0))')
     connection.execute('INSERT INTO checked VALUES (1), (2)')
     connection.execute(dependent_sql)
-    if admitted:
+    is_view = 'CREATE VIEW' in dependent_sql
+    if is_view:
         connection.execute("COMMENT ON VIEW checked_view IS 'retained view'")
         connection.execute("COMMENT ON COLUMN checked_view.id IS 'retained column'")
     connection.close()
@@ -828,8 +832,9 @@ def test_check_rebuild_preserves_views_and_blocks_unqualified_macros(
         assert preview['application_supported'] is admitted, preview['blockers']
         if admitted:
             operation = preview['operations'][0]
-            assert len(operation['affected_view_ids']) == 1
-            assert len(operation['affected_view_column_ids']) == 1
+            assert len(operation['affected_view_ids']) == int(is_view)
+            assert len(operation['affected_view_column_ids']) == int(is_view)
+            assert len(operation['affected_macro_ids']) == int(not is_view)
             applications = DuckDBSchemaApplications(tmp_path/'check-view.json',
                 clock=lambda: 100)
             receipt = applications.review(preview, baseline, desired,
@@ -839,13 +844,20 @@ def test_check_rebuild_preserves_views_and_blocks_unqualified_macros(
             assert outcome['state'] == 'committed', outcome
             assert outcome['outcome']['rediscovery_verified'], outcome
             observer = duckdb.connect(route['database'])
-            assert observer.execute('SELECT id FROM checked_view ORDER BY id').fetchall() == [
-                (1,), (2,)]
-            assert observer.execute("SELECT comment FROM duckdb_views() "
-                "WHERE view_name='checked_view'").fetchone()[0] == 'retained view'
-            assert observer.execute("SELECT comment FROM duckdb_columns() "
-                "WHERE table_name='checked_view' AND column_name='id'").fetchone()[0] == (
-                'retained column')
+            if is_view:
+                assert observer.execute('SELECT id FROM checked_view ORDER BY id').fetchall() == [
+                    (1,), (2,)]
+                assert observer.execute("SELECT comment FROM duckdb_views() "
+                    "WHERE view_name='checked_view'").fetchone()[0] == 'retained view'
+                assert observer.execute("SELECT comment FROM duckdb_columns() "
+                    "WHERE table_name='checked_view' AND column_name='id'").fetchone()[0] == (
+                    'retained column')
+            else:
+                if 'AS TABLE' in dependent_sql:
+                    assert observer.execute('SELECT id FROM checked_rows() ORDER BY id').fetchall() == [
+                        (1,), (2,)]
+                else:
+                    assert observer.execute('SELECT checked_count()').fetchone()[0] == 2
             observer.close()
         else:
             assert preview['operations'] == [] and preview['blockers']

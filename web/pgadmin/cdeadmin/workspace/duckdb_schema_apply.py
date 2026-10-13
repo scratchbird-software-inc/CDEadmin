@@ -41,6 +41,17 @@ class DuckDBSchemaApplications(SchemaApplications):
             elif operation['baseline_sha256'] != digest(_definition(before)):
                 raise SchemaApplyError('Native baseline differs from the reviewed plan')
             if operation['operation'] == 'rebuild':
+                for macro_id in operation.get('affected_macro_ids', []):
+                    old_macro = baseline['rows'].get(macro_id)
+                    new_macro = desired['rows'].get(macro_id)
+                    if (old_macro is None or new_macro is None or
+                            operation['baseline_macro_sha256'].get(macro_id) !=
+                                digest(_definition(old_macro)) or
+                            operation['desired_macro_sha256'].get(macro_id) !=
+                                digest(_definition(new_macro))):
+                        raise SchemaApplyError('Preserved macro differs from reviewed plan')
+                    baseline_ids.add(macro_id)
+                    desired_ids.add(macro_id)
                 for view_id in operation.get('affected_view_ids', []):
                     old_view = baseline['rows'].get(view_id)
                     new_view = desired['rows'].get(view_id)
