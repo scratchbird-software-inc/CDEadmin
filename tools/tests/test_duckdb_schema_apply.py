@@ -796,8 +796,11 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
     ('CREATE MACRO checked_rows() AS TABLE (SELECT id FROM checked)', True),
     ('CREATE MACRO checked_count(n) AS '
         '(SELECT count(*) FROM checked WHERE id > n)', True),
+    ('CREATE MACRO checked_count '
+        '(n) AS (SELECT count(*) FROM checked WHERE id > n), '
+        '(n, k) AS (SELECT count(*) FROM checked WHERE id > n + k)', True),
 ))
-def test_check_rebuild_preserves_views_and_single_overload_macros(
+def test_check_rebuild_preserves_views_and_distinct_arity_macros(
         tmp_path, dependent_sql, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -856,6 +859,9 @@ def test_check_rebuild_preserves_views_and_single_overload_macros(
                 if 'AS TABLE' in dependent_sql:
                     assert observer.execute('SELECT id FROM checked_rows() ORDER BY id').fetchall() == [
                         (1,), (2,)]
+                elif 'checked_count (n)' in dependent_sql:
+                    assert observer.execute('SELECT checked_count(0)').fetchone()[0] == 2
+                    assert observer.execute('SELECT checked_count(0, 1)').fetchone()[0] == 1
                 elif 'checked_count(n)' in dependent_sql:
                     assert observer.execute('SELECT checked_count(1)').fetchone()[0] == 1
                 else:

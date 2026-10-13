@@ -1163,24 +1163,36 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             old_macro = baseline['rows'].get(macro_id)
             new_macro = desired['rows'].get(macro_id)
             overloads = row['native'].get('overloads')
-            overload = overloads[0] if isinstance(overloads, list) and len(overloads) == 1 else None
-            metadata = overload.get('catalog_metadata', {}) if overload else {}
-            parameters = overload.get('parameters') if overload else None
+            def admitted_overloads():
+                if (not isinstance(overloads, list) or not 1 <= len(overloads) <= 8 or
+                        row['native'].get('overload_count') != len(overloads)):
+                    return False
+                arities, kinds = [], set()
+                for overload in overloads:
+                    if not isinstance(overload, dict):
+                        return False
+                    metadata = overload.get('catalog_metadata', {})
+                    parameters = overload.get('parameters')
+                    if (not isinstance(parameters, list) or len(parameters) > 8 or
+                            any(not isinstance(item, dict) or
+                                not isinstance(item.get('name'), str) or not item['name']
+                                for item in parameters) or
+                            metadata.get('varargs') is not None or
+                            metadata.get('has_side_effects') is not False or
+                            metadata.get('function_type') not in {'macro', 'table_macro'}):
+                        return False
+                    arities.append(len(parameters))
+                    kinds.add(metadata['function_type'])
+                return len(arities) == len(set(arities)) and len(kinds) == 1
             if (len(preserved_views) + len(preserved_macros) >= 16 or
                     row['path'][0] != before['path'][0] or row['system'] != 'false' or
                     old_macro is None or new_macro is None or
                     old_macro['path'] != row['path'] or new_macro['path'] != row['path'] or
                     new_macro['native'].get('duckdb_change') is not None or
-                    overload is None or not isinstance(parameters, list) or
-                    len(parameters) > 8 or any(not isinstance(item, dict) or
-                        not isinstance(item.get('name'), str) or not item['name']
-                        for item in parameters) or
-                    metadata.get('varargs') is not None or
-                    metadata.get('has_side_effects') is not False or
-                    metadata.get('function_type') not in {'macro', 'table_macro'} or
+                    not admitted_overloads() or
                     not _equal(_definition(old_macro), _definition(row)) or
                     not _equal(_definition(new_macro), _definition(row))):
-                raise ValueError('Constraint rebuild requires a complete unchanged zero-argument macro')
+                raise ValueError('Constraint rebuild requires complete distinct-arity macro overloads')
             preserved_macros.append(row)
         if row['kind'] == 'attached-database' or (
                 row['kind'] == 'sequence' and row['native'].get(

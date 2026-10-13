@@ -330,13 +330,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   each view definition and column facts, and native DESCRIBE must still bind
   to the same projection. Temporary views, attached catalogs, missing desired
   view rows and unqualified view bindings remain blockers. Independent
-  scalar or table macros with one complete unchanged overload and at most
-  eight observed positional parameters in the same catalog may also coexist.
-  Each is bound with native DESCRIBE using NULL placeholders before and after
-  the swap, with exact projection equality, and its full catalog definition
+  scalar or table macro groups with one to eight complete unchanged overloads,
+  each with at most eight observed positional parameters, in the same catalog
+  may also coexist when every overload has a distinct parameter count. Each
+  arity is bound with native DESCRIBE using NULL placeholders before and after
+  the swap, with exact projection equality, and the full catalog definition
   is checked again after commit. If placeholders cannot bind, application
-  refuses before dispatch. Overloaded, variadic, changed or unbindable macros
-  remain blockers.
+  refuses before dispatch. Same-arity overloads, variadic, changed or
+  unbindable macros remain blockers.
   Independent
   sequences may coexist with the table, including a sequence referenced by
   an unchanged column default: the explicit-column

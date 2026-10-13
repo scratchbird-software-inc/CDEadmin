@@ -60,14 +60,15 @@ def apply_review(provider, route, record):
                             'DESCRIBE SELECT * FROM ' + target).fetchall())
                     for macro_id in operation.get('affected_macro_ids', []):
                         macro = record['baseline']['rows'][macro_id]
-                        overload = macro['native']['overloads'][0]
-                        target = ('.'.join(_quote(part) for part in macro['path']) +
-                            '(' + ', '.join('NULL' for _ in overload['parameters']) + ')')
-                        kind = overload['catalog_metadata']['function_type']
-                        source = ('DESCRIBE SELECT * FROM ' if kind == 'table_macro'
-                            else 'DESCRIBE SELECT ') + target
-                        macro_descriptors[macro_id] = (source,
-                            connection.execute(source).fetchall())
+                        bindings = []
+                        for overload in macro['native']['overloads']:
+                            target = ('.'.join(_quote(part) for part in macro['path']) +
+                                '(' + ', '.join('NULL' for _ in overload['parameters']) + ')')
+                            kind = overload['catalog_metadata']['function_type']
+                            source = ('DESCRIBE SELECT * FROM ' if kind == 'table_macro'
+                                else 'DESCRIBE SELECT ') + target
+                            bindings.append((source, connection.execute(source).fetchall()))
+                        macro_descriptors[macro_id] = bindings
                 old_rows = connection.execute('SELECT count(*) FROM ' +
                     operation['target']).fetchone()[0]
                 for index, statement in enumerate(operation['statements']):
@@ -118,9 +119,9 @@ def apply_review(provider, route, record):
                             target).fetchall() != original_projection:
                         raise ValueError('Native view projection changed during table rebuild')
                 for macro_id in operation.get('affected_macro_ids', []):
-                    source, original_projection = macro_descriptors[macro_id]
-                    if connection.execute(source).fetchall() != original_projection:
-                        raise ValueError('Native macro projection changed during table rebuild')
+                    for source, original_projection in macro_descriptors[macro_id]:
+                        if connection.execute(source).fetchall() != original_projection:
+                            raise ValueError('Native macro projection changed during table rebuild')
                 rebuild_rows[operation['resource_id']] = old_rows
             else:
                 for statement in operation.get('statements', [operation['source']]):
@@ -245,8 +246,8 @@ def apply_review(provider, route, record):
                             verified = all(observed['rows'].get(macro_id) is not None and
                                 digest(_definition(observed['rows'][macro_id])) ==
                                     operation['desired_macro_sha256'][macro_id] and
-                                connection.execute(macro_descriptors[macro_id][0]).fetchall() ==
-                                    macro_descriptors[macro_id][1]
+                                all(connection.execute(source).fetchall() == projection
+                                    for source, projection in macro_descriptors[macro_id])
                                 for macro_id in operation.get('affected_macro_ids', []))
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
