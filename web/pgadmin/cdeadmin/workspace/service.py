@@ -858,6 +858,32 @@ class ProviderWorkspaceService:
         except (ValueError, RecursionError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mariadb_test_data(self, server, request):
+        from .firebird_catalog_export import build_export
+        from .mariadb_test_data import generate, template
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+            raise ProviderWorkspaceError('Invalid MariaDB test-data request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        try:
+            captured = provider.capture_catalog(endpoint['route'])
+            model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mariadb', native_model=True)
+            return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_data_capture(self, server, request):
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+            raise ProviderWorkspaceError('Invalid MariaDB relation data request')
+        context, endpoint, provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        try:
+            return provider.capture_data(endpoint['route'], request.get('resource_id'),
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'],
+                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mysql_test_data import generate, template

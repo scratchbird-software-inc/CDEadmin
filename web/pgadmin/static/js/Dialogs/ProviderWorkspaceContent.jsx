@@ -7822,6 +7822,7 @@ export default function ProviderWorkspaceContent({
           'firebird-templates': gettext('Native Code Templates'),
           'firebird-test-data': gettext('Generate Test Data'),
           'mysql-test-data': gettext('MySQL Test Data'),
+          'mariadb-test-data': gettext('MariaDB Test Data'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -8147,6 +8148,8 @@ export default function ProviderWorkspaceContent({
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
+      {workspace && tab === 'mariadb-test-data' && workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
+        <MySQLTestData engine="mariadb" post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'mysql-test-data' && workspace.endpoint?.profile_id === 'mysql-native' && queryDatabaseTargetId &&
         <MySQLTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' &&
@@ -8249,7 +8252,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data', 'mariadb-test-data',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,

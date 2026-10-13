@@ -99,6 +99,17 @@ MARIA-COMP-05: Native DDN roundtrip
   retrieval context. Oracle-mode connections must not silently omit native
   ENGINE, character set, row format, field comments or index options.
 
+  Test-data recipes bind to the owner-authorized MariaDB endpoint/database
+  and current native table/column identities. Reuse the compact recipe controls
+  with a distinct MariaDB format and downloadable persistent recipe files. Generate bounded,
+  deterministic native scripts only: no implicit transaction control, writes,
+  constraint disabling or sequence advancement during generation. MariaDB JSON
+  values use validated textual JSON (not unsupported CAST AS JSON); vectors use
+  VEC_FromText, not MySQL STRING_TO_VECTOR. Preserve exact decimal/integer/binary
+  values, generated columns, native AUTO_INCREMENT returned values and reviewed
+  parent dependencies. Native execution and transaction outcomes belong to the
+  shared Query Tool. Apply existing row, byte, generator and scope limits.
+
   Saved catalog and relational designs use the shared project-asset repository
   under a MariaDB-specific namespace. Scope includes owner, endpoint, registered
   database and design family. Preserve original native baseline, authored DDN,

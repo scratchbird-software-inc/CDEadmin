@@ -5585,6 +5585,10 @@
     "mariadb-relational-diagram": {
       "reference": "SR-F-001409",
       "title": "MariaDB relational DDN design"
+    },
+    "mariadb-test-data": {
+      "reference": "SR-F-001410",
+      "title": "MariaDB native test-data recipes"
     }
   }
 }

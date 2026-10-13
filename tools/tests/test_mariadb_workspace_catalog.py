@@ -89,3 +89,14 @@ def test_native_sql_generation_rejects_foreign_endpoint_before_encoding():
     assert result['engine_id'] == 'mariadb' and result['script_available']
     assert result['executed'] is False and result['deployment_authorized'] is False
     provider.encode_native_metadata.assert_not_called()
+
+
+def test_native_recipe_template_uses_fresh_maria_catalog_and_registered_database():
+    service, server, provider, _, _ = fixture()
+    result = service.mariadb_test_data(server, {'database_target_id': 'owned-target'})
+    assert result['format'] == 'scratchrobin.mariadb.test-data@1' and not result['executed']
+    provider.capture_catalog.assert_called_once_with({'database': 'demo'})
+    provider.capture_catalog.reset_mock()
+    for request in ({'database_target_id': 'foreign-target'}, {'database_target_id': 'owned-target', 'source': 'SELECT secret'}):
+        with pytest.raises(ProviderWorkspaceError):service.mariadb_test_data(server, request)
+        provider.capture_catalog.assert_not_called()

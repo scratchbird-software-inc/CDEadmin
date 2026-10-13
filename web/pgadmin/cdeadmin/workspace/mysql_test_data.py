@@ -10,13 +10,20 @@ LIMIT = 4 * 1024 * 1024
 SQL_LIMIT = 1024 * 1024
 
 
+def _format(engine):
+    if engine not in {'mysql', 'mariadb'}:
+        raise ValueError('Unsupported native test-data engine')
+    return f'scratchrobin.{engine}.test-data@1'
+
+
 def integer(value):
     if not isinstance(value, str) or not re.fullmatch(r'[+-]?[0-9]{1,65}', value):
         raise ValueError('Integer sources require exact decimal strings up to 65 digits')
     return int(value)
 
 
-def literal(value):
+def literal(value, *, engine='mysql'):
+    _format(engine)
     if value is None:return 'NULL'
     if type(value) is bool:return 'TRUE' if value else 'FALSE'
     if type(value) is int and abs(value) <= 2**53-1:return str(value)
@@ -34,19 +41,20 @@ def literal(value):
             return "X'" + encoded.hex() + "'"
         if kind == 'json':
             json.loads(data,parse_constant=lambda token: (_ for _ in ()).throw(ValueError('Non-finite JSON source')))
-            return 'CAST(' + literal(data) + ' AS JSON)'
+            return literal(data, engine=engine) if engine == 'mariadb' else 'CAST(' + literal(data) + ' AS JSON)'
         if kind == 'vector':
             components = json.loads(data)
             if not isinstance(components,list) or not 1 <= len(components) <= 16383 or any(
                 type(part) not in {int,float} for part in components):raise ValueError('Vector requires bounded numeric components')
             json.dumps(components,allow_nan=False)
-            return 'STRING_TO_VECTOR(' + literal(data) + ')'
+            return ('VEC_FromText(' if engine == 'mariadb' else 'STRING_TO_VECTOR(') + literal(data, engine=engine) + ')'
     raise ValueError('Use text, safe integers or explicit integer/decimal/binary/json/vector sources')
 
 
-def tables(model):
-    if model['provenance'].get('mapping') != 'scratchrobin.mysql.catalog@1':
-        raise ValueError('MySQL native catalog is required')
+def tables(model, *, engine='mysql'):
+    _format(engine)
+    if model['provenance'].get('mapping') != f'scratchrobin.{engine}.catalog@1':
+        raise ValueError(engine + ' native catalog is required')
     result = {key:row for key,row in model['rows'].items() if row['kind']=='table' and row.get('system')=='false'}
     for row in result.values():
         identifier(row['native']['database']);identifier(row['name'])
@@ -61,22 +69,24 @@ def generated(fact):
     return bool(fact.get('generation_expression')) or 'GENERATED' in str(fact.get('extra','')).upper().replace('DEFAULT_GENERATED','')
 
 
-def template(model):
-    return {'format':FORMAT,'scope':{key:model['provenance'][key] for key in ('endpoint_id','database_target_id')},
+def template(model, *, engine='mysql'):
+    return {'format':_format(engine),'scope':{key:model['provenance'][key] for key in ('endpoint_id','database_target_id')},
         'tables':[{'resource_id':key,'schema':row['native']['database'],'name':row['name'],
           'columns':[{'name':name,'data_type':fact['column_type'],'insertable':not generated(fact),
             'auto_increment':'auto_increment' in str(fact.get('extra','')).lower()}
             for name,fact in sorted(columns(row).items(),key=lambda pair:int(pair[1].get('ordinal_position',0)))]}
-          for key,row in sorted(tables(model).items())],'executed':False}
+          for key,row in sorted(tables(model, engine=engine).items())],'executed':False}
 
 
-def generate(model,recipe):
+def generate(model,recipe,*,engine='mysql'):
+    native_format = _format(engine)
+    native_literal = lambda value: literal(value, engine=engine)
     scope = {key:model['provenance'][key] for key in ('endpoint_id','database_target_id')}
-    if (not isinstance(recipe,dict) or set(recipe) != {'format','scope','seed','tables'} or recipe['format']!=FORMAT or
+    if (not isinstance(recipe,dict) or set(recipe) != {'format','scope','seed','tables'} or recipe['format']!=native_format or
         recipe['scope']!=scope or type(recipe['seed']) is not int or not 0<=recipe['seed']<=2**32-1 or
-        not isinstance(recipe['tables'],list) or not 1<=len(recipe['tables'])<=32):raise ValueError('Invalid or foreign MySQL recipe')
+        not isinstance(recipe['tables'],list) or not 1<=len(recipe['tables'])<=32):raise ValueError('Invalid or foreign native recipe')
     if len(json.dumps(recipe,allow_nan=False).encode('utf8'))>LIMIT:raise ValueError('Recipe exceeds 4 MiB')
-    available,selected,dependencies = tables(model),{},{}
+    available,selected,dependencies = tables(model, engine=engine),{},{}
     kinds = {'constant':{'value'},'default':set(),'sequential':{'start','step'},'random-integer':{'min','max'},
         'choice':{'values'},'file':{'values'},'generated':{'table','column'},'returned':{'table','column'},
         'existing':{'table','column','order_by'}}
@@ -91,13 +101,13 @@ def generate(model,recipe):
             kind=source.get('kind')
             if not isinstance(kind,str) or kind not in kinds or set(source)!=kinds[kind]|{'kind'}:raise ValueError('Unknown generator or fields')
             if generated(native_columns[name]) and kind!='default':raise ValueError('Generated columns require native defaults')
-            if kind=='constant':literal(source['value'])
+            if kind=='constant':native_literal(source['value'])
             if kind=='sequential':integer(source['start']);integer(source['step'])
             if kind=='random-integer' and not 1<=integer(source['max'])-integer(source['min'])+1<=2**32:
                 raise ValueError('Random range requires 1 to 2^32 values')
             if kind in {'choice','file'}:
                 if not isinstance(source['values'],list) or not 1<=len(source['values'])<=1000:raise ValueError('Choice/file sources require 1 to 1000 values')
-                for value in source['values']:literal(value)
+                for value in source['values']:native_literal(value)
             if kind in {'generated','returned','existing'}:
                 parent=available.get(source['table']) if isinstance(source['table'],str) else None
                 if not parent or not isinstance(source['column'],str) or source['column'] not in columns(parent):raise ValueError('Parent column is unavailable')
@@ -136,7 +146,7 @@ def generate(model,recipe):
                 parent['columns'].get(source['column'],{}).get('kind','default')!='default'):
                 raise ValueError('Returned source requires a native default AUTO_INCREMENT parent')
     namespace='sr_'+hashlib.sha256(json.dumps(recipe,sort_keys=True,ensure_ascii=False).encode()).hexdigest()[:20]
-    lines=['-- MySQL native test data. Review and run in the shared Query Tool.',
+    lines=['-- '+('MariaDB' if engine == 'mariadb' else 'MySQL')+' native test data. Review and run in the shared Query Tool.',
         '-- This script does not start, commit or rollback a transaction or disable constraints.',
         '-- Native defaults, triggers, permissions and nontransactional-engine effects apply.']
     materialized={};variables=[];counter=0;size=0
@@ -157,10 +167,10 @@ def generate(model,recipe):
             for name,source in sorted(entry['columns'].items()):
                 kind=source['kind']
                 if kind=='default':values[name]='DEFAULT'
-                elif kind=='constant':values[name]=literal(source['value'])
+                elif kind=='constant':values[name]=native_literal(source['value'])
                 elif kind=='sequential':values[name]=str(integer(source['start'])+position*integer(source['step']))
                 elif kind=='random-integer':values[name]=str(integer(source['min'])+random_index(integer(source['max'])-integer(source['min'])+1))
-                elif kind in {'choice','file'}:values[name]=literal(source['values'][random_index(len(source['values']))] if kind=='choice' else source['values'][position%len(source['values'])])
+                elif kind in {'choice','file'}:values[name]=native_literal(source['values'][random_index(len(source['values']))] if kind=='choice' else source['values'][position%len(source['values'])])
                 elif kind in {'generated','returned'}:
                     parent_position=position%selected[source['table']]['count']
                     values[name]=materialized[(source['table'],parent_position,source['column'])]
@@ -183,7 +193,7 @@ def generate(model,recipe):
     for variable in variables:emit('SET '+variable+' = NULL;')
     output='\n'.join(lines)+'\n'
     if len(output.encode('utf8'))>SQL_LIMIT:raise ValueError('Generated script exceeds 1 MiB')
-    return {'format':FORMAT,'source':output,'source_sha256':hashlib.sha256(output.encode()).hexdigest(),
+    return {'format':native_format,'source':output,'source_sha256':hashlib.sha256(output.encode()).hexdigest(),
         'rows':sum(entry['count'] for entry in selected.values()),'tables':len(selected),'executed':False,
         'warnings':['Generation performs no native writes; native execution can reject types, constraints or privileges.',
             'Existing sources are read during execution and may change between statements.',
