@@ -90,6 +90,15 @@ MARIA-COMP-05: Native DDN roundtrip
   nontransactional engines. All paths retire the owned attachment, without
   altering interactive work or retrying interrupted reads.
 
+  Capture must neutralize SHOW CREATE presentation flags that suppress table,
+  field or key options. On its disposable connection, remove NO_TABLE_OPTIONS,
+  NO_FIELD_OPTIONS, NO_KEY_OPTIONS and compatibility macros that restore them,
+  retaining the other expanded native SQL-mode flags. Record the original mode
+  in observed identity and the actual retrieval/creation context with every
+  native definition. Stored routine/package/event contexts take precedence over
+  retrieval context. Oracle-mode connections must not silently omit native
+  ENGINE, character set, row format, field comments or index options.
+
   Server inventory reads explicitly named credential-free columns from native
   SCHEMATA, mysql.user, roles_mapping, USER_PRIVILEGES, PLUGINS, CHARACTER_SETS,
   COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES and mysql.servers. Distinguish roles

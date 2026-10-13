@@ -25,7 +25,7 @@ class Connection:
                     raise connection.failure
                 if query.startswith('SELECT DATABASE()'):
                     rows = [{'database_name': 'demo', 'version': '12.2.2-MariaDB', 'server_uid': 'native-server',
-                             'lower_case_table_names': 0, 'sql_mode': 'STRICT_TRANS_TABLES'}]
+                             'lower_case_table_names': 0, 'sql_mode': getattr(connection, 'sql_mode', 'STRICT_TRANS_TABLES')}]
                 elif 'FROM information_schema.TABLES ' in query:
                     rows = [{'table_name': 'a:`b', 'table_type': 'BASE TABLE'}]
                 elif query.startswith('SHOW CREATE TABLE'):
@@ -136,3 +136,14 @@ def test_native_mariadb_workspace_admits_its_real_transaction_controls():
     assert session.transaction_actions == frozenset(MariaDBDBAPIClient.transaction_actions)
     assert {'autocommit_on', 'autocommit_off'} <= session.transaction_actions
     assert callable(session.control_transaction)
+
+
+def test_oracle_presentation_flags_cannot_hide_native_table_options():
+    connection = Connection()
+    connection.sql_mode = 'ANSI_QUOTES,ORACLE,NO_TABLE_OPTIONS,NO_KEY_OPTIONS,NO_FIELD_OPTIONS,NO_BACKSLASH_ESCAPES'
+    captured = capture(connection, 'demo')
+    assert ('SET SESSION sql_mode=?', ('ANSI_QUOTES,NO_BACKSLASH_ESCAPES',)) in connection.calls
+    root = captured['resources'][0]['native']
+    assert root['catalog_row']['sql_mode'] == connection.sql_mode
+    assert root['definition_context']['sql_mode'] == 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'
+    assert captured['resources'][1]['native']['definition_context']['sql_mode'] == 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'

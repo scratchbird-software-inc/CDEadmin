@@ -114,7 +114,25 @@ def capture(connection, database, *, include_system=False):
         raise ValueError('Catalog capture requires native MariaDB 12.2.2')
     if database in SYSTEM and not include_system:
         raise ValueError('System database capture requires explicit system-object inclusion')
+    mode = identity[0].get('sql_mode')
+    if not isinstance(mode, str):
+        raise ValueError('Native MariaDB SQL mode observation is unavailable')
+    hidden_options = {'NO_TABLE_OPTIONS', 'NO_FIELD_OPTIONS', 'NO_KEY_OPTIONS',
+        'ORACLE', 'DB2', 'MAXDB', 'MSSQL', 'POSTGRESQL'}
+    modes = [flag.strip() for flag in mode.split(',') if flag.strip()]
+    retrieval_mode = ','.join(flag for flag in modes if flag not in hidden_options)
+    if retrieval_mode != mode:
+        policy = connection.cursor(buffered=False)
+        try:
+            policy.execute('SET SESSION sql_mode=?', (retrieval_mode,))
+        finally:
+            policy.close()
+    capture_context = {key: identity[0].get(key) for key in
+        ('character_set_client', 'collation_connection', 'time_zone')}
+    capture_context['sql_mode'] = retrieval_mode
     root = add('database', database, identity[0])
+    root['native']['definition_context'] = dict(capture_context)
+
     quoted_database = identifier(database)
     schemas = section('SCHEMATA', 'SELECT * FROM information_schema.SCHEMATA WHERE SCHEMA_NAME=?', (database,))
     root['native']['schema_rows'] = schemas
@@ -133,8 +151,8 @@ def capture(connection, database, *, include_system=False):
         kind = 'view' if table_type == 'VIEW' else 'sequence' if table_type == 'SEQUENCE' else 'table'
         item = add(kind, name, row, root['resource_id'])
         item['native']['definition'] = ddl
-        item['native']['definition_context'] = {key: value for key, value in (values[0].items() if values else ())
-            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
+        item['native']['definition_context'] = {**capture_context, **{key: value for key, value in (values[0].items() if values else ())
+            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}}
         item['native']['definition_available'] = bool(ddl)
         if not ddl:
             observations.append({'section': kind + ':' + name, 'available': False,
@@ -168,8 +186,8 @@ def capture(connection, database, *, include_system=False):
             ddl = next((value for key, value in (definitions[0].items() if definitions else ())
                         if key.startswith('create ') or key == 'sql original statement'), None)
             item['native']['definition'] = ddl
-            item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
-                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
+            item['native']['definition_context'] = {**capture_context, **{key: value for key, value in (definitions[0].items() if definitions else ())
+                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}}
             if kind == 'trigger':
                 item['native']['trigger_identity']={'database':row.get('event_object_schema'),
                     'table':row.get('event_object_table'),'timing':row.get('action_timing'),

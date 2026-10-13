@@ -29,6 +29,7 @@ def qualify(route, evidence, *, password=None):
         owner.database = schema
         statements = [
             'CREATE SEQUENCE seq START WITH 20',
+            "CREATE TABLE options_probe (id INT COMMENT 'retained field', KEY k (id) USING BTREE) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='retained table'",
             'CREATE TABLE temporal (id INT PRIMARY KEY, value VARCHAR(40)) WITH SYSTEM VERSIONING',
             'CREATE TABLE appointments (id INT, start_at DATE, end_at DATE, PERIOD FOR validity(start_at,end_at))',
             'CREATE VIEW v AS SELECT id FROM temporal',
@@ -85,6 +86,17 @@ def qualify(route, evidence, *, password=None):
         assert decoded['provenance']['mapping'] == 'scratchrobin.mariadb.catalog@1'
         assert 'scratchrobin.mariadb.relations' in exported['diagram']['snapshot']['files']['relations.ddn']
         proof['checks'].append('native_ddn_catalog_roundtrip_preserves_all_native_facts')
+        oracle = provider.capture_catalog({**native_route, 'database': schema,
+            'init_command': "SET SESSION sql_mode='ORACLE'"})
+        oracle_root = next(row['native'] for row in oracle['resources'] if row['resource_kind'] == 'database')
+        assert 'ORACLE' in oracle_root['catalog_row']['sql_mode'].split(',')
+        assert 'ORACLE' not in oracle_root['definition_context']['sql_mode'].split(',')
+        probe = next(row['native'] for row in oracle['resources'] if row['resource_kind'] == 'table' and row['display_name'] == 'options_probe')
+        for option in ['ENGINE=InnoDB', 'ROW_FORMAT=DYNAMIC', 'retained field', 'retained table']:
+            assert option in probe['definition'], (option, probe['definition'])
+        assert 'NO_TABLE_OPTIONS' not in probe['definition_context']['sql_mode'].split(',')
+        proof['checks'].append('oracle_mode_capture_preserves_all_native_show_create_options')
+
         cursor.execute(f'CREATE ROLE `{role}`')
         cursor.execute(f"CREATE SERVER `{link}` FOREIGN DATA WRAPPER mysql OPTIONS (HOST 'example.invalid', DATABASE '{schema}', USER 'link-user', PASSWORD '{link_password}', PORT 3306)")
         cursor.execute('SELECT PLUGIN_NAME, PLUGIN_TYPE, PLUGIN_LIBRARY FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME, PLUGIN_TYPE')
