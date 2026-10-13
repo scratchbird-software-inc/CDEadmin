@@ -307,6 +307,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   every effective generator option with fresh native catalog metadata; matching
   the sequence name alone is insufficient. This does not reconstruct current
   generator position or claim ownership durability.
+  A committed single-overload macro creation is verified against the complete
+  observed scalar/table kind, plain parameter names and native definition
+  tokens. Creation with parameter defaults or several overloads may still use
+  its exact reviewed native statement, but stays explicitly unverified until
+  its complete signature and body can be reconstructed from discovery. The
+  catalog does not expose parameter default expressions. No creation is
+  replayed to resolve an unverified receipt.
   A committed column addition is verified against its requested native type,
   nullable state and default as well as its identity. Canonical spelling
   differences leave the committed result unverified without automatic replay.

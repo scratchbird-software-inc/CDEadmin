@@ -7,7 +7,7 @@ import pytest
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb.provider import _resource_id
 from pgadmin.cdeadmin.workspace.duckdb_schema_plan import (
-    create_definition_tokens, plan, sequence_creation_postcondition,
+    create_definition_tokens, macro_creation_matches, plan, sequence_creation_postcondition,
     type_expression_tokens, view_query_tokens,
 )
 
@@ -137,6 +137,28 @@ def test_sequence_creation_effective_options_and_ownership_blocker():
         preview = plan(model(), model(row('sequence', path, ddl=target + ' ' + suffix)),
             model())
         assert not preview['application_supported'] and preview['blockers']
+
+
+def test_macro_creation_matches_complete_plain_signature_and_body():
+    pytest.importorskip('duckdb')
+    source = 'CREATE MACRO "file"."main"."plus_one"(x) AS x + 1'
+    observed = row('macro', ['file', 'main', 'plus_one'])
+    observed['native'].update(overload_count=1, overloads=[{
+        'catalog_metadata': {'function_type': 'macro'},
+        'parameters': [{'name': 'x', 'data_type': None}],
+        'definition': '(x + 1)',
+    }])
+    assert macro_creation_matches(source, observed)
+    changed = deepcopy(observed)
+    changed['native']['overloads'][0]['definition'] = '(x + 2)'
+    assert not macro_creation_matches(source, changed)
+    assert not macro_creation_matches(
+        'CREATE MACRO "file"."main"."plus_one"(x := 1) AS x + 1', observed)
+    table = deepcopy(observed)
+    table['native']['overloads'][0]['catalog_metadata']['function_type'] = 'table_macro'
+    table['native']['overloads'][0]['definition'] = 'SELECT x AS "value"'
+    assert macro_creation_matches(
+        'CREATE MACRO "file"."main"."plus_one"(x) AS TABLE SELECT x AS value', table)
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

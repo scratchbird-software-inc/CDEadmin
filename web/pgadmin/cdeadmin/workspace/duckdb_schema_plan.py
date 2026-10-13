@@ -571,6 +571,119 @@ def sequence_creation_postcondition(source, path):
         'increment_by': increment, 'cycle': explicit.get('cycle', False)}
 
 
+def _macro_tokens(source):
+    if not isinstance(source, str):
+        return None
+    import duckdb
+    try:
+        positions = duckdb.tokenize(source)
+    except duckdb.Error:
+        return None
+    encoded = source.encode('utf8')
+    tokens = []
+    for index, (offset, kind) in enumerate(positions):
+        following = positions[index + 1][0] if index + 1 < len(positions) else len(encoded)
+        word = encoded[offset:following].decode('utf8').strip()
+        if kind == duckdb.token_type.identifier and len(word) >= 2 and word[0] == word[-1] == '"':
+            word = word[1:-1].replace('""', '"')
+        if kind in {duckdb.token_type.keyword, duckdb.token_type.identifier}:
+            word = word.casefold()
+        tokens.append((str(kind), word))
+    if tokens and tokens[-1] == (str(duckdb.token_type.operator), ';'):
+        tokens.pop()
+    return tokens
+
+
+def _macro_body_tokens(tokens, *, table=False):
+    import duckdb
+    opening = (str(duckdb.token_type.operator), '(')
+    closing = (str(duckdb.token_type.operator), ')')
+    keyword = str(duckdb.token_type.keyword)
+    identifier = str(duckdb.token_type.identifier)
+    tokens = list(tokens)
+    if table:
+        depth = 0
+        for index, token in enumerate(tokens):
+            if (index and depth == 0 and tokens[index - 1] == (keyword, 'as') and
+                    token[0] in {keyword, identifier}):
+                tokens[index] = (identifier, token[1])
+            depth += (token == opening) - (token == closing)
+    while len(tokens) >= 2 and tokens[0] == opening and tokens[-1] == closing:
+        depth = 0
+        wrapped = True
+        for index, token in enumerate(tokens):
+            depth += (token == opening) - (token == closing)
+            if depth == 0 and index < len(tokens) - 1:
+                wrapped = False
+                break
+        if not wrapped or depth != 0:
+            break
+        tokens = tokens[1:-1]
+    return tuple(tokens) if tokens else None
+
+
+def macro_creation_matches(source, current):
+    """Verify only a complete observed single-overload native macro."""
+    if current['kind'] != 'macro':
+        return False
+    target = '.'.join(_quote(part) for part in current['path'])
+    prefix = re.match(r'^\s*CREATE\s+MACRO\s+' + re.escape(target) +
+        r'(?=\s|\()', source, re.I) if isinstance(source, str) else None
+    if prefix is None:
+        return False
+    tokens = _macro_tokens(source[prefix.end():])
+    observed = current['native'].get('overloads')
+    if not isinstance(tokens, list) or not isinstance(observed, list) or len(observed) != 1:
+        return False
+    import duckdb
+    opening = (str(duckdb.token_type.operator), '(')
+    closing = (str(duckdb.token_type.operator), ')')
+    comma = (str(duckdb.token_type.operator), ',')
+    keyword = str(duckdb.token_type.keyword)
+    identifier = str(duckdb.token_type.identifier)
+    if not tokens or tokens[0] != opening:
+        return False
+    close = next((index for index, token in enumerate(tokens[1:], 1)
+        if token == closing), None)
+    if close is None or len(tokens) <= close + 2 or tokens[close + 1] != (keyword, 'as'):
+        return False
+    parameter_tokens = tokens[1:close]
+    parameters = []
+    if parameter_tokens:
+        for part in (list(group) for group in _split_macro_parameters(parameter_tokens, comma)):
+            if len(part) != 1 or part[0][0] != identifier:
+                return False
+            parameters.append(part[0][1])
+    body = tokens[close + 2:]
+    is_table = bool(body and body[0] == (keyword, 'table'))
+    if is_table:
+        body = body[1:]
+    expected_body = _macro_body_tokens(body, table=is_table)
+    overload = observed[0]
+    native_parameters = overload.get('parameters')
+    if (expected_body is None or current['native'].get('overload_count') != 1 or
+            overload.get('catalog_metadata', {}).get('function_type') !=
+                ('table_macro' if is_table else 'macro') or
+            not isinstance(native_parameters, list) or len(native_parameters) != len(parameters) or
+            any(not isinstance(item, dict) or item.get('data_type') is not None or
+                not isinstance(item.get('name'), str) or
+                item['name'].casefold() != expected
+                for item, expected in zip(native_parameters, parameters))):
+        return False
+    observed_tokens = _macro_tokens(overload.get('definition'))
+    return (isinstance(observed_tokens, list) and expected_body ==
+        _macro_body_tokens(observed_tokens, table=is_table))
+
+
+def _split_macro_parameters(tokens, comma):
+    start = 0
+    for index, token in enumerate(tokens):
+        if token == comma:
+            yield tokens[start:index]
+            start = index + 1
+    yield tokens[start:]
+
+
 def _validated_macro_replacement(before, after, target, change):
     if change != {'action': 'replace-definition',
                    'parameters_without_defaults_confirmed': True}:

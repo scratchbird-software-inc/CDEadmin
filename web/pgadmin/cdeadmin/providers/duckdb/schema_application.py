@@ -81,6 +81,9 @@ def apply_review(provider, route, record):
                         metadata = current['native'].get('catalog_metadata', {})
                         expected = operation['postcondition']['sequence_options']
                         verified = all(metadata.get(key) == value for key, value in expected.items())
+                    if verified and operation['kind'] == 'macro':
+                        from ...workspace.duckdb_schema_plan import macro_creation_matches
+                        verified = macro_creation_matches(operation['source'], current)
                     if verified and operation['kind'] == 'column':
                         metadata = current['native'].get('catalog_metadata', {})
                         verified = all(metadata.get(key) == value for key, value in
