@@ -225,6 +225,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   other dependency failures roll back the reviewed transaction. The historic
   generator position cannot be
   reconstructed from metadata and is never represented as retained design.
+  DuckDB 1.5.2 parses and executes ``ALTER SEQUENCE ... OWNED BY``, but in the
+  pinned runtime the ownership dependency disappears after closing and
+  reopening the database file, including after ``CHECKPOINT``. Dropping the
+  former owner then leaves the sequence. ScratchRobin must not advertise this
+  as a durable DDN or administration change; sequence-owner edits remain
+  blocked pending a later version's reopen-and-drop qualification. A dependency
+  seen only in the applying connection is not persistence proof.
   A ``replace-type`` intent requires a complete, exactly qualified native
   ``CREATE OR REPLACE TYPE`` statement and an explicit whole-definition
   confirmation. The edited design must declare the complete resolved type,

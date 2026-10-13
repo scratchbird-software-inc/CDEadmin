@@ -112,6 +112,23 @@ def test_unchanged_row_identity_tampering_blocks_other_native_operations(field, 
     assert any('identity changed' in item['reason'] for item in result['blockers'])
 
 
+def test_sequence_ownership_is_not_admitted_as_durable_design_change():
+    table = row('table', ['file', 'main', 'owner_table'],
+        ddl='CREATE TABLE "file"."main"."owner_table" (x INTEGER)')
+    sequence = row('sequence', ['file', 'main', 'owned_seq'],
+        ddl='CREATE SEQUENCE "file"."main"."owned_seq"')
+    baseline = model(table, sequence)
+    desired = deepcopy(baseline)
+    changed = desired['rows'][sequence['resource_id']]['native']
+    changed['catalog_metadata']['owner_table'] = ['file', 'main', 'owner_table']
+    changed['duckdb_change'] = {'action': 'set-owner',
+        'owner_table': ['file', 'main', 'owner_table'],
+        'drop_with_table_confirmed': True}
+    preview = plan(baseline, desired, baseline)
+    assert not preview['application_supported']
+    assert preview['operations'] == [] and preview['blockers']
+
+
 def test_stale_live_definition_and_foreign_scope_are_refused():
     before = row('view', ['file', 'main', 'report'],
         ddl='CREATE VIEW "file"."main"."report" AS SELECT 1')
