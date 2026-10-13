@@ -660,6 +660,27 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mariadb_native_metadata(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .mariadb_sql_export import build_metadata
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'source'}:
+            raise ProviderWorkspaceError('Invalid native MariaDB metadata export request')
+        try:
+            target = request['database_target_id']
+            context, endpoint, provider = self._mariadb_catalog_context(server, target)
+            document = read_catalog(request['source'], engine='mariadb')
+            if (document['provenance']['endpoint_id'] != context.endpoint_id or
+                    document['provenance']['database_target_id'] != target):
+                raise ValueError('Document belongs to another endpoint or database')
+            metadata = build_metadata(document)
+            if metadata['database'] != endpoint['route'].get('database'):
+                raise ValueError('Native metadata names another registered database')
+            if metadata.get('native_encoding_required'):
+                metadata = provider.encode_native_metadata(endpoint['route'], metadata)
+            return metadata
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mariadb_catalog(self, server, request, *, compare=False):
         from .firebird_catalog_export import build_export
         from .firebird_catalog_import import read_catalog, compare_catalogs

@@ -4,14 +4,15 @@ from .mysql_sql_export import _literal
 from ..providers.mysql_family.mysql_catalog import identifier
 
 
-def render(encoded,database):
+def render(encoded,database,*,engine="mysql"):
+    if engine not in {"mysql","mariadb"}:raise ValueError("Unsupported native metadata engine")
     if not encoded:raise ValueError('Native encoded statements are required')
     combined=b'\n'.join(data for _block,data in encoded);nonce=0
     while True:
         delimiter=('__sr_'+hashlib.sha256(str(nonce).encode()+combined).hexdigest()[:10]).encode('ascii')
         if delimiter not in combined:break
         nonce+=1
-    output=bytearray(b'-- Native MySQL metadata; fresh mysql --binary-mode --default-character-set=utf8mb4 client only.\n')
+    output=bytearray(('-- Native '+('MariaDB' if engine=='mariadb' else 'MySQL')+' metadata; fresh '+engine+' --binary-mode --default-character-set=utf8mb4 client only.\n').encode('ascii'))
     output.extend(b'-- Imported DDL is unvalidated; this file does not authorize execution.\n')
     output.extend(b'\\C utf8mb4\nDELIMITER '+delimiter+b'\n')
     selected=False;encodings=[]
@@ -23,7 +24,8 @@ def render(encoded,database):
             output.extend(b'\\C utf8mb4\n');append(('USE '+identifier(database)).encode('utf8'));selected=True
         context=block['context'];charset=context['character_set_client']
         output.extend(('\\C '+charset+'\n').encode('ascii'))
-        for key in ('sql_mode','collation_connection'):
+        for key in ('sql_mode','collation_connection','time_zone'):
+            if key not in context:continue
             append(('SET SESSION '+key+'='+_literal(context[key])).encode('ascii'))
         append(data)
         encodings.append({'resource_id':block['resource_id'],'character_set_client':charset,'byte_size':len(data),'sha256':hashlib.sha256(data).hexdigest()})

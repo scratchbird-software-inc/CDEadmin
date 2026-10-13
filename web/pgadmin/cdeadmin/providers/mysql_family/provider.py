@@ -1570,6 +1570,17 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def encode_native_metadata(self, route, metadata):
+        from .mariadb_native_encoding import encode_metadata
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB encoding client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return encode_metadata(connection, metadata)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def capture_server_catalog(self, route):
         from .mariadb_server_catalog import capture
         self._require('data_read', 'resource')

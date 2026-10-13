@@ -58,4 +58,20 @@ describe('MariaDB native catalog form', () => {
     expect(mockViewer.snapshot.files).toEqual(data.snapshot.files);
     expect(mockViewer.presentation).toBe(true);
   });
+  it('generates SQL from captured native DDN without issuing execution or apply requests', async () => {
+    const metadata = {statements: [{kind: 'sequence'}], script: 'CREATE SEQUENCE seq START WITH 20;',
+      script_available: true, blockers: [], prerequisites: [], warnings: ['Native export only']};
+    const post = jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce(metadata);
+    render(<Component post={post} databaseTargetId="mariadb-owned-target" />);
+    expect(screen.getByRole('button', {name: 'Generate native SQL'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    fireEvent.click(screen.getByRole('button', {name: 'Generate native SQL'}));
+    await screen.findByText('Native export only');
+    expect(post).toHaveBeenLastCalledWith({action: 'mariadb_native_metadata', request: {
+      database_target_id: 'mariadb-owned-target', source: JSON.stringify(capture.snapshot)}});
+    expect(screen.getByRole('textbox', {name: 'Native SQL preview'})).toHaveValue(metadata.script);
+    expect(screen.getByRole('button', {name: 'Download native SQL'})).toBeEnabled();
+    expect(post).toHaveBeenCalledTimes(2);
+  });
 });

@@ -33,14 +33,26 @@ def qualify(route, evidence, *, password=None):
             'CREATE TABLE temporal (id INT PRIMARY KEY, value VARCHAR(40)) WITH SYSTEM VERSIONING',
             'CREATE TABLE appointments (id INT, start_at DATE, end_at DATE, PERIOD FOR validity(start_at,end_at))',
             'CREATE VIEW v AS SELECT id FROM temporal',
+            'CREATE VIEW a_outer AS SELECT id FROM v',
+            'CREATE TABLE fk_a (id INT PRIMARY KEY, peer INT)',
+            'CREATE TABLE fk_b (id INT PRIMARY KEY, peer INT, CONSTRAINT fk_b_a FOREIGN KEY(peer) REFERENCES fk_a(id))',
+            'ALTER TABLE fk_a ADD CONSTRAINT fk_a_b FOREIGN KEY(peer) REFERENCES fk_b(id)',
             'CREATE PROCEDURE p(IN i INT) SELECT i',
             'CREATE PACKAGE pkg PROCEDURE hi(); END',
             'CREATE PACKAGE BODY pkg PROCEDURE hi() BEGIN SELECT 1; END; END',
             'CREATE TRIGGER tr BEFORE INSERT ON temporal FOR EACH ROW SET NEW.value=COALESCE(NEW.value,\'default\')',
+            "CREATE TRIGGER tr_second BEFORE INSERT ON temporal FOR EACH ROW FOLLOWS tr SET NEW.value=CONCAT(NEW.value,' suffix')",
             'CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DISABLE DO SELECT 1',
         ]
         for statement in statements:
             cursor.execute(statement)
+        cursor.execute("SET SESSION sql_mode='ORACLE'")
+        cursor.execute('CREATE PACKAGE oracle_pkg AS FUNCTION answer RETURN INT; END')
+        cursor.execute('CREATE PACKAGE BODY oracle_pkg AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END')
+        cursor.execute('SET SESSION sql_mode=DEFAULT')
+        cursor.execute("SET SESSION time_zone='+02:00'")
+        cursor.execute('CREATE EVENT tz_event ON SCHEDULE EVERY 1 DAY DISABLE DO SELECT 1')
+        cursor.execute('SET SESSION time_zone=DEFAULT')
         interactive = mariadb.connect(**route, database=schema, autocommit=False,
             **({'password': password} if password is not None else {}))
         with interactive.cursor() as pending:
@@ -156,6 +168,56 @@ def qualify(route, evidence, *, password=None):
 
 
 
+
+        from pgadmin.cdeadmin.workspace.mariadb_sql_export import build_metadata
+        import os
+        import subprocess
+        import base64
+        binary = os.environ['CDEADMIN_MARIADB_CLIENT_BINARY']
+        cli = [binary, '--protocol=TCP', '--host=' + route['host'], '--port=' + str(route['port']),
+            '--user=' + route['user'], '--binary-mode', '--default-character-set=utf8mb4']
+        environment = {**os.environ, 'MYSQL_PWD': password or route.get('password', '')}
+        def native_cli(data):
+            completed = subprocess.run(cli, input=data, capture_output=True, env=environment, timeout=60)
+            if completed.returncode:
+                (evidence / 'native-client-error.log').write_bytes(completed.stderr)
+                raise AssertionError('Native metadata client refused script; see retained diagnostic')
+            return completed.stdout
+        latin = ('USE `' + schema + '`;\n\\C latin1\nDELIMITER //\n'
+            "CREATE PROCEDURE latin_proc() SELECT 'é€';\n//\nDELIMITER ;\n").encode('cp1252')
+        native_cli(latin)
+        fresh = provider.capture_catalog({**native_route, 'database': schema})
+        fresh_export = build_export(fresh['resources'], **{**options, 'generation': fresh['generation']})
+        desired = read_catalog(json.dumps(fresh_export['snapshot']), engine='mariadb')
+        metadata = build_metadata(desired)
+        assert not metadata['blockers'], metadata['blockers']
+        assert metadata['native_encoding_required']
+        metadata = provider.encode_native_metadata({**native_route, 'database': schema}, metadata)
+        payload = base64.b64decode(metadata['encoded_script']['data_base64'])
+        assert b"'\xe9\x80'" in payload and b'\\C latin1' in payload
+        assert metadata['encoded_script']['consumer'] == 'mariadb-cli-fresh-session'
+        kinds = [item['kind'] for item in metadata['statements']]
+        assert kinds.index('package') < kinds.index('package-body')
+        interactive.rollback()
+        cursor.execute(f'DROP DATABASE `{schema}`')
+        (evidence / 'native-metadata.sql').write_bytes(payload)
+        native_cli(payload)
+        replay = provider.capture_catalog({**native_route, 'database': schema})
+        replayed = {(row['resource_kind'], row['display_name']): row['native'] for row in replay['resources']}
+        for original in fresh['resources']:
+            key = original['resource_kind'], original['display_name']
+            assert original['native']['definition'] == replayed[key]['definition'], key
+        for original in fresh['resources']:
+            if original['resource_kind'] == 'trigger':
+                assert original['native']['catalog_row']['action_order'] == replayed[('trigger', original['display_name'])]['catalog_row']['action_order']
+        owner.database = schema
+        cursor.execute('SELECT oracle_pkg.answer()')
+        assert cursor.fetchone()[0] == 42
+        assert replayed[('event', 'tz_event')]['definition_context']['time_zone'] == '+02:00'
+        cursor.execute('CALL latin_proc()')
+        assert cursor.fetchone()[0] == 'é€'
+        (evidence / 'native-metadata.sql').write_bytes(payload)
+        proof['checks'].append('native_mixed_charset_metadata_client_roundtrip_temporal_sequence_package_trigger_event')
 
         (evidence / 'catalog.json').write_text(json.dumps(result, indent=2) + '\n')
         proof['complete'] = True

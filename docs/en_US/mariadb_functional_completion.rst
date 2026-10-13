@@ -99,6 +99,27 @@ MARIA-COMP-05: Native DDN roundtrip
   retrieval context. Oracle-mode connections must not silently omit native
   ENGINE, character set, row format, field comments or index options.
 
+  Native SQL generation is export-only and preserves SHOW CREATE definitions,
+  per-object SQL mode, character context and event time zone. It must preserve
+  system-versioned/application-period tables, sequences and separate package
+  declarations/bodies. Foreign keys are deferred until tables exist; package
+  bodies follow declarations and multiple triggers preserve native action order.
+  MariaDB has no VIEW_TABLE_USAGE catalog: FROM/JOIN and table-list references outside
+  literals/comments are conservative ordering hints, with external/unresolved
+  dependencies explicitly reported rather than presented as exact discovery.
+  Missing context/definitions or ambiguous identities block a deployable export.
+  Filtered object exports retain the observed database identity/context in
+  provenance. Imported DDL remains unvalidated and never authorizes execution.
+
+  Mixed-character-set definitions are encoded by MariaDB itself, with exact
+  Unicode roundtrip checks, on a dedicated UTF-8 Connector/Python connection.
+  Do not change character_set_client away from utf8mb4 on that connector.
+  Validate native character-set names before constructing CONVERT. Validate
+  collation names with the native session setter, then restore the owned
+  connection context; UCA-1400 aliases can be absent from catalog inventories.
+  Downloads target a fresh mariadb --binary-mode client session, including
+  per-object time zone; conversion loss or wrong server UID prevents download.
+
   Server inventory reads explicitly named credential-free columns from native
   SCHEMATA, mysql.user, roles_mapping, USER_PRIVILEGES, PLUGINS, CHARACTER_SETS,
   COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES and mysql.servers. Distinguish roles

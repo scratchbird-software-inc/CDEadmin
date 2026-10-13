@@ -70,3 +70,22 @@ def test_explicit_data_capture_forwards_native_identity_and_rejects_unknown_fiel
         with pytest.raises(ProviderWorkspaceError):
             service.mariadb_data_capture(server, invalid)
         provider.capture_data.assert_not_called()
+
+
+def test_native_sql_generation_rejects_foreign_endpoint_before_encoding():
+    from tools.tests.test_mariadb_sql_export import model
+    from unittest.mock import patch
+    service, server, provider, _, _ = fixture()
+    provider.encode_native_metadata = Mock()
+    document = model()
+    document['provenance'].update(endpoint_id='foreign-endpoint', database_target_id='owned-target')
+    with patch('pgadmin.cdeadmin.workspace.firebird_catalog_import.read_catalog', return_value=document):
+        with pytest.raises(ProviderWorkspaceError, match='another endpoint'):
+            service.mariadb_native_metadata(server, {'database_target_id': 'owned-target', 'source': 'owned DDN'})
+    provider.encode_native_metadata.assert_not_called()
+    document['provenance']['endpoint_id'] = 'owned-endpoint'
+    with patch('pgadmin.cdeadmin.workspace.firebird_catalog_import.read_catalog', return_value=document):
+        result = service.mariadb_native_metadata(server, {'database_target_id': 'owned-target', 'source': 'owned DDN'})
+    assert result['engine_id'] == 'mariadb' and result['script_available']
+    assert result['executed'] is False and result['deployment_authorized'] is False
+    provider.encode_native_metadata.assert_not_called()

@@ -16,7 +16,9 @@ def _literal(value):
     return "CONVERT(X'" + value.encode('utf8').hex() + "' USING utf8mb4)"
 
 
-def _script(blocks, database):
+def _script(blocks, database, *, engine="mysql"):
+    if engine not in {"mysql", "mariadb"}:
+        raise ValueError("Unsupported native metadata engine")
     joined = '\n'.join(block['statement'] for block in blocks)
     if len(joined.encode('utf8')) > 8 * 1024 * 1024:
         raise ValueError('Native SQL export exceeds 8 MiB')
@@ -29,7 +31,7 @@ def _script(blocks, database):
             break
         nonce += 1
     prefix = '@sr_' + suffix + '_'
-    lines = ['-- Native MySQL metadata export; not a migration or execution authorization.',
+    lines = [f'-- Native {"MariaDB" if engine == "mariadb" else "MySQL"} metadata export; not a migration or execution authorization.',
              '-- DDL commits implicitly. Definers, privileges and external prerequisites are retained.',
              'DELIMITER ' + delimiter]
     def append(value):

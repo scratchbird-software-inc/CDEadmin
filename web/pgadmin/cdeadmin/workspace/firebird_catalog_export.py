@@ -75,6 +75,10 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         'warnings': warnings, 'objects': len(items), 'view_limit': VIEW_LIMIT,
         'deployment': 'documentary-only',
     }
+    if engine == 'mariadb' and len(databases) == 1 and databases[0]['resource_kind'] == 'database':
+        observed = native_metadata(databases[0], engine)
+        provenance['catalog_identity'] = observed.get('catalog_row', {})
+        provenance['definition_context'] = observed.get('definition_context', {})
     if native_model:
         # A host capture is already structured metadata, not imported notation.
         # Decode its JSON exactly like imported metadata, without a DDN detour.
