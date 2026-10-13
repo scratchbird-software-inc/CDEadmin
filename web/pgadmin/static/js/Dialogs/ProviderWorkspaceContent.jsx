@@ -7571,7 +7571,7 @@ export default function ProviderWorkspaceContent({
         ...(languageProfile === 'firebird-sql' ? {
           client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
         } : {}),
-        ...(['firebird-sql', 'mysql-sql'].includes(languageProfile) ? {history_sensitive: historySensitive} : {}),
+        ...(['firebird-sql', 'mysql-sql', 'mariadb-sql'].includes(languageProfile) ? {history_sensitive: historySensitive} : {}),
         database_target_id: queryDatabaseTargetId,
       });
       setHistoryNotice(occurrence.sql_history?.warning || '');
@@ -7974,12 +7974,12 @@ export default function ProviderWorkspaceContent({
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
           <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
             {languageProfile === 'mysql-sql' && <MySQLQueryOptions transaction={transaction} />}
-            {['firebird-sql', 'mysql-sql'].includes(languageProfile) && <>
+            {['firebird-sql', 'mysql-sql', 'mariadb-sql'].includes(languageProfile) && <>
               <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
                 checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
                 onChange={(event) => setHistorySensitive(event.target.checked)} />} />
               <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
-                engine={languageProfile === 'mysql-sql' ? 'mysql' : 'firebird'}
+                engine={languageProfile === 'mysql-sql' ? 'mysql' : languageProfile === 'mariadb-sql' ? 'mariadb' : 'firebird'}
                 onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
             </>}
             {languageProfile === 'firebird-sql' && <>

@@ -45,6 +45,16 @@ describe('Firebird persistent SQL history', () => {
     expect(onLoad).toHaveBeenCalledWith('select 1');
     expect(post).toHaveBeenCalledTimes(1);
   });
+  it('uses the MariaDB database scope without sending a foreign dialect or executing history', async () => {
+    const post = jest.fn().mockResolvedValue(response), onLoad = jest.fn();
+    render(<Component post={post} databaseTargetId="maria-target" engine="mariadb" onLoad={onLoad} />);
+    fireEvent.click(screen.getByText('SQL history'));
+    await screen.findByText('select 1');
+    expect(post).toHaveBeenCalledWith({action: 'query_history_read', request: {database_target_id: 'maria-target', search: ''}});
+    fireEvent.click(screen.getByText('Previous history entry'));
+    expect(onLoad).toHaveBeenCalledWith('select 1');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
   it('reuses the form for PostgreSQL without sending a Firebird dialect', async () => {
     const post = jest.fn().mockResolvedValue(response), onLoad = jest.fn();
     render(<Component post={post} databaseTargetId="postgresql-database:42" engine="postgresql" onLoad={onLoad} />);

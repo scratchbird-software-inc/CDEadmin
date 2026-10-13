@@ -89,4 +89,4 @@ export default function FirebirdQueryHistory({post, databaseTargetId, dialect, o
   </Box>;
 }
 FirebirdQueryHistory.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string,
-  dialect: PropTypes.number, engine: PropTypes.oneOf(['firebird', 'postgresql', 'mysql']), onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool, notice: PropTypes.string};
+  dialect: PropTypes.number, engine: PropTypes.oneOf(['firebird', 'postgresql', 'mysql', 'mariadb']), onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool, notice: PropTypes.string};
