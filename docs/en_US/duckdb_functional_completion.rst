@@ -178,7 +178,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   separate reviewed column alteration. A native view replacement or enum
   extension is blocked when the old object has a comment or tags, because
   ``CREATE OR REPLACE`` discards those facts and the one-statement adapter
-  cannot restore them. A macro replacement requires exactly
+  cannot restore them. After a committed view replacement, compare the native
+  catalog's parsed view-query tokens with the submitted query body. A changed
+  object name or merely different definition is insufficient verification;
+  canonical spelling differences may leave a successful commit explicitly
+  unverified, and must not trigger automatic replay. A macro replacement requires exactly
   one observed scalar or table overload, unchanged macro kind, parameters and
   metadata, an explicit new bounded definition, and an affirmative
   ``parameters_without_defaults_confirmed`` review assertion. DuckDB 1.5.2

@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -225,6 +225,48 @@ def test_explicit_drop_and_view_replace_are_native_and_one_time(tmp_path):
         assert observer.execute('SELECT x FROM observed_view').fetchall() == [(2,)]
         assert observer.execute("SELECT count(*) FROM duckdb_tables() WHERE table_name='existing'").fetchone()[0] == 0
         observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_committed_view_replacement_requires_matching_native_body(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE VIEW observed_view AS SELECT 1 AS x')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        current = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'view' and row['name'] == 'observed_view')
+        desired = deepcopy(baseline)
+        desired['rows'][current['resource_id']]['native'].update(
+            ddl=f'CREATE OR REPLACE VIEW "{current["path"][0]}"."main"."observed_view" AS SELECT 2 AS x',
+            duckdb_change={'action': 'replace'})
+        preview = plan(baseline, desired, baseline)
+        applications = DuckDBSchemaApplications(tmp_path/'view-body.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        from pgadmin.cdeadmin.providers.duckdb import schema_application
+        actual_model = schema_application._model
+
+        def conflicting_observation(connection, record, *, in_transaction):
+            model = actual_model(connection, record, in_transaction=in_transaction)
+            if not in_transaction:
+                model['rows'][current['resource_id']]['native']['ddl'] = (
+                    'CREATE VIEW observed_view AS SELECT 3 AS x;')
+            return model
+
+        with patch.object(schema_application, '_model', conflicting_observation):
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed'
+        assert outcome['outcome']['rediscovery_verified'] is False
+        assert outcome['outcome']['rediscovery_checks'] == [
+            {'resource_id': current['resource_id'], 'verified': False}]
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
     finally:
         provider.client.close()
 

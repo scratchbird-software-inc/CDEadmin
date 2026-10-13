@@ -6,7 +6,7 @@ import pytest
 
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb.provider import _resource_id
-from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan
+from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan, view_query_tokens
 
 
 def row(kind, path, *, ddl=None, change=None):
@@ -34,6 +34,15 @@ def test_create_plan_is_qualified_parsed_and_never_executes():
     assert result['operations'][0]['operation'] == 'create'
     assert result['operations'][0]['source'] == addition['native']['ddl']
     assert not result['executed'] and result['native_grammar_validated']
+
+
+def test_view_postcommit_body_comparison_ignores_header_and_terminal_separator():
+    pytest.importorskip('duckdb')
+    submitted = 'CREATE OR REPLACE VIEW "file"."main"."report" AS SELECT 2 AS x'
+    observed = 'CREATE VIEW report AS SELECT 2 AS x;'
+    wrong = 'CREATE VIEW report AS SELECT 3 AS x;'
+    assert view_query_tokens(submitted) == view_query_tokens(observed)
+    assert view_query_tokens(submitted) != view_query_tokens(wrong)
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

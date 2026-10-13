@@ -230,6 +230,40 @@ def _validated_view_replacement(before, after):
     return _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
 
 
+def view_query_tokens(source):
+    """Compare a submitted view body with the catalog's normalized body.
+
+    Native CREATE VIEW text may rewrite the target and remove OR REPLACE.
+    Token comparison is deliberately strict: an equivalent rewrite that does
+    not match remains committed but unverified.
+    """
+    if not isinstance(source, str):
+        return None
+    import duckdb
+    try:
+        positions = duckdb.tokenize(source)
+    except duckdb.Error:
+        return None
+    encoded = source.encode('utf8')
+    tokens = []
+    for index, (offset, kind) in enumerate(positions):
+        following = positions[index + 1][0] if index + 1 < len(positions) else len(encoded)
+        word = encoded[offset:following].decode('utf8').strip()
+        if kind in {duckdb.token_type.keyword, duckdb.token_type.identifier}:
+            word = word.casefold()
+        tokens.append((str(kind), word))
+    view_seen = False
+    for index, (kind, word) in enumerate(tokens):
+        if kind == str(duckdb.token_type.keyword) and word == 'view':
+            view_seen = True
+        elif view_seen and kind == str(duckdb.token_type.keyword) and word == 'as':
+            body = tokens[index + 1:]
+            if body and body[-1] == (str(duckdb.token_type.operator), ';'):
+                body = body[:-1]
+            return tuple(body) if body else None
+    return None
+
+
 def _validated_macro_replacement(before, after, target, change):
     if change != {'action': 'replace-definition',
                    'parameters_without_defaults_confirmed': True}:

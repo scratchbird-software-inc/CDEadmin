@@ -70,6 +70,11 @@ def apply_review(provider, route, record):
                     from ...workspace.firebird_schema_plan import digest
                     verified = (current is not None and
                         digest(_definition(current)) != operation['baseline_sha256'])
+                    if verified and operation['kind'] == 'view' and operation['operation'] == 'replace':
+                        from ...workspace.duckdb_schema_plan import view_query_tokens
+                        expected = view_query_tokens(operation['source'])
+                        verified = (expected is not None and expected == view_query_tokens(
+                            current['native'].get('ddl')))
                     if verified and operation.get('postcondition'):
                         if 'overloads' in operation['postcondition']:
                             from ...workspace.duckdb_schema_plan import _macro_overload_postcondition
