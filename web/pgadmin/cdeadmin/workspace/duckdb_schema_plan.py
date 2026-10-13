@@ -1313,6 +1313,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         'rebuild-check-with-inbound-children': {'CHECK'},
         'rebuild-unique-constraints': {'CHECK', 'UNIQUE'},
         'rebuild-foreign-keys': {'FOREIGN KEY'},
+        'rebuild-column-order': set(),
         'rebuild-drop-primary-key': {'PRIMARY KEY', 'NOT NULL'},
         'rebuild-retarget-primary-key': {'PRIMARY KEY', 'NOT NULL'}}.get(action)
     expected_change = {'action': action,
@@ -1329,6 +1330,28 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     old_constraints, new_constraints = old.pop('constraints'), new.pop('constraints')
     old.pop('ddl'); new.pop('ddl')
     stage_key_columns = None
+    if action == 'rebuild-column-order':
+        old_columns, new_columns = old.pop('columns'), new.pop('columns')
+        def column_map(items):
+            if (not isinstance(items, list) or len(items) < 2 or
+                    any(not isinstance(item, dict) or
+                        not isinstance(item.get('name'), str) or
+                        item.get('ordinal_position') != position
+                        for position, item in enumerate(items, 1))):
+                return None
+            mapped = {item['name']: {key: value for key, value in item.items()
+                if key != 'ordinal_position'} for item in items}
+            return mapped if len(mapped) == len(items) else None
+        old_map, new_map = column_map(old_columns), column_map(new_columns)
+        if (old_constraints != [] or new_constraints != [] or
+                old_map is None or new_map is None or
+                not _equal(old_map, new_map) or
+                [item['name'] for item in old_columns] ==
+                    [item['name'] for item in new_columns] or
+                old['catalog'].get('has_primary_key') is not False or
+                not _equal(old, new)):
+            raise ValueError('Column-order rebuild requires unchanged complete columns and no constraints')
+        stage_key_columns = []
     if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}:
         def key_facts(constraints):
             keys = [item.get('column_names') for item in constraints
@@ -1370,17 +1393,19 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL', 'UNIQUE'} if
         action in {'rebuild-check-constraints', 'rebuild-check-with-inbound-child',
             'rebuild-check-with-inbound-children'} else set() if
-        action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}
+        action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
+            'rebuild-column-order'}
         else {'PRIMARY KEY', 'NOT NULL'})
     old_retained = [item for item in old_constraints
         if item.get('constraint_type') in retained_types] if isinstance(old_constraints, list) else []
     new_retained = [item for item in new_constraints
         if item.get('constraint_type') in retained_types] if isinstance(new_constraints, list) else []
-    if (not _equal(old, new) or _equal(old_constraints, new_constraints) or
+    if (action != 'rebuild-column-order' and
+            (not _equal(old, new) or _equal(old_constraints, new_constraints) or
             not isinstance(old_constraints, list) or not isinstance(new_constraints, list) or
             not _equal(old_retained, new_retained) or
             any(item.get('constraint_type') not in (allowed | retained_types) for item in
-                [*old_constraints, *new_constraints])):
+                [*old_constraints, *new_constraints]))):
         raise ValueError('Constraint rebuild may change only its admitted native constraint kinds')
     if action == 'rebuild-unique-constraints' and not any(
             item.get('constraint_type') == 'UNIQUE' for item in
@@ -1547,13 +1572,17 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         for item in new_constraints)
     if (body is None or original_sections is None or desired_sections is None or
             not original_sections[0] or (action not in {
-                'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'} and
+                'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
+                'rebuild-column-order'} and
                 original_sections[0] != desired_sections[0]) or
+            (action == 'rebuild-column-order' and
+                sorted(original_sections[0]) != sorted(desired_sections[0])) or
             len(original_sections[1]) != len(old_constraints) - old_inline or
             len(desired_sections[1]) != len(new_constraints) - new_inline or any(
             kind == 'token_type.keyword' and word in
                 ({'generated'} |
-                 ({'primary'} if action == 'rebuild-drop-primary-key' else set()) |
+                 ({'primary', 'unique'} if action == 'rebuild-column-order' else
+                  {'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
                     'rebuild-check-constraints', 'rebuild-foreign-keys',
@@ -1639,7 +1668,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     stage_columns = ([{key: column.get(key) for key in
         ('name', 'data_type', 'default', 'nullable')}
         for column in after['native']['columns']]
-        if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}
+        if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
+            'rebuild-column-order'}
         else None)
     return (statements, check, dependency_check, dependency_count,
         requires_sequence_dependency, source, new_constraints, indexes,
@@ -1711,7 +1741,7 @@ def plan(baseline, desired, live):
              'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
              'rebuild-check-with-inbound-children',
              'rebuild-drop-primary-key',
-             'rebuild-retarget-primary-key'}}
+             'rebuild-retarget-primary-key', 'rebuild-column-order'}}
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
         if before is not None and (after.get('resource_id') != identity or
@@ -1735,7 +1765,8 @@ def plan(baseline, desired, live):
                 _resource_id('table', after['path'][:2], after['path'][2]) in rebuild_tables) and
                 desired['rows'][_resource_id('table', after['path'][:2],
                     after['path'][2])]['native']['duckdb_change']['action'] in
-                    {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}):
+                    {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
+                     'rebuild-column-order'}):
             if (before is None or after['resource_id'] != before['resource_id'] or
                     after['system'] != 'false' or
                     after['native'].get('system_object') is not False or
@@ -1860,7 +1891,7 @@ def plan(baseline, desired, live):
                    'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
                    'rebuild-check-with-inbound-children',
                    'rebuild-drop-primary-key',
-                   'rebuild-retarget-primary-key'}):
+                   'rebuild-retarget-primary-key', 'rebuild-column-order'}):
                 operation = 'rebuild'
                 (_rebuild_statements, _data_check, _dependency_check,
                  _dependency_count, _requires_sequence_dependency,

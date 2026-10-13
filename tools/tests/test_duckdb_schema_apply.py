@@ -1786,6 +1786,78 @@ def test_inbound_child_rebuild_retains_primary_and_not_null_constraints(
         provider.client.close()
 
 
+@pytest.mark.parametrize('view_mode', [None, 'explicit', 'star'])
+def test_reviewed_column_reorder_preserves_rows_and_dependencies(tmp_path, view_mode):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('ALTER TABLE existing ADD COLUMN note VARCHAR')
+    connection.execute("INSERT INTO existing VALUES (1, 'a'), (2, 'b')")
+    connection.execute('CREATE INDEX existing_id_idx ON existing(id)')
+    connection.execute("COMMENT ON TABLE existing IS 'table note'")
+    connection.execute("COMMENT ON COLUMN existing.note IS 'column note'")
+    connection.execute("COMMENT ON INDEX existing_id_idx IS 'index note'")
+    if view_mode:
+        connection.execute('CREATE VIEW existing_view AS SELECT ' +
+            ('id' if view_mode == 'explicit' else '*') + ' FROM existing')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'existing')
+        root = table['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        reordered = list(reversed(edited['columns']))
+        for position, column in enumerate(reordered, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = reordered
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."existing" '
+            '(note VARCHAR, id INTEGER)')
+        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        changed_type = deepcopy(desired)
+        changed_type['rows'][table['resource_id']]['native']['columns'][0][
+            'data_type'] = 'INTEGER'
+        assert not plan(baseline, changed_type, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'column-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        expected = 'rolled_back' if view_mode == 'star' else 'committed'
+        assert outcome['state'] == expected, outcome
+        if expected == 'committed':
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,note FROM existing ORDER BY id').fetchall() == [
+            (1, 'a'), (2, 'b')]
+        assert [item[0] for item in observer.execute('DESCRIBE existing').fetchall()] == (
+            ['id', 'note'] if view_mode == 'star' else ['note', 'id'])
+        assert observer.execute("SELECT comment FROM duckdb_tables() "
+            "WHERE table_name='existing'").fetchone()[0] == 'table note'
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='existing' AND column_name='note'").fetchone()[0] == (
+            'column note')
+        assert observer.execute("SELECT comment FROM duckdb_indexes() "
+            "WHERE index_name='existing_id_idx'").fetchone()[0] == 'index note'
+        if view_mode:
+            assert observer.execute('SELECT * FROM existing_view ORDER BY id').fetchall() == (
+                [(1,), (2,)] if view_mode == 'explicit' else
+                [(1, 'a'), (2, 'b')])
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

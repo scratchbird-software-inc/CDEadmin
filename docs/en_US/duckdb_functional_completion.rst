@@ -328,6 +328,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   bind. Native rollback restores the original table, but a successful commit
   does not preserve these facts. General whole-table replacement remains
   blocked; a separate migration must preserve data and dependent metadata.
+  An isolated ``rebuild-column-order`` intent may reorder two or more existing
+  columns without adding, dropping, renaming, converting or changing any
+  column property or constraint. It binds the complete old and desired native
+  column sets, their unchanged definitions and explicit final ordinals. The
+  staged table copies every row by named columns, checks both row-multiset
+  directions, replays unchanged independent indexes and comments, and verifies
+  the final column order and child rows after commit. The ordinary dependent
+  view and macro binding checks apply; a changed ``SELECT *`` projection must
+  roll the transaction back. Foreign-key edges, generated columns, native tags
+  and unaccounted sequence ownership remain blockers.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may
