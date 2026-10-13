@@ -959,6 +959,75 @@ def test_check_rebuild_can_remove_the_complete_check_child_set(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('unique_body', ['id INTEGER UNIQUE, payload VARCHAR',
+    'id INTEGER, payload VARCHAR, UNIQUE(id)'])
+def test_check_rebuild_preserves_unchanged_unique_constraint(tmp_path, unique_body):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(' + unique_body +
+        ', CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO checked VALUES (1, 'a'), (2, 'b')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        edited['constraints'] = [item for item in edited['constraints']
+            if item['constraint_type'] != 'CHECK']
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            f'({unique_body})')
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        del desired['rows'][check['resource_id']]
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        unsafe = deepcopy(desired)
+        unsafe['rows'][original['resource_id']]['native']['ddl'] = (
+            f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, payload VARCHAR)')
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        altered = deepcopy(desired)
+        altered_body = ('id INTEGER, payload VARCHAR UNIQUE' if
+            'id INTEGER UNIQUE' in unique_body else
+            'id INTEGER, payload VARCHAR, UNIQUE(payload)')
+        altered['rows'][original['resource_id']]['native']['ddl'] = (
+            f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            f'({altered_body})')
+        altered_preview = plan(baseline, altered, baseline)
+        assert altered_preview['application_supported'], altered_preview['blockers']
+        altered_applications = DuckDBSchemaApplications(
+            tmp_path/'wrong-unique-stage.json', clock=lambda: 100)
+        altered_receipt = altered_applications.review(altered_preview, baseline,
+            altered, 'owner', 'binding', 'file-1')
+        altered_outcome = altered_applications.apply(request(altered_receipt),
+            'owner', 'binding', lambda record: apply_review(provider, route, record))
+        assert altered_outcome['state'] == 'rolled_back', altered_outcome
+        assert altered_outcome['outcome']['native_rollback_returned']
+        applications = DuckDBSchemaApplications(tmp_path/'check-unique.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,payload FROM checked ORDER BY id').fetchall() == [
+            (1, 'a'), (2, 'b')]
+        assert observer.execute('SELECT constraint_type FROM duckdb_constraints() '
+            "WHERE table_name='checked'").fetchall() == [('UNIQUE',)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_isolated_unique_rebuild_can_remove_the_complete_unique_child_set(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)

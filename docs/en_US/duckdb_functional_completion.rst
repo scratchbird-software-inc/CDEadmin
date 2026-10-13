@@ -359,8 +359,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   automatic dependency; the native ``DROP ... RESTRICT`` must then refuse
   the swap and roll the whole transaction back. The reviewer supplies a complete
   CREATE TABLE definition and explicitly confirms the corresponding isolated
-  constraint rebuild. The CHECK intent accepts only CHECK constraints; the
-  UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
+  constraint rebuild. The CHECK intent changes only CHECK constraints and may
+  retain an unchanged, complete UNIQUE constraint set on that same table;
+  its complete inline or table-level native definitions must survive staging
+  and rediscovery. The UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
   key and its implicit NOT NULL constraint may be retained only when their
   complete native definitions and child catalog facts are unchanged. Primary
   key creation remains outside this migration; the isolated key-removal and

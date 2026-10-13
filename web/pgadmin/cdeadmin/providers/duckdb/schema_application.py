@@ -141,6 +141,19 @@ def apply_review(provider, route, record):
                                     sorted((name,) for name in key_columns) or
                                 len(constraints) != len(key_columns) + bool(key_columns)):
                             raise ValueError('Native staged columns or constraints differ from review')
+                    if index == parent_offset and operation.get('stage_unique_constraints') is not None:
+                        stage_path = record['desired']['rows'][operation['resource_id']]['path']
+                        scope = (stage_path[0], stage_path[1], operation['stage_name'])
+                        found = connection.execute(
+                            "SELECT constraint_column_names, constraint_text "
+                            "FROM duckdb_constraints() WHERE database_name=? "
+                            "AND schema_name=? AND table_name=? "
+                            "AND constraint_type='UNIQUE'", scope).fetchall()
+                        expected = [(item['column_names'], item['constraint_text'])
+                            for item in operation['stage_unique_constraints']]
+                        if sorted((tuple(names), text) for names, text in found) != sorted(
+                                (tuple(names), text) for names, text in expected):
+                            raise ValueError('Native staged UNIQUE constraints differ from review')
                     if index == parent_offset + 1:
                         difference = connection.execute(
                             operation['data_check']).fetchone()[0]
