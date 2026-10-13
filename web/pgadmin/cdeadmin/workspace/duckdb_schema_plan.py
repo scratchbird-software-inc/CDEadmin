@@ -199,6 +199,38 @@ def _validated_column_alter(before, after, change):
     return source
 
 
+def _validated_struct_field_add(before, after, change):
+    if set(change) != {'action', 'field', 'data_type'}:
+        raise ValueError('STRUCT field addition requires one exact field and type')
+    field = change['field']
+    if not isinstance(field, str) or not re.fullmatch(r'[a-z_][a-z0-9_]*', field):
+        raise ValueError('STRUCT field addition requires a simple native field name')
+    field_type = _native_column_type(change['data_type'])
+    previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
+    old_type = _native_column_type(previous['catalog'].get('data_type'))
+    new_type = _native_column_type(desired['catalog'].get('data_type'))
+    if not re.fullmatch(r'STRUCT\(.+\)', old_type, re.I | re.S):
+        raise ValueError('STRUCT field addition requires an observed native STRUCT column')
+    expected = old_type[:-1] + ', ' + field + ' ' + field_type + ')'
+    if new_type != expected:
+        raise ValueError('STRUCT field addition must append exactly one native field')
+    for key in _TYPE_FIELDS:
+        previous['catalog'].pop(key, None)
+        desired['catalog'].pop(key, None)
+    if not _equal(previous, desired):
+        raise ValueError('Review other native column edits separately')
+    source = ('ALTER TABLE ' + '.'.join(_quote(part) for part in after['path'][:3]) +
+              ' ADD COLUMN ' + _quote(after['name']) + '.' + _quote(field) + ' ' + field_type)
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected the STRUCT field addition') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native STRUCT field addition is required')
+    return source
+
+
 def _validated_enum_extension(before, after, target):
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
@@ -665,6 +697,10 @@ def plan(baseline, desired, live):
                   change.get('action') in {'set-default', 'set-nullable', 'set-type'}):
                 operation = 'alter'
                 source = _validated_column_alter(before, after, change)
+            elif (after['kind'] == 'column' and isinstance(change, dict) and
+                  change.get('action') == 'add-field'):
+                operation = 'alter'
+                source = _validated_struct_field_add(before, after, change)
             else:
                 raise ValueError('Alteration requires a qualified native adapter; only explicit view replacement is previewed')
             operation_record = {'resource_id': identity, 'kind': after['kind'],
@@ -680,7 +716,7 @@ def plan(baseline, desired, live):
                     'nullable': True,
                     'default': metadata.get('default'),
                 }
-            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') == 'set-type':
+            elif after['kind'] == 'column' and isinstance(change, dict) and change.get('action') in {'set-type', 'add-field'}:
                 operation_record['postcondition'] = {
                     'data_type': after['native']['catalog_metadata']['data_type']}
             elif after['kind'] == 'type' and change == {'action': 'extend-enum'}:

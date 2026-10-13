@@ -678,6 +678,48 @@ def test_reviewed_column_type_conversion_preserves_rows_and_is_not_replayed(tmp_
         provider.client.close()
 
 
+def test_reviewed_struct_field_add_preserves_existing_values(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('ALTER TABLE existing ADD COLUMN shape STRUCT(a INTEGER)')
+    connection.execute("INSERT INTO existing VALUES (1, {'a': 7})")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        column = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'column' and row['name'] == 'shape')
+        assert column['native']['catalog_metadata']['data_type'] == 'STRUCT(a INTEGER)'
+        desired = deepcopy(baseline)
+        changed = desired['rows'][column['resource_id']]
+        changed['native']['catalog_metadata']['data_type'] = 'STRUCT(a INTEGER, b VARCHAR)'
+        changed['native']['duckdb_change'] = {'action': 'add-field',
+            'field': 'b', 'data_type': 'VARCHAR'}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert preview['operations'][0]['source'].endswith(
+            'ADD COLUMN "shape"."b" VARCHAR')
+        wrong = deepcopy(desired)
+        wrong['rows'][column['resource_id']]['native']['catalog_metadata'][
+            'data_type'] = 'STRUCT(a INTEGER, other VARCHAR)'
+        assert not plan(baseline, wrong, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'struct-field.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT shape FROM existing').fetchall() == [
+            ({'a': 7, 'b': None},)]
+        observer.close()
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('kind', ('type', 'macro'))
 def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
     duckdb = pytest.importorskip('duckdb')

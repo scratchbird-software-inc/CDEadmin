@@ -155,7 +155,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Three-way design preview compares a saved baseline and edited DDN with a
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
   exact-name index CREATE on a qualified table, nullable native column ADD,
-  explicit DROP intent, view replacement, isolated column alterations, native
+  explicit DROP intent, view replacement, isolated column alterations including
+  top-level STRUCT field addition, native
   enum extension, reviewed full type replacement, reviewed sequence replacement,
   single-overload scalar or
   table macro replacement and complete macro overload replacement,
@@ -175,6 +176,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   requested native type, even when its canonical spelling differs and review
   is consequently marked unverified. Combined edits remain blockers. Each
   alteration is one parsed native statement and one review.
+  A top-level field may be added to an observed ``STRUCT`` column through a
+  separate ``add-field`` review. The desired native type must be the observed
+  structure with exactly that one named field and native type appended; no
+  other column property may change. The reviewed statement uses DuckDB's
+  ``ALTER TABLE ... ADD COLUMN struct_column.field`` grammar, and fresh
+  discovery must match the complete resulting native column type. Nested
+  field edits and field removal remain separate blocked intents until their
+  complete diff and preservation rules are qualified.
   An enum extension requires an observed native ENUM, preserves every existing
   label in order and appends distinct new labels. It uses one reviewed native
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
