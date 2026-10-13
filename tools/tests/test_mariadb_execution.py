@@ -12,6 +12,20 @@ from pgadmin.cdeadmin.sdk import RelationalClientError
 from mariadb.constants import FIELD_TYPE as FieldType
 
 
+def test_only_native_server_errors_include_bounded_diagnostic_text():
+    import mariadb
+    native = mariadb.ProgrammingError('Unknown column ' + 'x' * 20000)
+    native.errno, native.sqlstate = 1054, '42S22'
+    result = Executions._error(native)
+    assert result['message_primary'].startswith('Unknown column')
+    assert len(result['message_primary']) == 16384
+    native.errno = 2003
+    assert 'message_primary' not in Executions._error(native)
+    arbitrary = RuntimeError('route password must not escape')
+    arbitrary.errno, arbitrary.sqlstate = 1054, '42S22'
+    assert 'message_primary' not in Executions._error(arbitrary)
+
+
 def harness(sets):
     class Cursor:
         cdeadmin_exact_temporals = False

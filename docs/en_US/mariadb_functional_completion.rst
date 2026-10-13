@@ -52,6 +52,10 @@ MARIA-COMP-03: Shared SQL editor and scripts
   changes; disable commit/rollback when native autocommit is on. Do not infer
   transactional rollback for implicit DDL commits or nontransactional tables.
 
+  Native SQL diagnostics expose bounded MariaDB server message text alongside
+  native error number and SQLSTATE to the owning SQL session. Connector/transport
+  failures expose their classified code/type without route or credential text.
+
   SQL history is optional and persistent, isolated by owner, endpoint,
   registered database target, engine and ``mariadb-sql`` language. Capture is
   disabled by default, bounded by record count/retention and omits bound values,

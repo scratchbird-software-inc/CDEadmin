@@ -77,10 +77,19 @@ class Executions:
 
     @staticmethod
     def _error(exc):
-        return {key: item for key, item in {
+        result = {key: item for key, item in {
             'type': type(exc).__name__, 'errno': getattr(exc, 'errno', None),
             'sqlstate': getattr(exc, 'sqlstate', None),
         }.items() if isinstance(item, (str, int))}
+        # Only native server diagnostics belong in the owning user's SQL pane.
+        # Connector/transport failures can include route or credential details.
+        import mariadb
+        errno, sqlstate = result.get('errno'), result.get('sqlstate')
+        if (isinstance(exc, mariadb.Error) and type(errno) is int and errno >= 1000
+                and not 2000 <= errno < 3000 and isinstance(sqlstate, str)
+                and len(sqlstate) == 5):
+            result['message_primary'] = str(exc)[:16384]
+        return result
 
     def _run(self, token, source, bound):
         cursor = None

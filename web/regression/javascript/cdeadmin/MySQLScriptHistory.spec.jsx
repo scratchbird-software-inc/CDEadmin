@@ -6,17 +6,17 @@ jest.mock('sources/cdeadmin_ui/editors/CodeEditor', () => () => null);
 
 const Component = withTheme(LanguageSourceEditor);
 
-describe('MySQL retained script source history', () => {
-  it('carries explicit sensitive-source intent without adding a Firebird dialect', async () => {
+describe('MySQL and MariaDB retained script source history', () => {
+  it.each(['mysql', 'mariadb'])('%s carries sensitive-source intent without a Firebird dialect', async engine => {
     const post = jest.fn().mockResolvedValue({plan_id: 'review', state: 'ready'});
-    render(<Component language={{language_profile: 'mysql-sql', tooling: {script_framing: true}}}
+    render(<Component language={{language_profile: `${engine}-sql`, tooling: {script_framing: true}}}
       source="SELECT 'private';" onChange={jest.fn()} post={post}
-      ensureSession={jest.fn().mockResolvedValue('mysql-session')} databaseTargetId="mysql-target"
+      ensureSession={jest.fn().mockResolvedValue(`${engine}-session`)} databaseTargetId={`${engine}-target`}
       historySensitive onScriptLock={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', {name: 'Preview script'}));
     await waitFor(() => expect(post).toHaveBeenCalledWith({
-      action: 'native_script_prepare', session_id: 'mysql-session',
-      source: "SELECT 'private';", database_target_id: 'mysql-target', history_sensitive: true,
+      action: 'native_script_prepare', session_id: `${engine}-session`,
+      source: "SELECT 'private';", database_target_id: `${engine}-target`, history_sensitive: true,
     }));
     expect(post).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', {name: 'Run / resume retained script'})).toBeEnabled();
