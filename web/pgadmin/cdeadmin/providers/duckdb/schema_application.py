@@ -53,6 +53,21 @@ def apply_review(provider, route, record):
                 for index, statement in enumerate(operation['statements']):
                     result['statement_dispatched'] = True
                     connection.execute(statement)
+                    if index == 0 and operation.get('stage_columns') is not None:
+                        stage_path = record['desired']['rows'][operation['resource_id']]['path']
+                        scope = (stage_path[0], stage_path[1], operation['stage_name'])
+                        columns = connection.execute(
+                            'SELECT column_name, data_type, column_default, is_nullable '
+                            'FROM duckdb_columns() WHERE database_name=? AND schema_name=? '
+                            'AND table_name=? ORDER BY column_index', scope).fetchall()
+                        expected_columns = [(item['name'], item['data_type'],
+                            item['default'], item['nullable']) for item in
+                            operation['stage_columns']]
+                        constraints = connection.execute(
+                            'SELECT count(*) FROM duckdb_constraints() WHERE database_name=? '
+                            'AND schema_name=? AND table_name=?', scope).fetchone()[0]
+                        if columns != expected_columns or constraints:
+                            raise ValueError('Native staged columns or constraints differ from review')
                     if index == 1:
                         difference = connection.execute(
                             operation['data_check']).fetchone()[0]
@@ -119,10 +134,15 @@ def apply_review(provider, route, record):
                     from ...workspace.duckdb_schema_plan import create_definition_tokens
                     baseline = record['baseline']['rows'][operation['resource_id']]
                     expected = create_definition_tokens(operation['original_source'], 'table')
+                    actual = (create_definition_tokens(current['native'].get('ddl'), 'table')
+                        if current is not None else None)
                     verified = (current is not None and current['kind'] == 'table' and
-                        expected is not None and expected == create_definition_tokens(
-                            current['native'].get('ddl'), 'table') and
-                        current['native'].get('columns') == baseline['native'].get('columns') and
+                        expected is not None and actual is not None and
+                        (operation.get('stage_columns') is not None or expected == actual) and
+                        current['native'].get('columns') == (
+                            record['desired']['rows'][operation['resource_id']]['native'].get('columns')
+                            if operation.get('stage_columns') is not None else
+                            baseline['native'].get('columns')) and
                         current['native'].get('catalog_metadata', {}).get('comment') ==
                             baseline['native'].get('catalog_metadata', {}).get('comment'))
                     if verified:
@@ -151,6 +171,11 @@ def apply_review(provider, route, record):
                                 operation['desired_child_sha256'][child_id] ==
                                 digest(_definition(observed['rows'][child_id])))
                                 for child_id in operation['affected_child_ids'])
+                        if verified and operation.get('affected_column_ids'):
+                            verified = all(observed['rows'].get(column_id) is not None and
+                                digest(_definition(observed['rows'][column_id])) ==
+                                operation['desired_column_sha256'][column_id]
+                                for column_id in operation['affected_column_ids'])
                         if verified:
                             verified = all(observed['rows'].get(index_id) is not None and
                                 digest(_definition(observed['rows'][index_id])) ==

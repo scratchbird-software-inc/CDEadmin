@@ -41,6 +41,17 @@ class DuckDBSchemaApplications(SchemaApplications):
             elif operation['baseline_sha256'] != digest(_definition(before)):
                 raise SchemaApplyError('Native baseline differs from the reviewed plan')
             if operation['operation'] == 'rebuild':
+                for column_id in operation.get('affected_column_ids', []):
+                    old_column = baseline['rows'].get(column_id)
+                    new_column = desired['rows'].get(column_id)
+                    if (old_column is None or new_column is None or
+                            operation['baseline_column_sha256'].get(column_id) !=
+                                digest(_definition(old_column)) or
+                            operation['desired_column_sha256'].get(column_id) !=
+                                digest(_definition(new_column))):
+                        raise SchemaApplyError('Primary-key rebuild column facts differ from reviewed plan')
+                    baseline_ids.add(column_id)
+                    desired_ids.add(column_id)
                 for child_id in operation['affected_child_ids']:
                     old_child = baseline['rows'].get(child_id)
                     new_child = desired['rows'].get(child_id)

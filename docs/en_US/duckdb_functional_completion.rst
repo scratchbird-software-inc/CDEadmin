@@ -293,7 +293,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   checks existing data and nullability during native execution; a failure
   rolls back the reviewed transaction. Fresh discovery must observe the key
   and the exact ordered key columns. Dropping or changing a primary key is
-  unavailable through DuckDB 1.5.2 ``ALTER TABLE`` and remains blocked.
+  unavailable through DuckDB 1.5.2 ``ALTER TABLE``. A separate
+  ``rebuild-drop-primary-key`` intent may remove the sole key and its implicit
+  NOT NULL constraints when the reviewer explicitly accepts that all former
+  key columns become nullable. It requires no other CHECK, UNIQUE or foreign
+  key on the table, unchanged non-nullability column facts, and the same
+  dependency, data-copy, index and comment safeguards as the admitted staged
+  constraint rebuild. Before copying rows, the staged table's exact native
+  column names, types, defaults and nullability and absence of constraints
+  must match the reviewed desired model. Changed key identity, retention of
+  explicit NOT NULL and other primary-key rebuilds remain blocked.
   ``CREATE OR REPLACE TABLE`` is not a safe substitute for a general table
   migration: it clears rows, indexes and comments. It can leave a dependent
   view reporting ``is_bound = true`` while a query against that view fails to
@@ -319,7 +328,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
   key and its implicit NOT NULL constraint may be retained only when their
   complete native definitions and child catalog facts are unchanged. Primary
-  key creation, removal or alteration remain outside this migration. An
+  key creation or alteration remain outside this migration; the isolated
+  key-removal intent above is separate. An
   isolated ``rebuild-foreign-keys`` intent may add, remove or replace the
   complete outgoing foreign-key set of one child table. It retains unchanged
   CHECK, primary-key and NOT NULL facts, and uses the same staged copy,

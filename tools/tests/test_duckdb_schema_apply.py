@@ -1328,6 +1328,79 @@ def test_isolated_foreign_key_rebuild_adds_constraint_or_rolls_back(
         provider.client.close()
 
 
+@pytest.mark.parametrize('bad_stage', [False, True])
+@pytest.mark.parametrize('composite', [False, True])
+def test_isolated_primary_key_removal_relaxes_key_and_checks_stage(
+        tmp_path, bad_stage, composite):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER, value VARCHAR, '
+        'PRIMARY KEY(id, value))' if composite else
+        'CREATE TABLE checked(id INTEGER PRIMARY KEY, value VARCHAR)')
+    connection.execute('CREATE INDEX checked_value_idx ON checked(value)')
+    connection.execute("COMMENT ON TABLE checked IS 'kept table'")
+    connection.execute("COMMENT ON COLUMN checked.id IS 'kept id'")
+    connection.execute("INSERT INTO checked VALUES (1, 'one'), (2, 'two')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        edited['catalog_metadata']['has_primary_key'] = False
+        edited['constraints'] = []
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id VARCHAR, value VARCHAR)' if bad_stage else
+            f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, value VARCHAR)')
+        edited['duckdb_change'] = {'action': 'rebuild-drop-primary-key',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        for item in edited['columns']:
+            if item['name'] == 'id' or composite:
+                item['nullable'] = True
+        for row in desired['rows'].values():
+            if (row['kind'] == 'column' and row['path'][:3] == original['path'] and
+                    (row['name'] == 'id' or composite)):
+                row['native']['catalog_metadata']['nullable'] = True
+        for key, row in list(desired['rows'].items()):
+            if row['kind'] == 'constraint' and row['path'][:3] == original['path']:
+                del desired['rows'][key]
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'primary-key-drop.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if bad_stage else 'committed'), outcome
+        if not bad_stage:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id, value FROM checked ORDER BY id').fetchall() == [
+            (1, 'one'), (2, 'two')]
+        assert observer.execute("SELECT constraint_type FROM duckdb_constraints() "
+            "WHERE table_name='checked'").fetchall() == (
+            [('PRIMARY KEY',), ('NOT NULL',)] +
+            ([('NOT NULL',)] if composite else []) if bad_stage else [])
+        assert observer.execute("SELECT comment FROM duckdb_tables() "
+            "WHERE table_name='checked'").fetchone()[0] == 'kept table'
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='checked' AND column_name='id'").fetchone()[0] == 'kept id'
+        assert observer.execute("SELECT count(*) FROM duckdb_indexes() "
+            "WHERE table_name='checked' AND index_name='checked_value_idx'").fetchone()[0] == 1
+        if not bad_stage:
+            observer.execute("INSERT INTO checked VALUES (NULL, 'nullable')")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_isolated_foreign_key_rebuild_removes_complete_outgoing_set(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
