@@ -102,14 +102,20 @@ def apply_review(provider, route, record):
                             item['default'], item['nullable']) for item in inbound['columns']]
                         constraints = connection.execute(
                             'SELECT constraint_type, constraint_column_names, '
-                            'referenced_table, referenced_column_names '
+                            'referenced_table, referenced_column_names, constraint_text '
                             'FROM duckdb_constraints() WHERE database_name=? '
                             'AND schema_name=? AND table_name=?', scope).fetchall()
-                        fact = inbound['constraint']
-                        expected_constraints = ([] if phase == 0 else [(
+                        expected_constraints = [(
                             fact['constraint_type'], fact['column_names'],
-                            fact['referenced_table'], fact['referenced_column_names'])])
-                        if columns != expected_columns or constraints != expected_constraints:
+                            fact['referenced_table'], fact['referenced_column_names'],
+                            fact['constraint_text']) for fact in
+                            inbound['constraints_by_phase'][phase]]
+                        def normalized(items):
+                            return sorted((kind, tuple(names or ()), referenced or '',
+                                tuple(referenced_names or ()), definition or '')
+                                for kind, names, referenced, referenced_names, definition in items)
+                        if (columns != expected_columns or
+                                normalized(constraints) != normalized(expected_constraints)):
                             raise ValueError('Inbound child staging differs from reviewed model')
                     if index in child_copies:
                         inbound, phase = child_copies[index]

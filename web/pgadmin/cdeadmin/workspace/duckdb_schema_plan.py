@@ -1102,33 +1102,45 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     metadata = native.get('catalog_metadata', {})
     columns = native.get('columns')
     constraints = native.get('constraints')
+    foreign = [item for item in constraints
+        if isinstance(item, dict) and item.get('constraint_type') == 'FOREIGN KEY'] if (
+            isinstance(constraints, list)) else []
+    checks = [item for item in constraints
+        if isinstance(item, dict) and item.get('constraint_type') == 'CHECK'] if (
+            isinstance(constraints, list)) else []
     if (metadata.get('comment') is not None or metadata.get('tags') or
             metadata.get('temporary') is not False or
             metadata.get('has_primary_key') is not False or native.get('indexes') or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
-            not isinstance(constraints, list) or len(constraints) != 1 or
-            constraints[0].get('constraint_type') != 'FOREIGN KEY' or
-            constraints[0].get('referenced_table') != before['name'] or
-            not isinstance(constraints[0].get('column_names'), list) or
-            not isinstance(constraints[0].get('referenced_column_names'), list) or
-            not constraints[0]['column_names'] or
-            len(constraints[0]['column_names']) !=
-                len(constraints[0]['referenced_column_names']) or
+            not isinstance(constraints, list) or len(foreign) != 1 or
+            len(checks) > 2 or len(constraints) != len(checks) + 1 or
+            foreign[0].get('referenced_table') != before['name'] or
+            not isinstance(foreign[0].get('column_names'), list) or
+            not isinstance(foreign[0].get('referenced_column_names'), list) or
+            not foreign[0]['column_names'] or
+            len(foreign[0]['column_names']) !=
+                len(foreign[0]['referenced_column_names']) or
             any(not isinstance(item, dict) or item.get('comment') is not None or
                 not literal_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires its sole foreign key and plain literal defaults')
+        raise ValueError('Inbound child requires one foreign key, bounded CHECKs and plain literal defaults')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     original = native.get('ddl')
     original_sections = _table_definition_sections(original)
     interim_sections = _table_definition_sections(source)
+    foreign_token = ('token_type.keyword', 'foreign')
+    original_secondary = original_sections[1] if original_sections else ()
+    retained_sections = tuple(section for section in original_secondary
+        if foreign_token not in section)
     if (original_sections is None or interim_sections is None or
             any(token == ('token_type.keyword', 'generated') for token in
                 create_definition_tokens(original, 'table') or ()) or
             original_sections[0] != interim_sections[0] or
-            len(original_sections[1]) != 1 or interim_sections[1]):
-        raise ValueError('Intermediate child must retain exact columns and remove its sole foreign key')
+            len(original_secondary) != len(constraints) or
+            len(retained_sections) != len(checks) or
+            interim_sections[1] != retained_sections):
+        raise ValueError('Intermediate child must retain exact columns and CHECKs and remove its sole foreign key')
     original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
         re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
         r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
@@ -1175,9 +1187,10 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         'stage_names': stage_names, 'data_checks': [first_check, final_check],
         'columns': [{key: item.get(key) for key in
             ('name', 'data_type', 'default', 'nullable')} for item in columns],
-        'constraint': {key: constraints[0].get(key) for key in
+        'constraints_by_phase': [[{key: item.get(key) for key in
             ('constraint_type', 'column_names', 'referenced_table',
-             'referenced_column_names')}}
+             'referenced_column_names', 'constraint_text')}
+            for item in phase] for phase in (checks, constraints)]}
 
 
 def _validated_check_rebuild(before, after, change, target, baseline, live, desired):

@@ -382,8 +382,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
   constraints on a parent referenced by exactly one unchanged child table
   when that simple-name child has only one outgoing foreign key to the parent,
-  plain unchanged columns, and no indexes, comments, nonliteral defaults, other
-  constraints or sequence ownership. The captured file has no user views or
+  plain unchanged columns, and no indexes, comments, nonliteral defaults,
+  non-CHECK secondary constraints or sequence ownership. Up to two unchanged
+  table-level child CHECK constraints may accompany the sole outgoing foreign
+  key; the intermediate child definition must retain their exact native body,
+  and both stages verify their catalog text and columns before any child drop.
+  The captured file has no user views or
   macros in this first inbound subset. The reviewer
   supplies the complete intermediate child CREATE TABLE definition without
   the foreign key. The one-time receipt binds the parent, child, their
