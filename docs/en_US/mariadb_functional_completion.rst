@@ -68,6 +68,15 @@ MARIA-COMP-05: Native DDN roundtrip
   deletion intent. Do not claim catalog reads are an atomic DDL snapshot or
   translate MySQL-only grammar into a MariaDB deployment.
 
+  Catalog capture uses a dedicated idle native connection and records
+  ``server_uid``, SQL mode and character context. Preserve exact SHOW CREATE
+  text for databases, tables, views, sequences, routines, triggers, events,
+  packages and package bodies. Retain native column, constraint, partition,
+  parameter, PERIODS and KEY_PERIOD_USAGE facts. A privilege denial is an
+  explicit coverage gap; unsupported MySQL catalogs are never queried. Captures
+  are bounded observational documents, not atomic snapshots or permission to
+  execute imported definitions. Sequence inspection must not advance values.
+
 MARIA-COMP-06: Dashboards and dedicated monitoring
   Provide engine/server/database display-only DDN dashboards with separately
   authorized dashboard editing. Use dedicated collector connections, selectable

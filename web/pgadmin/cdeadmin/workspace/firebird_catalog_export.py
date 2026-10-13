@@ -28,7 +28,7 @@ def _json(value):
 def build_export(resources, *, endpoint_id, target_id, generation,
                  resource_id=None, include_system=False, refreshed=False,
                  native_model=False, engine="firebird"):
-    if engine not in {"firebird", "mysql"}:
+    if engine not in {"firebird", "mysql", "mariadb"}:
         raise ValueError("Unsupported native catalog engine")
     if len(resources) > MAX_RESOURCES:
         raise ValueError('Catalog exceeds the 20,000-resource export limit')
@@ -176,7 +176,9 @@ def build_export(resources, *, endpoint_id, target_id, generation,
     result = {'snapshot': snapshot, 'provenance': provenance, 'views': view_metadata,
               'filename': f'{engine}-catalog.ddn-workspace.json' if multi else f'{engine}-catalog.ddn',
               'sha256': hashlib.sha256(download.encode('utf-8')).hexdigest()}
-    if engine == 'mysql':
+    if engine == 'mariadb':
+        from .mariadb_erd import build_diagram
+    elif engine == 'mysql':
         from .mysql_erd import build_diagram
     else:
         from .firebird_erd import build_diagram

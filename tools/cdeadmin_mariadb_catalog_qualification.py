@@ -1,0 +1,107 @@
+"""Qualify native MariaDB catalog facts without executing imported DDN."""
+import argparse
+import json
+from pathlib import Path
+import secrets
+
+from tools.cdeadmin_mariadb_driver_gate import run
+from tools.mysql_driver_gate_support import provider_access
+from pgadmin.cdeadmin.providers.mysql_family.provider import (
+    MariaDBPilotProvider, MARIADB_PROFILE, _create_client)
+from types import SimpleNamespace
+
+
+def qualify(route, evidence, *, password=None):
+    import mariadb
+    evidence.mkdir(parents=True, exist_ok=False)
+    proof = {'complete': False, 'checks': []}
+    schema = 'owned_catalog_' + secrets.token_hex(8)
+    owner = mariadb.connect(**route, autocommit=True,
+        **({'password': password} if password is not None else {}))
+    cursor = owner.cursor()
+    client = None
+    interactive = None
+    try:
+        cursor.execute(f'CREATE DATABASE `{schema}`')
+        owner.database = schema
+        statements = [
+            'CREATE SEQUENCE seq START WITH 20',
+            'CREATE TABLE temporal (id INT PRIMARY KEY, value VARCHAR(40)) WITH SYSTEM VERSIONING',
+            'CREATE TABLE appointments (id INT, start_at DATE, end_at DATE, PERIOD FOR validity(start_at,end_at))',
+            'CREATE VIEW v AS SELECT id FROM temporal',
+            'CREATE PROCEDURE p(IN i INT) SELECT i',
+            'CREATE PACKAGE pkg PROCEDURE hi(); END',
+            'CREATE PACKAGE BODY pkg PROCEDURE hi() BEGIN SELECT 1; END; END',
+            'CREATE TRIGGER tr BEFORE INSERT ON temporal FOR EACH ROW SET NEW.value=COALESCE(NEW.value,\'default\')',
+            'CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DISABLE DO SELECT 1',
+        ]
+        for statement in statements:
+            cursor.execute(statement)
+        interactive = mariadb.connect(**route, database=schema, autocommit=False,
+            **({'password': password} if password is not None else {}))
+        with interactive.cursor() as pending:
+            pending.execute("INSERT INTO temporal VALUES (1,'pending')")
+        native_route, permissions = provider_access(route, password)
+        def require(permission_id, scope):
+            assert (permission_id, scope) == ('data_read', 'resource')
+        permissions.require = require
+        context = SimpleNamespace(pool_namespace='catalog:' + secrets.token_hex(8))
+        client = _create_client(MARIADB_PROFILE, permissions, context)
+        provider = MariaDBPilotProvider(context, permissions, client)
+        result = provider.capture_catalog({**native_route, 'database': schema})
+        objects = {(row['resource_kind'], row['display_name']): row for row in result['resources']}
+        for key in [('table', 'temporal'), ('table', 'appointments'), ('sequence', 'seq'),
+                    ('view', 'v'), ('procedure', 'p'), ('package', 'pkg'),
+                    ('package-body', 'pkg'), ('trigger', 'tr'), ('event', 'ev')]:
+            native = objects[key]['native']
+            assert native['definition_available'] and native['definition'], key
+            assert objects[key]['resource_id'].startswith('mariadb:')
+        assert 'WITH SYSTEM VERSIONING' in objects['table', 'temporal']['native']['definition']
+        assert objects['table', 'appointments']['native']['children']['PERIODS'][0]['period'] == 'validity'
+        assert objects['procedure', 'p']['native']['parameters'][0]['parameter_name'] == 'i'
+        assert objects['database', schema]['native']['catalog_row']['server_uid']
+        assert all(row['available'] for row in result['observations']), result['observations']
+        assert result['complete'] is False
+        assert len({row['resource_id'] for row in result['resources']}) == len(result['resources'])
+        proof['checks'].append('native_temporal_sequence_package_routine_trigger_event_definitions')
+        cursor.execute('SELECT NEXT VALUE FOR seq')
+        assert cursor.fetchone()[0] == 20
+        proof['checks'].append('sequence_capture_does_not_advance_native_value')
+        assert interactive.server_status & 1
+        cursor.execute('SELECT COUNT(*) FROM temporal')
+        assert cursor.fetchone()[0] == 0
+        proof['checks'].append('independent_catalog_preserves_interactive_pending_work')
+        from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
+        from pgadmin.cdeadmin.workspace.firebird_catalog_import import read_catalog, compare_catalogs
+        options = {'endpoint_id': 'owned-gate', 'target_id': schema,
+            'generation': result['generation'], 'engine': 'mariadb'}
+        exported = build_export(result['resources'], **options)
+        decoded = read_catalog(json.dumps(exported['snapshot']), engine='mariadb')
+        native = build_export(result['resources'], **options, native_model=True)
+        assert not compare_catalogs(decoded, native)['changes']
+        assert decoded['provenance']['mapping'] == 'scratchrobin.mariadb.catalog@1'
+        assert 'scratchrobin.mariadb.relations' in exported['diagram']['snapshot']['files']['relations.ddn']
+        proof['checks'].append('native_ddn_catalog_roundtrip_preserves_all_native_facts')
+
+        (evidence / 'catalog.json').write_text(json.dumps(result, indent=2) + '\n')
+        proof['complete'] = True
+    finally:
+        if client is not None:
+            client.close()
+        if interactive is not None:
+            interactive.rollback()
+            interactive.close()
+        cursor.execute(f'DROP DATABASE IF EXISTS `{schema}`')
+        cursor.close()
+        owner.close()
+        (evidence / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
+    return proof
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--image', default='mariadb:12.2.2')
+    parser.add_argument('--evidence', type=Path, required=True)
+    options = parser.parse_args()
+    result = run(options.image, options.evidence, qualify)
+    raise SystemExit(0 if result['complete'] else 1)

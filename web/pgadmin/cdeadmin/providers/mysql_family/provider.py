@@ -1570,6 +1570,18 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def capture_catalog(self, route, *, include_system=False):
+        """Observe native MariaDB metadata on an independently owned lease."""
+        from .mariadb_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB catalog client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True}})
+        try:
+            return capture(connection, route.get('database'), include_system=include_system)
+        finally:
+            self.client._discard_failed_session(connection)
+
 
 def _route_arguments(route, profile):
     if profile is MYSQL_PROFILE:

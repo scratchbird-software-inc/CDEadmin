@@ -33,7 +33,7 @@ def _decode(value):
 
 
 def read_catalog(source, node='node', *, engine='firebird'):
-    if engine not in {'firebird', 'mysql'}:
+    if engine not in {'firebird', 'mysql', 'mariadb'}:
         raise ValueError('Unsupported native catalog engine')
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Catalog document must be nonempty UTF-8 text within 8 MiB')

@@ -9,7 +9,7 @@ try {
     check(Buffer.byteLength(input) <= 16 * 1024 * 1024);
   }
   const engine = process.argv[2] || 'firebird';
-  check(['firebird', 'mysql'].includes(engine));
+  check(['firebird', 'mysql', 'mariadb'].includes(engine));
   const snapshot = JSON.parse(input);
   const rows = [], identities = new Set(), uids = new Set();
   let provenance;
