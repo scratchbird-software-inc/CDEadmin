@@ -7,7 +7,7 @@ import pytest
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.duckdb.provider import _resource_id
 from pgadmin.cdeadmin.workspace.duckdb_schema_plan import (
-    create_definition_tokens, plan, view_query_tokens,
+    create_definition_tokens, plan, type_expression_tokens, view_query_tokens,
 )
 
 
@@ -102,6 +102,20 @@ def test_created_table_and_index_definition_tokens_ignore_native_target_rewritin
         'CREATE UNIQUE INDEX "facts_amount" ON "file"."main"."facts"(amount)', 'index') != (
         create_definition_tokens('CREATE INDEX facts_amount ON facts(amount);', 'index'))
     assert create_definition_tokens('CREATE TABLE facts AS SELECT (1)', 'table') is None
+
+
+def test_created_type_expression_matches_catalog_resolution_without_target_spelling():
+    pytest.importorskip('duckdb')
+    assert type_expression_tokens(
+        'CREATE TYPE "file"."main"."state" AS ENUM (\'ready\', \'done\')',
+        created=True) == type_expression_tokens("ENUM('ready', 'done')", created=False)
+    assert type_expression_tokens(
+        'CREATE TYPE "file"."main"."point" AS STRUCT("x" INTEGER, y DOUBLE)',
+        created=True) == type_expression_tokens(
+        'STRUCT(x INTEGER, y DOUBLE)', created=False)
+    assert type_expression_tokens(
+        'CREATE TYPE "file"."main"."state" AS ENUM (\'ready\')',
+        created=True) != type_expression_tokens("ENUM('done')", created=False)
 
 
 def test_missing_row_does_not_drop_and_explicit_drop_is_separate():

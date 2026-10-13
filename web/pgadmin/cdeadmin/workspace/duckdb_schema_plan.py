@@ -480,6 +480,41 @@ def create_definition_tokens(source, kind):
     return None
 
 
+def type_expression_tokens(source, *, created):
+    """Compare CREATE TYPE's expression with the native resolved expression."""
+    if not isinstance(source, str) or not source:
+        return None
+    import duckdb
+    try:
+        positions = duckdb.tokenize(source)
+    except duckdb.Error:
+        return None
+    encoded = source.encode('utf8')
+    tokens = []
+    for index, (offset, token_kind) in enumerate(positions):
+        following = positions[index + 1][0] if index + 1 < len(positions) else len(encoded)
+        word = encoded[offset:following].decode('utf8').strip()
+        if (token_kind == duckdb.token_type.identifier and
+                len(word) >= 2 and word[0] == word[-1] == '"'):
+            word = word[1:-1].replace('""', '"')
+        if token_kind in {duckdb.token_type.keyword, duckdb.token_type.identifier}:
+            word = word.casefold()
+        tokens.append((str(token_kind), word))
+    if created:
+        if len(tokens) < 5 or tokens[:2] != [
+                (str(duckdb.token_type.keyword), 'create'),
+                (str(duckdb.token_type.keyword), 'type')]:
+            return None
+        marker = next((index for index, token in enumerate(tokens[2:], 2)
+            if token == (str(duckdb.token_type.keyword), 'as')), None)
+        if marker is None:
+            return None
+        tokens = tokens[marker + 1:]
+    if tokens and tokens[-1] == (str(duckdb.token_type.operator), ';'):
+        tokens = tokens[:-1]
+    return tuple(tokens) if tokens else None
+
+
 def _validated_macro_replacement(before, after, target, change):
     if change != {'action': 'replace-definition',
                    'parameters_without_defaults_confirmed': True}:
