@@ -388,7 +388,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   key; the intermediate child definition must retain their exact native body,
   and both stages verify their catalog text and columns before any child drop.
   Each child may also carry up to eight unchanged plain, nonunique independent
-  indexes, subject to the 32-statement review budget. Their exact observed
+  indexes, subject to the 64-statement isolated-rebuild review budget. Their exact observed
   native definitions are replayed after the final child swap
   in the same transaction, with its catalog identity bound into the receipt and
   checked again after commit. Unchanged table, column and admitted index
@@ -412,7 +412,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   predecessor is dropped. Any failure rolls back both tables; fresh discovery
   verifies both table definitions, rows and the restored foreign key. More
   complex inbound graphs remain blocked. The companion
-  ``rebuild-check-with-inbound-children`` intent accepts two or three distinct
+  ``rebuild-check-with-inbound-children`` intent accepts two to seven distinct
   qualifying children, each with its own complete intermediate definition.
   The parent may also retain an independent unchanged UNIQUE constraint set;
   staging verifies its exact native columns and definition before copying rows
@@ -478,7 +478,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   classification or resource ID has been changed under its existing key;
   such a row cannot silently pass through beside a valid operation. Up to 32
   native statements may be reviewed together when their identities and dependencies
-  are unambiguous. Create schemas before their tables and tables before their
+  are unambiguous. One isolated table rebuild may use up to 64 native statements
+  under the same one-time receipt and transaction; longer programs are refused
+  before dispatch. Create schemas before their tables and tables before their
   indexes; apply added columns before indexes on those columns. Drop children
   before their parents. A new table's columns belong in its one CREATE TABLE
   statement, and cannot also be added as separate operations. Rename remains

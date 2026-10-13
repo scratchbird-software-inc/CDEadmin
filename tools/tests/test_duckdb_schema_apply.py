@@ -1415,7 +1415,7 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
 
 
 @pytest.mark.parametrize('invalid', [False, True])
-@pytest.mark.parametrize('child_count', [1, 2, 3])
+@pytest.mark.parametrize('child_count', [1, 2, 3, 4, 7])
 @pytest.mark.parametrize('retained_unique', [False, True])
 @pytest.mark.parametrize('literal_defaults', [False, True])
 @pytest.mark.parametrize('child_checks', [0, 1, 2])
@@ -1488,6 +1488,14 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
             missing['rows'][parent['resource_id']]['native'][
                 'duckdb_change']['inbound_children'].pop()
             assert not plan(baseline, missing, baseline)['application_supported']
+        if child_count == 7:
+            excessive = deepcopy(desired)
+            excessive['rows'][parent['resource_id']]['native'][
+                'duckdb_change']['inbound_children'].append(
+                    deepcopy(change['inbound_children'][0]))
+            blocked = plan(baseline, excessive, baseline)
+            assert not blocked['application_supported']
+            assert any('two to seven' in item['reason'] for item in blocked['blockers'])
         unsafe = deepcopy(desired)
         unsafe_change = unsafe['rows'][parent['resource_id']]['native']['duckdb_change']
         def corrupt_intermediate(source):
