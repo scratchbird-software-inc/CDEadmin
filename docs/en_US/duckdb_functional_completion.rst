@@ -382,8 +382,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
   constraints on a parent referenced by exactly one unchanged child table
   when that simple-name child has only one outgoing foreign key to the parent,
-  plain unchanged columns, and no index comments, table/column comments,
-  nonliteral defaults,
+  plain unchanged columns and no nonliteral defaults,
   non-CHECK secondary constraints or sequence ownership. Up to two unchanged
   table-level child CHECK constraints may accompany the sole outgoing foreign
   key; the intermediate child definition must retain their exact native body,
@@ -391,10 +390,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Each child may also carry one unchanged plain, nonunique independent index.
   Its exact observed native definition is replayed after the final child swap
   in the same transaction, with its catalog identity bound into the receipt and
-  checked again after commit. DuckDB assigns a new native index OID during
+  checked again after commit. Unchanged table, column and admitted index
+  comments may be replayed after that final swap, in the same reviewed
+  transaction, and their exact catalog facts must survive rediscovery.
+  A missing child object row, changed comment or replay failure blocks or
+  rolls back the review. DuckDB assigns a new native index OID during
   replay; that transient OID is not part of retained design identity. Index
-  comments, native tags and additional
-  child indexes remain blocked in this bounded subset.
+  native tags and additional child indexes remain blocked in this bounded
+  subset.
   The captured file has no user views or
   macros in this first inbound subset. The reviewer
   supplies the complete intermediate child CREATE TABLE definition without

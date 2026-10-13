@@ -1599,9 +1599,11 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
         provider.client.close()
 
 
-@pytest.mark.parametrize('child_count,indexed_child', [(1, 1), (2, 1),
-    (2, 2), (3, 2)])
-def test_inbound_rebuild_replays_one_child_index(tmp_path, child_count, indexed_child):
+@pytest.mark.parametrize('child_count,indexed_child,with_comments', [
+    (1, 1, False), (1, 1, True), (2, 1, False), (2, 1, True),
+    (2, 2, False), (2, 2, True), (3, 2, False)])
+def test_inbound_rebuild_replays_one_child_index(
+        tmp_path, child_count, indexed_child, with_comments):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1615,6 +1617,11 @@ def test_inbound_rebuild_replays_one_child_index(tmp_path, child_count, indexed_
         connection.execute(f'INSERT INTO {name} VALUES ({number * 10}, 1)')
         if number == indexed_child:
             connection.execute(f'CREATE INDEX {name}_id_idx ON {name}(id)')
+        if with_comments:
+            connection.execute(f"COMMENT ON TABLE {name} IS 'table note'")
+            connection.execute(f"COMMENT ON COLUMN {name}.id IS 'column note'")
+            if number == indexed_child:
+                connection.execute(f"COMMENT ON INDEX {name}_id_idx IS 'index note'")
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1658,6 +1665,11 @@ def test_inbound_rebuild_replays_one_child_index(tmp_path, child_count, indexed_
         omitted = deepcopy(desired)
         del omitted['rows'][index['resource_id']]
         assert not plan(baseline, omitted, baseline)['application_supported']
+        if with_comments:
+            changed = deepcopy(desired)
+            changed['rows'][index['resource_id']]['native'][
+                'catalog_metadata']['comment'] = 'changed note'
+            assert not plan(baseline, changed, baseline)['application_supported']
         applications = DuckDBSchemaApplications(tmp_path/'inbound-index.json', clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired,
             'owner', 'binding', 'file-1')
@@ -1670,9 +1682,18 @@ def test_inbound_rebuild_replays_one_child_index(tmp_path, child_count, indexed_
             name = 'child' if number == 1 else f'child{number}'
             assert observer.execute(f'SELECT id,parent_id FROM {name}').fetchall() == [
                 (number * 10, 1)]
+            if with_comments:
+                assert observer.execute('SELECT comment FROM duckdb_tables() '
+                    'WHERE table_name=?', [name]).fetchone()[0] == 'table note'
+                assert observer.execute('SELECT comment FROM duckdb_columns() '
+                    "WHERE table_name=? AND column_name='id'", [name]).fetchone()[0] == (
+                    'column note')
         assert observer.execute('SELECT index_name FROM duckdb_indexes() '
             'WHERE table_name=?', [children[indexed_child - 1]['name']]).fetchall() == [
             (index['name'],)]
+        if with_comments:
+            assert observer.execute('SELECT comment FROM duckdb_indexes() '
+                'WHERE index_name=?', [index['name']]).fetchone()[0] == 'index note'
         observer.close()
     finally:
         provider.client.close()

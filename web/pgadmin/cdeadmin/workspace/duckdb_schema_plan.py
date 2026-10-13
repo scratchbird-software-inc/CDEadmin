@@ -1114,7 +1114,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     checks = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'CHECK'] if (
             isinstance(constraints, list)) else []
-    if (metadata.get('comment') is not None or metadata.get('tags') or
+    if (metadata.get('tags') or
             metadata.get('temporary') is not False or
             metadata.get('has_primary_key') is not False or
             not isinstance(native.get('indexes'), list) or len(indexes) > 1 or
@@ -1131,7 +1131,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             not foreign[0]['column_names'] or
             len(foreign[0]['column_names']) !=
                 len(foreign[0]['referenced_column_names']) or
-            any(not isinstance(item, dict) or item.get('comment') is not None or
+            any(not isinstance(item, dict) or
                 not literal_default(item.get('default')) for item in columns)):
         raise ValueError('Inbound child requires one foreign key, bounded CHECKs and plain literal defaults')
     for index in indexes:
@@ -1141,7 +1141,6 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         if (observed_index is None or desired_index is None or
                 not _equal(_definition(observed_index), _definition(index)) or
                 not _equal(_definition(desired_index), _definition(index)) or
-                index_metadata.get('comment') is not None or
                 index_metadata.get('tags') or index_metadata.get('unique') is not False):
             raise ValueError('Inbound child requires one unchanged plain independent index')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
@@ -1195,10 +1194,25 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     final, final_check = phase(restore, stage_names[1])
     for index in indexes:
         final.append(_validated_replayed_index(index, target))
+    comments = [
+        ('table', target, metadata.get('comment')),
+        *(( 'column', target + '.' + _quote(column['name']), column.get('comment'))
+          for column in columns),
+        *(( 'index', '.'.join(_quote(part) for part in
+            [index['path'][0], index['path'][1], index['name']]),
+            index['native'].get('catalog_metadata', {}).get('comment'))
+          for index in indexes),
+    ]
+    comment_statements = []
+    for kind, comment_target, comment in comments:
+        replay = _validated_replayed_comment(kind, comment_target, comment)
+        if replay is not None:
+            comment_statements.append(replay)
+    final.extend(comment_statements)
     import duckdb
     for statement, expected in zip([*first, *final],
             ['CREATE', 'INSERT', 'DROP', 'ALTER'] * 2 +
-            ['CREATE'] * len(indexes)):
+            ['CREATE'] * len(indexes) + ['ALTER'] * len(comment_statements)):
         try:
             parsed = duckdb.extract_statements(statement)
         except duckdb.Error:
