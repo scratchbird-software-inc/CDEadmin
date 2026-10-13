@@ -463,8 +463,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   replayed after the table swap. Existing column defaults must remain
   identical in the reviewed native CREATE TABLE body and catalog; the data
   copy names every column explicitly, so it never evaluates those defaults.
-  Generated columns remain outside this migration because native INSERT
-  cannot write their derived values explicitly.
+  An unchanged virtual generated column may accompany a constraint rebuild
+  when its native expression contains only observed base-column references,
+  constants, parentheses and arithmetic or concatenation operators. Copy only
+  the base columns; DuckDB recomputes the generated values in staging, and the
+  complete row-multiset comparison must prove the resulting values match before
+  the original table is dropped. Function calls, sequence use, casts, generated
+  references to other generated columns and expressions outside this admitted
+  subset block review because staging might invoke side effects or change values.
   A deterministic staging table receives every old row in the same native
   transaction; both EXCEPT ALL directions must be empty before the original
   table is dropped and the staging table renamed. The same transaction must

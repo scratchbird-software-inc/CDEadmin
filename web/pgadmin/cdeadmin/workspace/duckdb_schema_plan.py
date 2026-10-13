@@ -592,6 +592,44 @@ def _table_definition_sections(source, *, inline_unique=False):
     return tuple(columns), tuple(checks)
 
 
+def _admitted_generated_columns(sections, columns):
+    """Find virtual columns whose unchanged expression can be recomputed safely."""
+    if sections is None or not isinstance(columns, list):
+        return None
+    marker = ('token_type.keyword', 'generated')
+    generated = {}
+    for section in sections[0]:
+        if marker not in section:
+            continue
+        position = section.index(marker)
+        if (not section or section[0][0] != 'token_type.identifier' or
+                not re.fullmatch(r'[a-z_][a-z0-9_]*', section[0][1]) or
+                section[position:position + 3] != (
+                    marker, ('token_type.keyword', 'always'),
+                    ('token_type.keyword', 'as'))):
+            return None
+        generated[section[0][1]] = section[position + 3:]
+    observed = {item.get('name') for item in columns if isinstance(item, dict)}
+    if len(observed) != len(columns) or not set(generated) <= observed:
+        return None
+    base = observed - set(generated)
+    if generated and not base:
+        return None
+    for expression in generated.values():
+        if not expression or any(
+                (kind == 'token_type.identifier' and word not in base) or
+                (kind == 'token_type.operator' and word not in
+                    {'(', ')', '+', '-', '*', '/', '%', '||'}) or
+                (kind == 'token_type.keyword' and word not in
+                    {'true', 'false', 'null'}) or
+                kind not in {'token_type.identifier', 'token_type.operator',
+                    'token_type.keyword', 'token_type.numeric_const',
+                    'token_type.string_const'}
+                for kind, word in expression):
+            return None
+    return set(generated)
+
+
 def type_expression_tokens(source, *, created):
     """Compare CREATE TYPE's expression with the native resolved expression."""
     if not isinstance(source, str) or not source:
@@ -1566,11 +1604,17 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children'})
+    generated_names = _admitted_generated_columns(original_sections, columns)
     old_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
         for item in old_constraints)
     new_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
         for item in new_constraints)
     if (body is None or original_sections is None or desired_sections is None or
+            generated_names is None or
+            (generated_names and action not in {'rebuild-check-constraints',
+                'rebuild-unique-constraints', 'rebuild-foreign-keys',
+                'rebuild-check-with-inbound-child',
+                'rebuild-check-with-inbound-children'}) or
             not original_sections[0] or (action not in {
                 'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                 'rebuild-column-order'} and
@@ -1580,8 +1624,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             len(original_sections[1]) != len(old_constraints) - old_inline or
             len(desired_sections[1]) != len(new_constraints) - new_inline or any(
             kind == 'token_type.keyword' and word in
-                ({'generated'} |
-                 ({'primary', 'unique'} if action == 'rebuild-column-order' else
+                (({'primary', 'unique'} if action == 'rebuild-column-order' else
                   {'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
@@ -1600,8 +1643,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     creation = 'CREATE TABLE ' + stage + source[source_prefix.end():]
     _validated_ddl(creation, 'table', stage_path)
     names = ', '.join(_quote(item['name']) for item in columns)
+    copy_names = ', '.join(_quote(item['name']) for item in columns
+        if item['name'] not in generated_names)
     statements = [creation,
-        'INSERT INTO ' + stage + ' (' + names + ') SELECT ' + names + ' FROM ' + target,
+        'INSERT INTO ' + stage + ' (' + copy_names + ') SELECT ' + copy_names + ' FROM ' + target,
         'DROP TABLE ' + target + ' RESTRICT',
         'ALTER TABLE ' + stage + ' RENAME TO ' + _quote(after['name'])]
     expected_types = ['CREATE', 'INSERT', 'DROP', 'ALTER']

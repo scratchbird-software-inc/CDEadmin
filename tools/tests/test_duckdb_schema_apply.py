@@ -1234,12 +1234,16 @@ def test_constraint_rebuild_preserves_column_defaults_without_evaluating_them_fo
         provider.client.close()
 
 
-def test_constraint_rebuild_blocks_generated_columns_before_dispatch(tmp_path):
+@pytest.mark.parametrize('expression,data_type,admitted', [
+    ('id + 1', 'INTEGER', True), ('random()', 'DOUBLE', False)])
+def test_constraint_rebuild_preserves_only_safe_generated_columns(
+        tmp_path, expression, data_type, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0), '
-        'derived INTEGER GENERATED ALWAYS AS (id + 1))')
+        f'derived {data_type} GENERATED ALWAYS AS ({expression}))')
+    connection.execute('INSERT INTO checked(id) VALUES (1), (2)')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1256,14 +1260,32 @@ def test_constraint_rebuild_blocks_generated_columns_before_dispatch(tmp_path):
         desired['rows'][child_id]['native']['catalog_metadata'].update(
             constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
         edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
-            '(id INTEGER, derived INTEGER GENERATED ALWAYS AS((id + 1)), '
+            f'(id INTEGER, derived {data_type} GENERATED ALWAYS AS(({expression})), '
             'CHECK((id >= 0)))')
         edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         preview = plan(baseline, desired, baseline)
-        assert not preview['application_supported']
-        assert any('plain CREATE TABLE body' in blocker['reason']
-            for blocker in preview['blockers'])
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            assert any('plain CREATE TABLE body' in blocker['reason']
+                for blocker in preview['blockers'])
+            return
+        altered = deepcopy(desired)
+        altered['rows'][original['resource_id']]['native']['ddl'] = (
+            edited['ddl'].replace('id + 1', 'id + 2'))
+        assert not plan(baseline, altered, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'generated-rebuild.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,derived FROM checked ORDER BY id').fetchall() == [
+            (1, 2), (2, 3)]
+        observer.close()
     finally:
         provider.client.close()
 
