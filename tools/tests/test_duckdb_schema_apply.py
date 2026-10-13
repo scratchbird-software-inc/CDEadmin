@@ -1503,7 +1503,8 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
                     deepcopy(change['inbound_children'][0]))
             blocked = plan(baseline, excessive, baseline)
             assert not blocked['application_supported']
-            assert any('two to seven' in item['reason'] for item in blocked['blockers'])
+            assert any('repeats a child identity' in item['reason']
+                for item in blocked['blockers'])
         unsafe = deepcopy(desired)
         unsafe_change = unsafe['rows'][parent['resource_id']]['native']['duckdb_change']
         def corrupt_intermediate(source):
@@ -1571,6 +1572,79 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
             assert observer.execute("SELECT constraint_column_names FROM duckdb_constraints() "
                 "WHERE table_name='parent' AND constraint_type='UNIQUE'").fetchall() == [
                 (['code'],)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+@pytest.mark.parametrize('child_count,invalid', [
+    (8, False), (8, True), (32, False), (33, False)])
+def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, invalid):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute('INSERT INTO parent VALUES (1, ?)',
+        ['a' if invalid else 'aa'])
+    for number in range(1, child_count + 1):
+        connection.execute(f'CREATE TABLE child{number}(id INTEGER, parent_id INTEGER, '
+            'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+        connection.execute(f'INSERT INTO child{number} VALUES ({number}, 1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-children',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_children': [{
+                'resource_id': next(row['resource_id'] for row in baseline['rows'].values()
+                    if row['kind'] == 'table' and row['name'] == f'child{number}'),
+                'intermediate_ddl': f'CREATE TABLE "{root}"."main"."child{number}" '
+                    '(id INTEGER, parent_id INTEGER)'}
+                for number in range(1, child_count + 1)]}
+        preview = plan(baseline, desired, baseline)
+        if child_count == 33:
+            assert not preview['application_supported']
+            assert any('two to thirty-two' in item['reason']
+                for item in preview['blockers'])
+            return
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) == 4 + 8 * child_count
+        applications = DuckDBSchemaApplications(tmp_path/'many-child-receipt.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if invalid else 'committed'), outcome
+        if not invalid:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        for number in range(1, child_count + 1):
+            assert observer.execute(f'SELECT id,parent_id FROM child{number}').fetchall() == [
+                (number, 1)]
+            assert observer.execute('SELECT constraint_type FROM duckdb_constraints() '
+                'WHERE table_name=?', [f'child{number}']).fetchall() == [
+                ('FOREIGN KEY',)]
+        assert observer.execute('SELECT payload FROM parent').fetchone()[0] == (
+            'a' if invalid else 'aa')
         observer.close()
     finally:
         provider.client.close()

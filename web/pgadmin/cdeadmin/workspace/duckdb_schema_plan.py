@@ -1443,10 +1443,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     elif action == 'rebuild-check-with-inbound-children':
         inbound_requests = change['inbound_children']
         if (not isinstance(inbound_requests, list) or
-                not 2 <= len(inbound_requests) <= 7 or
+                not 2 <= len(inbound_requests) <= 32 or
                 any(not isinstance(item, dict) or set(item) !=
                     {'resource_id', 'intermediate_ddl'} for item in inbound_requests)):
-            raise ValueError('Inbound review requires two to seven complete child definitions')
+            raise ValueError('Inbound review requires two to thirty-two complete child definitions')
     if len({item['resource_id'] for item in inbound_requests}) != len(inbound_requests):
         raise ValueError('Inbound review repeats a child identity')
     inbound = [_validated_inbound_child(before, item['resource_id'],
@@ -1678,7 +1678,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
 
 
 def _ordered_operations(operations, desired):
-    statement_limit = (64 if len(operations) == 1 and
+    statement_limit = (512 if len(operations) == 1 and
         operations[0]['operation'] == 'rebuild' else 32)
     if (sum(len(item.get('statements', [item['source']])) for item in operations) >
             statement_limit or
