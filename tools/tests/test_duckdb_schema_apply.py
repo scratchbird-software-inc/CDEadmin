@@ -1686,6 +1686,85 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
         provider.client.close()
 
 
+@pytest.mark.parametrize('key_style', ['not-null', 'inline-primary', 'table-primary'])
+def test_inbound_child_rebuild_retains_primary_and_not_null_constraints(
+        tmp_path, key_style):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa')")
+    id_definition = ('id INTEGER PRIMARY KEY' if key_style == 'inline-primary'
+        else 'id INTEGER NOT NULL' if key_style == 'not-null' else 'id INTEGER')
+    parent_definition = ('parent_id INTEGER' if key_style == 'table-primary'
+        else 'parent_id INTEGER NOT NULL')
+    key_definition = ', PRIMARY KEY(id,parent_id)' if key_style == 'table-primary' else ''
+    connection.execute('CREATE TABLE child(' + id_definition + ', ' +
+        parent_definition + key_definition +
+        ', FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO child VALUES (10, 1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        intermediate = (f'CREATE TABLE "{root}"."main"."child" (' +
+            id_definition + ', ' + parent_definition + key_definition + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': intermediate}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        wrong = deepcopy(desired)
+        wrong['rows'][parent['resource_id']]['native']['duckdb_change'][
+            'intermediate_child_ddl'] = (intermediate.replace(
+                ', PRIMARY KEY(id,parent_id)', '') if key_style == 'table-primary'
+                else intermediate.replace('parent_id INTEGER NOT NULL',
+                    'parent_id INTEGER'))
+        assert not plan(baseline, wrong, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'child-not-null.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,parent_id FROM child').fetchall() == [(10, 1)]
+        types = sorted(row[0] for row in observer.execute(
+            "SELECT constraint_type FROM duckdb_constraints() WHERE table_name='child'").fetchall())
+        assert types == sorted(['FOREIGN KEY', 'NOT NULL', 'NOT NULL'] +
+            (['PRIMARY KEY'] if key_style != 'not-null' else []))
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO child VALUES (11, NULL)')
+        if key_style != 'not-null':
+            with pytest.raises(duckdb.ConstraintException):
+                observer.execute('INSERT INTO child VALUES (10, 1)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

@@ -1130,9 +1130,16 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     uniques = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'UNIQUE'] if (
             isinstance(constraints, list)) else []
+    primary = [item for item in constraints
+        if isinstance(item, dict) and item.get('constraint_type') == 'PRIMARY KEY'] if (
+            isinstance(constraints, list)) else []
+    nulls = [item for item in constraints
+        if isinstance(item, dict) and item.get('constraint_type') == 'NOT NULL'] if (
+            isinstance(constraints, list)) else []
     if (metadata.get('tags') or
             metadata.get('temporary') is not False or
-            metadata.get('has_primary_key') is not False or
+            type(metadata.get('has_primary_key')) is not bool or
+            metadata['has_primary_key'] != bool(primary) or len(primary) > 1 or
             not isinstance(native.get('indexes'), list) or len(indexes) > 8 or
             {item.get('resource_id') for item in native['indexes']} !=
                 {item['resource_id'] for item in indexes} or
@@ -1141,7 +1148,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 len(columns) or
             not isinstance(constraints, list) or len(foreign) != 1 or
             len(checks) > 2 or len(uniques) > 2 or
-            len(constraints) != len(checks) + len(uniques) + 1 or
+            len(constraints) != len(checks) + len(uniques) +
+                len(primary) + len(nulls) + 1 or
             foreign[0].get('referenced_table') != before['name'] or
             not isinstance(foreign[0].get('column_names'), list) or
             not isinstance(foreign[0].get('referenced_column_names'), list) or
@@ -1172,10 +1180,10 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             any(token == ('token_type.keyword', 'generated') for token in
                 create_definition_tokens(original, 'table') or ()) or
             original_sections[0] != interim_sections[0] or
-            len(original_secondary) != len(constraints) or
+            len(original_secondary) != len(checks) + len(uniques) + 1 or
             len(retained_sections) != len(checks) + len(uniques) or
             interim_sections[1] != retained_sections):
-        raise ValueError('Intermediate child must retain exact columns, CHECKs and UNIQUEs and remove its sole foreign key')
+        raise ValueError('Intermediate child must retain exact columns and constraints except its sole foreign key')
     original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
         re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
         r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
@@ -1268,7 +1276,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         'constraints_by_phase': [[{key: item.get(key) for key in
             ('constraint_type', 'column_names', 'referenced_table',
              'referenced_column_names', 'constraint_text')}
-            for item in phase] for phase in ([*checks, *uniques], constraints)]}
+            for item in phase] for phase in (
+                [*checks, *uniques, *primary, *nulls], constraints)]}
 
 
 def _validated_check_rebuild(before, after, change, target, baseline, live, desired):
