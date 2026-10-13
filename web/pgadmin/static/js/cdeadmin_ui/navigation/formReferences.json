@@ -9,6 +9,7 @@
     "duckdb-dashboard": {"reference": "SR-F-010001", "title": "DuckDB dashboard viewer"},
     "duckdb-monitoring-policy": {"reference": "SR-F-010002", "title": "DuckDB monitoring policy"},
     "duckdb-dashboard-editor": {"reference": "SR-F-010003", "title": "DuckDB dashboard editor"},
+    "duckdb-catalog-designer": {"reference": "SR-F-010004", "title": "DuckDB DDN catalog designer"},
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

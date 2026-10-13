@@ -1106,6 +1106,28 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=request['database_target_id'])
+        if context.profile_id != 'duckdb-native' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise ProviderWorkspaceError('Select a native DuckDB endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='duckdb').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id),
+                'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
+
     def export_firebird_catalog(self, server, request, *, _native_model=False):
         """Capture one admitted catalog generation into documentary DDN."""
         from .firebird_catalog_export import build_export, MAX_RESOURCES

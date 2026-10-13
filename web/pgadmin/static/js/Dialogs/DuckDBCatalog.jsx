@@ -4,6 +4,7 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} fro
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
+import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function DuckDBCatalog({post, databaseTargetId}) {
@@ -99,6 +100,9 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
     {display === 'data' && data?.acquisition && <Alert severity="info">Captured {data.acquisition.rows} visible rows from {data.acquisition.relation}. Mode: {data.acquisition.mode}.</Alert>}
     {display === 'data' && data?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {result && <Alert severity="info">Visible objects: {result.provenance.objects}. Coverage: {result.provenance.coverage}.</Alert>}
+    {result?.snapshot && <FirebirdCatalogDesigner engine="duckdb" baseline={JSON.stringify(result.snapshot)}
+      post={post} databaseTargetId={databaseTargetId} disabled={busy}
+      onReview={desired => {setSource(desired); setComparison(null);}} />}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="duckdb/catalog-comparison" aria-label="DuckDB catalog differences"

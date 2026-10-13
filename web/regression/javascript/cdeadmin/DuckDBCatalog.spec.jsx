@@ -5,6 +5,7 @@ import {withTheme} from '../fake_theme';
 let viewer;
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: props => {viewer = props; return <div>Native DDN viewer</div>;},
+  DDNDesignerSurface: () => <div>Native DDN designer</div>,
 }));
 jest.mock('sources/cdeadmin_ui/data/PagedDataGrid', () => function MockGrid(props) {
   return <div aria-label={props['aria-label']}>{props.rows.length} changes</div>;
@@ -56,5 +57,19 @@ describe('DuckDB native catalog form', () => {
     expect(post).toHaveBeenLastCalledWith({action: 'duckdb_data_capture', request: {
       database_target_id: 'owned-duckdb-file', resource_id: 'native-table', mode: 'sample', row_limit: 3}});
     expect(viewer.snapshot.view).toBe('result_1');
+  });
+
+  it('opens the DuckDB designer and reads only its file-scoped design revision', async () => {
+    const post = jest.fn().mockResolvedValueOnce(capture).mockResolvedValueOnce({version: 0,
+      assetRef: {assetVersion: 0}});
+    render(<Component post={post} databaseTargetId="owned-duckdb-file" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+    fireEvent.click(screen.getByRole('button', {name: 'Check saved catalog design'}));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith({action: 'duckdb_design_read',
+      request: {kind: 'catalog', database_target_id: 'owned-duckdb-file'}}));
+    fireEvent.click(screen.getByRole('button', {name: 'Edit catalog design in DDN'}));
+    expect(screen.getByText('SR-F-010004')).toBeVisible();
+    expect(screen.getByText('Native DDN designer')).toBeVisible();
   });
 });

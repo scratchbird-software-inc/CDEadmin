@@ -90,6 +90,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   and no capture borrows or commits an interactive transaction.
   Separate native sequence observations from resumable sequence state; discovery
   must not call nextval. Preserve native file effects and uncertain apply state.
+  Versioned DDN design drafts use the shared project asset repository, scoped to
+  the owner, exact endpoint and registered file target. Keep the capture used as
+  the design baseline with each revision, permit source merge through the paired
+  public DDN workflow, and treat an edited design as documentary until native
+  plan review and application are separately qualified.
 
 DUCK-COMP-06: Native dashboards and monitoring
   Provide display-only DDN engine/embedded-instance/database dashboards with a

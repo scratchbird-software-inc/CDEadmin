@@ -11,11 +11,12 @@ _LOCK = threading.RLock()
 
 class NativeDesignAssets:
     def __init__(self, assets, *, engine='firebird'):
-        if engine not in {'firebird', 'mysql', 'mariadb'}:
+        if engine not in {'firebird', 'mysql', 'mariadb', 'duckdb'}:
             raise ProjectAssetError('Unsupported native design engine')
         self.assets = assets
         self.engine = engine
-        self.title = {'firebird': 'Firebird', 'mysql': 'MySQL', 'mariadb': 'MariaDB'}[engine]
+        self.title = {'firebird': 'Firebird', 'mysql': 'MySQL', 'mariadb': 'MariaDB',
+                      'duckdb': 'DuckDB'}[engine]
         self.baseline_key = engine + 'Design'
 
     def apply(self, owner, scope, action, request):
