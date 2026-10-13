@@ -19,6 +19,8 @@ DUCK-COMP-01: Native catalog and administration
   Do not offer unsupported server accounts, roles, triggers, procedures,
   replication, savepoints, or MySQL-style administrative executables.
   Never expose secret values, encryption keys or confidential attachment options.
+  Database options use an explicit safe metadata allowlist; foreign attachment
+  connection strings are omitted. Disclose omitted metadata without returning it.
 
 DUCK-COMP-02: Embedded connection and transaction ownership
   Bind explorer connections, editor sessions and target selectors to the exact
@@ -57,6 +59,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   baseline/desired/live diff, with explicit deletion intent, native nonexecuting
   validation and reviewed apply receipts. A view filter never authorizes drops.
   Distinguish temporary/session definitions from persisted file contents.
+  Catalog capture uses its own connection and transaction, bounded to 20,000
+  native/expanded facts, 8 MiB and 30 seconds. Overflow or interruption returns
+  no partial successful capture. A known missing registered file is refused
+  before connection creation. Independent capture of :memory: is refused.
   Separate native sequence observations from resumable sequence state; discovery
   must not call nextval. Preserve native file effects and uncertain apply state.
 

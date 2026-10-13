@@ -148,6 +148,21 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def capture_catalog(self, route, *, include_system=False):
+        from .catalog import capture
+        self._require('data_read', 'resource')
+        path = contained_database(route)
+        if path == ':memory:':
+            raise RelationalClientError('An independent in-memory connection is a different DuckDB database')
+        if not os.path.isfile(path):
+            raise RelationalClientError('DuckDB catalog capture requires an existing registered database file')
+        connection = self.client._connect({'route': route})
+        try:
+            return capture(connection, include_system=include_system)
+        finally:
+            self.client._discard_failed_session(connection)
+
+
 
 def _route_arguments(route):
     return duckdb_arguments(route)
@@ -211,14 +226,16 @@ def _resources(connection, request):
         )
         native = {
             'database_name': database,
-            'path': path, 'database_oid': database_oid,
+            'database_oid': database_oid,
             'comment': comment, 'tags': tags,
             'database_type': database_type,
             'read_only': bool(read_only), 'encrypted': bool(encrypted),
-            'cipher': cipher, 'options': options,
+            'cipher': cipher,
             'runtime_version': runtime_version, 'platform': platform,
             **sizes.get(database, {}),
         }
+        from .catalog import database_location
+        native.update(database_location(path, database_type, options))
         if isinstance(path, str) and os.path.isfile(path):
             native['file_bytes'] = os.path.getsize(path)
         add(kind, [], database, native)
