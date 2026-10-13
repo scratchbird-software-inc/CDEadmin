@@ -58,6 +58,14 @@ def apply_review(provider, route, record):
                             operation['data_check']).fetchone()[0]
                         if difference != 0:
                             raise ValueError('Native staging rows differ from original rows')
+                        dependency_difference = connection.execute(
+                            operation['sequence_dependency_check']).fetchone()[0]
+                        if dependency_difference != 0:
+                            raise ValueError('Native staged sequence dependencies differ')
+                        if (operation['requires_sequence_dependency'] and
+                                connection.execute(operation[
+                                    'sequence_dependency_count']).fetchone()[0] == 0):
+                            raise ValueError('Native sequence default has no observed dependency')
                 rebuild_rows[operation['resource_id']] = old_rows
             else:
                 result['statement_dispatched'] = True

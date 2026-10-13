@@ -288,8 +288,18 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   blocked; a separate migration must preserve data and dependent metadata.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical, no tag or foreign-key edge needs preservation, and
-  the captured file has no user view, macro or sequence
-  dependency whose binding could change. The reviewer supplies a complete
+  the captured file has no user view or macro dependency whose binding
+  could change. Independent sequences may coexist with the table, including
+  a sequence referenced by an unchanged column default: the explicit-column
+  data copy must not advance it. Before the old table is dropped, the
+  transaction compares the native sequence dependency identities of the old
+  and staged tables; a direct ``nextval`` default also requires an observed
+  dependency. Any mismatch rolls back. A sequence with an observed automatic
+  ownership dependency still blocks the rebuild; dropping its owner may
+  otherwise delete the sequence. DuckDB 1.5.2 may accept ``OWNED BY`` for
+  a sequence already referenced by the table default without exposing an
+  automatic dependency; the native ``DROP ... RESTRICT`` must then refuse
+  the swap and roll the whole transaction back. The reviewer supplies a complete
   CREATE TABLE definition and explicitly confirms the corresponding isolated
   constraint rebuild. The CHECK intent accepts only CHECK constraints; the
   UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary

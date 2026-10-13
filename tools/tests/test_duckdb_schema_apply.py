@@ -1048,6 +1048,98 @@ def test_constraint_rebuild_preserves_unchanged_primary_key(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('owned', (False, True))
+def test_constraint_rebuild_preserves_independent_sequence_default(tmp_path, owned):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE SEQUENCE seq')
+    connection.execute("CREATE TABLE checked(id BIGINT DEFAULT nextval('seq') "
+        'CHECK(id > 0))')
+    connection.execute('INSERT INTO checked DEFAULT VALUES')
+    connection.execute('INSERT INTO checked DEFAULT VALUES')
+    if owned:
+        connection.execute('ALTER SEQUENCE seq OWNED BY checked')
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            "(id BIGINT DEFAULT(nextval('seq')), CHECK((id >= 0)))")
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'rebuild-with-sequence.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if owned else 'committed'), outcome
+        if not owned:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id FROM checked ORDER BY id').fetchall() == [
+            (1,), (2,)]
+        constraint = observer.execute('SELECT constraint_text FROM duckdb_constraints() '
+            "WHERE table_name='checked'").fetchone()[0]
+        assert constraint == ('CHECK((id > 0))' if owned else 'CHECK((id >= 0))')
+        observer.execute('INSERT INTO checked DEFAULT VALUES')
+        assert observer.execute('SELECT max(id) FROM checked').fetchone()[0] == 3
+        observer.close()
+    finally:
+        connection.close()
+        provider.client.close()
+
+
+def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE SEQUENCE owned_seq')
+    connection.execute('CREATE TABLE checked(id INTEGER CHECK(id > 0))')
+    connection.execute('ALTER SEQUENCE owned_seq OWNED BY checked')
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        sequence = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'sequence' and row['name'] == 'owned_seq')
+        assert sequence['native']['catalog_metadata']['automatic_dependency_observed']
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'][0]['constraint_text'] = 'CHECK((id >= 0))'
+        edited['constraints'][0]['expression'] = '(id >= 0)'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, CHECK((id >= 0)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert not preview['application_supported']
+        assert any('dependent object' in blocker['reason']
+            for blocker in preview['blockers'])
+    finally:
+        connection.close()
+        provider.client.close()
+
+
 def test_native_batch_rolls_back_all_statements_on_late_failure(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, baseline, _desired, _identity = fixture(tmp_path)

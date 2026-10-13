@@ -1043,7 +1043,9 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
                 index['native'].get('catalog_metadata', {}).get('tags')):
             raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
     for row in live['rows'].values():
-        if row['kind'] in {'view', 'macro', 'sequence', 'attached-database'}:
+        if row['kind'] in {'view', 'macro', 'attached-database'} or (
+                row['kind'] == 'sequence' and row['native'].get(
+                    'catalog_metadata', {}).get('automatic_dependency_observed') is True):
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
         if row['kind'] == 'table' and any(item.get('constraint_type') in
                 ({'FOREIGN KEY'} | ({'UNIQUE'} if action ==
@@ -1100,6 +1102,24 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         ' EXCEPT ALL SELECT ' + names + ' FROM ' + stage + ') UNION ALL (SELECT ' +
         names + ' FROM ' + stage + ' EXCEPT ALL SELECT ' + names + ' FROM ' +
         target + ')) AS differences')
+    def sequence_dependencies(table_name):
+        literals = ["'" + value.replace("'", "''") + "'" for value in
+            [before['path'][0], before['path'][1], table_name]]
+        return ('SELECT sequence_oid FROM duckdb_sequences() AS s '
+            'JOIN duckdb_dependencies() AS d ON d.objid = s.sequence_oid '
+            "WHERE d.deptype = 'n' AND d.refobjid = (SELECT table_oid "
+            'FROM duckdb_tables() WHERE database_name = ' + literals[0] +
+            ' AND schema_name = ' + literals[1] + ' AND table_name = ' +
+            literals[2] + ')')
+    original_dependencies = sequence_dependencies(before['name'])
+    staged_dependencies = sequence_dependencies(stage_name)
+    dependency_check = ('SELECT count(*) FROM ((' + original_dependencies +
+        ' EXCEPT ALL ' + staged_dependencies + ') UNION ALL (' +
+        staged_dependencies + ' EXCEPT ALL ' + original_dependencies +
+        ')) AS differences')
+    dependency_count = 'SELECT count(*) FROM (' + original_dependencies + ') AS dependencies'
+    requires_sequence_dependency = any(isinstance(item.get('default'), str) and
+        'nextval' in item['default'].casefold() for item in columns)
     import duckdb
     for statement, expected in zip(statements, expected_types):
         try:
@@ -1108,7 +1128,8 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
             raise ValueError('Native constraint rebuild statement is not parseable') from None
         if len(parsed) != 1 or parsed[0].type != getattr(duckdb.StatementType, expected):
             raise ValueError('Native constraint rebuild requires exact reviewed statements')
-    return statements, check, source, new_constraints, indexes
+    return (statements, check, dependency_check, dependency_count,
+        requires_sequence_dependency, source, new_constraints, indexes)
 
 
 def _ordered_operations(operations, desired):
@@ -1293,7 +1314,9 @@ def plan(baseline, desired, live):
                   change.get('action') in
                   {'rebuild-check-constraints', 'rebuild-unique-constraints'}):
                 operation = 'rebuild'
-                _rebuild_statements, _data_check, _original_source, _expected_constraints, _replayed_indexes = (
+                (_rebuild_statements, _data_check, _dependency_check,
+                 _dependency_count, _requires_sequence_dependency,
+                 _original_source, _expected_constraints, _replayed_indexes) = (
                     _validated_check_rebuild(before, after, change, target, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
                     _rebuild_statements) + ';'
@@ -1363,7 +1386,10 @@ def plan(baseline, desired, live):
                              'referenced_table', 'referenced_column_names')):
                         raise ValueError('Constraint rebuild child and parent facts differ')
                 operation_record.update(statements=_rebuild_statements,
-                    data_check=_data_check, original_source=_original_source,
+                    data_check=_data_check, sequence_dependency_check=_dependency_check,
+                    sequence_dependency_count=_dependency_count,
+                    requires_sequence_dependency=_requires_sequence_dependency,
+                    original_source=_original_source,
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),
