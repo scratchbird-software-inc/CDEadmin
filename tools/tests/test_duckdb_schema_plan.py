@@ -36,6 +36,38 @@ def test_create_plan_is_qualified_parsed_and_never_executes():
     assert not result['executed'] and result['native_grammar_validated']
 
 
+@pytest.mark.parametrize('action', ['create', 'drop', 'set-default', 'rename'])
+def test_view_columns_cannot_be_reviewed_as_table_column_mutations(action):
+    pytest.importorskip('duckdb')
+    view = row('view', ['file', 'main', 'projected'],
+        ddl='CREATE VIEW "file"."main"."projected" AS SELECT 1 AS value')
+    column = row('column', ['file', 'main', 'projected', 'value'])
+    column['native']['catalog_metadata'] = {
+        'data_type': 'INTEGER', 'nullable': True, 'default': None}
+    baseline = model(view, column)
+    desired = deepcopy(baseline)
+    if action == 'create':
+        added = row('column', ['file', 'main', 'projected', 'extra'])
+        added['native']['catalog_metadata'] = {'data_type': 'INTEGER', 'nullable': True}
+        desired['rows'][added['resource_id']] = added
+    elif action == 'rename':
+        renamed = row('column', ['file', 'main', 'projected', 'renamed'],
+            change={'action': 'rename', 'from_resource_id': column['resource_id'],
+                'confirmation': 'value'})
+        renamed['native']['catalog_metadata'] = deepcopy(column['native']['catalog_metadata'])
+        desired['rows'][renamed['resource_id']] = renamed
+    else:
+        changed = desired['rows'][column['resource_id']]['native']
+        if action == 'drop':
+            changed['duckdb_change'] = {'action': 'drop', 'confirmation': 'value'}
+        else:
+            changed['duckdb_change'] = {'action': 'set-default'}
+            changed['catalog_metadata']['default'] = '2'
+    result = plan(baseline, desired, baseline)
+    assert not result['application_supported']
+    assert any('table' in item['reason'] for item in result['blockers'])
+
+
 def test_view_postcommit_body_comparison_ignores_header_and_terminal_separator():
     pytest.importorskip('duckdb')
     submitted = 'CREATE OR REPLACE VIEW "file"."main"."report" AS SELECT 2 AS x'
@@ -96,7 +128,8 @@ def test_exact_native_rename_binds_old_and_new_identity(kind, parent, old, new, 
                  resource_id=_resource_id(kind, parent, new))
     after['native']['duckdb_change'] = {'action': 'rename',
         'from_resource_id': before['resource_id'], 'confirmation': old}
-    baseline, desired = model(before), model(after)
+    parents = [row('table', parent)] if kind == 'column' else []
+    baseline, desired = model(before, *parents), model(after, *parents)
     result = plan(baseline, desired, baseline)
     assert result['application_supported'], result['blockers']
     assert result['operations'][0]['source'] == statement
@@ -104,15 +137,15 @@ def test_exact_native_rename_binds_old_and_new_identity(kind, parent, old, new, 
     assert result['operations'][0]['resource_id'] == after['resource_id']
     wrong = deepcopy(after)
     wrong['native']['duckdb_change']['confirmation'] = new
-    assert plan(baseline, model(wrong), baseline)['blockers']
+    assert plan(baseline, model(wrong, *parents), baseline)['blockers']
     changed = deepcopy(after)
     changed['native']['catalog_metadata']['comment'] = 'other edit'
-    assert plan(baseline, model(changed), baseline)['blockers']
-    occupied = plan(baseline, desired, model(before, row(kind, [*parent, new])))
+    assert plan(baseline, model(changed, *parents), baseline)['blockers']
+    occupied = plan(baseline, desired, model(before, row(kind, [*parent, new]), *parents))
     assert occupied['blockers'] and not occupied['application_supported']
     stale = deepcopy(before)
     stale['native']['catalog_metadata']['comment'] = 'changed'
-    assert plan(baseline, desired, model(stale))['conflicts']
+    assert plan(baseline, desired, model(stale, *parents))['conflicts']
 
 
 @pytest.mark.parametrize('kind,path,target', [

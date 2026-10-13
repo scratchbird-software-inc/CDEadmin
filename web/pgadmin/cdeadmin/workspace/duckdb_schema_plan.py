@@ -49,6 +49,15 @@ def _address(row, catalog):
     return '.'.join(_quote(part) for part in path)
 
 
+def _require_table_parent(row, live, catalog):
+    path = row['path']
+    parent_id = _resource_id('table', path[:2], path[2])
+    parent = live['rows'].get(parent_id)
+    if parent is None or parent['kind'] != 'table':
+        raise ValueError('Native column mutation requires an observed table parent')
+    _address(parent, catalog)
+
+
 def _definition(row):
     native = row['native']
     catalog = {key: value for key, value in native.get('catalog_metadata', {}).items()
@@ -554,6 +563,8 @@ def plan(baseline, desired, live):
                 if current is None or current['kind'] != before['kind'] or not _equal(_definition(current), _definition(before)):
                     conflicts.append({'resource_id': identity, 'reason': 'Live native definition changed since baseline'})
                     continue
+                if after['kind'] == 'column' and after['native'].get('duckdb_change') != {'action': 'set-comment'}:
+                    _require_table_parent(after, live, catalog)
             change = after['native'].get('duckdb_change')
             if (before is None and isinstance(change, dict) and
                     change.get('action') == 'rename'):
@@ -566,6 +577,8 @@ def plan(baseline, desired, live):
                     raise ValueError('Rename source is absent from baseline or live catalog')
                 _address(source_before, catalog)
                 _address(source_current, catalog)
+                if after['kind'] == 'column':
+                    _require_table_parent(after, live, catalog)
                 if (source_current['kind'] != source_before['kind'] or
                         not _equal(_definition(source_current), _definition(source_before))):
                     conflicts.append({'resource_id': identity,

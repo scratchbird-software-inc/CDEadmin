@@ -163,6 +163,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   isolated native object comments are previewed
   through the 1.5.2 native parser. A column addition requires an observed persistent
   parent table and a native type; unsupported column constraints block review.
+  View columns remain navigable but cannot enter table-column create, alter,
+  rename or drop reviews; these column mutations require an observed native
+  table parent, except columns included in a new table's CREATE statement.
+  DuckDB's supported column-comment operation remains available for view columns.
   One-field column default or nullability alterations require explicit change
   intent and an otherwise unchanged baseline definition. An explicit column
   type alteration may change only native type-derived metadata, with an
