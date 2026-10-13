@@ -12,6 +12,7 @@
     "duckdb-catalog-designer": {"reference": "SR-F-010004", "title": "DuckDB DDN catalog designer"},
     "duckdb-test-data": {"reference": "SR-F-010005", "title": "DuckDB native test-data recipes"},
     "duckdb-copy": {"reference": "SR-F-010006", "title": "DuckDB native table COPY preview"},
+    "duckdb-attachment": {"reference": "SR-F-010007", "title": "DuckDB session attachment preview"},
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

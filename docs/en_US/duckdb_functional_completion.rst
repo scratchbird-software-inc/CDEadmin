@@ -86,6 +86,13 @@ DUCK-COMP-04: Data and file workflows
   PARQUET statement. Import is a database write; export creates an external
   file that SQL rollback cannot promise to remove. Execution remains in the
   shared Query Tool with its explicit transaction controls.
+  ATTACH/DETACH planning is session-scoped and nonexecuting. An ATTACH script
+  accepts only an existing DuckDB file under the registered root, an explicit
+  alias and read-only choice; a read-only primary route cannot attach a
+  writable file. DETACH targets an explicit nonprimary alias. The script must
+  run on the chosen retained connection, since an independent connection
+  cannot observe or change another session's attachments. Never advertise
+  these aliases as separately authenticated remote servers.
 
 DUCK-COMP-05: DDN catalog, data and design exchange
   Capture native catalog and selected data into DDN views using the sister

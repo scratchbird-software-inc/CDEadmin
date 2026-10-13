@@ -1120,6 +1120,23 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_attachment_plan(self, server, request):
+        from .duckdb_attachment import plan
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+            raise ProviderWorkspaceError('Select a native DuckDB endpoint')
+        provider._require('execute', 'resource')
+        try:
+            return plan(endpoint['route'], {key: value for key, value in request.items()
+                if key != 'database_target_id'})
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def duckdb_design_asset(self, server, action, request):
         from .assets import ProjectAssetError
         from .firebird_design_assets import NativeDesignAssets

@@ -30,6 +30,7 @@ import MariaDBCatalog from './MariaDBCatalog';
 import DuckDBCatalog from './DuckDBCatalog';
 import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
+import DuckDBAttachment from './DuckDBAttachment';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import FirebirdFormLayout from './FirebirdFormLayout';
@@ -73,7 +74,7 @@ import {providerConnectionFieldGridSx} from
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
-  'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
+  'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
@@ -7830,6 +7831,7 @@ export default function ProviderWorkspaceContent({
           'mariadb-test-data': gettext('MariaDB Test Data'),
           'duckdb-test-data': gettext('DuckDB Test Data'),
           'duckdb-copy': gettext('DuckDB Native COPY'),
+          'duckdb-attachment': gettext('DuckDB Attachment'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -8167,6 +8169,8 @@ export default function ProviderWorkspaceContent({
         <DuckDBTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'duckdb-copy' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <DuckDBCopy key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} resourceId={initialContext.resource_id} />}
+      {workspace && tab === 'duckdb-attachment' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' &&
@@ -8269,7 +8273,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,

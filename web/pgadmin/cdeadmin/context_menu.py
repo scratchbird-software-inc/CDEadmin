@@ -1247,6 +1247,9 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.copy', 'Native DuckDB COPY...',
             'open_workspace', icon='action.export', group='database', priority=46,
             arguments={**base, 'tab': 'duckdb-copy'}))
+        actions.append(_action('database.duckdb.attachment', 'Plan native DuckDB attachment...',
+            'open_workspace', icon='action.connect', group='database', priority=47,
+            arguments={**base, 'tab': 'duckdb-attachment'}))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
