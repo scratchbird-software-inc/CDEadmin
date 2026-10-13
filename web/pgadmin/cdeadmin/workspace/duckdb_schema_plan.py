@@ -60,13 +60,16 @@ def _require_table_parent(row, live, catalog):
 
 def _definition(row):
     native = row['native']
+    indexes = native.get('indexes')
     catalog = {key: value for key, value in native.get('catalog_metadata', {}).items()
                if key not in {'oid', 'last_value'}}
     return {'ddl': native.get('ddl'),
             'catalog': catalog,
             'columns': native.get('columns') if row['kind'] in {'table', 'view'} else None,
             'constraints': native.get('constraints') if row['kind'] == 'table' else None,
-            'indexes': native.get('indexes') if row['kind'] == 'table' else None,
+            'indexes': ([{key: value for key, value in item.items() if key != 'oid'}
+                if isinstance(item, dict) else item for item in indexes]
+                if isinstance(indexes, list) else indexes) if row['kind'] == 'table' else None,
             'overloads': native.get('overloads') if row['kind'] == 'macro' else None,
             'definition': native.get('definition') if row['kind'] == 'macro' else None,
             'parameters': native.get('parameters') if row['kind'] == 'macro' else None,
@@ -1102,6 +1105,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     metadata = native.get('catalog_metadata', {})
     columns = native.get('columns')
     constraints = native.get('constraints')
+    indexes = sorted((row for row in live['rows'].values()
+        if row['kind'] == 'index' and row.get('path', [])[:3] == child['path']),
+        key=lambda row: row['resource_id'])
     foreign = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'FOREIGN KEY'] if (
             isinstance(constraints, list)) else []
@@ -1110,7 +1116,10 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             isinstance(constraints, list)) else []
     if (metadata.get('comment') is not None or metadata.get('tags') or
             metadata.get('temporary') is not False or
-            metadata.get('has_primary_key') is not False or native.get('indexes') or
+            metadata.get('has_primary_key') is not False or
+            not isinstance(native.get('indexes'), list) or len(indexes) > 1 or
+            {item.get('resource_id') for item in native['indexes']} !=
+                {item['resource_id'] for item in indexes} or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
@@ -1125,6 +1134,16 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             any(not isinstance(item, dict) or item.get('comment') is not None or
                 not literal_default(item.get('default')) for item in columns)):
         raise ValueError('Inbound child requires one foreign key, bounded CHECKs and plain literal defaults')
+    for index in indexes:
+        observed_index = baseline['rows'].get(index['resource_id'])
+        desired_index = desired['rows'].get(index['resource_id'])
+        index_metadata = index['native'].get('catalog_metadata', {})
+        if (observed_index is None or desired_index is None or
+                not _equal(_definition(observed_index), _definition(index)) or
+                not _equal(_definition(desired_index), _definition(index)) or
+                index_metadata.get('comment') is not None or
+                index_metadata.get('tags') or index_metadata.get('unique') is not False):
+            raise ValueError('Inbound child requires one unchanged plain independent index')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     original = native.get('ddl')
     original_sections = _table_definition_sections(original)
@@ -1174,9 +1193,12 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         return statements, check
     first, first_check = phase(source, stage_names[0])
     final, final_check = phase(restore, stage_names[1])
+    for index in indexes:
+        final.append(_validated_replayed_index(index, target))
     import duckdb
     for statement, expected in zip([*first, *final],
-            ['CREATE', 'INSERT', 'DROP', 'ALTER'] * 2):
+            ['CREATE', 'INSERT', 'DROP', 'ALTER'] * 2 +
+            ['CREATE'] * len(indexes)):
         try:
             parsed = duckdb.extract_statements(statement)
         except duckdb.Error:
@@ -1513,12 +1535,14 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         first_statements = [statement for item in inbound for statement in item[1]]
         final_statements = [statement for item in inbound for statement in item[2]]
         parent_offset = len(first_statements)
-        for number, (_child, first, final, details) in enumerate(inbound):
-            details['first_offset'] = number * len(first)
+        first_offset, final_offset = 0, parent_offset + len(parent_statements)
+        for _child, first, final, details in inbound:
+            details['first_offset'] = first_offset
             details['parent_offset'] = parent_offset
-            details['final_offset'] = (parent_offset + len(parent_statements) +
-                number * len(final))
+            details['final_offset'] = final_offset
             inbound_details.append(details)
+            first_offset += len(first)
+            final_offset += len(final)
         statements = [*first_statements, *parent_statements, *final_statements]
     stage_columns = ([{key: column.get(key) for key in
         ('name', 'data_type', 'default', 'nullable')}
@@ -1839,10 +1863,10 @@ def plan(baseline, desired, live):
                     inbound_paths = {tuple(baseline['rows'][key]['path'])
                         for key in inbound_ids}
                     inbound_rows = {key: row for key, row in baseline['rows'].items()
-                        if key in inbound_ids or (row['kind'] in {'column', 'constraint'} and
+                        if key in inbound_ids or (row['kind'] in {'column', 'constraint', 'index'} and
                             tuple(row.get('path', [])[:3]) in inbound_paths)}
                     desired_inbound_ids = {key for key, row in desired['rows'].items()
-                        if key in inbound_ids or (row['kind'] in {'column', 'constraint'} and
+                        if key in inbound_ids or (row['kind'] in {'column', 'constraint', 'index'} and
                             tuple(row.get('path', [])[:3]) in inbound_paths)}
                     if (not inbound_rows or set(inbound_rows) != desired_inbound_ids or
                             any(key not in desired['rows'] or

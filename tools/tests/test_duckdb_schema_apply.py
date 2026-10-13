@@ -1599,6 +1599,85 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('child_count,indexed_child', [(1, 1), (2, 1),
+    (2, 2), (3, 2)])
+def test_inbound_rebuild_replays_one_child_index(tmp_path, child_count, indexed_child):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa')")
+    for number in range(1, child_count + 1):
+        name = 'child' if number == 1 else f'child{number}'
+        connection.execute(f'CREATE TABLE {name}(id INTEGER, parent_id INTEGER, '
+            'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+        connection.execute(f'INSERT INTO {name} VALUES ({number * 10}, 1)')
+        if number == indexed_child:
+            connection.execute(f'CREATE INDEX {name}_id_idx ON {name}(id)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        children = [next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] ==
+                ('child' if number == 1 else f'child{number}'))
+            for number in range(1, child_count + 1)]
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        intermediate = lambda name: (f'CREATE TABLE "{root}"."main"."{name}" '
+            '(id INTEGER, parent_id INTEGER)')
+        if child_count == 1:
+            edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+                'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+                'inbound_child_resource_id': children[0]['resource_id'],
+                'intermediate_child_ddl': intermediate('child')}
+        else:
+            edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-children',
+                'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+                'inbound_children': [{'resource_id': item['resource_id'],
+                    'intermediate_ddl': intermediate(item['name'])} for item in children]}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        index = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'index' and row['name'] == children[indexed_child - 1]['name'] + '_id_idx')
+        omitted = deepcopy(desired)
+        del omitted['rows'][index['resource_id']]
+        assert not plan(baseline, omitted, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'inbound-index.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        for number in range(1, child_count + 1):
+            name = 'child' if number == 1 else f'child{number}'
+            assert observer.execute(f'SELECT id,parent_id FROM {name}').fetchall() == [
+                (number * 10, 1)]
+        assert observer.execute('SELECT index_name FROM duckdb_indexes() '
+            'WHERE table_name=?', [children[indexed_child - 1]['name']]).fetchall() == [
+            (index['name'],)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('invalid,parent_drift', (
     (False, False), (True, False), (False, True),
 ))
