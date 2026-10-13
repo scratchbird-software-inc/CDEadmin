@@ -982,9 +982,9 @@
       "reference": "SR-F-000245",
       "title": "plugin / endpoint"
     },
-    "native:mariadb:endpoint:external-function": {
+    "native:mariadb:endpoint:loadable-function": {
       "reference": "SR-F-000246",
-      "title": "external-function / endpoint"
+      "title": "loadable-function / endpoint"
     },
     "native:mariadb:endpoint:server-link": {
       "reference": "SR-F-000247",
@@ -5601,6 +5601,14 @@
     "mariadb-native-partition-operation": {
       "reference": "SR-F-001413",
       "title": "Native MariaDB partition administration"
+    },
+    "mariadb-native-server-link-operation": {
+      "reference": "SR-F-001414",
+      "title": "Native MariaDB remote server operation"
+    },
+    "mariadb-native-loadable-function-operation": {
+      "reference": "SR-F-001415",
+      "title": "Native MariaDB server loadable function operation"
     }
   }
 }

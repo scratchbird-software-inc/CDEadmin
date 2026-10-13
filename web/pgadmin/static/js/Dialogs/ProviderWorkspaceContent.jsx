@@ -6529,10 +6529,10 @@ PropertyGroup.propTypes = {
   value: PropTypes.object,
 };
 
-function selectedProperties(source, fields) {
+function selectedProperties(source, fields, includeEmpty = false) {
   return Object.fromEntries(fields.flatMap(([field, label, convert]) => {
     const value = source?.[field];
-    if (value === undefined || value === null || value === '') return [];
+    if (value === undefined || value === null || (!includeEmpty && value === '')) return [];
     return [[label, convert ? convert(value, source) : value]];
   }));
 }
@@ -6722,7 +6722,7 @@ function MariaDBDatabaseProperties({endpoint, target, server, database}) {
           ['default_character_set', gettext('Default character set')],
           ['default_collation', gettext('Default collation')],
           ['schema_comment', gettext('Database comment')],
-        ])} />
+        ], true)}/>
       <PropertyGroup title={gettext('MariaDB server identity')}
         value={selectedProperties(serverNative, [
           ['version', gettext('Server version')],

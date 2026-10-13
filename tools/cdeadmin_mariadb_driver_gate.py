@@ -160,12 +160,12 @@ def qualify(route, evidence, *, password=None):
     return proof
 
 
-def run(image, evidence, qualification=qualify, *, tls=False):
+def run(image, evidence, qualification=qualify, *, tls=False, fixture_mounts=()):
     evidence.mkdir(parents=True, exist_ok=False)
     name = 'cdeadmin-mariadb-driver-' + secrets.token_hex(8)
     identity = _image_identity(image)
     started = False
-    mounts, server_options, route_options = [], [], {}
+    mounts, server_options, route_options = list(fixture_mounts), [], {}
     if tls:
         certificates = evidence.resolve() / 'certificates'
         certificates.mkdir()
@@ -178,7 +178,7 @@ def run(image, evidence, qualification=qualify, *, tls=False):
         ], check=True, capture_output=True)
         # Disposable fixture key, readable by mysqld inside the owned image.
         (certificates / 'server.key').chmod(0o644)
-        mounts = ['--mount',
+        mounts += ['--mount',
                   f'type=bind,src={certificates},'
                   'dst=/qualification-tls,readonly']
         server_options = [

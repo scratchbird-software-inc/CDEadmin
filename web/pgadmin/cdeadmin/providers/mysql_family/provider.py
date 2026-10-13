@@ -81,7 +81,7 @@ MARIADB_PROFILE = PilotProfile(
     ('server', 'database', 'table', 'column', 'view', 'index', 'constraint',
      'sequence', 'trigger', 'event', 'procedure', 'function', 'package',
      'partition', 'tablespace', 'user', 'role', 'privilege',
-     'plugin', 'replication-channel', 'server-link', 'metric', 'session',
+     'plugin', 'replication-channel', 'server-link', 'loadable-function', 'metric', 'session',
      'system-variable', 'lock', 'lock-wait', 'table-storage', 'binary-log',
      'binary-log-event', 'binary-log-status', 'log-configuration',
      'general-log-entry', 'slow-query', 'tls-configuration'),
@@ -235,6 +235,9 @@ def _administration(profile):
             'repair_objects', 'checksum_tables', 'backup_logical',
             'restore_logical',
         })
+        from ..mariadb_server_objects import OPERATIONS as server_operations
+        for kind, operations in server_operations.items():
+            common[kind] = frozenset({'inspect'}) | operations
         from ..mariadb_packages import OPERATIONS as package_operations
         common['package'] = frozenset({'inspect', 'create', 'alter', 'drop'}) | package_operations
         from ..mariadb_partitions import OPERATIONS as partition_operations
@@ -1732,6 +1735,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         resources = {}
         catalog_failures = []
+        catalog_unavailable = []
         system_databases = {'information_schema', 'mysql',
                             'performance_schema', 'sys'}
 
@@ -1747,6 +1751,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
 
         def record_failure(source, error):
             code = getattr(error, 'errno', None)
+            server_native = resources.get('server:' + profile.engine_name, {}).get('native', {})
+            if (profile is MARIADB_PROFILE and source == 'SHOW BINARY LOGS' and
+                    code == 1381 and server_native.get('log_bin') in (0, False, '0', 'OFF')):
+                catalog_unavailable.append({'feature': 'binary-log',
+                    'state': 'disabled', 'native_error_code': 1381,
+                    'sqlstate': getattr(error, 'sqlstate', None)})
+                return
             catalog_failures.append({
                 'query_sha256': hashlib.sha256(source.encode()).hexdigest(),
                 'error_code': None if code is None else str(code),
@@ -2202,6 +2213,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             for name,record in functions.items():
                 record['administration']={'allowed_operations':['inspect','drop'] if record['registration_origin']=='mysql.func' else ['inspect']}
                 add('loadable-function',[],name,record)
+        if profile is MARIADB_PROFILE:
+            for record in optional_records('SELECT name,ret,dl,type FROM mysql.func ORDER BY name'):
+                record.update(registration_origin='mysql.func',
+                              administration={'allowed_operations': ['inspect', 'drop']})
+                add('loadable-function', [], record['name'], record)
         if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
             members=optional_records('SELECT * FROM performance_schema.replication_group_members')
             stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')
@@ -2299,13 +2315,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     'resource_type': resource_type, 'enabled': enabled,
                 })
         else:
-            for name, host, database in optional(
-                'SELECT Server_name, Host, Db FROM mysql.servers '
-                'ORDER BY Server_name'
+            for record in optional_records(
+                'SELECT Server_name, Host, Db, Username, Port, Socket, Wrapper, Owner '
+                'FROM mysql.servers ORDER BY Server_name'
             ):
-                add('server-link', [], name, {
-                    'host': host, 'database': database,
-                })
+                add('server-link', [], record['server_name'],
+                    {**record, 'database': record['db']})
             for record in optional_records(
                 'SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO, '
                 'TIME_MS, STAGE, MAX_STAGE, PROGRESS, MEMORY_USED, '
@@ -2491,6 +2506,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'complete_native_inventory': False,
             'failed_query_count': len(catalog_failures),
             'failures': catalog_failures,
+            **({'unavailable': catalog_unavailable} if catalog_unavailable else {}),
         }
         for resource in resources.values():
             if resource['resource_kind'] in {'server', 'database'}:

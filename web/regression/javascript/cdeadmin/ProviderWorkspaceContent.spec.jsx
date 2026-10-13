@@ -2044,7 +2044,7 @@ describe('ProviderWorkspaceContent', () => {
         display_name: 'cdeadmin_demo',
         extensions: {mariadb: {native: {
           default_character_set: 'utf8mb4',
-          default_collation: 'utf8mb4_general_ci', schema_comment: 'QA'}}},
+          default_collation: 'utf8mb4_general_ci', schema_comment: ''}}},
       }]},
     }}});
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
@@ -2053,6 +2053,7 @@ describe('ProviderWorkspaceContent', () => {
     expect(await screen.findByText(
       'cdeadmin_demo — MariaDB database properties')).toBeInTheDocument();
     expect(screen.getByText('MariaDB database defaults')).toBeInTheDocument();
+    expect(screen.getByText('Database comment').nextElementSibling).toHaveTextContent('');
     expect(screen.getByText('MariaDB server identity')).toBeInTheDocument();
     expect(screen.getByText('MariaDB server configuration')).toBeInTheDocument();
     expect(screen.getByText('MariaDB session and transaction state'))

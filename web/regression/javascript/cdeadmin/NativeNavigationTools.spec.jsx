@@ -1,6 +1,10 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import NativeNavigation from '../../../pgadmin/static/js/cdeadmin_ui/navigation/NativeNavigation';
-import LanguageSourceEditor from '../../../pgadmin/static/js/cdeadmin_ui/editors/LanguageSourceEditor';
+import LanguageSourceEditorBase from '../../../pgadmin/static/js/cdeadmin_ui/editors/LanguageSourceEditor';
+
+import {withTheme} from '../fake_theme';
+
+const LanguageSourceEditor = withTheme(LanguageSourceEditorBase);
 
 const node = (id, label, kind, children=[], section=null) => ({id,label,kind,children,section,form_reference:'SR-F-000085'});
 

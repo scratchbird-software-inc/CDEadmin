@@ -1126,6 +1126,7 @@
         {"resource_kind": "plugin", "title": "Server plugin", "operation_profile": "definition"},
         {"resource_kind": "replication-channel", "title": "Replication channel", "operation_profile": "mariadb_replication"},
         {"resource_kind": "server-link", "title": "Remote server", "operation_profile": "definition"},
+        {"resource_kind": "loadable-function", "title": "Server loadable function", "operation_profile": "definition"},
         {"resource_kind": "session", "title": "Session and running operation", "operation_profile": "mariadb_session"},
         {"resource_kind": "system-variable", "title": "System variable", "operation_profile": "mariadb_system_variable"},
         {"resource_kind": "lock", "title": "InnoDB lock", "operation_profile": "read_only"},

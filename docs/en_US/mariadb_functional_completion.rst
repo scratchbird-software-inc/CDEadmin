@@ -17,13 +17,33 @@ MARIA-COMP-01: Native navigation and administration
   schema identify the same native namespace. Cover tables, views, sequences,
   columns, constraints, indexes, partitions, triggers, procedures, functions,
   packages and package bodies, events, accounts, roles, grants, storage engines,
-  plugins, server links, replication, system variables, sessions and logs.
+  plugins, server links, server loadable functions, replication, system variables,
+  sessions and logs.
   Preserve system-versioned tables, application-time periods, partitioning,
   generated columns, exact native types/options and SQL-mode-dependent syntax.
   Gate features against observed server version, installed engines, SQL mode,
   privilege and edition. Do not expose MySQL components, JavaScript libraries,
   MySQL Shell or MySQL materialized views as MariaDB features. Discovery failure
   or denied metadata must not appear as an empty successful catalog.
+  An observed disabled binary log with native error 1381 is explicitly
+  unavailable, rather than a failed visibility probe. Permission denial,
+  contradictory enabled state and other failures remain incomplete coverage.
+
+  Remote server definitions expose native CREATE/ALTER/DROP SERVER with explicit
+  wrapper and selected HOST/DATABASE/USER/PASSWORD/PORT/SOCKET/OWNER options.
+  Discovery never reads remote passwords or arbitrary confidential Options.
+  Alteration changes only explicitly selected options; omitted options remain
+  unchanged. Passwords are never returned in previews or saved metadata.
+  Registration does not contact or qualify the remote server or storage engine.
+
+  Server loadable functions are distinct from stored routines and built-in
+  FUNCTION plugins. Discover mysql.func registrations and expose native scalar
+  or aggregate CREATE FUNCTION ... SONAME and DROP FUNCTION. Keep native
+  STRING/REAL/INTEGER/DECIMAL return types. Native library availability,
+  privileges and dependencies decide execution. Use an owned attachment with
+  no default database for global UDF lifecycle; a concurrent removal must never
+  turn DROP FUNCTION into removal of a same-name database routine. Native DDL
+  has independent commits; do not retry or promise user rollback.
 
   Native partition administration provides table partitioning/add/coalesce/remove
   and selected-partition analyze/check/optimize/repair/rebuild/truncate/drop,
@@ -214,7 +234,7 @@ MARIA-COMP-05: Native DDN roundtrip
 
   Server inventory reads explicitly named credential-free columns from native
   SCHEMATA, mysql.user, roles_mapping, USER_PRIVILEGES, PLUGINS, CHARACTER_SETS,
-  COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES and mysql.servers. Distinguish roles
+  COLLATIONS, ENGINES, INNODB_SYS_TABLESPACES, mysql.func and mysql.servers. Distinguish roles
   using native is_role. Plugin identity includes native name and plugin type;
   MariaDB uuid DATA TYPE and FUNCTION plugins are separate entries. Preserve
   the native name for commands. Do not read authentication_string, Password, global_priv
@@ -282,7 +302,8 @@ boundary renames require separate temporal lifecycle review.
 MariaDB administration reuses the compact native field grid and password
 confirmation controls, without enabling Firebird privilege queues or Firebird
 operations. Native package and partition forms have stable reusable reference
-numbers SR-F-001412 and SR-F-001413. Numeric partition counts use bounded integer
+numbers SR-F-001412 and SR-F-001413. Remote server and loadable-function
+forms use SR-F-001414 and SR-F-001415. Numeric partition counts use bounded integer
 controls, and fragment editors span the grid with bounded vertical scrolling.
 
 The exact dialect task inventory must track every executable provider operation.

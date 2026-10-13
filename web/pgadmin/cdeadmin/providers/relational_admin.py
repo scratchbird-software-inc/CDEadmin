@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mariadb_packages, mariadb_partitions
+from . import mariadb_packages, mariadb_partitions, mariadb_server_objects
 from . import mysql_events, mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
@@ -271,6 +271,18 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mariadb' and kind in mariadb_server_objects.OPERATIONS:
+                resource['operations'] = [{
+                    'operation_id': 'inspect', 'title': 'Inspect native object',
+                    'mutation_class': 'read', 'target_required': True,
+                    'confirmation_required': False,
+                }] + [{
+                    'operation_id': operation,
+                    'title': mariadb_server_objects.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'destructive' if operation == 'drop' else 'admin',
+                    'target_required': operation != 'create',
+                    'confirmation_required': operation != 'create',
+                } for operation in sorted(mariadb_server_objects.OPERATIONS[kind])]
             if self.dialect.engine_id == 'mariadb' and kind == 'package':
                 resource['operations'] = resource.get('operations', []) + [{
                     'operation_id': operation, 'title': mariadb_packages.form(operation, self._field)['title'],
@@ -703,6 +715,12 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id == 'mariadb' and operation_id in mariadb_server_objects.OPERATIONS.get(resource_kind, ()):
+            try:
+                mariadb_server_objects.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mariadb_server_object', 'message': str(error)})
+            return {'errors': errors}
         if self.dialect.engine_id == 'mariadb' and resource_kind == 'package' and operation_id in mariadb_packages.OPERATIONS:
             try:
                 mariadb_packages.compile_operation(operation_id, draft, request.get('target_resource'), self._safe_definition)
@@ -3173,8 +3191,9 @@ class RelationalAdministration:
         owns_connection = connection is None
         if self.dialect.engine_id=='mysql' and compiled.get('mysql_owned_event_scope') and not owns_connection:
             raise RelationalClientError('Native event administration requires an independently owned connection')
-        global_function_scope = (self.dialect.engine_id == 'mysql' and
-                                 compiled.get('mysql_global_function_scope'))
+        global_function_scope = (
+            self.dialect.engine_id == 'mysql' and compiled.get('mysql_global_function_scope')
+            or self.dialect.engine_id == 'mariadb' and compiled.get('mariadb_global_function_scope'))
         if global_function_scope:
             if not owns_connection:
                 raise RelationalClientError('Server loadable functions require an owned connection without a default database')
@@ -3756,6 +3775,11 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(request['resource_kind'], ()):
+            return {'statements': [mariadb_server_objects.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'mariadb_global_function_scope': request['resource_kind'] == 'loadable-function',
+                    'warnings': ['Native server registration has independent commits and server-global effects.',
+                                 'Remote connectivity, native library availability, privileges and dependencies are not qualified by registration.']}
         if (self.dialect.engine_id == 'mariadb' and request['resource_kind'] == 'package' and
                 operation in mariadb_packages.OPERATIONS):
             return {'statements': mariadb_packages.compile_operation(operation, request['draft'], request.get('target_resource'), self._safe_definition),
@@ -5059,6 +5083,8 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
+            return value
         if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:
             return value
         if self.dialect.engine_id=='mysql' and kind=='event':
@@ -5331,6 +5357,8 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
+            return mariadb_server_objects.form(kind, operation, self._field)
         if self.dialect.engine_id=='mysql' and kind=='event' and operation in mysql_events.OPERATIONS:
             return mysql_events.form(operation,self._field)
         if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:

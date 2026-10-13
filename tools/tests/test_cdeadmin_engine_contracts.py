@@ -444,7 +444,7 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         document, MARIADB_PROFILE,
         MARIADB_ADMINISTRATION.dialect_task_ids(),
     )
-    assert checked['coverage']['authoritative_task_count'] == 83
+    assert checked['coverage']['authoritative_task_count'] == 88
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 693,
         'statements': 59,

@@ -41,7 +41,7 @@ def test_native_forms_are_mysql_only_and_global_scope_is_compiled():
     for kind,ops in [('library',{'inspect','create','alter','drop'}),('loadable-function',{'inspect','create','drop'})]:
         row=next(row for row in catalog['objects'] if row['resource_kind']==kind)
         assert {item['operation_id'] for item in row['operations']}==ops
-        assert not MARIADB_ADMINISTRATION.supports(kind,'create')
+        assert MARIADB_ADMINISTRATION.supports(kind,'create') == (kind == 'loadable-function')
     result=MYSQL_ADMINISTRATION._compile({'resource_kind':'loadable-function','operation_id':'create','draft':{'name':'u','return_type':'INTEGER','library':'x.so'}})
     assert result['mysql_global_function_scope']
 

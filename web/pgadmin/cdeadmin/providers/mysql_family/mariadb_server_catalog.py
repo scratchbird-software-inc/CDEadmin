@@ -17,6 +17,7 @@ SECTIONS = (
     ('collations', 'collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN FROM information_schema.COLLATIONS ORDER BY COLLATION_NAME', ('collation_name',)),
     ('storage-engines', 'storage-engine', 'SELECT ENGINE, SUPPORT, COMMENT, TRANSACTIONS, XA, SAVEPOINTS FROM information_schema.ENGINES ORDER BY ENGINE', ('engine',)),
     ('tablespaces', 'tablespace', 'SELECT SPACE, NAME, FLAG, ROW_FORMAT, PAGE_SIZE, FILENAME, FS_BLOCK_SIZE, FILE_SIZE, ALLOCATED_SIZE FROM information_schema.INNODB_SYS_TABLESPACES ORDER BY SPACE', ('space',)),
+    ('loadable-functions', 'loadable-function', 'SELECT name,ret,dl,type FROM mysql.func ORDER BY name', ('name',)),
     ('server-links', 'server-link', 'SELECT Server_name, Host, Db, Username, Port, Socket, Wrapper, Owner FROM mysql.servers ORDER BY Server_name', ('server_name',)),
 )
 

@@ -30,7 +30,7 @@
       "session_settings": 708,
       "statements": 59
     },
-    "authoritative_task_count": 83,
+    "authoritative_task_count": 88,
     "authoritative_task_ids": [
       "visual_admin.binary-log-status.rotate",
       "visual_admin.binary-log.purge_before",
@@ -54,6 +54,8 @@
       "visual_admin.function.drop",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.loadable-function.create",
+      "visual_admin.loadable-function.drop",
       "visual_admin.package.alter",
       "visual_admin.package.create",
       "visual_admin.package.create_body",
@@ -92,6 +94,9 @@
       "visual_admin.sequence.create",
       "visual_admin.sequence.drop",
       "visual_admin.sequence.rename",
+      "visual_admin.server-link.alter",
+      "visual_admin.server-link.create",
+      "visual_admin.server-link.drop",
       "visual_admin.session.terminate_connection",
       "visual_admin.session.terminate_query",
       "visual_admin.system-variable.set_global",
@@ -116,7 +121,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 83,
+    "implemented_task_count": 88,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -37983,7 +37988,8 @@
   ],
   "live_evidence_ids": [
     "mariadb-12.2.2-task-live-execution",
-    "mariadb-12.2.2-native-admin-20261013-live_execution"
+    "mariadb-12.2.2-native-admin-20261013-live_execution",
+    "mariadb-12.2.2-global-objects-20261013-live_execution"
   ],
   "profile_id": "mariadb-native",
   "proof_records": [
@@ -38049,6 +38055,24 @@
       "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
       "sha256": "67e3abd3c529f826eeea84ab614c46b3ea99a27d3c6a7f5896473e446df3a333"
+    },
+    {
+      "artifact": "mariadb-global-native-5/native/summary.json",
+      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
+      "evidence_id": "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+      "evidence_kind": "parser_acceptance",
+      "format": "JSON native execution and independent observation summary",
+      "license_id": "PostgreSQL",
+      "sha256": "9ba50aacfbeed87bb281c49aa4a2f3a9459ce67513d9980442b615c42d3f7e78"
+    },
+    {
+      "artifact": "mariadb-global-native-5/native/summary.json",
+      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
+      "evidence_id": "mariadb-12.2.2-global-objects-20261013-live_execution",
+      "evidence_kind": "live_execution",
+      "format": "JSON native execution and independent observation summary",
+      "license_id": "PostgreSQL",
+      "sha256": "9ba50aacfbeed87bb281c49aa4a2f3a9459ce67513d9980442b615c42d3f7e78"
     }
   ],
   "provider_id": "org.cdeadmin.mariadb",
@@ -38406,6 +38430,36 @@
         "DROP INDEX `cde_editor_index` ON `cde_live_80876a555900`.`qualification`"
       ],
       "task_id": "visual_admin.index.drop"
+    },
+    {
+      "binding_style": "mariadb_connector_qmark",
+      "proof_ids": [
+        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+        "mariadb-12.2.2-global-objects-20261013-live_execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "CREATE AGGREGATE FUNCTION `sr_owned_aggregate` RETURNS INTEGER SONAME %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE AGGREGATE FUNCTION `sr_owned_aggregate` RETURNS INTEGER SONAME %s"
+      ],
+      "task_id": "visual_admin.loadable-function.create"
+    },
+    {
+      "binding_style": "mariadb_connector_qmark",
+      "proof_ids": [
+        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+        "mariadb-12.2.2-global-objects-20261013-live_execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP FUNCTION `sr_owned_integer`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP FUNCTION `sr_owned_integer`"
+      ],
+      "task_id": "visual_admin.loadable-function.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
@@ -38952,6 +39006,58 @@
         "RENAME TABLE `cde_live_80876a555900`.`cde_editor_sequence` TO `cde_live_80876a555900`.`cde_editor_sequence_renamed`"
       ],
       "task_id": "visual_admin.sequence.rename"
+    },
+    {
+      "binding_style": "mariadb_connector_qmark",
+      "proof_ids": [
+        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+        "mariadb-12.2.2-global-objects-20261013-live_execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER SERVER `owned_server_e7218c4a9bc4b843` OPTIONS (PASSWORD %s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER SERVER `owned_server_e7218c4a9bc4b843` OPTIONS (PASSWORD %s)"
+      ],
+      "task_id": "visual_admin.server-link.alter"
+    },
+    {
+      "binding_style": "mariadb_connector_qmark",
+      "proof_ids": [
+        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+        "mariadb-12.2.2-global-objects-20261013-live_execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4",
+        "parameter_5",
+        "parameter_6",
+        "parameter_7"
+      ],
+      "source": "CREATE SERVER `owned_server_e7218c4a9bc4b843` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE SERVER `owned_server_e7218c4a9bc4b843` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)"
+      ],
+      "task_id": "visual_admin.server-link.create"
+    },
+    {
+      "binding_style": "mariadb_connector_qmark",
+      "proof_ids": [
+        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+        "mariadb-12.2.2-global-objects-20261013-live_execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP SERVER `owned_server_e7218c4a9bc4b843`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP SERVER `owned_server_e7218c4a9bc4b843`"
+      ],
+      "task_id": "visual_admin.server-link.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
