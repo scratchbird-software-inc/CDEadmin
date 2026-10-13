@@ -1136,6 +1136,10 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     nulls = [item for item in constraints
         if isinstance(item, dict) and item.get('constraint_type') == 'NOT NULL'] if (
             isinstance(constraints, list)) else []
+    parent_foreign = [item for item in foreign
+        if item.get('referenced_table') == before['name']]
+    other_foreign = [item for item in foreign
+        if item.get('referenced_table') != before['name']]
     if (metadata.get('tags') or
             metadata.get('temporary') is not False or
             type(metadata.get('has_primary_key')) is not bool or
@@ -1146,19 +1150,34 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
-            not isinstance(constraints, list) or len(foreign) != 1 or
+            not isinstance(constraints, list) or len(parent_foreign) != 1 or
+            len(other_foreign) > 1 or
             len(checks) > 2 or len(uniques) > 2 or
             len(constraints) != len(checks) + len(uniques) +
-                len(primary) + len(nulls) + 1 or
-            foreign[0].get('referenced_table') != before['name'] or
-            not isinstance(foreign[0].get('column_names'), list) or
-            not isinstance(foreign[0].get('referenced_column_names'), list) or
-            not foreign[0]['column_names'] or
-            len(foreign[0]['column_names']) !=
-                len(foreign[0]['referenced_column_names']) or
+                len(primary) + len(nulls) + len(foreign) or
+            any(not isinstance(item.get('column_names'), list) or
+                not isinstance(item.get('referenced_column_names'), list) or
+                not item['column_names'] or
+                len(item['column_names']) != len(item['referenced_column_names'])
+                for item in foreign) or
             any(not isinstance(item, dict) or
                 not constant_default(item.get('default')) for item in columns)):
-        raise ValueError('Inbound child requires one foreign key, bounded CHECK/UNIQUE constraints and admitted defaults')
+        raise ValueError('Inbound child requires one parent key, at most one other key, bounded constraints and admitted defaults')
+    other_parent_sha256 = {}
+    for edge in other_foreign:
+        referenced = edge.get('referenced_table')
+        if (not isinstance(referenced, str) or not referenced or '.' in referenced or
+                referenced == child['name']):
+            raise ValueError('Secondary foreign key needs a separate same-schema parent')
+        parent_id = _resource_id('table', child['path'][:2], referenced)
+        parents = [model['rows'].get(parent_id) for model in
+            (baseline, live, desired)]
+        if (any(row is None or row['kind'] != 'table' or row['path'] !=
+                [*child['path'][:2], referenced] for row in parents) or
+                any(not _equal(_fk_parent_definition(parents[0]),
+                    _fk_parent_definition(row)) for row in parents[1:])):
+            raise ValueError('Secondary foreign-key parent changed or is outside the observed scope')
+        other_parent_sha256[parent_id] = digest(_fk_parent_definition(parents[0]))
     for index in indexes:
         observed_index = baseline['rows'].get(index['resource_id'])
         desired_index = desired['rows'].get(index['resource_id'])
@@ -1172,18 +1191,24 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     original = native.get('ddl')
     original_sections = _table_definition_sections(original, inline_unique=True)
     interim_sections = _table_definition_sections(source, inline_unique=True)
-    foreign_token = ('token_type.keyword', 'foreign')
     original_secondary = original_sections[1] if original_sections else ()
-    retained_sections = tuple(section for section in original_secondary
-        if foreign_token not in section)
+    parent_clause = parent_foreign[0].get('constraint_text')
+    parent_sections = (_table_definition_sections(
+        'CREATE TABLE scratchrobin_fk_clause (id INTEGER, ' + parent_clause + ')')
+        if isinstance(parent_clause, str) else None)
+    retained_sections = [tuple((*original_secondary[:position],
+        *original_secondary[position + 1:]))
+        for position, section in enumerate(original_secondary)
+        if parent_sections is not None and len(parent_sections[1]) == 1 and
+            section == parent_sections[1][0]]
     if (original_sections is None or interim_sections is None or
             any(token == ('token_type.keyword', 'generated') for token in
                 create_definition_tokens(original, 'table') or ()) or
             original_sections[0] != interim_sections[0] or
-            len(original_secondary) != len(checks) + len(uniques) + 1 or
-            len(retained_sections) != len(checks) + len(uniques) or
-            interim_sections[1] != retained_sections):
-        raise ValueError('Intermediate child must retain exact columns and constraints except its sole foreign key')
+            len(original_secondary) != len(checks) + len(uniques) + len(foreign) or
+            len(retained_sections) != 1 or
+            interim_sections[1] != retained_sections[0]):
+        raise ValueError('Intermediate child must remove only the rebuilt parent foreign key')
     original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
         re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
         r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
@@ -1271,13 +1296,14 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         'sequence_dependency_checks': sequence_checks,
         'sequence_dependency_counts': sequence_counts,
         'requires_sequence_dependency': requires_sequence_dependency,
+        'other_parent_sha256': other_parent_sha256,
         'columns': [{key: item.get(key) for key in
             ('name', 'data_type', 'default', 'nullable')} for item in columns],
         'constraints_by_phase': [[{key: item.get(key) for key in
             ('constraint_type', 'column_names', 'referenced_table',
              'referenced_column_names', 'constraint_text')}
             for item in phase] for phase in (
-                [*checks, *uniques, *primary, *nulls], constraints)]}
+                [*checks, *uniques, *primary, *nulls, *other_foreign], constraints)]}
 
 
 def _validated_check_rebuild(before, after, change, target, baseline, live, desired):
@@ -1484,7 +1510,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             if any(item.get('constraint_type') in blocked_types for item in
                     row['native'].get('constraints', [])):
                 raise ValueError('Constraint rebuild is blocked by native key dependencies')
-    fk_parents = {}
+    fk_parents = {key: value for item in inbound
+        for key, value in item[3]['other_parent_sha256'].items()}
     if action == 'rebuild-foreign-keys':
         for constraint in [*old_constraints, *new_constraints]:
             if constraint.get('constraint_type') != 'FOREIGN KEY':
