@@ -9,16 +9,22 @@ from .mysql_schema_plan import schema
 
 
 class MySQLSchemaApplications(SchemaApplications):
+    engine = 'mysql'
+    identity_key = 'server_uuid'
+    intent_key = 'mysql_change'
+    kinds = frozenset({'table', 'view', 'library', 'event', 'procedure', 'function', 'trigger', 'database', 'materialized-view'})
+    schema = staticmethod(schema)
+
     def review(self, plan, baseline, desired, owner, binding, database):
         operations = plan.get('operations', [])
-        if (plan.get('format') != 'scratchrobin.mysql.schema-plan@1' or
+        if (plan.get('format') != f'scratchrobin.{self.engine}.schema-plan@1' or
                 not plan.get('ready_for_review') or not plan.get('native_grammar_validated') or
                 not 1 <= len(operations) <= 32 or
-                any(op.get('kind') not in {'table', 'view', 'library', 'event', 'procedure', 'function', 'trigger', 'database', 'materialized-view'} or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
+                any(op.get('kind') not in self.kinds or op.get('operation') not in {'create', 'alter', 'drop'} for op in operations) or
                 len({op['resource_id'] for op in operations}) != len(operations) or
                 sum(len(op['source'].encode('utf8')) for op in operations) > 1024 * 1024 or
                 plan.get('execution_sha256') != digest(operations) or
-                not plan.get('server_uuid')):
+                not plan.get(self.identity_key)):
             raise SchemaApplyError('Prepare 1 to 32 distinct native-validated table/view/library/event/routine operations within 1 MiB')
         ids = {operation['resource_id'] for operation in operations}
         for operation in operations:
@@ -27,14 +33,14 @@ class MySQLSchemaApplications(SchemaApplications):
             if operation['operation'] == 'create':
                 if before is not None or operation['baseline_schema_sha256'] is not None:
                     raise SchemaApplyError('Native creation requires an absent baseline target')
-            elif before is None or digest(schema(before)) != operation['baseline_schema_sha256']:
+            elif before is None or digest(self.schema(before)) != operation['baseline_schema_sha256']:
                 raise SchemaApplyError('Exact native baseline is required')
-            if digest(schema(desired['rows'][key])) != operation['desired_schema_sha256']:
+            if digest(self.schema(desired['rows'][key])) != operation['desired_schema_sha256']:
                 raise SchemaApplyError('Exact desired native definition is required')
         def reduced(document):
             return {'rows': {key: {**deepcopy({field: value for field, value in row.items() if field != 'native'}),
                 'native': {field: deepcopy(value) for field, value in row['native'].items() if field in {
-                    'database', 'navigator_parent_resource_id', 'definition', 'definition_context', 'mysql_change', 'trigger_identity'}}}
+                    'database', 'system_object', 'navigator_parent_resource_id', 'definition', 'definition_context', self.intent_key, 'trigger_identity'}}}
                 for key, row in document['rows'].items() if key in ids}}
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed',
                   'created_at': self.clock(), 'expires_at': self.clock() + 300,

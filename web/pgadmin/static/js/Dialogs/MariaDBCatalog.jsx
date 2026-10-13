@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import FirebirdERD from './FirebirdERD';
+import MariaDBSchemaChanges from './MariaDBSchemaChanges';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
@@ -132,6 +133,8 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
       <TextField fullWidth multiline minRows={5} maxRows={14} label="Native SQL preview" value={metadata.script_preview || metadata.script || ''}
         slotProps={{input: {readOnly: true}}} />
     </Box>}
+    {result?.snapshot && <MariaDBSchemaChanges post={post} databaseTargetId={databaseTargetId}
+      baseline={JSON.stringify(result.snapshot)} source={source} />}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="mariadb/catalog-comparison" aria-label="MariaDB catalog differences"
         rows={comparison.changes} rowKeyGetter={row => row.resource_id} columns={[

@@ -78,6 +78,27 @@ MARIA-COMP-05: Native DDN roundtrip
   deletion intent. Do not claim catalog reads are an atomic DDL snapshot or
   translate MySQL-only grammar into a MariaDB deployment.
 
+  Three-way table previews bind the baseline, desired and live catalog to the
+  endpoint, registered database and native server_uid. Compile named CHECK removal
+  using MariaDB DROP CONSTRAINT. Preserve generated-column and temporal clauses;
+  omitted columns and application periods require exact mariadb_change.drop_columns
+  and drop_periods intent. Omitted objects are selections, never deletion intent.
+  Native PREPARE validation uses an independent UTF-8 connector connection and
+  exact-lossless native conversion into the original statement character set.
+  PREPARE never EXECUTEs during validation. Reviewed receipts are owner/target
+  bound, expire before dispatch and persist uncertainty before native execution.
+  Apply requires explicit change and exclusive-DDL-maintenance-window confirmation,
+  rechecks native UID and exact live definition/absence, and rediscovers afterward.
+  Lost acknowledgements remain unknown; batch receipts preserve each statement's
+  independently committed prefix and never automatically replay it.
+  Native MariaDB rejects many system-versioned schema changes under its default
+  history-alter policy. Require explicit mariadb_change.temporal_history=KEEP
+  before admitting such an alteration; set system_versioning_alter_history only
+  on the dedicated lease. KEEP accepts MariaDB's native historical-row/schema
+  interpretation and is not a promise to retain each older schema definition.
+  System-time history removal and period-boundary replacement require separately
+  reviewed native lifecycle operations. A lexical preview grants no execution.
+
   Catalog capture uses a dedicated idle native connection and records
   ``server_uid``, SQL mode and character context. Preserve exact SHOW CREATE
   text for databases, tables, views, sequences, routines, triggers, events,

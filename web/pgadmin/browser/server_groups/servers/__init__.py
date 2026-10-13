@@ -2641,7 +2641,7 @@ class ServerNode(PGChildNodeView):
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
+                        'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
@@ -2814,6 +2814,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action in {'mariadb_schema_plan', 'mariadb_schema_validate'}:
+                    payload = service.mariadb_schema_plan(server, data.get('request'), validate=action == 'mariadb_schema_validate')
+                elif action in {'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt'}:
+                    payload = service.mariadb_schema_application(server, action, data.get('request'))
                 elif action == 'mariadb_server_catalog':
                     payload = service.mariadb_server_catalog(server, data.get('request'))
                 elif action == 'mysql_server_catalog':

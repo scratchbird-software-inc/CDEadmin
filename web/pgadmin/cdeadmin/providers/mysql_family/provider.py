@@ -1569,6 +1569,28 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def validate_schema_plan(self, route, plan):
+        from ..mariadb_schema_validation import validate
+        self._require('administer', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB validation client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return validate(connection, plan)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def apply_schema_review(self, route, record):
+        from ..mariadb_schema_application import apply_review
+        self._require('administer', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB application client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return apply_review(connection, record)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def encode_native_metadata(self, route, metadata):
         from .mariadb_native_encoding import encode_metadata
         self._require('data_read', 'resource')

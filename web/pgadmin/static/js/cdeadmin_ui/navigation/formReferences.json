@@ -5589,6 +5589,10 @@
     "mariadb-test-data": {
       "reference": "SR-F-001410",
       "title": "MariaDB native test-data recipes"
+    },
+    "mariadb-schema-changes": {
+      "reference": "SR-F-001411",
+      "title": "MariaDB reviewed native schema changes"
     }
   }
 }

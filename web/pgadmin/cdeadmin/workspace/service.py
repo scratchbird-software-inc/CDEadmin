@@ -858,6 +858,80 @@ class ProviderWorkspaceService:
         except (ValueError, RecursionError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mariadb_schema_plan(self, server, request, *, validate=False):
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog
+        from .mariadb_schema_plan import plan
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'source'}:
+            raise ProviderWorkspaceError('Native MariaDB preview requires baseline and desired DDN')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        try:
+            baseline = read_catalog(request['baseline'], engine='mariadb')
+            desired = read_catalog(request['source'], engine='mariadb')
+            for document in (baseline, desired):
+                if (document['provenance']['endpoint_id'] != str(context.endpoint_id) or
+                        document['provenance']['database_target_id'] != target):
+                    raise ValueError('Document belongs to another endpoint or registered database')
+            captured = provider.capture_catalog(endpoint['route'])
+            live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mariadb', native_model=True)
+            result = plan(baseline, desired, live)
+            if validate:
+                result.update(provider.validate_schema_plan(endpoint['route'], result))
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_schema_apply import MariaDBSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MariaDB application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        applications = MariaDBSchemaApplications(str(store.path) + '.mariadb-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'mariadb_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                    raise ValueError('Invalid MariaDB schema review request')
+                preview = self.mariadb_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, validate=True)
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mariadb'),
+                    read_catalog(request['source'], engine='mariadb'), owner, binding, target)
+            if action == 'mariadb_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid MariaDB schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'mariadb_schema_apply':
+                raise ValueError('Unknown MariaDB schema application action')
+            def execute(record):
+                result = provider.apply_schema_review(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        result['explorer_invalidated'] = True
+                    except Exception as error:
+                        result.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return result
+            if request.get('maintenance_window_confirmed') is not True:
+                raise ValueError('Confirm an exclusive DDL maintenance window before applying')
+            return applications.apply({key: value for key, value in request.items()
+                if key not in {'database_target_id', 'maintenance_window_confirmed'}}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mariadb_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mariadb_test_data import generate, template
