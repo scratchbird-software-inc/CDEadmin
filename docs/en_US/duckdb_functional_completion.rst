@@ -382,7 +382,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
   constraints on a parent referenced by exactly one unchanged child table
   when that simple-name child has only one outgoing foreign key to the parent,
-  plain unchanged columns, and no indexes, comments, defaults, other
+  plain unchanged columns, and no indexes, comments, nonliteral defaults, other
   constraints or sequence ownership. The captured file has no user views or
   macros in this first inbound subset. The reviewer
   supplies the complete intermediate child CREATE TABLE definition without
@@ -400,10 +400,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   qualifying children, each with its own complete intermediate definition.
   The parent may also retain an independent unchanged UNIQUE constraint set;
   staging verifies its exact native columns and definition before copying rows
-  or dropping the old parent. All child foreign keys are detached before the parent swap, then each child
+  or dropping the old parent. All child foreign keys are detached before the
+  parent swap, then each child
   is restored and independently row-checked within the same transaction and
   receipt. A partial child set, overlapping child identities or a batch above
-  the statement budget is refused before dispatch.
+  the statement budget is refused before dispatch. A child's unchanged numeric,
+  string, boolean or NULL literal defaults may survive both stages; explicit
+  column-list copies never evaluate those defaults. Sequence and expression
+  defaults remain blocked pending dependency and side-effect qualification.
+  Each stage's native default facts must match the reviewed child columns
+  before the old child is dropped.
   Native staging validates existing rows against new references before the
   original child is dropped; a failure rolls back. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain

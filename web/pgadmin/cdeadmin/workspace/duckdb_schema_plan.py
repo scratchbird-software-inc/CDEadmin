@@ -1080,6 +1080,13 @@ def _validated_replayed_comment(kind, target, comment):
 def _validated_inbound_child(before, child_id, intermediate_ddl,
         baseline, live, desired):
     """Bind one plain FK child for a three-phase parent rebuild."""
+    def literal_default(value):
+        if value is None:
+            return True
+        return (isinstance(value, str) and len(value) <= 256 and
+            re.fullmatch(r"(?:[+-]?[0-9]+(?:\.[0-9]+)?|'(?:[^']|'')*'|TRUE|FALSE|NULL)",
+                value.strip(), re.I) is not None)
+
     child = live['rows'].get(child_id)
     old_child = baseline['rows'].get(child_id)
     new_child = desired['rows'].get(child_id)
@@ -1110,8 +1117,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             len(constraints[0]['column_names']) !=
                 len(constraints[0]['referenced_column_names']) or
             any(not isinstance(item, dict) or item.get('comment') is not None or
-                item.get('default') is not None for item in columns)):
-        raise ValueError('Inbound child must have only its foreign key and plain columns')
+                not literal_default(item.get('default')) for item in columns)):
+        raise ValueError('Inbound child requires its sole foreign key and plain literal defaults')
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     original = native.get('ddl')
     original_sections = _table_definition_sections(original)

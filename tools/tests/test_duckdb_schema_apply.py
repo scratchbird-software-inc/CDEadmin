@@ -1417,18 +1417,21 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
 @pytest.mark.parametrize('invalid', [False, True])
 @pytest.mark.parametrize('child_count', [1, 2, 3])
 @pytest.mark.parametrize('retained_unique', [False, True])
+@pytest.mark.parametrize('literal_defaults', [False, True])
 def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
-        tmp_path, invalid, child_count, retained_unique):
+        tmp_path, invalid, child_count, retained_unique, literal_defaults):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     unique_definition = 'code INTEGER UNIQUE, ' if retained_unique else ''
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, ' +
         unique_definition + 'payload VARCHAR CHECK(length(payload) > 0))')
-    connection.execute('CREATE TABLE child(id INTEGER, parent_id INTEGER, '
+    child_columns = ('id INTEGER DEFAULT(7), parent_id INTEGER DEFAULT(1)'
+        if literal_defaults else 'id INTEGER, parent_id INTEGER')
+    connection.execute('CREATE TABLE child(' + child_columns + ', '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     for number in range(2, child_count + 1):
-        connection.execute(f'CREATE TABLE child{number}(id INTEGER, parent_id INTEGER, '
+        connection.execute(f'CREATE TABLE child{number}(' + child_columns + ', '
             'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute(('INSERT INTO parent VALUES (1, 100, ?), (2, 200, ?)'
         if retained_unique else 'INSERT INTO parent VALUES (1, ?), (2, ?)'),
@@ -1465,7 +1468,7 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
                 else 'rebuild-check-with-inbound-children'),
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         intermediate = lambda name: (f'CREATE TABLE "{root}"."main"."{name}" '
-            '(id INTEGER, parent_id INTEGER)')
+            '(' + child_columns + ')')
         if child_count == 1:
             change.update(inbound_child_resource_id=children[0]['resource_id'],
                 intermediate_child_ddl=intermediate('child'))
@@ -1531,11 +1534,58 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
             "WHERE table_name='parent' AND constraint_type='CHECK'").fetchone()[0] == (
             'CHECK((length(payload) > 0))' if invalid else
             'CHECK((length(payload) >= 2))')
+        if literal_defaults and not invalid:
+            observer.execute('INSERT INTO child DEFAULT VALUES')
+            assert observer.execute('SELECT id,parent_id FROM child WHERE id=7').fetchall() == [
+                (7, 1)]
         if retained_unique:
             assert observer.execute("SELECT constraint_column_names FROM duckdb_constraints() "
                 "WHERE table_name='parent' AND constraint_type='UNIQUE'").fetchall() == [
                 (['code'],)]
         observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute('CREATE TABLE child(id DOUBLE DEFAULT random(), '
+        'parent_id INTEGER, FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 1))'
+        check['expression'] = '(length(payload) >= 1)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 1)))')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
+                '(id DOUBLE DEFAULT random(), parent_id INTEGER)'}
+        preview = plan(baseline, desired, baseline)
+        assert not preview['application_supported']
+        assert any('plain literal defaults' in item['reason']
+            for item in preview['blockers'])
     finally:
         provider.client.close()
 
