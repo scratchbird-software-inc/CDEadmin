@@ -319,8 +319,20 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE intent accepts CHECK and UNIQUE constraints. An unchanged primary
   key and its implicit NOT NULL constraint may be retained only when their
   complete native definitions and child catalog facts are unchanged. Primary
-  key creation, removal or alteration and all foreign-key changes remain
-  outside this migration. Unchanged independent indexes are
+  key creation, removal or alteration remain outside this migration. An
+  isolated ``rebuild-foreign-keys`` intent may add, remove or replace the
+  complete outgoing foreign-key set of one child table. It retains unchanged
+  CHECK, primary-key and NOT NULL facts, and uses the same staged copy,
+  index/comment replay and exact post-commit child verification. The
+  referenced parent tables must be observed in the same catalog and schema,
+  differ from the child, and have unchanged semantic definitions bound into
+  the review receipt. Global native constraint ordinals can shift when the
+  child is recreated and are excluded from that parent comparison. No other
+  table may have a foreign key in this first native
+  subset; this also excludes inbound references to the child. Unchanged
+  independent UNIQUE constraints are not yet admitted alongside this action.
+  Native staging validates existing rows against new references before the
+  original child is dropped; a failure rolls back. Unchanged independent indexes are
   replayed after the table swap. Existing column defaults must remain
   identical in the reviewed native CREATE TABLE body and catalog; the data
   copy names every column explicitly, so it never evaluates those defaults.

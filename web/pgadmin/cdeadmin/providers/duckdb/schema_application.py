@@ -126,7 +126,7 @@ def apply_review(provider, route, record):
                         current['native'].get('catalog_metadata', {}).get('comment') ==
                             baseline['native'].get('catalog_metadata', {}).get('comment'))
                     if verified:
-                        from ...workspace.duckdb_schema_plan import _definition
+                        from ...workspace.duckdb_schema_plan import _definition, _fk_parent_definition
                         from ...workspace.firebird_schema_plan import digest
                         def signatures(items):
                             return sorted((item.get('constraint_type'),
@@ -156,6 +156,12 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][index_id])) ==
                                 operation['desired_index_sha256'][index_id]
                                 for index_id in operation['affected_index_ids'])
+                        if verified:
+                            verified = all(observed['rows'].get(parent_id) is not None and
+                                digest(_fk_parent_definition(observed['rows'][parent_id])) ==
+                                    parent_sha
+                                for parent_id, parent_sha in operation.get(
+                                    'fk_parent_sha256', {}).items())
                 else:
                     from ...workspace.duckdb_schema_plan import _definition
                     from ...workspace.firebird_schema_plan import digest

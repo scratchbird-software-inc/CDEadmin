@@ -1,4 +1,4 @@
-"""DuckDB DDN review claims one native statement and never replays it."""
+"""DuckDB DDN reviews bind bounded native operations without replaying outcomes."""
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -1248,6 +1248,212 @@ def test_constraint_rebuild_blocks_observed_sequence_ownership(tmp_path):
             for blocker in preview['blockers'])
     finally:
         connection.close()
+        provider.client.close()
+
+
+@pytest.mark.parametrize('invalid,parent_drift', (
+    (False, False), (True, False), (False, True),
+))
+def test_isolated_foreign_key_rebuild_adds_constraint_or_rolls_back(
+        tmp_path, invalid, parent_drift):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY)')
+    connection.execute('CREATE TABLE checked(id INTEGER, p_id INTEGER)')
+    connection.execute('INSERT INTO parent VALUES (1), (2)')
+    connection.execute('INSERT INTO checked VALUES (10, 1), (11, ?)',
+        [9 if invalid else 2])
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        root = original['path'][0]
+        child_name = 'checked_p_id_id_fkey'
+        child_id = _resource_id('constraint', [root, 'main', 'checked'],
+            child_name, discriminator=0)
+        constraint = {'resource_id': child_id, 'name': child_name,
+            'constraint_index': 0, 'constraint_type': 'FOREIGN KEY',
+            'constraint_text': 'FOREIGN KEY (p_id) REFERENCES parent(id)',
+            'expression': None, 'column_indexes': [1], 'column_names': ['p_id'],
+            'referenced_table': 'parent', 'referenced_column_names': ['id']}
+        edited['constraints'] = [constraint]
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."checked" '
+            '(id INTEGER, p_id INTEGER, FOREIGN KEY (p_id) REFERENCES parent(id))')
+        edited['duckdb_change'] = {'action': 'rebuild-foreign-keys',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        desired['rows'][child_id] = {'resource_id': child_id, 'kind': 'constraint',
+            'name': child_name, 'path': [root, 'main', 'checked', child_name],
+            'system': 'false', 'native': {'system_object': False,
+                'catalog_metadata': {key: value for key, value in constraint.items()
+                    if key not in {'resource_id', 'name'}}}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert set(preview['operations'][0]['fk_parent_sha256']) == {
+            parent['resource_id']}
+        applications = DuckDBSchemaApplications(tmp_path/'foreign-key-add.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        if parent_drift:
+            changed_parent = duckdb.connect(route['database'])
+            changed_parent.execute('ALTER TABLE parent ADD COLUMN extra INTEGER')
+            changed_parent.close()
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        expected = 'not_dispatched' if parent_drift else (
+            'rolled_back' if invalid else 'committed')
+        assert outcome['state'] == expected, outcome
+        if not invalid and not parent_drift:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id, p_id FROM checked ORDER BY id').fetchall() == [
+            (10, 1), (11, 9 if invalid else 2)]
+        observed_fks = observer.execute("SELECT constraint_type FROM duckdb_constraints() "
+            "WHERE table_name='checked'").fetchall()
+        assert observed_fks == ([] if invalid or parent_drift else [('FOREIGN KEY',)])
+        if not invalid and not parent_drift:
+            with pytest.raises(duckdb.ConstraintException):
+                observer.execute('INSERT INTO checked VALUES (12, 9)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_isolated_foreign_key_rebuild_removes_complete_outgoing_set(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY)')
+    connection.execute('CREATE TABLE checked(id INTEGER, p_id INTEGER, '
+        'FOREIGN KEY (p_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO parent VALUES (1)')
+    connection.execute('INSERT INTO checked VALUES (10, 1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        child_id = edited['constraints'][0]['resource_id']
+        edited['constraints'] = []
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, p_id INTEGER)')
+        edited['duckdb_change'] = {'action': 'rebuild-foreign-keys',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        desired['rows'].pop(child_id)
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'foreign-key-drop.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        observer.execute('INSERT INTO checked VALUES (11, 9)')
+        assert observer.execute('SELECT id, p_id FROM checked ORDER BY id').fetchall() == [
+            (10, 1), (11, 9)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_isolated_foreign_key_rebuild_retargets_a_parent(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent_old(id INTEGER PRIMARY KEY)')
+    connection.execute('CREATE TABLE parent_new(id INTEGER PRIMARY KEY)')
+    connection.execute('CREATE TABLE checked(id INTEGER, p_id INTEGER, '
+        'FOREIGN KEY (p_id) REFERENCES parent_old(id))')
+    connection.execute('INSERT INTO parent_old VALUES (1), (2)')
+    connection.execute('INSERT INTO parent_new VALUES (1)')
+    connection.execute('INSERT INTO checked VALUES (10, 1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        constraint = edited['constraints'][0]
+        child_id = constraint['resource_id']
+        constraint['constraint_text'] = 'FOREIGN KEY (p_id) REFERENCES parent_new(id)'
+        constraint['referenced_table'] = 'parent_new'
+        desired['rows'][child_id]['native']['catalog_metadata'].update(
+            constraint_text=constraint['constraint_text'],
+            referenced_table='parent_new')
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER, p_id INTEGER, FOREIGN KEY (p_id) REFERENCES parent_new(id))')
+        edited['duckdb_change'] = {'action': 'rebuild-foreign-keys',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['fk_parent_sha256']) == 2
+        applications = DuckDBSchemaApplications(tmp_path/'foreign-key-retarget.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO checked VALUES (11, 2)')
+        assert observer.execute('SELECT id, p_id FROM checked').fetchall() == [(10, 1)]
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_foreign_key_rebuild_blocks_an_inbound_reference(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY)')
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, p_id INTEGER)')
+    connection.execute('CREATE TABLE dependent(checked_id INTEGER REFERENCES checked(id))')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        original = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][original['resource_id']]['native']
+        edited['constraints'].append({'constraint_type': 'FOREIGN KEY',
+            'referenced_table': 'parent'})
+        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
+            '(id INTEGER PRIMARY KEY, p_id INTEGER, '
+            'FOREIGN KEY (p_id) REFERENCES parent(id))')
+        edited['duckdb_change'] = {'action': 'rebuild-foreign-keys',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert not preview['application_supported']
+        assert any('native key dependencies' in blocker['reason']
+            for blocker in preview['blockers'])
+    finally:
         provider.client.close()
 
 

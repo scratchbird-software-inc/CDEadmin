@@ -73,6 +73,15 @@ def _definition(row):
             'overload_count': native.get('overload_count') if row['kind'] == 'macro' else None}
 
 
+def _fk_parent_definition(row):
+    """Bind parent semantics without DuckDB's file-global constraint ordinals."""
+    definition = deepcopy(_definition(row))
+    for constraint in definition.get('constraints') or []:
+        constraint.pop('constraint_index', None)
+        constraint.pop('resource_id', None)
+    return definition
+
+
 def _validated_ddl(source, kind, path, *, replace=False):
     if (not isinstance(source, str) or not source or '\x00' in source or
             len(source.encode('utf8')) > 1024 * 1024):
@@ -519,9 +528,11 @@ def _table_definition_sections(source, *, inline_unique=False):
             return None
         if section[0] in {('token_type.keyword', 'check'),
                           ('token_type.keyword', 'unique'),
+                          ('token_type.keyword', 'foreign'),
                           ('token_type.keyword', 'constraint')}:
             if not any(token in section for token in
-                    (('token_type.keyword', 'check'), ('token_type.keyword', 'unique'))):
+                    (('token_type.keyword', 'check'), ('token_type.keyword', 'unique'),
+                     ('token_type.keyword', 'foreign'))):
                 return None
             checks.append(section)
         else:
@@ -1022,10 +1033,11 @@ def _validated_replayed_comment(kind, target, comment):
     return source
 
 
-def _validated_check_rebuild(before, after, change, target, live, desired):
+def _validated_check_rebuild(before, after, change, target, baseline, live, desired):
     action = change.get('action') if isinstance(change, dict) else None
     allowed = {'rebuild-check-constraints': {'CHECK'},
-        'rebuild-unique-constraints': {'CHECK', 'UNIQUE'}}.get(action)
+        'rebuild-unique-constraints': {'CHECK', 'UNIQUE'},
+        'rebuild-foreign-keys': {'FOREIGN KEY'}}.get(action)
     if allowed is None or change != {'action': action,
                   'complete_definition_confirmed': True,
                   'preserve_rows_confirmed': True}:
@@ -1033,7 +1045,8 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
     old, new = deepcopy(_definition(before)), deepcopy(_definition(after))
     old_constraints, new_constraints = old.pop('constraints'), new.pop('constraints')
     old.pop('ddl'); new.pop('ddl')
-    retained_types = {'PRIMARY KEY', 'NOT NULL'}
+    retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK'} if
+        action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL'})
     old_retained = [item for item in old_constraints
         if item.get('constraint_type') in retained_types] if isinstance(old_constraints, list) else []
     new_retained = [item for item in new_constraints
@@ -1048,6 +1061,10 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
             item.get('constraint_type') == 'UNIQUE' for item in
             [*old_constraints, *new_constraints]):
         raise ValueError('UNIQUE rebuild requires an observed or desired UNIQUE constraint')
+    if action == 'rebuild-foreign-keys' and not any(
+            item.get('constraint_type') == 'FOREIGN KEY' for item in
+            [*old_constraints, *new_constraints]):
+        raise ValueError('Foreign-key rebuild requires an observed or desired foreign key')
     metadata = before['native'].get('catalog_metadata', {})
     columns = before['native'].get('columns')
     if (type(metadata.get('has_primary_key')) is not bool or metadata.get('tags') or
@@ -1074,25 +1091,52 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
                 row['kind'] == 'sequence' and row['native'].get(
                     'catalog_metadata', {}).get('automatic_dependency_observed') is True):
             raise ValueError('Constraint rebuild is blocked by a native dependent object category')
-        if row['kind'] == 'table' and any(item.get('constraint_type') in
-                ({'FOREIGN KEY'} | ({'UNIQUE'} if action ==
-                 'rebuild-check-constraints' else set()) if
-                 row['resource_id'] == before['resource_id'] else {'FOREIGN KEY'}) for item in
-                row['native'].get('constraints', [])):
-            raise ValueError('Constraint rebuild is blocked by native key dependencies')
+        if row['kind'] == 'table':
+            blocked_types = ({'UNIQUE'} if action == 'rebuild-foreign-keys' else
+                {'FOREIGN KEY'} | ({'UNIQUE'} if action ==
+                    'rebuild-check-constraints' else set())) if (
+                row['resource_id'] == before['resource_id']) else {'FOREIGN KEY'}
+            if any(item.get('constraint_type') in blocked_types for item in
+                    row['native'].get('constraints', [])):
+                raise ValueError('Constraint rebuild is blocked by native key dependencies')
+    fk_parents = {}
+    if action == 'rebuild-foreign-keys':
+        for constraint in [*old_constraints, *new_constraints]:
+            if constraint.get('constraint_type') != 'FOREIGN KEY':
+                continue
+            referenced = constraint.get('referenced_table')
+            if (not isinstance(referenced, str) or not referenced or
+                    '.' in referenced or referenced == before['name']):
+                raise ValueError('Foreign key requires a separate same-schema parent table')
+            parent_path = [*before['path'][:2], referenced]
+            parent_id = _resource_id('table', parent_path[:2], referenced)
+            parent_rows = [model['rows'].get(parent_id) for model in
+                (baseline, live, desired)]
+            if (any(row is None or row['kind'] != 'table' or row['path'] != parent_path
+                    for row in parent_rows) or
+                    any(not _equal(_fk_parent_definition(parent_rows[0]),
+                        _fk_parent_definition(row))
+                        for row in parent_rows[1:])):
+                raise ValueError('Foreign-key parent changed or is outside the observed scope')
+            fk_parents[parent_id] = digest(_fk_parent_definition(parent_rows[0]))
     source = _validated_ddl(after['native'].get('ddl'), 'table', after['path'])
     body = create_definition_tokens(source, 'table')
     original_sections = _table_definition_sections(before['native'].get('ddl'),
         inline_unique=action == 'rebuild-unique-constraints')
     desired_sections = _table_definition_sections(source,
         inline_unique=action == 'rebuild-unique-constraints')
+    old_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
+        for item in old_constraints)
+    new_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
+        for item in new_constraints)
     if (body is None or original_sections is None or desired_sections is None or
             not original_sections[0] or original_sections[0] != desired_sections[0] or
-            len(original_sections[1]) != len(old_constraints) - len(old_retained) or
-            len(desired_sections[1]) != len(new_constraints) - len(new_retained) or any(
+            len(original_sections[1]) != len(old_constraints) - old_inline or
+            len(desired_sections[1]) != len(new_constraints) - new_inline or any(
             kind == 'token_type.keyword' and word in
-                ({'foreign', 'references', 'generated'} |
-                 ({'unique'} if action == 'rebuild-check-constraints' else set()))
+                ({'generated'} |
+                 ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
+                 ({'unique'} if action != 'rebuild-unique-constraints' else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
@@ -1156,7 +1200,7 @@ def _validated_check_rebuild(before, after, change, target, live, desired):
         if len(parsed) != 1 or parsed[0].type != getattr(duckdb.StatementType, expected):
             raise ValueError('Native constraint rebuild requires exact reviewed statements')
     return (statements, check, dependency_check, dependency_count,
-        requires_sequence_dependency, source, new_constraints, indexes)
+        requires_sequence_dependency, source, new_constraints, indexes, fk_parents)
 
 
 def _ordered_operations(operations, desired):
@@ -1216,7 +1260,8 @@ def plan(baseline, desired, live):
     rebuild_tables = {identity for identity, row in desired['rows'].items()
         if row['kind'] == 'table' and isinstance(row['native'].get('duckdb_change'), dict)
         and row['native']['duckdb_change'].get('action') in
-            {'rebuild-check-constraints', 'rebuild-unique-constraints'}}
+            {'rebuild-check-constraints', 'rebuild-unique-constraints',
+             'rebuild-foreign-keys'}}
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
         if before is not None and (after.get('resource_id') != identity or
@@ -1349,12 +1394,15 @@ def plan(baseline, desired, live):
                 source, _pk_columns = _validated_primary_key(before, after, change, target)
             elif (after['kind'] == 'table' and isinstance(change, dict) and
                   change.get('action') in
-                  {'rebuild-check-constraints', 'rebuild-unique-constraints'}):
+                  {'rebuild-check-constraints', 'rebuild-unique-constraints',
+                   'rebuild-foreign-keys'}):
                 operation = 'rebuild'
                 (_rebuild_statements, _data_check, _dependency_check,
                  _dependency_count, _requires_sequence_dependency,
-                 _original_source, _expected_constraints, _replayed_indexes) = (
-                    _validated_check_rebuild(before, after, change, target, live, desired))
+                 _original_source, _expected_constraints, _replayed_indexes,
+                 _fk_parents) = (
+                    _validated_check_rebuild(before, after, change, target,
+                        baseline, live, desired))
                 source = ';\n'.join(item.rstrip().rstrip(';') for item in
                     _rebuild_statements) + ';'
             elif (after['kind'] == 'column' and isinstance(change, dict) and
@@ -1458,6 +1506,7 @@ def plan(baseline, desired, live):
                         desired['rows'][row['resource_id']])) for row in _replayed_indexes},
                     baseline_index_sha256={row['resource_id']: digest(_definition(
                         baseline['rows'][row['resource_id']])) for row in _replayed_indexes},
+                    fk_parent_sha256=_fk_parents,
                     postcondition={'constraints': _expected_constraints})
             operations.append(operation_record)
         except (ValueError, KeyError, TypeError) as error:

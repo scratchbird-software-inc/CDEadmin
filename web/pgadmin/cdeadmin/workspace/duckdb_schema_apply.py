@@ -6,7 +6,7 @@ import uuid
 
 from .firebird_schema_apply import SchemaApplications, SchemaApplyError
 from .firebird_schema_plan import digest
-from .duckdb_schema_plan import _definition, _root
+from .duckdb_schema_plan import _definition, _fk_parent_definition, _root
 
 
 class DuckDBSchemaApplications(SchemaApplications):
@@ -64,6 +64,15 @@ class DuckDBSchemaApplications(SchemaApplications):
                         raise SchemaApplyError('Constraint rebuild index facts differ from reviewed plan')
                     baseline_ids.add(index_id)
                     desired_ids.add(index_id)
+                for parent_id, parent_sha in operation.get('fk_parent_sha256', {}).items():
+                    old_parent = baseline['rows'].get(parent_id)
+                    new_parent = desired['rows'].get(parent_id)
+                    if (old_parent is None or new_parent is None or
+                            digest(_fk_parent_definition(old_parent)) != parent_sha or
+                            digest(_fk_parent_definition(new_parent)) != parent_sha):
+                        raise SchemaApplyError('Foreign-key parent differs from reviewed plan')
+                    baseline_ids.add(parent_id)
+                    desired_ids.add(parent_id)
         if (_root(baseline) != preview['catalog'] or _root(desired) != preview['catalog'] or
                 any(baseline['provenance'].get(key) != desired['provenance'].get(key)
                     for key in ('endpoint_id', 'database_target_id'))):
