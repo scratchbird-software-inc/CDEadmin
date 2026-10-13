@@ -97,3 +97,27 @@ def test_index_preview_binds_local_name_and_qualified_parent():
     dropped = plan(model(table, index), model(table, deleted), model(table, index))
     assert dropped['application_supported']
     assert dropped['operations'][0]['source'] == 'DROP INDEX "file"."main"."facts_x" RESTRICT'
+
+
+def test_column_add_and_explicit_drop_use_qualified_parent():
+    pytest.importorskip('duckdb')
+    table = row('table', ['file', 'main', 'facts'])
+    column = row('column', ['file', 'main', 'facts', 'amount'])
+    column['native']['catalog_metadata'] = {
+        'data_type': 'DECIMAL(18,2)', 'nullable': True, 'default': '0'}
+    result = plan(model(table), model(table, column), model(table))
+    assert result['application_supported']
+    assert result['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" ADD COLUMN "amount" DECIMAL(18,2) DEFAULT 0')
+    assert plan(model(), model(column), model())['blockers']
+    for changes in ({'nullable': False}, {'comment': 'not yet admitted'},
+                    {'data_type': 'INTEGER DEFAULT 5'}, {'data_type': 'INTEGER; DROP TABLE facts'}):
+        edited = deepcopy(column)
+        edited['native']['catalog_metadata'].update(changes)
+        assert plan(model(table), model(table, edited), model(table))['blockers']
+    removed = deepcopy(column)
+    removed['native']['duckdb_change'] = {'action': 'drop', 'confirmation': 'amount'}
+    drop = plan(model(table, column), model(table, removed), model(table, column))
+    assert drop['application_supported']
+    assert drop['operations'][0]['source'] == (
+        'ALTER TABLE "file"."main"."facts" DROP COLUMN "amount" RESTRICT')

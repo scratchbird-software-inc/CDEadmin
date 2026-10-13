@@ -133,8 +133,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   plan review and application are separately qualified.
   Three-way design preview compares a saved baseline and edited DDN with a
   fresh native capture. Only explicit, exactly qualified DuckDB CREATE objects,
-  exact-name index CREATE on a qualified table, explicit DROP intent and view
-  replacement are currently previewed through the 1.5.2 native parser. An
+  exact-name index CREATE on a qualified table, nullable native column ADD,
+  explicit DROP intent and view replacement are currently previewed through
+  the 1.5.2 native parser. A column addition requires an observed persistent
+  parent table and a native type; unsupported column constraints block review.
+  An
   index's native identity includes its table, but DuckDB CREATE INDEX names
   the index without catalog qualification; DROP INDEX qualifies the index by
   catalog and schema. The reviewed target must match both forms exactly.

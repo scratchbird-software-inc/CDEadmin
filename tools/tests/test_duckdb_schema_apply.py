@@ -268,3 +268,44 @@ def test_reviewed_index_creation_and_drop_use_native_table_identity(tmp_path):
         observer.close()
     finally:
         provider.client.close()
+
+
+def test_reviewed_nullable_column_add_and_drop_are_native(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    try:
+        root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')
+        path = [root, 'main', 'existing', 'label']
+        identity = _resource_id('column', path[:-1], path[-1])
+        desired = deepcopy(baseline)
+        desired['rows'][identity] = {'resource_id': identity, 'kind': 'column',
+            'name': 'label', 'path': path, 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': {
+                'data_type': 'VARCHAR', 'nullable': True, 'default': "'ready'"}}}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'column-add.json', clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired, 'owner', 'binding', 'file-1')
+        added = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert added['state'] == 'committed' and added['outcome']['rediscovery_verified'], added
+        observed = provider.capture_catalog(route)
+        fresh = build_export(observed['resources'], endpoint_id='endpoint-1', target_id='file-1',
+            generation=observed['generation'], refreshed=True, engine='duckdb', native_model=True)
+        assert identity in fresh['rows']
+        remove = deepcopy(fresh)
+        remove['rows'][identity]['native']['duckdb_change'] = {
+            'action': 'drop', 'confirmation': 'label'}
+        preview = plan(fresh, remove, fresh)
+        assert preview['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'column-drop.json', clock=lambda: 100)
+        receipt = applications.review(preview, fresh, remove, 'owner', 'binding', 'file-1')
+        dropped = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert dropped['state'] == 'committed' and dropped['outcome']['rediscovery_verified'], dropped
+        observer = duckdb.connect(route['database'])
+        assert observer.execute("SELECT count(*) FROM duckdb_columns() "
+            "WHERE table_name='existing' AND column_name='label'").fetchone() == (0,)
+        observer.close()
+    finally:
+        provider.client.close()

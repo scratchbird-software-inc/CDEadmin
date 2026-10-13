@@ -10,7 +10,7 @@ from ..providers.duckdb.provider import _resource_id
 
 _KINDS = {'schema': 'SCHEMA', 'table': 'TABLE', 'view': 'VIEW',
           'sequence': 'SEQUENCE', 'type': 'TYPE', 'macro': 'MACRO',
-          'index': 'INDEX'}
+          'index': 'INDEX', 'column': 'COLUMN'}
 _NAME = r'"(?:""|[^"])+"'
 
 
@@ -33,7 +33,7 @@ def _address(row, catalog):
     kind, path = row['kind'], row['path']
     if kind not in _KINDS or not isinstance(path, list):
         raise ValueError('Native adapter for this object kind is not admitted')
-    expected = 2 if kind == 'schema' else 4 if kind == 'index' else 3
+    expected = 2 if kind == 'schema' else 4 if kind in {'index', 'column'} else 3
     if len(path) != expected or path[0] != catalog or path[-1] != row['name']:
         raise ValueError('Object must identify this exact catalog and native schema')
     if row['resource_id'] != _resource_id(kind, path[:-1], path[-1]) or row['system'] != 'false':
@@ -99,6 +99,36 @@ def _validated_index_ddl(source, path):
     return source
 
 
+def _validated_column_add(row):
+    native = row['native']
+    metadata = native.get('catalog_metadata', {})
+    data_type = metadata.get('data_type')
+    if (not isinstance(data_type, str) or not data_type.strip() or
+            len(data_type.encode('utf8')) > 1024 or '\x00' in data_type):
+        raise ValueError('Column addition requires one bounded native data type')
+    if (any(marker in data_type for marker in (';', '--', '/*', '*/')) or
+            re.search(r'\b(?:DEFAULT|CONSTRAINT|CHECK|GENERATED|PRIMARY|UNIQUE|REFERENCES)\b',
+                      data_type, re.I)):
+        raise ValueError('Column data type cannot contain SQL clauses or comments')
+    if metadata.get('nullable') is False or metadata.get('comment') or native.get('ddl'):
+        raise ValueError('Column constraints, comments and direct DDL are not admitted by ADD COLUMN')
+    parent = '.'.join(_quote(part) for part in row['path'][:3])
+    source = 'ALTER TABLE ' + parent + ' ADD COLUMN ' + _quote(row['name']) + ' ' + data_type.strip()
+    default = metadata.get('default')
+    if default is not None:
+        if not isinstance(default, str) or not default.strip():
+            raise ValueError('Native column default must be a nonempty SQL expression')
+        source += ' DEFAULT ' + default.strip()
+    import duckdb
+    try:
+        statements = duckdb.extract_statements(source)
+    except duckdb.Error:
+        raise ValueError('Native DuckDB parser rejected this column addition') from None
+    if len(statements) != 1 or statements[0].type != duckdb.StatementType.ALTER:
+        raise ValueError('Exactly one native ADD COLUMN statement is required')
+    return source
+
+
 def plan(baseline, desired, live):
     catalog = _root(live)
     for model in (baseline, desired):
@@ -123,16 +153,17 @@ def plan(baseline, desired, live):
             if before is None:
                 if change is not None:
                     raise ValueError('Creation cannot carry replacement or deletion intent')
-                if after['kind'] == 'index':
+                if after['kind'] in {'index', 'column'}:
                     parent_path = after['path'][:3]
                     parent_id = _resource_id('table', parent_path[:2], parent_path[2])
                     parent = live['rows'].get(parent_id)
                     if parent is None:
-                        raise ValueError('Index creation requires an observed native parent table')
+                        raise ValueError('Child creation requires an observed native parent table')
                     _address(parent, catalog)
                 operation = 'create'
                 source = (_validated_index_ddl(after['native'].get('ddl'), after['path'])
                           if after['kind'] == 'index' else
+                          _validated_column_add(after) if after['kind'] == 'column' else
                           _validated_ddl(after['native'].get('ddl'), after['kind'], after['path']))
             elif change == {'action': 'drop', 'confirmation': before['name']}:
                 retained = deepcopy(after)
@@ -143,14 +174,18 @@ def plan(baseline, desired, live):
                 drop_target = ('.'.join(_quote(part) for part in
                     [after['path'][0], after['path'][1], after['name']])
                     if after['kind'] == 'index' else target)
-                source = 'DROP ' + _KINDS[after['kind']] + ' ' + drop_target + ' RESTRICT'
+                source = ('ALTER TABLE ' + '.'.join(_quote(part) for part in
+                    after['path'][:3]) + ' DROP COLUMN ' + _quote(after['name']) + ' RESTRICT'
+                    if after['kind'] == 'column' else
+                    'DROP ' + _KINDS[after['kind']] + ' ' + drop_target + ' RESTRICT')
                 import duckdb
                 try:
                     statements = duckdb.extract_statements(source)
                 except duckdb.Error:
-                    raise ValueError('Native DuckDB DROP grammar is unavailable') from None
-                if len(statements) != 1 or statements[0].type != duckdb.StatementType.DROP:
-                    raise ValueError('Native DROP grammar is unavailable')
+                    raise ValueError('Native DuckDB removal grammar is unavailable') from None
+                expected_type = duckdb.StatementType.ALTER if after['kind'] == 'column' else duckdb.StatementType.DROP
+                if len(statements) != 1 or statements[0].type != expected_type:
+                    raise ValueError('Native removal grammar is unavailable')
             elif change == {'action': 'replace'} and after['kind'] == 'view':
                 operation = 'replace'
                 source = _validated_ddl(after['native'].get('ddl'), 'view', after['path'], replace=True)
