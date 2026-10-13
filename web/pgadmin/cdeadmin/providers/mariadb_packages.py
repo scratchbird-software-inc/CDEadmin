@@ -61,4 +61,4 @@ def form(operation, field):
             field('definition', 'Declaration or body fragment', 'code', True,
                 'Enter the fragment after the qualified package name, including END; native MariaDB validates grammar.')]
     if not create:fields.append(field('confirmation', 'Confirmation', 'text', True))
-    return {'form_id': 'package.' + operation, 'title': TITLES[operation], 'fields': fields}
+    return {'form_key':'mariadb-native-package-operation', 'form_id': 'mariadb.package.' + operation, 'title': TITLES[operation], 'fields': fields}

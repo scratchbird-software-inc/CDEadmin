@@ -237,6 +237,9 @@ def _administration(profile):
         })
         from ..mariadb_packages import OPERATIONS as package_operations
         common['package'] = frozenset({'inspect', 'create', 'alter', 'drop'}) | package_operations
+        from ..mariadb_partitions import OPERATIONS as partition_operations
+        for kind, operations in partition_operations.items():
+            common[kind] = common[kind] | operations
     return RelationalAdministration(RelationalAdminDialect(
         engine_id=profile.engine_id,
         quote_open='`',

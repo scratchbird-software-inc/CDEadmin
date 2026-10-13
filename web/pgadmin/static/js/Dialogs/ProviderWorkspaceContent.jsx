@@ -1149,6 +1149,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   const allFields = operation?.form?.fields || [];
   const compactFirebird = catalog?.engine_id === 'firebird' ||
     /^firebird[._]/.test(operation?.form_id || '');
+  const compactNativeForms = compactFirebird || catalog?.engine_id === 'mariadb';
   const fields = allFields.filter((field) => fieldVisible(field, draft)).map(
     (field) => visibleFieldOptions(field, draft, inspectedResource));
   const targetKinds = operation?.target_resource_kinds || [resourceKind];
@@ -1574,8 +1575,8 @@ export function VisualAdministration({catalog, resources, selectedResource, post
           <Box component="fieldset" disabled={working || inspecting}
             sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 2,
               p: 0, border: 0, minWidth: 0}}>
-            <FormReference formKey={'operation:' + operation?.form_id} />
-            {compactFirebird ? <FirebirdFormLayout fields={fields} draft={draft}
+            <FormReference formKey={catalog.engine_id === 'mariadb' && operation?.form?.form_key || 'operation:' + operation?.form_id} />
+            {compactNativeForms ? <FirebirdFormLayout fields={fields} draft={draft}
               key={resourceKind + ':' + operationId + ':' + (targetResource?.resource_id || '')}
               onValidityChange={setNativeFormValid}
               disabled={working || inspecting}
@@ -1626,13 +1627,13 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       label={gettext('I confirm this provider-planned operation.')} />}
           <Box sx={{display: 'flex', gap: 1, mt: 2}}>
             <Button variant="contained" disabled={working || inspecting || !operation ||
-        (compactFirebird && !nativeFormValid) ||
+        (compactNativeForms && !nativeFormValid) ||
         operation.graphical_ready === false ||
         targetUnavailable} onClick={preview}>
               {gettext('Validate and preview')}
             </Button>
             <Button color="warning" disabled={working || inspecting || targetUnavailable || plan?.state !== 'ready' ||
-        (compactFirebird && !nativeFormValid) ||
+        (compactNativeForms && !nativeFormValid) ||
         !plan?.execution_available || (operation?.confirmation_required && !confirmed)}
             onClick={apply}>{gettext('Apply provider plan')}</Button>
             {working && <CircularProgress size={24} />}

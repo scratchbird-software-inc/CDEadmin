@@ -2,6 +2,7 @@
 import argparse
 from copy import deepcopy
 import json
+import hashlib
 from pathlib import Path
 import secrets
 from types import SimpleNamespace
@@ -83,6 +84,28 @@ def qualify(route, evidence, *, password=None):
         assert 'PERIOD FOR `validity` (`starts`, `ends`)' in definition
         assert 'KEY `by_start` (`starts`)' in definition
         proof['checks'].append('stable_field_uid_rename_preserves_native_application_period_and_index')
+        cursor.execute('CREATE TABLE parent(id INT PRIMARY KEY)')
+        cursor.execute('CREATE TABLE child(parent_id INT)')
+        before = capture(); desired = deepcopy(before['diagram']['snapshot'])
+        mapped = read_catalog(json.dumps(before['snapshot']), engine='mariadb')['rows']
+        child = next(row for row in mapped.values() if row['kind']=='table' and row['name']=='child')
+        parent = next(row for row in mapped.values() if row['kind']=='table' and row['name']=='parent')
+        alias = lambda row: 'n_'+hashlib.sha256(row['resource_id'].encode()).hexdigest()
+        source = desired['files']['relations.ddn']
+        start = source.index('object '+alias(child)+' ')
+        offset = source.index('fields {', start)+len('fields {')
+        source = source[:offset]+'field authored_uuid "authored_uuid" {uid:"authored-uuid";datatype:"UUID";nullable:true;description:"native graphical column";}'+source[offset:]
+        intent = {'format':'scratchrobin.mariadb.foreign-key@1','action':'create','name':'authored_fk',
+                  'columns':['parent_id'],'referenced_columns':['id'],'on_delete':'CASCADE','on_update':'RESTRICT'}
+        relationship = 'relation authored_fk "authored fk" @'+alias(child)+' -> @'+alias(parent)+' {kind:ref;enforcement:database;uid:"authored-fk";x_record:{native_json:'+json.dumps(json.dumps(intent))+'};}'
+        offset = source.index('\n}\nview ')
+        desired['files']['relations.ddn'] = source[:offset]+relationship+source[offset:]
+        apply_graphical(before,desired,allow_new_columns=True,allow_foreign_keys=True)
+        observed=observer.cursor();observed.execute('SHOW CREATE TABLE child');definition=observed.fetchone()[1];observed.close()
+        assert '`authored_uuid` uuid' in definition and 'CONSTRAINT `authored_fk` FOREIGN KEY' in definition
+        cursor.execute('INSERT INTO parent VALUES(1)');cursor.execute('INSERT INTO child(parent_id) VALUES(1)');cursor.execute('DELETE FROM parent WHERE id=1')
+        observed=observer.cursor();observed.execute('SELECT COUNT(*) FROM child');assert observed.fetchone()[0]==0;observed.close()
+        proof['checks'].append('public_ddn_new_uuid_column_and_native_foreign_key_enforce_cascading_parent_delete')
         proof['complete'] = True
     finally:
         if observer is not None: observer.close()

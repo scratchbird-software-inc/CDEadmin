@@ -40,7 +40,7 @@ def test_forms_and_compiler_are_mysql_specific_and_confirmed():
     for kind,operations in partitions.OPERATIONS.items():
         nodes={row['operation_id']:row for row in catalog[kind]['operations']}
         for operation in operations:
-            assert MYSQL_ADMINISTRATION.supports(kind,operation) and not MARIADB_ADMINISTRATION.supports(kind,operation)
+            assert MYSQL_ADMINISTRATION.supports(kind,operation)
             assert nodes[operation]['target_required'] and nodes[operation]['confirmation_required']
             assert nodes[operation]['form']['form_id']=='mysql.'+kind+'.'+operation
     request={'resource_kind':'table','operation_id':'add_partitions','target_resource':TABLE,'draft':{'mode':'COUNT','count':2},'_provider_route':{'host':'trusted'}}

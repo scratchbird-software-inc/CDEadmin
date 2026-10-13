@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mariadb_packages
+from . import mariadb_packages, mariadb_partitions
 from . import mysql_events, mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
@@ -323,6 +323,12 @@ class RelationalAdministration:
                 additions = mysql_partitions.OPERATIONS[kind]
                 resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
                     'operation_id': operation, 'title': mysql_partitions.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
+            if self.dialect.engine_id == 'mariadb' and kind in mariadb_partitions.OPERATIONS:
+                additions = mariadb_partitions.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mariadb_partitions.form(kind, operation, self._field)['title'],
                     'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                 } for operation in sorted(additions)]
             if self.dialect.engine_id == 'mysql' and kind == 'tablespace':
@@ -750,6 +756,12 @@ class RelationalAdministration:
                 mysql_partitions.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
             except RelationalClientError as error:
                 errors.append({'field_id': None, 'code': 'invalid_mysql_partition', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mariadb' and operation_id in mariadb_partitions.OPERATIONS.get(resource_kind, ())):
+            try:
+                mariadb_partitions.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mariadb_partition', 'message': str(error)})
             return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and resource_kind == 'tablespace' and operation_id in mysql_tablespaces.OPERATIONS):
             try:
@@ -3784,6 +3796,10 @@ class RelationalAdministration:
             return {'statements': [mysql_partitions.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Native partition DDL commits independently and can delete or exchange data.',
                                  'Native engine, method, privileges and row-placement validation remain authoritative.']}
+        if (self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mariadb_partitions.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native partition DDL commits independently and can delete or exchange data.',
+                                 'Native engine, method, privileges and row-placement validation remain authoritative.']}
         if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'tablespace' and operation in mysql_tablespaces.OPERATIONS):
             return {'statements': [mysql_tablespaces.compile_operation(operation, request['draft'], request.get('target_resource'))],
                     'warnings': ['Tablespace DDL commits independently; DROP can remove native datafiles.',
@@ -5063,6 +5079,8 @@ class RelationalAdministration:
             return value
         if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
             return value
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
+            return value
         if self.dialect.engine_id == 'mysql' and kind in {'resource-group', 'system-variable', 'session', 'tablespace'}:
             return value
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
@@ -5333,6 +5351,8 @@ class RelationalAdministration:
             return mysql_replication.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
             return mysql_partitions.form(kind, operation, self._field)
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
+            return mariadb_partitions.form(kind, operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'tablespace' and operation in mysql_tablespaces.OPERATIONS:
             return mysql_tablespaces.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(kind, ()):

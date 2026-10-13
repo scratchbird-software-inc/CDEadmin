@@ -25,6 +25,17 @@ MARIA-COMP-01: Native navigation and administration
   MySQL Shell or MySQL materialized views as MariaDB features. Discovery failure
   or denied metadata must not appear as an empty successful catalog.
 
+  Native partition administration provides table partitioning/add/coalesce/remove
+  and selected-partition analyze/check/optimize/repair/rebuild/truncate/drop,
+  exchange, reorganize and conversion to a standalone table. Conversion from
+  an existing table requires explicit native partition definition text. Bind
+  every action to its exact owning database/table/partition and require review
+  and confirmation. Preserve native RANGE/LIST/HASH/KEY, subpartition and
+  SYSTEM_TIME grammar. The native server decides storage-engine, foreign-key,
+  current/history-partition and row-placement eligibility; do not disable
+  constraints or promise transactional rollback of partition DDL. Exchange and
+  conversion expose native WITH/WITHOUT VALIDATION explicitly.
+
   Package discovery retains declaration and body observations separately on the
   package node, including both native SHOW CREATE results. A same-name body must
   never overwrite declaration metadata. In addition to combined create/replace,
@@ -267,3 +278,15 @@ Application-period boundary renames compile an explicit DROP PERIOD and ADD PERI
 in the same native ALTER as the column rename, preserving its final period and
 constraint. MariaDB does not automatically rename the period reference. System-time
 boundary renames require separate temporal lifecycle review.
+
+MariaDB administration reuses the compact native field grid and password
+confirmation controls, without enabling Firebird privilege queues or Firebird
+operations. Native package and partition forms have stable reusable reference
+numbers SR-F-001412 and SR-F-001413. Numeric partition counts use bounded integer
+controls, and fragment editors span the grid with bounded vertical scrolling.
+
+The exact dialect task inventory must track every executable provider operation.
+Package/partition additions require native parser and live execution evidence
+before admission. Keep the provider task-ID set and dialect coverage identical;
+an inventory mismatch must continue to block generated DDL rather than bypass
+the engine gate.

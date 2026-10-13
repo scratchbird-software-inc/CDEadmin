@@ -5593,6 +5593,14 @@
     "mariadb-schema-changes": {
       "reference": "SR-F-001411",
       "title": "MariaDB reviewed native schema changes"
+    },
+    "mariadb-native-package-operation": {
+      "reference": "SR-F-001412",
+      "title": "Native MariaDB package declaration/body operation"
+    },
+    "mariadb-native-partition-operation": {
+      "reference": "SR-F-001413",
+      "title": "Native MariaDB partition administration"
     }
   }
 }
