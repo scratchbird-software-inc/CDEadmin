@@ -1617,7 +1617,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             (generated_names and action not in {'rebuild-check-constraints',
                 'rebuild-unique-constraints', 'rebuild-foreign-keys',
                 'rebuild-check-with-inbound-child',
-                'rebuild-check-with-inbound-children'}) or
+                'rebuild-check-with-inbound-children',
+                'rebuild-column-order'}) or
             not original_sections[0] or (action not in {
                 'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                 'rebuild-column-order'} and

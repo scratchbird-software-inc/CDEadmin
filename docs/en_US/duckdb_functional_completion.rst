@@ -336,8 +336,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   directions, replays unchanged independent indexes and comments, and verifies
   the final column order and child rows after commit. The ordinary dependent
   view and macro binding checks apply; a changed ``SELECT *`` projection must
-  roll the transaction back. Foreign-key edges, generated columns, native tags
-  and unaccounted sequence ownership remain blockers.
+  roll the transaction back. Unchanged virtual generated columns may accompany
+  the reorder under the simple-expression whitelist used by the constraint
+  rebuild. The staged copy names only base columns and compares the complete
+  row multiset, including recomputed generated values, before dropping the
+  original table. Foreign-key edges, non-whitelisted generated expressions,
+  native tags and unaccounted sequence ownership remain blockers.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may
