@@ -519,8 +519,9 @@ def test_native_enum_extension_is_append_only_and_warns_about_existing_columns()
     commented = deepcopy(existing)
     commented['native']['catalog_metadata']['comment'] = 'preserve'
     changed['native']['catalog_metadata']['comment'] = 'preserve'
-    assert 'discard native comment' in plan(
-        model(commented), model(changed), model(commented))['blockers'][0]['reason']
+    comment_preview = plan(model(commented), model(changed), model(commented))
+    assert comment_preview['application_supported'], comment_preview['blockers']
+    assert len(comment_preview['operations'][0]['statements']) == 2
 
 
 def test_scalar_macro_definition_replacement_rejects_other_edits():

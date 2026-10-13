@@ -198,9 +198,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   label in order and appends distinct new labels. It uses one reviewed native
   ``CREATE OR REPLACE TYPE``. DuckDB does not retarget columns that already
   reference the prior type definition; any such column conversion requires a
-  separate reviewed column alteration. A native enum extension is blocked
-  when the old object has a comment or tags, because ``CREATE OR REPLACE``
-  discards those facts and the one-statement adapter cannot restore them.
+  separate reviewed column alteration. An enum extension with an unchanged
+  native comment replays it after ``CREATE OR REPLACE TYPE`` in the same
+  transaction and verifies it after commit; native tags still block replacement.
   A view replacement replays unchanged view and column comments in the same
   native transaction after ``CREATE OR REPLACE VIEW``; a changed comment,
   a missing commented column in the desired model or any native tags block
@@ -246,12 +246,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   value. A ``replace-sequence`` design intent therefore requires a complete,
   exactly qualified native statement and an explicit ``reset_state_confirmed``
   assertion. Review changes only observed start, minimum, maximum, increment
-  and cycle options; a sequence with a comment or tags is blocked because
-  replacement could discard that metadata. An automatic ownership dependency
+  and cycle options. An unchanged sequence comment is replayed in the same
+  transaction and verified after commit; native tags still block replacement.
+  An automatic ownership dependency
   observed on the current native catalog also blocks replacement before
   dispatch; this observation does not assert that ownership survives a file
   reopen. Application rechecks the old
-  definition in its transaction, dispatches the statement once, and verifies
+  definition in its transaction, dispatches the replacement and any comment
+  replay once each, and verifies
   the new option values after commit. Native dependency checks govern
   replacement; do not use ``CASCADE`` or silently detach dependents. DuckDB
   1.5.2 preserves a simple table default referencing a replaced sequence;
@@ -269,8 +271,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``CREATE OR REPLACE TYPE`` statement and an explicit whole-definition
   confirmation. The edited design must declare the complete resolved type,
   broad logical category, labels and native size it expects; changing other
-  metadata in the same review is blocked. A comment or tags on the old type
-  block replacement because native recreation can discard them. After commit,
+  metadata in the same review is blocked. An unchanged type comment is
+  replayed after replacement in the same transaction and verified after
+  commit; native tags still block replacement. After commit,
   capture the type again and compare its resolved definition and reported
   metadata. Replacing a named type does not imply that columns already using
   the old type are converted; those columns require separate reviewed changes.

@@ -1646,6 +1646,7 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
     connection = duckdb.connect(route['database'])
     if kind == 'type':
         connection.execute("CREATE TYPE mood AS ENUM ('ok', 'bad')")
+        connection.execute("COMMENT ON TYPE mood IS 'enum note'")
         name = 'mood'
     else:
         connection.execute('CREATE MACRO plusone(x) AS x + 1')
@@ -1671,8 +1672,7 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
                 'action': 'replace-definition', 'parameters_without_defaults_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
-        if kind == 'macro':
-            assert len(preview['operations'][0]['statements']) == 2
+        assert len(preview['operations'][0]['statements']) == 2
         applications = DuckDBSchemaApplications(tmp_path/f'{kind}-replace.json',
             clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired,
@@ -1684,6 +1684,8 @@ def test_reviewed_native_enum_or_scalar_macro_replacement(tmp_path, kind):
         if kind == 'type':
             assert observer.execute("SELECT labels FROM duckdb_types() "
                 "WHERE type_name='mood'").fetchone()[0] == ['ok', 'bad', 'great']
+            assert observer.execute("SELECT comment FROM duckdb_types() "
+                "WHERE type_name='mood'").fetchone()[0] == 'enum note'
         else:
             assert observer.execute('SELECT plusone(5)').fetchone() == (7,)
             assert observer.execute("SELECT comment FROM duckdb_functions() "
@@ -1852,6 +1854,7 @@ def test_reviewed_native_sequence_replacement_requires_reset_intent(tmp_path):
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE SEQUENCE counter START 3 INCREMENT 2')
     assert connection.execute("SELECT nextval('counter')").fetchone() == (3,)
+    connection.execute("COMMENT ON SEQUENCE counter IS 'sequence note'")
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1872,17 +1875,16 @@ def test_reviewed_native_sequence_replacement_requires_reset_intent(tmp_path):
             'action': 'replace-sequence', 'reset_state_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) == 2
         unconfirmed = deepcopy(desired)
         unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'] = {
             'action': 'replace-sequence'}
         assert 'reset confirmation' in plan(
             baseline, unconfirmed, baseline)['blockers'][0]['reason']
-        commented_baseline = deepcopy(baseline)
         commented_desired = deepcopy(desired)
-        commented_baseline['rows'][original['resource_id']]['native']['catalog_metadata']['comment'] = 'keep'
-        commented_desired['rows'][original['resource_id']]['native']['catalog_metadata']['comment'] = 'keep'
-        assert 'discard native comment' in plan(
-            commented_baseline, commented_desired, commented_baseline)['blockers'][0]['reason']
+        commented_desired['rows'][original['resource_id']]['native'][
+            'catalog_metadata']['comment'] = 'changed note'
+        assert not plan(baseline, commented_desired, baseline)['application_supported']
         applications = DuckDBSchemaApplications(tmp_path/'sequence-replace.json',
             clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired,
@@ -1892,6 +1894,8 @@ def test_reviewed_native_sequence_replacement_requires_reset_intent(tmp_path):
         assert outcome['state'] == 'committed' and outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
         assert observer.execute("SELECT nextval('counter')").fetchone() == (20,)
+        assert observer.execute("SELECT comment FROM duckdb_sequences() "
+            "WHERE sequence_name='counter'").fetchone()[0] == 'sequence note'
         observer.close()
         assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
     finally:
@@ -1953,6 +1957,7 @@ def test_reviewed_native_complete_type_replacement(tmp_path, name, original_type
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute(f'CREATE TYPE "{name}" AS {original_type}')
+    connection.execute(f"COMMENT ON TYPE \"{name}\" IS 'type note'")
     if name == 'payload':
         connection.execute('CREATE TABLE typed_payload(value payload)')
     connection.close()
@@ -1974,6 +1979,7 @@ def test_reviewed_native_complete_type_replacement(tmp_path, name, original_type
             'action': 'replace-type', 'complete_definition_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['statements']) == 2
         unconfirmed = deepcopy(desired)
         unconfirmed['rows'][original['resource_id']]['native']['duckdb_change'] = {
             'action': 'replace-type'}
@@ -1989,6 +1995,8 @@ def test_reviewed_native_complete_type_replacement(tmp_path, name, original_type
         observer = duckdb.connect(route['database'])
         assert observer.execute(
             f'SELECT typeof(NULL::"{root}"."main"."{name}")').fetchone() == (resolved,)
+        assert observer.execute("SELECT comment FROM duckdb_types() WHERE type_name = ?",
+            [name]).fetchone()[0] == 'type note'
         if name == 'payload':
             assert observer.execute("SELECT data_type FROM duckdb_columns() "
                 "WHERE table_name='typed_payload' AND column_name='value'").fetchone() == (

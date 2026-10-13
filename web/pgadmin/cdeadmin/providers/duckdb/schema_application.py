@@ -210,6 +210,10 @@ def apply_review(provider, route, record):
                             .get('comment') == comment and all(
                             overload.get('catalog_metadata', {}).get('comment') == comment
                             for overload in current['native'].get('overloads', [])))
+                    if (verified and operation['kind'] in {'sequence', 'type'} and
+                            'preserved_comment' in operation):
+                        verified = (current['native'].get('catalog_metadata', {})
+                            .get('comment') == operation['preserved_comment'])
                 checks.append({'resource_id': operation['resource_id'], 'verified': verified})
                 rediscovered.append(current['resource_id'] if current else None)
             result['rediscovery_checks'] = checks

@@ -357,9 +357,9 @@ def _validated_nested_struct_change(before, after, change):
 def _validated_enum_extension(before, after, target):
     previous = deepcopy(_definition(before))
     desired = deepcopy(_definition(after))
-    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
-            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
-        raise ValueError('Enum replacement would discard native comment or tags')
+    if (previous['catalog'].get('comment') != desired['catalog'].get('comment') or
+            previous['catalog'].get('tags') or desired['catalog'].get('tags')):
+        raise ValueError('Enum replacement requires unchanged comment and no native tags')
     old_labels = previous['catalog'].pop('labels', None)
     new_labels = desired['catalog'].pop('labels', None)
     if (previous['catalog'].get('logical_type') != 'ENUM' or
@@ -861,9 +861,9 @@ def _validated_sequence_replacement(before, after, change):
     if (previous['catalog'].get('automatic_dependency_observed') or
             desired['catalog'].get('automatic_dependency_observed')):
         raise ValueError('Sequence replacement is blocked by an observed automatic dependency')
-    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
-            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
-        raise ValueError('Sequence replacement would discard native comment or tags')
+    if (previous['catalog'].get('comment') != desired['catalog'].get('comment') or
+            previous['catalog'].get('tags') or desired['catalog'].get('tags')):
+        raise ValueError('Sequence replacement requires unchanged comment and no native tags')
     old_options = {key: previous['catalog'].pop(key, None) for key in _SEQUENCE_OPTIONS}
     new_options = {key: desired['catalog'].pop(key, None) for key in _SEQUENCE_OPTIONS}
     if (old_options == new_options or
@@ -879,9 +879,9 @@ def _validated_type_replacement(before, after, change):
     if change != {'action': 'replace-type', 'complete_definition_confirmed': True}:
         raise ValueError('Type replacement requires explicit whole-definition confirmation')
     previous, desired = deepcopy(_definition(before)), deepcopy(_definition(after))
-    if (previous['catalog'].get('comment') is not None or previous['catalog'].get('tags') or
-            desired['catalog'].get('comment') is not None or desired['catalog'].get('tags')):
-        raise ValueError('Type replacement would discard native comment or tags')
+    if (previous['catalog'].get('comment') != desired['catalog'].get('comment') or
+            previous['catalog'].get('tags') or desired['catalog'].get('tags')):
+        raise ValueError('Type replacement requires unchanged comment and no native tags')
     old_fields = {key: previous['catalog'].pop(key, None) for key in _TYPE_CATALOG_FIELDS}
     new_fields = {key: desired['catalog'].pop(key, None) for key in _TYPE_CATALOG_FIELDS}
     resolved = new_fields['resolved_type']
@@ -1385,6 +1385,12 @@ def plan(baseline, desired, live):
                 operation_record['preserved_column_comments'] = _view_column_comments
                 if _view_comment_replays:
                     operation_record['statements'] = [source, *_view_comment_replays]
+            if operation == 'replace' and after['kind'] in {'sequence', 'type'}:
+                comment = after['native'].get('catalog_metadata', {}).get('comment')
+                replay = _validated_replayed_comment(after['kind'], target, comment)
+                operation_record['preserved_comment'] = comment
+                if replay is not None:
+                    operation_record['statements'] = [source, replay]
             if (operation == 'replace' and after['kind'] == 'macro' and
                     change.get('action') in {'replace-definition', 'replace-macro'}):
                 operation_record['preserved_comment'] = after['native'].get(
