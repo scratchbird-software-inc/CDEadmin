@@ -127,7 +127,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
             'inspect', 'create', 'alter', 'rename', 'drop',
             'insert', 'update', 'delete',
         }),
-        'view': frozenset({'inspect', 'create', 'drop'}),
+        'view': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
         'column': frozenset({'inspect', 'create', 'rename', 'drop'}),
         'constraint': frozenset({'inspect'}),
         'index': frozenset({'inspect', 'create', 'drop'}),

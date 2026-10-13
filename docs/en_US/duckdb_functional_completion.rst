@@ -294,6 +294,16 @@ DUCK-COMP-07: Contextual compact forms
   navigable data grids. Preserve supported native functionality without adding
   features from other engines. Require review and exact target authorization
   for mutations; display native capability or configuration limits explicitly.
+  DuckDB view rename uses native ``ALTER VIEW ... RENAME TO``. Its Alter form
+  emits ``CREATE OR REPLACE VIEW`` from one reviewed SELECT/WITH query; the
+  generic ``ALTER VIEW ... AS`` statement is not DuckDB syntax. A macro Alter
+  form takes one exact fully qualified ``CREATE OR REPLACE MACRO`` statement,
+  including every intended overload and default argument, rather than
+  reconstructing one signature from incomplete catalog metadata. Both
+  replacements require explicit whole-definition and comment/tag-reset
+  acknowledgement, validate one native CREATE statement before dispatch,
+  and show the reviewed statement. The DDN preservation path remains stricter
+  and blocks a replacement that would silently discard metadata.
 
 DUCK-COMP-08: Qualification and cleanup
   Qualify native driver, catalog, structured administration, SQL, data, file,

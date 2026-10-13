@@ -8,6 +8,23 @@ from ...sdk.relational import RelationalClientError
 
 class DuckDBAdministration(RelationalAdministration):
     def _form(self, kind, operation):
+        if operation == 'alter' and kind in {'view', 'macro'}:
+            fields = [self._field(
+                'query' if kind == 'view' else 'source',
+                'Replacement SELECT/WITH query' if kind == 'view' else
+                'Complete qualified CREATE OR REPLACE MACRO statement',
+                'code', True,
+                'DuckDB replaces the entire definition and all macro overloads.'
+                if kind == 'macro' else 'Enter one SELECT or WITH query.')]
+            fields.extend((
+                self._field('complete_definition_confirmed',
+                    'I reviewed the complete replacement definition', 'boolean', True),
+                self._field('metadata_reset_acknowledged',
+                    'I accept that native replacement clears comments and tags',
+                    'boolean', True),
+            ))
+            return {'form_id': f'duckdb.{kind}.alter',
+                'title': f'Replace DuckDB {kind}', 'fields': fields}
         if kind == 'database' and operation in {'export_database', 'import_database'}:
             exporting = operation == 'export_database'
             fields = [self._field('directory', 'Export directory' if exporting else 'Import directory',
@@ -19,6 +36,64 @@ class DuckDBAdministration(RelationalAdministration):
                 'title': 'Export DuckDB logical database' if exporting else 'Import DuckDB logical database',
                 'fields': fields}
         return super()._form(kind, operation)
+
+    def _definition_replacement(self, request):
+        kind = request['resource_kind']
+        draft = request.get('draft') or {}
+        expected = ({'query', 'definition'} if kind == 'view' else {'source'}) | {
+            'complete_definition_confirmed', 'metadata_reset_acknowledged'}
+        if (set(draft) - expected - {'changes'} or draft.get('changes') or
+                (kind == 'view' and 'query' in draft and 'definition' in draft) or
+                draft.get('complete_definition_confirmed') is not True or
+                draft.get('metadata_reset_acknowledged') is not True):
+            raise RelationalClientError(
+                'DuckDB replacement requires one complete definition and explicit metadata-reset acknowledgement')
+        path = self._target_path(request.get('target_resource'))
+        if len(path) != 3:
+            raise RelationalClientError('DuckDB replacement requires the exact catalog, schema and object')
+        if kind == 'view':
+            source = ('CREATE OR REPLACE VIEW ' + self._qualified(path) +
+                      ' AS ' + self._query_body(draft.get('query', draft.get('definition'))))
+        else:
+            source = draft.get('source')
+        from ...workspace.duckdb_schema_plan import _validated_ddl
+        try:
+            source = _validated_ddl(source, kind, path, replace=True)
+        except ValueError as error:
+            raise RelationalClientError(str(error)) from None
+        return {'statements': [{'source': source, 'parameters': ()}],
+            'warnings': [
+                'Native replacement clears existing comments and tags; restore them separately if needed.',
+                'The complete macro signature set, including defaults, is operator-authored.'
+                if kind == 'macro' else
+                'The replacement view query is bound and checked by DuckDB at execution.',
+            ]}
+
+    def validate(self, request):
+        result = super().validate(request)
+        if (not result['errors'] and request.get('operation_id') == 'alter' and
+                request.get('resource_kind') in {'view', 'macro'}):
+            try:
+                self._definition_replacement(request)
+            except RelationalClientError as error:
+                result['errors'].append({'field_id': None,
+                    'code': 'invalid_duckdb_definition_replacement',
+                    'message': str(error)})
+        return result
+
+    def _compile(self, request):
+        if (request['operation_id'] == 'alter' and
+                request['resource_kind'] in {'view', 'macro'}):
+            return self._definition_replacement(request)
+        return super()._compile(request)
+
+    def plan(self, request):
+        result = super().plan(request)
+        if (request.get('operation_id') == 'alter' and
+                request.get('resource_kind') == 'macro'):
+            result['command_preview']['provider_constructed'] = False
+            result['command_preview']['source_origin'] = 'operator-reviewed-native-statement'
+        return result
 
     @staticmethod
     def _duckdb_operation_directory(route, value, importing=False):
