@@ -474,22 +474,23 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   constraints on a parent referenced by an unchanged child table
   when that simple-name child has exactly one outgoing foreign key to the parent,
   plain unchanged columns and no unadmitted defaults,
-  unsupported secondary constraints or sequence ownership. Up to two unchanged
-  table-level child CHECK constraints and two unchanged UNIQUE constraints
-  may accompany that parent-directed foreign key. One unchanged child primary key
+  unsupported secondary constraints or sequence ownership. The complete unchanged
+  set of table-level child CHECK and UNIQUE constraints may accompany that
+  parent-directed foreign key. One unchanged child primary key
   and its native NOT NULL facts, or explicit unchanged NOT NULL column facts,
   may also survive both stages. A UNIQUE constraint may use
   native inline or table-level syntax; the intermediate child definition must
   retain their exact native body,
   and both stages verify their catalog text and columns before any child drop.
-  The child may also have up to eight unchanged foreign keys to other unchanged
+  The child may also have unchanged foreign keys to other unchanged
   same-schema parents. Each referenced parent's semantic definition is bound
   into the review and checked after commit. The intermediate definition removes
   only the key to the rebuilt parent; native staging must retain and verify
-  every other edge before dropping its predecessor. More outgoing keys or
-  changed referenced parents remain blocked.
-  Each child may also carry up to eight unchanged plain, nonunique independent
-  indexes, subject to the 512-statement isolated-rebuild review budget. Their exact observed
+  every other edge before dropping its predecessor. Changed referenced parents
+  remain blocked.
+  Each child may also carry unchanged plain, nonunique independent
+  indexes, subject to the 512-statement isolated-rebuild review budget and
+  1 MiB aggregate source limit. Their exact observed
   native definitions are replayed after the final child swap
   in the same transaction, with its catalog identity bound into the receipt and
   checked again after commit. Unchanged table, column and admitted index

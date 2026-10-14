@@ -1234,6 +1234,73 @@ def test_constraint_rebuild_preserves_column_defaults_without_evaluating_them_fo
         provider.client.close()
 
 
+def test_inbound_rebuild_preserves_complete_check_and_unique_sets(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa')")
+    child_body = ('id INTEGER, parent_id INTEGER, a INTEGER, b INTEGER, '
+        'c INTEGER, CHECK((id > 0)), CHECK((a >= 0)), CHECK((b >= 0)), '
+        'UNIQUE(a), UNIQUE(b), UNIQUE(c)')
+    connection.execute('CREATE TABLE child(' + child_body + ', '
+        'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO child VALUES (10, 1, 1, 2, 3)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        root = parent['path'][0]
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        intermediate = f'CREATE TABLE "{root}"."main"."child" ({child_body})'
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': intermediate}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        omitted = deepcopy(desired)
+        omitted['rows'][parent['resource_id']]['native']['duckdb_change'][
+            'intermediate_child_ddl'] = intermediate.replace(', UNIQUE(c)', '')
+        assert not plan(baseline, omitted, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'complete-child-constraints.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT * FROM child').fetchall() == [(10, 1, 1, 2, 3)]
+        assert observer.execute('SELECT constraint_type, count(*) FROM '
+            "duckdb_constraints() WHERE table_name='child' GROUP BY 1 "
+            'ORDER BY 1').fetchall() == [
+                ('CHECK', 3), ('FOREIGN KEY', 1), ('UNIQUE', 3)]
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO child VALUES (11, 1, 1, 8, 9)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('expression,data_type,admitted', [
     ('id + 1', 'INTEGER', True), ('random()', 'DOUBLE', False)])
 def test_constraint_rebuild_preserves_only_safe_generated_columns(
@@ -1880,7 +1947,7 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
 
 
 @pytest.mark.parametrize('key_style', ['not-null', 'inline-primary', 'table-primary'])
-@pytest.mark.parametrize('other_parent_count', [0, 1, 2, 8])
+@pytest.mark.parametrize('other_parent_count', [0, 1, 2, 8, 9])
 def test_inbound_child_rebuild_retains_primary_and_not_null_constraints(
         tmp_path, key_style, other_parent_count):
     duckdb = pytest.importorskip('duckdb')
@@ -2742,7 +2809,7 @@ def test_reviewed_multiple_nullable_columns_and_reorder_preserves_constraints(
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),
-    (1, 1, False, 3), (2, 2, False, 3)])
+    (1, 1, False, 3), (2, 2, False, 3), (1, 1, False, 9)])
 def test_inbound_rebuild_replays_child_indexes(
         tmp_path, child_count, indexed_child, with_comments, index_count):
     duckdb = pytest.importorskip('duckdb')
@@ -2762,6 +2829,9 @@ def test_inbound_rebuild_replays_child_indexes(
                 connection.execute(f'CREATE INDEX {name}_parent_idx ON {name}(parent_id)')
             if index_count >= 3:
                 connection.execute(f'CREATE INDEX {name}_pair_idx ON {name}(id,parent_id)')
+            for index_number in range(4, index_count + 1):
+                connection.execute(f'CREATE INDEX {name}_expr{index_number}_idx '
+                    f'ON {name}((id + {index_number}))')
         if with_comments:
             connection.execute(f"COMMENT ON TABLE {name} IS 'table note'")
             connection.execute(f"COMMENT ON COLUMN {name}.id IS 'column note'")
@@ -2838,6 +2908,9 @@ def test_inbound_rebuild_replays_child_indexes(
             expected_indexes.append(children[indexed_child - 1]['name'] + '_parent_idx')
         if index_count >= 3:
             expected_indexes.append(children[indexed_child - 1]['name'] + '_pair_idx')
+        for index_number in range(4, index_count + 1):
+            expected_indexes.append(children[indexed_child - 1]['name'] +
+                f'_expr{index_number}_idx')
         assert sorted(observer.execute('SELECT index_name FROM duckdb_indexes() '
             'WHERE table_name=?', [children[indexed_child - 1]['name']]).fetchall()) == [
             (name,) for name in sorted(expected_indexes)]

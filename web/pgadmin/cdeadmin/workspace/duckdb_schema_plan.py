@@ -1252,7 +1252,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             metadata.get('temporary') is not False or
             type(metadata.get('has_primary_key')) is not bool or
             metadata['has_primary_key'] != bool(primary) or len(primary) > 1 or
-            not isinstance(native.get('indexes'), list) or len(indexes) > 8 or
+            not isinstance(native.get('indexes'), list) or
             {item.get('resource_id') for item in native['indexes']} !=
                 {item['resource_id'] for item in indexes} or
             not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
@@ -1260,8 +1260,6 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
             not isinstance(constraints, list) or len(parent_foreign) != 1 or
-            len(other_foreign) > 8 or
-            len(checks) > 2 or len(uniques) > 2 or
             len(constraints) != len(checks) + len(uniques) +
                 len(primary) + len(nulls) + len(foreign) or
             any(not isinstance(item.get('column_names'), list) or
@@ -1272,7 +1270,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             any(not isinstance(item, dict) or
                 (item.get('name') not in generated_names and
                     not constant_default(item.get('default'))) for item in columns)):
-        raise ValueError('Inbound child requires one parent key, at most eight other keys, bounded constraints and admitted defaults')
+        raise ValueError('Inbound child requires one parent key, bounded constraints and admitted defaults')
     other_parent_sha256 = {}
     for edge in other_foreign:
         referenced = edge.get('referenced_table')
