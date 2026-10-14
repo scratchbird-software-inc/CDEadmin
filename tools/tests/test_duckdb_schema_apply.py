@@ -2236,8 +2236,9 @@ def test_reviewed_column_reorder_preserves_unique_constraints(tmp_path, style):
 
 @pytest.mark.parametrize('style', ['plain', 'with-key-table',
     'with-key-inline', 'with-key-inline-rekey'])
+@pytest.mark.parametrize('addition', [False, True])
 def test_reviewed_column_reorder_preserves_table_check(
-        tmp_path, style):
+        tmp_path, style, addition):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -2261,13 +2262,28 @@ def test_reviewed_column_reorder_preserves_table_check(
         desired = deepcopy(baseline)
         edited = desired['rows'][table['resource_id']]['native']
         reordered = list(reversed(edited['columns']))
+        if addition:
+            added = deepcopy(reordered[0])
+            added['name'] = 'extra'
+            added['resource_id'] = _resource_id('column', table['path'], 'extra')
+            for field in ('data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+                added[field] = None
+            reordered.insert(0, added)
+            desired['rows'][added['resource_id']] = {
+                'resource_id': added['resource_id'], 'kind': 'column',
+                'name': 'extra', 'path': [*table['path'], 'extra'],
+                'system': 'false', 'native': {'system_object': False,
+                'catalog_metadata': {key: value for key, value in added.items()
+                    if key not in {'name', 'resource_id'}}}}
         for position, column in enumerate(reordered, 1):
             column['ordinal_position'] = position
             desired['rows'][column['resource_id']]['native'][
                 'catalog_metadata']['ordinal_position'] = position
         edited['columns'] = reordered
         for constraint in edited['constraints']:
-            constraint['column_indexes'] = [0 if name == 'code' else 1
+            constraint['column_indexes'] = [(1 if name == 'code' else 2)
+                if addition else (0 if name == 'code' else 1)
                 for name in constraint['column_names']]
             desired['rows'][constraint['resource_id']]['native'][
                 'catalog_metadata']['column_indexes'] = constraint['column_indexes']
@@ -2291,8 +2307,9 @@ def test_reviewed_column_reorder_preserves_table_check(
                 desired['rows'][new_id] = child_row
             edited['constraints'].sort(key=lambda item: item['constraint_index'])
         edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
-            '(' + new_body + ')')
-        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            '(' + ('extra VARCHAR, ' if addition else '') + new_body + ')')
+        edited['duckdb_change'] = {'action': ('rebuild-add-column-and-reorder'
+            if addition else 'rebuild-column-order'),
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'], preview['blockers']
@@ -2310,7 +2327,11 @@ def test_reviewed_column_reorder_preserves_table_check(
         assert observer.execute('SELECT id,code FROM checked ORDER BY id').fetchall() == [
             (1, 'aa'), (2, 'bb')]
         assert [item[0] for item in observer.execute('DESCRIBE checked').fetchall()] == (
-            ['id', 'code'] if style == 'with-key-inline' else ['code', 'id'])
+            ['id', 'code'] if style == 'with-key-inline' else
+            (['extra', 'code', 'id'] if addition else ['code', 'id']))
+        if addition and style != 'with-key-inline':
+            assert observer.execute('SELECT extra FROM checked').fetchall() == [
+                (None,), (None,)]
         with pytest.raises(duckdb.ConstraintException):
             observer.execute("INSERT INTO checked(code,id) VALUES ('x',3)")
         observer.close()
