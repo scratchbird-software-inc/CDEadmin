@@ -2172,6 +2172,68 @@ def test_reviewed_column_reorder_preserves_inline_primary_key(tmp_path, generate
         provider.client.close()
 
 
+@pytest.mark.parametrize('style', ['inline', 'table', 'with-key'])
+def test_reviewed_column_reorder_preserves_unique_constraints(tmp_path, style):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    old_body = ('id INTEGER PRIMARY KEY, code VARCHAR, UNIQUE(code)'
+        if style == 'with-key' else
+        'id INTEGER, code VARCHAR UNIQUE' if style == 'inline' else
+        'id INTEGER, code VARCHAR, UNIQUE(code)')
+    new_body = ('code VARCHAR, id INTEGER PRIMARY KEY, UNIQUE(code)'
+        if style == 'with-key' else
+        'code VARCHAR UNIQUE, id INTEGER' if style == 'inline' else
+        'code VARCHAR, id INTEGER, UNIQUE(code)')
+    connection.execute('CREATE TABLE checked(' + old_body + ')')
+    connection.execute("INSERT INTO checked VALUES (1,'a'),(2,'b')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        reordered = list(reversed(edited['columns']))
+        for position, column in enumerate(reordered, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = reordered
+        for constraint in edited['constraints']:
+            constraint['column_indexes'] = [0 if name == 'code' else 1
+                for name in constraint['column_names']]
+            desired['rows'][constraint['resource_id']]['native'][
+                'catalog_metadata']['column_indexes'] = constraint['column_indexes']
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
+            '(' + new_body + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'unique-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,code FROM checked ORDER BY id').fetchall() == [
+            (1, 'a'), (2, 'b')]
+        assert [item[0] for item in observer.execute('DESCRIBE checked')
+            .fetchall()] == ['code', 'id']
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO checked(code,id) VALUES ('a',3)")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

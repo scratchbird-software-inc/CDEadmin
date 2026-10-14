@@ -1389,6 +1389,11 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         old_map, new_map = column_map(old_columns), column_map(new_columns)
         if old_map is None or new_map is None:
             raise ValueError('Column-order rebuild requires complete native column rows')
+        if (not isinstance(old_constraints, list) or
+                not isinstance(new_constraints, list) or
+                any(not isinstance(item, dict) for item in
+                    [*old_constraints, *new_constraints])):
+            raise ValueError('Column-order rebuild requires complete native constraint rows')
         def key_facts(items, ordered_columns):
             if (not isinstance(items, list) or
                     any(not isinstance(item, dict) for item in items)):
@@ -1420,12 +1425,32 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                         for name in item['column_names']]:
                     return None
             return keys[0]
-        old_key = key_facts(old_constraints, old_columns)
-        new_key = key_facts(new_constraints, new_columns)
+        old_key = key_facts([item for item in old_constraints
+            if item.get('constraint_type') != 'UNIQUE'], old_columns)
+        new_key = key_facts([item for item in new_constraints
+            if item.get('constraint_type') != 'UNIQUE'], new_columns)
+        def unique_facts(items, ordered_columns):
+            if not isinstance(items, list):
+                return False
+            uniques = [item for item in items if isinstance(item, dict) and
+                item.get('constraint_type') == 'UNIQUE']
+            if len(uniques) > 8:
+                return False
+            names = [item['name'] for item in ordered_columns]
+            return all(isinstance(item.get('column_names'), list) and
+                item['column_names'] and
+                all(isinstance(name, str) and name in names
+                    for name in item['column_names']) and
+                len(set(item['column_names'])) == len(item['column_names']) and
+                item.get('column_indexes') == [names.index(name)
+                    for name in item['column_names']]
+                for item in uniques)
         def without_column_indexes(items):
             return [{key: value for key, value in item.items()
                 if key != 'column_indexes'} for item in items]
         if (old_key is None or new_key is None or old_key != new_key or
+                not unique_facts(old_constraints, old_columns) or
+                not unique_facts(new_constraints, new_columns) or
                 not _equal(without_column_indexes(old_constraints),
                     without_column_indexes(new_constraints)) or
                 old_map is None or new_map is None or
@@ -1434,7 +1459,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     [item['name'] for item in new_columns] or
                 old['catalog'].get('has_primary_key') is not bool(old_key) or
                 not _equal(old, new)):
-            raise ValueError('Column-order rebuild requires unchanged complete columns and one optional key')
+            raise ValueError('Column-order rebuild requires unchanged complete columns and admitted constraints')
         stage_key_columns = new_key
     if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}:
         def key_facts(constraints):
@@ -1645,11 +1670,13 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     original_sections = _table_definition_sections(before['native'].get('ddl'),
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
-            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children'})
+            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
+            'rebuild-column-order'})
     desired_sections = _table_definition_sections(source,
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
-            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children'})
+            'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
+            'rebuild-column-order'})
     generated_names = _admitted_generated_columns(original_sections, columns)
     old_inline = sum(item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
         for item in old_constraints)
@@ -1672,13 +1699,14 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             len(original_sections[1]) != len(old_constraints) - old_inline or
             len(desired_sections[1]) != len(new_constraints) - new_inline or any(
             kind == 'token_type.keyword' and word in
-                (({'unique'} if action == 'rebuild-column-order' else
+                ((set() if action == 'rebuild-column-order' else
                   {'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
                     'rebuild-check-constraints', 'rebuild-foreign-keys',
                     'rebuild-check-with-inbound-child',
-                    'rebuild-check-with-inbound-children'} else set()))
+                    'rebuild-check-with-inbound-children',
+                    'rebuild-column-order'} else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
@@ -2142,7 +2170,8 @@ def plan(baseline, desired, live):
                         if item['constraint_type'] == 'UNIQUE']
                         if change.get('action') in {'rebuild-check-constraints',
                             'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
-                            'rebuild-check-with-inbound-children'} else None),
+                            'rebuild-check-with-inbound-children',
+                            'rebuild-column-order'} else None),
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),

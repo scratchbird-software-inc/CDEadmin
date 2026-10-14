@@ -349,9 +349,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   constraints may also survive a reorder. The reviewed child constraint facts
   must retain their native names, key columns and definitions; only column
   indexes follow the new ordinal positions. Staging verifies the complete key
-  and nullability facts before the old table is dropped. Other constraints,
-  foreign-key edges, non-whitelisted generated expressions, native tags and
-  unaccounted sequence ownership remain blockers.
+  and nullability facts before the old table is dropped. An unchanged complete
+  UNIQUE constraint set, whether inline or table-level, may also survive if
+  its native names, definitions and columns remain fixed and only column
+  indexes shift with the reorder. Staging verifies every UNIQUE fact before
+  dropping the old table. CHECK and foreign-key edges, non-whitelisted
+  generated expressions, native tags and unaccounted sequence ownership
+  remain blockers.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may

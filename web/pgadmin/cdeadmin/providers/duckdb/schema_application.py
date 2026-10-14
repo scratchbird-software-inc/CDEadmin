@@ -143,6 +143,9 @@ def apply_review(provider, route, record):
                             'FROM duckdb_constraints() WHERE database_name=? '
                             'AND schema_name=? AND table_name=? ORDER BY constraint_index',
                             scope).fetchall()
+                        if operation.get('stage_unique_constraints') is not None:
+                            constraints = [item for item in constraints
+                                if item[0] != 'UNIQUE']
                         key_columns = operation.get('stage_key_columns') or []
                         primary_keys = [names for kind, names in constraints
                             if kind == 'PRIMARY KEY']
