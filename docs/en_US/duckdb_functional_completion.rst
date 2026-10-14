@@ -585,17 +585,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   evaluate defaults for existing rows. A missing function, failed binding or
   changed staged default rolls the whole review back before the original child
   is dropped.
-  A direct ``nextval('name')`` or ``nextval('schema.name')`` default may also
-  survive when each staging table has exactly the original child's observed
+  A direct ``nextval('name')`` or ``nextval('schema.name')`` default, or that
+  one literal sequence call followed by bounded arithmetic with numeric
+  constants, may also survive when each staging table has exactly the original child's observed
   native sequence dependencies before its predecessor is dropped, at least one
   dependency exists, and no sequence has observed ownership of the child.
   DuckDB 1.5.2 may fail to expose an ``OWNED BY`` dependency through an
   independent catalog capture; in that case native ``DROP ... RESTRICT`` must
   refuse the child swap and roll back the entire transaction.
   The explicit copy must not advance the sequence; fresh rows retain its
-  native default after final rediscovery. Any other expression containing
-  ``nextval`` remains blocked because its sequence effect or dependency may
-  not be accounted for by the direct-default check.
+  native default after final rediscovery. The arithmetic subset allows only
+  ``+``, ``-``, ``*``, ``/`` and ``%`` with decimal constants of at most six
+  digits. Any other expression containing ``nextval`` remains blocked because
+  its sequence effect or dependency has not been qualified.
   Native catalog-normalized
   ``CAST(expression AS type)`` defaults may also survive when the inner
   expression remains textually exact and the destination is an admitted

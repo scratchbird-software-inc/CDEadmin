@@ -1254,9 +1254,12 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
                 len(value.encode('utf8')) > 8192 or '\x00' in value):
             return False
         if 'nextval' in value.casefold():
+            expression = value.strip()
+            while expression.startswith('(') and expression.endswith(')'):
+                expression = expression[1:-1].strip()
             return re.fullmatch(
-                r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)",
-                value.strip(), re.I) is not None
+                r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)"
+                r'(?:\s*[+*/%-]\s*[0-9]{1,6})*', expression, re.I) is not None
         return True
 
     child = live['rows'].get(child_id)
@@ -1402,7 +1405,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         sequence_counts.append('SELECT count(*) FROM (' +
             original_dependencies + ') AS dependencies')
     requires_sequence_dependency = any(isinstance(item.get('default'), str) and
-        item['default'].strip().casefold().startswith('nextval(')
+        'nextval' in item['default'].casefold()
         for item in columns)
     def phase(definition, stage_name):
         stage = '.'.join(_quote(part) for part in [*child['path'][:2], stage_name])

@@ -1928,9 +1928,9 @@ def test_inbound_child_generated_column_is_preserved_only_when_safe(
 
 
 @pytest.mark.parametrize('owned', [False, True])
-@pytest.mark.parametrize('composed', [False, True])
+@pytest.mark.parametrize('composition', ['direct', 'arithmetic', 'function'])
 def test_inbound_child_sequence_default_preserves_position_and_dependency(
-        tmp_path, owned, composed):
+        tmp_path, owned, composition):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1938,7 +1938,11 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
         'payload VARCHAR CHECK(length(payload) > 0))')
     connection.execute("INSERT INTO parent VALUES (1, 'aa')")
-    sequence_default = "nextval('child_seq')" + (' + 1' if composed else '')
+    sequence_default = {
+        'direct': "nextval('child_seq')",
+        'arithmetic': "nextval('child_seq') + 1",
+        'function': "coalesce(nextval('child_seq'), 0)",
+    }[composition]
     connection.execute('CREATE TABLE child(id BIGINT DEFAULT (' + sequence_default +
         '), parent_id INTEGER DEFAULT(1), '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
@@ -1966,14 +1970,18 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
         edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
             '(id INTEGER PRIMARY KEY, payload VARCHAR, '
             'CHECK((length(payload) >= 2)))')
+        child_source = child['native']['ddl']
+        assert 'CREATE TABLE child' in child_source
+        assert ', FOREIGN KEY (parent_id) REFERENCES parent(id)' in child_source
+        intermediate_child = (child_source.replace('CREATE TABLE child',
+            f'CREATE TABLE "{root}"."main"."child"', 1).replace(
+                ', FOREIGN KEY (parent_id) REFERENCES parent(id)', '', 1))
         edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
             'inbound_child_resource_id': child['resource_id'],
-            'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
-                '(id BIGINT DEFAULT(' + sequence_default + '), '
-                'parent_id INTEGER DEFAULT(1))'}
+            'intermediate_child_ddl': intermediate_child}
         preview = plan(baseline, desired, baseline)
-        if composed:
+        if composition == 'function':
             assert not preview['application_supported']
             assert any('admitted defaults' in item['reason']
                 for item in preview['blockers'])
@@ -1991,13 +1999,14 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
         if not owned:
             assert outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
-        assert observer.execute('SELECT id,parent_id FROM child').fetchall() == [(100, 1)]
+        first_id = 101 if composition == 'arithmetic' else 100
+        assert observer.execute('SELECT id,parent_id FROM child').fetchall() == [(first_id, 1)]
         assert observer.execute("SELECT last_value FROM duckdb_sequences() "
             "WHERE sequence_name='child_seq'").fetchone()[0] == 100
         if not owned:
             observer.execute('INSERT INTO child DEFAULT VALUES')
             assert observer.execute('SELECT id FROM child ORDER BY id').fetchall() == [
-                (100,), (101,)]
+                (first_id,), (first_id + 1,)]
         observer.close()
     finally:
         connection.close()
