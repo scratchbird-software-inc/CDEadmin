@@ -673,10 +673,12 @@ def _admitted_generated_columns(sections, columns):
                         tokens[position + 1] == ('token_type.operator', '(')))):
                 return False
             if (kind == 'token_type.operator' and word not in
-                    {'(', ')', '+', '-', '*', '/', '%', '||'}):
+                    {'(', ')', '+', '-', '*', '/', '%', '||', '=', '!=', '<>',
+                        '<', '<=', '>', '>='}):
                 return False
             if (kind == 'token_type.keyword' and word not in
-                    {'true', 'false', 'null'}):
+                    {'true', 'false', 'null', 'case', 'when', 'then', 'else',
+                        'end', 'and', 'or', 'not', 'is'}):
                 return False
             if kind not in {'token_type.identifier', 'token_type.operator',
                     'token_type.keyword', 'token_type.numeric_const',

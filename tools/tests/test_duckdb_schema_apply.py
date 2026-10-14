@@ -1331,14 +1331,17 @@ def test_inbound_rebuild_preserves_complete_check_and_unique_sets(tmp_path):
         provider.client.close()
 
 
-@pytest.mark.parametrize('expression,data_type,admitted', [
-    ('id + 1', 'INTEGER', True),
-    ('CAST(id + 1 AS BIGINT)', 'BIGINT', True),
-    ('TRY_CAST(id + 1 AS BIGINT)', 'BIGINT', True),
-    ('random()', 'DOUBLE', False),
-    ('CAST(random() AS BIGINT)', 'BIGINT', False)])
+@pytest.mark.parametrize('expression,data_type,admitted,expected', [
+    ('id + 1', 'INTEGER', True, [(1, 2), (2, 3)]),
+    ('CAST(id + 1 AS BIGINT)', 'BIGINT', True, [(1, 2), (2, 3)]),
+    ('TRY_CAST(id + 1 AS BIGINT)', 'BIGINT', True, [(1, 2), (2, 3)]),
+    ('CASE WHEN id IS NULL THEN 0 WHEN id > 1 THEN id ELSE 0 END',
+        'BIGINT', True, [(1, 0), (2, 2)]),
+    ('random()', 'DOUBLE', False, None),
+    ('CAST(random() AS BIGINT)', 'BIGINT', False, None),
+    ('CASE WHEN id > 1 THEN random() ELSE 0 END', 'DOUBLE', False, None)])
 def test_constraint_rebuild_preserves_only_safe_generated_columns(
-        tmp_path, expression, data_type, admitted):
+        tmp_path, expression, data_type, admitted, expected):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1373,6 +1376,8 @@ def test_constraint_rebuild_preserves_only_safe_generated_columns(
             return
         altered = deepcopy(desired)
         altered['rows'][original['resource_id']]['native']['ddl'] = (
+            edited['ddl'].replace('ELSE 0', 'ELSE 1') if
+            expression.startswith('CASE ') else
             edited['ddl'].replace('id + 1', 'id + 2'))
         assert not plan(baseline, altered, baseline)['application_supported']
         applications = DuckDBSchemaApplications(tmp_path/'generated-rebuild.json',
@@ -1384,8 +1389,7 @@ def test_constraint_rebuild_preserves_only_safe_generated_columns(
         assert outcome['state'] == 'committed', outcome
         assert outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
-        assert observer.execute('SELECT id,derived FROM checked ORDER BY id').fetchall() == [
-            (1, 2), (2, 3)]
+        assert observer.execute('SELECT id,derived FROM checked ORDER BY id').fetchall() == expected
         observer.close()
     finally:
         provider.client.close()
@@ -2699,14 +2703,20 @@ def test_reviewed_add_and_reorder_preserves_safe_generated_values(
         provider.client.close()
 
 
-@pytest.mark.parametrize('expression,added_type,admitted,wrong_catalog_fact', [
-    ('id * 2', 'INTEGER', True, False),
-    ('id * 2', 'INTEGER', True, True),
-    ('CAST(id * 2 AS BIGINT)', 'BIGINT', True, False),
-    ('TRY_CAST(id * 2 AS BIGINT)', 'BIGINT', True, False),
-    ('random()', 'DOUBLE', False, False)])
+@pytest.mark.parametrize('expression,added_type,admitted,wrong_catalog_fact,expected', [
+    ('id * 2', 'INTEGER', True, False, [(1, 'a', 2), (2, 'b', 4)]),
+    ('id * 2', 'INTEGER', True, True, None),
+    ('CAST(id * 2 AS BIGINT)', 'BIGINT', True, False,
+        [(1, 'a', 2), (2, 'b', 4)]),
+    ('TRY_CAST(id * 2 AS BIGINT)', 'BIGINT', True, False,
+        [(1, 'a', 2), (2, 'b', 4)]),
+    ('CASE WHEN id >= 2 THEN id * 2 ELSE 0 END', 'INTEGER', True,
+        False, [(1, 'a', 0), (2, 'b', 4)]),
+    ('random()', 'DOUBLE', False, False, None),
+    ('CASE WHEN id >= 2 THEN random() ELSE 0 END', 'DOUBLE', False,
+        False, None)])
 def test_reviewed_add_generated_column_and_reorder(
-        tmp_path, expression, added_type, admitted, wrong_catalog_fact):
+        tmp_path, expression, added_type, admitted, wrong_catalog_fact, expected):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -2727,12 +2737,17 @@ def test_reviewed_add_generated_column_and_reorder(
         added['name'] = 'doubled'
         added['resource_id'] = _resource_id('column', table['path'], 'doubled')
         added['data_type'] = added_type
-        canonical_expression = (expression.replace('id * 2', '(id * 2)')
-            if expression.startswith(('CAST(', 'TRY_CAST(')) else expression)
-        added['default'] = (f'CAST({canonical_expression} AS {added_type})'
-            if expression.startswith(('CAST(', 'TRY_CAST(')) else
-            f'CAST(({"id * 3" if wrong_catalog_fact else expression}) '
-            f'AS {added_type})')
+        canonical = duckdb.connect(':memory:')
+        try:
+            canonical.execute('CREATE TABLE generated_template(id INTEGER, '
+                f'note VARCHAR, doubled {added_type} GENERATED ALWAYS AS(({expression})))')
+            added['default'] = canonical.execute('SELECT column_default FROM '
+                "information_schema.columns WHERE table_name='generated_template' "
+                "AND column_name='doubled'").fetchone()[0]
+        finally:
+            canonical.close()
+        if wrong_catalog_fact:
+            added['default'] = added['default'].replace('id * 2', 'id * 3')
         for field in ('data_type_id', 'character_maximum_length',
                 'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
             added[field] = None
@@ -2749,11 +2764,9 @@ def test_reviewed_add_generated_column_and_reorder(
             'system': 'false', 'native': {'system_object': False,
             'catalog_metadata': {key: value for key, value in added.items()
                 if key not in {'name', 'resource_id'}}}}
-        authored_expression = (canonical_expression if expression.startswith(
-            ('CAST(', 'TRY_CAST(')) else f'({expression})')
         edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."measurements" '
             f'(note VARCHAR, id INTEGER, doubled {added_type} '
-            f'GENERATED ALWAYS AS({authored_expression}))')
+            f'GENERATED ALWAYS AS(({expression})))')
         edited['duckdb_change'] = {
             'action': 'rebuild-add-generated-column-and-reorder',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
@@ -2778,7 +2791,7 @@ def test_reviewed_add_generated_column_and_reorder(
                 'ORDER BY id').fetchall() == [(1, 'a'), (2, 'b')]
         else:
             assert observer.execute('SELECT id,note,doubled FROM measurements '
-                'ORDER BY id').fetchall() == [(1, 'a', 2), (2, 'b', 4)]
+                'ORDER BY id').fetchall() == expected
         assert [item[0] for item in observer.execute('DESCRIBE measurements')
             .fetchall()] == (['id', 'note'] if wrong_catalog_fact else
                 ['note', 'id', 'doubled'])

@@ -446,7 +446,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   dropped; a mismatched canonical expression rolls back.
   Built-in ``CAST`` and ``TRY_CAST`` may wrap safe base-column expressions,
   constants and nested admitted casts when the target is an admitted scalar
-  type with bounded native numeric parameters. User functions, sequence use,
+  type with bounded native numeric parameters. Native ``CASE`` expressions,
+  comparisons and Boolean conditions may combine those same safe operands;
+  source validation still excludes subqueries and function calls. User functions, sequence use,
   arbitrary function calls and references to generated columns remain blocked
   before dispatch. DuckDB 1.5.2 cannot directly add a
   generated column through ``ALTER TABLE``.
@@ -621,6 +623,8 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   complete row-multiset comparison must prove the resulting values match before
   the original table is dropped. Built-in ``CAST`` and ``TRY_CAST`` of admitted
   base-column expressions to admitted scalar targets may also be recomputed.
+  Native ``CASE`` expressions using the admitted comparisons and Boolean
+  conditions may be recomputed under the same complete-value check.
   User functions, sequence use, generated references to other generated columns
   and expressions outside this admitted
   subset block review because staging might invoke side effects or change values.
