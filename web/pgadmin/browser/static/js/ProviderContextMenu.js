@@ -14,8 +14,9 @@ import pgAdmin from 'sources/pgadmin';
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
   'clear_credentials', 'connector_info', 'edit_endpoint',
-  'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
+  'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
+  'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -98,9 +99,14 @@ function dispatch(action, args, context) {
       registrationContext => serverNode.callbacks.register_engine_server.call(serverNode, {item, registrationContext})));
   case 'open_duckdb_fleet':
     return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('duckdb'));
+  case 'open_sqlite_fleet':
+    return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('sqlite'));
   case 'open_duckdb_dashboard_editor':
     return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
       endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id, 'duckdb'));
+  case 'open_sqlite_dashboard_editor':
+    return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
+      endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id, 'sqlite'));
   case 'open_mariadb_fleet':
     return import('sources/Dialogs').then(({showMySQLFleet}) => showMySQLFleet('mariadb'));
   case 'open_mariadb_dashboard_editor':
@@ -111,6 +117,8 @@ function dispatch(action, args, context) {
   case 'open_mysql_dashboard_editor':
     return import('sources/Dialogs').then(({showMySQLDashboardEditor}) => showMySQLDashboardEditor(
       endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined, args.database_target_id));
+  case 'open_postgresql_dashboard_editor':
+    return import('sources/Dialogs').then(({showPostgresqlDashboardEditor}) => showPostgresqlDashboardEditor());
   case 'open_postgresql_fleet':
     return import('sources/Dialogs').then(({showPostgresqlFleet}) => showPostgresqlFleet());
   case 'open_firebird_fleet':

@@ -12,7 +12,7 @@ import { getNodePrivilegeRoleSchema } from '../../../static/js/privilege.ui';
 import { getNodeVariableSchema } from '../../../static/js/variable.ui';
 import DatabaseSchema from './database.ui';
 import {removeSQLConnections} from 'sources/cdeadmin_ui/editors/SQLConnections';
-import { showPostgresqlMonitor, showProviderWorkspace, showServerPassword } from '../../../../../../static/js/Dialogs/index';
+import { showPostgresqlDashboardEditor, showPostgresqlMonitor, showProviderWorkspace, showServerPassword } from '../../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../../static/js/api_instance';
 import { AllPermissionTypes } from '../../../../../static/js/constants';
@@ -23,7 +23,7 @@ define('pgadmin.node.database', [
   'pgadmin.authenticate.kerberos', 'pgadmin.browser.collection',
 ], function(gettext, url_for, pgAdmin, pgBrowser, Kerberos) {
 
-  function sqlWorkspace(item, registerOnly=true) {
+  function sqlWorkspace(item, registerOnly=true, tab='studio') {
     const tree = pgBrowser.tree;
     const database = tree.itemData(item);
     if (!database?.connected) return;
@@ -31,15 +31,17 @@ define('pgadmin.node.database', [
     while (serverItem && tree.itemData(serverItem)?._type !== 'server') serverItem = tree.parent(serverItem);
     if (!serverItem) return;
     const server = tree.itemData(serverItem);
-    showProviderWorkspace('SQL', pgBrowser.Nodes.server, server, serverItem,
-      'studio', {database_target_id: `postgresql-database:${database._id}`,
-        display_name: database.label || database._label}, undefined, registerOnly);
+    showProviderWorkspace(tab === 'export' ? 'PostgreSQL catalog DDN' : tab === 'postgresql-test-data' ? 'PostgreSQL test data' : tab === 'administration' ? 'PostgreSQL advanced objects' : 'SQL', pgBrowser.Nodes.server, server, serverItem,
+      tab, {database_target_id: `postgresql-database:${database._id}`,
+        display_name: database.label || database._label,
+        ...(tab === 'administration' ? {resource_kind: 'access-method'} : {})}, undefined, registerOnly);
   }
 
-  function monitoringWorkspace(item, policyMode) {
+  function monitoringWorkspace(item, policyMode, editor=false) {
     const tree = pgBrowser.tree, database = tree.itemData(item);
     let parent = tree.parent(item);
     while(parent && tree.itemData(parent)?._type !== 'server') parent = tree.parent(parent);
+    if(parent && editor) return showPostgresqlDashboardEditor(Number(tree.itemData(parent)._id), `postgresql-database:${database._id}`);
     if(parent) showPostgresqlMonitor(tree.itemData(parent)._id,
       `postgresql-database:${database._id}`, database.label || database._label, policyMode);
   }
@@ -100,9 +102,25 @@ define('pgadmin.node.database', [
           applies: ['object', 'context'], callback: 'open_monitor', priority: 7,
           label: gettext('PostgreSQL dashboard...'), enable: 'is_connected',
         },{
+          name: 'postgresql_dashboard_editor', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_dashboard_editor', priority: 9,
+          label: gettext('Edit PostgreSQL dashboard...'), enable: 'is_connected',
+        },{
           name: 'postgresql_monitor_policy', node: 'database', module: this,
           applies: ['object', 'context'], callback: 'open_monitor_policy', priority: 8,
           label: gettext('Configure PostgreSQL monitoring...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_catalog_ddn', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_catalog_ddn', priority: 10,
+          label: gettext('PostgreSQL catalog DDN...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_test_data', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_test_data', priority: 11,
+          label: gettext('Generate PostgreSQL test data...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_advanced_objects', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_native_administration', priority: 11,
+          label: gettext('PostgreSQL advanced objects...'), enable: 'is_connected',
         },{
           name: 'postgresql_global_sql', node: 'database', module: this,
           applies: ['object', 'context'], callback: 'open_global_sql',
@@ -262,8 +280,12 @@ define('pgadmin.node.database', [
         );
       },
       callbacks: {
+        open_dashboard_editor: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), false, true); },
         open_monitor: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), false); },
         open_monitor_policy: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), true); },
+        open_test_data: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'postgresql-test-data'); },
+        open_catalog_ddn: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'export'); },
+        open_native_administration: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'administration'); },
         open_global_sql: function(args) {
           sqlWorkspace(args?.item || pgBrowser.tree.selected(), false);
         },

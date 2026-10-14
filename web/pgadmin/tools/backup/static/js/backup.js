@@ -178,7 +178,7 @@ define([
           'filename': this.getHelpFile(typeOfDialog),
         });
         pgAdmin.Browser.Events.trigger('pgadmin:utility:show', item, title ?? 'Backup', {
-          schema, extraData, urlBase, sqlHelpUrl, helpUrl, saveBtnName: gettext('Backup')
+          schema, extraData, urlBase, sqlHelpUrl, helpUrl, formKey: typeOfDialog === 'backup_objects' ? 'native-utility:backup' : 'native-utility:backup-server', saveBtnName: gettext('Backup')
         }, pgAdmin.Browser.stdW.md, pgAdmin.Browser.stdH.lg);
       }
     },

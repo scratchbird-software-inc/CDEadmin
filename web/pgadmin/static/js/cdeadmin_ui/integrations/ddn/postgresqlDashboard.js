@@ -1,5 +1,7 @@
 import {dashboardPanelFiles} from './dashboardPanels';
 
+const identity = value => [...new TextEncoder().encode(String(value ?? ''))].map(byte => byte.toString(16).padStart(2, '0')).join('') || '00';
+
 export function postgresqlFleetFiles(fleet) {
   const panels = [{id: 'inventory', title: 'PostgreSQL owner registrations', rows: [
     ['Registered servers', fleet?.registered_endpoints, 'Registrations, not discovered cluster members'],
@@ -24,10 +26,10 @@ export function postgresqlFleetFiles(fleet) {
       ['Postmaster started', sample?.identity?.postmaster_started_at, 'UTC'],
     ]});
   };
-  (fleet?.servers || []).forEach((server, index) => {
-    observation(`server_${index}`, server.name, server.snapshot, 'server');
-    (server.databases || []).forEach((database, dbIndex) => observation(
-      `database_${index}_${dbIndex}`, `${server.name} / ${database.name}`, database.snapshot, 'database'));
+  (fleet?.servers || []).forEach((server) => {
+    observation(`server_${server.server_id}_${identity(server.name)}`, server.name, server.snapshot, 'server');
+    (server.databases || []).forEach((database) => observation(
+      `fleetdb_${server.server_id}_${identity(database.target_id)}_${identity(database.name)}`, `${server.name} / ${database.name}`, database.snapshot, 'database'));
   });
   return dashboardPanelFiles(panels, 'PostgreSQL engine dashboard', 'scratchrobin.postgresql.monitoring');
 }
@@ -70,7 +72,7 @@ export function postgresqlDashboardFiles(snapshot, title='PostgreSQL dashboard',
     ['Truncated', groups[name]?.truncated, 'Limited groups are not complete inventories'],
   ];
   panels.push({id: 'databases', title: 'Database statistics coverage', rows: coverage('database')});
-  rows('database').forEach((row, index) => panels.push({id: `database_${index}`, title: row.datname, rows: [
+  rows('database').forEach((row) => panels.push({id: `database_${row.datid}_${identity(row.datname)}`, title: row.datname, rows: [
     ['Database OID', row.datid], ['Connected backends', row.numbackends, 'Includes this collector'],
     ['Statistics reset', row.stats_reset, 'UTC'], ['Rate baseline', row.rate_state],
     ...counters.map(([field, label, unit]) => [label, row[field], unit,
@@ -85,13 +87,12 @@ export function postgresqlDashboardFiles(snapshot, title='PostgreSQL dashboard',
       .map(([key, label]) => [label, activity?.[key], 'backends']),
     ['Oldest visible transaction', activity?.oldest_transaction_seconds, 'seconds'],
   ]});
-  panels.push({id: 'locks', title: 'Locks — collector excluded', rows: [
-    ...coverage('locks'), ...rows('locks').map((row) => [
-      `${row.locktype} / ${row.mode} / ${row.granted ? 'granted' : 'waiting'}`, row.count, 'locks']),
-  ]});
+  panels.push({id: 'locks', title: 'Locks — collector excluded', rows: coverage('locks')});
+  rows('locks').forEach(row => panels.push({id: `lock_${identity(row.locktype + '/' + row.mode + '/' + row.granted)}`,
+    title: 'Lock observation', rows: [[`${row.locktype} / ${row.mode} / ${row.granted ? 'granted' : 'waiting'}`, row.count, 'locks']]}));
   if(scope === 'database') {
     panels.push({id: 'tables', title: 'Table maintenance coverage', rows: coverage('tables')});
-    rows('tables').forEach((row, index) => panels.push({id: `table_${index}`,
+    rows('tables').forEach((row) => panels.push({id: `table_${row.relid}_${identity(row.schemaname + '.' + row.relname)}`,
       title: `${row.schemaname}.${row.relname}`, rows: [
         ['Relation OID', row.relid], ['Live tuples', row.n_live_tup, 'Estimate, not exact count'],
         ['Dead tuples', row.n_dead_tup, 'Estimate, not exact count'],
@@ -104,13 +105,13 @@ export function postgresqlDashboardFiles(snapshot, title='PostgreSQL dashboard',
   panels.push({id: 'replication', title: 'Replication — server scope', rows: [
     ...coverage('replication'), ['Interpretation', 'Availability does not prove replication freshness'],
   ]});
-  rows('replication').forEach((row, index) => panels.push({id: `replica_${index}`, title: row.application_name, rows: [
+  rows('replication').forEach((row) => panels.push({id: `replica_${row.pid}_${identity(row.application_name)}`, title: row.application_name, rows: [
     ['Sender PID', row.pid], ['State', row.state], ['Synchronous state', row.sync_state],
     ...['sent_lsn', 'write_lsn', 'flush_lsn', 'replay_lsn'].map((name) => [name, row[name], 'Native position']),
     ...['write_lag', 'flush_lag', 'replay_lag'].map((name) => [name, row[name], 'Native interval; NULL is unknown']),
   ]}));
   panels.push({id: 'io', title: 'I/O — server scope', rows: coverage('io')});
-  rows('io').forEach((row, index) => panels.push({id: `io_${index}`,
+  rows('io').forEach((row) => panels.push({id: `io_${identity(row.backend_type + '/' + row.object + '/' + row.context)}`,
     title: `${row.backend_type} / ${row.object} / ${row.context}`, rows: [
       ...['reads', 'writes', 'hits', 'evictions', 'fsyncs'].map((name) => [name, row[name], 'Native cumulative counter']),
       ['Bytes read', row.read_bytes, 'bytes'], ['Bytes written', row.write_bytes, 'bytes'],
@@ -118,7 +119,8 @@ export function postgresqlDashboardFiles(snapshot, title='PostgreSQL dashboard',
     ]}));
   panels.push({id: 'settings', title: 'Settings — collector connection', rows: [
     ...coverage('settings'), ['Observed at', groups.settings?.observed_at, 'UTC; metadata sampling interval'],
-    ...rows('settings').map((row) => [row.name, row.setting, row.unit || 'Native setting']),
+
   ]});
+  rows('settings').forEach(row => panels.push({id: `setting_${identity(row.name)}`, title: 'Collector setting', rows: [[row.name, row.setting, row.unit || 'Native setting']]}));
   return dashboardPanelFiles(panels, title, 'scratchrobin.postgresql.monitoring');
 }

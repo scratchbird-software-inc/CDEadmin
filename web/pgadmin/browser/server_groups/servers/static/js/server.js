@@ -10,7 +10,7 @@ import {removeSQLConnections} from 'sources/cdeadmin_ui/editors/SQLConnections';
 
 import { getNodeListById } from '../../../../static/js/node_ajax';
 import ServerSchema from './server.ui';
-import { showPostgresqlMonitor, showServerPassword, showEndpointVerification, showProviderWorkspace, showChangeServerPassword, showNamedRestorePoint } from '../../../../../static/js/Dialogs/index';
+import { showPostgresqlDashboardEditor, showPostgresqlMonitor, showServerPassword, showEndpointVerification, showProviderWorkspace, showChangeServerPassword, showNamedRestorePoint } from '../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../static/js/api_instance';
 import { AllPermissionTypes } from '../../../../static/js/constants';
@@ -31,6 +31,7 @@ define('pgadmin.node.server', [
   gettext, url_for, pgAdmin, pgBrowser,
   current_user, Kerberos,
 ) {
+  const connectionStatusChecks = new WeakMap();
 
   if (!pgBrowser.Nodes['server']) {
     pgAdmin.Browser.Nodes['server'] = pgAdmin.Browser.Node.extend({
@@ -91,6 +92,11 @@ define('pgadmin.node.server', [
           name: 'postgresql_monitor', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'open_postgresql_monitor',
           priority: 7, label: gettext('PostgreSQL dashboard...'),
+          enable: (node) => !!node?.connected && !node?.cde_endpoint,
+        },{
+          name: 'postgresql_dashboard_editor', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_postgresql_dashboard_editor',
+          priority: 9, label: gettext('Edit PostgreSQL dashboard...'),
           enable: (node) => !!node?.connected && !node?.cde_endpoint,
         },{
           name: 'postgresql_monitor_policy', node: 'server', module: this,
@@ -233,6 +239,11 @@ define('pgadmin.node.server', [
             data_disabled: gettext('SSH Tunnel password is not saved for selected server.'),
           },
         }, {
+          name: 'postgresql_server_catalog', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'open_postgresql_server_catalog',
+          label: gettext('PostgreSQL server catalog DDN...'), priority: 9,
+          enable: node => node?.connected && (!node.cde_endpoint || node.cde_profile_id === 'postgresql-native'),
+        }, {
           name: 'copy_server', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'show_obj_properties',
           label: gettext('Copy Server...'), data: {action: 'copy'},
@@ -282,6 +293,10 @@ define('pgadmin.node.server', [
         return _.some(item.children, (child) => pgAdmin.Browser.tree.getData(child).connected);
       },
       callbacks: {
+        open_postgresql_dashboard_editor: function(args) {
+          const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
+          showPostgresqlDashboardEditor(Number(node._id));
+        },
         open_postgresql_monitor: function(args) {
           const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
           showPostgresqlMonitor(node._id, undefined, node.label || node._label);
@@ -418,6 +433,12 @@ define('pgadmin.node.server', [
           );
           return false;
         },
+        open_postgresql_server_catalog: function(args) {
+          const item = args?.item || pgBrowser.tree.selected();
+          const data = pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('PostgreSQL server catalog DDN'), this, data, item, 'export', {server_catalog: true});
+          return false;
+        },
         register_cde_sql_connection: function({item, databaseItem}) {
           const tree = pgBrowser.tree;
           const data = tree.itemData(item);
@@ -540,6 +561,12 @@ define('pgadmin.node.server', [
 
           if(!data || data._type != 'server') {
             return false;
+          }
+
+          const pendingStatus = connectionStatusChecks.get(item);
+          if (pendingStatus) {
+            return pendingStatus.then((ready) => ready &&
+              this.callbacks.beforeopen.call(this, item, data));
           }
 
           pgBrowser.tree.addIcon(item, {icon: data.icon});
@@ -1068,9 +1095,9 @@ define('pgadmin.node.server', [
       tree.removeIcon(item);
       tree.addIcon(item, {icon: 'icon-server-connecting'});
 
-      getApiInstance().get(url)
-        .then(({data: res})=>{
-          tree.setInode(item);
+      const check = getApiInstance().get(url)
+        .then(async ({data: res})=>{
+          await tree.setInode(item);
           if (res?.data) {
             if (typeof res.data.icon == 'string') {
               tree.removeIcon(item);
@@ -1089,17 +1116,25 @@ define('pgadmin.node.server', [
             pgBrowser.Events.trigger(
               'pgadmin:server:connected', data._id, item, data
             );
+            return true;
           }
+          return false;
         })
-        .catch((error)=>{
-          tree.setInode(item);
+        .catch(async (error)=>{
+          await tree.setInode(item);
           if (data.shared && pgAdmin.server_mode == 'True'){
             tree.addIcon(item, {icon: 'icon-shared-server-not-connected'});
           }else{
             tree.addIcon(item, {icon: 'icon-server-not-connected'});
           }
           pgAdmin.Browser.notifier.pgRespErrorNotify(error);
+          return false;
+        }).finally(()=>{
+          if (connectionStatusChecks.get(item) === check) {
+            connectionStatusChecks.delete(item);
+          }
         });
+      connectionStatusChecks.set(item, check);
     };
     let disconnect_from_server = async function(obj, data, tree, item, notify=false) {
       let d = data,

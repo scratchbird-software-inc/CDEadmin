@@ -5440,7 +5440,7 @@
     },
     "firebird-query-history": {
       "reference": "SR-F-001357",
-      "title": "Firebird persistent SQL history"
+      "title": "Persistent SQL history"
     },
     "firebird-profiler": {
       "reference": "SR-F-001358",
@@ -5530,6 +5530,62 @@
       "reference": "SR-F-001379",
       "title": "PostgreSQL dedicated monitoring credentials and policy"
     },
+    "postgresql-dashboard-editor": {
+      "reference": "SR-F-001380",
+      "title": "PostgreSQL DDN dashboard draft and publication"
+    },
+    "postgresql-catalog-ddn": {
+      "reference": "SR-F-001381",
+      "title": "PostgreSQL native catalog DDN capture, design and comparison"
+    },
+    "postgresql-recent-observations": {
+      "reference": "SR-F-001382",
+      "title": "PostgreSQL retained monitoring observations"
+    },
+    "sql-source-validation": {
+      "reference": "SR-F-001383",
+      "title": "SQL source diagnostics"
+    },
+    "postgresql-test-data": {
+      "reference": "SR-F-001385",
+      "title": "PostgreSQL test-data recipes"
+    },
+    "postgresql-server-catalog-ddn": {
+      "reference": "SR-F-001384",
+      "title": "PostgreSQL server metadata DDN bundle"
+    },
+    "native-property:domain-constraint": {
+      "reference": "SR-F-001386",
+      "title": "Native domain constraint properties"
+    },
+    "native-utility": {
+      "reference": "SR-F-001387",
+      "title": "Native utility form"
+    },
+    "native-utility:backup": {
+      "reference": "SR-F-001388",
+      "title": "Native object backup"
+    },
+    "native-utility:backup-server": {
+      "reference": "SR-F-001389",
+      "title": "Native server and globals backup"
+    },
+    "native-utility:restore": {
+      "reference": "SR-F-001390",
+      "title": "Native restore"
+    },
+    "native-utility:maintenance": {
+      "reference": "SR-F-001391",
+      "title": "Native maintenance"
+    },
+    "native-utility:import-export": {
+      "reference": "SR-F-001392",
+      "title": "Native data import/export"
+    },
+    "mysql-catalog-ddn": {
+      "reference": "SR-F-001393",
+      "title": "MySQL native catalog and DDN views"
+    },
     "mysql-monitoring-policy": {
       "reference": "SR-F-001394",
       "title": "MySQL dedicated monitoring credentials and policy"
@@ -5545,10 +5601,6 @@
     "mysql-recent-observations": {
       "reference": "SR-F-001397",
       "title": "MySQL retained monitoring observations"
-    },
-    "mysql-catalog-ddn": {
-      "reference": "SR-F-001393",
-      "title": "MySQL native catalog and DDN views"
     },
     "mysql-relational-diagram": {
       "reference": "SR-F-001398",
@@ -5621,6 +5673,34 @@
     "mariadb-native-loadable-function-operation": {
       "reference": "SR-F-001415",
       "title": "Native MariaDB server loadable function operation"
+    },
+    "sqlite-catalog-ddn": {
+      "reference": "SR-F-001416",
+      "title": "SQLite native catalog and DDN views"
+    },
+    "sqlite-dashboard": {
+      "reference": "SR-F-001417",
+      "title": "SQLite display-only dashboard"
+    },
+    "sqlite-monitoring-policy": {
+      "reference": "SR-F-001418",
+      "title": "SQLite monitoring collection policy"
+    },
+    "sqlite-dashboard-editor": {
+      "reference": "SR-F-001419",
+      "title": "SQLite dashboard designer"
+    },
+    "sqlite-catalog-designer": {
+      "reference": "SR-F-001420",
+      "title": "SQLite DDN catalog designer"
+    },
+    "sqlite-server-catalog-ddn": {
+      "reference": "SR-F-001421",
+      "title": "SQLite registered-file catalog and selected DDN collection"
+    },
+    "sqlite-test-data": {
+      "reference": "SR-F-001422",
+      "title": "SQLite native test-data recipe and SQL generation"
     }
   }
 }

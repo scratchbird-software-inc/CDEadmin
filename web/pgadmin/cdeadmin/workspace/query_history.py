@@ -21,6 +21,7 @@ MARIADB_CREDENTIAL_URI = re.compile(r'\b(?:mariadb|mysql(?:x)?)://[^\s/]*@', re.
 MARIADB_AUTHENTICATION = re.compile(r'\bIDENTIFIED\s+(?:BY|WITH|VIA)\b', re.IGNORECASE)
 MYSQL_AUTHENTICATION = re.compile(r'\bIDENTIFIED\s+(?:BY|WITH)\b', re.IGNORECASE)
 DUCKDB_ATTACH = re.compile(r'\bATTACH\b', re.IGNORECASE)
+SQLITE_ATTACH = re.compile(r'\bATTACH\b', re.IGNORECASE)
 
 
 class HistoryError(ValueError):
@@ -75,7 +76,8 @@ class QueryHistory:
                     scope.engine == 'postgresql' and scope.dialect == 'postgresql-sql' or
                     scope.engine == 'mysql' and scope.dialect == 'mysql-sql' or
                     scope.engine == 'mariadb' and scope.dialect == 'mariadb-sql' or
-                    scope.engine == 'duckdb' and scope.dialect == 'duckdb-sql')):
+                    scope.engine == 'duckdb' and scope.dialect == 'duckdb-sql' or
+                    scope.engine == 'sqlite' and scope.dialect == 'sqlite-sql')):
             raise HistoryError('History requires an authorized owner, server, database target and SQL dialect')
         # A separate SQLAlchemy session must never commit unrelated application
         # work. Retry only configuration-store contention, never native SQL.
@@ -130,7 +132,7 @@ class QueryHistory:
             return {'policy': selected, 'total_retained': len(entries),
                     'entries': [entry for entry in entries if search.casefold() in (entry.get('source') or '').casefold()],
                     'scope': {'database_target_id': scope.target, **(
-                        {'engine_id': scope.engine, 'language_profile': scope.dialect} if scope.engine in {'postgresql', 'mysql', 'mariadb', 'duckdb'}
+                        {'engine_id': scope.engine, 'language_profile': scope.dialect} if scope.engine in {'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'}
                         else {'client_sql_dialect': scope.dialect})}}
         return self._run(scope, load)
 
@@ -155,7 +157,8 @@ class QueryHistory:
                         MYSQL_CREDENTIAL_URI.search(source) or MYSQL_AUTHENTICATION.search(source))) or
                     (scope.engine == 'mariadb' and (
                         MARIADB_CREDENTIAL_URI.search(source) or MARIADB_AUTHENTICATION.search(source))) or
-                    (scope.engine == 'duckdb' and DUCKDB_ATTACH.search(source))):
+                    (scope.engine == 'duckdb' and DUCKDB_ATTACH.search(source)) or
+                    (scope.engine == 'sqlite' and SQLITE_ATTACH.search(source))):
                 reason = 'Sensitive source omitted'
             elif len(source.encode('utf-8')) > 65536:
                 reason = 'Source exceeds 64 KiB'

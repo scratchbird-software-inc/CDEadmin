@@ -95,8 +95,24 @@ that omit the limit retain the 100-row default.
 Unified SQL workspace
 ---------------------
 
+Owner direction, 2026-10-11: the native PostgreSQL Query Tool is the presentation
+baseline for the general and Firebird SQL forms. Shared frame, compact icon
+toolbar and execution/transaction controls use the same components. Native
+adapters supply actions, enablement and engine-specific options; presentation
+controls never synthesize transaction outcomes or issue PostgreSQL commands
+against another engine. Connection/dialect selection stays visible. Query source
+and results occupy separate panes; result, plan, message and engine-option tabs
+retain mounted content when switching so cursors and drafts remain owned.
+The global SQL tab also shows the query-tool toolbar, source pane, result tabs
+and metrics when disconnected; it must not fall back to a bare editor. Execution
+and transaction actions remain disabled until a connection is selected.
+Unsupported actions remain absent. PostgreSQL's existing native docking, file,
+history and debugging facilities must be preserved during the migration.
+
 All provider SQL actions activate the global SQL tab. Its active-connection
-selector retains a separate editor/session for each admitted endpoint/database;
+selector prefixes every connection label with its engine type, including
+connections registered before an editor is opened. It retains a separate
+editor/session for each admitted endpoint/database;
 switching connections never commits, rolls back, or replays a statement. The
 same syntax-editor surface is used for every language, with native capabilities
 selecting preparation, plans and diagnostics. Advanced execution options are
@@ -122,3 +138,14 @@ Firebird, Disconnect server (all databases). Disconnect uses the existing native
 release guard: active work must be explicitly completed and closed first. Only
 a successful disconnect removes SQL entries and unloads database internals.
 Registered database names remain browsable while disconnected.
+
+
+Administration refresh stability
+--------------------------------
+
+The context's initial object type and operation initialize an administration
+workspace; catalog/resource refreshes must not reapply them over later user
+choices. A newly requested context may initialize a new selection. If the active
+kind or operation actually disappears from the current permitted descriptor,
+choose an available value and invalidate the old plan. Inspection of a transform
+must retain the transform form, target and matching form reference.

@@ -42,6 +42,6 @@ export default function FirebirdDesignStorage({post, databaseTargetId, kind, cap
     {error && <Alert severity="error">{error}</Alert>}
   </Box>;
 }
-FirebirdDesignStorage.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'duckdb']), post: PropTypes.func, databaseTargetId: PropTypes.string,
+FirebirdDesignStorage.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'duckdb', 'sqlite']), post: PropTypes.func, databaseTargetId: PropTypes.string,
   kind: PropTypes.oneOf(['catalog', 'relations']).isRequired, capture: PropTypes.func.isRequired,
   onLoad: PropTypes.func.isRequired, disabled: PropTypes.bool};

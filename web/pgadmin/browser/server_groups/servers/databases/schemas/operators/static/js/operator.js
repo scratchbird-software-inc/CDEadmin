@@ -7,6 +7,8 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {postgresqlAdministrationContext} from 'sources/cdeadmin_ui/navigation/postgresqlAdministration';
+import {showProviderWorkspace} from 'sources/Dialogs';
 import OperatorSchema from './operator.ui';
 
 define('pgadmin.node.operator', [
@@ -45,6 +47,24 @@ define('pgadmin.node.operator', [
           return;
 
         this.initialized = true;
+        pgBrowser.add_menus(['operator', 'coll-operator'].map(node => ({
+          name: 'postgresql_operator_administration_' + node, node, module: this,
+          applies: ['object', 'context'], callback: 'open_native_administration', priority: 12,
+          label: gettext('Native operator administration...'),
+          enable: (data, item) => Boolean(postgresqlAdministrationContext(
+            pgBrowser.tree, item || pgBrowser.tree.selected(), 'operator')),
+        })));
+      },
+      callbacks: {
+        open_native_administration: function(args) {
+          const selected = postgresqlAdministrationContext(pgBrowser.tree,
+            args?.item || pgBrowser.tree.selected(), 'operator');
+          if (!selected) return false;
+          showProviderWorkspace(gettext('PostgreSQL operator administration'),
+            pgBrowser.Nodes.server, selected.server, selected.serverItem,
+            'administration', selected.context);
+          return false;
+        },
       },
       getSchema: ()=>{
         return new OperatorSchema();

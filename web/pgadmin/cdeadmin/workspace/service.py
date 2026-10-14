@@ -1092,11 +1092,284 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_catalog(self, server, request, *, compare=False, plan=False):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog, compare_catalogs
+        if not isinstance(request, dict) or set(request) - {
+                'database_target_id', 'include_system', 'resource_id', 'source', 'baseline'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL catalog request')
+        try:
+            target = request.get('database_target_id')
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            include_system = request.get('include_system', False)
+            if type(include_system) is not bool:
+                raise ValueError('Invalid system-object selection')
+            resource_id = request.get('resource_id')
+            if resource_id is not None and (not isinstance(resource_id, str) or not resource_id):
+                raise ValueError('Invalid native object selection')
+            document = read_catalog(request.get('source'), engine='postgresql') if compare or plan else None
+            baseline = read_catalog(request.get('baseline'), engine='postgresql') if plan else None
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            for imported in (document, baseline):
+                if imported and (imported['provenance']['endpoint_id'] != context.endpoint_id or
+                                 imported['provenance']['database_target_id'] != target):
+                    raise ValueError('Document belongs to another endpoint or database')
+            captured = provider.capture_catalog(endpoint['route'], include_system=include_system)
+            result = build_export(captured['resources'], endpoint_id=context.endpoint_id,
+                target_id=target, generation=captured['generation'], resource_id=None if plan else resource_id,
+                include_system=include_system, refreshed=True, engine='postgresql', native_model=compare or plan)
+            if plan:
+                from .postgresql_schema_plan import build_plan
+                return build_plan(baseline, document, result)
+            if compare:
+                return compare_catalogs(document, result)
+            result['objects'] = [{'resource_id': item['resource_id'], 'name': item['display_name'],
+                                  'kind': item['resource_kind'], 'path': item['display_path']}
+                                 for item in captured['resources']]
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_test_data(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from .firebird_catalog_export import build_export
+        from .postgresql_test_data import generate, template
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL test-data request')
+        try:
+            target = request.get('database_target_id')
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            captured = provider.capture_catalog(endpoint['route'])
+            model = build_export(captured['resources'], endpoint_id=context.endpoint_id,
+                target_id=target, generation=captured['generation'], engine='postgresql', native_model=True)
+            return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except (ValueError, TypeError, KeyError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_data_capture(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from ..providers.postgresql.data_capture import capture
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL data capture request')
+        try:
+            target = request['database_target_id']
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            return capture(provider, endpoint['route'], context.endpoint_id, request['resource_id'],
+                           mode=request['mode'], row_limit=request['row_limit'])
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_server_catalog(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.server_catalog import inventory, bundle
+        if not isinstance(request, dict) or set(request) - {'database_ids', 'include_system'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL server catalog request')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=None)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, PostgreSQLProvider):
+            raise ProviderWorkspaceError('Select a native PostgreSQL server')
+        try:
+            if 'database_ids' not in request:
+                return inventory(provider, endpoint['route'])
+            return bundle(provider, endpoint['route'], context.endpoint_id, request['database_ids'],
+                          include_system=request.get('include_system', False))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .postgresql_schema_apply import PostgreSQLSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.schema_application import apply_review
+        from ..providers.postgresql.connection_target import database_oid
+        if not isinstance(request, dict) or database_oid(request.get('database_target_id')) is None:
+            raise ProviderWorkspaceError('Select an explicit PostgreSQL database target')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, PostgreSQLProvider):
+            raise ProviderWorkspaceError('Native schema application requires PostgreSQL')
+        provider.permissions.require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable operation storage')
+        applications = PostgreSQLSchemaApplications(str(store.path) + '.postgresql-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'postgresql_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id', 'include_system'}:
+                    raise ValueError('Invalid PostgreSQL schema review request')
+                plan = self.postgresql_catalog(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, plan=True)
+                if plan['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(plan, read_catalog(request['baseline'], engine='postgresql'),
+                    read_catalog(request['source'], engine='postgresql'), owner, binding, target)
+            if action == 'postgresql_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid PostgreSQL schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'postgresql_schema_apply':
+                raise ValueError('Unknown PostgreSQL schema application action')
+            def execute(record):
+                result = apply_review(provider, endpoint['route'], record)
+                try:
+                    self.resource_service.invalidate(context)
+                    result['explorer_invalidated'] = True
+                except Exception as error:
+                    result['explorer_invalidated'] = False
+                    result['refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or not {'original', 'snapshot'} <= request.keys():
+            raise ProviderWorkspaceError('Original and edited relational designs are required')
+        options = dict(request)
+        original, snapshot = options.pop('original'), options.pop('snapshot')
+        catalog = self.postgresql_catalog(server, options)
+        try:
+            return handoff(catalog['snapshot'], original, snapshot, engine='postgresql')
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def duckdb_catalog(self, server, request, *, compare=False):
         from .duckdb_catalog_service import catalog
         try:
             return catalog(self, server, request, compare=compare)
         except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_catalog(self, server, request, *, compare=False):
+        from .sqlite_catalog_service import catalog
+        try:
+            return catalog(self, server, request, compare=compare)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_data_capture(self, server, request):
+        from .sqlite_catalog_service import data
+        try:
+            return data(self, server, request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_data_script(self, server, request):
+        from .sqlite_catalog_service import data_script
+        try:
+            return data_script(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_test_data(self, server, request):
+        from .sqlite_catalog_service import test_data
+        try:
+            return test_data(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_plan(self, server, request):
+        from .sqlite_catalog_service import schema_plan
+        try:
+            return schema_plan(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        import os
+        import stat
+        from .sqlite_schema_apply import SQLiteSchemaApplications, apply_review
+        from .firebird_catalog_import import read_catalog
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        from ..providers.sqlite.provider import SQLiteProvider
+        from ..providers.embedded_route import contained_database
+        if (not isinstance(request, dict) or
+                not isinstance(request.get('database_target_id'), str) or
+                not request['database_target_id']):
+            raise ProviderWorkspaceError('Select an exact SQLite registered file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, SQLiteProvider) or context.profile_id != 'sqlite-native':
+            raise ProviderWorkspaceError('Native schema application requires SQLite')
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        try:
+            path = contained_database(endpoint['route'])
+            if path == ':memory:':
+                raise ValueError('Native application requires an existing writable SQLite file')
+            info = os.stat(path)
+            if not stat.S_ISREG(info.st_mode) or endpoint['route'].get('read_only') is True:
+                raise ValueError('Native application requires an existing writable SQLite file')
+            applications = SQLiteSchemaApplications(
+                str(store.path) + '.sqlite-schema-applications.json')
+            owner = self._principal_id(server)
+            binding = digest({'context': asdict(context), 'route': endpoint['route'],
+                'target': target, 'file_identity': [info.st_dev, info.st_ino]})
+            if action == 'sqlite_schema_review':
+                if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames'}):
+                    raise ValueError('Invalid SQLite schema review request')
+                preview = self.sqlite_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed SQLite plan changed; preview again')
+                return applications.review(preview,
+                    read_catalog(request['baseline'], engine='sqlite'),
+                    read_catalog(request['desired'], engine='sqlite'),
+                    owner, binding, target,
+                    file_identity=[info.st_dev, info.st_ino])
+            if action == 'sqlite_schema_receipt':
+                if set(request) != {'database_target_id', 'review_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid SQLite schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'sqlite_schema_apply' or set(request) != {
+                    'database_target_id', 'review_id', 'review_digest', 'confirmed'}:
+                raise ValueError('Invalid SQLite schema application request')
+            def execute(record):
+                outcome = apply_review(provider, endpoint['route'], record)
+                if outcome['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        outcome['explorer_invalidated'] = True
+                    except Exception as error:
+                        outcome.update(explorer_invalidated=False,
+                                       refresh_error_type=type(error).__name__)
+                return outcome
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (OSError, ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
     def duckdb_data_capture(self, server, request):
@@ -1158,6 +1431,34 @@ class ProviderWorkspaceService:
         except (IntegrityError, StaleDataError):
             assets.repository.rollback()
             raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
+
+    def sqlite_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if (not isinstance(request, dict) or
+                not isinstance(request.get('database_target_id'), str) or
+                not request['database_target_id']):
+            raise ProviderWorkspaceError('Select a registered SQLite database file')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=request['database_target_id'])
+        if (context.profile_id != 'sqlite-native' or
+                context.provider_id != 'org.cdeadmin.sqlite'):
+            raise ProviderWorkspaceError('Select a native SQLite endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='sqlite').apply(
+                self._principal_id(server), {
+                    'endpoint_id': str(context.endpoint_id),
+                    'database_target_id': request['database_target_id']},
+                action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError(
+                'Design storage changed concurrently; reload before saving') from None
 
     def duckdb_schema_plan(self, server, request):
         from .firebird_catalog_import import read_catalog
@@ -2004,9 +2305,18 @@ class ProviderWorkspaceService:
     def _history_context(self, server, target, dialect):
         from .query_history import HistoryScope
         profile = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
-        if profile not in {'mysql-native', 'mariadb-native', 'firebird-native', 'firebird-embedded', 'duckdb-native'}:
+        if profile not in {None, 'postgresql-native', 'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'}:
             raise ProviderWorkspaceError('SQL history is not admitted for this engine')
         context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        if profile in {None, 'postgresql-native'}:
+            from ..providers.postgresql.connection_target import database_oid
+            try:
+                oid = database_oid(target)
+            except ValueError:
+                raise ProviderWorkspaceError('Select an explicit native PostgreSQL database for history') from None
+            if context.profile_id != 'postgresql-native' or oid is None or dialect is not None:
+                raise ProviderWorkspaceError('PostgreSQL history requires its native database target and language')
+            return HistoryScope(self._principal_id(server), server.id, target, 'postgresql-sql', engine='postgresql')
         if profile == 'duckdb-native':
             if context.profile_id != profile or dialect is not None:
                 raise ProviderWorkspaceError('DuckDB history requires its native database target and language')
@@ -2017,6 +2327,16 @@ class ProviderWorkspaceService:
                     matches[0]['database'] != endpoint['route'].get('database')):
                 raise ProviderWorkspaceError('Select an explicit registered DuckDB file for history')
             return HistoryScope(self._principal_id(server), server.id, target, 'duckdb-sql', engine='duckdb')
+        if profile == 'sqlite-native':
+            if context.profile_id != profile or dialect is not None:
+                raise ProviderWorkspaceError('SQLite history requires its native file target and language')
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item for item in targets if item['target_id'] == target]
+            if (not isinstance(target, str) or not target or len(matches) != 1 or
+                    not matches[0].get('database') or
+                    matches[0]['database'] != endpoint['route'].get('database')):
+                raise ProviderWorkspaceError('Select an explicit registered SQLite file for history')
+            return HistoryScope(self._principal_id(server), server.id, target, 'sqlite-sql', engine='sqlite')
         if profile in {'mysql-native', 'mariadb-native'}:
             engine = 'mariadb' if profile == 'mariadb-native' else 'mysql'
             label = 'MariaDB' if engine == 'mariadb' else 'MySQL'
@@ -2175,9 +2495,9 @@ class ProviderWorkspaceService:
 
     def _record_query_request(self, server, target, dialect, source, sensitive, kind, execute):
         factory = getattr(self, 'query_history_factory', None)
-        firebird = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
-            'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native'}
-        if factory is None or not firebird:
+        admitted = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
+            None, 'postgresql-native', 'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'}
+        if factory is None or not admitted:
             return execute()
         history = scope = entry = None
         notice = None
@@ -2272,10 +2592,12 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('plan mode must be boolean')
         if plan_mode:
             if (script_mode or context.provider_id not in {
-                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded',
+                    'org.pgadmin.postgresql'}):
                 raise ProviderWorkspaceError(
-                    'Select a single Firebird statement for plan preparation')
-            policy['firebird_plan'] = True
+                    'Provider has not admitted single-statement plans')
+            policy['postgresql_plan' if context.provider_id ==
+                   'org.pgadmin.postgresql' else 'firebird_plan'] = True
         if client_sql_dialect is not None:
             if context.provider_id not in {
                     'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
@@ -2311,9 +2633,18 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'source_complete':
+                source, prefix = data.get('source'), data.get('source_before_cursor')
+                if (not isinstance(source, str) or not isinstance(prefix, str) or
+                        len(source.encode('utf8')) > 1024 * 1024 or not source.startswith(prefix)):
+                    raise ProviderWorkspaceError('Completion requires bounded source and its exact cursor prefix')
+                return self.studio_service.complete(context, data.get('session_id'), source, prefix)
             if action == 'source_validate':
                 return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
             if action == 'native_script_prepare':
+                parameters = data.get('parameters', {})
+                if not isinstance(parameters, (dict, list)) or parameters:
+                    raise ProviderWorkspaceError('Retained scripts require empty parameter bindings')
                 return self._record_query_request(server, data.get('database_target_id'), data.get('client_sql_dialect'),
                     data.get('source'), data.get('history_sensitive', False), 'script-prepared',
                     lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source')))
@@ -2476,13 +2807,13 @@ class ProviderWorkspaceService:
             **exported,
             'content_base64': base64.b64encode(content).decode('ascii'),
             'media_type': self._export_media_type(export_format),
-            'filename': f'cdeadmin-result-{result_id}.{export_format}',
+            'filename': f'cdeadmin-result-{result_id}.' + ('ddn-workspace.json' if export_format == 'ddn' else export_format),
         }
 
     @staticmethod
     def _export_media_type(export_format):
         media_types = {
-            'csv': 'text/csv', 'json': 'application/json',
+            'csv': 'text/csv', 'json': 'application/json', 'ddn': 'application/json',
             'jsonl': 'application/x-ndjson',
             'xlsx': ('application/vnd.openxmlformats-officedocument.'
                      'spreadsheetml.sheet'),

@@ -26,3 +26,22 @@ describe('DuckDB native test-data recipes', () => {
     expect(post.mock.calls.every(([request]) => request.action === 'duckdb_test_data')).toBe(true);
   });
 });
+
+it('binds SQLite recipes to the SQLite file and action', async () => {
+  const scope = {endpoint_id: 'ep', database_target_id: 'file-1'};
+  const post = jest.fn().mockResolvedValue({scope, tables: [{resource_id: 'sqlite-table',
+    schema: 'main', name: 'facts', columns: [{name: 'n', data_type: 'INTEGER', nullable: true,
+      has_default: false}]}]});
+  render(<Component engine="sqlite" post={post} databaseTargetId="file-1" />);
+  expect(screen.getByText('SR-F-001422')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Load native tables'}));
+  await screen.findByText('main.facts');
+  fireEvent.click(screen.getByRole('button', {name: 'Add table'}));
+  const recipe = JSON.parse(screen.getByRole('textbox', {name: 'Test-data recipe JSON'}).value);
+  expect(recipe.format).toBe('scratchrobin.sqlite.test-data@1');
+  post.mockResolvedValue({source: 'INSERT INTO "main"."facts" DEFAULT VALUES;', rows: 10, tables: 1});
+  fireEvent.click(screen.getByRole('button', {name: 'Generate SQL preview'}));
+  await screen.findByText('10 rows in 1 tables generated; not executed.');
+  expect(post).toHaveBeenLastCalledWith({action: 'sqlite_test_data', request: {
+    database_target_id: 'file-1', recipe}});
+});

@@ -298,10 +298,12 @@ class MonitoringHost:
             maria_released = maria.close() if maria is not None else True
             duckdb = self.app.extensions.get('cdeadmin_duckdb_monitoring_host')
             duckdb_released = duckdb.close() if duckdb is not None else True
+            sqlite = self.app.extensions.get('cdeadmin_sqlite_monitoring_host')
+            sqlite_released = sqlite.close() if sqlite is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
-            released = released and postgres_released and mysql_released and maria_released and duckdb_released
+            released = released and postgres_released and mysql_released and maria_released and duckdb_released and sqlite_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -437,4 +439,6 @@ def init_app(app, endpoint_service):
     init_mariadb(app, host)
     from .duckdb_monitoring_host import init_app as init_duckdb
     init_duckdb(app, host)
+    from .sqlite_monitoring_host import init_app as init_sqlite
+    init_sqlite(app, host)
     return host

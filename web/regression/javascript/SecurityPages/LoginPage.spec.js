@@ -74,6 +74,31 @@ describe('LoginPage', ()=>{
     expect(screen.getByLabelText('Enable QA visual element IDs')).toBeChecked();
   });
 
+  it('reveals and hides browser-autofilled credentials without losing their values', async ()=>{
+    const ctrl = ctrlMount({userLanguage: 'en', langOptions: [],
+      authSources: ['internal'], authSourcesEnum: {OAUTH2: 'oauth2'}, oauth2Config: []});
+    const email = ctrl.container.querySelector('input[name="email"]');
+    const password = ctrl.container.querySelector('input[name="password"]');
+    expect(email).toHaveAttribute('autocomplete', 'username');
+    expect(password).toHaveAttribute('autocomplete', 'current-password');
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toBeRequired();
+    // Model autofill that does not dispatch React's change event.
+    email.value = 'owner@example.test';
+    password.value = 'autofilled-test-value';
+    expect(screen.getByRole('button', {name: 'Login'})).toBeEnabled();
+    fireEvent.click(screen.getByLabelText('Show password'));
+    await waitFor(() => expect(password).toHaveAttribute('type', 'text'));
+    expect(password).toHaveValue('autofilled-test-value');
+    expect(email).toHaveValue('owner@example.test');
+    fireEvent.click(screen.getByLabelText('Show password'));
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toHaveValue('autofilled-test-value');
+    ctrl.unmount();
+    ctrlMount({authSources: ['internal'], authSourcesEnum: {OAUTH2: 'oauth2'}, oauth2Config: []});
+    expect(screen.getByLabelText('Show password')).not.toBeChecked();
+  });
+
   it('offers visual QA mode when internal authentication is unavailable', ()=>{
     const ctrl = ctrlMount({userLanguage: 'en', langOptions: [],
       forgotPassUrl: '/forgot/url', csrfToken: 'some-token',

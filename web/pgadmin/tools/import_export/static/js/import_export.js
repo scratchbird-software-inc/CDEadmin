@@ -181,7 +181,7 @@ define([
 
             let title = isQueryExport ? gettext('Export Data Using Query - database \'%s\'', treeInfo.database.label) : gettext('Import/Export data - table \'%s\'', treeInfo.table.label);
             pgAdmin.Browser.Events.trigger('pgadmin:utility:show', item, title,
-              { schema, extraData, urlBase, sqlHelpUrl, helpUrl, actionType: 'select', saveBtnName: gettext('OK'),
+              { schema, extraData, urlBase, sqlHelpUrl, helpUrl, formKey: 'native-utility:import-export', actionType: 'select', saveBtnName: gettext('OK'),
               }, pgAdmin.Browser.stdW.md, pgAdmin.Browser.stdH.lg
             );
           }

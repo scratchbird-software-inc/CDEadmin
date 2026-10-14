@@ -8,7 +8,7 @@ try {
     if (Buffer.byteLength(input) > 16 * 1024 * 1024) throw new Error();
   }
   const engine = process.argv[2] || 'firebird';
-  if (!['firebird', 'mysql', 'mariadb'].includes(engine)) throw new Error();
+  if (!['firebird', 'postgresql', 'mysql', 'mariadb'].includes(engine)) throw new Error();
   const snapshot = JSON.parse(input), rows = [], fields = [], fieldRecords = [], relations = [], objectIds = new Map(), ids = new Set();
   const visit = (node, parent = null, namespace = null) => {
     if (['mysql', 'mariadb'].includes(engine) && node.type === 'relation') {
@@ -16,7 +16,7 @@ try {
         to_ref: node.to?.$ref ?? null, kind: node.props?.kind ?? null, enforcement: node.props?.enforcement ?? null,
         native_json: node.props?.x_record?.native_json ?? null});
     }
-    if (['mysql', 'mariadb'].includes(engine) && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
+    if (['postgresql', 'mysql', 'mariadb'].includes(engine) && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
     if (node.type === 'field' && typeof node.props?.uid === 'string') {
       fields.push(node.props.uid);
       fieldRecords.push({uid: node.props.uid, parent_resource_id: parent, label: node.label,

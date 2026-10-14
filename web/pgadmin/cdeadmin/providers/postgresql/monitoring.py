@@ -1,5 +1,6 @@
 """Independent PostgreSQL monitoring; no user connection or SQL text capture."""
 import copy
+import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import threading
@@ -43,6 +44,20 @@ SETTINGS_SQL = '''SELECT name, setting, unit FROM pg_catalog.pg_settings
  'track_io_timing','stats_fetch_consistency','autovacuum','max_worker_processes')
  ORDER BY name'''
 
+CONNECTION_OPTIONS = frozenset({'sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'sslcrl',
+    'sslcrldir', 'sslcertmode', 'ssl_min_protocol_version', 'ssl_max_protocol_version',
+    'channel_binding', 'require_auth', 'gssencmode', 'krbsrvname', 'target_session_attrs', 'hostaddr',
+    'keepalives', 'keepalives_idle', 'keepalives_interval', 'keepalives_count', 'tcp_user_timeout'})
+
+
+def counter_integer(value):
+    # pgAdmin installs global text loaders for bigint. Independent psycopg
+    # attachments inherit them: normalize only exact native bigint encodings,
+    # never floats, booleans, arbitrary decimals or missing values.
+    if isinstance(value, str) and re.fullmatch(r'0|[1-9][0-9]{0,18}', value):
+        value = int(value)
+    return value if type(value) is int and 0 <= value <= 2**63 - 1 else None
+
 
 def wire(value):
     if isinstance(value, bool) or value is None:
@@ -82,6 +97,7 @@ class PostgreSQLMonitor:
         self._clock = monotonic_ns
         self._lock = threading.Lock()
         self._connection = None
+        self._tunnel = None
         self._closed = False
         self._needs_release = False
         self._epoch = None
@@ -100,22 +116,36 @@ class PostgreSQLMonitor:
             timeout = int(timeout)
         if type(timeout) is not int or not 1 <= timeout <= 30:
             raise PostgreSQLMonitoringError('Monitoring connection timeout must be 1 to 30 seconds')
-        allowed = {'sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'sslcrl',
-                   'sslcrldir', 'ssl_min_protocol_version', 'ssl_max_protocol_version',
-                   'channel_binding', 'gssencmode', 'krbsrvname', 'target_session_attrs'}
-        if set(options) - allowed:
+        if set(options) - CONNECTION_OPTIONS:
             raise PostgreSQLMonitoringError('Unsupported monitoring connection options')
         reference = route.get('credential_reference_id')
         if not reference or not route.get('principal_reference'):
             raise PostgreSQLMonitoringError('Monitoring credential reference is unavailable')
+        port = route['port']
+        if route.get('ssh') is not None:
+            from .monitoring_ssh import MonitoringSSHTunnel
+            self._tunnel = MonitoringSSHTunnel(self.permissions, route)
+            port = self._tunnel.start()
+            # libpq keeps the original hostname for TLS hostname verification.
+            options['hostaddr'] = '127.0.0.1'
         with self.permissions.acquire_secret(reference, route['principal_reference'],
                                              'connect', 'database_password') as lease:
             def attach(value):
-                return (self._connect or psycopg.connect)(
-                    host=route['host'], port=route['port'], user=route['user'],
-                    dbname=route['database'], password=bytes(value).decode('utf8'),
-                    application_name='ScratchRobin monitoring', connect_timeout=timeout,
-                    autocommit=True, **options)
+                def connect(tls_password=None):
+                    parameters = dict(options)
+                    if tls_password is not None:
+                        parameters['sslpassword'] = bytes(tls_password).decode('utf8')
+                    return (self._connect or psycopg.connect)(
+                        host=route['host'], port=port, user=route['user'],
+                        dbname=route['database'], password=bytes(value).decode('utf8'),
+                        application_name='ScratchRobin monitoring', connect_timeout=timeout,
+                        autocommit=True, **parameters)
+                tls_reference = route.get('credential_references', {}).get('tls_private_key_password')
+                if tls_reference:
+                    with self.permissions.acquire_secret(tls_reference, route['principal_reference'],
+                            'connect', 'tls_private_key_password') as tls_lease:
+                        return tls_lease.use(connect)
+                return connect()
             connection = lease.use(attach)
         self._connection = connection
         if connection.info.server_version != 180003:
@@ -132,6 +162,9 @@ class PostgreSQLMonitor:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+        if self._tunnel is not None:
+            self._tunnel.close()
+            self._tunnel = None
         self._needs_release = False
         self._previous = {}
         self._settings = None
@@ -170,7 +203,7 @@ class PostgreSQLMonitor:
         for row in group.get('rows', []):
             identity = (row['datid'], postmaster, row['stats_reset'])
             old = self._previous.get(identity)
-            values = {key: row[key] for key in COUNTERS}
+            values = {key: counter_integer(row.get(key)) for key in COUNTERS}
             valid = (old is not None and started > old[0] and
                      all(type(value) is int and type(old[1].get(key)) is int
                          and value >= old[1][key] for key, value in values.items()))
@@ -186,10 +219,12 @@ class PostgreSQLMonitor:
             if self._closed:
                 raise PostgreSQLMonitoringError('Monitoring source is closed')
             start = self._clock()
+            probe_key = 'transaction_refresh' if self.scope == 'database' else 'service_probe'
             result = {'schema': 'postgresql-monitoring-sample@1', 'sample_id': str(uuid.uuid4()),
                       'scope': self.scope, 'status': 'available', 'history': 'volatile',
                       'started_at': datetime.now(timezone.utc).isoformat(), 'groups': {},
-                      'last_success_at': self._last_success}
+                      'last_success_at': self._last_success,
+                      probe_key: {'status': 'not-completed'}}
             try:
                 if self._needs_release:
                     self._release()
@@ -239,6 +274,8 @@ class PostgreSQLMonitor:
                 self._last_success = datetime.now(timezone.utc).isoformat()
                 result['last_success_at'] = self._last_success
                 result['transaction_completed'] = True
+                result[probe_key] = {'status': 'completed',
+                                     'evidence': 'owned-read-only-transaction-commit'}
             except Exception as error:
                 result.update(status='unavailable', error_type=type(error).__name__, transaction_completed=False)
                 self._previous = {}

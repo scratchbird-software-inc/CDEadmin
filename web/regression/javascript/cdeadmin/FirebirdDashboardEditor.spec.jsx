@@ -2,9 +2,12 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import FirebirdDashboardEditor from 'sources/Dialogs/FirebirdDashboardEditor';
 import getApiInstance from 'sources/api_instance';
 import pgAdmin from 'sources/pgadmin';
+import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
+import {loadDDNLibraries} from 'sources/cdeadmin_ui/integrations/ddn/library';
 import {withTheme} from '../fake_theme';
 
 jest.mock('sources/api_instance');
+jest.mock('sources/cdeadmin_ui/integrations/ddn/library');
 jest.mock('sources/url_for', () => () => '/definition');
 let mockProps;
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
@@ -36,6 +39,20 @@ describe('separate Firebird dashboard draft editor', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/definition?sid=7&target_id=db', {schema: 'draft'}));
     unmount();
     expect(remove).toHaveBeenCalled();
+  });
+  it('seeds PostgreSQL catalog identities without storing observed metric values', async () => {
+    loadDDNLibraries.mockResolvedValue({viewer});
+    api.get.mockResolvedValueOnce({data: {data: {assetRef: {assetVersion: 0}, snapshot: null}}});
+    api.get.mockResolvedValueOnce({data: {data: {state: 'collecting', sample_age_seconds: 1, stale_after_seconds: 15,
+      samples: [{scope: 'database', status: 'available', transaction_completed: true,
+        groups: {database: {status: 'available', rows: [{datid: '42', datname: 'qa', xact_commit: '987654321'}]}}}]}}});
+    const {unmount} = render(<Component engine="postgresql" serverId={7} targetId="postgresql-database:42" panelId="postgres-editor" />);
+    await screen.findByRole('button', {name: 'Save test draft'});
+    expect(mockProps.snapshot.files['dashboard.ddn']).toContain('database_42_7161_0');
+    expect(mockProps.snapshot.files['dashboard.ddn']).not.toContain('987654321');
+    expect(screen.getByText('SR-F-001380')).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(2);
+    unmount();
   });
   it('guards dirty and unapplied drafts while allowing clean close', async () => {
     const {unmount} = render(<Component panelId="editor" />);

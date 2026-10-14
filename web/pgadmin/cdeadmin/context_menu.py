@@ -35,8 +35,9 @@ _HANDLERS = frozenset({
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
+    'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
     'open_firebird_fleet',
-    'open_postgresql_fleet',
+    'open_postgresql_fleet', 'open_postgresql_dashboard_editor',
     'open_firebird_docker',
     'open_firebird_dashboard_editor',
     'refresh_node',
@@ -256,6 +257,13 @@ def connector_context_actions(
             _action('connector.duckdb.dashboard_editor', 'Edit DuckDB engine dashboard...', 'open_duckdb_dashboard_editor',
                 icon='action.edit', group='information', priority=6, mutation='write'),
         ])
+    if engine_id == 'sqlite' and not localhost_placeholder:
+        actions.extend([
+            _action('connector.sqlite.monitoring', 'SQLite engine dashboard...', 'open_sqlite_fleet',
+                icon='tool.dashboard', group='information', priority=5),
+            _action('connector.sqlite.dashboard_editor', 'Edit SQLite engine dashboard...', 'open_sqlite_dashboard_editor',
+                icon='action.edit', group='information', priority=6, mutation='write'),
+        ])
     if engine_id == 'mysql' and not localhost_placeholder:
         actions.extend([
             _action('connector.mysql.monitoring', 'MySQL engine dashboard...', 'open_mysql_fleet',
@@ -264,6 +272,11 @@ def connector_context_actions(
                 icon='action.edit', group='information', priority=6, mutation='write'),
         ])
     if engine_id == 'postgresql' and not localhost_placeholder:
+        actions.append(_action(
+            'connector.postgresql.dashboard_editor', 'Edit PostgreSQL engine dashboard...',
+            'open_postgresql_dashboard_editor', icon='tool.dashboard', group='information',
+            priority=6,
+        ))
         actions.append(_action(
             'connector.postgresql.monitoring', 'PostgreSQL engine dashboard...',
             'open_postgresql_fleet', icon='tool.dashboard', group='information',
@@ -723,6 +736,18 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.duckdb.dashboard_editor', 'Edit DuckDB dashboard...',
             'open_duckdb_dashboard_editor', icon='action.edit', group='availability', mutation='write',
             enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
+    if engine_id == 'sqlite':
+        actions.append(_action('endpoint.sqlite.monitoring', 'SQLite registered-file dashboard...',
+            'open_workspace', icon='tool.dashboard', group='availability', arguments={'tab': 'monitoring'},
+            enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
+        actions.append(_action('endpoint.sqlite.catalog_ddn', 'Registered SQLite files and DDN...',
+            'open_workspace', icon='action.export', group='database',
+            arguments={'tab': 'export', 'server_catalog': True},
+            enabled=ready and can_manage,
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
+        actions.append(_action('endpoint.sqlite.dashboard_editor', 'Edit SQLite dashboard...',
+            'open_sqlite_dashboard_editor', icon='action.edit', group='availability', mutation='write',
+            enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB server dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
@@ -945,6 +970,17 @@ def database_target_context_actions(
         icon=icon, group='database', priority=10 + index,
         arguments={**base, 'tab': tab},
     ) for index, (tab, label, icon) in enumerate(rows)]
+    if engine_id == 'sqlite':
+        actions.append(_action(
+            'database.sqlite.catalog_ddn', 'SQLite metadata and DDN diagrams...',
+            'open_workspace', icon='action.export', group='database',
+            arguments={**base, 'tab': 'export'},
+        ))
+        actions.append(_action(
+            'database.sqlite.test_data', 'Generate SQLite test data...',
+            'open_workspace', icon='action.edit', group='database',
+            arguments={**base, 'tab': 'sqlite-test-data'},
+        ))
     if engine_id == 'duckdb':
         actions.append(_action(
             'database.duckdb.catalog_ddn', 'DuckDB metadata and DDN diagrams...',
@@ -1255,6 +1291,16 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.attachment', 'Plan native DuckDB attachment...',
             'open_workspace', icon='action.connect', group='database', priority=47,
             arguments={**base, 'tab': 'duckdb-attachment'}))
+    if engine_id == 'sqlite':
+        for tab, label in (('monitoring', 'SQLite database dashboard...'),
+                           ('monitoring_policy', 'Configure SQLite monitoring collection...')):
+            actions.append(_action(f'database.sqlite.{tab}', label, 'open_workspace',
+                icon='tool.dashboard', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read',
+                arguments={**base, 'tab': tab}))
+        actions.append(_action('database.sqlite.dashboard_editor', 'Edit SQLite dashboard...',
+            'open_sqlite_dashboard_editor', icon='action.edit', group='availability',
+            mutation='write', arguments=base))
     if engine_id == 'mariadb':
         for tab, label in (('monitoring', 'MariaDB database dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
@@ -1552,6 +1598,11 @@ def resource_context_actions(
         actions.append(_action('resource.duckdb.table.copy', 'Native DuckDB COPY...',
             'open_workspace', icon='action.export', group='object', priority=12,
             arguments={**base, 'tab': 'duckdb-copy'}))
+    if (engine_id == 'sqlite' and resource_kind == 'table' and database_target_id and
+            resource_native(resource).get('system_object') is not True):
+        actions.append(_action('resource.sqlite.table.export_sql', 'Export SQLite table as native SQL...',
+            'open_workspace', icon='action.export', group='object', priority=12,
+            arguments={**base, 'tab': 'export'}))
     for index, operation in enumerate(operations):
         operation_id = operation.get('operation_id')
         if (

@@ -1,12 +1,49 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {TextDecoder, TextEncoder} from 'util';
 import NativeNavigation from '../../../pgadmin/static/js/cdeadmin_ui/navigation/NativeNavigation';
 import LanguageSourceEditorBase from '../../../pgadmin/static/js/cdeadmin_ui/editors/LanguageSourceEditor';
-
 import {withTheme} from '../fake_theme';
 
 const LanguageSourceEditor = withTheme(LanguageSourceEditorBase);
 
 const node = (id, label, kind, children=[], section=null) => ({id,label,kind,children,section,form_reference:'SR-F-000085'});
+beforeAll(() => {global.TextDecoder = TextDecoder; global.TextEncoder = TextEncoder;});
+
+test('refuses retained scripts with nonempty query bindings before opening a session', async () => {
+  const post=jest.fn(), session=jest.fn();
+  render(<LanguageSourceEditor language={{language_profile:'postgresql-sql',tooling:{script_framing:true}}}
+    source="SELECT 1" parameterSource={'{"value":42}'} onChange={jest.fn()} post={post}
+    ensureSession={session} onScriptLock={jest.fn()} />);
+  fireEvent.click(screen.getByText('Preview script'));
+  expect(await screen.findByText(/Retained scripts require an empty parameter/)).toBeInTheDocument();
+  expect(post).not.toHaveBeenCalled();
+  expect(session).not.toHaveBeenCalled();
+});
+
+test('reviews PostgreSQL current statement and prepares multi-statement slices without executing', async () => {
+  const source='SELECT 1; SELECT 2';
+  const execute=jest.fn();
+  const post=jest.fn().mockImplementation(async request => request.action==='source_validate' ? {
+    syntax_valid:true,statements:[{source:'SELECT 1',start:0,end:8},{source:'SELECT 2',start:10,end:18}],
+  } : {plan_id:'slice',state:'ready',revision:0,statements:[{source:'SELECT 1'},{source:'SELECT 2'}]});
+  render(<LanguageSourceEditor language={{language_profile:'postgresql-sql',tooling:{script_framing:true}}}
+    source={source} onChange={jest.fn()} post={post} ensureSession={async ()=>'owned'} databaseTargetId="db1"
+    onScriptLock={jest.fn()} onExecute={execute} />);
+  fireEvent.click(screen.getByText('Prepare current statement'));
+  expect(await screen.findByLabelText('Prepared execution source')).toHaveValue('SELECT 1');
+  expect(execute).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('Run prepared source'));
+  expect(execute).toHaveBeenCalledWith('SELECT 1',false);
+  execute.mockClear();
+  fireEvent.click(screen.getByText('Prepare from cursor'));
+  fireEvent.click(await screen.findByText('Preview prepared script'));
+  await waitFor(()=>expect(post).toHaveBeenCalledWith(expect.objectContaining({
+    action:'native_script_prepare',source:'SELECT 1\n;\nSELECT 2',session_id:'owned',database_target_id:'db1',
+  })));
+  expect(screen.getByText('Run / resume retained script')).toBeEnabled();
+  expect(execute).not.toHaveBeenCalled();
+  expect(post.mock.calls.some(([request])=>request.action==='native_script_advance')).toBe(false);
+});
 
 test('binds real table children and opens owner sections, with numbered missing destinations', () => {
   const open=jest.fn();
@@ -28,7 +65,7 @@ test('validates through the retained language session without executing source',
     post={post} ensureSession={async ()=>'s1'} databaseTargetId="db1" onScriptLock={jest.fn()} />);
   fireEvent.click(screen.getByText('Check source'));
   await waitFor(()=>expect(post).toHaveBeenCalledWith({action:'source_validate',session_id:'s1',source:'SELECT 1',database_target_id:'db1'}));
-  expect(await screen.findByText(/not certified/)).toBeInTheDocument();
+  expect(await screen.findByText(/SQL grammar: not checked/)).toBeInTheDocument();
 });
 
 test('resumes the same retained plan after an unavailable observation', async () => {
@@ -43,9 +80,31 @@ test('resumes the same retained plan after an unavailable observation', async ()
   await waitFor(()=>expect(screen.getByText('Run / resume retained script')).toBeEnabled());
   fireEvent.click(screen.getByText('Run / resume retained script'));
   await screen.findByText(/Observation unavailable/);
+  expect(screen.getByLabelText('Load source file')).toBeDisabled();
   expect(lock).toHaveBeenLastCalledWith(true);
   fireEvent.click(screen.getByText('Run / resume retained script'));
   await waitFor(()=>expect(lock).toHaveBeenLastCalledWith(false));
   expect(post.mock.calls.filter(([p])=>p.action==='native_script_prepare')).toHaveLength(1);
   expect(post.mock.calls[2][0]).toEqual(expect.objectContaining({action:'native_script_advance',plan_id:'p1',revision:1}));
+});
+
+test('loads native UTF-8 source without opening a session or executing SQL', async () => {
+  const post=jest.fn(), session=jest.fn(), change=jest.fn();
+  render(<LanguageSourceEditor language={{language_profile:'postgresql-sql'}} source="SELECT 1" onChange={change}
+    post={post} ensureSession={session} databaseTargetId="db1" onScriptLock={jest.fn()} />);
+  const source='SELECT \'é漢\';\r\nSELECT 2;', bytes=new TextEncoder().encode(source);
+  fireEvent.change(screen.getByLabelText('Load source file'), {target:{files:[{size:bytes.length,arrayBuffer:async ()=>bytes}]}});
+  await waitFor(()=>expect(change).toHaveBeenCalledWith(source));
+  expect(post).not.toHaveBeenCalled(); expect(session).not.toHaveBeenCalled();
+});
+
+test('late file completion cannot overwrite a new source or database binding', async () => {
+  let resolve;
+  const change=jest.fn(), props={language:{language_profile:'postgresql-sql'},source:'SELECT 1',onChange:change,
+    post:jest.fn(),ensureSession:jest.fn(),databaseTargetId:'db1',onScriptLock:jest.fn()};
+  const view=render(<LanguageSourceEditor {...props} />);
+  fireEvent.change(screen.getByLabelText('Load source file'), {target:{files:[{size:8,arrayBuffer:()=>new Promise(done=>{resolve=done;})}]}});
+  view.rerender(<LanguageSourceEditor {...props} source="SELECT 3" databaseTargetId="db2" />);
+  await act(async ()=>{resolve(new TextEncoder().encode('SELECT 2'));});
+  expect(change.mock.calls.map(([value])=>value)).not.toContain('SELECT 2');
 });

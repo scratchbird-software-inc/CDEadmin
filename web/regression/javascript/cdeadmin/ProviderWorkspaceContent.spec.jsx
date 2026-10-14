@@ -853,6 +853,7 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio"
       initialContext={{database_target_id: 'firebird-target'}} />);
+    fireEvent.click(await screen.findByRole('tab', {name: 'Engine options'}));
     const input = await screen.findByLabelText('Query parameters (JSON array)');
     expect(input).toHaveValue('[]');
     expect(screen.getByText('Ordered ? placeholders')).toBeInTheDocument();
@@ -875,7 +876,67 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   });
 
-  it.each(['mysql'])('observes %s autocommit and changes only acknowledged policy', async (engine) => {
+  it('shares a pending PostgreSQL session and policy observation between validation and execution', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'postgresql-sql', title: 'PostgreSQL SQL', starter_source: 'SELECT 1',
+    }]}}});
+    let opened;
+    const opening = new Promise(resolve => {opened = resolve;});
+    api.post.mockImplementation((_url, payload) => payload.action === 'open_session' ? opening : Promise.resolve({data: {data: {
+      transaction: {provider_payload: {autocommit: true}},
+      source_validate: {grammar_valid: true, diagnostics: []},
+      execute: {occurrence_id: 'pg-concurrent'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Check source'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'open_session')).toHaveLength(1);
+    opened({data: {data: {session_id: 'pg-shared-opening'}}});
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', session_id: 'pg-shared-opening',
+    })));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'source_validate', session_id: 'pg-shared-opening',
+    })));
+    expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'open_session')).toHaveLength(1);
+    expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'transaction')).toHaveLength(1);
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+  });
+
+  it('binds PostgreSQL plan parameters and displays native diagnostics and scoped timings', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'postgresql-sql', title: 'PostgreSQL SQL', starter_source: 'SELECT %s',
+      parameter_shape: 'object-or-array', query_plan_templates: [
+        {label: 'Estimated plan', source_template: 'EXPLAIN (FORMAT JSON) {source}'},
+      ],
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'pg-plan'}, transaction: {provider_payload: {autocommit: true}},
+      execute: {occurrence_id: 'plan-one'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {postgresql: {payload: {
+        has_page: false, statement_metrics: {dispatch_ms: 12.5},
+        error: {sqlstate: '42601', message_primary: 'Native syntax error', message_hint: 'Check source', statement_position: '8'},
+      }}}}}, rendered_result: null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio" />);
+    fireEvent.change(await screen.findByLabelText('Query parameters (JSON object or array)'), {target: {value: '[42]'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Explain / query plan'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({
+      action: 'execute', source: 'EXPLAIN (FORMAT JSON) SELECT %s', parameters: [42], plan_mode: true,
+    })));
+    expect(await screen.findByLabelText('Statement metrics')).toHaveTextContent('12.5 ms');
+    fireEvent.click(screen.getByRole('tab', {name: 'Messages'}));
+    expect(screen.getByLabelText('PostgreSQL diagnostic')).toHaveTextContent('Check source');
+    expect(screen.getByLabelText('PostgreSQL diagnostic')).toHaveTextContent('statement_position: 8');
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({action: 'execute', source: 'SELECT %s'})));
+    fireEvent.click(screen.getByRole('tab', {name: 'Explain'}));
+    expect(screen.getByText('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')).toBeVisible();
+  });
+
+  it.each(['postgresql', 'mysql'])('observes %s autocommit and changes only acknowledged policy', async (engine) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',
       transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
@@ -907,6 +968,42 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeEnabled());
     expect(screen.getByRole('checkbox', {name: 'Autocommit'})).not.toBeChecked();
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'execute')).toBe(false);
+  });
+
+  it.each([
+    ['MySQL JSON query plan', 'EXPLAIN FORMAT=JSON {source}'],
+    ['MySQL execution plan', 'EXPLAIN ANALYZE {source}'],
+  ])('uses the shared query form for %s without Firebird controls', async (label, template) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT %s',
+      parameter_shape: 'object-or-array', transaction_actions: ['commit', 'rollback'],
+      query_plan_templates: [{label, source_template: template}],
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-session'},
+      execute: {occurrence_id: 'mysql-plan'},
+      poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+      transaction: {provider_payload: {state: 'active', autocommit: false, in_transaction: true}},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'mysql-target'}} />);
+    fireEvent.click(await screen.findByRole('tab', {name: 'Engine options'}));
+    expect(screen.getByLabelText('MySQL session observation')).toHaveTextContent('Not observed');
+    expect(screen.queryByLabelText('Statement SQL dialect')).not.toBeInTheDocument();
+    expect(screen.queryByText('Run with native profiling')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Query parameters (JSON object or array)'), {target: {value: '[42]'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Provider transaction state'}));
+    await waitFor(() => expect(screen.getByLabelText('MySQL session observation')).toHaveTextContent('active'));
+    expect(screen.getByLabelText('MySQL session observation')).toHaveTextContent('Autocommit (observed)Off');
+    fireEvent.click(screen.getByRole('button', {name: label}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'execute', session_id: 'mysql-session', database_target_id: 'mysql-target',
+      source: template.replace('{source}', 'SELECT %s'), parameters: [42],
+      history_sensitive: false,
+    }));
+    expect(screen.getByRole('tab', {name: 'Explain'})).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    expect(api.post.mock.calls.some(([, value]) => value.action === 'transaction_action')).toBe(false);
   });
 
   it('retains MySQL dispatch timing and native diagnostics without inventing engine timing or a row result', async () => {
@@ -972,6 +1069,7 @@ describe('ProviderWorkspaceContent', () => {
             errno: 1146, sqlstate: '42S02'}}}},
         }}, rendered_result: null,
       } : {open_session: {session_id: 'mysql-session'},
+        transaction: {provider_payload: {autocommit: true}},
         execute: {occurrence_id: 'mysql-occurrence'}}[payload.action];
       return Promise.resolve({data: {data: result}});
     });
@@ -1001,6 +1099,7 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio"
       initialContext={{database_target_id: 'firebird-target'}} />);
+    fireEvent.click(await screen.findByRole('tab', {name: 'Engine options'}));
     expect(await screen.findByRole('button', {name: 'Disable all DECFLOAT traps'})).toBeDisabled();
     fireEvent.click(screen.getByRole('button', {name: 'Provider transaction state'}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
@@ -1014,6 +1113,7 @@ describe('ProviderWorkspaceContent', () => {
       action: 'execute', session_id: 'firebird-session', source: 'SET DECFLOAT TRAPS TO',
       parameters: [], database_target_id: 'firebird-target', client_sql_dialect: 3, history_sensitive: false,
     }));
+    fireEvent.click(screen.getByRole('tab', {name: 'Engine options'}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Inspect DECFLOAT traps'})).toBeEnabled());
     expect(api.post.mock.calls.filter(([, value]) => value.action === 'open_session')).toHaveLength(1);
     expect(screen.getByRole('button', {name: 'Disable all DECFLOAT traps'})).toBeDisabled();
@@ -1067,6 +1167,7 @@ describe('ProviderWorkspaceContent', () => {
     const request = api.post.mock.calls.find(([, payload]) => payload.action === 'execute')[1];
     expect(request).not.toHaveProperty('max_rows');
     expect(request).not.toHaveProperty('script_mode');
+    expect(screen.getByRole('tab', {name: 'Explain'})).toHaveAttribute('aria-selected', 'true');
   });
 
   it.each(['', '-1', '1.5', '1000001'])('rejects invalid Firebird row bound %s before opening a session', async (value) => {
@@ -1195,11 +1296,8 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    const run = await screen.findByRole('button', {name: 'Run', exact: true});
-    await waitFor(() => expect(run).toBeEnabled());
-    fireEvent.click(run);
-    await screen.findByRole('button', {name: 'Cancel request'});
-    await waitFor(() => expect(screen.getByRole('button', {name: 'Cancel request'})).toBeEnabled());
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Cancel request'})).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', {name: 'Cancel request'}));
     expect(await screen.findByText('Firebird query did not complete. Native status codes: 335544794')).toBeInTheDocument();
     expect(api.post.mock.calls.filter(([, payload]) => payload.action === 'execute')).toHaveLength(1);
@@ -2026,7 +2124,7 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByLabelText('Query source'))
       .toHaveValue('SELECT 42 FROM RDB$DATABASE'));
     expect(screen.getByRole('region', {name: 'Provider query workspace'}))
-      .toHaveStyle({overflow: 'hidden', minHeight: '0'});
+      .toHaveStyle({overflow: 'auto', minHeight: '0'});
     expect(screen.queryByText(/editor is intentionally empty/)).not.toBeInTheDocument();
   });
 
@@ -2557,7 +2655,8 @@ describe('ProviderWorkspaceContent', () => {
     )).toBeInTheDocument();
     expect(screen.getByLabelText('Query source')).toHaveValue('');
     expect(screen.queryByDisplayValue('SELECT 1')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', {name: 'Explain'})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Data Output'})).toHaveAttribute('aria-selected', 'true');
     fireEvent.change(screen.getByLabelText('Query source'), {
       target: {value: 'provider-owned user source'},
     });
@@ -3123,10 +3222,11 @@ describe('ProviderWorkspaceContent', () => {
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
     fireEvent.click(await screen.findByRole('button', {name: 'commit', exact: true}));
+    fireEvent.click(screen.getByRole('tab', {name: 'Messages'}));
     expect(await screen.findByText(/next_transaction_started/)).toBeVisible();
     expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeDisabled();
     expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Close query session'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Close query session', exact: true})).toBeEnabled();
     expect(api.post.mock.calls.filter(([, payload]) =>
       payload.action === 'transaction_action')).toHaveLength(1);
   });
@@ -3156,14 +3256,14 @@ describe('ProviderWorkspaceContent', () => {
     ));
     expect(await screen.findByText(/driver_observation_only/))
       .toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', {name: 'Close query session'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Close query session', exact: true}));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith(
       '/workspace/1', {
         action: 'close_session', session_id: 'session-one',
         database_target_id: null,
       }
     ));
-    expect(screen.getByRole('button', {name: 'Close query session'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Close query session', exact: true})).toBeDisabled();
   });
 
   it('pages, exports, and compares endpoint-bound retained results', async () => {
@@ -3233,6 +3333,11 @@ describe('ProviderWorkspaceContent', () => {
       endpointUrl="/workspace/1" initialTab="studio" />);
     fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
     const results = await screen.findByLabelText('Document results');
+    fireEvent.click(screen.getByRole('tab', {name: 'Messages'}));
+    expect(results).not.toBeVisible();
+    fireEvent.click(screen.getByRole('tab', {name: 'Data Output'}));
+    expect(screen.getByLabelText('Document results')).toBe(results);
+    expect(results).toBeVisible();
     expect(results).toHaveTextContent('0123456789abcdef01234567');
     expect(results).toHaveTextContent('42');
   });
@@ -4403,5 +4508,30 @@ describe('ProviderWorkspaceContent', () => {
     expect(pivot).toHaveTextContent('42.5');
     expect(pivot).toHaveTextContent('Drill down');
     expect(pivot).toHaveTextContent('Transpose axes');
+  });
+});
+
+describe('administration refresh selection stability', () => {
+  it('keeps user-selected kind and operation when catalog and inspected target refresh', async () => {
+    const catalog = {objects: ['access-method', 'transform'].map(kind => ({
+      resource_kind: kind, title: kind, operations: ['create', 'inspect', 'drop'].map(operation => ({
+        operation_id: operation, title: operation, target_required: false, form: {fields: []},
+      })),
+    }))};
+    const target = {resource_id: 'transform:42', resource_kind: 'transform', display_name: 'jsonb'};
+    const post = jest.fn(async () => target);
+    const props = {catalog, resources: [target], post, setError: jest.fn(),
+      initialResourceKind: 'access-method', initialOperationId: 'create'};
+    const view = render(<VisualAdministration {...props} />);
+    fireEvent.change(screen.getByRole('combobox', {name: 'Object type'}).parentElement.querySelector('input'), {target: {value: 'transform'}});
+    fireEvent.change(screen.getByRole('combobox', {name: 'Operation'}).parentElement.querySelector('input'), {target: {value: 'inspect'}});
+    view.rerender(<VisualAdministration {...props} catalog={JSON.parse(JSON.stringify(catalog))}
+      selectedResource={target} resourceGeneration="refreshed" />);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({action: 'resource_inspect'})));
+    expect(screen.getByRole('combobox', {name: 'Object type'})).toHaveTextContent('transform');
+    expect(screen.getByRole('combobox', {name: 'Operation'})).toHaveTextContent('inspect');
+    view.rerender(<VisualAdministration {...props} initialResourceKind="transform" initialOperationId="drop"
+      selectedResource={target} resourceGeneration="refreshed" />);
+    await waitFor(() => expect(screen.getByRole('combobox', {name: 'Operation'})).toHaveTextContent('drop'));
   });
 });

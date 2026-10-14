@@ -16,6 +16,15 @@ const mysqlCounts = {engine: {inventory: 5}, server: {availability: 9, native_st
   database: {availability: 9, native_status: 5, native_settings: 5, native_storage: 5, native_activity: 5, native_replication: 5}};
 const duckdbCounts = {engine: {inventory: 5}, server: {availability: 9, registrations: 3},
   database: {availability: 9, storage: 8, database: 3, extensions: 3, limitations: 2}};
+const sqliteCounts = {engine: {inventory: 5}, server: {availability: 9, registrations: 3},
+  database: {availability: 9, storage: 6, database: 4, limitations: 2}};
+function sqliteDynamic(id, scope) {
+  if(scope !== 'engine') return false;
+  const match = /^sqlite_fleet_[1-9][0-9]*_[a-f0-9]{2,1024}_([a-f0-9]{2,128})$/.exec(id);
+  if(!match) return false;
+  return ['name', 'collector', 'freshness', 'heartbeat', 'target_id', 'observed_at']
+    .some(field => [...new TextEncoder().encode(field)].map(byte => byte.toString(16).padStart(2, '0')).join('') === match[1]);
+}
 function duckdbDynamic(id, scope) {
   if(scope !== 'engine') return false;
   const match = /^duckdb_fleet_[1-9][0-9]*_[a-f0-9]{2,1024}_([a-f0-9]{2,128})$/.exec(id);
@@ -73,8 +82,8 @@ function records(runtime, files) {
   return {parsed, rows: blocks[0].children};
 }
 export function validatePublication(runtime, snapshot, scope, engine='firebird') {
-  check(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb'].includes(engine), 'Unknown dashboard engine.');
-  const bindings = engine === 'postgresql' ? postgresCounts : ['mysql', 'mariadb'].includes(engine) ? mysqlCounts : engine === 'duckdb' ? duckdbCounts : counts;
+  check(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine), 'Unknown dashboard engine.');
+  const bindings = engine === 'postgresql' ? postgresCounts : ['mysql', 'mariadb'].includes(engine) ? mysqlCounts : engine === 'duckdb' ? duckdbCounts : engine === 'sqlite' ? sqliteCounts : counts;
   check(bindings[scope], 'Unknown dashboard scope.');
   check(snapshot?.format === 'ddn-workspace@1', 'Unsupported dashboard format.');
   check(Object.keys(snapshot.files || {}).join() === 'dashboard.ddn', 'Use one dashboard.ddn file.');
@@ -82,7 +91,7 @@ export function validatePublication(runtime, snapshot, scope, engine='firebird')
   const source = snapshot.files['dashboard.ddn'];
   check(typeof source === 'string' && new TextEncoder().encode(source).length <= 512 * 1024, 'Dashboard source exceeds its limit.');
   const {parsed, rows} = records(runtime, snapshot.files);
-  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring', 'scratchrobin.mariadb.monitoring', 'scratchrobin.duckdb.monitoring'].includes(parsed.module) :
+  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring', 'scratchrobin.mariadb.monitoring', 'scratchrobin.duckdb.monitoring', 'scratchrobin.sqlite.monitoring'].includes(parsed.module) :
     parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
   check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)), 'Unsupported dashboard declaration.');
   const allowed = new Set(Object.entries(bindings[scope]).flatMap(([prefix, count]) =>
@@ -92,6 +101,7 @@ export function validatePublication(runtime, snapshot, scope, engine='firebird')
   for(const row of rows) {
     check((allowed.has(row.id) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
       (engine === 'duckdb' && duckdbDynamic(row.id, scope)) ||
+      (engine === 'sqlite' && sqliteDynamic(row.id, scope)) ||
       (['mysql', 'mariadb'].includes(engine) && mysqlDynamic(row.id, scope, engine))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');
     seen.add(row.id);
     check(row.type === 'object' && row.props.kind === 'record' && !row.children.length,

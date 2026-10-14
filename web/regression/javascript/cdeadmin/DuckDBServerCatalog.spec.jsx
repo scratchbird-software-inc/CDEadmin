@@ -37,3 +37,13 @@ describe('DuckDB registered-file catalog', () => {
     expect(screen.getByRole('combobox', {name: 'Captured catalog'})).toBeVisible();
   });
 });
+
+it('uses SQLite endpoint capture and its own form identity', async () => {
+  const post = jest.fn().mockResolvedValue({files: [{target_id: 'file-1',
+    display_name: 'File one', active: true}]});
+  render(<Component engine="sqlite" post={post} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Load registered files'}));
+  expect(await screen.findByRole('table', {name: 'SQLite registered file selection'})).toBeVisible();
+  expect(post).toHaveBeenCalledWith({action: 'sqlite_catalog_export', request: {}});
+  expect(screen.getByText('SR-F-001421')).toBeVisible();
+});

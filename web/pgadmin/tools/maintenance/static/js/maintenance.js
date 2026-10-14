@@ -194,7 +194,7 @@ define([
 
             pgAdmin.Browser.Events.trigger('pgadmin:utility:show', item,
               gettext('Maintenance'),{
-                schema, extraData, urlBase, sqlHelpUrl, helpUrl, saveBtnName: gettext('OK'),
+                schema, extraData, urlBase, sqlHelpUrl, helpUrl, formKey: 'native-utility:maintenance', saveBtnName: gettext('OK'),
               }, pgAdmin.Browser.stdW.md, pgAdmin.Browser.stdH.lg
             );
           }

@@ -22,7 +22,7 @@ def _exact_json(value):
 
 
 def read_relations(snapshot, *, engine="firebird"):
-    if engine not in {"firebird", "mysql", "mariadb"}:
+    if engine not in {"firebird", "postgresql", "mysql", "mariadb"}:
         raise ValueError("Unsupported relational engine")
     if (not isinstance(snapshot, dict) or set(snapshot) != {'format', 'entry', 'view', 'files'} or
             snapshot['format'] != 'ddn-workspace@1' or not isinstance(snapshot['files'], dict) or
@@ -52,7 +52,7 @@ def read_relations(snapshot, *, engine="firebird"):
             raise ValueError('Duplicate relational field identity')
         children = []
         for row in rows:
-            if engine in {'mysql', 'mariadb'}:
+            if engine in {'postgresql', 'mysql', 'mariadb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
                     '_property_names': field['property_names']} for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
@@ -114,7 +114,7 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
     for identity, row in after.items():
         old, live = before.get(identity), current['rows'].get(identity)
         if old is None or live is None or live['kind'] not in ({'table', 'view', 'column', 'constraint'} if engine == 'firebird' else
-                {'table', 'view', 'materialized-view'}):
+                {'table', 'partitioned-table', 'foreign-table', 'view', 'materialized-view', 'constraint'}):
             raise ValueError('Relational definition requires explicit catalog identity reconciliation: ' + identity)
         if old['uid'] != live['uid'] or row['uid'] != live['uid']:
             raise ValueError('Relational design belongs to another database or object')
@@ -131,6 +131,9 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
                     constraint_changes[identity],mode,engine=engine)
+        if engine == 'postgresql':
+            from .postgresql_relational_fields import merge_fields
+            facts[1] = merge_fields(old, row)
         if engine=='mariadb' and facts[0].get('definition')!=facts[1].get('definition') and 'WITH SYSTEM VERSIONING' in facts[0].get('definition','').upper():
             if not allow_temporal_history:raise ValueError('Graphical system-versioned schema edits require explicit native KEEP-history acceptance')
             intent=facts[1].setdefault('mariadb_change',{})

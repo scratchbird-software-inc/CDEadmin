@@ -28,7 +28,7 @@ def _json(value):
 def build_export(resources, *, endpoint_id, target_id, generation,
                  resource_id=None, include_system=False, refreshed=False,
                  native_model=False, engine="firebird"):
-    if engine not in {"firebird", "mysql", "mariadb", "duckdb"}:
+    if engine not in {"firebird", "postgresql", "mysql", "mariadb", "duckdb", "sqlite"}:
         raise ValueError("Unsupported native catalog engine")
     if len(resources) > MAX_RESOURCES:
         raise ValueError('Catalog exceeds the 20,000-resource export limit')
@@ -44,7 +44,7 @@ def build_export(resources, *, endpoint_id, target_id, generation,
         observations.extend(native.get('catalog_observations') or [])
         warnings.extend(native.get('catalog_warnings') or [])
     selected = set(by_id)
-    if engine == 'duckdb' and resource_id is not None and by_id[resource_id]['resource_kind'] in {'database', 'attached-database'}:
+    if engine in {'duckdb', 'sqlite'} and resource_id is not None and by_id[resource_id]['resource_kind'] in {'database', 'attached-database'}:
         catalog = by_id[resource_id]['display_path'][0]
         selected = {item['resource_id'] for item in resources if (item.get('display_path') or [None])[0] == catalog}
     elif resource_id is not None and by_id[resource_id]['resource_kind'] != 'database':
@@ -183,12 +183,16 @@ def build_export(resources, *, endpoint_id, target_id, generation,
     result = {'snapshot': snapshot, 'provenance': provenance, 'views': view_metadata,
               'filename': f'{engine}-catalog.ddn-workspace.json' if multi else f'{engine}-catalog.ddn',
               'sha256': hashlib.sha256(download.encode('utf-8')).hexdigest()}
-    if engine == 'duckdb':
+    if engine == 'sqlite':
+        from .sqlite_erd import build_diagram
+    elif engine == 'duckdb':
         from .duckdb_erd import build_diagram
     elif engine == 'mariadb':
         from .mariadb_erd import build_diagram
     elif engine == 'mysql':
         from .mysql_erd import build_diagram
+    elif engine == 'postgresql':
+        from .postgresql_erd import build_diagram
     else:
         from .firebird_erd import build_diagram
     try:

@@ -102,3 +102,44 @@ def test_fleet_reads_only_owned_collectors_and_discards_revoked_samples(tmp_path
         assert database['name'] == 'Unavailable target'
         assert database['snapshot'] == {'state': 'authorization-denied', 'samples': []}
     finally: shared.close()
+
+
+def test_dashboard_scope_requires_owned_server_and_exact_connected_database(tmp_path, monkeypatch):
+    from pgadmin.utils.driver.registry import DriverRegistry
+    host, shared, _ = make_host(tmp_path, monkeypatch)
+    connection = Mock(db='qa')
+    connection.connected.return_value = True
+    manager = Mock()
+    manager.connection.return_value = connection
+    driver = Mock()
+    driver.connection_manager.return_value = manager
+    monkeypatch.setattr(DriverRegistry, 'get', lambda name: driver)
+    try:
+        scope = host.definition_scope(1, 7, 'postgresql-database:42')
+        assert scope['engine'] == 'postgresql' and scope['database'] == 'qa'
+        assert scope['target_id'] == 'postgresql-database:42'
+        manager.connection.assert_called_once_with(did=42)
+        with pytest.raises(PermissionError):
+            host.definition_scope(2, 7, 'postgresql-database:42')
+        with pytest.raises(ValueError):
+            host.definition_scope(1, None, 'postgresql-database:42')
+        connection.connected.return_value = False
+        with pytest.raises(PermissionError):
+            host.definition_scope(1, 7, 'postgresql-database:42')
+        assert host.definition_scope(1, 7, None)['kind'] == 'server'
+        assert not host._grants and host.ownership.fd is None
+    finally:
+        shared.close()
+
+
+@pytest.mark.parametrize('provider,version,profile,profile_version,accepted', [
+    ('org.pgadmin.postgresql', None, None, None, True),
+    ('org.pgadmin.postgresql', '9.17.0', 'postgresql-native', '18.3', True),
+    ('org.pgadmin.postgresql', '9.17.0', 'postgresql-native', '17', False),
+    ('org.pgadmin.postgresql', 'unqualified', 'postgresql-native', '18.3', False),
+    ('org.pgadmin.cockroachdb', None, None, None, False),
+])
+def test_monitoring_accepts_both_native_registration_paths_only(provider, version, profile, profile_version, accepted):
+    server = SimpleNamespace(endpoint_profile=SimpleNamespace(provider_id=provider,
+        provider_version=version, profile_id=profile, profile_version=profile_version))
+    assert PostgreSQLMonitoringHost._native_registration(server) is accepted

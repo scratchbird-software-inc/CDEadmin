@@ -56,7 +56,7 @@ def test_owned_target_export_compare_and_foreign_document_rejection(tmp_path):
         preview = service.duckdb_schema_plan(server, {'database_target_id': 'owned-target',
             'baseline': source, 'desired': source})
         assert preview['operations'] == [] and not preview['executed']
-        assert not preview['application_supported']
+        assert not preview['application_supported']  # No operation to review.
         other = build_export(provider.capture_catalog.return_value['resources'],
             endpoint_id='foreign-endpoint', target_id='owned-target', generation='native-1', engine='duckdb')
         provider.capture_catalog.reset_mock()

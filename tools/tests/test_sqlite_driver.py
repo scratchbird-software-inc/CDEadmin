@@ -66,6 +66,20 @@ def test_exact_storage_and_bindings(client, tmp_path):
     assert rows(execute(client, handle, 'SELECT ?', [42])) == [[42]]
 
 
+def test_native_statement_metrics_report_measured_scope(client, tmp_path):
+    handle, _ = open_database(client, tmp_path)
+    pages = execute(client, handle, 'SELECT 1 UNION ALL SELECT 2')
+    metrics = pages[-1]['payload']['statement_metrics']
+    assert metrics['rows_buffered'] == 2
+    assert metrics['prepare_ms'] is None
+    assert metrics['plan'] is None
+    assert metrics['dispatch_ms'] >= 0
+    assert metrics['fetch_ms'] >= 0
+    assert metrics['execute_ms'] >= metrics['dispatch_ms']
+    assert 'Preparation is not separately measured' in metrics[
+        'measurement_scope']
+
+
 def test_unsafe_integer_rejected_before_any_sql():
     for binding in [[2**60], [{'encoding': 'integer', 'data': str(2**63)}],
                     [{'encoding': 'decimal', 'data': '1.23'}]]:

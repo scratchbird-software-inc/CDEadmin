@@ -119,6 +119,8 @@ PRESERVED_SURFACE_CONCEPTS = {
             'type': ('create', 'alter', 'drop', 'inspect'),
             'aggregate': ('create', 'alter', 'drop', 'inspect'),
             'cast': ('create', 'drop', 'inspect'),
+            'access-method': ('create', 'drop', 'inspect'),
+            'transform': ('create', 'drop', 'inspect'),
             'collation': ('create', 'alter', 'drop', 'inspect'),
             'conversion': ('create', 'alter', 'drop', 'inspect'),
             'language': ('create', 'alter', 'drop', 'inspect'),
@@ -409,7 +411,7 @@ def adapt_catalog(catalog):
         'refresh': 'admin',
     }
     native_form_kinds = {
-        'conversion', 'operator-class', 'operator-family',
+        'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate',
     }
 
     def native_form(kind, operation_id, title):
@@ -423,6 +425,39 @@ def adapt_catalog(catalog):
 
         if operation_id == 'inspect':
             fields = []
+        elif kind == 'aggregate' and operation_id == 'create':
+            fields = [field('schema', 'Schema', required=True), field('name', 'Name', required=True),
+                      field('replace', 'Allow CREATE OR REPLACE', 'boolean'),
+                      field('definition', 'Native aggregate definition', 'code', required=True,
+                            help='One qualified CREATE AGGREGATE statement. Supports native ordered-set, hypothetical, variadic, parallel and moving-aggregate options.')]
+        elif kind == 'operator' and operation_id == 'create':
+            fields = [field('schema', 'Schema', required=True),
+                      field('name', 'Operator symbol', required=True),
+                      field('function', 'Implementation function', required=True, catalog_kind='function'),
+                      field('left_type', 'Left operand type (omit for prefix)', catalog_kind='type'),
+                      field('right_type', 'Right operand type', required=True, catalog_kind='type'),
+                      field('options', 'Optimization options', 'json', help='Optional commutator, negator, restrict, join function references and hashes/merges booleans.')]
+        elif kind == 'operator' and operation_id == 'alter':
+            fields = [field('action', 'Alter action', 'select', True, options=[
+                {'value': 'owner', 'label': 'Change owner'},
+                {'value': 'schema', 'label': 'Move to schema'},
+                {'value': 'comment', 'label': 'Set or remove comment'},
+                {'value': 'options', 'label': 'Change optimization options'}]),
+                field('value', 'Owner, schema or comment', visible_when={'field_id': 'action', 'in': ['owner', 'schema', 'comment']}),
+                field('options', 'Optimization options', 'json', required=True,
+                      visible_when={'field_id': 'action', 'equals': 'options'},
+                      help='restrict/join: function or null to remove; commutator/negator: operator reference; hashes/merges: true to enable.')]
+        elif operation_id == 'create' and kind == 'access-method':
+            fields = [field('name', 'Name', required=True),
+                      field('method_type', 'Method type', 'select', True, options=[
+                          {'value': 'INDEX', 'label': 'Index'}, {'value': 'TABLE', 'label': 'Table'}]),
+                      field('handler', 'Handler function', required=True, catalog_kind='function')]
+        elif operation_id == 'create' and kind == 'transform':
+            fields = [field('data_type', 'Data type', required=True, catalog_kind='type'),
+                      field('language', 'Language', required=True, catalog_kind='language'),
+                      field('replace', 'Replace existing transform', 'boolean'),
+                      field('from_sql', 'FROM SQL function', 'json', help='Function and argument_types object.'),
+                      field('to_sql', 'TO SQL function', 'json', help='Function and argument_types object. At least one direction is required.')]
         elif operation_id == 'create':
             fields = [
                 field('schema', 'Schema', required=True),
@@ -450,8 +485,13 @@ def adapt_catalog(catalog):
                         field('default', 'Default operator class', 'boolean'),
                         field('storage_type', 'Storage data type',
                               catalog_kind='type'),
-                        field('operators', 'Strategy operators', 'json', True),
-                        field('functions', 'Support functions', 'json', True),
+                        field('operators', 'Strategy operators', 'json', help=(
+                            'Array of strategy, operator, optional operand_types (two types), '
+                            'and optional sort_family. Use [] when the access method needs no operators.')),
+                        field('functions', 'Support functions', 'json', help=(
+                            'Array of support, function, argument_types, and optional operand_types. '
+                            'Example: [{"support":1,"function":"pg_catalog.btint4cmp",'
+                            '"argument_types":["pg_catalog.int4","pg_catalog.int4"]}]')),
                     ))
         elif operation_id == 'alter':
             fields = [
@@ -460,8 +500,21 @@ def adapt_catalog(catalog):
                     {'value': 'rename', 'label': 'Rename'},
                     {'value': 'schema', 'label': 'Move to schema'},
                 ]),
-                field('value', 'New owner, name, or schema', required=True),
+                field('value', 'New owner, name, or schema', required=kind != 'operator-family'),
             ]
+            if kind == 'operator-family':
+                fields[1]['required'] = True
+                fields[1]['visible_when'] = {'field_id': 'action', 'in': ['owner', 'rename', 'schema']}
+                fields[0]['options'].extend([
+                    {'value': 'add_members', 'label': 'Add members'},
+                    {'value': 'drop_members', 'label': 'Remove members'}])
+                fields.extend([
+                    field('operators', 'Added operators', 'json', visible_when={'field_id': 'action', 'equals': 'add_members'}, help='Strategy, operator and operand_types entries.'),
+                    field('functions', 'Added functions', 'json', visible_when={'field_id': 'action', 'equals': 'add_members'}, help='Support number, function, argument_types and operand_types entries.'),
+                    field('members', 'Removed members', 'json', required=True, visible_when={'field_id': 'action', 'equals': 'drop_members'}, help='Kind (OPERATOR/FUNCTION), number and two operand_types per entry.')])
+            if kind == 'aggregate':
+                fields[0]['options'].append({'value': 'comment', 'label': 'Set or remove comment'})
+                fields[1].update(label='New owner, name, schema or comment', required=False)
         else:
             fields = [
                 field('cascade', 'Drop dependent objects', 'boolean'),
@@ -470,6 +523,7 @@ def adapt_catalog(catalog):
             ]
         return {
             'form_id': f'postgresql-{kind}-{operation_id}',
+            'form_key': f'native:postgresql:{"database" if kind in {"access-method", "transform"} else "schema"}:{kind}',
             'title': f'{operation_id.title()} {title}',
             'fields': fields,
         }

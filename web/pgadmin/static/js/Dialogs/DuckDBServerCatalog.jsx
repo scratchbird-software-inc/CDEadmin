@@ -5,7 +5,8 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
-export default function DuckDBServerCatalog({post}) {
+export default function DuckDBServerCatalog({post, engine = 'duckdb'}) {
+  const label = engine === 'sqlite' ? 'SQLite' : 'DuckDB';
   const [inventory, setInventory] = useState(null), [result, setResult] = useState(null);
   const [selected, setSelected] = useState([]), [includeSystem, setIncludeSystem] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [page, setPage] = useState(0);
@@ -16,12 +17,12 @@ export default function DuckDBServerCatalog({post}) {
   const run = async capture => {
     const token = ++serial.current; setBusy(true); setError('');
     try {
-      const response = await post({action: 'duckdb_catalog_export', request: capture ? {
+      const response = await post({action: `${engine}_catalog_export`, request: capture ? {
         database_target_ids: selected, include_system: includeSystem} : {}});
       if(token !== serial.current) return;
       if(capture) {setResult(response); setDocumentId('endpoint'); setDisplay('inventory'); setView(response.server.document.snapshot.view);}
       else {setInventory(response); setSelected([]); setResult(null); setPage(0);}
-    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB endpoint capture failed');}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || `${label} endpoint capture failed`);}
     finally {if(token === serial.current) setBusy(false);}
   };
   const documents = result ? [{id: 'endpoint', name: 'Registered files', document: result.server.document},
@@ -33,13 +34,13 @@ export default function DuckDBServerCatalog({post}) {
     const body = JSON.stringify(single ? shown.snapshot : result);
     const url = URL.createObjectURL(new Blob([body], {type: 'application/json'}));
     const link = document.createElement('a'); link.href = url;
-    link.download = single ? 'duckdb-catalog.ddn-workspace.json' : 'duckdb-registered-files-ddn-bundle.json';
+    link.download = single ? `${engine}-catalog.ddn-workspace.json` : `${engine}-registered-files-ddn-bundle.json`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
-    <FormReference formKey="duckdb-server-catalog-ddn" />
+    <FormReference formKey={engine === 'sqlite' ? 'sqlite-server-catalog-ddn' : 'duckdb-server-catalog-ddn'} />
     {error && <Alert severity="error">{error}</Alert>}
-    <Alert severity="info">Each registered file is captured on its own DuckDB connection. The documents are independent observations, not an atomic endpoint snapshot or a multi-file migration.</Alert>
+    <Alert severity="info">Each registered file is captured on its own {label} connection. The documents are independent observations, not an atomic endpoint snapshot or a multi-file migration.</Alert>
     <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
       <Button disabled={busy} onClick={() => run(false)}>Load registered files</Button>
       <FormControlLabel label="Include system objects" control={<Checkbox checked={includeSystem} disabled={busy}
@@ -53,10 +54,10 @@ export default function DuckDBServerCatalog({post}) {
           onClick={() => setSelected(inventory.files.map(item => item.target_id))}>Select all registered files</Button>
         <Button disabled={busy || !selected.length} onClick={() => setSelected([])}>Clear selection</Button>
       </Box>
-      <Table size="small" aria-label="DuckDB registered file selection"><TableHead><TableRow>
+      <Table size="small" aria-label={`${label} registered file selection`}><TableHead><TableRow>
         <TableCell>Select</TableCell><TableCell>Registered file</TableCell><TableCell>Active</TableCell>
       </TableRow></TableHead><TableBody>{inventory.files.slice(page * 25, page * 25 + 25).map(item =>
-        <TableRow key={item.target_id}><TableCell><Checkbox inputProps={{'aria-label': `Select DuckDB file ${item.display_name}`}}
+        <TableRow key={item.target_id}><TableCell><Checkbox inputProps={{'aria-label': `Select ${label} file ${item.display_name}`}}
           checked={selected.includes(item.target_id)} disabled={busy || (!selected.includes(item.target_id) && selected.length >= 32)}
           onChange={event => setSelected(current => event.target.checked ? [...current, item.target_id] :
             current.filter(identity => identity !== item.target_id))} /></TableCell>
@@ -92,4 +93,4 @@ export default function DuckDBServerCatalog({post}) {
     </>}
   </Box>;
 }
-DuckDBServerCatalog.propTypes = {post: PropTypes.func.isRequired};
+DuckDBServerCatalog.propTypes = {post: PropTypes.func.isRequired, engine: PropTypes.oneOf(['duckdb', 'sqlite'])};

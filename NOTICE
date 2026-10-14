@@ -45,8 +45,17 @@ maintained compatibility interfaces.
 DDN library notice
 ==================
 
-CDEadmin includes the independently reusable DDN runtime/viewer
-0.5.0-draft.2 and DDN Designer 0.1.0-preview.1 distributions under
-`web/pgadmin/static/vendor/ddn`. The distributions identify themselves as
+CDEadmin includes the independently reusable DDN runtime/viewer and unified
+designer distributions under `web/pgadmin/static/vendor/ddn`. The consumed
+revision and hashes are recorded with those resources. The distributions identify themselves as
 MIT licensed. Their SPDX notices, public declarations, exact-file manifest,
 and a copy of the MIT licence are retained with the vendored resources.
+
+PostgreSQL grammar dependency
+============================
+
+The optional Python-3.10-or-later PostgreSQL grammar functionality uses pglast
+8.5 (https://github.com/lelit/pglast), licensed GPL-3.0-or-later. Its distribution
+includes libpg_query/PostgreSQL code and separate third-party notices. Preserve
+the dependency's license and bundled notices when packaging it; the application
+license does not replace those terms. No pglast source is vendored here.

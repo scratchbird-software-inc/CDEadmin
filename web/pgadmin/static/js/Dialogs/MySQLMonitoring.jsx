@@ -8,8 +8,10 @@ import {bindPublication} from '../cdeadmin_ui/integrations/ddn/dashboardPublicat
 import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {mysqlDashboardFiles, mysqlFleetFiles, mysqlFleetPublication} from '../cdeadmin_ui/integrations/ddn/mysqlDashboard';
 import {duckdbDashboardFiles, duckdbFleetFiles, duckdbFleetPublication} from '../cdeadmin_ui/integrations/ddn/duckdbDashboard';
+import {sqliteDashboardFiles, sqliteFleetFiles, sqliteFleetPublication} from '../cdeadmin_ui/integrations/ddn/sqliteDashboard';
 import MySQLTrendView from './MySQLTrendView';
 import DuckDBTrendView from './DuckDBTrendView';
+import SQLiteTrendView from './SQLiteTrendView';
 export {mysqlDashboardFiles} from '../cdeadmin_ui/integrations/ddn/mysqlDashboard';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
@@ -17,7 +19,10 @@ const defaults = {interval_seconds: 5, retain_samples: 120, lease_seconds: 3600,
   metadata_interval_seconds: 60, heartbeat_enabled: false, heartbeat_timeout_seconds: null};
 
 export default function MySQLMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate, engine='mysql'}) {
-  const embedded = engine === 'duckdb';
+  const embedded = ['duckdb', 'sqlite'].includes(engine);
+  const embeddedDashboard = engine === 'sqlite' ? sqliteDashboardFiles : duckdbDashboardFiles;
+  const embeddedFleetFiles = engine === 'sqlite' ? sqliteFleetFiles : duckdbFleetFiles;
+  const embeddedFleetPublication = engine === 'sqlite' ? sqliteFleetPublication : duckdbFleetPublication;
   const scope = engineMode ? 'engine' : targetId ? 'database' : 'server', showPolicy = policyMode && !engineMode;
   const endpoint = `/cdeadmin/api/monitoring/${engine}${engineMode ? '' : '/' + serverId}${targetId ? '?target_id=' + encodeURIComponent(targetId) : ''}`;
   const definitionEndpoint = `/cdeadmin/api/monitoring/${engine}/definition?published=1${engineMode ? '' : '&sid=' + serverId}${targetId ? '&target_id=' + encodeURIComponent(targetId) : ''}`;
@@ -47,8 +52,8 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           const definition = (await getApiInstance().get(definitionEndpoint)).data.data;
           if(definition?.state === 'published') {
             const {viewer} = await loadDDNLibraries();
-            const live = engineMode ? embedded ? duckdbFleetFiles(response.data.data) : mysqlFleetFiles(response.data.data, engine) :
-              embedded ? duckdbDashboardFiles(response.data.data, scope) : mysqlDashboardFiles(response.data.data, scope, engine);
+            const live = engineMode ? embedded ? embeddedFleetFiles(response.data.data) : mysqlFleetFiles(response.data.data, engine) :
+              embedded ? embeddedDashboard(response.data.data, scope) : mysqlDashboardFiles(response.data.data, scope, engine);
             publication = bindPublication(viewer, definition.snapshot, scope, live, engine);
           }
         }
@@ -79,8 +84,8 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     finally {if(token === serial.current) {changing.current = false; setBusy(false); setCredentials(value => ({...value, password: ''}));}}
   };
   const {files, pages} = useMemo(() => engineMode ?
-    embedded ? duckdbFleetPublication(snapshot) : mysqlFleetPublication(snapshot, 128, engine) :
-    {files: embedded ? duckdbDashboardFiles(snapshot, scope) : mysqlDashboardFiles(snapshot, scope, engine),
+    embedded ? embeddedFleetPublication(snapshot) : mysqlFleetPublication(snapshot, 128, engine) :
+    {files: embedded ? embeddedDashboard(snapshot, scope) : mysqlDashboardFiles(snapshot, scope, engine),
       pages: ['dashboard']}, [snapshot, scope, engineMode, engine, embedded]);
   const active = Boolean(snapshot && snapshot.state !== 'disabled');
   const valid = Number.isInteger(policy.interval_seconds) && policy.interval_seconds >= (targetId ? 5 : 15) && policy.interval_seconds <= 300 &&
@@ -94,7 +99,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     {error && <Alert severity="error">{error}</Alert>}
     {actionError && <Alert severity="error">{actionError}</Alert>}
     {showPolicy ? <>
-      <Alert severity="info">{embedded ? 'Collection owns a separate connection to the registered DuckDB file and continues without an open dashboard. Stop collection before changing policy. Samples last for this process and lease.' :
+      <Alert severity="info">{embedded ? `Collection owns a separate connection to the registered ${engine === 'sqlite' ? 'SQLite' : 'DuckDB'} file and continues without an open dashboard. Stop collection before changing policy. Samples last for this process and lease.` :
         'Collection owns a separate connection and continues without an open dashboard. Stop collection before changing policy or credentials. Samples and sealed credentials last for this process and lease.'}</Alert>
       {snapshot?.collection_available === false && <Alert severity="warning">{embedded ?
         'Monitoring requires single-process admission and a process lock.' :
@@ -144,7 +149,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           ...(server.databases || []).map(database => <MenuItem key={`${server.server_id}/${database.target_id}`} value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
         ])}
       </TextField>}
-      {display === 'trends' && !engineMode ? embedded ? <DuckDBTrendView snapshot={snapshot} /> :
+      {display === 'trends' && !engineMode ? engine === 'sqlite' ? <SQLiteTrendView snapshot={snapshot} /> : embedded ? <DuckDBTrendView snapshot={snapshot} /> :
         <MySQLTrendView snapshot={snapshot} scope={scope} engine={engine} /> :
         <Box sx={{height: 'calc(100% - 76px)', minHeight: 300}}><DDNViewerSurface presentation snapshot={publishedView || {
           format: 'ddn-workspace@1', entry: 'dashboard.ddn', view: pages.includes(page) ? page : 'dashboard', files}} /></Box>}
@@ -152,4 +157,4 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
   </Box>;
 }
 MySQLMonitoring.propTypes = {serverId: PropTypes.number, targetId: PropTypes.string, policyMode: PropTypes.bool,
-  engineMode: PropTypes.bool, onNavigate: PropTypes.func, engine: PropTypes.oneOf(['mysql', 'mariadb', 'duckdb'])};
+  engineMode: PropTypes.bool, onNavigate: PropTypes.func, engine: PropTypes.oneOf(['mysql', 'mariadb', 'duckdb', 'sqlite'])};

@@ -20,6 +20,7 @@ def client_fixture(rows=()):
                             query_value_normalizer=lambda value: value)
     connection = Mock()
     cursor = connection.cursor.return_value
+    cursor.statement_metrics = None
     cursor.description = [('N', int)]
     cursor.rowcount = -1
     cursor.fetchmany.side_effect = lambda count: list(rows)[:count]
@@ -191,7 +192,8 @@ def test_workspace_transports_policy_to_the_selected_database_session():
     workspace.execute('server', 'session', 'source', [], 'target', max_rows=7)
     workspace.studio_service.execute.assert_called_once_with(
         context, 'session', 'source', parameters=[],
-        output_policy={'redact_keys': [], 'max_rows': 7})
+        output_policy={'redact_keys': [], 'firebird_statement_metrics': True,
+                       'max_rows': 7})
     workspace.endpoint_service.workspace.assert_called_once_with(
         'server', database_target_id='target')
 

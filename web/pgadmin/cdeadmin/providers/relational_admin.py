@@ -3567,7 +3567,9 @@ class RelationalAdministration:
                               for name, value in values.items()}
                 identity_token = None
                 if row_identity_available and all(
-                        key in values for key in key_columns):
+                        key in values for key in key_columns) and not (
+                        self.dialect.engine_id == 'sqlite' and
+                        any(values[key] is None for key in key_columns)):
                     array_columns = tuple(
                         name for name, native in zip(columns, native_types)
                         if self.dialect.engine_id == 'firebird' and

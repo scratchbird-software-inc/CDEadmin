@@ -1,3 +1,4 @@
+import {validatePublication, bindPublication} from 'sources/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
 import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
 import {postgresqlDashboardFiles, postgresqlFleetFiles} from 'sources/cdeadmin_ui/integrations/ddn/postgresqlDashboard';
 
@@ -14,14 +15,48 @@ describe('PostgreSQL native DDN dashboard', () => {
       database: group([{datid: '16384', datname: 'db " } view injected {}', xact_commit: '9007199254740993',
         rate_state: 'available', rates_per_second: {xact_commit: '1.5000000000001'}}]),
       activity: group([{visible_backends: '2', active: '0', restricted_or_unavailable: '1'}], {visibility: 'permission-limited'}),
-      tables: group([{schemaname: 'public', relname: 'accounts', n_live_tup: '27'}], {truncated: true}),
+      tables: group([{relid: '42', schemaname: 'public', relname: 'accounts', n_live_tup: '27'}], {truncated: true}),
       locks: group([{locktype: 'relation', mode: 'AccessShareLock', granted: true, count: '1'}]),
-      replication: group([{application_name: 'replica', replay_lag: null}], {scope: 'server'}),
+      replication: group([{pid: '123', application_name: 'replica', replay_lag: null}], {scope: 'server'}),
       io: group([{backend_type: 'client backend', object: 'relation', context: 'normal', read_bytes: '123'}], {scope: 'server'}),
       settings: group([{name: 'shared_buffers', setting: '16384', unit: '8kB'}], {scope: 'server'}),
     }};
   const snapshot = (last=sample) => ({state: 'collecting', sample_age_seconds: 1,
     stale_after_seconds: 15, samples: [last]});
+  it.each(['engine', 'server', 'database'])('admits PostgreSQL %s publications using only native bindings', scope => {
+    const files = scope === 'engine' ? postgresqlFleetFiles(null) : postgresqlDashboardFiles(snapshot({...sample, scope}), 'Published', scope);
+    const draft = {format: 'ddn-workspace@1', files, entry: 'dashboard.ddn', view: 'dashboard'};
+    const clean = validatePublication(viewer, draft, scope, 'postgresql');
+    expect(clean.files['dashboard.ddn']).not.toContain('9007199254740993');
+    expect(() => bindPublication(viewer, clean, scope, files, 'postgresql')).not.toThrow();
+    expect(() => validatePublication(viewer, draft, scope, 'firebird')).toThrow();
+  });
+  it('retains every server observation across bounded dashboard pages', () => {
+    const files = postgresqlFleetFiles({registered_endpoints: 30, servers: Array.from({length: 30}, (_, index) =>
+      ({server_id: index + 1, name: `Endpoint ${index + 1}`, snapshot: {state: 'disabled'}, databases: []}))});
+    const workspace = viewer.createWorkspace(files);
+    try {
+      const pages = workspace.entries()[0].views.filter(item => /^dashboard(?:_page_\d+)?$/.test(item.id));
+      expect(pages).toHaveLength(3);
+      const rendered = pages.map(item => workspace.renderSync({entry: 'dashboard.ddn', view: item.id}));
+      rendered.forEach(result => expect(result.diagnostics.filter(item => item.severity === 'error')).toEqual([]));
+      const output = rendered.map(result => result.svg).join('');
+      for(let index = 1; index <= 30; index++) expect(output).toContain(`Endpoint ${index}`);
+      expect(() => validatePublication(viewer, {format: 'ddn-workspace@1', files,
+        entry: 'dashboard.ddn', view: 'dashboard'}, 'engine', 'postgresql')).not.toThrow();
+    } finally { workspace.destroy(); }
+  });
+  it('binds by database identity rather than catalog row position and removes renamed observations', () => {
+    const one = {datid: '42', datname: 'alpha', xact_commit: '9007199254740993'};
+    const two = {datid: '43', datname: 'beta', xact_commit: '9007199254740997'};
+    const files = rows => postgresqlDashboardFiles(snapshot({...sample, scope: 'server', groups: {database: group(rows)}}), 'Bindings', 'server');
+    const draft = {format: 'ddn-workspace@1', files: files([one, two]), entry: 'dashboard.ddn', view: 'dashboard'};
+    const before = bindPublication(viewer, draft, 'server', files([one, two]), 'postgresql');
+    expect(bindPublication(viewer, draft, 'server', files([two, one]), 'postgresql')).toEqual(before);
+    const renamed = bindPublication(viewer, draft, 'server', files([{...one, datname: 'renamed'}, two]), 'postgresql');
+    expect(renamed.files['dashboard.ddn']).not.toContain('9007199254740993');
+    expect(renamed.files['dashboard.ddn']).toContain('9007199254740997');
+  });
   it('renders owner inventory with isolated server/database observations', () => {
     const files = postgresqlFleetFiles({registered_endpoints: 2, servers: [
       {server_id: 7, name: 'Same name', snapshot: snapshot({...sample, scope: 'server'}),

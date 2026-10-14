@@ -426,6 +426,14 @@ class ResultService:
             item, policy.redact_keys
         ) for item in records)
         metadata = descriptor.metadata()
+        metadata['export_coverage'] = {
+            'stored_records': len(descriptor.records),
+            'exported_records': len(redacted_records),
+            'sampling_applied': _sampled,
+            'policy_max_records': policy.max_records,
+            'selection_complete': len(redacted_records) == len(descriptor.records),
+            'redacted': True,
+        }
         use_worker = (
             descriptor.worker_policy.required or
             renderer.worker_required

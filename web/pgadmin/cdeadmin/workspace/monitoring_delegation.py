@@ -82,8 +82,17 @@ class MonitoringGrant:
             references[kind] = primary
         if credentials is not None:
             references['database_password'] = 'dedicated'
-        required = {'database_password'}
-        optional = {'database_password_2', 'database_password_3'} if engine == 'mysql' else set()
+        required, optional = {'database_password'}, set()
+        if engine == 'mysql':
+            optional.update({'database_password_2', 'database_password_3'})
+        if original.get('ssh') is not None:
+            if engine != 'postgresql':
+                raise MonitoringGrantError('SSH delegation is not admitted for this engine')
+            from pgadmin.cdeadmin.providers.postgresql.monitoring_ssh import ssh_secret_kinds
+            ssh_required, optional = ssh_secret_kinds(original)
+            required |= ssh_required
+        if engine == 'postgresql':
+            optional.add('tls_private_key_password')
         if not required <= set(references) or set(references) - required - optional:
             raise MonitoringGrantError('A database password reference is required')
         principal = original.get('principal_reference')

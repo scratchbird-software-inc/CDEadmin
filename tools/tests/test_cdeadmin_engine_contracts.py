@@ -546,6 +546,10 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
         gate = (document.get('provenance') or {}).get('activation_gate', '')
         if str(gate).startswith('passed'):
             activated.append(str(path.relative_to(WEB)))
+        elif document['identity']['profile_id'] == 'postgresql-native':
+            assert document['support_state'] == 'implemented'
+            assert gate == 'pending_exact_dialect_metrics_and_full_native_form_qualification'
+            incomplete.append(str(path.relative_to(WEB)))
         elif document['identity']['profile_id'] == 'firebird-embedded':
             assert document['support_state'] == 'experimental'
             assert gate == (
@@ -557,6 +561,7 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
             experimental.append(document['identity']['profile_id'])
         else:
             incomplete.append(str(path.relative_to(WEB)))
-    assert incomplete == []
-    assert len(activated) == 26
+    assert incomplete == [
+        'pgadmin/cdeadmin/providers/postgresql/provider_manifest.json']
+    assert len(activated) == 25
     assert experimental == ['firebird-embedded']

@@ -217,7 +217,7 @@ def test_commit_initial_attachment_and_failed_close_receipt(provider):
     session = open_session(provider)
     state = provider._sessions[session['session_id']]
     state.attached = False
-    state.connection.connected = Mock(return_value=False)
+    state.connection.connected = Mock(side_effect=[False, True])
     state.connection.connect = Mock(return_value=(True, None))
     with patch(PROVIDER + '.native_control',
                return_value=(True, 'COMMIT')):
@@ -252,3 +252,103 @@ def test_profile_change_refuses_open_owned_sessions(provider):
     with provider.profile_change_guard():
         provider.release_for_profile_change()
     assert provider._closed
+
+
+def test_delegated_database_resolves_and_verifies_native_oid(provider):
+    connection = provider._driver.manager._connection
+    connection.execute_dict = Mock(side_effect=[
+        (True, {'rows': [{'datname': 'selected_db'}]}),
+        (True, {'rows': [{'oid': 42}]}),
+    ])
+    with patch(PROVIDER + '.native_control', return_value=(True, 'ROLLBACK')):
+        session = open_session(provider, owner_id=19, principal_reference='worker:owned',
+                               credential_reference_id='secret', database_id=42)
+    calls = provider._driver.manager.connection_calls
+    assert calls[-1]['database'] == 'selected_db' and calls[-1]['did'] == 42
+    assert connection.execute_dict.call_args_list[0].args[1] == (42,)
+    assert len(provider._sessions) == 1
+    assert session['provider_state']['database_id'] == 42
+    assert len(provider._driver.manager.release_calls) == 1
+
+
+@pytest.mark.parametrize('resolved,attached', [([], None), ([{'datname': 'renamed'}], 43)])
+def test_delegated_database_never_falls_back_after_missing_or_replaced_oid(provider, resolved, attached):
+    connection = provider._driver.manager._connection
+    connection.execute_dict = Mock(side_effect=[(True, {'rows': resolved}),
+        (True, {'rows': [{'oid': attached}]})])
+    with patch(PROVIDER + '.native_control', return_value=(True, 'ROLLBACK')):
+        with pytest.raises(RuntimeError):
+            open_session(provider, owner_id=19, principal_reference='worker:owned',
+                         credential_reference_id='secret', database_id=42)
+    assert not provider._sessions
+    if not resolved:
+        assert len(provider._driver.manager.connection_calls) == 1
+
+
+@pytest.mark.parametrize('oid', [0, -1, 4294967296, True])
+def test_invalid_session_oid_does_not_acquire_a_manager(provider, oid):
+    with pytest.raises(RuntimeError):
+        open_session(provider, database_id=oid)
+    assert not provider._driver.server_ids
+
+
+def test_native_diagnostics_survive_terminal_poll(provider):
+    from types import SimpleNamespace
+    session = open_session(provider)
+    error = RuntimeError('not exposed connection material')
+    error.sqlstate = '42601'
+    error.diag = SimpleNamespace(
+        message_primary='syntax error', message_detail='detail',
+        message_hint='check syntax', statement_position='8',
+        severity_nonlocalized='ERROR')
+    with patch(EXECUTION + '.result_pages', side_effect=error):
+        pages = finish(provider, provider.execute(dict(session, source='bad')))
+    payload = pages[-1]['extensions']['postgresql']['payload']
+    assert payload['error']['message_hint'] == 'check syntax'
+    assert payload['error']['statement_position'] == '8'
+    assert not payload['session_reuse_blocked']
+    assert 'connection material' not in str(payload)
+
+
+def test_metrics_survive_final_empty_poll():
+    release = threading.Event()
+    metrics = {'dispatch_ms': 1.25, 'prepare_ms': None, 'execute_ms': None}
+
+    def pages(*_):
+        yield {'columns': [], 'rows': [['1']], 'has_page': True,
+               'statement_metrics': metrics}
+        assert release.wait(5)
+
+    with patch(EXECUTION + '.result_pages', pages):
+        execution = Execution(Mock(), 'SELECT 1', None)
+        execution.start()
+        try:
+            page = execution.poll()
+            assert page['statement_metrics'] == metrics
+            assert not page['complete']
+        finally:
+            release.set()
+            execution.worker.join(5)
+        final = execution.poll()
+        assert final['complete'] and not final['has_page']
+        assert final['statement_metrics'] == metrics
+
+
+def test_plan_validation_precedes_dispatch(provider):
+    session = open_session(provider)
+    with patch(EXECUTION + '.validate_plan', side_effect=ValueError('batch')), \
+            patch.object(Execution, 'start') as start:
+        with pytest.raises(ValueError, match='batch'):
+            provider.execute(dict(session, source='EXPLAIN SELECT 1; SELECT 2',
+                                  output_policy={'postgresql_plan': True}))
+        start.assert_not_called()
+
+
+def test_shared_plan_host_policy_is_postgresql_owned():
+    from test_firebird_query_limits import workspace_fixture
+    workspace, context = workspace_fixture('org.pgadmin.postgresql')
+    workspace.execute('server', 'session', 'EXPLAIN SELECT %s', [42],
+                      'target', plan_mode=True)
+    workspace.studio_service.execute.assert_called_once_with(
+        context, 'session', 'EXPLAIN SELECT %s', parameters=[42],
+        output_policy={'redact_keys': [], 'postgresql_plan': True})

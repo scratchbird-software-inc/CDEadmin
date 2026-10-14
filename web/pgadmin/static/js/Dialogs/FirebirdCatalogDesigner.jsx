@@ -82,4 +82,4 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
 }
 FirebirdCatalogDesigner.propTypes = {baseline: PropTypes.string, disabled: PropTypes.bool, onReview: PropTypes.func.isRequired,
   post: PropTypes.func, databaseTargetId: PropTypes.string,
-  engine: PropTypes.oneOf(['firebird', 'duckdb'])};
+  engine: PropTypes.oneOf(['firebird', 'duckdb', 'sqlite'])};

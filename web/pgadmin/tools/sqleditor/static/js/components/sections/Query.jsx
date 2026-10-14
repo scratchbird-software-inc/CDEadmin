@@ -372,6 +372,10 @@ export default function Query({onTextSelect, setQtStatePartial}) {
     registerAutocomplete(editor.current, queryToolCtx.api, queryToolCtx.params.trans_id);
   }, [queryToolCtx.params.trans_id]);
 
+  useEffect(() => eventBus.registerListener(QUERY_TOOL_EVENTS.TRIGGER_GET_QUERY_CONTENT, callback => {
+    callback(editor.current?.getSelection()?.trim() ? editor.current.getSelection() : editor.current?.getValue() || '');
+  }), [eventBus]);
+
   const cursorActivity = useCallback(_.debounce((cursor)=>{
     if (queryToolCtx.preferences.sqleditor.underline_query_cursor){
       let {from, to}=editor.current.getQueryAt(editor.current?.state.selection.head);

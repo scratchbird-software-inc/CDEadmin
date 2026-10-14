@@ -636,9 +636,7 @@ class EndpointService:
         a derived cache namespace so native identifiers cannot collide.
         """
         endpoint = getattr(server, 'endpoint_profile', None)
-        if endpoint is not None and endpoint.provider_version is None and (
-            endpoint.provider_id == 'org.pgadmin.postgresql'
-        ):
+        if self._is_preserved_postgresql(server):
             return self._postgresql_workspace(server, endpoint, database_target_id)
         if endpoint is None or endpoint.provider_version is None:
             raise EndpointRegistrationError(
@@ -1266,8 +1264,13 @@ class EndpointService:
     @staticmethod
     def _is_preserved_postgresql(server):
         endpoint = getattr(server, 'endpoint_profile', None)
-        return (endpoint is not None and endpoint.provider_version is None and
-                endpoint.provider_id == 'org.pgadmin.postgresql')
+        from pgadmin.cdeadmin.providers.postgresql.provider import (
+            PROVIDER_ID, PROVIDER_VERSION, PROFILE_ID, PROFILE_VERSION)
+        return (endpoint is not None and getattr(endpoint, 'provider_id', None) == PROVIDER_ID and
+                (endpoint.provider_version is None or (
+                    endpoint.provider_version == PROVIDER_VERSION and
+                    endpoint.profile_id == PROFILE_ID and
+                    endpoint.profile_version == PROFILE_VERSION)))
 
     @staticmethod
     def _managed_endpoint(server):

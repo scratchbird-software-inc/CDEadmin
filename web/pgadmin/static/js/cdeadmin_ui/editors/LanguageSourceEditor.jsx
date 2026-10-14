@@ -8,8 +8,10 @@ import {formatFirebird} from './firebirdFormatting';
 import {firebirdSQLConfig} from './firebirdSyntax';
 import {duckdbSQLConfig} from './duckdbSyntax';
 import {firebirdExecution} from './firebirdExecution';
-import {duckdbExecution} from './duckdbExecution';
 import {readSourceFile, saveSourceFile} from './scriptFiles';
+import {registerPostgresqlCompletion} from './postgresqlCompletion';
+import {postgresqlExecution} from './postgresqlExecution';
+import {duckdbExecution} from './duckdbExecution';
 
 export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}'}) {
   const [syntax, setSyntax] = useState(true);
@@ -41,6 +43,16 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const generation = useRef(0);
   const mounted = useRef(true);
   const inFlight = useRef(false);
+  const nativeCompletionState = useRef(null);
+  nativeCompletionState.current = {active: mounted.current,
+    blocked: disabled || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved),
+    scope: nativeProfile + ':' + databaseTargetId, databaseTargetId, post, ensureSession, onError: setError};
+  const bindEditor = editor => {
+    syntaxEditor.current = editor;
+    if (nativeProfile === 'postgresql-sql') registerPostgresqlCompletion(editor,
+      () => ({...nativeCompletionState.current, active: mounted.current}));
+  };
+  const completionGeneration = useRef(0);
   const fileGeneration = useRef(0);
   useEffect(() => {fileGeneration.current++;}, [source, nativeProfile, databaseTargetId, disabled, running, plan]);
   const loadFile = async event => {
@@ -52,7 +64,6 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       if (mounted.current && token === fileGeneration.current) {onChange(text); setError('');}
     } catch (failure) {if (mounted.current && token === fileGeneration.current) setError(failure.message);}
   };
-  const completionGeneration = useRef(0);
   useEffect(() => {
     completionGeneration.current++; setCompletion(null);
     return () => {completionGeneration.current++;};
@@ -80,10 +91,14 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
         plainEditor.current.selectionStart : (plainEditor.current?.selectionEnd ?? 0));
       const from = mode === 'selection' ? (selection?.from ?? plainEditor.current?.selectionStart ?? 0) : cursor;
       const to = mode === 'selection' ? (selection?.to ?? plainEditor.current?.selectionEnd ?? from) : cursor;
-      const value = firebird ? firebirdExecution(source, mode, from, to) :
-        await duckdbExecution(source, mode, from, to, async input => send({
+      const nativeValidate = async input => post({
           action: 'source_validate', session_id: await ensureSession(), source: input,
-        }));
+          database_target_id: databaseTargetId,
+        });
+      const value = firebird ? firebirdExecution(source, mode, from, to) :
+        nativeProfile === 'duckdb-sql' ?
+          await duckdbExecution(source, mode, from, to, nativeValidate) :
+          await postgresqlExecution(source, mode, from, to, nativeValidate);
       if (!mounted.current || current !== generation.current) return;
       setPrepared({...value, original: source});
       setError('');
@@ -97,16 +112,15 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const inspect = async (script, executionSource=source) => {
     const current=++generation.current;setChecking(true);setError('');
     try {
-      if (script && !scriptParameters) throw new Error('Retained scripts require empty parameter bindings.');
+      if (script && !scriptParameters) throw new Error('Retained scripts require an empty parameter object or array. Clear the query bindings first.');
       if (script && plan?.plan_id) {
         await send({action:'native_script_discard',plan_id:plan.plan_id});
       }
       const result=await send({action:script ? 'native_script_prepare' : 'source_validate',
         session_id:await ensureSession(), source:executionSource,
         ...(script ? {parameters: scriptParameters} : {}),
-        ...(script && language?.language_profile === 'firebird-sql' ?
-          {history_sensitive: historySensitive, client_sql_dialect: clientSqlDialect} : {}),
-        ...(script && ['mysql-sql', 'mariadb-sql', 'duckdb-sql'].includes(language?.language_profile) ? {history_sensitive: historySensitive} : {})});
+        ...(script && ['firebird-sql', 'postgresql-sql', 'mysql-sql', 'mariadb-sql', 'duckdb-sql'].includes(nativeProfile) ? {history_sensitive: historySensitive} : {}),
+        ...(script && nativeProfile === 'firebird-sql' ? {client_sql_dialect: clientSqlDialect} : {})});
       if (!mounted.current || current!==generation.current) return;
       if(result.sql_history?.warning) setError(result.sql_history.warning);
       if(script){setPlan(result);setPreparedSource(source);setValidation(result.validation || null);}
@@ -149,14 +163,14 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
         try {saveSourceFile(source, (nativeProfile.replace(/[^a-z0-9_-]/gi, '_') || 'query') + (jsonLanguage ? '.json' : '.sql')); setError('');}
         catch (failure) {setError(failure.message);}
       }}>Save source file</Button>
-      {(firebird || nativeProfile === 'duckdb-sql') && <Box>
+      {(firebird || ['postgresql-sql', 'duckdb-sql'].includes(nativeProfile)) && <Box>
         {firebird && <><Button disabled={disabled || running} onClick={() => setSyntax(!syntax)}>{syntax ? 'Plain text editor' : 'Syntax editor'}</Button>
           <Button disabled={disabled || running || Boolean(plan?.occurrence_id)} onClick={format}>Format Firebird source</Button></>}
         {['selection', 'current', 'from-cursor'].map(mode => <Button key={mode}
           disabled={disabled || checking || running || !onExecute || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)}
           onClick={() => prepareExecution(mode)}>{({'selection': 'Prepare selection', 'current': 'Prepare current statement', 'from-cursor': 'Prepare from cursor'})[mode]}</Button>)}
       </Box>}
-      {(firebird || nativeProfile === 'duckdb-sql') && prepared?.original === source && <Box sx={{my: 1}}>
+      {(firebird || ['postgresql-sql', 'duckdb-sql'].includes(nativeProfile)) && prepared?.original === source && <Box sx={{my: 1}}>
         <Alert severity="info">Review the prepared {prepared.scriptMode ? 'script, including inherited client settings and any transaction commands' : 'native statement'}.
           {prepared.scriptMode ? ' Scripts require empty parameter bindings.' : ' Existing ordered parameters apply.'}
         No SQL has been executed by preparing this source.</Alert>
@@ -186,7 +200,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     {syntax ? <>
       <Box sx={{flex: '1 1 auto', minHeight: 100, overflow: 'auto'}}><CodeEditor label="Query source" value={source} onChange={onChange}
         language={jsonLanguage ? 'json' : firebird ? 'firebird' : 'sql'} sqlConfig={firebird ? sqlConfig : nativeProfile === 'duckdb-sql' ? duckdbConfig : nativeConfig} autocomplete autocompleteOnKeyPress
-        currEditor={editor => {syntaxEditor.current = editor;}}
+        currEditor={bindEditor}
         formatOverride={firebird ? format : undefined} disabled={disabled || running || Boolean(plan?.occurrence_id)} /></Box>
       {firebird && <Button disabled={disabled || checking || running} onClick={loadCompletion}>Refresh metadata completion</Button>}
 

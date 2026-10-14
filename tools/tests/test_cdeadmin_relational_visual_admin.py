@@ -1046,6 +1046,41 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         self.assertEqual('visible', page['rows'][0]['values']['name'])
         self.assertIsNone(page['rows'][0]['identity_token'])
 
+    def test_sqlite_nullable_primary_key_does_not_issue_ambiguous_row_identity(self):
+        with sqlite3.connect(self.route['database']) as connection:
+            connection.execute('CREATE TABLE widgets(id TEXT PRIMARY KEY, name TEXT)')
+            connection.executemany('INSERT INTO widgets VALUES (?, ?)',
+                                   [(None, 'one'), (None, 'two'), ('named', 'three')])
+        page = self.admin.read_rows(self.client, {
+            '_provider_route': self.route, 'target_resource': self.target,
+            'limit': 50})
+        by_name = {row['values']['name']: row for row in page['rows']}
+        self.assertIsNone(by_name['one']['identity_token'])
+        self.assertIsNone(by_name['two']['identity_token'])
+        self.assertIsInstance(by_name['three']['identity_token'], str)
+
+    def test_sqlite_without_rowid_composite_key_edits_exact_native_row(self):
+        with sqlite3.connect(self.route['database']) as connection:
+            connection.execute('CREATE TABLE widgets(a TEXT, b INTEGER, name TEXT, '
+                               'PRIMARY KEY(a,b)) WITHOUT ROWID')
+            connection.executemany('INSERT INTO widgets VALUES (?, ?, ?)',
+                                   [('one', 1, 'before'), ('one', 2, 'untouched')])
+        page = self.admin.read_rows(self.client, {
+            '_provider_route': self.route, 'target_resource': self.target,
+            'limit': 50})
+        self.assertTrue(page['editable'])
+        row = next(item for item in page['rows'] if item['values']['b'] == 1)
+        token = row['identity_token']
+        self.assertIsInstance(token, str)
+        planned = self.admin.plan(request(self.route, 'update', {
+            'selector': {'identity_token': token}, 'concurrency_token': token,
+            'changes': {'name': 'after'}}, self.target))
+        self.apply(planned)
+        with sqlite3.connect(self.route['database']) as connection:
+            self.assertEqual(connection.execute(
+                'SELECT b,name FROM widgets ORDER BY b').fetchall(),
+                [(1, 'after'), (2, 'untouched')])
+
     def test_row_identity_is_bound_to_issuing_provider_session(self):
         connection = sqlite3.connect(self.route['database'])
         try:

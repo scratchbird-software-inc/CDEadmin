@@ -152,7 +152,7 @@ define('tools.restore', [
 
         pgAdmin.Browser.Events.trigger('pgadmin:utility:show', treeItem,
           gettext(`Restore (${pgBrowser.Nodes[data._type].label}: ${data.label})`),{
-            schema, extraData, urlBase, sqlHelpUrl, helpUrl, saveBtnName: gettext('Restore')
+            schema, extraData, urlBase, sqlHelpUrl, helpUrl, formKey: 'native-utility:restore', saveBtnName: gettext('Restore')
           }, pgAdmin.Browser.stdW.md
         );
       }).catch(()=>{

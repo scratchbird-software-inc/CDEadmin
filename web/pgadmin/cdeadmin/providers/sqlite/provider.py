@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import stat
+import uuid
 from collections.abc import Mapping
 from importlib import resources as package_resources
 
@@ -136,6 +137,115 @@ class SQLiteProvider(ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def validate_source_without_execution(self, request):
+        from pgadmin.cdeadmin.data_studio.language_tools import analyze
+        if (not isinstance(request, dict) or
+                request.get('language_profile') != 'sqlite-sql'):
+            raise RelationalClientError('SQLite SQL language binding required')
+        session = self._sessions.get(request.get('session_id'))
+        if session is None:
+            raise RelationalClientError('SQLite session is unavailable')
+        source = request.get('source')
+        result = analyze(source, 'sqlite-sql', script=request.get('script', False))
+        if result['diagnostics'] or not result['statements']:
+            return result
+        all_valid = True
+        for statement in result['statements']:
+            native = self.client.validate_parse_only(session.handle, statement['source'])
+            if native['grammar_valid'] is False:
+                result['diagnostics'].append({**native['diagnostic'],
+                    'offset': statement['start'],
+                    'line': source.count('\n', 0, statement['start']) + 1,
+                    'column': statement['start'] - source.rfind('\n', 0, statement['start'])})
+                all_valid = False
+            elif native['grammar_valid'] is None:
+                if all_valid is True:
+                    all_valid = None
+                if native.get('diagnostic'):
+                    result['diagnostics'].append({**native['diagnostic'],
+                        'offset': statement['start'],
+                        'line': source.count('\n', 0, statement['start']) + 1,
+                        'column': statement['start'] - source.rfind('\n', 0, statement['start'])})
+        result['grammar_valid'] = all_valid
+        result['authority'] = 'sqlite-native-explain-compile'
+        result['scope'] = ('SQLite native compilation against the retained session; '
+                           'EXPLAIN does not execute the submitted SQL. '
+                           'Context or parameter binding errors leave grammar unconfirmed.')
+        if all_valid is False:
+            result['syntax_valid'] = False
+            result['script_ready'] = False
+        return result
+
+    def capture_catalog(self, route, *, include_system=False):
+        """Observe a registered file in a separate short read transaction."""
+        self._require('data_read', 'resource')
+        path = contained_database(route)
+        if path == ':memory:':
+            raise RelationalClientError(
+                'An independent in-memory connection is a different SQLite database')
+        if not os.path.isfile(path):
+            raise RelationalClientError(
+                'SQLite catalog capture requires an existing registered file')
+        initial_info = os.stat(path)
+        if not stat.S_ISREG(initial_info.st_mode):
+            raise RelationalClientError('SQLite catalog requires a regular registered file')
+        connection = self.client._connect({'route': route})
+        try:
+            connection.execute('BEGIN')
+            resources = _resources(connection, {
+                'capability_generation': str(uuid.uuid4())})
+            connection.execute('ROLLBACK')
+            file_info = os.stat(path)
+            if (not stat.S_ISREG(file_info.st_mode) or
+                    (file_info.st_dev, file_info.st_ino) !=
+                    (initial_info.st_dev, initial_info.st_ino)):
+                raise RelationalClientError('SQLite registered file changed during capture')
+            for item in resources:
+                if item['resource_kind'] in {'database',
+                                             'attached-database'}:
+                    if item['resource_kind'] == 'database':
+                        item['native']['registered_file_identity'] = [
+                            file_info.st_dev, file_info.st_ino]
+                    item['native']['catalog_observations'] = [{
+                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list',
+                        'available': True,
+                    }]
+                    item['native']['coverage_complete'] = False
+                    item['native']['catalog_warnings'] = [
+                        'CHECK expressions and all table options remain in exact native CREATE SQL; they are not separately decomposed.',
+                        'Connection-local objects and uncommitted changes on other handles are outside this capture.',
+                    ]
+            if len(resources) > 20_000:
+                raise RelationalClientError(
+                    'SQLite catalog exceeds the 20,000-resource limit')
+            if not include_system:
+                resources = [item for item in resources if
+                    item['native'].get('system_object') is not True]
+            return {'resources': resources,
+                    'generation': resources[0]['generation'] if resources else str(uuid.uuid4()),
+                    'consistency': 'owned-native-read-transaction',
+                    'complete': True}
+        except BaseException:
+            if connection.in_transaction:
+                try:
+                    connection.execute('ROLLBACK')
+                except Exception:
+                    pass
+            raise
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id,
+                     mode='sample', row_limit=100):
+        from .data_capture import capture
+        return capture(self, route, resource_id, endpoint_id=endpoint_id,
+                       target_id=target_id, mode=mode, row_limit=row_limit)
+
+    def export_data_script(self, route, resource_id, *, endpoint_id, target_id):
+        from .data_script import export
+        return export(self, route, resource_id, endpoint_id=endpoint_id,
+                      target_id=target_id)
+
 
 def _route_arguments(route):
     return sqlite_arguments(route)
@@ -156,6 +266,14 @@ def _metric_records():
     } for item in document['metrics']]
 
 
+def _resource_id(kind, path, name):
+    """Encode native path segments without conflating names containing ':'."""
+    return 'sqlite:' + json.dumps(
+        [kind, *[str(part) for part in path], str(name)],
+        ensure_ascii=False, separators=(',', ':'),
+    )
+
+
 def _resources(connection, request):
     generation = str(request.get('capability_generation') or 'current')
     cursor = connection.cursor()
@@ -170,7 +288,20 @@ def _resources(connection, request):
         def add(kind, path, name, native=None):
             path = [str(item) for item in path]
             name = str(name)
-            resource_id = ':'.join([kind, *path, name])
+            resource_id = _resource_id(kind, path, name)
+            native = dict(native or {})
+            native.setdefault('system_object', False)
+            if path:
+                if len(path) == 1:
+                    parent = _resource_id(
+                        'database' if path[0] == 'main' else
+                        'attached-database', [], path[0])
+                else:
+                    parent_kind = relation_kinds.get(
+                        (path[0], path[-1]), 'table')
+                    parent = _resource_id(
+                        parent_kind, path[:-1], path[-1])
+                native.setdefault('navigator_parent_resource_id', parent)
             resources[resource_id] = {
                 'resource_id': resource_id,
                 'resource_kind': kind,
@@ -179,8 +310,7 @@ def _resources(connection, request):
                 'authority_path': [*path, kind, name],
                 'generation': generation,
             }
-            if native:
-                resources[resource_id]['native'] = native
+            resources[resource_id]['native'] = native
             return resources[resource_id]
 
         def pragma_value(schema_name, pragma_name):
@@ -244,18 +374,41 @@ def _resources(connection, request):
                 'sqlite_source_id': runtime[1],
             }
 
+        relation_kinds = {}
         for sequence, name, path in databases:
             name = str(name)
             kind = 'database' if name == 'main' else 'attached-database'
             add(kind, [], name, database_properties(sequence, name, path))
         for _sequence, schema_name, _path in databases:
             schema_name = str(schema_name)
+            cursor.execute(f'PRAGMA {quote(schema_name)}.table_list')
+            table_options = {
+                str(row[1]): {'type': str(row[2]),
+                              'without_rowid': bool(row[4]),
+                              'strict': bool(row[5])}
+                for row in cursor.fetchall()
+                if str(row[0]) == schema_name
+            }
             cursor.execute(
                 f'SELECT type, name, tbl_name, sql FROM '
                 f'{quote(schema_name)}.sqlite_schema '
-                "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                'ORDER BY type, name'
             )
             schema_rows = cursor.fetchall()
+            relation_system = {}
+            for native_kind, name, _table_name, source in schema_rows:
+                kind = str(native_kind)
+                if kind == 'table' and re.match(
+                        r'^\s*CREATE\s+VIRTUAL\s+TABLE',
+                        str(source or ''), re.I):
+                    kind = ('fts-table' if re.search(
+                        r'\bUSING\s+fts\d?\b', str(source), re.I)
+                        else 'virtual-table')
+                if kind in {'table', 'view', 'fts-table', 'virtual-table'}:
+                    relation_kinds[(schema_name, str(name))] = kind
+                    relation_system[(schema_name, str(name))] = (
+                        str(name).startswith('sqlite_') or
+                        table_options.get(str(name), {}).get('type') == 'shadow')
             relation_names = []
             for native_kind, name, table_name, source in schema_rows:
                 native_kind = str(native_kind)
@@ -275,10 +428,19 @@ def _resources(connection, request):
                     'fts-table',
                 }:
                     continue
+                system_object = (name.startswith('sqlite_') or
+                                 table_options.get(name, {}).get('type') == 'shadow' or
+                                 (kind in {'index', 'trigger'} and
+                                  (schema_name, str(table_name)) in relation_system and
+                                  relation_system[(schema_name, str(table_name))]))
                 native = {
+                    'system_object': system_object,
                     'catalog_metadata': {
                         'schema_object_type': native_kind,
                         'table_name': str(table_name),
+                        'table_list_type': table_options.get(name, {}).get('type'),
+                        'without_rowid': table_options.get(name, {}).get('without_rowid'),
+                        'strict': table_options.get(name, {}).get('strict'),
                     },
                     'ddl': source_value,
                 }
@@ -289,8 +451,13 @@ def _resources(connection, request):
                     })
                 elif kind == 'view':
                     native.update({'columns': [], 'triggers': []})
-                resource = add(kind, [schema_name], name, native)
+                owner_path = ([schema_name, str(table_name)]
+                              if kind in {'index', 'trigger'} and
+                              (schema_name, str(table_name)) in relation_kinds
+                              else [schema_name])
+                resource = add(kind, owner_path, name, native)
                 if native_kind in {'table', 'view'}:
+                    relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))
             for table_name, relation_id in relation_names:
                 cursor.execute(
@@ -302,7 +469,8 @@ def _resources(connection, request):
                 for _cid, name, data_type, not_null, default, pk, hidden in (
                     columns
                 ):
-                    native = {'catalog_metadata': {
+                    native = {'system_object': relation_system[(schema_name, table_name)],
+                              'catalog_metadata': {
                         'ordinal_position': int(_cid),
                         'data_type': str(data_type or ''),
                         'nullable': not bool(not_null),
@@ -324,6 +492,7 @@ def _resources(connection, request):
                     constraint = add(
                         'constraint', [schema_name, table_name],
                         f'pk_{table_name}', {
+                            'system_object': relation_system[(schema_name, table_name)],
                             'catalog_metadata': {
                                 'constraint_type': 'PRIMARY KEY',
                                 'columns': [
@@ -360,6 +529,7 @@ def _resources(connection, request):
                     constraint = add(
                         'constraint', [schema_name, table_name],
                         constraint_name, {
+                            'system_object': relation_system[(schema_name, table_name)],
                             'catalog_metadata': {
                                 'constraint_type': 'FOREIGN KEY',
                                 'columns': [str(row[3]) for row in rows],
@@ -392,17 +562,59 @@ def _resources(connection, request):
                 )
                 for index_row in cursor.fetchall():
                     index_name = str(index_row[1])
-                    index_id = ':'.join(['index', schema_name, index_name])
+                    index_id = _resource_id(
+                        'index', [schema_name, table_name], index_name)
                     index = resources.get(index_id)
-                    if index is not None:
-                        resources[relation_id]['native']['indexes'].append({
-                            'resource_id': index_id,
-                            'name': index_name,
-                            'unique': bool(index_row[2]),
-                            'origin': str(index_row[3]),
-                            'partial': bool(index_row[4]),
-                            'ddl': index['native'].get('ddl'),
-                        })
+                    cursor.execute(
+                        f'PRAGMA {quote(schema_name)}.index_xinfo('
+                        f'{quote(index_name)})')
+                    keys = [{
+                        'sequence': int(row[0]), 'column_id': int(row[1]),
+                        'name': row[2], 'descending': bool(row[3]),
+                        'collation': row[4], 'is_key': bool(row[5]),
+                    } for row in cursor.fetchall()]
+                    details = {
+                        'resource_id': index_id, 'name': index_name,
+                        'unique': bool(index_row[2]),
+                        'origin': str(index_row[3]),
+                        'partial': bool(index_row[4]),
+                        'keys': keys,
+                    }
+                    if index is None:
+                        index = add('index', [schema_name, table_name],
+                                    index_name, {
+                            'system_object': True,
+                            'ddl': None,
+                            'catalog_metadata': {
+                                'schema_object_type': 'index',
+                                'table_name': table_name,
+                                'implicit': True,
+                            }})
+                    index['native']['catalog_metadata'].update({
+                        'unique': details['unique'],
+                        'origin': details['origin'],
+                        'partial': details['partial'],
+                        'keys': keys,
+                    })
+                    details['ddl'] = index['native'].get('ddl')
+                    resources[relation_id]['native']['indexes'].append(details)
+                    if str(index_row[3]) == 'u':
+                        constraint_name = 'unique_' + index_name
+                        constraint = add('constraint',
+                            [schema_name, table_name], constraint_name, {
+                                'system_object': relation_system[(schema_name, table_name)],
+                                'catalog_metadata': {
+                                    'constraint_type': 'UNIQUE',
+                                    'columns': [key['name'] for key in keys
+                                                if key['is_key']],
+                                    'backing_index_resource_id': index_id,
+                                }})
+                        resources[relation_id]['native'][
+                            'constraints'].append({
+                                'resource_id': constraint['resource_id'],
+                                'name': constraint_name,
+                                **constraint['native']['catalog_metadata'],
+                            })
                 for item in resources.values():
                     if (
                         item['resource_kind'] == 'trigger' and
