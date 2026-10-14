@@ -227,10 +227,18 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``parameters_without_defaults_confirmed`` review assertion. DuckDB 1.5.2
   ``duckdb_functions()`` does not expose macro parameter default expressions;
   names and types alone cannot prove that reconstruction preserves optional
-  arguments. DuckDB 1.5.2 ``EXPORT DATABASE`` can emit the full macro DDL in
-  ``schema.sql``, but a database with tables also exports their data and rejects
-  the tested ``SCHEMA_ONLY`` option. Routine metadata capture must not export
-  table data merely to recover optional macro arguments. DDN capture reports
+  arguments. DuckDB 1.5.2 ``EXPORT DATABASE`` on the source can emit the full
+  macro DDL in ``schema.sql``, but a database with tables also exports their data
+  and rejects the tested ``SCHEMA_ONLY`` option. A schema-only
+  ``COPY FROM DATABASE`` into a writable attached scratch catalog, followed by
+  export of that scratch catalog, can recover the full macro DDL without copying
+  source table rows. This was observed in a source read transaction, including
+  after another connection committed a changed macro signature: the exported
+  signature matched the original snapshot. A read-only source connection must
+  explicitly attach the scratch catalog ``READ_WRITE``. The capture must restore
+  the original active database before rollback, because rolling back an attach
+  otherwise leaves the session pointing at a removed catalog. Until this path
+  is bounded, implemented and qualified in the provider, DDN capture reports
   those default expressions as unavailable and blocks inferred replacement;
   the native SQL administration path accepts an explicitly authored complete
   statement. A reviewer must independently verify the original signature has
