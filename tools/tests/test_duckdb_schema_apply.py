@@ -2703,6 +2703,67 @@ def test_reviewed_add_and_reorder_preserves_safe_generated_values(
         provider.client.close()
 
 
+@pytest.mark.parametrize('expression,expected_default,admitted,committed', [
+    ('id + 2', 'CAST((id + 2) AS INTEGER)', True, True),
+    ('id + 2', 'CAST((id + 3) AS INTEGER)', True, False),
+    ('random()', 'CAST(random() AS INTEGER)', False, False)])
+def test_reviewed_generated_expression_change_preserves_base_rows(
+        tmp_path, expression, expected_default, admitted, committed):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE computed(id INTEGER, derived INTEGER '
+        'GENERATED ALWAYS AS(id + 1))')
+    connection.execute('INSERT INTO computed(id) VALUES (1), (2)')
+    connection.execute('CREATE INDEX computed_derived_idx ON computed(derived)')
+    connection.execute('CREATE VIEW computed_projection AS '
+        'SELECT id, derived FROM computed')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'computed')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        generated = next(item for item in edited['columns']
+            if item['name'] == 'derived')
+        generated['default'] = expected_default
+        desired['rows'][generated['resource_id']]['native'][
+            'catalog_metadata']['default'] = expected_default
+        edited['ddl'] = (edited['ddl'].replace('CREATE TABLE computed',
+            f'CREATE TABLE "{table["path"][0]}"."main"."computed"')
+            .replace('id + 1', expression))
+        edited['duckdb_change'] = {'action': 'rebuild-change-generated-expression',
+            'generated_column_resource_id': generated['resource_id'],
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            return
+        assert '"id"' in preview['operations'][0]['data_check']
+        assert '"derived"' not in preview['operations'][0]['data_check']
+        applications = DuckDBSchemaApplications(tmp_path/'changed-generated.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('committed' if committed else 'rolled_back'), outcome
+        observer = duckdb.connect(route['database'])
+        expected = [(1, 3), (2, 4)] if committed else [(1, 2), (2, 3)]
+        assert observer.execute('SELECT id, derived FROM computed ORDER BY id').fetchall() == expected
+        assert observer.execute('SELECT id, derived FROM computed_projection '
+            'ORDER BY id').fetchall() == expected
+        assert observer.execute("SELECT count(*) FROM duckdb_indexes() WHERE "
+            "index_name='computed_derived_idx'").fetchone()[0] == 1
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('expression,added_type,admitted,wrong_catalog_fact,expected', [
     ('id * 2', 'INTEGER', True, False, [(1, 'a', 2), (2, 'b', 4)]),
     ('id * 2', 'INTEGER', True, True, None),

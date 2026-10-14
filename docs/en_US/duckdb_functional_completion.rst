@@ -625,6 +625,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   base-column expressions to admitted scalar targets may also be recomputed.
   Native ``CASE`` expressions using the admitted comparisons and Boolean
   conditions may be recomputed under the same complete-value check.
+  ``rebuild-change-generated-expression`` changes exactly one existing
+  virtual generated column. Its intent names that column's resource ID and
+  confirms the complete table definition and retained base rows. The old and
+  new expressions must both be admitted by this safe-expression contract;
+  every other column fact, every constraint and the column order remain fixed.
+  The staging copy names only base columns. Before the original table is
+  dropped, a two-way row-multiset comparison proves every unchanged column is
+  preserved, while the changed generated value is intentionally excluded from
+  that comparison. The staged native catalog must match the reviewed new
+  expression, type, nullability and column identity. Fresh post-commit
+  discovery verifies the changed column and all retained dependencies.
   User functions, sequence use, generated references to other generated columns
   and expressions outside this admitted
   subset block review because staging might invoke side effects or change values.
