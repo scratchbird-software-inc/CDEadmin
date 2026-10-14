@@ -4052,6 +4052,116 @@ def test_reviewed_combined_column_replacement_keeps_only_retained_values(
         provider.client.close()
 
 
+def test_wide_column_addition_uses_catalog_and_review_budgets(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE wide(id INTEGER, keep INTEGER)')
+    connection.execute('INSERT INTO wide VALUES (1, 2)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'wide')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_columns = {item['name']: item for item in edited['columns']}
+        added = []
+        for number in range(129):
+            name = f'extra{number}'
+            column = deepcopy(old_columns['keep'])
+            column.update(name=name, resource_id=_resource_id('column',
+                table['path'], name), default=None, comment=None)
+            for field in ('data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+                column[field] = None
+            desired['rows'][column['resource_id']] = {
+                'resource_id': column['resource_id'], 'kind': 'column',
+                'name': name, 'path': [*table['path'], name], 'system': 'false',
+                'native': {'system_object': False, 'catalog_metadata': {
+                    key: value for key, value in column.items()
+                    if key not in {'name', 'resource_id'}}}}
+            added.append(column)
+        columns = [old_columns['keep'], *added, old_columns['id']]
+        for position, column in enumerate(columns, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = columns
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."wide" (' +
+            ', '.join(f'{column["name"]} INTEGER' for column in columns) + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-add-columns-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert len(preview['operations'][0]['added_column_ids']) == 129
+        applications = DuckDBSchemaApplications(tmp_path/'wide-add.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,keep,extra0,extra128 FROM wide').fetchone() == (
+            1, 2, None, None)
+        assert observer.execute("SELECT count(*) FROM duckdb_columns() "
+            "WHERE table_name='wide'").fetchone() == (131,)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_wide_existing_table_reorders_without_a_128_column_cutoff(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE wide (' + ', '.join(
+        f'c{number} INTEGER' for number in range(129)) + ')')
+    connection.execute('INSERT INTO wide VALUES (' + ', '.join(
+        str(number) for number in range(129)) + ')')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'wide')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        columns = list(reversed(edited['columns']))
+        for position, column in enumerate(columns, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = columns
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."wide" (' +
+            ', '.join(f'{column["name"]} INTEGER' for column in columns) + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        applications = DuckDBSchemaApplications(tmp_path/'wide-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT c0,c128 FROM wide').fetchone() == (0, 128)
+        assert observer.execute('SELECT * FROM wide').fetchone()[:2] == (128, 127)
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_committed_column_add_rejects_mismatched_native_default(tmp_path):
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
     root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')

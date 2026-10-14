@@ -17,6 +17,7 @@ _TYPE_FIELDS = frozenset({'data_type', 'data_type_id',
     'numeric_precision_radix', 'numeric_scale'})
 _SEQUENCE_OPTIONS = ('start_value', 'min_value', 'max_value', 'increment_by', 'cycle')
 _TYPE_CATALOG_FIELDS = ('size_bytes', 'logical_type', 'category', 'labels', 'resolved_type')
+_MAX_REBUILD_COLUMNS = 20_000  # Native catalog capture rejects more than 20,000 facts.
 
 
 def _quote(value):
@@ -1244,7 +1245,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             not isinstance(native.get('indexes'), list) or
             {item.get('resource_id') for item in native['indexes']} !=
                 {item['resource_id'] for item in indexes} or
-            not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
+            not isinstance(columns, list) or not 1 <= len(columns) <=
+                _MAX_REBUILD_COLUMNS or
             generated_names is None or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
@@ -1537,7 +1539,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             required_count = (1 if action in {'rebuild-add-column-and-reorder',
                 'rebuild-add-generated-column-and-reorder',
                 'rebuild-add-generated-column'}
-                else 128)
+                else _MAX_REBUILD_COLUMNS)
             valid_count = (len(added_names) == 1 if required_count == 1
                 else 1 <= len(added_names) <= required_count if shape_removal
                 else 2 <= len(added_names) <= required_count)
@@ -1552,7 +1554,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 len(set(dropped_ids)) == len(dropped_ids)) if shape_removal else (
                     not dropped_names)
             valid_columns = (old_map is not None and new_map is not None and
-                len(new_columns) <= 128 and
+                len(new_columns) <= _MAX_REBUILD_COLUMNS and
                 len(new_columns) == len(old_columns) - len(dropped_names) +
                     len(added_names) and valid_count and valid_removal and
                 (set(old_map) < set(new_map) if not shape_removal else
@@ -1697,7 +1699,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     if (type(metadata.get('has_primary_key')) is not bool or metadata.get('tags') or
             (metadata['has_primary_key'] != any(item.get('constraint_type') ==
                 'PRIMARY KEY' for item in old_constraints)) or
-            not isinstance(columns, list) or not 1 <= len(columns) <= 128 or
+            not isinstance(columns, list) or not 1 <= len(columns) <=
+                _MAX_REBUILD_COLUMNS or
             any(not isinstance(item, dict) or not isinstance(item.get('name'), str)
                 for item in columns) or
             len({item['name'] for item in columns}) != len(columns)):
@@ -1880,9 +1883,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             action in {'rebuild-add-column-and-reorder',
                 'rebuild-add-generated-column-and-reorder',
                 'rebuild-add-generated-column'} else
-            1 <= len(added_names) <= 128 if action ==
+            1 <= len(added_names) <= _MAX_REBUILD_COLUMNS if action ==
                 'rebuild-replace-columns-and-reorder' else
-            2 <= len(added_names) <= 128)
+            2 <= len(added_names) <= _MAX_REBUILD_COLUMNS)
         shape_valid = (original_tokens is not None and
             desired_tokens is not None and valid_additions and
             (bool(removed_names) if action ==
@@ -2429,9 +2432,9 @@ def plan(baseline, desired, live):
                             {'rebuild-add-column-and-reorder',
                              'rebuild-add-generated-column-and-reorder',
                              'rebuild-add-generated-column'} else
-                        1 <= len(added_ids) <= 128 if addition_action ==
+                        1 <= len(added_ids) <= _MAX_REBUILD_COLUMNS if addition_action ==
                             'rebuild-replace-columns-and-reorder' else
-                        2 <= len(added_ids) <= 128 if addition_action ==
+                        2 <= len(added_ids) <= _MAX_REBUILD_COLUMNS if addition_action ==
                             'rebuild-add-columns-and-reorder' else
                         not added_ids)
                     if ((removed_ids and addition_action not in

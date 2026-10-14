@@ -401,8 +401,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   such plain nullable columns in one reviewed stage, while also reordering
   the old columns. It applies the same native column, constraint, generated
   value, dependency and row-preservation checks to the complete staged table.
-  The complete resulting table remains bounded to 128 columns and the reviewed
-  native batch to 512 statements and 1 MiB of source.
+  There is no separate 128-column cutoff: the complete resulting table is
+  bounded by the catalog's 20,000-fact, 8 MiB and 30-second capture limits,
+  the 4 MiB durable review limit, and the reviewed native batch's 512
+  statements and 1 MiB of source. A modeled table cannot exceed the catalog
+  fact budget even before other resources are counted.
   A separate ``rebuild-drop-columns-and-reorder`` intent may remove one or
   more observed columns while retaining at least one. It requires the exact
   removed column resource IDs and an explicit confirmation that their values
