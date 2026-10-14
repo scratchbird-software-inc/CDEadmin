@@ -359,9 +359,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   native text and columns before dropping the old table. Inline CHECK syntax,
   foreign-key edges, non-whitelisted generated expressions, native tags and
   unaccounted sequence ownership remain blockers. The staged native constraint
-  order must match the reviewed child identities; if an inline declaration
-  moves a key before another key and changes its native ordinal, the apply
-  transaction rolls back before dropping the original table.
+  order must match the reviewed child identities. When an inline declaration
+  moves a key before another key, the desired model must explicitly rekey the
+  unchanged constraint children to their new native ordinals and resource IDs.
+  The ordinal set remains complete and unchanged, and all semantic constraint
+  facts remain fixed. A stale or incomplete child identity rolls the apply
+  transaction back before dropping the original table.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may

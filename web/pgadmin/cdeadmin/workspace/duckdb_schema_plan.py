@@ -1391,7 +1391,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             raise ValueError('Column-order rebuild requires complete native column rows')
         if (not isinstance(old_constraints, list) or
                 not isinstance(new_constraints, list) or
-                any(not isinstance(item, dict) for item in
+                any(not isinstance(item, dict) or
+                    type(item.get('constraint_index')) is not int for item in
                     [*old_constraints, *new_constraints])):
             raise ValueError('Column-order rebuild requires complete native constraint rows')
         def key_facts(items, ordered_columns):
@@ -1445,16 +1446,28 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 item.get('column_indexes') == [names.index(name)
                     for name in item['column_names']]
                 for item in facts)
-        def without_column_indexes(items):
-            return [{key: value for key, value in item.items()
-                if key != 'column_indexes'} for item in items]
+        def semantic_constraints(items):
+            names = [item.get('name') for item in items]
+            if (any(not isinstance(name, str) or not name for name in names) or
+                    len(set(names)) != len(items)):
+                return None
+            return {item['name']: {key: value for key, value in item.items()
+                if key not in {'resource_id', 'constraint_index',
+                    'column_indexes'}} for item in items}
+        old_indices = {item.get('constraint_index') for item in old_constraints}
+        new_indices = {item.get('constraint_index') for item in new_constraints}
+        old_semantic = semantic_constraints(old_constraints)
+        new_semantic = semantic_constraints(new_constraints)
         if (old_key is None or new_key is None or old_key != new_key or
+                len(old_indices) != len(old_constraints) or
+                len(new_indices) != len(new_constraints) or
+                old_indices != new_indices or
+                old_semantic is None or new_semantic is None or
                 not positional_facts(old_constraints, old_columns, 'UNIQUE') or
                 not positional_facts(new_constraints, new_columns, 'UNIQUE') or
                 not positional_facts(old_constraints, old_columns, 'CHECK') or
                 not positional_facts(new_constraints, new_columns, 'CHECK') or
-                not _equal(without_column_indexes(old_constraints),
-                    without_column_indexes(new_constraints)) or
+                not _equal(old_semantic, new_semantic) or
                 old_map is None or new_map is None or
                 not _equal(old_map, new_map) or
                 [item['name'] for item in old_columns] ==

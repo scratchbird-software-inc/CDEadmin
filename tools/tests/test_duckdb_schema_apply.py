@@ -2234,14 +2234,16 @@ def test_reviewed_column_reorder_preserves_unique_constraints(tmp_path, style):
         provider.client.close()
 
 
-@pytest.mark.parametrize('style', ['plain', 'with-key-table', 'with-key-inline'])
+@pytest.mark.parametrize('style', ['plain', 'with-key-table',
+    'with-key-inline', 'with-key-inline-rekey'])
 def test_reviewed_column_reorder_preserves_table_check(
         tmp_path, style):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     id_sql = 'id INTEGER PRIMARY KEY' if style != 'plain' else 'id INTEGER'
-    code_sql = 'code VARCHAR UNIQUE' if style == 'with-key-inline' else 'code VARCHAR'
+    code_sql = ('code VARCHAR UNIQUE' if style.startswith('with-key-inline')
+        else 'code VARCHAR')
     suffix = (', UNIQUE(code)' if style == 'with-key-table' else '') + (
         ', CHECK(length(code) > 1)')
     old_body = f'{id_sql}, {code_sql}' + suffix
@@ -2269,6 +2271,25 @@ def test_reviewed_column_reorder_preserves_table_check(
                 for name in constraint['column_names']]
             desired['rows'][constraint['resource_id']]['native'][
                 'catalog_metadata']['column_indexes'] = constraint['column_indexes']
+        if style == 'with-key-inline-rekey':
+            original_children = {item['resource_id']: desired['rows'].pop(
+                item['resource_id']) for item in edited['constraints']}
+            first_index = min(item['constraint_index']
+                for item in edited['constraints'])
+            positions = {'UNIQUE': 0, 'PRIMARY KEY': 1,
+                'CHECK': 2, 'NOT NULL': 3}
+            for item in edited['constraints']:
+                old_id = item['resource_id']
+                new_index = first_index + positions[item['constraint_type']]
+                new_id = _resource_id('constraint', table['path'], item['name'],
+                    discriminator=new_index)
+                item['resource_id'] = new_id
+                item['constraint_index'] = new_index
+                child_row = original_children[old_id]
+                child_row['resource_id'] = new_id
+                child_row['native']['catalog_metadata']['constraint_index'] = new_index
+                desired['rows'][new_id] = child_row
+            edited['constraints'].sort(key=lambda item: item['constraint_index'])
         edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
             '(' + new_body + ')')
         edited['duckdb_change'] = {'action': 'rebuild-column-order',
