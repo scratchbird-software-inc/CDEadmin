@@ -12,7 +12,7 @@ history, and applicable notices are retained. See [NOTICE](NOTICE),
 [LICENSE](LICENSE), and [Hard-fork status](docs/en_US/cdeadmin_hard_fork.rst).
 
 **Project links:** [implementation and qualification status](docs/en_US/implementation_status.rst)
-· [open-source site source](docs/index.html) · [wiki source](wiki/Home.md)
+· [open-source site source](website/index.html) · [wiki source](wiki/Home.md)
 · [development setup](tools/development/README.md) ·
 [commercial ScratchRobin page](https://scratchbird.ca/robin).
 The site and wiki source are versioned here; their GitHub publishing endpoints
@@ -277,7 +277,7 @@ read-only inputs and must never be modified by CDEadmin work.
 
 The [wiki source](wiki/Home.md) is a task-oriented entry point for setup,
 engine workflows, schema review, dashboards, SQL history and troubleshooting.
-The [open-source website source](docs/index.html) is a static GitHub Pages
+The [open-source website source](website/index.html) is a static GitHub Pages
 entry point. Both link to the detailed Sphinx and provider documentation;
 neither is a production-readiness claim.
 

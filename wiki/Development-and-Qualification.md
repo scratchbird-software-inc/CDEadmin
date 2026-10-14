@@ -19,7 +19,9 @@ API, refresh the consumed runtime/editor/tool snapshot, then test the same
 captured dependency. Do not edit the sister project's active checkout. Keep
 generated builds, raw logs and fixtures out of source control.
 
-The open-source site is built from versioned files in `docs/`; wiki pages are
-versioned in `wiki/`. The GitHub wiki has a separate publication repository,
-and GitHub Pages publishes from the configured branch and `/docs` directory.
+The open-source site is built from versioned files in `website/`; detailed
+documentation remains in `docs/`, and wiki pages are versioned in `wiki/`.
+The GitHub wiki has a separate publication repository. The reviewed
+`website/` subtree is published at the root of the `gh-pages` branch using
+`tools/publish_website.sh`; GitHub Pages serves that branch at `/`.
 Documentation must not promote uncommitted features to shipped status.
