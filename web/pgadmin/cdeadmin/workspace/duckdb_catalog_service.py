@@ -6,6 +6,11 @@ from .firebird_catalog_import import compare_catalogs, read_catalog
 
 
 def catalog(service, server, request, *, compare=False):
+    if isinstance(request, dict) and (not request or 'database_target_ids' in request):
+        if compare:
+            raise ValueError('DuckDB endpoint DDN bundle comparison is file-scoped')
+        from .duckdb_server_catalog import serve
+        return serve(service, server, request)
     if not isinstance(request, dict) or set(request) - {
             'database_target_id', 'include_system', 'resource_id', 'source'}:
         raise ValueError('Invalid DuckDB catalog request')

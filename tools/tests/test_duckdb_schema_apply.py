@@ -1877,27 +1877,32 @@ def test_inbound_child_with_two_keys_to_same_parent_requires_complete_detach(
         provider.client.close()
 
 
-@pytest.mark.parametrize('child_targets_unique,child_count', [
-    (False, 1), (False, 2), (True, 1), (True, 2)])
+@pytest.mark.parametrize('target_key,child_count', [
+    ('primary', 1), ('primary', 2),
+    ('changed_unique', 1), ('changed_unique', 2),
+    ('retained_unique', 1), ('retained_unique', 2)])
 def test_independent_parent_unique_change_with_inbound_child_requires_unchanged_key(
-        tmp_path, child_targets_unique, child_count):
+        tmp_path, target_key, child_count):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
-        'payload VARCHAR UNIQUE, extra VARCHAR, CHECK(length(payload) > 0))')
+        'payload VARCHAR UNIQUE, extra VARCHAR' +
+        (' UNIQUE' if target_key == 'retained_unique' else '') +
+        ', CHECK(length(payload) > 0))')
     connection.execute("INSERT INTO parent VALUES (1, 'aa', 'x')")
-    key = 'payload VARCHAR' if child_targets_unique else 'id INTEGER'
-    reference = 'payload' if child_targets_unique else 'id'
+    reference = {'primary': 'id', 'changed_unique': 'payload',
+        'retained_unique': 'extra'}[target_key]
+    key = reference + (' INTEGER' if reference == 'id' else ' VARCHAR')
     connection.execute('CREATE TABLE child(' + key + ', FOREIGN KEY(' +
         reference + ') REFERENCES parent(' + reference + '))')
-    connection.execute("INSERT INTO child VALUES ('aa')" if child_targets_unique
-        else 'INSERT INTO child VALUES (1)')
+    connection.execute('INSERT INTO child VALUES (' +
+        ('1' if reference == 'id' else "'aa'" if reference == 'payload' else "'x'") + ')')
     if child_count == 2:
         connection.execute('CREATE TABLE child_b(' + key + ', FOREIGN KEY(' +
             reference + ') REFERENCES parent(' + reference + '))')
-        connection.execute("INSERT INTO child_b VALUES ('aa')" if child_targets_unique
-            else 'INSERT INTO child_b VALUES (1)')
+        connection.execute('INSERT INTO child_b VALUES (' +
+            ('1' if reference == 'id' else "'aa'" if reference == 'payload' else "'x'") + ')')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1913,22 +1918,43 @@ def test_independent_parent_unique_change_with_inbound_child_requires_unchanged_
         desired = deepcopy(baseline)
         edited = desired['rows'][parent['resource_id']]['native']
         old_unique = next(item for item in edited['constraints']
-            if item['constraint_type'] == 'UNIQUE')
+            if item['constraint_type'] == 'UNIQUE' and
+                item['column_names'] == ['payload'])
+        if target_key == 'retained_unique':
+            retained = next(item for item in edited['constraints']
+                if item['constraint_type'] == 'UNIQUE' and
+                    item['column_names'] == ['extra'])
+            changed_index = retained['constraint_index']
+            retained_row = deepcopy(desired['rows'].pop(retained['resource_id']))
+            retained_id = _resource_id('constraint', parent['path'],
+                retained['name'], discriminator=old_unique['constraint_index'])
+            retained_row['resource_id'] = retained_id
+            retained_row['native']['catalog_metadata']['constraint_index'] = old_unique[
+                'constraint_index']
+            desired['rows'][retained_id] = retained_row
+            retained.update(resource_id=retained_id,
+                constraint_index=old_unique['constraint_index'])
+        else:
+            changed_index = old_unique['constraint_index']
         new_name = 'parent_payload_extra_key'
         new_id = _resource_id('constraint', parent['path'], new_name,
-            discriminator=old_unique['constraint_index'])
+            discriminator=changed_index)
         new_child = deepcopy(desired['rows'].pop(old_unique['resource_id']))
         new_child.update(name=new_name, path=[*parent['path'], new_name],
             resource_id=new_id)
         new_child['native']['catalog_metadata'].update(column_indexes=[1, 2],
             column_names=['payload', 'extra'],
-            constraint_text='UNIQUE(payload, extra)')
+            constraint_text='UNIQUE(payload, extra)',
+            constraint_index=changed_index)
         desired['rows'][new_id] = new_child
         old_unique.update(name=new_name, resource_id=new_id,
             column_indexes=[1, 2], column_names=['payload', 'extra'],
-            constraint_text='UNIQUE(payload, extra)')
+            constraint_text='UNIQUE(payload, extra)',
+            constraint_index=changed_index)
+        edited['constraints'].sort(key=lambda item: item['constraint_index'])
         edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
-            '(id INTEGER PRIMARY KEY, payload VARCHAR, extra VARCHAR, '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, extra VARCHAR' +
+            (' UNIQUE' if target_key == 'retained_unique' else '') + ', '
             'UNIQUE(payload, extra), CHECK((length(payload) > 0)))')
         intermediate = [{'resource_id': child['resource_id'],
             'intermediate_ddl': f'CREATE TABLE "{root}"."main"."{child["name"]}" '
@@ -1944,9 +1970,9 @@ def test_independent_parent_unique_change_with_inbound_child_requires_unchanged_
         else:
             edited['duckdb_change']['inbound_children'] = intermediate
         preview = plan(baseline, desired, baseline)
-        assert preview['application_supported'] is not child_targets_unique, preview['blockers']
-        if child_targets_unique:
-            assert any('unchanged primary key' in item['reason']
+        assert preview['application_supported'] is not (target_key == 'changed_unique'), preview['blockers']
+        if target_key == 'changed_unique':
+            assert any('unchanged parent keys' in item['reason']
                 for item in preview['blockers'])
             return
         applications = DuckDBSchemaApplications(tmp_path/'unique-inbound.json',
@@ -1958,9 +1984,11 @@ def test_independent_parent_unique_change_with_inbound_child_requires_unchanged_
         assert outcome['state'] == 'committed', outcome
         assert outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
-        assert observer.execute('SELECT * FROM child').fetchall() == [(1,)]
+        expected_child = [(1 if reference == 'id' else 'aa' if
+            reference == 'payload' else 'x',)]
+        assert observer.execute('SELECT * FROM child').fetchall() == expected_child
         if child_count == 2:
-            assert observer.execute('SELECT * FROM child_b').fetchall() == [(1,)]
+            assert observer.execute('SELECT * FROM child_b').fetchall() == expected_child
         observer.execute("INSERT INTO parent VALUES (2, 'aa', 'y')")
         with pytest.raises(duckdb.ConstraintException):
             observer.execute("INSERT INTO parent VALUES (3, 'aa', 'x')")

@@ -715,6 +715,11 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.duckdb.monitoring', 'DuckDB registered-file dashboard...',
             'open_workspace', icon='tool.dashboard', group='availability', arguments={'tab': 'monitoring'},
             enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
+        actions.append(_action('endpoint.duckdb.catalog_ddn', 'Registered DuckDB files and DDN...',
+            'open_workspace', icon='action.export', group='database',
+            arguments={'tab': 'export', 'server_catalog': True},
+            enabled=ready and can_manage,
+            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
         actions.append(_action('endpoint.duckdb.dashboard_editor', 'Edit DuckDB dashboard...',
             'open_duckdb_dashboard_editor', icon='action.edit', group='availability', mutation='write',
             enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))

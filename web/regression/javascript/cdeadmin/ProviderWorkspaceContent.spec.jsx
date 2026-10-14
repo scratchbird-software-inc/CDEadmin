@@ -804,6 +804,20 @@ describe('ProviderWorkspaceContent', () => {
     api.get.mockResolvedValue({data: {data: bootstrap}});
   });
 
+  it('keeps a DuckDB registered-file DDN request at endpoint scope', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap,
+      endpoint: {...bootstrap.endpoint, profile_id: 'duckdb-native'}}}});
+    api.post.mockResolvedValue({data: {data: {format: 'scratchrobin.duckdb.registered-files@1',
+      files: [], capture_limit: 32}}});
+    render(<ProviderWorkspaceContent closeModal={jest.fn()}
+      endpointUrl="/workspace/1" initialTab="export"
+      initialContext={{server_catalog: true, database_target_id: 'active-file'}} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Load registered files'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', {
+      action: 'duckdb_catalog_export', request: {},
+    }));
+  });
+
   it('keeps stacked status messages in a keyboard-accessible bounded region', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap,
       engine_contracts: {state: 'blocked', dialect: {state: 'blocked'},

@@ -580,6 +580,12 @@ class ContextMenuTests(unittest.TestCase):
 
     def test_duckdb_database_actions_expose_native_file_operations(self):
         duckdb = profile('duckdb', route_kind='embedded_file', multiple=True)
+        server_actions = {item['command_id']: item for item in
+            endpoint_context_actions(duckdb, 'verified')}
+        server_catalog = server_actions['endpoint.duckdb.catalog_ddn']
+        self.assertEqual({'tab': 'export', 'server_catalog': True},
+                         server_catalog['arguments'])
+        self.assertTrue(server_catalog['enabled'])
         actions = database_target_context_actions(duckdb, {
             'target_id': 'duckdb-one', 'display_name': 'example.duckdb',
         })

@@ -1937,16 +1937,22 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         for item in inbound_requests]
     if action in {'rebuild-unique-with-inbound-child',
             'rebuild-unique-with-inbound-children'}:
-        primary = [item['column_names'] for item in old_constraints
-            if item.get('constraint_type') == 'PRIMARY KEY']
-        if len(primary) != 1 or not primary[0]:
-            raise ValueError('Inbound UNIQUE rebuild requires one unchanged parent primary key')
+        retained_keys = {
+            tuple(item.get('column_names') or []) for item in old_constraints
+            if item.get('constraint_type') in {'PRIMARY KEY', 'UNIQUE'} and
+            item.get('column_names') and any(
+                desired_key.get('constraint_type') == item['constraint_type'] and
+                desired_key.get('column_names') == item['column_names'] and
+                desired_key.get('constraint_text') == item.get('constraint_text')
+                for desired_key in new_constraints)}
+        if not retained_keys:
+            raise ValueError('Inbound UNIQUE rebuild requires an unchanged parent key')
         for child, _first, _final, _details in inbound:
-            if any(edge.get('referenced_column_names') != primary[0]
+            if any(tuple(edge.get('referenced_column_names') or []) not in retained_keys
                     for edge in child['native'].get('constraints', [])
                     if edge.get('constraint_type') == 'FOREIGN KEY' and
                         edge.get('referenced_table') == before['name']):
-                raise ValueError('Inbound UNIQUE rebuild requires foreign keys to the unchanged primary key')
+                raise ValueError('Inbound UNIQUE rebuild requires foreign keys to unchanged parent keys')
     if len({name for item in inbound for name in item[3]['stage_names']}) != 2 * len(inbound):
         raise ValueError('Inbound child stages must have distinct native identities')
     preserved_views, preserved_macros = [], []

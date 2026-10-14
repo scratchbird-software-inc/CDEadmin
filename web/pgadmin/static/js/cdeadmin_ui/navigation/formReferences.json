@@ -13,6 +13,7 @@
     "duckdb-test-data": {"reference": "SR-F-010005", "title": "DuckDB native test-data recipes"},
     "duckdb-copy": {"reference": "SR-F-010006", "title": "DuckDB native table COPY preview"},
     "duckdb-attachment": {"reference": "SR-F-010007", "title": "DuckDB session attachment preview"},
+    "duckdb-server-catalog-ddn": {"reference": "SR-F-010008", "title": "DuckDB registered-file DDN catalog"},
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

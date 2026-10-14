@@ -135,6 +135,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   baseline/desired/live diff, with explicit deletion intent, native nonexecuting
   validation and reviewed apply receipts. A view filter never authorizes drops.
   Distinguish temporary/session definitions from persisted file contents.
+  At endpoint scope, enumerate owner-registered DuckDB files without exposing
+  routes, credentials or secret options. A reviewer may capture one to thirty-two
+  selected files into a bundle of separate DDN documents and view each file's
+  catalog and relational diagram. Include a documentary endpoint inventory;
+  its registered-file entries are not native DuckDB server objects. Every file
+  uses its own authorized route, native connection, read transaction, exact
+  target provenance and capture coverage. Do not merge equal native catalog
+  names or resource IDs from different files. Report an unavailable file as
+  unavailable with no substitute document. A bundle of independently observed
+  files is not an atomic snapshot, physical backup or multi-file migration.
+  Cap the combined response and refuse an oversized selection explicitly.
   Catalog capture uses its own connection and transaction, bounded to 20,000
   native/expanded facts, 8 MiB and 30 seconds. Overflow or interruption returns
   no partial successful capture. A known missing registered file is refused
@@ -598,8 +609,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``rebuild-unique-with-inbound-children`` for two to sixty-three children,
   may change the parent's independent UNIQUE set while preserving its complete
   CHECK, primary-key and NOT NULL facts. Every detached child key to that
-  parent must reference exactly the unchanged ordered primary-key columns;
-  a child relying on a changed or independent UNIQUE target is refused.
+  parent must reference either the unchanged ordered primary-key columns or
+  an independent UNIQUE constraint whose ordered columns and native definition
+  remain identical in the baseline and desired parent. A key relying on a
+  changed or removed UNIQUE target is refused.
   These intents use the same complete child-set review, detached and restored
   stages, row checks, dependency binding, statement budget and rediscovery
   requirements as the inbound CHECK rebuild. A missing child or changed key
@@ -733,8 +746,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   verifies the registered file identity and rechecks the live baseline in that
   transaction, dispatches each native statement once in dependency order,
   commits once and rediscovers every target. A failed/uncertain commit is never
-  replayed automatically. The limited admitted operation set does not complete
-  the full native DDN adapter obligation.
+  replayed automatically. This bounded operation set is the current-run native
+  DDN application contract. Independent changes can use separate reviewed
+  operations. A combined or side-effectful transformation without a qualified
+  preservation path remains an explicit blocker; an operator may author native
+  SQL in the shared editor under its own review and transaction controls. Full
+  engine access does not imply automatic migration of every legal DuckDB DDL
+  combination or permission to guess a data conversion.
 
 DUCK-COMP-06: Native dashboards and monitoring
   Provide display-only DDN engine/embedded-instance/database dashboards with a
