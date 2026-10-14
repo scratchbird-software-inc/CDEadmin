@@ -467,9 +467,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   independent catalog capture; in that case native ``DROP ... RESTRICT`` must
   refuse the child swap and roll back the entire transaction.
   The explicit copy must not advance the sequence; fresh rows retain its
-  native default after final rediscovery. Other function calls, identifiers,
-  casts and sequence expressions remain blocked pending dependency and
+  native default after final rediscovery. Casts, column identifiers and
+  composed sequence expressions remain blocked pending dependency and
   side-effect qualification.
+  Unchanged zero-argument native ``random()`` and ``uuid()`` defaults and the
+  ``current_date``, ``current_time`` and ``current_timestamp`` special defaults
+  may survive both child stages. Every existing column is copied explicitly,
+  so these expressions are not used to regenerate existing values. Stage
+  catalog facts and the complete row multiset must match before each child
+  swap; arbitrary function calls remain blocked.
   Each stage's native default facts must match the reviewed child columns
   before the old child is dropped.
   An unchanged virtual generated child column may survive both stages under

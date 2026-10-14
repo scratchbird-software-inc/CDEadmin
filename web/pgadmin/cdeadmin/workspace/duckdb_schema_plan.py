@@ -1129,6 +1129,9 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
         if re.fullmatch(r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)",
                 value.strip(), re.I):
             return True
+        if re.fullmatch(r'(?:random|uuid)\(\)|current_(?:date|time|timestamp)',
+                value.strip(), re.I):
+            return True
         atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
             r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
         token = re.compile(r'\s*(?:' + atom + r'|\|\||[()+*/%-])', re.I)

@@ -1672,14 +1672,24 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
         provider.client.close()
 
 
-def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
+@pytest.mark.parametrize('expression,data_type,admitted', [
+    ('random()', 'DOUBLE', True), ('uuid()', 'UUID', True),
+    ('current_date', 'DATE', True), ('current_time', 'TIME', True),
+    ('current_timestamp', 'TIMESTAMP', True),
+    ("current_setting('TimeZone')", 'VARCHAR', False)])
+def test_inbound_child_native_default_preserves_existing_values(
+        tmp_path, expression, data_type, admitted):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
         'payload VARCHAR CHECK(length(payload) > 0))')
-    connection.execute('CREATE TABLE child(id DOUBLE DEFAULT random(), '
-        'parent_id INTEGER, FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa')")
+    columns = f'id {data_type} DEFAULT({expression}), parent_id INTEGER'
+    connection.execute('CREATE TABLE child(' + columns + ', '
+        'FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO child(parent_id) VALUES (1)')
+    original_value = connection.execute('SELECT id FROM child').fetchone()[0]
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1695,22 +1705,36 @@ def test_inbound_child_expression_default_is_refused_before_dispatch(tmp_path):
         edited = desired['rows'][parent['resource_id']]['native']
         check = next(item for item in edited['constraints']
             if item['constraint_type'] == 'CHECK')
-        check['constraint_text'] = 'CHECK((length(payload) >= 1))'
-        check['expression'] = '(length(payload) >= 1)'
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
         desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
             constraint_text=check['constraint_text'], expression=check['expression'])
         edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
             '(id INTEGER PRIMARY KEY, payload VARCHAR, '
-            'CHECK((length(payload) >= 1)))')
+            'CHECK((length(payload) >= 2)))')
         edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
             'inbound_child_resource_id': child['resource_id'],
             'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
-                '(id DOUBLE DEFAULT random(), parent_id INTEGER)'}
+                '(' + columns + ')'}
         preview = plan(baseline, desired, baseline)
-        assert not preview['application_supported']
-        assert any('admitted defaults' in item['reason']
-            for item in preview['blockers'])
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            return
+        applications = DuckDBSchemaApplications(tmp_path/'child-native-default.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,parent_id FROM child').fetchall() == [
+            (original_value, 1)]
+        observer.execute('INSERT INTO child(parent_id) VALUES (1)')
+        assert observer.execute('SELECT count(*) FROM child WHERE id IS NOT NULL').fetchone()[0] == 2
+        observer.close()
     finally:
         provider.client.close()
 
