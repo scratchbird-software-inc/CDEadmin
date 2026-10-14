@@ -110,16 +110,16 @@ describe('DuckDB native catalog form', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Use design for native review'}));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', {name: 'Preview native changes'}));
-    await screen.findByRole('button', {name: 'Prepare one-statement native review'});
-    fireEvent.click(screen.getByRole('button', {name: 'Prepare one-statement native review'}));
+    await screen.findByRole('button', {name: 'Prepare native change review'});
+    fireEvent.click(screen.getByRole('button', {name: 'Prepare native change review'}));
     await screen.findByText(/Native receipt review-1: reviewed/);
     expect(post).toHaveBeenLastCalledWith({action: 'duckdb_schema_review', request: {
       database_target_id: 'owned-duckdb-file', baseline: JSON.stringify(snapshot),
       desired: JSON.stringify({...snapshot, files: {'catalog.ddn': 'authored native facts'}}),
       execution_sha256: 'sha'}});
-    expect(screen.getByRole('button', {name: 'Apply reviewed statement'})).toBeDisabled();
-    fireEvent.click(screen.getByRole('checkbox', {name: 'Confirm this reviewed DuckDB statement'}));
-    fireEvent.click(screen.getByRole('button', {name: 'Apply reviewed statement'}));
+    expect(screen.getByRole('button', {name: 'Apply reviewed change'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Confirm this reviewed DuckDB change'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Apply reviewed change'}));
     await screen.findByText(/Native receipt review-1: committed/);
     expect(post).toHaveBeenLastCalledWith({action: 'duckdb_schema_apply', request: {
       database_target_id: 'owned-duckdb-file', review_id: 'review-1', review_digest: 'digest-1', confirmed: true}});

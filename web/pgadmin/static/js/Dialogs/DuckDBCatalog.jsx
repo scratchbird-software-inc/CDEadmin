@@ -165,15 +165,15 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           {key: 'source', name: 'Native SQL', minWidth: 340}, {key: 'reason', name: 'Blocker or conflict', minWidth: 260},
         ]} /></Box>
       {schemaPlan.application_supported && !schemaReceipt &&
-        <Button disabled={busy} onClick={reviewSchema}>Prepare one-statement native review</Button>}
+        <Button disabled={busy} onClick={reviewSchema}>Prepare native change review</Button>}
     </Box>}
     {schemaReceipt && <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
       <Alert severity={schemaReceipt.state === 'committed' ? 'success' : schemaReceipt.state === 'unknown_outcome' ? 'warning' : 'info'}>
         Native receipt {schemaReceipt.review_id}: {schemaReceipt.state}. Rediscovery {schemaReceipt.outcome?.rediscovery_verified ? 'verified' : 'unverified'}.
       </Alert>
-      {schemaReceipt.state === 'reviewed' && <FormControlLabel label="Confirm this reviewed DuckDB statement"
+      {schemaReceipt.state === 'reviewed' && <FormControlLabel label="Confirm this reviewed DuckDB change"
         control={<Checkbox checked={confirmApply} disabled={busy} onChange={event => setConfirmApply(event.target.checked)} />} />}
-      {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed statement</Button>}
+      {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed change</Button>}
       <Button disabled={busy} onClick={readReceipt}>Read native receipt</Button>
     </Box>}
     {shown?.snapshot && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
