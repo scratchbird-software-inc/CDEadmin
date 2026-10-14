@@ -2079,6 +2079,75 @@ def test_reviewed_column_reorder_preserves_safe_generated_values(
         provider.client.close()
 
 
+@pytest.mark.parametrize('generated', [False, True])
+def test_reviewed_column_reorder_preserves_inline_primary_key(tmp_path, generated):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    generated_sql = (', doubled INTEGER GENERATED ALWAYS AS((id * 2))'
+        if generated else '')
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, note VARCHAR' +
+        generated_sql + ')')
+    connection.execute("INSERT INTO checked(id,note) VALUES (1,'a'),(2,'b')")
+    connection.execute('CREATE INDEX checked_note_idx ON checked(note)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        reordered = [next(item for item in edited['columns'] if item['name'] == name)
+            for name in (('note', 'id', 'doubled') if generated else ('note', 'id'))]
+        for position, column in enumerate(reordered, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = reordered
+        for constraint in edited['constraints']:
+            constraint['column_indexes'] = [1]
+            desired['rows'][constraint['resource_id']]['native'][
+                'catalog_metadata']['column_indexes'] = [1]
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
+            '(note VARCHAR, id INTEGER PRIMARY KEY' + generated_sql + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        malformed = deepcopy(desired)
+        malformed['rows'][table['resource_id']]['native'][
+            'constraints'][0]['column_indexes'] = [0]
+        assert not plan(baseline, malformed, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'keyed-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,note FROM checked ORDER BY id').fetchall() == [
+            (1, 'a'), (2, 'b')]
+        assert [item[0] for item in observer.execute('DESCRIBE checked')
+            .fetchall()] == (['note', 'id', 'doubled'] if generated else ['note', 'id'])
+        if generated:
+            assert observer.execute('SELECT doubled FROM checked ORDER BY id').fetchall() == [
+                (2,), (4,)]
+        assert observer.execute('SELECT constraint_type, constraint_column_indexes '
+            "FROM duckdb_constraints() WHERE table_name='checked' "
+            'ORDER BY constraint_index').fetchall() == [
+            ('PRIMARY KEY', [1]), ('NOT NULL', [1])]
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO checked(id,note) VALUES (1,'duplicate')")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

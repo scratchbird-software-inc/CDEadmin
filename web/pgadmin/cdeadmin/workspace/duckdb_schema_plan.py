@@ -1384,15 +1384,55 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 if key != 'ordinal_position'} for item in items}
             return mapped if len(mapped) == len(items) else None
         old_map, new_map = column_map(old_columns), column_map(new_columns)
-        if (old_constraints != [] or new_constraints != [] or
+        if old_map is None or new_map is None:
+            raise ValueError('Column-order rebuild requires complete native column rows')
+        def key_facts(items, ordered_columns):
+            if (not isinstance(items, list) or
+                    any(not isinstance(item, dict) for item in items)):
+                return None
+            if not items:
+                return []
+            keys = [item.get('column_names') for item in items
+                if isinstance(item, dict) and item.get('constraint_type') == 'PRIMARY KEY']
+            if (len(keys) != 1 or not isinstance(keys[0], list) or not keys[0] or
+                    any(not isinstance(name, str) or not name for name in keys[0]) or
+                    len(set(keys[0])) != len(keys[0]) or
+                    len(items) != len(keys[0]) + 1 or
+                    {item.get('constraint_type') for item in items
+                        if isinstance(item, dict)} != {'PRIMARY KEY', 'NOT NULL'}):
+                return None
+            names = [item['name'] for item in ordered_columns]
+            if not set(keys[0]) <= set(names):
+                return None
+            nulls = [item.get('column_names') for item in items
+                if item.get('constraint_type') == 'NOT NULL']
+            if (len(nulls) != len(keys[0]) or
+                    any(not isinstance(value, list) or len(value) != 1 or
+                        not isinstance(value[0], str) for value in nulls) or
+                    {tuple(value) for value in nulls} !=
+                        {(name,) for name in keys[0]}):
+                return None
+            for item in items:
+                if item.get('column_indexes') != [names.index(name)
+                        for name in item['column_names']]:
+                    return None
+            return keys[0]
+        old_key = key_facts(old_constraints, old_columns)
+        new_key = key_facts(new_constraints, new_columns)
+        def without_column_indexes(items):
+            return [{key: value for key, value in item.items()
+                if key != 'column_indexes'} for item in items]
+        if (old_key is None or new_key is None or old_key != new_key or
+                not _equal(without_column_indexes(old_constraints),
+                    without_column_indexes(new_constraints)) or
                 old_map is None or new_map is None or
                 not _equal(old_map, new_map) or
                 [item['name'] for item in old_columns] ==
                     [item['name'] for item in new_columns] or
-                old['catalog'].get('has_primary_key') is not False or
+                old['catalog'].get('has_primary_key') is not bool(old_key) or
                 not _equal(old, new)):
-            raise ValueError('Column-order rebuild requires unchanged complete columns and no constraints')
-        stage_key_columns = []
+            raise ValueError('Column-order rebuild requires unchanged complete columns and one optional key')
+        stage_key_columns = new_key
     if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}:
         def key_facts(constraints):
             keys = [item.get('column_names') for item in constraints
@@ -1629,7 +1669,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             len(original_sections[1]) != len(old_constraints) - old_inline or
             len(desired_sections[1]) != len(new_constraints) - new_inline or any(
             kind == 'token_type.keyword' and word in
-                (({'primary', 'unique'} if action == 'rebuild-column-order' else
+                (({'unique'} if action == 'rebuild-column-order' else
                   {'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',

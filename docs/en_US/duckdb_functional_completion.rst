@@ -345,8 +345,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   the reorder under the simple-expression whitelist used by the constraint
   rebuild. The staged copy names only base columns and compares the complete
   row multiset, including recomputed generated values, before dropping the
-  original table. Foreign-key edges, non-whitelisted generated expressions,
-  native tags and unaccounted sequence ownership remain blockers.
+  original table. One unchanged inline primary key and its implicit NOT NULL
+  constraints may also survive a reorder. The reviewed child constraint facts
+  must retain their native names, key columns and definitions; only column
+  indexes follow the new ordinal positions. Staging verifies the complete key
+  and nullability facts before the old table is dropped. Other constraints,
+  foreign-key edges, non-whitelisted generated expressions, native tags and
+  unaccounted sequence ownership remain blockers.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may
