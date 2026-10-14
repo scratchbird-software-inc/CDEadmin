@@ -388,6 +388,19 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Every new column must remain NULL through staging and after rediscovery;
   explicitly authored derived type facts are checked for each new column
   before the old table is dropped. A partial new-column child set is refused.
+  A separate ``rebuild-add-generated-column-and-reorder`` intent may add one
+  virtual generated column while reordering old columns. Its expression must
+  satisfy the same simple deterministic whitelist as preserved generated
+  columns and may reference only observed base columns. The stage copies only
+  old base values, compares every old column including previously generated
+  values, verifies the new generated column's exact native type and catalog
+  facts, including DuckDB's generated-expression column-default text, and
+  preserves admitted unchanged constraints and dependencies. The authored
+  catalog-default fact must match the stage before the original table is
+  dropped; a mismatched canonical expression rolls back.
+  Function calls, casts, sequence use and references to generated columns
+  remain blocked before dispatch. DuckDB 1.5.2 cannot directly add a
+  generated column through ``ALTER TABLE``.
   Staging copies every old column by name, proves their complete row multiset
   matches in both directions and verifies that every staged value of the new
   column is NULL before dropping the original table. Unchanged independent

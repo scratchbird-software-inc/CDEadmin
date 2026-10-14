@@ -2499,6 +2499,86 @@ def test_reviewed_add_and_reorder_preserves_safe_generated_values(
         provider.client.close()
 
 
+@pytest.mark.parametrize('expression,added_type,admitted,wrong_catalog_fact', [
+    ('id * 2', 'INTEGER', True, False),
+    ('id * 2', 'INTEGER', True, True),
+    ('random()', 'DOUBLE', False, False)])
+def test_reviewed_add_generated_column_and_reorder(
+        tmp_path, expression, added_type, admitted, wrong_catalog_fact):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE measurements(id INTEGER, note VARCHAR)')
+    connection.execute("INSERT INTO measurements VALUES (1,'a'),(2,'b')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'measurements')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_columns = {item['name']: item for item in edited['columns']}
+        added = deepcopy(old_columns['id'])
+        added['name'] = 'doubled'
+        added['resource_id'] = _resource_id('column', table['path'], 'doubled')
+        added['data_type'] = added_type
+        added['default'] = (f'CAST(({"id * 3" if wrong_catalog_fact else expression}) '
+            f'AS {added_type})')
+        for field in ('data_type_id', 'character_maximum_length',
+                'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+            added[field] = None
+        ordered = [old_columns['note'], old_columns['id'], added]
+        for position, column in enumerate(ordered, 1):
+            column['ordinal_position'] = position
+            if column is not added:
+                desired['rows'][column['resource_id']]['native'][
+                    'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = ordered
+        desired['rows'][added['resource_id']] = {
+            'resource_id': added['resource_id'], 'kind': 'column',
+            'name': 'doubled', 'path': [*table['path'], 'doubled'],
+            'system': 'false', 'native': {'system_object': False,
+            'catalog_metadata': {key: value for key, value in added.items()
+                if key not in {'name', 'resource_id'}}}}
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."measurements" '
+            f'(note VARCHAR, id INTEGER, doubled {added_type} '
+            f'GENERATED ALWAYS AS(({expression})))')
+        edited['duckdb_change'] = {
+            'action': 'rebuild-add-generated-column-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            return
+        assert 'stage_null_column' not in preview['operations'][0]
+        applications = DuckDBSchemaApplications(tmp_path/'new-generated.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if wrong_catalog_fact
+            else 'committed'), outcome
+        if not wrong_catalog_fact:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        if wrong_catalog_fact:
+            assert observer.execute('SELECT id,note FROM measurements '
+                'ORDER BY id').fetchall() == [(1, 'a'), (2, 'b')]
+        else:
+            assert observer.execute('SELECT id,note,doubled FROM measurements '
+                'ORDER BY id').fetchall() == [(1, 'a', 2), (2, 'b', 4)]
+        assert [item[0] for item in observer.execute('DESCRIBE measurements')
+            .fetchall()] == (['id', 'note'] if wrong_catalog_fact else
+                ['note', 'id', 'doubled'])
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('added_count', [2, 8])
 @pytest.mark.parametrize('wrong_derived_fact', [False, True])
 def test_reviewed_multiple_nullable_columns_and_reorder_preserves_constraints(
