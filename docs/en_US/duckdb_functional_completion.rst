@@ -444,8 +444,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   preserves admitted unchanged constraints and dependencies. The authored
   catalog-default fact must match the stage before the original table is
   dropped; a mismatched canonical expression rolls back.
-  Function calls, casts, sequence use and references to generated columns
-  remain blocked before dispatch. DuckDB 1.5.2 cannot directly add a
+  Built-in ``CAST`` and ``TRY_CAST`` may wrap safe base-column expressions,
+  constants and nested admitted casts when the target is an admitted scalar
+  type with bounded native numeric parameters. User functions, sequence use,
+  arbitrary function calls and references to generated columns remain blocked
+  before dispatch. DuckDB 1.5.2 cannot directly add a
   generated column through ``ALTER TABLE``.
   ``rebuild-add-generated-column`` applies the same checks when the order of
   old columns is unchanged, including a table with one existing base column.
@@ -616,8 +619,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   constants, parentheses and arithmetic or concatenation operators. Copy only
   the base columns; DuckDB recomputes the generated values in staging, and the
   complete row-multiset comparison must prove the resulting values match before
-  the original table is dropped. Function calls, sequence use, casts, generated
-  references to other generated columns and expressions outside this admitted
+  the original table is dropped. Built-in ``CAST`` and ``TRY_CAST`` of admitted
+  base-column expressions to admitted scalar targets may also be recomputed.
+  User functions, sequence use, generated references to other generated columns
+  and expressions outside this admitted
   subset block review because staging might invoke side effects or change values.
   A deterministic staging table receives every old row in the same native
   transaction; both EXCEPT ALL directions must be empty before the original

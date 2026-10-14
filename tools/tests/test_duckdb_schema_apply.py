@@ -1332,7 +1332,11 @@ def test_inbound_rebuild_preserves_complete_check_and_unique_sets(tmp_path):
 
 
 @pytest.mark.parametrize('expression,data_type,admitted', [
-    ('id + 1', 'INTEGER', True), ('random()', 'DOUBLE', False)])
+    ('id + 1', 'INTEGER', True),
+    ('CAST(id + 1 AS BIGINT)', 'BIGINT', True),
+    ('TRY_CAST(id + 1 AS BIGINT)', 'BIGINT', True),
+    ('random()', 'DOUBLE', False),
+    ('CAST(random() AS BIGINT)', 'BIGINT', False)])
 def test_constraint_rebuild_preserves_only_safe_generated_columns(
         tmp_path, expression, data_type, admitted):
     duckdb = pytest.importorskip('duckdb')
@@ -1356,9 +1360,9 @@ def test_constraint_rebuild_preserves_only_safe_generated_columns(
         edited['constraints'][0]['expression'] = '(id >= 0)'
         desired['rows'][child_id]['native']['catalog_metadata'].update(
             constraint_text='CHECK((id >= 0))', expression='(id >= 0)')
-        edited['ddl'] = (f'CREATE TABLE "{original["path"][0]}"."main"."checked" '
-            f'(id INTEGER, derived {data_type} GENERATED ALWAYS AS(({expression})), '
-            'CHECK((id >= 0)))')
+        edited['ddl'] = (edited['ddl'].replace('CREATE TABLE checked',
+            f'CREATE TABLE "{original["path"][0]}"."main"."checked"')
+            .replace('CHECK((id > 0))', 'CHECK((id >= 0))'))
         edited['duckdb_change'] = {'action': 'rebuild-check-constraints',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         preview = plan(baseline, desired, baseline)
@@ -2698,6 +2702,8 @@ def test_reviewed_add_and_reorder_preserves_safe_generated_values(
 @pytest.mark.parametrize('expression,added_type,admitted,wrong_catalog_fact', [
     ('id * 2', 'INTEGER', True, False),
     ('id * 2', 'INTEGER', True, True),
+    ('CAST(id * 2 AS BIGINT)', 'BIGINT', True, False),
+    ('TRY_CAST(id * 2 AS BIGINT)', 'BIGINT', True, False),
     ('random()', 'DOUBLE', False, False)])
 def test_reviewed_add_generated_column_and_reorder(
         tmp_path, expression, added_type, admitted, wrong_catalog_fact):
@@ -2721,7 +2727,11 @@ def test_reviewed_add_generated_column_and_reorder(
         added['name'] = 'doubled'
         added['resource_id'] = _resource_id('column', table['path'], 'doubled')
         added['data_type'] = added_type
-        added['default'] = (f'CAST(({"id * 3" if wrong_catalog_fact else expression}) '
+        canonical_expression = (expression.replace('id * 2', '(id * 2)')
+            if expression.startswith(('CAST(', 'TRY_CAST(')) else expression)
+        added['default'] = (f'CAST({canonical_expression} AS {added_type})'
+            if expression.startswith(('CAST(', 'TRY_CAST(')) else
+            f'CAST(({"id * 3" if wrong_catalog_fact else expression}) '
             f'AS {added_type})')
         for field in ('data_type_id', 'character_maximum_length',
                 'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
@@ -2739,9 +2749,11 @@ def test_reviewed_add_generated_column_and_reorder(
             'system': 'false', 'native': {'system_object': False,
             'catalog_metadata': {key: value for key, value in added.items()
                 if key not in {'name', 'resource_id'}}}}
+        authored_expression = (canonical_expression if expression.startswith(
+            ('CAST(', 'TRY_CAST(')) else f'({expression})')
         edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."measurements" '
             f'(note VARCHAR, id INTEGER, doubled {added_type} '
-            f'GENERATED ALWAYS AS(({expression})))')
+            f'GENERATED ALWAYS AS({authored_expression}))')
         edited['duckdb_change'] = {
             'action': 'rebuild-add-generated-column-and-reorder',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}

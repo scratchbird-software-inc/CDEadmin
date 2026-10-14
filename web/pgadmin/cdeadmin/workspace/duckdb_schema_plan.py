@@ -616,17 +616,76 @@ def _admitted_generated_columns(sections, columns):
     base = observed - set(generated)
     if generated and not base:
         return None
-    for expression in generated.values():
-        if not expression or any(
-                (kind == 'token_type.identifier' and word not in base) or
-                (kind == 'token_type.operator' and word not in
-                    {'(', ')', '+', '-', '*', '/', '%', '||'}) or
-                (kind == 'token_type.keyword' and word not in
-                    {'true', 'false', 'null'}) or
-                kind not in {'token_type.identifier', 'token_type.operator',
+    scalar_types = {'boolean', 'tinyint', 'smallint', 'integer', 'bigint',
+        'utinyint', 'usmallint', 'uinteger', 'ubigint', 'hugeint', 'uhugeint',
+        'real', 'float', 'double', 'decimal', 'varchar', 'date', 'time',
+        'timestamp', 'timestamptz', 'uuid', 'json', 'blob', 'interval'}
+    def safe_cast_target(tokens):
+        if (not tokens or tokens[0][0] not in
+                {'token_type.keyword', 'token_type.identifier'} or
+                tokens[0][1] not in scalar_types):
+            return False
+        if len(tokens) == 1:
+            return True
+        if tokens[1] != ('token_type.operator', '(') or tokens[-1] != (
+                'token_type.operator', ')') or len(tokens) not in {4, 6}:
+            return False
+        values = tokens[2:-1]
+        if len(values) == 3 and values[1] != ('token_type.operator', ','):
+            return False
+        parameters = values[::2]
+        return all(kind == 'token_type.numeric_const' and word.isdecimal() and
+            len(word) <= 6 and 0 <= int(word) <= 65535
+            for kind, word in parameters)
+    def safe_expression(tokens):
+        if not tokens:
+            return False
+        position = 0
+        while position < len(tokens):
+            kind, word = tokens[position]
+            if (kind, word) in {('token_type.keyword', 'cast'),
+                    ('token_type.keyword', 'try_cast')}:
+                if (position + 1 >= len(tokens) or tokens[position + 1] !=
+                        ('token_type.operator', '(')):
+                    return False
+                depth, separator, close = 1, None, None
+                for index in range(position + 2, len(tokens)):
+                    token = tokens[index]
+                    if token == ('token_type.operator', '('):
+                        depth += 1
+                    elif token == ('token_type.operator', ')'):
+                        depth -= 1
+                        if depth == 0:
+                            close = index
+                            break
+                    elif token == ('token_type.keyword', 'as') and depth == 1:
+                        if separator is not None:
+                            return False
+                        separator = index
+                if (separator is None or close is None or
+                        not safe_expression(tokens[position + 2:separator]) or
+                        not safe_cast_target(tokens[separator + 1:close])):
+                    return False
+                position = close + 1
+                continue
+            if (kind == 'token_type.identifier' and
+                    (word not in base or (position + 1 < len(tokens) and
+                        tokens[position + 1] == ('token_type.operator', '(')))):
+                return False
+            if (kind == 'token_type.operator' and word not in
+                    {'(', ')', '+', '-', '*', '/', '%', '||'}):
+                return False
+            if (kind == 'token_type.keyword' and word not in
+                    {'true', 'false', 'null'}):
+                return False
+            if kind not in {'token_type.identifier', 'token_type.operator',
                     'token_type.keyword', 'token_type.numeric_const',
-                    'token_type.string_const'}
-                for kind, word in expression):
+                    'token_type.string_const'}:
+                return False
+            position += 1
+        return True
+    for expression in generated.values():
+        if not safe_expression(expression):
             return None
     return set(generated)
 
