@@ -1671,8 +1671,6 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         raise ValueError('Inbound child stages must have distinct native identities')
     preserved_views, preserved_macros = [], []
     for row in live['rows'].values():
-        if inbound and row['kind'] in {'view', 'macro'}:
-            raise ValueError('Inbound child rebuild cannot preserve views or macros')
         if row['kind'] == 'view':
             view_id = row['resource_id']
             old_view = baseline['rows'].get(view_id)

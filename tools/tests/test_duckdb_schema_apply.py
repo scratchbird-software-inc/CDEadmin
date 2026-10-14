@@ -1247,6 +1247,10 @@ def test_inbound_rebuild_preserves_complete_check_and_unique_sets(tmp_path):
     connection.execute('CREATE TABLE child(' + child_body + ', '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute('INSERT INTO child VALUES (10, 1, 1, 2, 3)')
+    connection.execute('CREATE VIEW child_parent AS SELECT child.id, parent.payload '
+        'FROM child JOIN parent ON child.parent_id = parent.id')
+    connection.execute('CREATE MACRO child_row_count() AS '
+        '(SELECT count(*) FROM child)')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1290,6 +1294,8 @@ def test_inbound_rebuild_preserves_complete_check_and_unique_sets(tmp_path):
         assert outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
         assert observer.execute('SELECT * FROM child').fetchall() == [(10, 1, 1, 2, 3)]
+        assert observer.execute('SELECT * FROM child_parent').fetchall() == [(10, 'aa')]
+        assert observer.execute('SELECT child_row_count()').fetchone()[0] == 1
         assert observer.execute('SELECT constraint_type, count(*) FROM '
             "duckdb_constraints() WHERE table_name='child' GROUP BY 1 "
             'ORDER BY 1').fetchall() == [
@@ -1668,7 +1674,7 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
 
 @pytest.mark.parametrize('child_count,invalid', [
     (8, False), (8, True), (32, False), (33, False),
-    (63, False), (64, False)])
+    (63, False), (64, False), (2, False)])
 def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, invalid):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -1681,6 +1687,12 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
         connection.execute(f'CREATE TABLE child{number}(id INTEGER, parent_id INTEGER, '
             'FOREIGN KEY(parent_id) REFERENCES parent(id))')
         connection.execute(f'INSERT INTO child{number} VALUES ({number}, 1)')
+    if child_count == 2:
+        connection.execute('CREATE VIEW child_parent AS SELECT child1.id, '
+            'parent.payload FROM child1 JOIN parent '
+            'ON child1.parent_id = parent.id')
+        connection.execute('CREATE MACRO child2_count() AS '
+            '(SELECT count(*) FROM child2)')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -1737,6 +1749,10 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
                 ('FOREIGN KEY',)]
         assert observer.execute('SELECT payload FROM parent').fetchone()[0] == (
             'a' if invalid else 'aa')
+        if child_count == 2:
+            assert observer.execute('SELECT * FROM child_parent').fetchall() == [
+                (1, 'aa')]
+            assert observer.execute('SELECT child2_count()').fetchone()[0] == 1
         observer.close()
     finally:
         provider.client.close()

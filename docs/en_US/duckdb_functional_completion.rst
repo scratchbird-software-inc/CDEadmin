@@ -227,7 +227,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   ``parameters_without_defaults_confirmed`` review assertion. DuckDB 1.5.2
   ``duckdb_functions()`` does not expose macro parameter default expressions;
   names and types alone cannot prove that reconstruction preserves optional
-  arguments. A reviewer must independently verify the original signature has
+  arguments. DuckDB 1.5.2 ``EXPORT DATABASE`` can emit the full macro DDL in
+  ``schema.sql``, but a database with tables also exports their data and rejects
+  the tested ``SCHEMA_ONLY`` option. Routine metadata capture must not export
+  table data merely to recover optional macro arguments. DDN capture reports
+  those default expressions as unavailable and blocks inferred replacement;
+  the native SQL administration path accepts an explicitly authored complete
+  statement. A reviewer must independently verify the original signature has
   no defaults before the plan may synthesize a replacement statement. A
   single-overload scalar macro replacement with an unchanged native comment
   replays that comment in the same transaction and verifies it after commit.
@@ -501,8 +507,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   replay; that transient OID is not part of retained design identity. Index
   native tags and child indexes beyond the review budget remain blocked in this bounded
   subset.
-  The captured file has no user views or
-  macros in this first inbound subset. The reviewer
+  Unchanged persistent user views and complete independent scalar or table
+  macro groups may coexist with this inbound rebuild under the same bounded
+  binding contract as an isolated table rebuild. Native DESCRIBE must retain
+  every admitted projection before dispatch, after the final child restoration
+  and after commit; a missing or changed binding rolls the whole transaction
+  back or leaves a committed result unverified. The reviewer
   supplies the complete intermediate child CREATE TABLE definition without
   the foreign key. The one-time receipt binds the parent, child, their
   columns and constraint children, and both complete CREATE definitions.
