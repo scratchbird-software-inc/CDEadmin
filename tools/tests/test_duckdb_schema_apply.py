@@ -2318,7 +2318,10 @@ def test_reviewed_column_reorder_preserves_table_check(
         provider.client.close()
 
 
-def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
+@pytest.mark.parametrize('added_type,derived_known', [
+    ('INTEGER', True), ('BIGINT', False)])
+def test_reviewed_add_nullable_column_and_reorder_preserves_rows(
+        tmp_path, added_type, derived_known):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -2340,6 +2343,11 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
         added['name'] = 'extra'
         added['resource_id'] = _resource_id('column', table['path'], 'extra')
         added['ordinal_position'] = 1
+        added['data_type'] = added_type
+        if not derived_known:
+            for field in ('data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+                added[field] = None
         old_columns['note']['ordinal_position'] = 2
         old_columns['id']['ordinal_position'] = 3
         edited['columns'] = [added, old_columns['note'], old_columns['id']]
@@ -2354,7 +2362,7 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
             'path': [*table['path'], 'extra'], 'system': 'false',
             'native': {'system_object': False, 'catalog_metadata': new_metadata}}
         edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."existing" '
-            '(extra INTEGER, note VARCHAR, id INTEGER)')
+            f'(extra {added_type}, note VARCHAR, id INTEGER)')
         edited['duckdb_change'] = {'action': 'rebuild-add-column-and-reorder',
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
         preview = plan(baseline, desired, baseline)
@@ -2363,7 +2371,7 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
         unsafe = deepcopy(desired)
         unsafe['rows'][table['resource_id']]['native']['ddl'] = (
             f'CREATE TABLE "{table["path"][0]}"."main"."existing" '
-            '(extra INTEGER DEFAULT 1, note VARCHAR, id INTEGER)')
+            f'(extra {added_type} DEFAULT 1, note VARCHAR, id INTEGER)')
         assert not plan(baseline, unsafe, baseline)['application_supported']
         applications = DuckDBSchemaApplications(tmp_path/'add-and-reorder.json',
             clock=lambda: 100)
@@ -2378,6 +2386,8 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
             (1, 'a', None), (2, 'b', None)]
         assert [item[0] for item in observer.execute('DESCRIBE existing')
             .fetchall()] == ['extra', 'note', 'id']
+        assert observer.execute('SELECT data_type FROM duckdb_columns() '
+            "WHERE table_name='existing' AND column_name='extra'").fetchone()[0] == added_type
         assert observer.execute('SELECT count(*) FROM duckdb_indexes() '
             "WHERE table_name='existing' AND index_name='existing_note_idx'").fetchone()[0] == 1
         observer.close()

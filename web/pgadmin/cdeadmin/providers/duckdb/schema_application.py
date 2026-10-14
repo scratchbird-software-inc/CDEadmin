@@ -7,6 +7,38 @@ from ...workspace.duckdb_schema_plan import plan
 from ...workspace.firebird_catalog_export import build_export
 
 
+_DERIVED_COLUMN_FACTS = {'data_type_id', 'character_maximum_length',
+    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'}
+
+
+def _column_metadata_matches(actual, desired):
+    return (isinstance(actual, dict) and isinstance(desired, dict) and
+        all(actual.get(key) == value for key, value in desired.items()
+            if key not in _DERIVED_COLUMN_FACTS or value is not None))
+
+
+def _table_columns_match(actual, desired, added_ids):
+    if (not isinstance(actual, list) or not isinstance(desired, list) or
+            len(actual) != len(desired)):
+        return False
+    added_ids = set(added_ids)
+    for found, expected in zip(actual, desired):
+        if not isinstance(found, dict) or not isinstance(expected, dict):
+            return False
+        if expected.get('resource_id') not in added_ids:
+            if found != expected:
+                return False
+        elif (found.get('resource_id') != expected.get('resource_id') or
+                found.get('name') != expected.get('name') or
+                not _column_metadata_matches(
+                    {key: value for key, value in found.items()
+                        if key not in {'resource_id', 'name'}},
+                    {key: value for key, value in expected.items()
+                        if key not in {'resource_id', 'name'}})):
+            return False
+    return True
+
+
 def _model(connection, record, *, in_transaction):
     from .catalog import capture
     observed = capture(connection, include_system=False, _in_transaction=in_transaction)
@@ -284,10 +316,11 @@ def apply_review(provider, route, record):
                     verified = (current is not None and current['kind'] == 'table' and
                         expected is not None and actual is not None and
                         (operation.get('stage_columns') is not None or expected == actual) and
-                        current['native'].get('columns') == (
+                        _table_columns_match(current['native'].get('columns'), (
                             record['desired']['rows'][operation['resource_id']]['native'].get('columns')
                             if operation.get('stage_columns') is not None else
-                            baseline['native'].get('columns')) and
+                            baseline['native'].get('columns')),
+                            operation.get('added_column_ids', [])) and
                         current['native'].get('catalog_metadata', {}).get('comment') ==
                             baseline['native'].get('catalog_metadata', {}).get('comment'))
                     if verified:
@@ -317,9 +350,21 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][child_id])))
                                 for child_id in operation['affected_child_ids'])
                         if verified and operation.get('affected_column_ids'):
-                            verified = all(observed['rows'].get(column_id) is not None and
-                                digest(_definition(observed['rows'][column_id])) ==
-                                operation['desired_column_sha256'][column_id]
+                            added_ids = set(operation.get('added_column_ids', []))
+                            def column_verified(column_id):
+                                found = observed['rows'].get(column_id)
+                                if found is None:
+                                    return False
+                                if column_id not in added_ids:
+                                    return digest(_definition(found)) == operation[
+                                        'desired_column_sha256'][column_id]
+                                expected = record['desired']['rows'][column_id]
+                                return (all(found.get(key) == expected.get(key)
+                                    for key in ('resource_id', 'kind', 'name', 'path', 'system')) and
+                                    _column_metadata_matches(found['native'].get(
+                                        'catalog_metadata'), expected['native'].get(
+                                            'catalog_metadata')))
+                            verified = all(column_verified(column_id)
                                 for column_id in operation['affected_column_ids'])
                         if verified and operation.get('stage_null_column') is not None:
                             from ...workspace.duckdb_schema_plan import _quote

@@ -374,7 +374,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   matches in both directions and verifies that every staged value of the new
   column is NULL before dropping the original table. Unchanged independent
   indexes, comments and admitted view/macro bindings use the ordinary rebuild
-  safeguards. Other column-shape changes still require separate native
+  safeguards. Authored new-column models may leave DuckDB-derived type IDs and
+  numeric/character precision facts unspecified; fresh discovery verifies the
+  exact canonical native type, name, ordinal, default, nullability and comment,
+  and verifies any derived fact that the design explicitly supplied. Other
+  column-shape changes still require separate native
   operations or a future reviewed migration.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
