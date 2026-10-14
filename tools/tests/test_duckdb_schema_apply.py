@@ -3854,6 +3854,107 @@ def test_column_removal_with_index_on_removed_column_rolls_back(tmp_path):
         provider.client.close()
 
 
+@pytest.mark.parametrize('replace_count', (1, 2))
+def test_reviewed_combined_column_replacement_keeps_only_retained_values(
+        tmp_path, replace_count):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE shape(id INTEGER, note VARCHAR, '
+        'obsolete VARCHAR, obsolete2 VARCHAR)')
+    connection.execute("INSERT INTO shape VALUES (1, 'a', 'x', 'xx'), "
+        "(2, 'b', 'y', 'yy')")
+    connection.execute('CREATE INDEX shape_id_idx ON shape(id)')
+    connection.execute("COMMENT ON COLUMN shape.note IS 'retained note'")
+    connection.execute('CREATE VIEW shape_view AS SELECT id FROM shape')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'shape')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        by_name = {column['name']: column for column in edited['columns']}
+        dropped = [by_name['obsolete']]
+        if replace_count == 2:
+            dropped.append(by_name['obsolete2'])
+        for column in dropped:
+            desired['rows'].pop(column['resource_id'])
+        added = []
+        for number in range(1, replace_count + 1):
+            name = f'added{number}'
+            column = deepcopy(by_name['obsolete'])
+            column.update(name=name, resource_id=_resource_id('column',
+                table['path'], name), default=None, comment=None)
+            for field in ('data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+                column[field] = None
+            desired['rows'][column['resource_id']] = {
+                'resource_id': column['resource_id'], 'kind': 'column',
+                'name': name, 'path': [*table['path'], name], 'system': 'false',
+                'native': {'system_object': False, 'catalog_metadata': {
+                    key: value for key, value in column.items()
+                    if key not in {'name', 'resource_id'}}}}
+            added.append(column)
+        columns = [by_name['note'], added[0], by_name['id']]
+        if replace_count == 1:
+            columns.append(by_name['obsolete2'])
+        else:
+            columns.append(added[1])
+        for position, column in enumerate(columns, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = columns
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."shape" '
+            '(note VARCHAR, added1 VARCHAR, id INTEGER, ' +
+            ('obsolete2 VARCHAR)' if replace_count == 1 else 'added2 VARCHAR)'))
+        edited['duckdb_change'] = {'action': 'rebuild-replace-columns-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'discard_columns_confirmed': True,
+            'drop_column_ids': sorted(column['resource_id'] for column in dropped)}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        operation = preview['operations'][0]
+        assert len(operation['removed_column_ids']) == replace_count
+        assert len(operation['added_column_ids']) == replace_count
+        unsafe = deepcopy(desired)
+        unsafe['rows'][table['resource_id']]['native']['duckdb_change'][
+            'drop_column_ids'] = []
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        unsafe = deepcopy(desired)
+        unsafe['rows'].pop(added[0]['resource_id'])
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'combined-columns.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,note,added1 FROM shape ORDER BY id').fetchall() == [
+            (1, 'a', None), (2, 'b', None)]
+        if replace_count == 2:
+            assert observer.execute('SELECT added2 FROM shape').fetchall() == [
+                (None,), (None,)]
+        assert observer.execute("SELECT comment FROM duckdb_columns() "
+            "WHERE table_name='shape' AND column_name='note'").fetchone() == (
+            'retained note',)
+        assert observer.execute("SELECT count(*) FROM duckdb_indexes() "
+            "WHERE index_name='shape_id_idx'").fetchone() == (1,)
+        assert observer.execute('SELECT id FROM shape_view ORDER BY id').fetchall() == [
+            (1,), (2,)]
+        assert applications.apply(request(receipt), 'owner', 'binding', Mock()) == outcome
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_committed_column_add_rejects_mismatched_native_default(tmp_path):
     provider, route, baseline, _desired, _identity = fixture(tmp_path)
     root = next(row['name'] for row in baseline['rows'].values() if row['kind'] == 'database')

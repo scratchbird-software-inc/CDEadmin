@@ -407,6 +407,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   themselves never authorize removal. A failed stage or dependency check
   rolls back the complete transaction, and fresh discovery must prove the
   removed columns are absent and all retained descendants match the review.
+  ``rebuild-replace-columns-and-reorder`` may combine one or more such
+  removals with one or more plain nullable additions in the same reviewed
+  stage. It requires the exact removed resource IDs, explicit discarded-value
+  confirmation and complete newly authored column children. Retained native
+  column definitions and all constraint facts remain unchanged; no retained
+  value is cast or inferred. Only retained base columns enter the named copy,
+  the row multiset of every retained column is compared before the swap, and
+  every new column must be NULL in staging and after rediscovery. The same
+  independent-index, comment, generated-column, sequence-dependency and
+  view/macro binding guards apply. A missing desired column without the
+  matching explicit removal intent is never accepted.
   Every new column must remain NULL through staging and after rediscovery;
   explicitly authored derived type facts are checked for each new column
   before the old table is dropped. A partial new-column child set is refused.
