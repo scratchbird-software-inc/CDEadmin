@@ -2320,8 +2320,9 @@ def test_reviewed_column_reorder_preserves_table_check(
 
 @pytest.mark.parametrize('added_type,derived_known', [
     ('INTEGER', True), ('BIGINT', False)])
+@pytest.mark.parametrize('wrong_derived_fact', [False, True])
 def test_reviewed_add_nullable_column_and_reorder_preserves_rows(
-        tmp_path, added_type, derived_known):
+        tmp_path, added_type, derived_known, wrong_derived_fact):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -2348,6 +2349,8 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(
             for field in ('data_type_id', 'character_maximum_length',
                     'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
                 added[field] = None
+        if wrong_derived_fact:
+            added['numeric_precision'] = 999
         old_columns['note']['ordinal_position'] = 2
         old_columns['id']['ordinal_position'] = 3
         edited['columns'] = [added, old_columns['note'], old_columns['id']]
@@ -2379,15 +2382,23 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(
             'owner', 'binding', 'file-1')
         outcome = applications.apply(request(receipt), 'owner', 'binding',
             lambda record: apply_review(provider, route, record))
-        assert outcome['state'] == 'committed', outcome
-        assert outcome['outcome']['rediscovery_verified'], outcome
+        assert outcome['state'] == ('rolled_back' if wrong_derived_fact
+            else 'committed'), outcome
+        if not wrong_derived_fact:
+            assert outcome['outcome']['rediscovery_verified'], outcome
         observer = duckdb.connect(route['database'])
-        assert observer.execute('SELECT id,note,extra FROM existing ORDER BY id').fetchall() == [
-            (1, 'a', None), (2, 'b', None)]
-        assert [item[0] for item in observer.execute('DESCRIBE existing')
-            .fetchall()] == ['extra', 'note', 'id']
-        assert observer.execute('SELECT data_type FROM duckdb_columns() '
-            "WHERE table_name='existing' AND column_name='extra'").fetchone()[0] == added_type
+        if wrong_derived_fact:
+            assert observer.execute('SELECT id,note FROM existing ORDER BY id').fetchall() == [
+                (1, 'a'), (2, 'b')]
+            assert [item[0] for item in observer.execute('DESCRIBE existing')
+                .fetchall()] == ['id', 'note']
+        else:
+            assert observer.execute('SELECT id,note,extra FROM existing ORDER BY id').fetchall() == [
+                (1, 'a', None), (2, 'b', None)]
+            assert [item[0] for item in observer.execute('DESCRIBE existing')
+                .fetchall()] == ['extra', 'note', 'id']
+            assert observer.execute('SELECT data_type FROM duckdb_columns() '
+                "WHERE table_name='existing' AND column_name='extra'").fetchone()[0] == added_type
         assert observer.execute('SELECT count(*) FROM duckdb_indexes() '
             "WHERE table_name='existing' AND index_name='existing_note_idx'").fetchone()[0] == 1
         observer.close()

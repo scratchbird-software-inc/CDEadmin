@@ -377,7 +377,9 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   safeguards. Authored new-column models may leave DuckDB-derived type IDs and
   numeric/character precision facts unspecified; fresh discovery verifies the
   exact canonical native type, name, ordinal, default, nullability and comment,
-  and verifies any derived fact that the design explicitly supplied. Other
+  and verifies any derived fact that the design explicitly supplied. A supplied
+  derived fact is also checked on the stage before the old table is dropped;
+  a mismatch rolls back without committing the migration. Other
   column-shape changes still require separate native
   operations or a future reviewed migration.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns

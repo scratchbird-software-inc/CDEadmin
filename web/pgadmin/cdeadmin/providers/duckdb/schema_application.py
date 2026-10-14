@@ -200,6 +200,22 @@ def apply_review(provider, route, record):
                             if [list(item) for item in actual_order] != operation[
                                     'stage_constraint_order']:
                                 raise ValueError('Native staged constraint order differs from reviewed child identities')
+                        if operation.get('stage_added_derived'):
+                            fields = ('data_type_id', 'character_maximum_length',
+                                'numeric_precision', 'numeric_precision_radix',
+                                'numeric_scale')
+                            observed_facts = connection.execute(
+                                'SELECT ' + ', '.join(fields) +
+                                ' FROM duckdb_columns() WHERE database_name=? '
+                                'AND schema_name=? AND table_name=? AND column_name=?',
+                                (*scope, operation['stage_null_column'])).fetchone()
+                            observed_derived = (dict(zip(fields, observed_facts))
+                                if observed_facts is not None else {})
+                            if (observed_facts is None or any(
+                                    observed_derived.get(key) != value
+                                    for key, value in operation[
+                                        'stage_added_derived'].items())):
+                                raise ValueError('New staged column derived facts differ from review')
                     if index == parent_offset and operation.get('stage_unique_constraints') is not None:
                         stage_path = record['desired']['rows'][operation['resource_id']]['path']
                         scope = (stage_path[0], stage_path[1], operation['stage_name'])

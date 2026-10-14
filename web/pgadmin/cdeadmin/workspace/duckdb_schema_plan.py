@@ -2231,8 +2231,14 @@ def plan(baseline, desired, live):
                         desired_column_sha256={key: digest(_definition(row))
                             for key, row in new_columns.items()})
                     if shape_addition:
-                        operation_record['stage_null_column'] = new_columns[
-                            next(iter(added_ids))]['name']
+                        added_column = new_columns[next(iter(added_ids))]
+                        operation_record['stage_null_column'] = added_column['name']
+                        operation_record['stage_added_derived'] = {
+                            key: value for key, value in added_column['native'][
+                                'catalog_metadata'].items() if key in {
+                                    'data_type_id', 'character_maximum_length',
+                                    'numeric_precision', 'numeric_precision_radix',
+                                    'numeric_scale'} and value is not None}
                 child_rows = {key: row for key, row in desired['rows'].items()
                     if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}
                 expected_ids = {item.get('resource_id') for item in _expected_constraints}
