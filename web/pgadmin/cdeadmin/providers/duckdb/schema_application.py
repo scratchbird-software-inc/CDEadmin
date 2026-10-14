@@ -143,9 +143,10 @@ def apply_review(provider, route, record):
                             'FROM duckdb_constraints() WHERE database_name=? '
                             'AND schema_name=? AND table_name=? ORDER BY constraint_index',
                             scope).fetchall()
-                        if operation.get('stage_unique_constraints') is not None:
+                        if (operation.get('stage_unique_constraints') is not None or
+                                operation.get('stage_check_constraints') is not None):
                             constraints = [item for item in constraints
-                                if item[0] != 'UNIQUE']
+                                if item[0] not in {'UNIQUE', 'CHECK'}]
                         key_columns = operation.get('stage_key_columns') or []
                         primary_keys = [names for kind, names in constraints
                             if kind == 'PRIMARY KEY']
@@ -157,6 +158,16 @@ def apply_review(provider, route, record):
                                     sorted((name,) for name in key_columns) or
                                 len(constraints) != len(key_columns) + bool(key_columns)):
                             raise ValueError('Native staged columns or constraints differ from review')
+                        if operation.get('stage_constraint_order') is not None:
+                            actual_order = connection.execute(
+                                'SELECT constraint_type, constraint_column_names, '
+                                'constraint_text FROM duckdb_constraints() '
+                                'WHERE database_name=? AND schema_name=? '
+                                'AND table_name=? ORDER BY constraint_index',
+                                scope).fetchall()
+                            if [list(item) for item in actual_order] != operation[
+                                    'stage_constraint_order']:
+                                raise ValueError('Native staged constraint order differs from reviewed child identities')
                     if index == parent_offset and operation.get('stage_unique_constraints') is not None:
                         stage_path = record['desired']['rows'][operation['resource_id']]['path']
                         scope = (stage_path[0], stage_path[1], operation['stage_name'])
@@ -170,6 +181,19 @@ def apply_review(provider, route, record):
                         if sorted((tuple(names), text) for names, text in found) != sorted(
                                 (tuple(names), text) for names, text in expected):
                             raise ValueError('Native staged UNIQUE constraints differ from review')
+                    if index == parent_offset and operation.get('stage_check_constraints') is not None:
+                        stage_path = record['desired']['rows'][operation['resource_id']]['path']
+                        scope = (stage_path[0], stage_path[1], operation['stage_name'])
+                        found = connection.execute(
+                            'SELECT constraint_column_names, constraint_text '
+                            'FROM duckdb_constraints() WHERE database_name=? '
+                            'AND schema_name=? AND table_name=? '
+                            "AND constraint_type='CHECK'", scope).fetchall()
+                        expected = [(item['column_names'], item['constraint_text'])
+                            for item in operation['stage_check_constraints']]
+                        if sorted((tuple(names), text) for names, text in found) != sorted(
+                                (tuple(names), text) for names, text in expected):
+                            raise ValueError('Native staged CHECK constraints differ from review')
                     if index == parent_offset + 1:
                         difference = connection.execute(
                             operation['data_check']).fetchone()[0]

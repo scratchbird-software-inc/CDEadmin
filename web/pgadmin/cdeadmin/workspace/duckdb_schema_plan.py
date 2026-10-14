@@ -1426,31 +1426,33 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     return None
             return keys[0]
         old_key = key_facts([item for item in old_constraints
-            if item.get('constraint_type') != 'UNIQUE'], old_columns)
+            if item.get('constraint_type') not in {'UNIQUE', 'CHECK'}], old_columns)
         new_key = key_facts([item for item in new_constraints
-            if item.get('constraint_type') != 'UNIQUE'], new_columns)
-        def unique_facts(items, ordered_columns):
+            if item.get('constraint_type') not in {'UNIQUE', 'CHECK'}], new_columns)
+        def positional_facts(items, ordered_columns, kind):
             if not isinstance(items, list):
                 return False
-            uniques = [item for item in items if isinstance(item, dict) and
-                item.get('constraint_type') == 'UNIQUE']
-            if len(uniques) > 8:
+            facts = [item for item in items if isinstance(item, dict) and
+                item.get('constraint_type') == kind]
+            if len(facts) > 8:
                 return False
             names = [item['name'] for item in ordered_columns]
             return all(isinstance(item.get('column_names'), list) and
-                item['column_names'] and
+                (kind == 'CHECK' or item['column_names']) and
                 all(isinstance(name, str) and name in names
                     for name in item['column_names']) and
                 len(set(item['column_names'])) == len(item['column_names']) and
                 item.get('column_indexes') == [names.index(name)
                     for name in item['column_names']]
-                for item in uniques)
+                for item in facts)
         def without_column_indexes(items):
             return [{key: value for key, value in item.items()
                 if key != 'column_indexes'} for item in items]
         if (old_key is None or new_key is None or old_key != new_key or
-                not unique_facts(old_constraints, old_columns) or
-                not unique_facts(new_constraints, new_columns) or
+                not positional_facts(old_constraints, old_columns, 'UNIQUE') or
+                not positional_facts(new_constraints, new_columns, 'UNIQUE') or
+                not positional_facts(old_constraints, old_columns, 'CHECK') or
+                not positional_facts(new_constraints, new_columns, 'CHECK') or
                 not _equal(without_column_indexes(old_constraints),
                     without_column_indexes(new_constraints)) or
                 old_map is None or new_map is None or
@@ -2172,6 +2174,18 @@ def plan(baseline, desired, live):
                             'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
                             'rebuild-check-with-inbound-children',
                             'rebuild-column-order'} else None),
+                    stage_check_constraints=([{
+                        'column_names': item['column_names'],
+                        'constraint_text': item['constraint_text']}
+                        for item in _expected_constraints
+                        if item['constraint_type'] == 'CHECK']
+                        if change.get('action') == 'rebuild-column-order' else None),
+                    stage_constraint_order=([[
+                        item['constraint_type'], item['column_names'],
+                        item['constraint_text']]
+                        for item in sorted(_expected_constraints,
+                            key=lambda item: item['constraint_index'])]
+                        if change.get('action') == 'rebuild-column-order' else None),
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),

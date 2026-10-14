@@ -353,9 +353,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE constraint set, whether inline or table-level, may also survive if
   its native names, definitions and columns remain fixed and only column
   indexes shift with the reorder. Staging verifies every UNIQUE fact before
-  dropping the old table. CHECK and foreign-key edges, non-whitelisted
-  generated expressions, native tags and unaccounted sequence ownership
-  remain blockers.
+  dropping the old table. Up to eight unchanged table-level CHECK constraints
+  may also survive when their names, definitions, expressions and referenced
+  columns remain fixed and only column indexes shift. Staging verifies their
+  native text and columns before dropping the old table. Inline CHECK syntax,
+  foreign-key edges, non-whitelisted generated expressions, native tags and
+  unaccounted sequence ownership remain blockers. The staged native constraint
+  order must match the reviewed child identities; if an inline declaration
+  moves a key before another key and changes its native ordinal, the apply
+  transaction rolls back before dropping the original table.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may
