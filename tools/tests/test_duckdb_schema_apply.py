@@ -2499,6 +2499,97 @@ def test_reviewed_add_and_reorder_preserves_safe_generated_values(
         provider.client.close()
 
 
+@pytest.mark.parametrize('added_count', [2, 8])
+@pytest.mark.parametrize('wrong_derived_fact', [False, True])
+def test_reviewed_multiple_nullable_columns_and_reorder_preserves_constraints(
+        tmp_path, added_count, wrong_derived_fact):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, '
+        'code VARCHAR, UNIQUE(code), CHECK(length(code) > 1))')
+    connection.execute("INSERT INTO checked VALUES (1,'aa'),(2,'bb')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_columns = {item['name']: item for item in edited['columns']}
+        additions = []
+        for number in range(1, added_count + 1):
+            added = deepcopy(old_columns['code'])
+            added['name'] = f'extra{number}'
+            added['resource_id'] = _resource_id('column', table['path'], added['name'])
+            for field in ('data_type_id', 'character_maximum_length',
+                    'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+                added[field] = None
+            if wrong_derived_fact and number == 1:
+                added['numeric_precision'] = 999
+            additions.append(added)
+            desired['rows'][added['resource_id']] = {
+                'resource_id': added['resource_id'], 'kind': 'column',
+                'name': added['name'], 'path': [*table['path'], added['name']],
+                'system': 'false', 'native': {'system_object': False,
+                'catalog_metadata': {key: value for key, value in added.items()
+                    if key not in {'name', 'resource_id'}}}}
+        ordered = [*additions, old_columns['code'], old_columns['id']]
+        for position, column in enumerate(ordered, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = ordered
+        for constraint in edited['constraints']:
+            constraint['column_indexes'] = [added_count if name == 'code'
+                else added_count + 1 for name in constraint['column_names']]
+            desired['rows'][constraint['resource_id']]['native'][
+                'catalog_metadata']['column_indexes'] = constraint['column_indexes']
+        prefix = ', '.join(f'extra{number} VARCHAR' for number in
+            range(1, added_count + 1))
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
+            f'({prefix}, code VARCHAR, id INTEGER PRIMARY KEY, '
+            'UNIQUE(code), CHECK(length(code) > 1))')
+        edited['duckdb_change'] = {'action': 'rebuild-add-columns-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert preview['operations'][0]['stage_null_columns'] == [
+            f'extra{number}' for number in range(1, added_count + 1)]
+        incomplete = deepcopy(desired)
+        incomplete['rows'].pop(additions[-1]['resource_id'])
+        assert not plan(baseline, incomplete, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'multiple-add-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == ('rolled_back' if wrong_derived_fact
+            else 'committed'), outcome
+        if not wrong_derived_fact:
+            assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,code FROM checked ORDER BY id').fetchall() == [
+            (1, 'aa'), (2, 'bb')]
+        assert [item[0] for item in observer.execute('DESCRIBE checked').fetchall()] == (
+            ['id', 'code'] if wrong_derived_fact else
+            [*[f'extra{number}' for number in range(1, added_count + 1)],
+             'code', 'id'])
+        if not wrong_derived_fact:
+            for number in range(1, added_count + 1):
+                assert observer.execute(f'SELECT count(*) FROM checked '
+                    f'WHERE extra{number} IS NOT NULL').fetchone()[0] == 0
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO checked(code,id) VALUES ('aa',3)")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

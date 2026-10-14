@@ -381,6 +381,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   exact staged native ordinals, and the stage must prove the complete key,
   UNIQUE and CHECK facts before the original table is dropped. The added
   column remains nullable and outside every unchanged constraint.
+  A separate ``rebuild-add-columns-and-reorder`` intent may add two to eight
+  such plain nullable columns in one reviewed stage, while also reordering
+  the old columns. It applies the same native column, constraint, generated
+  value, dependency and row-preservation checks to the complete staged table.
+  Every new column must remain NULL through staging and after rediscovery;
+  explicitly authored derived type facts are checked for each new column
+  before the old table is dropped. A partial new-column child set is refused.
   Staging copies every old column by name, proves their complete row multiset
   matches in both directions and verifies that every staged value of the new
   column is NULL before dropping the original table. Unchanged independent

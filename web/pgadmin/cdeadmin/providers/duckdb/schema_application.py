@@ -200,7 +200,14 @@ def apply_review(provider, route, record):
                             if [list(item) for item in actual_order] != operation[
                                     'stage_constraint_order']:
                                 raise ValueError('Native staged constraint order differs from reviewed child identities')
-                        if operation.get('stage_added_derived'):
+                        derived_columns = operation.get('stage_added_derived_columns')
+                        if derived_columns is None and operation.get('stage_added_derived'):
+                            derived_columns = {operation['stage_null_column']:
+                                operation['stage_added_derived']}
+                        for column_name, expected_derived in (
+                                derived_columns or {}).items():
+                            if not expected_derived:
+                                continue
                             fields = ('data_type_id', 'character_maximum_length',
                                 'numeric_precision', 'numeric_precision_radix',
                                 'numeric_scale')
@@ -208,13 +215,12 @@ def apply_review(provider, route, record):
                                 'SELECT ' + ', '.join(fields) +
                                 ' FROM duckdb_columns() WHERE database_name=? '
                                 'AND schema_name=? AND table_name=? AND column_name=?',
-                                (*scope, operation['stage_null_column'])).fetchone()
+                                (*scope, column_name)).fetchone()
                             observed_derived = (dict(zip(fields, observed_facts))
                                 if observed_facts is not None else {})
                             if (observed_facts is None or any(
                                     observed_derived.get(key) != value
-                                    for key, value in operation[
-                                        'stage_added_derived'].items())):
+                                    for key, value in expected_derived.items())):
                                 raise ValueError('New staged column derived facts differ from review')
                     if index == parent_offset and operation.get('stage_unique_constraints') is not None:
                         stage_path = record['desired']['rows'][operation['resource_id']]['path']
@@ -247,16 +253,21 @@ def apply_review(provider, route, record):
                             operation['data_check']).fetchone()[0]
                         if difference != 0:
                             raise ValueError('Native staging rows differ from original rows')
-                        if operation.get('stage_null_column') is not None:
+                        null_columns = operation.get('stage_null_columns')
+                        if null_columns is None:
+                            null_columns = ([operation['stage_null_column']]
+                                if operation.get('stage_null_column') is not None else [])
+                        if null_columns:
                             from ...workspace.duckdb_schema_plan import _quote
                             stage_path = record['desired']['rows'][
                                 operation['resource_id']]['path']
                             stage_target = '.'.join(_quote(part) for part in
                                 [*stage_path[:2], operation['stage_name']])
-                            if connection.execute('SELECT count(*) FROM ' +
-                                    stage_target + ' WHERE ' + _quote(operation[
-                                        'stage_null_column']) + ' IS NOT NULL').fetchone()[0]:
-                                raise ValueError('New staged column contains non-NULL values')
+                            for column_name in null_columns:
+                                if connection.execute('SELECT count(*) FROM ' +
+                                        stage_target + ' WHERE ' + _quote(
+                                            column_name) + ' IS NOT NULL').fetchone()[0]:
+                                    raise ValueError('New staged column contains non-NULL values')
                         dependency_difference = connection.execute(
                             operation['sequence_dependency_check']).fetchone()[0]
                         if dependency_difference != 0:
@@ -382,11 +393,16 @@ def apply_review(provider, route, record):
                                             'catalog_metadata')))
                             verified = all(column_verified(column_id)
                                 for column_id in operation['affected_column_ids'])
-                        if verified and operation.get('stage_null_column') is not None:
+                        null_columns = operation.get('stage_null_columns')
+                        if null_columns is None:
+                            null_columns = ([operation['stage_null_column']]
+                                if operation.get('stage_null_column') is not None else [])
+                        if verified and null_columns:
                             from ...workspace.duckdb_schema_plan import _quote
-                            verified = connection.execute('SELECT count(*) FROM ' +
-                                operation['target'] + ' WHERE ' + _quote(operation[
-                                    'stage_null_column']) + ' IS NOT NULL').fetchone()[0] == 0
+                            verified = all(connection.execute('SELECT count(*) FROM ' +
+                                operation['target'] + ' WHERE ' + _quote(
+                                    column_name) + ' IS NOT NULL').fetchone()[0] == 0
+                                for column_name in null_columns)
                         if verified:
                             verified = all(observed['rows'].get(index_id) is not None and
                                 digest(_definition(observed['rows'][index_id])) ==
