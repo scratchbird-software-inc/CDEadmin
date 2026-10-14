@@ -1741,7 +1741,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         desired_tokens = section_map(desired_sections)
         added_names = {item['name'].casefold() for item in after['native']['columns']} - (
             {item['name'].casefold() for item in columns})
-        shape_valid = (not generated_names and original_tokens is not None and
+        shape_valid = (original_tokens is not None and
             desired_tokens is not None and len(added_names) == 1 and
             set(desired_tokens) - set(original_tokens) == added_names and
             all(desired_tokens.get(name) == section for name, section in
@@ -1761,7 +1761,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 'rebuild-check-with-inbound-child',
                 'rebuild-check-with-inbound-children',
                 'rebuild-column-order', 'rebuild-drop-primary-key',
-                'rebuild-retarget-primary-key'}) or
+                'rebuild-retarget-primary-key',
+                'rebuild-add-column-and-reorder'}) or
             not original_sections[0] or (action not in {
                 'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                 'rebuild-column-order', 'rebuild-add-column-and-reorder'} and

@@ -370,6 +370,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   reordering the unchanged old columns. The old table has no constraints or
   generated columns. The reviewed definition and all column children must be
   complete; the new column has an exact native type and a new stable identity.
+  Unchanged virtual generated columns may survive this migration when their
+  expressions use the same bounded, side-effect-free subset admitted for
+  constraint rebuilds. Copy only old base columns and compare all old values,
+  including recomputed generated values, before dropping the original table.
   Staging copies every old column by name, proves their complete row multiset
   matches in both directions and verifies that every staged value of the new
   column is NULL before dropping the original table. Unchanged independent

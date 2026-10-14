@@ -2406,6 +2406,78 @@ def test_reviewed_add_nullable_column_and_reorder_preserves_rows(
         provider.client.close()
 
 
+@pytest.mark.parametrize('expression,admitted', [
+    ('id * 2', True), ('random()', False)])
+def test_reviewed_add_and_reorder_preserves_safe_generated_values(
+        tmp_path, expression, admitted):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    generated_type = 'INTEGER' if admitted else 'DOUBLE'
+    generated = (f'doubled {generated_type} '
+        f'GENERATED ALWAYS AS(({expression}))')
+    connection.execute('CREATE TABLE measurements(id INTEGER, ' + generated +
+        ', note VARCHAR)')
+    connection.execute("INSERT INTO measurements(id,note) VALUES (1,'a'),(2,'b')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'measurements')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_columns = {item['name']: item for item in edited['columns']}
+        added = deepcopy(old_columns['note'])
+        added['name'] = 'extra'
+        added['resource_id'] = _resource_id('column', table['path'], 'extra')
+        added['ordinal_position'] = 1
+        for field in ('data_type_id', 'character_maximum_length',
+                'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+            added[field] = None
+        reordered = [added, old_columns['note'], old_columns['id'],
+            old_columns['doubled']]
+        for position, column in enumerate(reordered, 1):
+            column['ordinal_position'] = position
+            if column is not added:
+                desired['rows'][column['resource_id']]['native'][
+                    'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = reordered
+        desired['rows'][added['resource_id']] = {
+            'resource_id': added['resource_id'], 'kind': 'column', 'name': 'extra',
+            'path': [*table['path'], 'extra'], 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': {
+                key: value for key, value in added.items()
+                if key not in {'name', 'resource_id'}}}}
+        root = table['path'][0]
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."measurements" '
+            f'(extra VARCHAR, note VARCHAR, id INTEGER, {generated})')
+        edited['duckdb_change'] = {'action': 'rebuild-add-column-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            return
+        applications = DuckDBSchemaApplications(tmp_path/'generated-add-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,doubled,note,extra FROM measurements '
+            'ORDER BY id').fetchall() == [(1, 2, 'a', None), (2, 4, 'b', None)]
+        assert [item[0] for item in observer.execute('DESCRIBE measurements')
+            .fetchall()] == ['extra', 'note', 'id', 'doubled']
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),
