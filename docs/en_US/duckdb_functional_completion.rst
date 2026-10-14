@@ -310,16 +310,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   unavailable through DuckDB 1.5.2 ``ALTER TABLE``. A separate
   ``rebuild-drop-primary-key`` intent may remove the sole key and its implicit
   NOT NULL constraints when the reviewer explicitly accepts that all former
-  key columns become nullable. It requires no other CHECK, UNIQUE or foreign
-  key on the table, unchanged non-nullability column facts, and the same
+  key columns become nullable. It requires no foreign key on the table,
+  unchanged non-nullability column facts, and the same
   dependency, data-copy, index and comment safeguards as the admitted staged
   constraint rebuild. Before copying rows, the staged table's exact native
-  column names, types, defaults and nullability and absence of constraints
+  column names, types, defaults and nullability and absence of key constraints
   must match the reviewed desired model. Changed key identity, retention of
   explicit NOT NULL remains blocked. A separate
   ``rebuild-retarget-primary-key`` intent may replace the sole primary key
   with a different ordered set of existing columns. The old and new tables
-  may contain only the respective key and its implicit NOT NULL constraints.
+  may contain the respective key and its implicit NOT NULL constraints.
   Columns leaving the key become nullable; newly keyed columns become NOT
   NULL. All other column facts stay fixed. Before copying rows, the staged
   table's columns and exact ordered primary-key and implicit NOT NULL facts
@@ -328,6 +328,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   The same dependency, sequence-default, index, comment and rediscovery
   safeguards as key removal apply. Explicit NOT NULL retention, an unchanged
   key and general primary-key rebuilds remain blocked.
+  Both key intents may retain a complete, unchanged set of table CHECK and
+  UNIQUE constraints, including inline UNIQUE declarations. Their native
+  names, definitions, referenced columns and column ordinals remain fixed;
+  only DuckDB's constraint indexes and their corresponding child resource IDs
+  may shift when the key is removed or retargeted. The desired model must
+  explicitly rekey every shifted child to the staged native order. Before the
+  old table is dropped, the staged table must expose the exact reviewed
+  CHECK and UNIQUE facts and full constraint order. Fresh rediscovery must
+  prove their definitions, child identities and indexes after commit. An
+  incomplete set or changed CHECK/UNIQUE fact blocks review.
   An unchanged virtual generated column may accompany either isolated key
   rebuild when its expression satisfies the same simple-expression whitelist
   as the constraint rebuild. The staged copy names only base columns and

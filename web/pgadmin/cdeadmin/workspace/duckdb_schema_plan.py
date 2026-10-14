@@ -1602,6 +1602,16 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             raise ValueError('Column-shape rebuild requires complete unchanged columns and admitted constraints')
         stage_key_columns = new_key
     if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'}:
+        def retained_key_constraints(items):
+            retained = [item for item in items if
+                item.get('constraint_type') in {'CHECK', 'UNIQUE'}]
+            names = [item.get('name') for item in retained]
+            if (any(not isinstance(name, str) or not name for name in names) or
+                    len(names) != len(set(names))):
+                return None
+            return {item['name']: {key: value for key, value in item.items()
+                if key not in {'resource_id', 'constraint_index'}}
+                for item in retained}
         def key_facts(constraints):
             keys = [item.get('column_names') for item in constraints
                 if item.get('constraint_type') == 'PRIMARY KEY']
@@ -1623,7 +1633,12 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     (action == 'rebuild-retarget-primary-key') or
                 not isinstance(old_columns, list) or not isinstance(new_columns, list) or
                 len(old_columns) != len(new_columns) or
-                (action == 'rebuild-drop-primary-key' and new_constraints) or
+                (retained_key_constraints(old_constraints) is None or
+                    not _equal(retained_key_constraints(old_constraints),
+                        retained_key_constraints(new_constraints))) or
+                (action == 'rebuild-drop-primary-key' and any(
+                    item.get('constraint_type') in {'PRIMARY KEY', 'NOT NULL'}
+                    for item in new_constraints)) or
                 (action == 'rebuild-retarget-primary-key' and
                     key_columns == stage_key_columns)):
             raise ValueError('Primary-key rebuild requires a distinct complete desired key')
@@ -1641,8 +1656,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK', 'UNIQUE'} if
         action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL', 'UNIQUE'} if
         action in {'rebuild-check-constraints', 'rebuild-check-with-inbound-child',
-            'rebuild-check-with-inbound-children'} else set() if
-        action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
+            'rebuild-check-with-inbound-children'} else {'CHECK', 'UNIQUE'} if
+        action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'} else set() if
+        action in {
             'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
             'rebuild-replace-columns-and-reorder',
             'rebuild-add-column-and-reorder',
@@ -1662,7 +1678,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             'rebuild-add-generated-column'} and
             (not _equal(old, new) or _equal(old_constraints, new_constraints) or
             not isinstance(old_constraints, list) or not isinstance(new_constraints, list) or
-            not _equal(old_retained, new_retained) or
+            (action not in {'rebuild-drop-primary-key',
+                'rebuild-retarget-primary-key'} and
+                not _equal(old_retained, new_retained)) or
             any(item.get('constraint_type') not in (allowed | retained_types) for item in
                 [*old_constraints, *new_constraints]))):
         raise ValueError('Constraint rebuild may change only its admitted native constraint kinds')
@@ -1817,6 +1835,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
+            'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
             'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
             'rebuild-replace-columns-and-reorder',
             'rebuild-add-column-and-reorder',
@@ -1827,6 +1846,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
+            'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
             'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
             'rebuild-replace-columns-and-reorder',
             'rebuild-add-column-and-reorder',
@@ -1935,6 +1955,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     'rebuild-check-constraints', 'rebuild-foreign-keys',
                     'rebuild-check-with-inbound-child',
                     'rebuild-check-with-inbound-children',
+                    'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                     'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
                     'rebuild-replace-columns-and-reorder',
                     'rebuild-add-column-and-reorder',
@@ -2489,6 +2510,7 @@ def plan(baseline, desired, live):
                         if change.get('action') in {'rebuild-check-constraints',
                             'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
                             'rebuild-check-with-inbound-children',
+                            'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                             'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
                             'rebuild-add-column-and-reorder',
@@ -2500,7 +2522,8 @@ def plan(baseline, desired, live):
                         'constraint_text': item['constraint_text']}
                         for item in _expected_constraints
                         if item['constraint_type'] == 'CHECK']
-                        if change.get('action') in {'rebuild-column-order',
+                        if change.get('action') in {'rebuild-drop-primary-key',
+                            'rebuild-retarget-primary-key', 'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
                             'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',
@@ -2511,7 +2534,8 @@ def plan(baseline, desired, live):
                         item['constraint_text']]
                         for item in sorted(_expected_constraints,
                             key=lambda item: item['constraint_index'])]
-                        if change.get('action') in {'rebuild-column-order',
+                        if change.get('action') in {'rebuild-drop-primary-key',
+                            'rebuild-retarget-primary-key', 'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
                             'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',

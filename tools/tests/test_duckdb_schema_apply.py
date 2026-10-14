@@ -3269,6 +3269,103 @@ def test_isolated_primary_key_removal_relaxes_key_and_checks_stage(
 
 @pytest.mark.parametrize('action', ['rebuild-drop-primary-key',
     'rebuild-retarget-primary-key'])
+def test_primary_key_rebuild_retains_check_and_unique_constraints(tmp_path, action):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, '
+        'code VARCHAR UNIQUE, score INTEGER, CHECK((score > 0)))')
+    connection.execute("INSERT INTO checked VALUES (1, 'a', 10), (2, 'b', 20)")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        retarget = action == 'rebuild-retarget-primary-key'
+        edited['catalog_metadata']['has_primary_key'] = retarget
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
+            '(id INTEGER, code VARCHAR UNIQUE, score INTEGER' +
+            (' PRIMARY KEY' if retarget else '') + ', CHECK((score > 0)))')
+        edited['duckdb_change'] = {'action': action,
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        for column in edited['columns']:
+            if column['name'] in {'id', 'score'}:
+                column['nullable'] = column['name'] != 'score' or not retarget
+                desired['rows'][column['resource_id']]['native'][
+                    'catalog_metadata']['nullable'] = column['nullable']
+        old_constraints = deepcopy(edited['constraints'])
+        first_index = min(item['constraint_index'] for item in old_constraints)
+        for item in old_constraints:
+            desired['rows'].pop(item['resource_id'])
+        unique = next(item for item in old_constraints
+            if item['constraint_type'] == 'UNIQUE')
+        check = next(item for item in old_constraints
+            if item['constraint_type'] == 'CHECK')
+        ordered = [unique]
+        if retarget:
+            key = next(item for item in old_constraints
+                if item['constraint_type'] == 'PRIMARY KEY')
+            null = next(item for item in old_constraints
+                if item['constraint_type'] == 'NOT NULL')
+            for item, name, text in ((key, 'checked_score_pkey',
+                    'PRIMARY KEY(score)'), (null, 'checked_score_not_null',
+                    'NOT NULL')):
+                item.update(name=name, constraint_text=text,
+                    column_names=['score'], column_indexes=[2])
+            ordered.append(key)
+        ordered.append(check)
+        if retarget:
+            ordered.append(null)
+        for position, item in enumerate(ordered):
+            item['constraint_index'] = first_index + position
+            item['resource_id'] = _resource_id('constraint', table['path'],
+                item['name'], discriminator=item['constraint_index'])
+            desired['rows'][item['resource_id']] = {
+                'resource_id': item['resource_id'], 'kind': 'constraint',
+                'name': item['name'], 'path': [*table['path'], item['name']],
+                'system': 'false', 'native': {'system_object': False,
+                'catalog_metadata': {key: value for key, value in item.items()
+                    if key not in {'resource_id', 'name'}}}}
+        edited['constraints'] = ordered
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        unsafe = deepcopy(desired)
+        unsafe['rows'][check['resource_id']]['native']['catalog_metadata'][
+            'constraint_text'] = 'CHECK((score > 99))'
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        unsafe = deepcopy(desired)
+        unsafe['rows'].pop(check['resource_id'])
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'key-retained.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,code,score FROM checked ORDER BY id').fetchall() == [
+            (1, 'a', 10), (2, 'b', 20)]
+        assert observer.execute("SELECT constraint_type FROM duckdb_constraints() "
+            "WHERE table_name='checked' ORDER BY constraint_index").fetchall() == [
+            (item['constraint_type'],) for item in ordered]
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO checked VALUES (3, 'a', 30)")
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO checked VALUES (3, 'c', -1)")
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+@pytest.mark.parametrize('action', ['rebuild-drop-primary-key',
+    'rebuild-retarget-primary-key'])
 @pytest.mark.parametrize('expression,data_type,admitted', [
     ('id * 2', 'INTEGER', True), ('random()', 'DOUBLE', False)])
 def test_primary_key_rebuild_preserves_only_safe_generated_values(
