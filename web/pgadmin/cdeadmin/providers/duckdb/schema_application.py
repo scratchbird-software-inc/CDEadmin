@@ -41,7 +41,11 @@ def _table_columns_match(actual, desired, added_ids):
 
 def _model(connection, record, *, in_transaction):
     from .catalog import capture
-    observed = capture(connection, include_system=False, _in_transaction=in_transaction)
+    verify_macro_source = (not in_transaction and any(
+        item.get('operation') == 'create' and item.get('kind') == 'macro'
+        for item in record.get('plan', {}).get('operations', [])))
+    observed = capture(connection, include_system=False, _in_transaction=in_transaction,
+        include_macro_source=verify_macro_source)
     provenance = record['baseline']['provenance']
     return build_export(observed['resources'], endpoint_id=provenance['endpoint_id'],
         target_id=provenance['database_target_id'], generation=observed['generation'],

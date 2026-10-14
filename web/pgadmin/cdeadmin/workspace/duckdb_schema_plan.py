@@ -843,6 +843,72 @@ def macro_creation_matches(source, current):
         r'(?=\s|\()', source, re.I) if isinstance(source, str) else None
     if prefix is None:
         return False
+    source_ddl = current['native'].get('source_ddl')
+    if source_ddl is not None:
+        from ..providers.duckdb.catalog import _macro_target
+        if (_macro_target(source_ddl, current['path'][0]) != tuple(current['path']) or
+                current['native'].get('overload_count') != 1):
+            return False
+        import duckdb
+        opening = (str(duckdb.token_type.operator), '(')
+        closing = (str(duckdb.token_type.operator), ')')
+        comma = (str(duckdb.token_type.operator), ',')
+        keyword = str(duckdb.token_type.keyword)
+        identifier = str(duckdb.token_type.identifier)
+        def signature(statement):
+            tokens = _macro_tokens(statement)
+            if not tokens or len(tokens) < 7:
+                return None
+            start = next((index for index, token in enumerate(tokens[2:], 2)
+                if token == opening), None)
+            if start is None:
+                return None
+            depth = 0
+            end = None
+            for index in range(start, len(tokens)):
+                depth += (tokens[index] == opening) - (tokens[index] == closing)
+                if depth == 0:
+                    end = index
+                    break
+            if end is None or end + 2 >= len(tokens) or tokens[end + 1] != (
+                    keyword, 'as'):
+                return None
+            parameters = tokens[start + 1:end]
+            parts, part, depth = [], [], 0
+            for token in parameters:
+                if token == comma and depth == 0:
+                    parts.append(part); part = []
+                else:
+                    part.append(token)
+                    depth += (token == opening) - (token == closing)
+                    if depth < 0:
+                        return None
+            if part or parameters:
+                parts.append(part)
+            if depth or any(not item or item[0][0] != identifier or
+                    (len(item) > 1 and (len(item) < 3 or item[1] !=
+                        (str(duckdb.token_type.operator), ':='))) for item in parts):
+                return None
+            body = tokens[end + 2:]
+            is_table = bool(body and body[0] == (keyword, 'table'))
+            if is_table:
+                body = body[1:]
+            body = _macro_body_tokens(body, table=is_table)
+            return (tuple(parameters), tuple(item[0][1] for item in parts),
+                is_table, body) if body is not None else None
+        submitted = signature(source)
+        observed = signature(source_ddl)
+        overloads = current['native'].get('overloads')
+        if (submitted is None or observed is None or submitted != observed or
+                not isinstance(overloads, list) or len(overloads) != 1 or
+                observed[1] != tuple(item.get('name', '').casefold() for item in
+                    overloads[0].get('parameters', [])) or
+                overloads[0].get('catalog_metadata', {}).get('function_type') !=
+                    ('table_macro' if observed[2] else 'macro')):
+            return False
+        catalog_body = _macro_tokens(overloads[0].get('definition'))
+        return (catalog_body is not None and observed[3] ==
+            _macro_body_tokens(catalog_body, table=observed[2]))
     tokens = _macro_tokens(source[prefix.end():])
     observed = current['native'].get('overloads')
     if not isinstance(tokens, list) or not isinstance(observed, list) or len(observed) != 1:

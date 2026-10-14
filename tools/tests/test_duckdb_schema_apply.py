@@ -589,6 +589,56 @@ def test_committed_macro_creation_requires_matching_native_body(tmp_path, table_
         provider.client.close()
 
 
+@pytest.mark.parametrize('tamper', [False, True])
+def test_optional_default_macro_creation_verifies_complete_native_signature(
+        tmp_path, tamper):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, baseline, _desired, _identity = fixture(tmp_path)
+    root = next(row['name'] for row in baseline['rows'].values()
+        if row['kind'] == 'database')
+    desired = deepcopy(baseline)
+    path = [root, 'main', 'defaulted_macro']
+    identity = _resource_id('macro', path[:-1], path[-1])
+    desired['rows'][identity] = {'resource_id': identity, 'kind': 'macro',
+        'name': 'defaulted_macro', 'path': path, 'system': 'false',
+        'native': {'system_object': False, 'catalog_metadata': {},
+            'ddl': f'CREATE MACRO "{root}"."main"."defaulted_macro"'
+                '(x, y := 5) AS x + y'}}
+    preview = plan(baseline, desired, baseline)
+    assert preview['application_supported'], preview['blockers']
+    applications = DuckDBSchemaApplications(tmp_path/'macro-default.json',
+        clock=lambda: 100)
+    receipt = applications.review(preview, baseline, desired,
+        'owner', 'binding', 'file-1')
+    from pgadmin.cdeadmin.providers.duckdb import schema_application
+    actual_model = schema_application._model
+
+    def conflicting_observation(connection, record, *, in_transaction):
+        model = actual_model(connection, record, in_transaction=in_transaction)
+        if not in_transaction:
+            model['rows'][identity]['native']['source_ddl'] = (
+                model['rows'][identity]['native']['source_ddl'].replace(
+                    'y := 5', 'y := 6'))
+        return model
+
+    try:
+        if tamper:
+            with patch.object(schema_application, '_model', conflicting_observation):
+                outcome = applications.apply(request(receipt), 'owner', 'binding',
+                    lambda record: apply_review(provider, route, record))
+        else:
+            outcome = applications.apply(request(receipt), 'owner', 'binding',
+                lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_checks'] == [
+            {'resource_id': identity, 'verified': not tamper}]
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT defaulted_macro(3)').fetchone()[0] == 8
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('kind,old,new,source_sql', [
     ('table', 'existing', 'renamed_table', None),
     ('view', 'old_view', 'renamed_view', 'CREATE VIEW old_view AS SELECT 1 AS x'),
