@@ -2579,6 +2579,66 @@ def test_reviewed_add_generated_column_and_reorder(
         provider.client.close()
 
 
+def test_reviewed_add_generated_column_to_one_column_keyed_table(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE measurements(id INTEGER PRIMARY KEY)')
+    connection.execute('INSERT INTO measurements VALUES (1),(2)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'measurements')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_column = edited['columns'][0]
+        added = deepcopy(old_column)
+        added['name'] = 'doubled'
+        added['resource_id'] = _resource_id('column', table['path'], 'doubled')
+        added['ordinal_position'] = 2
+        added['nullable'] = True
+        added['default'] = 'CAST((id * 2) AS INTEGER)'
+        for field in ('data_type_id', 'character_maximum_length',
+                'numeric_precision', 'numeric_precision_radix', 'numeric_scale'):
+            added[field] = None
+        edited['columns'].append(added)
+        desired['rows'][added['resource_id']] = {
+            'resource_id': added['resource_id'], 'kind': 'column',
+            'name': 'doubled', 'path': [*table['path'], 'doubled'],
+            'system': 'false', 'native': {'system_object': False,
+            'catalog_metadata': {key: value for key, value in added.items()
+                if key not in {'name', 'resource_id'}}}}
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."measurements" '
+            '(id INTEGER PRIMARY KEY, doubled INTEGER '
+            'GENERATED ALWAYS AS((id * 2)))')
+        edited['duckdb_change'] = {
+            'action': 'rebuild-add-generated-column',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert 'stage_null_column' not in preview['operations'][0]
+        applications = DuckDBSchemaApplications(tmp_path/'one-column-generated.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,doubled FROM measurements '
+            'ORDER BY id').fetchall() == [(1, 2), (2, 4)]
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO measurements(id) VALUES (1)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('added_count', [2, 8])
 @pytest.mark.parametrize('wrong_derived_fact', [False, True])
 def test_reviewed_multiple_nullable_columns_and_reorder_preserves_constraints(

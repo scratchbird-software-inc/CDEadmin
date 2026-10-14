@@ -401,6 +401,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   Function calls, casts, sequence use and references to generated columns
   remain blocked before dispatch. DuckDB 1.5.2 cannot directly add a
   generated column through ``ALTER TABLE``.
+  ``rebuild-add-generated-column`` applies the same checks when the order of
+  old columns is unchanged, including a table with one existing base column.
+  The reviewed new generated column is appended to the complete old column
+  set; an unrelated shape edit still blocks this intent.
   Staging copies every old column by name, proves their complete row multiset
   matches in both directions and verifies that every staged value of the new
   column is NULL before dropping the original table. Unchanged independent

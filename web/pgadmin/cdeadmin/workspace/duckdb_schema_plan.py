@@ -1361,6 +1361,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         'rebuild-add-column-and-reorder': set(),
         'rebuild-add-columns-and-reorder': set(),
         'rebuild-add-generated-column-and-reorder': set(),
+        'rebuild-add-generated-column': set(),
         'rebuild-drop-primary-key': {'PRIMARY KEY', 'NOT NULL'},
         'rebuild-retarget-primary-key': {'PRIMARY KEY', 'NOT NULL'}}.get(action)
     expected_change = {'action': action,
@@ -1379,11 +1380,13 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     stage_key_columns = None
     if action in {'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'}:
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'}:
         shape_addition = action != 'rebuild-column-order'
         old_columns, new_columns = old.pop('columns'), new.pop('columns')
         def column_map(items):
-            if (not isinstance(items, list) or len(items) < 2 or
+            if (not isinstance(items, list) or len(items) < (
+                    1 if action == 'rebuild-add-generated-column' else 2) or
                     any(not isinstance(item, dict) or
                         not isinstance(item.get('name'), str) or
                         item.get('ordinal_position') != position
@@ -1467,7 +1470,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if shape_addition:
             added_names = set(new_map or ()) - set(old_map or ())
             required_count = (1 if action in {'rebuild-add-column-and-reorder',
-                'rebuild-add-generated-column-and-reorder'}
+                'rebuild-add-generated-column-and-reorder',
+                'rebuild-add-generated-column'}
                 else 8)
             valid_count = (len(added_names) == 1 if required_count == 1
                 else 2 <= len(added_names) <= required_count)
@@ -1480,8 +1484,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 all(_equal(item, new_map.get(name)) for name, item in old_map.items()) and
                 all(item.get('nullable') is True and item.get('comment') is None and
                     (isinstance(item.get('default'), str) and
-                        0 < len(item['default']) <= 4096 if action ==
-                            'rebuild-add-generated-column-and-reorder' else
+                        0 < len(item['default']) <= 4096 if action in
+                            {'rebuild-add-generated-column-and-reorder',
+                             'rebuild-add-generated-column'} else
                         item.get('default') is None) for item in additions))
             if valid_columns:
                 for added in additions:
@@ -1499,9 +1504,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 not positional_facts(new_constraints, new_columns, 'CHECK') or
                 not _equal(old_semantic, new_semantic) or
                 not valid_columns or
-                [item['name'] for item in old_columns] ==
+                ([item['name'] for item in old_columns] ==
                     [item['name'] for item in new_columns
-                        if not shape_addition or item['name'] in old_map] or
+                        if not shape_addition or item['name'] in old_map]) is not
+                    (action == 'rebuild-add-generated-column') or
                 old['catalog'].get('has_primary_key') is not bool(old_key) or
                 not _equal(old, new)):
             raise ValueError('Column-shape rebuild requires complete unchanged columns and admitted constraints')
@@ -1550,7 +1556,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
             'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'}
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'}
         else {'PRIMARY KEY', 'NOT NULL'})
     old_retained = [item for item in old_constraints
         if item.get('constraint_type') in retained_types] if isinstance(old_constraints, list) else []
@@ -1558,7 +1565,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if item.get('constraint_type') in retained_types] if isinstance(new_constraints, list) else []
     if (action not in {'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'} and
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'} and
             (not _equal(old, new) or _equal(old_constraints, new_constraints) or
             not isinstance(old_constraints, list) or not isinstance(new_constraints, list) or
             not _equal(old_retained, new_retained) or
@@ -1722,19 +1730,22 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
             'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'})
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'})
     desired_sections = _table_definition_sections(source,
         inline_unique=action in {'rebuild-unique-constraints',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
             'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'})
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'})
     generated_names = _admitted_generated_columns(original_sections, columns)
     shape_valid = True
     if action in {'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'}:
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'}:
         def section_map(sections):
             if sections is None or any(not section or section[0][0] !=
                     'token_type.identifier' for section in sections[0]):
@@ -1745,12 +1756,14 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         desired_tokens = section_map(desired_sections)
         added_names = {item['name'].casefold() for item in after['native']['columns']} - (
             {item['name'].casefold() for item in columns})
-        generated_addition = action == 'rebuild-add-generated-column-and-reorder'
+        generated_addition = action in {'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'}
         desired_generated = (_admitted_generated_columns(desired_sections,
             after['native']['columns']) if generated_addition else None)
         valid_additions = (len(added_names) == 1 if
             action in {'rebuild-add-column-and-reorder',
-                'rebuild-add-generated-column-and-reorder'} else
+                'rebuild-add-generated-column-and-reorder',
+                'rebuild-add-generated-column'} else
             2 <= len(added_names) <= 8)
         shape_valid = (original_tokens is not None and
             desired_tokens is not None and valid_additions and
@@ -1780,12 +1793,14 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 'rebuild-retarget-primary-key',
                 'rebuild-add-column-and-reorder',
                 'rebuild-add-columns-and-reorder',
-                'rebuild-add-generated-column-and-reorder'}) or
+                'rebuild-add-generated-column-and-reorder',
+                'rebuild-add-generated-column'}) or
             not original_sections[0] or (action not in {
                 'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                 'rebuild-column-order', 'rebuild-add-column-and-reorder',
                 'rebuild-add-columns-and-reorder',
-                'rebuild-add-generated-column-and-reorder'} and
+                'rebuild-add-generated-column-and-reorder',
+                'rebuild-add-generated-column'} and
                 original_sections[0] != desired_sections[0]) or
             (action == 'rebuild-column-order' and
                 sorted(original_sections[0]) != sorted(desired_sections[0])) or
@@ -1802,7 +1817,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     'rebuild-column-order',
                     'rebuild-add-column-and-reorder',
                     'rebuild-add-columns-and-reorder',
-                    'rebuild-add-generated-column-and-reorder'} else set()))
+                    'rebuild-add-generated-column-and-reorder',
+                    'rebuild-add-generated-column'} else set()))
             for kind, word in body)):
         raise ValueError('Constraint rebuild requires a complete plain CREATE TABLE body')
     stage_name = '__scratchrobin_rebuild_' + digest(source)[:16]
@@ -1888,7 +1904,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         if action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
             'rebuild-column-order', 'rebuild-add-column-and-reorder',
             'rebuild-add-columns-and-reorder',
-            'rebuild-add-generated-column-and-reorder'}
+            'rebuild-add-generated-column-and-reorder',
+            'rebuild-add-generated-column'}
         else None)
     return (statements, check, dependency_check, dependency_count,
         requires_sequence_dependency, source, new_constraints, indexes,
@@ -1963,7 +1980,8 @@ def plan(baseline, desired, live):
              'rebuild-retarget-primary-key', 'rebuild-column-order',
              'rebuild-add-column-and-reorder',
              'rebuild-add-columns-and-reorder',
-             'rebuild-add-generated-column-and-reorder'}}
+             'rebuild-add-generated-column-and-reorder',
+             'rebuild-add-generated-column'}}
     for identity, after in sorted(desired['rows'].items()):
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
         if before is not None and (after.get('resource_id') != identity or
@@ -1990,13 +2008,15 @@ def plan(baseline, desired, live):
                     {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                      'rebuild-column-order', 'rebuild-add-column-and-reorder',
                      'rebuild-add-columns-and-reorder',
-                     'rebuild-add-generated-column-and-reorder'}):
+                     'rebuild-add-generated-column-and-reorder',
+                     'rebuild-add-generated-column'}):
             parent_action = desired['rows'][_resource_id('table',
                 after['path'][:2], after['path'][2])]['native']['duckdb_change']['action']
             if ((before is None and parent_action not in
                     {'rebuild-add-column-and-reorder',
                      'rebuild-add-columns-and-reorder',
-                     'rebuild-add-generated-column-and-reorder'}) or
+                     'rebuild-add-generated-column-and-reorder',
+                     'rebuild-add-generated-column'}) or
                     (before is not None and after['resource_id'] != before['resource_id']) or
                     after['system'] != 'false' or
                     after['native'].get('system_object') is not False or
@@ -2124,7 +2144,8 @@ def plan(baseline, desired, live):
                    'rebuild-retarget-primary-key', 'rebuild-column-order',
                    'rebuild-add-column-and-reorder',
                    'rebuild-add-columns-and-reorder',
-                   'rebuild-add-generated-column-and-reorder'}):
+                   'rebuild-add-generated-column-and-reorder',
+                   'rebuild-add-generated-column'}):
                 operation = 'rebuild'
                 (_rebuild_statements, _data_check, _dependency_check,
                  _dependency_count, _requires_sequence_dependency,
@@ -2249,7 +2270,8 @@ def plan(baseline, desired, live):
                     added_count_valid = (
                         len(added_ids) == 1 if addition_action in
                             {'rebuild-add-column-and-reorder',
-                             'rebuild-add-generated-column-and-reorder'} else
+                             'rebuild-add-generated-column-and-reorder',
+                             'rebuild-add-generated-column'} else
                         2 <= len(added_ids) <= 8 if addition_action ==
                             'rebuild-add-columns-and-reorder' else
                         not added_ids)
@@ -2274,7 +2296,8 @@ def plan(baseline, desired, live):
                             for key, row in new_columns.items()})
                     if addition_action in {'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',
-                            'rebuild-add-generated-column-and-reorder'}:
+                            'rebuild-add-generated-column-and-reorder',
+                            'rebuild-add-generated-column'}:
                         added_columns = [new_columns[key] for key in sorted(added_ids)]
                         derived = {column['name']: {key: value for key, value in
                             column['native']['catalog_metadata'].items() if key in {
@@ -2320,7 +2343,8 @@ def plan(baseline, desired, live):
                             'rebuild-column-order',
                             'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',
-                            'rebuild-add-generated-column-and-reorder'} else None),
+                            'rebuild-add-generated-column-and-reorder',
+                            'rebuild-add-generated-column'} else None),
                     stage_check_constraints=([{
                         'column_names': item['column_names'],
                         'constraint_text': item['constraint_text']}
@@ -2329,7 +2353,8 @@ def plan(baseline, desired, live):
                         if change.get('action') in {'rebuild-column-order',
                             'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',
-                            'rebuild-add-generated-column-and-reorder'} else None),
+                            'rebuild-add-generated-column-and-reorder',
+                            'rebuild-add-generated-column'} else None),
                     stage_constraint_order=([[
                         item['constraint_type'], item['column_names'],
                         item['constraint_text']]
@@ -2338,7 +2363,8 @@ def plan(baseline, desired, live):
                         if change.get('action') in {'rebuild-column-order',
                             'rebuild-add-column-and-reorder',
                             'rebuild-add-columns-and-reorder',
-                            'rebuild-add-generated-column-and-reorder'} else None),
+                            'rebuild-add-generated-column-and-reorder',
+                            'rebuild-add-generated-column'} else None),
                     affected_child_ids=sorted(set(child_rows) | {
                         key for key, row in baseline['rows'].items()
                         if row['kind'] == 'constraint' and row.get('path', [])[:3] == after['path']}),
