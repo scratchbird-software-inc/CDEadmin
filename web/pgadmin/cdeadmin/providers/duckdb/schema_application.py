@@ -384,8 +384,11 @@ def apply_review(provider, route, record):
                                 for child_id in operation['affected_child_ids'])
                         if verified and operation.get('affected_column_ids'):
                             added_ids = set(operation.get('added_column_ids', []))
+                            removed_ids = set(operation.get('removed_column_ids', []))
                             def column_verified(column_id):
                                 found = observed['rows'].get(column_id)
+                                if column_id in removed_ids:
+                                    return found is None
                                 if found is None:
                                     return False
                                 if column_id not in added_ids:

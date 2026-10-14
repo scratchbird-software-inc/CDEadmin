@@ -88,17 +88,20 @@ class DuckDBSchemaApplications(SchemaApplications):
                 for column_id in operation.get('affected_column_ids', []):
                     old_column = baseline['rows'].get(column_id)
                     new_column = desired['rows'].get(column_id)
-                    if (new_column is None or
+                    removed = column_id in operation.get('removed_column_ids', [])
+                    if ((new_column is None) is not removed or
+                            (removed and old_column is None) or
                             (old_column is None and column_id not in
                                 operation.get('added_column_ids', [])) or
                             operation['baseline_column_sha256'].get(column_id) !=
                                 (digest(_definition(old_column)) if old_column else None) or
                             operation['desired_column_sha256'].get(column_id) !=
-                                digest(_definition(new_column))):
+                                (digest(_definition(new_column)) if new_column else None)):
                         raise SchemaApplyError('Staged rebuild column facts differ from reviewed plan')
                     if old_column is not None:
                         baseline_ids.add(column_id)
-                    desired_ids.add(column_id)
+                    if new_column is not None:
+                        desired_ids.add(column_id)
                 for child_id in operation['affected_child_ids']:
                     old_child = baseline['rows'].get(child_id)
                     new_child = desired['rows'].get(child_id)

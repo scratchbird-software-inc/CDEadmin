@@ -393,6 +393,20 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   value, dependency and row-preservation checks to the complete staged table.
   The complete resulting table remains bounded to 128 columns and the reviewed
   native batch to 512 statements and 1 MiB of source.
+  A separate ``rebuild-drop-columns-and-reorder`` intent may remove one or
+  more observed columns while retaining at least one. It requires the exact
+  removed column resource IDs and an explicit confirmation that their values
+  will be discarded. The complete desired table, remaining column children
+  and native CREATE statement must preserve every retained column definition;
+  only its ordinal may change. All constraints and independent indexes must
+  remain unchanged and bind on the staged table. The staged copy names only
+  retained base columns and compares their row multiset in both directions
+  before dropping the original table. A retained generated expression must
+  still bind without any removed column. Unchanged views and macros must bind
+  to the same projections before and after the swap. Missing desired rows by
+  themselves never authorize removal. A failed stage or dependency check
+  rolls back the complete transaction, and fresh discovery must prove the
+  removed columns are absent and all retained descendants match the review.
   Every new column must remain NULL through staging and after rediscovery;
   explicitly authored derived type facts are checked for each new column
   before the old table is dropped. A partial new-column child set is refused.
