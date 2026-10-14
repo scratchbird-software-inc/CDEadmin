@@ -145,6 +145,14 @@ provider manifest. The consumed DDN snapshot was revision
 retained outside the implementation repository. Existing provider manifests
 record bounded evidence for other profiles, not a common end-to-end pass.
 
+The subsequent Python policy migration raised the minimum to 3.14. A Linux
+CPython 3.14.8 interpreter linked to the SQLite provider's exact 3.53.0
+library passed the same 1,496 selected Python tests (and 174 subtests). The
+portable SQLite exact-runtime gate also completed with no failures. The
+newer standard Python 3.15 and free-threaded builds have dependency gaps;
+their precise intake state is in :doc:`python_runtime_policy`. This does not
+retroactively qualify all live providers or platform packages on Python 3.14.
+
 At the 14 October inspection, the GitHub Actions runs associated with the
 latest pushed commit ended in ``startup_failure`` with no jobs in the sampled
 run. That is an infrastructure/startup observation, neither a passing nor a

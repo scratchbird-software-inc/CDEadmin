@@ -522,8 +522,8 @@ Parser API reference: https://pglast.readthedocs.io/en/v8/parser.html.
 The new runtime dependency must be included by DEB/RPM packagers through the
 root requirements file; this record is not a claim that packagers were notified
 or that their packages have been qualified.
-The parser requires Python 3.10 or later. Python 3.9 installations retain their
-existing native query execution but report offline grammar validation unavailable.
+The parser is available under the current Python 3.14-or-later product minimum.
+The earlier Python 3.9 fallback is no longer a supported runtime path.
 The dependency's GPL-3.0-or-later license and bundled PostgreSQL/libpg_query
 notices must accompany redistribution; the application's existing license text
 does not replace dependency notices.

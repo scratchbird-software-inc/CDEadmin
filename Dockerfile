@@ -56,7 +56,7 @@ RUN --mount=type=bind,source=.git,target=/cdeadmin/.git \
 # Next, create the base environment for Python
 #########################################################################
 
-FROM python:3-alpine AS env-builder
+FROM python:3.14-alpine AS env-builder
 
 # Install dependencies
 RUN apk add --no-cache \
@@ -149,7 +149,7 @@ COPY --from=pg18-builder /usr/local/bin/psql /usr/local/pgsql/pgsql-18/
 # Assemble everything into the final container.
 #########################################################################
 
-FROM python:3-alpine
+FROM python:3.14-alpine
 
 # Install runtime dependencies
 RUN apk update && apk upgrade && \

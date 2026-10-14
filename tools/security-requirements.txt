@@ -1,0 +1,3 @@
+# Install in a separate Python 3.14+ virtual environment. Safety's Typer
+# constraint conflicts with the application's Typer requirement.
+safety==3.8.1

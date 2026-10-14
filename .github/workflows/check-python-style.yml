@@ -19,12 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
       - name: Install Python dependencies
         run: |
-          sudo pip install --upgrade pip
-          sudo pip install pycodestyle
-          sudo pip install "coverage==7.*"
-          sudo pip install "SQLAlchemy==2.*" "Flask-Migrate==4.*"
+          python -m pip install --upgrade pip
+          python -m pip install pycodestyle "coverage==7.*"
+          python -m pip install "SQLAlchemy==2.*" "Flask-Migrate==4.*"
 
       - name: Check the documentation
         run: pycodestyle --config=.pycodestyle docs/

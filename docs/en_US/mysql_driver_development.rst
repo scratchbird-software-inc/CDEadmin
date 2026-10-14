@@ -131,7 +131,9 @@ Installation and driver selection
 
 Install the application requirements, regression requirements and
 ``tools/reference_engine_demos/requirements.txt`` into a platform-native Python
-virtual environment. Python 3.12 is the current Linux qualification baseline.
+virtual environment. The previous Linux native receipt used Python 3.12 and is
+historical under the current Python 3.14 minimum. Requalify the connector on
+the new runtime.
 Keep the pinned connector version. Do not copy a Linux environment or native
 extension to Windows/macOS. The pure Python connector does not require a
 separate ``libmysqlclient`` installation. Optional authentication mechanisms

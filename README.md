@@ -204,21 +204,26 @@ described above.
 
 ## Prerequisites
 
-- Python 3.9 or later
+- Python 3.14 or later (the standard 3.14 build is the current installation baseline)
 - Node.js 20 or later
 - Yarn through Corepack
 - The Python and native drivers required by the providers being exercised
 - Live reference engines only for the relevant integration/activation tests
 
+The separate free-threaded Python build (`python3.14t` or newer) is a
+qualification target, not a supported full-product runtime yet. See the
+[Python runtime policy](docs/en_US/python_runtime_policy.rst) for the dependency
+and no-GIL gates. Python 3.15 has been released but needs its own qualification.
+
 Enable Yarn and create a Python environment:
 
 ```bash
 corepack enable
-python3 -m venv venv
+python3.14 -m venv venv
 source venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
-python3 -m pip install -r web/regression/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r web/regression/requirements.txt
 ```
 
 Provider-specific drivers and reference-engine versions are documented by

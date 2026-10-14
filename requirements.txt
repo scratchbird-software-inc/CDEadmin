@@ -6,14 +6,15 @@
 # *must* ensure the DEB and RPM package maintainers are informed as soon as
 # possible.
 #
+# This requirement set targets standard CPython 3.14+. The separate free-threaded
+# build is not a qualified full-product runtime; see docs/en_US/python_runtime_policy.rst.
 # The packages listed below are sorted alphabetically. It is recommended to add
 # new packages in alphabetical order. However, exceptions can be made to
 # preserve dependency order—please add a comment in such cases and specify the
 # relevant packages.
 ###############################################################################
 
-Authlib==1.6.*; python_version <= '3.9'
-Authlib==1.7.*; python_version > '3.9'
+Authlib==1.7.*
 azure-identity==1.25.3
 azure-mgmt-rdbms==10.1.1
 # Azure CLI (a common companion package on Linux distros) still pins
@@ -22,8 +23,7 @@ azure-mgmt-rdbms==10.1.1
 azure-mgmt-resource>=24.0.0,<26.0.0
 azure-mgmt-subscription==3.1.1
 bcrypt==5.0.*
-boto3==1.42.*; python_version <= '3.9'
-boto3==1.43.*; python_version > '3.9'
+boto3==1.43.*
 certifi==2026.7.22
 cryptography==50.0.*
 croniter==6.0.*
@@ -33,30 +33,26 @@ Flask-Login==0.*
 Flask-Mail==0.*
 Flask-Migrate==4.*
 Flask-Paranoid==0.*
-Flask-Security-Too==5.6.*; python_version <= '3.9'
 # 5.8.2 corrected the inverted UserMixin.is_locked() test in LoginForm;
 # User.is_locked() in web/pgadmin/model/__init__.py follows the fixed
 # semantics, so anything earlier in the 5.8 series would refuse all logins.
-Flask-Security-Too>=5.8.2,<5.9; python_version > '3.9'
+Flask-Security-Too>=5.8.2,<5.9
 Flask-SocketIO==5.6.*
 Flask-SQLAlchemy==3.1.*
-Flask-WTF==1.2.*; python_version <= '3.9'
-Flask-WTF==1.3.*; python_version > '3.9'
+Flask-WTF==1.3.*
 Flask==3.1.*
 google-api-python-client==2.*
-google-auth-oauthlib==1.3.1; python_version <= '3.9'
-google-auth-oauthlib==1.4.0; python_version > '3.9'
+google-auth-oauthlib==1.4.0
 gssapi==1.11.*
 jsonformatter~=0.3.4
 keyring==25.*
 ldap3==2.*
 libgravatar==1.0.*
 paramiko==3.5.1
-pglast==8.5; python_version >= '3.10'
+pglast==8.5
 psutil==7.2.*
-psycopg[c]==3.2.13; python_version < '3.10'
-psycopg[c]==3.3.4; python_version >= '3.10'
-psycopg-pool==3.3.1; python_version >= '3.10'
+psycopg[c]==3.3.4
+psycopg-pool==3.3.1
 pymongo==4.17.0
 pymongo-auth-aws==1.3.0
 pymilvus==2.6.5
@@ -70,23 +66,19 @@ opensearch-py[kerberos]==3.2.0
 requests-aws4auth==1.3.2
 python-snappy==0.7.3
 lz4==4.4.5
-pyarrow==25.0.1; python_version >= '3.10'
+pyarrow==25.0.1
 pyotp==2.*
 python-dateutil==2.*
 pytz==2026.*
 # pinned for https://github.com/andfoy/pywinpty/issues/545
 pywinpty==2.0.*; sys_platform=="win32"
 qrcode[pil]==8.*
-setuptools<82; python_version <= '3.9'
-setuptools==84.*; python_version > '3.9'
+setuptools==84.*
 SQLAlchemy==2.*
 sqlparse==0.*
 sshtunnel==0.*
-typer[all]==0.23.*; python_version <= '3.9'
-typer==0.27.*; python_version > '3.9'
-urllib3==1.26.*; python_version <= '3.9'
-urllib3==2.7.*;  python_version > '3.9'
+typer==0.27.*
+urllib3==2.7.*
 user-agents==2.2.0
 Werkzeug==3.1.*
-WTForms==3.1.*; python_version <= '3.9'
-WTForms==3.2.*; python_version > '3.9'
+WTForms==3.2.*

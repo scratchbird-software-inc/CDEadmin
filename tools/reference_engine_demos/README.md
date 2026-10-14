@@ -15,7 +15,7 @@ committed.
 ## Prerequisites
 
 - Linux with Docker Engine and the Docker Compose v2 plugin
-- Python 3.12 or a project-supported newer Python
+- Python 3.14 or a project-supported newer Python
 - Go (used to build the repository's native TiKV helper)
 - a C compiler and `make` (used to build the pinned SQLite reference CLI)
 - MariaDB Connector/C development files (`libmariadb-dev` on Debian/Ubuntu)

@@ -13,8 +13,9 @@ Dependencies and library selection
 
 Install the application, regression and reference-engine Python requirements in
 one platform-native virtual environment. Keep the repository lockfiles and
-driver pin. Python 3.12 is the current Linux qualification baseline; a different
-Python version requires its own native checks. Do not copy a Linux virtual
+driver pin. The previous Linux native receipt used Python 3.12; it is historical
+under the current Python 3.14 minimum. Requalify the Firebird client and
+embedded modes on Python 3.14. Do not copy a Linux virtual
 environment or native library into Windows/macOS.
 
 Use a complete Firebird 5.0.4 distribution of the same architecture as Python:
