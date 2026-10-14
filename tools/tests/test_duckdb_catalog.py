@@ -10,6 +10,7 @@ from pgadmin.cdeadmin.providers.duckdb import catalog
 from pgadmin.cdeadmin.providers.duckdb.provider import DuckDBPilotProvider, _create_client
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
+from pgadmin.cdeadmin.workspace.firebird_catalog_import import read_catalog
 from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan
 
 
@@ -57,6 +58,82 @@ def test_owned_capture_preserves_interactive_work_and_sequence_state(tmp_path):
         provider.permissions.require.assert_called_once_with('data_read', 'resource')
     finally:
         client.close(); owner.close()
+
+
+@pytest.mark.parametrize('read_only', [False, True])
+def test_macro_source_capture_preserves_optional_defaults_without_exporting_rows(
+        tmp_path, monkeypatch, read_only):
+    duckdb = pytest.importorskip('duckdb')
+    path = tmp_path/'macro.duckdb'
+    owner = duckdb.connect(str(path))
+    owner.execute('CREATE TABLE payload(secret VARCHAR)')
+    owner.execute("INSERT INTO payload VALUES ('private row value')")
+    owner.execute('CREATE MACRO optional_arg(x, y := 5) AS x + y')
+    owner.execute('CREATE SCHEMA custom')
+    owner.execute('CREATE MACRO custom.overloaded(x) AS x + 1, (x, y) AS x + y')
+    owner.close()
+    monkeypatch.setattr(catalog.tempfile, 'tempdir', str(tmp_path))
+    client = _create_client()
+    provider = DuckDBPilotProvider(SimpleNamespace(),
+        SimpleNamespace(require=Mock()), client)
+    try:
+        captured = provider.capture_catalog({'database': str(path),
+            'filesystem_root': str(tmp_path), 'read_only': read_only},
+            include_macro_source=True)
+        macro = next(row for row in captured['resources']
+            if row['resource_kind'] == 'macro' and row['display_name'] == 'optional_arg')
+        assert 'y := 5' in macro['native']['source_ddl']
+        overloaded = next(row for row in captured['resources']
+            if row['resource_kind'] == 'macro' and row['display_name'] == 'overloaded')
+        assert overloaded['display_path'][1] == 'custom'
+        assert '(x, y) AS' in overloaded['native']['source_ddl']
+        design = build_export(captured['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=captured['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        assert design['rows'][macro['resource_id']]['native']['source_ddl'] == (
+            macro['native']['source_ddl'])
+        exported = build_export(captured['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=captured['generation'], refreshed=True,
+            engine='duckdb')
+        decoded = read_catalog(json.dumps(exported['snapshot']), engine='duckdb')
+        assert decoded['rows'][macro['resource_id']]['native']['source_ddl'] == (
+            macro['native']['source_ddl'])
+        assert 'private row value' not in json.dumps(captured)
+        assert sorted(item.name for item in tmp_path.iterdir()) == ['macro.duckdb']
+        observer = duckdb.connect(str(path), read_only=read_only)
+        assert observer.execute('SELECT optional_arg(3)').fetchone()[0] == 8
+        observer.close()
+    finally:
+        client.close()
+
+
+def test_macro_source_capture_reads_the_original_catalog_snapshot(tmp_path, monkeypatch):
+    duckdb = pytest.importorskip('duckdb')
+    path = tmp_path/'snapshot.duckdb'
+    setup = duckdb.connect(str(path))
+    setup.execute('CREATE MACRO optional_arg(x, y := 2) AS x + y')
+    setup.close()
+    monkeypatch.setattr(catalog.tempfile, 'tempdir', str(tmp_path))
+    reader = duckdb.connect(str(path))
+    try:
+        reader.execute('BEGIN TRANSACTION')
+        assert reader.execute("SELECT count(*) FROM duckdb_functions() WHERE "
+            "function_name='optional_arg'").fetchone()[0] == 1
+        writer = duckdb.connect(str(path))
+        writer.execute('CREATE OR REPLACE MACRO optional_arg(x, y := 3) AS x + y')
+        writer.close()
+        row = {'resource_kind': 'macro',
+            'display_path': ['snapshot', 'main', 'optional_arg'],
+            'display_name': 'optional_arg',
+            'native': {'catalog_metadata': {'internal': False}}}
+        catalog._capture_macro_source(reader, [row], lambda value: None)
+        assert 'y := 2' in row['native']['source_ddl']
+        assert reader.execute('SELECT current_database(), current_schema()').fetchone() == (
+            'snapshot', 'main')
+        reader.execute('ROLLBACK')
+        assert reader.execute('SELECT optional_arg(1)').fetchone()[0] == 4
+    finally:
+        reader.close()
 
 
 def test_transient_sequence_ownership_blocks_replacement_review(tmp_path):

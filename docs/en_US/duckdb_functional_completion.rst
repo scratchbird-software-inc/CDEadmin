@@ -237,9 +237,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   signature matched the original snapshot. A read-only source connection must
   explicitly attach the scratch catalog ``READ_WRITE``. The capture must restore
   the original active database before rollback, because rolling back an attach
-  otherwise leaves the session pointing at a removed catalog. Until this path
-  is bounded, implemented and qualified in the provider, DDN capture reports
-  those default expressions as unavailable and blocks inferred replacement;
+  otherwise leaves the session pointing at a removed catalog. DDN catalog
+  export and comparison request this bounded capture in the same owned read
+  transaction and retain the complete exported ``source_ddl`` on each observed
+  user macro group; ordinary navigation capture need not create a scratch
+  catalog. A failed schema copy refuses the full-signature DDN capture rather
+  than guessing its defaults. The resulting full signature remains an observed
+  native fact: inferred replacement stays blocked until the migration planner
+  binds and verifies each exact overload and its defaults;
   the native SQL administration path accepts an explicitly authored complete
   statement. A reviewer must independently verify the original signature has
   no defaults before the plan may synthesize a replacement statement. A

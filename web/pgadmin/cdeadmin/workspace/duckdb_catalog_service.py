@@ -27,7 +27,8 @@ def catalog(service, server, request, *, compare=False):
     if document and (document['provenance']['endpoint_id'] != context.endpoint_id or
                      document['provenance']['database_target_id'] != target):
         raise ValueError('Document belongs to another endpoint or database')
-    captured = provider.capture_catalog(endpoint['route'], include_system=include_system)
+    captured = provider.capture_catalog(endpoint['route'], include_system=include_system,
+        include_macro_source=True)
     result = build_export(captured['resources'], endpoint_id=context.endpoint_id,
         target_id=target, generation=captured['generation'], resource_id=resource_id,
         include_system=include_system, refreshed=True, engine='duckdb', native_model=compare)

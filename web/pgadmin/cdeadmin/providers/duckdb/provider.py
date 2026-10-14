@@ -169,7 +169,8 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
         self.client._require_idle(session.handle)
         return analyze(request.get('source'), script=request.get('script', False))
 
-    def capture_catalog(self, route, *, include_system=False):
+    def capture_catalog(self, route, *, include_system=False,
+                        include_macro_source=False):
         from .catalog import capture
         self._require('data_read', 'resource')
         path = contained_database(route)
@@ -179,7 +180,8 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
             raise RelationalClientError('DuckDB catalog capture requires an existing registered database file')
         connection = self.client._connect({'route': route})
         try:
-            return capture(connection, include_system=include_system)
+            return capture(connection, include_system=include_system,
+                include_macro_source=include_macro_source)
         finally:
             self.client._discard_failed_session(connection)
 

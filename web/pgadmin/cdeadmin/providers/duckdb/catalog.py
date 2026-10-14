@@ -1,5 +1,7 @@
 """Bounded native catalog observations on an independently owned connection."""
 import json
+import os
+import tempfile
 import threading
 import time
 import uuid
@@ -22,10 +24,87 @@ def database_location(path, database_type, options):
             'options': safe, 'options_redacted': len(safe) != len(options)}
 
 
-def capture(connection, *, include_system=False, _in_transaction=False):
+def _macro_target(source, database):
+    """Read the object path from one DuckDB-exported CREATE MACRO statement."""
+    import duckdb
+    encoded = source.encode('utf8')
+    positions = duckdb.tokenize(source)
+    tokens = []
+    for index, (offset, kind) in enumerate(positions):
+        following = positions[index + 1][0] if index + 1 < len(positions) else len(encoded)
+        word = encoded[offset:following].decode('utf8').strip()
+        if kind == duckdb.token_type.identifier and word.startswith('"') and word.endswith('"'):
+            word = word[1:-1].replace('""', '"')
+        tokens.append((kind, word))
+    if (len(tokens) < 5 or tokens[0][1].casefold() != 'create' or
+            tokens[1][1].casefold() != 'macro'):
+        return None
+    names, expect_name = [], True
+    for kind, word in tokens[2:]:
+        if kind == duckdb.token_type.operator and word == '(':
+            break
+        if expect_name:
+            if kind != duckdb.token_type.identifier or not word:
+                return None
+            names.append(word)
+        elif kind != duckdb.token_type.operator or word != '.':
+            return None
+        expect_name = not expect_name
+    if expect_name or not 1 <= len(names) <= 2:
+        return None
+    return (database, names[0], names[1]) if len(names) == 2 else (
+        database, 'main', names[0])
+
+
+def _capture_macro_source(connection, resources, account):
+    """Recover source signatures from a transaction-consistent schema-only copy."""
+    import duckdb
+    macros = {(row['display_path'][0], row['display_path'][1], row['display_name']): row
+        for row in resources if row['resource_kind'] == 'macro' and
+        not row.get('native', {}).get('catalog_metadata', {}).get('internal')}
+    if not macros:
+        return
+    active_database, active_schema = connection.execute(
+        'SELECT current_database(), current_schema()').fetchone()
+    quote = lambda value: '"' + value.replace('"', '""') + '"'
+    literal = lambda value: "'" + value.replace("'", "''") + "'"
+    for database in sorted({path[0] for path in macros}):
+        with tempfile.TemporaryDirectory(prefix='scratchrobin-duckdb-macro-') as root:
+            alias = '__scratchrobin_macro_' + uuid.uuid4().hex
+            scratch = os.path.join(root, 'schema.duckdb')
+            exported = os.path.join(root, 'export')
+            connection.execute('ATTACH ' + literal(scratch) + ' AS ' +
+                quote(alias) + ' (READ_WRITE)')
+            connection.execute('COPY FROM DATABASE ' + quote(database) +
+                ' TO ' + quote(alias) + ' (SCHEMA)')
+            connection.execute('USE ' + quote(alias))
+            connection.execute('EXPORT DATABASE ' + literal(exported))
+            connection.execute('USE ' + quote(active_database) + '.' + quote(active_schema))
+            connection.execute('DETACH ' + quote(alias))
+            schema_file = os.path.join(exported, 'schema.sql')
+            if os.path.getsize(schema_file) > MAX_BYTES:
+                raise ValueError('DuckDB macro source export exceeds the catalog byte limit')
+            with open(schema_file, encoding='utf8') as stream:
+                source = stream.read()
+            for statement in duckdb.extract_statements(source):
+                target = _macro_target(statement.query, database)
+                if target in macros:
+                    row = macros[target]
+                    if 'source_ddl' in row['native']:
+                        raise ValueError('DuckDB macro source export repeated a macro group')
+                    row['native']['source_ddl'] = statement.query.rstrip('; \n') + ';'
+                    account(row['native']['source_ddl'])
+    if any('source_ddl' not in row['native'] for row in macros.values()):
+        raise ValueError('DuckDB macro source export omitted an observed macro')
+
+
+def capture(connection, *, include_system=False, _in_transaction=False,
+            include_macro_source=False):
     from .provider import _resources
-    if type(include_system) is not bool:
+    if type(include_system) is not bool or type(include_macro_source) is not bool:
         raise ValueError('DuckDB system-object selection must be Boolean')
+    if include_macro_source and _in_transaction:
+        raise ValueError('Macro source capture needs its own read transaction')
     started = time.monotonic()
     facts = size = 0
     def account(value):
@@ -59,6 +138,8 @@ def capture(connection, *, include_system=False, _in_transaction=False):
     try:
         generation = str(uuid.uuid4())
         resources = _resources(Reader(), {'capability_generation': generation})
+        if include_macro_source:
+            _capture_macro_source(connection, list(resources), account)
         retained = []
         for resource in resources:
             native = resource.setdefault('native', {})

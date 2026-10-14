@@ -32,7 +32,8 @@ def test_owned_target_export_compare_and_foreign_document_rejection(tmp_path):
         assert result['provenance']['mapping'] == 'scratchrobin.duckdb.catalog@1'
         assert result['diagram']['snapshot']['format'] == 'ddn-workspace@1'
         assert any(item['name'] == 'native_fact' for item in result['objects'])
-        provider.capture_catalog.assert_called_once_with(endpoint['route'], include_system=False)
+        provider.capture_catalog.assert_called_once_with(endpoint['route'],
+            include_system=False, include_macro_source=True)
         provider.capture_catalog.reset_mock()
         offered = service.duckdb_test_data(server, {'database_target_id': 'owned-target'})
         selected = next(item for item in offered['tables'] if item['name'] == 'native_fact')
