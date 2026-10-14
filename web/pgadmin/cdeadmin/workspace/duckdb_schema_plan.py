@@ -1574,6 +1574,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
         'rebuild-check-with-inbound-child': {'CHECK'},
         'rebuild-check-with-inbound-children': {'CHECK'},
         'rebuild-unique-constraints': {'CHECK', 'UNIQUE'},
+        'rebuild-unique-with-inbound-child': {'UNIQUE'},
+        'rebuild-unique-with-inbound-children': {'UNIQUE'},
         'rebuild-foreign-keys': {'FOREIGN KEY'},
         'rebuild-column-order': set(),
         'rebuild-drop-columns-and-reorder': set(),
@@ -1594,11 +1596,13 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     if action == 'rebuild-change-generated-expression':
         expected_change['generated_column_resource_id'] = change.get(
             'generated_column_resource_id')
-    if action == 'rebuild-check-with-inbound-child':
+    if action in {'rebuild-check-with-inbound-child',
+            'rebuild-unique-with-inbound-child'}:
         expected_change.update(inbound_child_resource_id=change.get(
             'inbound_child_resource_id'), intermediate_child_ddl=change.get(
             'intermediate_child_ddl'))
-    elif action == 'rebuild-check-with-inbound-children':
+    elif action in {'rebuild-check-with-inbound-children',
+            'rebuild-unique-with-inbound-children'}:
         expected_change['inbound_children'] = change.get('inbound_children')
     if allowed is None or change != expected_change:
         raise ValueError('Constraint rebuild needs complete-definition and row-preservation confirmation')
@@ -1848,7 +1852,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     retained_types = ({'PRIMARY KEY', 'NOT NULL', 'CHECK', 'UNIQUE'} if
         action == 'rebuild-foreign-keys' else {'PRIMARY KEY', 'NOT NULL', 'UNIQUE'} if
         action in {'rebuild-check-constraints', 'rebuild-check-with-inbound-child',
-            'rebuild-check-with-inbound-children'} else {'CHECK', 'UNIQUE'} if
+            'rebuild-check-with-inbound-children'} else
+        {'PRIMARY KEY', 'NOT NULL', 'CHECK'} if action in {
+            'rebuild-unique-with-inbound-child',
+            'rebuild-unique-with-inbound-children'} else {'CHECK', 'UNIQUE'} if
         action in {'rebuild-drop-primary-key', 'rebuild-retarget-primary-key'} else set() if
         action in {
             'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
@@ -1878,7 +1885,9 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             any(item.get('constraint_type') not in (allowed | retained_types) for item in
                 [*old_constraints, *new_constraints]))):
         raise ValueError('Constraint rebuild may change only its admitted native constraint kinds')
-    if action == 'rebuild-unique-constraints' and not any(
+    if action in {'rebuild-unique-constraints',
+            'rebuild-unique-with-inbound-child',
+            'rebuild-unique-with-inbound-children'} and not any(
             item.get('constraint_type') == 'UNIQUE' for item in
             [*old_constraints, *new_constraints]):
         raise ValueError('UNIQUE rebuild requires an observed or desired UNIQUE constraint')
@@ -1909,10 +1918,12 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 index['native'].get('catalog_metadata', {}).get('tags')):
             raise ValueError('Constraint rebuild requires unchanged tag-free independent indexes')
     inbound_requests = []
-    if action == 'rebuild-check-with-inbound-child':
+    if action in {'rebuild-check-with-inbound-child',
+            'rebuild-unique-with-inbound-child'}:
         inbound_requests = [{'resource_id': change['inbound_child_resource_id'],
             'intermediate_ddl': change['intermediate_child_ddl']}]
-    elif action == 'rebuild-check-with-inbound-children':
+    elif action in {'rebuild-check-with-inbound-children',
+            'rebuild-unique-with-inbound-children'}:
         inbound_requests = change['inbound_children']
         if (not isinstance(inbound_requests, list) or
                 not 2 <= len(inbound_requests) <= 63 or
@@ -1924,6 +1935,18 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     inbound = [_validated_inbound_child(before, item['resource_id'],
         item['intermediate_ddl'], baseline, live, desired)
         for item in inbound_requests]
+    if action in {'rebuild-unique-with-inbound-child',
+            'rebuild-unique-with-inbound-children'}:
+        primary = [item['column_names'] for item in old_constraints
+            if item.get('constraint_type') == 'PRIMARY KEY']
+        if len(primary) != 1 or not primary[0]:
+            raise ValueError('Inbound UNIQUE rebuild requires one unchanged parent primary key')
+        for child, _first, _final, _details in inbound:
+            if any(edge.get('referenced_column_names') != primary[0]
+                    for edge in child['native'].get('constraints', [])
+                    if edge.get('constraint_type') == 'FOREIGN KEY' and
+                        edge.get('referenced_table') == before['name']):
+                raise ValueError('Inbound UNIQUE rebuild requires foreign keys to the unchanged primary key')
     if len({name for item in inbound for name in item[3]['stage_names']}) != 2 * len(inbound):
         raise ValueError('Inbound child stages must have distinct native identities')
     preserved_views, preserved_macros = [], []
@@ -2028,6 +2051,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     body = create_definition_tokens(source, 'table')
     original_sections = _table_definition_sections(before['native'].get('ddl'),
         inline_unique=action in {'rebuild-unique-constraints',
+            'rebuild-unique-with-inbound-child',
+            'rebuild-unique-with-inbound-children',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
             'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
@@ -2040,6 +2065,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             'rebuild-change-generated-expression'})
     desired_sections = _table_definition_sections(source,
         inline_unique=action in {'rebuild-unique-constraints',
+            'rebuild-unique-with-inbound-child',
+            'rebuild-unique-with-inbound-children',
             'rebuild-check-constraints', 'rebuild-foreign-keys',
             'rebuild-check-with-inbound-child', 'rebuild-check-with-inbound-children',
             'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
@@ -2150,6 +2177,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             not shape_valid or
             (generated_names and action not in {'rebuild-check-constraints',
                 'rebuild-unique-constraints', 'rebuild-foreign-keys',
+                'rebuild-unique-with-inbound-child',
+                'rebuild-unique-with-inbound-children',
                 'rebuild-check-with-inbound-child',
                 'rebuild-check-with-inbound-children',
                 'rebuild-column-order', 'rebuild-drop-columns-and-reorder',
@@ -2180,6 +2209,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                   {'primary'} if action == 'rebuild-drop-primary-key' else set()) |
                  ({'foreign', 'references'} if action != 'rebuild-foreign-keys' else set()) |
                  ({'unique'} if action not in {'rebuild-unique-constraints',
+                    'rebuild-unique-with-inbound-child',
+                    'rebuild-unique-with-inbound-children',
                     'rebuild-check-constraints', 'rebuild-foreign-keys',
                     'rebuild-check-with-inbound-child',
                     'rebuild-check-with-inbound-children',
@@ -2356,6 +2387,8 @@ def plan(baseline, desired, live):
         if row['kind'] == 'table' and isinstance(row['native'].get('duckdb_change'), dict)
         and row['native']['duckdb_change'].get('action') in
             {'rebuild-check-constraints', 'rebuild-unique-constraints',
+             'rebuild-unique-with-inbound-child',
+             'rebuild-unique-with-inbound-children',
              'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
              'rebuild-check-with-inbound-children',
              'rebuild-drop-primary-key',
@@ -2526,6 +2559,8 @@ def plan(baseline, desired, live):
             elif (after['kind'] == 'table' and isinstance(change, dict) and
                   change.get('action') in
                   {'rebuild-check-constraints', 'rebuild-unique-constraints',
+                   'rebuild-unique-with-inbound-child',
+                   'rebuild-unique-with-inbound-children',
                    'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
                    'rebuild-check-with-inbound-children',
                    'rebuild-drop-primary-key',
@@ -2744,6 +2779,8 @@ def plan(baseline, desired, live):
                         if change.get('action') in {'rebuild-check-constraints',
                             'rebuild-foreign-keys', 'rebuild-check-with-inbound-child',
                             'rebuild-check-with-inbound-children',
+                            'rebuild-unique-with-inbound-child',
+                            'rebuild-unique-with-inbound-children',
                             'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                             'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
@@ -2758,6 +2795,8 @@ def plan(baseline, desired, live):
                         for item in _expected_constraints
                         if item['constraint_type'] == 'CHECK']
                         if change.get('action') in {'rebuild-drop-primary-key',
+                            'rebuild-unique-with-inbound-child',
+                            'rebuild-unique-with-inbound-children',
                             'rebuild-retarget-primary-key', 'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
                             'rebuild-add-column-and-reorder',
@@ -2771,6 +2810,8 @@ def plan(baseline, desired, live):
                         for item in sorted(_expected_constraints,
                             key=lambda item: item['constraint_index'])]
                         if change.get('action') in {'rebuild-drop-primary-key',
+                            'rebuild-unique-with-inbound-child',
+                            'rebuild-unique-with-inbound-children',
                             'rebuild-retarget-primary-key', 'rebuild-column-order',
                             'rebuild-drop-columns-and-reorder', 'rebuild-replace-columns-and-reorder',
                             'rebuild-add-column-and-reorder',

@@ -593,7 +593,18 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   receipt. Sixty-three simple children produce 508 reviewed statements; child
   indexes or comments can lower the count that fits the 512-statement budget.
   A partial child set, overlapping child identities or a batch above
-  that budget is refused before dispatch. An unchanged child default expression
+  that budget is refused before dispatch.
+  A companion ``rebuild-unique-with-inbound-child`` intent, or
+  ``rebuild-unique-with-inbound-children`` for two to sixty-three children,
+  may change the parent's independent UNIQUE set while preserving its complete
+  CHECK, primary-key and NOT NULL facts. Every detached child key to that
+  parent must reference exactly the unchanged ordered primary-key columns;
+  a child relying on a changed or independent UNIQUE target is refused.
+  These intents use the same complete child-set review, detached and restored
+  stages, row checks, dependency binding, statement budget and rediscovery
+  requirements as the inbound CHECK rebuild. A missing child or changed key
+  never authorizes dropping its foreign key.
+  An unchanged child default expression
   may survive both stages when its exact baseline catalog and native CREATE
   definition are captured, the expression is at most 8192 bytes without a NUL,
   and both staged definitions bind and retain the native default fact. The

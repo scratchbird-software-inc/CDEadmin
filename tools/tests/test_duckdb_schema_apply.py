@@ -1877,6 +1877,100 @@ def test_inbound_child_with_two_keys_to_same_parent_requires_complete_detach(
         provider.client.close()
 
 
+@pytest.mark.parametrize('child_targets_unique,child_count', [
+    (False, 1), (False, 2), (True, 1), (True, 2)])
+def test_independent_parent_unique_change_with_inbound_child_requires_unchanged_key(
+        tmp_path, child_targets_unique, child_count):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR UNIQUE, extra VARCHAR, CHECK(length(payload) > 0))')
+    connection.execute("INSERT INTO parent VALUES (1, 'aa', 'x')")
+    key = 'payload VARCHAR' if child_targets_unique else 'id INTEGER'
+    reference = 'payload' if child_targets_unique else 'id'
+    connection.execute('CREATE TABLE child(' + key + ', FOREIGN KEY(' +
+        reference + ') REFERENCES parent(' + reference + '))')
+    connection.execute("INSERT INTO child VALUES ('aa')" if child_targets_unique
+        else 'INSERT INTO child VALUES (1)')
+    if child_count == 2:
+        connection.execute('CREATE TABLE child_b(' + key + ', FOREIGN KEY(' +
+            reference + ') REFERENCES parent(' + reference + '))')
+        connection.execute("INSERT INTO child_b VALUES ('aa')" if child_targets_unique
+            else 'INSERT INTO child_b VALUES (1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        children = sorted((row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] in {'child', 'child_b'}),
+            key=lambda row: row['name'])
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        old_unique = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'UNIQUE')
+        new_name = 'parent_payload_extra_key'
+        new_id = _resource_id('constraint', parent['path'], new_name,
+            discriminator=old_unique['constraint_index'])
+        new_child = deepcopy(desired['rows'].pop(old_unique['resource_id']))
+        new_child.update(name=new_name, path=[*parent['path'], new_name],
+            resource_id=new_id)
+        new_child['native']['catalog_metadata'].update(column_indexes=[1, 2],
+            column_names=['payload', 'extra'],
+            constraint_text='UNIQUE(payload, extra)')
+        desired['rows'][new_id] = new_child
+        old_unique.update(name=new_name, resource_id=new_id,
+            column_indexes=[1, 2], column_names=['payload', 'extra'],
+            constraint_text='UNIQUE(payload, extra)')
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, extra VARCHAR, '
+            'UNIQUE(payload, extra), CHECK((length(payload) > 0)))')
+        intermediate = [{'resource_id': child['resource_id'],
+            'intermediate_ddl': f'CREATE TABLE "{root}"."main"."{child["name"]}" '
+                '(' + key + ')'} for child in children]
+        edited['duckdb_change'] = {'action': (
+            'rebuild-unique-with-inbound-child' if child_count == 1 else
+            'rebuild-unique-with-inbound-children'),
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        if child_count == 1:
+            edited['duckdb_change'].update(
+                inbound_child_resource_id=intermediate[0]['resource_id'],
+                intermediate_child_ddl=intermediate[0]['intermediate_ddl'])
+        else:
+            edited['duckdb_change']['inbound_children'] = intermediate
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is not child_targets_unique, preview['blockers']
+        if child_targets_unique:
+            assert any('unchanged primary key' in item['reason']
+                for item in preview['blockers'])
+            return
+        applications = DuckDBSchemaApplications(tmp_path/'unique-inbound.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT * FROM child').fetchall() == [(1,)]
+        if child_count == 2:
+            assert observer.execute('SELECT * FROM child_b').fetchall() == [(1,)]
+        observer.execute("INSERT INTO parent VALUES (2, 'aa', 'y')")
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute("INSERT INTO parent VALUES (3, 'aa', 'x')")
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO child VALUES (99)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,invalid', [
     (8, False), (8, True), (32, False), (33, False),
     (63, False), (64, False), (2, False)])
