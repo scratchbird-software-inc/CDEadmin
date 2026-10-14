@@ -427,16 +427,16 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   operations or a future reviewed migration.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
-  A bounded set of unchanged, persistent user views in the same catalog may
-  coexist with the rebuild. Their exact catalog definitions and child columns
+  The complete captured set of unchanged, persistent user views in the same
+  catalog may coexist with the rebuild. Their exact catalog definitions and child columns
   are bound into the review. The apply transaction binds every view with
   native DESCRIBE before staging and again after the table swap; any failure
   or changed projection rolls back. Fresh post-commit discovery must retain
   each view definition and column facts, and native DESCRIBE must still bind
   to the same projection. Temporary views, attached catalogs, missing desired
   view rows and unqualified view bindings remain blockers. Independent
-  scalar or table macro groups with one to eight complete unchanged overloads,
-  each with at most eight observed positional parameters, in the same catalog
+  scalar or table macro groups with complete unchanged overloads and observed
+  positional parameter lists in the same catalog
   may also coexist when every overload has a distinct parameter count. Each
   arity is bound with native DESCRIBE using NULL placeholders before and after
   the swap, with exact projection equality, and the full catalog definition

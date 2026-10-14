@@ -1675,8 +1675,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             view_id = row['resource_id']
             old_view = baseline['rows'].get(view_id)
             new_view = desired['rows'].get(view_id)
-            if (len(preserved_views) + len(preserved_macros) >= 16 or
-                    row['path'][0] != before['path'][0] or
+            if (row['path'][0] != before['path'][0] or
                     row['system'] != 'false' or
                     row['native'].get('catalog_metadata', {}).get('temporary') or
                     old_view is None or new_view is None or
@@ -1705,7 +1704,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             new_macro = desired['rows'].get(macro_id)
             overloads = row['native'].get('overloads')
             def admitted_overloads():
-                if (not isinstance(overloads, list) or not 1 <= len(overloads) <= 8 or
+                if (not isinstance(overloads, list) or not overloads or
                         row['native'].get('overload_count') != len(overloads)):
                     return False
                 arities, kinds = [], set()
@@ -1714,7 +1713,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                         return False
                     metadata = overload.get('catalog_metadata', {})
                     parameters = overload.get('parameters')
-                    if (not isinstance(parameters, list) or len(parameters) > 8 or
+                    if (not isinstance(parameters, list) or
                             any(not isinstance(item, dict) or
                                 not isinstance(item.get('name'), str) or not item['name']
                                 for item in parameters) or
@@ -1725,8 +1724,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                     arities.append(len(parameters))
                     kinds.add(metadata['function_type'])
                 return len(arities) == len(set(arities)) and len(kinds) == 1
-            if (len(preserved_views) + len(preserved_macros) >= 16 or
-                    row['path'][0] != before['path'][0] or row['system'] != 'false' or
+            if (row['path'][0] != before['path'][0] or row['system'] != 'false' or
                     old_macro is None or new_macro is None or
                     old_macro['path'] != row['path'] or new_macro['path'] != row['path'] or
                     new_macro['native'].get('duckdb_change') is not None or

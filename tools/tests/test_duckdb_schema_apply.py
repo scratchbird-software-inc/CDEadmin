@@ -799,6 +799,9 @@ def test_isolated_check_rebuild_preserves_rows_or_rolls_back(tmp_path, violates,
     ('CREATE MACRO checked_count '
         '(n) AS (SELECT count(*) FROM checked WHERE id > n), '
         '(n, k) AS (SELECT count(*) FROM checked WHERE id > n + k)', True),
+    ('CREATE MACRO checked_many ' + ', '.join(
+        '(' + ', '.join(f'p{number}' for number in range(1, arity + 1)) +
+        ') AS (SELECT count(*) FROM checked)' for arity in range(1, 10)), True),
 ))
 def test_check_rebuild_preserves_views_and_distinct_arity_macros(
         tmp_path, dependent_sql, admitted):
@@ -809,9 +812,18 @@ def test_check_rebuild_preserves_views_and_distinct_arity_macros(
     connection.execute('INSERT INTO checked VALUES (1), (2)')
     connection.execute(dependent_sql)
     is_view = 'CREATE VIEW' in dependent_sql
+    many_macros = dependent_sql == (
+        'CREATE MACRO checked_count() AS (SELECT count(*) FROM checked)')
     if is_view:
+        for number in range(2, 18):
+            connection.execute(f'CREATE VIEW checked_view{number} '
+                'AS SELECT id FROM checked')
         connection.execute("COMMENT ON VIEW checked_view IS 'retained view'")
         connection.execute("COMMENT ON COLUMN checked_view.id IS 'retained column'")
+    if many_macros:
+        for number in range(2, 18):
+            connection.execute(f'CREATE MACRO checked_count{number}() AS '
+                '(SELECT count(*) FROM checked)')
     connection.close()
     try:
         observed = provider.capture_catalog(route)
@@ -835,9 +847,10 @@ def test_check_rebuild_preserves_views_and_distinct_arity_macros(
         assert preview['application_supported'] is admitted, preview['blockers']
         if admitted:
             operation = preview['operations'][0]
-            assert len(operation['affected_view_ids']) == int(is_view)
-            assert len(operation['affected_view_column_ids']) == int(is_view)
-            assert len(operation['affected_macro_ids']) == int(not is_view)
+            assert len(operation['affected_view_ids']) == (17 if is_view else 0)
+            assert len(operation['affected_view_column_ids']) == (17 if is_view else 0)
+            assert len(operation['affected_macro_ids']) == (
+                17 if many_macros else int(not is_view))
             applications = DuckDBSchemaApplications(tmp_path/'check-view.json',
                 clock=lambda: 100)
             receipt = applications.review(preview, baseline, desired,
@@ -850,6 +863,9 @@ def test_check_rebuild_preserves_views_and_distinct_arity_macros(
             if is_view:
                 assert observer.execute('SELECT id FROM checked_view ORDER BY id').fetchall() == [
                     (1,), (2,)]
+                for number in range(2, 18):
+                    assert observer.execute(f'SELECT id FROM checked_view{number} '
+                        'ORDER BY id').fetchall() == [(1,), (2,)]
                 assert observer.execute("SELECT comment FROM duckdb_views() "
                     "WHERE view_name='checked_view'").fetchone()[0] == 'retained view'
                 assert observer.execute("SELECT comment FROM duckdb_columns() "
@@ -864,8 +880,16 @@ def test_check_rebuild_preserves_views_and_distinct_arity_macros(
                     assert observer.execute('SELECT checked_count(0, 1)').fetchone()[0] == 1
                 elif 'checked_count(n)' in dependent_sql:
                     assert observer.execute('SELECT checked_count(1)').fetchone()[0] == 1
+                elif 'checked_many' in dependent_sql:
+                    for arity in (1, 9):
+                        assert observer.execute('SELECT checked_many(' +
+                            ','.join(['NULL'] * arity) + ')').fetchone()[0] == 2
                 else:
                     assert observer.execute('SELECT checked_count()').fetchone()[0] == 2
+                    if many_macros:
+                        for number in range(2, 18):
+                            assert observer.execute(
+                                f'SELECT checked_count{number}()').fetchone()[0] == 2
             observer.close()
         else:
             assert preview['operations'] == [] and preview['blockers']
