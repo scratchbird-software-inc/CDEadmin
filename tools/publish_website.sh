@@ -23,6 +23,6 @@ if [[ $(git rev-parse HEAD) != $(git rev-parse origin/master) ]]; then
     exit 1
 fi
 
-site_commit=$(git subtree split --prefix=website HEAD)
+site_commit=$(git subtree split --quiet --prefix=website HEAD)
 git push origin "$site_commit:refs/heads/gh-pages"
 echo "Published website subtree $site_commit to origin/gh-pages."
