@@ -1118,30 +1118,32 @@ def _validated_replayed_comment(kind, target, comment):
     return source
 
 
-def _literal_cast_signature(value):
-    """Recognize a bounded native literal cast without evaluating it."""
-    if not isinstance(value, str) or len(value.encode('utf8')) > 256:
+def _native_cast_signature(value):
+    """Normalize only the built-in target spelling of an unchanged cast."""
+    if (not isinstance(value, str) or len(value.encode('utf8')) > 8192 or
+            '\x00' in value):
         return None
-    atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
-        r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
     scalar = (r'(?:BOOLEAN|TINYINT|SMALLINT|INTEGER|BIGINT|UTINYINT|'
         r'USMALLINT|UINTEGER|UBIGINT|HUGEINT|UHUGEINT|REAL|FLOAT|DOUBLE|'
         r'DECIMAL|VARCHAR|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|UUID|JSON|BLOB|INTERVAL)')
-    found = re.fullmatch(r'CAST\(\s*(' + atom + r')\s+AS\s+("?' + scalar +
+    found = re.fullmatch(r'CAST\(\s*(.+)\s+AS\s+("?' + scalar +
         r'"?)(?:\(\s*([0-9]+)(?:\s*,\s*([0-9]+))?\s*\))?\s*\)',
-        value.strip(), re.I)
+        value.strip(), re.I | re.S)
     if found is None or found[2].startswith('"') != found[2].endswith('"'):
         return None
-    literal = found[1].casefold() if found[1].casefold() in {
-        'true', 'false', 'null'} else found[1]
-    return literal, found[2].strip('"').casefold(), found[3], found[4]
+    expression = found[1].strip()
+    if not expression:
+        return None
+    if expression.casefold() in {'true', 'false', 'null'}:
+        expression = expression.casefold()
+    return expression, found[2].strip('"').casefold(), found[3], found[4]
 
 
 def _native_default_equivalent(expected, observed):
     if expected == observed:
         return True
-    signature = _literal_cast_signature(expected)
-    return signature is not None and signature == _literal_cast_signature(observed)
+    signature = _native_cast_signature(expected)
+    return signature is not None and signature == _native_cast_signature(observed)
 
 
 def _inbound_definition_matches(observed, expected):
@@ -1186,27 +1188,14 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     def constant_default(value):
         if value is None:
             return True
-        if not isinstance(value, str) or len(value.encode('utf8')) > 256:
+        if (not isinstance(value, str) or not value.strip() or
+                len(value.encode('utf8')) > 8192 or '\x00' in value):
             return False
-        if re.fullmatch(r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)",
-                value.strip(), re.I):
-            return True
-        if re.fullmatch(r'(?:random|uuid)\(\)|current_(?:date|time|timestamp)',
-                value.strip(), re.I):
-            return True
-        atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
-            r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
-        if _literal_cast_signature(value) is not None:
-            return True
-        token = re.compile(r'\s*(?:' + atom + r'|\|\||[()+*/%-])', re.I)
-        offset, literal = 0, False
-        while offset < len(value) and value[offset:].strip():
-            matched = token.match(value, offset)
-            if matched is None:
-                return False
-            literal = literal or re.fullmatch(atom, matched.group().strip(), re.I) is not None
-            offset = matched.end()
-        return literal
+        if 'nextval' in value.casefold():
+            return re.fullmatch(
+                r"nextval\('[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?'\)",
+                value.strip(), re.I) is not None
+        return True
 
     child = live['rows'].get(child_id)
     old_child = baseline['rows'].get(child_id)
@@ -1506,8 +1495,6 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 return False
             facts = [item for item in items if isinstance(item, dict) and
                 item.get('constraint_type') == kind]
-            if len(facts) > 8:
-                return False
             names = [item['name'] for item in ordered_columns]
             return all(isinstance(item.get('column_names'), list) and
                 (kind == 'CHECK' or item['column_names']) and

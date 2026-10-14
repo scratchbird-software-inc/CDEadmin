@@ -353,7 +353,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   UNIQUE constraint set, whether inline or table-level, may also survive if
   its native names, definitions and columns remain fixed and only column
   indexes shift with the reorder. Staging verifies every UNIQUE fact before
-  dropping the old table. Up to eight unchanged table-level CHECK constraints
+  dropping the old table. The complete unchanged table-level CHECK set
   may also survive when their names, definitions, expressions and referenced
   columns remain fixed and only column indexes shift. Staging verifies their
   native text and columns before dropping the old table. Inline CHECK syntax,
@@ -524,11 +524,14 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   receipt. Sixty-three simple children produce 508 reviewed statements; child
   indexes or comments can lower the count that fits the 512-statement budget.
   A partial child set, overlapping child identities or a batch above
-  that budget is refused before dispatch. A child's unchanged numeric,
-  string, boolean or NULL literal defaults, or bounded constant expressions
-  composed only of those literals, parentheses, arithmetic operators and string
-  concatenation, may survive both stages. The complete native CREATE definitions
-  must parse, and explicit column-list copies never evaluate the defaults.
+  that budget is refused before dispatch. An unchanged child default expression
+  may survive both stages when its exact baseline catalog and native CREATE
+  definition are captured, the expression is at most 8192 bytes without a NUL,
+  and both staged definitions bind and retain the native default fact. The
+  complete CREATE definitions must parse; explicit column-list copies do not
+  evaluate defaults for existing rows. A missing function, failed binding or
+  changed staged default rolls the whole review back before the original child
+  is dropped.
   A direct ``nextval('name')`` or ``nextval('schema.name')`` default may also
   survive when each staging table has exactly the original child's observed
   native sequence dependencies before its predecessor is dropped, at least one
@@ -537,19 +540,13 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   independent catalog capture; in that case native ``DROP ... RESTRICT`` must
   refuse the child swap and roll back the entire transaction.
   The explicit copy must not advance the sequence; fresh rows retain its
-  native default after final rediscovery. Casts, column identifiers and
-  composed sequence expressions remain blocked pending dependency and
-  side-effect qualification.
-  Unchanged zero-argument native ``random()`` and ``uuid()`` defaults and the
-  ``current_date``, ``current_time`` and ``current_timestamp`` special defaults
-  may survive both child stages. Every existing column is copied explicitly,
-  so these expressions are not used to regenerate existing values. Stage
-  catalog facts and the complete row multiset must match before each child
-  swap; arbitrary function calls remain blocked. Native catalog-normalized
-  ``CAST(literal AS type)`` defaults may also survive when the source is one
-  numeric, string, boolean or NULL literal and the destination is an admitted
-  built-in scalar type with bounded length or precision. User-defined casts,
-  nested expressions and function calls remain blocked. Both child stages
+  native default after final rediscovery. Any other expression containing
+  ``nextval`` remains blocked because its sequence effect or dependency may
+  not be accounted for by the direct-default check.
+  Native catalog-normalized
+  ``CAST(expression AS type)`` defaults may also survive when the inner
+  expression remains textually exact and the destination is an admitted
+  built-in scalar type with bounded length or precision. Both child stages
   must retain the native default fact; a staged literal cast may differ only
   in built-in type quoting or numeric type-parameter whitespace, which are
   normalized for comparison. Other default text remains exact. Explicit row

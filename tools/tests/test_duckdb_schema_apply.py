@@ -1749,8 +1749,8 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
     ("CAST('2024-01-01' AS DATE)", 'DATE', True),
     ('CAST(1 AS DECIMAL(10,2))', 'DECIMAL(10,2)', True),
     ("CAST('{\"a\":1}' AS JSON)", 'JSON', True),
-    ('CAST(random() AS DOUBLE)', 'DOUBLE', False),
-    ("current_setting('TimeZone')", 'VARCHAR', False)])
+    ('CAST(random() AS DOUBLE)', 'DOUBLE', True),
+    ("current_setting('TimeZone')", 'VARCHAR', True)])
 def test_inbound_child_native_default_preserves_existing_values(
         tmp_path, expression, data_type, admitted):
     duckdb = pytest.importorskip('duckdb')
@@ -1880,8 +1880,9 @@ def test_inbound_child_generated_column_is_preserved_only_when_safe(
 
 
 @pytest.mark.parametrize('owned', [False, True])
+@pytest.mark.parametrize('composed', [False, True])
 def test_inbound_child_sequence_default_preserves_position_and_dependency(
-        tmp_path, owned):
+        tmp_path, owned, composed):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
     connection = duckdb.connect(route['database'])
@@ -1889,8 +1890,10 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
     connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
         'payload VARCHAR CHECK(length(payload) > 0))')
     connection.execute("INSERT INTO parent VALUES (1, 'aa')")
-    connection.execute("CREATE TABLE child(id BIGINT DEFAULT nextval('child_seq'), "
-        'parent_id INTEGER DEFAULT(1), FOREIGN KEY(parent_id) REFERENCES parent(id))')
+    sequence_default = "nextval('child_seq')" + (' + 1' if composed else '')
+    connection.execute('CREATE TABLE child(id BIGINT DEFAULT (' + sequence_default +
+        '), parent_id INTEGER DEFAULT(1), '
+        'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute('INSERT INTO child DEFAULT VALUES')
     if owned:
         connection.execute('ALTER SEQUENCE child_seq OWNED BY child')
@@ -1919,9 +1922,16 @@ def test_inbound_child_sequence_default_preserves_position_and_dependency(
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
             'inbound_child_resource_id': child['resource_id'],
             'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
-                "(id BIGINT DEFAULT(nextval('child_seq')), "
+                '(id BIGINT DEFAULT(' + sequence_default + '), '
                 'parent_id INTEGER DEFAULT(1))'}
         preview = plan(baseline, desired, baseline)
+        if composed:
+            assert not preview['application_supported']
+            assert any('admitted defaults' in item['reason']
+                for item in preview['blockers'])
+            assert connection.execute("SELECT last_value FROM duckdb_sequences() "
+                "WHERE sequence_name='child_seq'").fetchone()[0] == 100
+            return
         assert preview['application_supported'], preview['blockers']
         applications = DuckDBSchemaApplications(tmp_path/'child-sequence.json',
             clock=lambda: 100)
@@ -2118,6 +2128,76 @@ def test_reviewed_column_reorder_preserves_rows_and_dependencies(tmp_path, view_
             assert observer.execute('SELECT * FROM existing_view ORDER BY id').fetchall() == (
                 [(1,), (2,)] if view_mode == 'explicit' else
                 [(1, 'a'), (2, 'b')])
+        observer.close()
+    finally:
+        provider.client.close()
+
+
+def test_column_reorder_preserves_complete_check_and_unique_sets(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    names = [f'c{number}' for number in range(1, 10)]
+    constraints = [*(f'UNIQUE({name})' for name in names),
+        *(f'CHECK(({name} >= 0))' for name in names)]
+    connection.execute('CREATE TABLE many_constraints (' + ', '.join(
+        [*(f'{name} INTEGER' for name in names), *constraints]) + ')')
+    connection.execute('INSERT INTO many_constraints VALUES (' + ', '.join(
+        str(number) for number in range(1, 10)) + ')')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'many_constraints')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        new_names = list(reversed(names))
+        column_map = {item['name']: item for item in edited['columns']}
+        ordered = [column_map[name] for name in new_names]
+        for position, column in enumerate(ordered, 1):
+            column['ordinal_position'] = position
+            desired['rows'][column['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = position
+        edited['columns'] = ordered
+        for constraint in edited['constraints']:
+            constraint['column_indexes'] = [new_names.index(name)
+                for name in constraint['column_names']]
+            desired['rows'][constraint['resource_id']]['native'][
+                'catalog_metadata']['column_indexes'] = constraint['column_indexes']
+        root = table['path'][0]
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."many_constraints" (' +
+            ', '.join([*(f'{name} INTEGER' for name in new_names), *constraints]) + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-column-order',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        missing = deepcopy(desired)
+        check_id = next(item['resource_id'] for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        missing['rows'].pop(check_id)
+        assert not plan(baseline, missing, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'many-constraint-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert [item[0] for item in observer.execute(
+            'DESCRIBE many_constraints').fetchall()] == new_names
+        assert observer.execute('SELECT ' + ', '.join(names) +
+            ' FROM many_constraints').fetchone() == tuple(range(1, 10))
+        assert observer.execute('SELECT constraint_type, count(*) FROM '
+            "duckdb_constraints() WHERE table_name='many_constraints' "
+            'GROUP BY 1 ORDER BY 1').fetchall() == [('CHECK', 9), ('UNIQUE', 9)]
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO many_constraints (' + ', '.join(names) +
+                ') VALUES (' + ', '.join(str(number) for number in range(1, 10)) + ')')
         observer.close()
     finally:
         provider.client.close()
