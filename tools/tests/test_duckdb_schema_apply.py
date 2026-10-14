@@ -1600,7 +1600,8 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
 
 
 @pytest.mark.parametrize('child_count,invalid', [
-    (8, False), (8, True), (32, False), (33, False)])
+    (8, False), (8, True), (32, False), (33, False),
+    (63, False), (64, False)])
 def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, invalid):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)
@@ -1642,13 +1643,15 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
                     '(id INTEGER, parent_id INTEGER)'}
                 for number in range(1, child_count + 1)]}
         preview = plan(baseline, desired, baseline)
-        if child_count == 33:
+        if child_count == 64:
             assert not preview['application_supported']
-            assert any('two to thirty-two' in item['reason']
+            assert any('two to sixty-three' in item['reason']
                 for item in preview['blockers'])
             return
         assert preview['application_supported'], preview['blockers']
         assert len(preview['operations'][0]['statements']) == 4 + 8 * child_count
+        if child_count == 63:
+            return
         applications = DuckDBSchemaApplications(tmp_path/'many-child-receipt.json',
             clock=lambda: 100)
         receipt = applications.review(preview, baseline, desired,
@@ -2645,7 +2648,7 @@ def test_reviewed_add_generated_column_to_one_column_keyed_table(tmp_path):
         provider.client.close()
 
 
-@pytest.mark.parametrize('added_count', [2, 8])
+@pytest.mark.parametrize('added_count', [2, 8, 9, 32])
 @pytest.mark.parametrize('wrong_derived_fact', [False, True])
 def test_reviewed_multiple_nullable_columns_and_reorder_preserves_constraints(
         tmp_path, added_count, wrong_derived_fact):

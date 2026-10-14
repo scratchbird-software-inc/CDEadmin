@@ -381,10 +381,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   exact staged native ordinals, and the stage must prove the complete key,
   UNIQUE and CHECK facts before the original table is dropped. The added
   column remains nullable and outside every unchanged constraint.
-  A separate ``rebuild-add-columns-and-reorder`` intent may add two to eight
+  A separate ``rebuild-add-columns-and-reorder`` intent may add two or more
   such plain nullable columns in one reviewed stage, while also reordering
   the old columns. It applies the same native column, constraint, generated
   value, dependency and row-preservation checks to the complete staged table.
+  The complete resulting table remains bounded to 128 columns and the reviewed
+  native batch to 512 statements and 1 MiB of source.
   Every new column must remain NULL through staging and after rediscovery;
   explicitly authored derived type facts are checked for each new column
   before the old table is dropped. A partial new-column child set is refused.
@@ -511,15 +513,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   predecessor is dropped. Any failure rolls back both tables; fresh discovery
   verifies both table definitions, rows and the restored foreign key. More
   complex inbound graphs remain blocked. The companion
-  ``rebuild-check-with-inbound-children`` intent accepts two to thirty-two distinct
+  ``rebuild-check-with-inbound-children`` intent accepts two to sixty-three distinct
   qualifying children, each with its own complete intermediate definition.
   The parent may also retain an independent unchanged UNIQUE constraint set;
   staging verifies its exact native columns and definition before copying rows
   or dropping the old parent. All child foreign keys are detached before the
   parent swap, then each child
   is restored and independently row-checked within the same transaction and
-  receipt. A partial child set, overlapping child identities or a batch above
-  the statement budget is refused before dispatch. A child's unchanged numeric,
+  receipt. Sixty-three simple children produce 508 reviewed statements; child
+  indexes or comments can lower the count that fits the 512-statement budget.
+  A partial child set, overlapping child identities or a batch above
+  that budget is refused before dispatch. A child's unchanged numeric,
   string, boolean or NULL literal defaults, or bounded constant expressions
   composed only of those literals, parentheses, arithmetic operators and string
   concatenation, may survive both stages. The complete native CREATE definitions

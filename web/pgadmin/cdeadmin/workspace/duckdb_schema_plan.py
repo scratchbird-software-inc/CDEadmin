@@ -1536,7 +1536,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             required_count = (1 if action in {'rebuild-add-column-and-reorder',
                 'rebuild-add-generated-column-and-reorder',
                 'rebuild-add-generated-column'}
-                else 8)
+                else 128)
             valid_count = (len(added_names) == 1 if required_count == 1
                 else 2 <= len(added_names) <= required_count)
             additions = [new_map[name] for name in sorted(added_names)] if (
@@ -1673,10 +1673,10 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
     elif action == 'rebuild-check-with-inbound-children':
         inbound_requests = change['inbound_children']
         if (not isinstance(inbound_requests, list) or
-                not 2 <= len(inbound_requests) <= 32 or
+                not 2 <= len(inbound_requests) <= 63 or
                 any(not isinstance(item, dict) or set(item) !=
                     {'resource_id', 'intermediate_ddl'} for item in inbound_requests)):
-            raise ValueError('Inbound review requires two to thirty-two complete child definitions')
+            raise ValueError('Inbound review requires two to sixty-three complete child definitions')
     if len({item['resource_id'] for item in inbound_requests}) != len(inbound_requests):
         raise ValueError('Inbound review repeats a child identity')
     inbound = [_validated_inbound_child(before, item['resource_id'],
@@ -1828,7 +1828,7 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
             action in {'rebuild-add-column-and-reorder',
                 'rebuild-add-generated-column-and-reorder',
                 'rebuild-add-generated-column'} else
-            2 <= len(added_names) <= 8)
+            2 <= len(added_names) <= 128)
         shape_valid = (original_tokens is not None and
             desired_tokens is not None and valid_additions and
             (not generated_addition or (generated_names is not None and
@@ -2336,7 +2336,7 @@ def plan(baseline, desired, live):
                             {'rebuild-add-column-and-reorder',
                              'rebuild-add-generated-column-and-reorder',
                              'rebuild-add-generated-column'} else
-                        2 <= len(added_ids) <= 8 if addition_action ==
+                        2 <= len(added_ids) <= 128 if addition_action ==
                             'rebuild-add-columns-and-reorder' else
                         not added_ids)
                     if ((not set(old_columns) <= set(new_columns)) or
@@ -2362,7 +2362,9 @@ def plan(baseline, desired, live):
                             'rebuild-add-columns-and-reorder',
                             'rebuild-add-generated-column-and-reorder',
                             'rebuild-add-generated-column'}:
-                        added_columns = [new_columns[key] for key in sorted(added_ids)]
+                        added_columns = [new_columns[column['resource_id']]
+                            for column in after['native']['columns']
+                            if column['resource_id'] in added_ids]
                         derived = {column['name']: {key: value for key, value in
                             column['native']['catalog_metadata'].items() if key in {
                                 'data_type_id', 'character_maximum_length',
@@ -2374,7 +2376,7 @@ def plan(baseline, desired, live):
                             operation_record['stage_added_derived'] = derived[
                                 added_columns[0]['name']]
                         elif addition_action == 'rebuild-add-columns-and-reorder':
-                            operation_record['stage_null_columns'] = sorted(derived)
+                            operation_record['stage_null_columns'] = list(derived)
                             operation_record['stage_added_derived_columns'] = derived
                         else:
                             operation_record['stage_added_derived_columns'] = derived
