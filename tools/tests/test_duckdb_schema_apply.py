@@ -2414,6 +2414,91 @@ def test_isolated_primary_key_removal_relaxes_key_and_checks_stage(
         provider.client.close()
 
 
+@pytest.mark.parametrize('action', ['rebuild-drop-primary-key',
+    'rebuild-retarget-primary-key'])
+@pytest.mark.parametrize('expression,data_type,admitted', [
+    ('id * 2', 'INTEGER', True), ('random()', 'DOUBLE', False)])
+def test_primary_key_rebuild_preserves_only_safe_generated_values(
+        tmp_path, action, expression, data_type, admitted):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    generated = (f'derived {data_type} GENERATED ALWAYS AS(({expression}))')
+    connection.execute('CREATE TABLE checked(id INTEGER PRIMARY KEY, '
+        'code VARCHAR, ' + generated + ')')
+    connection.execute("INSERT INTO checked(id,code) VALUES (1,'a'),(2,'b')")
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'checked')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        retarget = action == 'rebuild-retarget-primary-key'
+        edited['catalog_metadata']['has_primary_key'] = retarget
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."checked" '
+            '(id INTEGER, code VARCHAR' + (' PRIMARY KEY' if retarget else '') +
+            ', ' + generated + ')')
+        edited['duckdb_change'] = {'action': action,
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        for column in edited['columns']:
+            if column['name'] in {'id', 'code'}:
+                column['nullable'] = column['name'] != 'code' or not retarget
+        for row in desired['rows'].values():
+            if row['kind'] == 'column' and row['path'][:3] == table['path'] and (
+                    row['name'] in {'id', 'code'}):
+                row['native']['catalog_metadata']['nullable'] = (
+                    row['name'] != 'code' or not retarget)
+        for identity, row in list(desired['rows'].items()):
+            if row['kind'] == 'constraint' and row['path'][:3] == table['path']:
+                del desired['rows'][identity]
+        constraints = []
+        if retarget:
+            for index, (kind, source) in enumerate([
+                    ('PRIMARY KEY', 'PRIMARY KEY(code)'),
+                    ('NOT NULL', 'NOT NULL')]):
+                name = 'checked_code_' + ('pkey' if index == 0 else 'not_null')
+                identity = _resource_id('constraint', table['path'], name,
+                    discriminator=index)
+                item = {'resource_id': identity, 'name': name,
+                    'constraint_index': index, 'constraint_type': kind,
+                    'constraint_text': source, 'expression': None,
+                    'column_indexes': [1], 'column_names': ['code'],
+                    'referenced_table': None, 'referenced_column_names': []}
+                constraints.append(item)
+                desired['rows'][identity] = {'resource_id': identity,
+                    'kind': 'constraint', 'name': name,
+                    'path': [*table['path'], name], 'system': 'false',
+                    'native': {'system_object': False,
+                        'catalog_metadata': {key: value for key, value in item.items()
+                            if key not in {'resource_id', 'name'}}}}
+        edited['constraints'] = constraints
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is admitted, preview['blockers']
+        if not admitted:
+            return
+        applications = DuckDBSchemaApplications(tmp_path/'generated-key.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,code,derived FROM checked '
+            'ORDER BY id').fetchall() == [(1, 'a', 2), (2, 'b', 4)]
+        assert observer.execute('SELECT constraint_type FROM duckdb_constraints() '
+            "WHERE table_name='checked' ORDER BY constraint_index").fetchall() == (
+            [('PRIMARY KEY',), ('NOT NULL',)] if retarget else [])
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 def test_isolated_foreign_key_rebuild_removes_complete_outgoing_set(tmp_path):
     duckdb = pytest.importorskip('duckdb')
     provider, route, _baseline, _desired, _identity = fixture(tmp_path)

@@ -1618,7 +1618,8 @@ def _validated_check_rebuild(before, after, change, target, baseline, live, desi
                 'rebuild-unique-constraints', 'rebuild-foreign-keys',
                 'rebuild-check-with-inbound-child',
                 'rebuild-check-with-inbound-children',
-                'rebuild-column-order'}) or
+                'rebuild-column-order', 'rebuild-drop-primary-key',
+                'rebuild-retarget-primary-key'}) or
             not original_sections[0] or (action not in {
                 'rebuild-drop-primary-key', 'rebuild-retarget-primary-key',
                 'rebuild-column-order'} and

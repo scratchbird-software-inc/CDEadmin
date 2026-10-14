@@ -322,6 +322,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   The same dependency, sequence-default, index, comment and rediscovery
   safeguards as key removal apply. Explicit NOT NULL retention, an unchanged
   key and general primary-key rebuilds remain blocked.
+  An unchanged virtual generated column may accompany either isolated key
+  rebuild when its expression satisfies the same simple-expression whitelist
+  as the constraint rebuild. The staged copy names only base columns and
+  compares the complete row multiset, including the recomputed value, before
+  dropping the original table. Other generated expressions remain blocked.
   ``CREATE OR REPLACE TABLE`` is not a safe substitute for a general table
   migration: it clears rows, indexes and comments. It can leave a dependent
   view reporting ``is_bound = true`` while a query against that view fails to
