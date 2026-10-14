@@ -365,6 +365,17 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   The ordinal set remains complete and unchanged, and all semantic constraint
   facts remain fixed. A stale or incomplete child identity rolls the apply
   transaction back before dropping the original table.
+  A separate ``rebuild-add-column-and-reorder`` intent may add exactly one
+  nullable column with no default, comment or generated expression while
+  reordering the unchanged old columns. The old table has no constraints or
+  generated columns. The reviewed definition and all column children must be
+  complete; the new column has an exact native type and a new stable identity.
+  Staging copies every old column by name, proves their complete row multiset
+  matches in both directions and verifies that every staged value of the new
+  column is NULL before dropping the original table. Unchanged independent
+  indexes, comments and admitted view/macro bindings use the ordinary rebuild
+  safeguards. Other column-shape changes still require separate native
+  operations or a future reviewed migration.
   A narrow CHECK or UNIQUE constraint migration may be admitted when all observed columns
   remain identical and no tag or foreign-key edge needs preservation.
   A bounded set of unchanged, persistent user views in the same catalog may

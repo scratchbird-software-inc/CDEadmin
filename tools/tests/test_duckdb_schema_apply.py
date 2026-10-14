@@ -2318,6 +2318,73 @@ def test_reviewed_column_reorder_preserves_table_check(
         provider.client.close()
 
 
+def test_reviewed_add_nullable_column_and_reorder_preserves_rows(tmp_path):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('ALTER TABLE existing ADD COLUMN note VARCHAR')
+    connection.execute("INSERT INTO existing VALUES (1,'a'),(2,'b')")
+    connection.execute('CREATE INDEX existing_note_idx ON existing(note)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        table = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'existing')
+        desired = deepcopy(baseline)
+        edited = desired['rows'][table['resource_id']]['native']
+        old_columns = {item['name']: item for item in edited['columns']}
+        added = deepcopy(old_columns['id'])
+        added['name'] = 'extra'
+        added['resource_id'] = _resource_id('column', table['path'], 'extra')
+        added['ordinal_position'] = 1
+        old_columns['note']['ordinal_position'] = 2
+        old_columns['id']['ordinal_position'] = 3
+        edited['columns'] = [added, old_columns['note'], old_columns['id']]
+        for name in ('id', 'note'):
+            desired['rows'][old_columns[name]['resource_id']]['native'][
+                'catalog_metadata']['ordinal_position'] = old_columns[name][
+                    'ordinal_position']
+        new_metadata = {key: value for key, value in added.items()
+            if key not in {'name', 'resource_id'}}
+        desired['rows'][added['resource_id']] = {'resource_id': added['resource_id'],
+            'kind': 'column', 'name': 'extra',
+            'path': [*table['path'], 'extra'], 'system': 'false',
+            'native': {'system_object': False, 'catalog_metadata': new_metadata}}
+        edited['ddl'] = (f'CREATE TABLE "{table["path"][0]}"."main"."existing" '
+            '(extra INTEGER, note VARCHAR, id INTEGER)')
+        edited['duckdb_change'] = {'action': 'rebuild-add-column-and-reorder',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'], preview['blockers']
+        assert preview['operations'][0]['stage_null_column'] == 'extra'
+        unsafe = deepcopy(desired)
+        unsafe['rows'][table['resource_id']]['native']['ddl'] = (
+            f'CREATE TABLE "{table["path"][0]}"."main"."existing" '
+            '(extra INTEGER DEFAULT 1, note VARCHAR, id INTEGER)')
+        assert not plan(baseline, unsafe, baseline)['application_supported']
+        applications = DuckDBSchemaApplications(tmp_path/'add-and-reorder.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT id,note,extra FROM existing ORDER BY id').fetchall() == [
+            (1, 'a', None), (2, 'b', None)]
+        assert [item[0] for item in observer.execute('DESCRIBE existing')
+            .fetchall()] == ['extra', 'note', 'id']
+        assert observer.execute('SELECT count(*) FROM duckdb_indexes() '
+            "WHERE table_name='existing' AND index_name='existing_note_idx'").fetchone()[0] == 1
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,indexed_child,with_comments,index_count', [
     (1, 1, False, 1), (1, 1, True, 1), (2, 1, False, 1), (2, 1, True, 1),
     (2, 2, False, 1), (2, 2, True, 1), (3, 2, False, 1),

@@ -199,6 +199,16 @@ def apply_review(provider, route, record):
                             operation['data_check']).fetchone()[0]
                         if difference != 0:
                             raise ValueError('Native staging rows differ from original rows')
+                        if operation.get('stage_null_column') is not None:
+                            from ...workspace.duckdb_schema_plan import _quote
+                            stage_path = record['desired']['rows'][
+                                operation['resource_id']]['path']
+                            stage_target = '.'.join(_quote(part) for part in
+                                [*stage_path[:2], operation['stage_name']])
+                            if connection.execute('SELECT count(*) FROM ' +
+                                    stage_target + ' WHERE ' + _quote(operation[
+                                        'stage_null_column']) + ' IS NOT NULL').fetchone()[0]:
+                                raise ValueError('New staged column contains non-NULL values')
                         dependency_difference = connection.execute(
                             operation['sequence_dependency_check']).fetchone()[0]
                         if dependency_difference != 0:
@@ -311,6 +321,11 @@ def apply_review(provider, route, record):
                                 digest(_definition(observed['rows'][column_id])) ==
                                 operation['desired_column_sha256'][column_id]
                                 for column_id in operation['affected_column_ids'])
+                        if verified and operation.get('stage_null_column') is not None:
+                            from ...workspace.duckdb_schema_plan import _quote
+                            verified = connection.execute('SELECT count(*) FROM ' +
+                                operation['target'] + ' WHERE ' + _quote(operation[
+                                    'stage_null_column']) + ' IS NOT NULL').fetchone()[0] == 0
                         if verified:
                             verified = all(observed['rows'].get(index_id) is not None and
                                 digest(_definition(observed['rows'][index_id])) ==
