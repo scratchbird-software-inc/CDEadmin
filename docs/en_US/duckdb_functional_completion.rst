@@ -244,7 +244,10 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   catalog. A failed schema copy refuses the full-signature DDN capture rather
   than guessing its defaults. The resulting full signature remains an observed
   native fact: inferred replacement stays blocked until the migration planner
-  binds and verifies each exact overload and its defaults;
+  binds and verifies each exact overload and its defaults. The catalog's
+  ``function_oid`` is not a durable substitute: in DuckDB 1.5.2 a default-only
+  replacement changed the OID in the running process, but the old and changed
+  definitions were observed with the same OID after separate file reopens;
   the native SQL administration path accepts an explicitly authored complete
   statement. A reviewer must independently verify the original signature has
   no defaults before the plan may synthesize a replacement statement. A
@@ -690,10 +693,12 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   transactional copy, prove its one complete signature matches the authored
   default expressions, and bind its body to ``duckdb_functions()``. A missing,
   inconsistent or canonically rewritten signature leaves the committed result
-  unverified. Creation with several overloads may still use its exact reviewed
-  native statement, but remains unverified until every overload signature and
-  body can be reconstructed from discovery. No creation is replayed to resolve
-  an unverified receipt.
+  unverified. The same exported-source check may verify a bounded group of
+  several scalar or table overloads when every complete authored signature
+  matches the exported group and every exported body, parameter list and kind
+  has an exact native catalog counterpart. Ambiguous overload boundaries or
+  an incomplete group leave the committed result unverified. No creation is
+  replayed to resolve an unverified receipt.
   A committed column addition is verified against its requested native type,
   nullable state and default as well as its identity. Canonical spelling
   differences leave the committed result unverified without automatic replay.
