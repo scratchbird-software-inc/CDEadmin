@@ -1704,6 +1704,74 @@ def test_check_rebuild_with_inbound_foreign_keys_is_atomic(
         provider.client.close()
 
 
+@pytest.mark.parametrize('remove_all_parent_keys', [True, False])
+def test_inbound_child_with_two_keys_to_same_parent_requires_complete_detach(
+        tmp_path, remove_all_parent_keys):
+    duckdb = pytest.importorskip('duckdb')
+    provider, route, _baseline, _desired, _identity = fixture(tmp_path)
+    connection = duckdb.connect(route['database'])
+    connection.execute('CREATE TABLE parent(id INTEGER PRIMARY KEY, '
+        'payload VARCHAR CHECK(length(payload) > 0))')
+    connection.execute('INSERT INTO parent VALUES (1, \'aa\')')
+    connection.execute('CREATE TABLE child(id INTEGER, left_id INTEGER, '
+        'right_id INTEGER, FOREIGN KEY(left_id) REFERENCES parent(id), '
+        'FOREIGN KEY(right_id) REFERENCES parent(id))')
+    connection.execute('INSERT INTO child VALUES (10, 1, 1)')
+    connection.close()
+    try:
+        observed = provider.capture_catalog(route)
+        baseline = build_export(observed['resources'], endpoint_id='endpoint-1',
+            target_id='file-1', generation=observed['generation'], refreshed=True,
+            engine='duckdb', native_model=True)
+        parent = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'parent')
+        child = next(row for row in baseline['rows'].values()
+            if row['kind'] == 'table' and row['name'] == 'child')
+        root = parent['path'][0]
+        desired = deepcopy(baseline)
+        edited = desired['rows'][parent['resource_id']]['native']
+        check = next(item for item in edited['constraints']
+            if item['constraint_type'] == 'CHECK')
+        check['constraint_text'] = 'CHECK((length(payload) >= 2))'
+        check['expression'] = '(length(payload) >= 2)'
+        desired['rows'][check['resource_id']]['native']['catalog_metadata'].update(
+            constraint_text=check['constraint_text'], expression=check['expression'])
+        edited['ddl'] = (f'CREATE TABLE "{root}"."main"."parent" '
+            '(id INTEGER PRIMARY KEY, payload VARCHAR, '
+            'CHECK((length(payload) >= 2)))')
+        intermediate = (f'CREATE TABLE "{root}"."main"."child" '
+            '(id INTEGER, left_id INTEGER, right_id INTEGER' +
+            ('' if remove_all_parent_keys else
+                ', FOREIGN KEY (left_id) REFERENCES parent(id)') + ')')
+        edited['duckdb_change'] = {'action': 'rebuild-check-with-inbound-child',
+            'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
+            'inbound_child_resource_id': child['resource_id'],
+            'intermediate_child_ddl': intermediate}
+        preview = plan(baseline, desired, baseline)
+        assert preview['application_supported'] is remove_all_parent_keys, preview['blockers']
+        if not remove_all_parent_keys:
+            assert any('remove exactly' in item['reason']
+                for item in preview['blockers'])
+            return
+        applications = DuckDBSchemaApplications(tmp_path/'two-parent-keys.json',
+            clock=lambda: 100)
+        receipt = applications.review(preview, baseline, desired,
+            'owner', 'binding', 'file-1')
+        outcome = applications.apply(request(receipt), 'owner', 'binding',
+            lambda record: apply_review(provider, route, record))
+        assert outcome['state'] == 'committed', outcome
+        assert outcome['outcome']['rediscovery_verified'], outcome
+        observer = duckdb.connect(route['database'])
+        assert observer.execute('SELECT * FROM child').fetchall() == [(10, 1, 1)]
+        assert observer.execute("SELECT count(*) FROM duckdb_constraints() WHERE "
+            "table_name='child' AND constraint_type='FOREIGN KEY'").fetchone()[0] == 2
+        with pytest.raises(duckdb.ConstraintException):
+            observer.execute('INSERT INTO child VALUES (11, 1, 99)')
+        observer.close()
+    finally:
+        provider.client.close()
+
+
 @pytest.mark.parametrize('child_count,invalid', [
     (8, False), (8, True), (32, False), (33, False),
     (63, False), (64, False), (2, False)])

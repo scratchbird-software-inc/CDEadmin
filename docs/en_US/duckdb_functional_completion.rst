@@ -521,11 +521,11 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   old-table drop; changed or omitted UNIQUE definitions roll back.
   A separate ``rebuild-check-with-inbound-child`` intent may rebuild CHECK
   constraints on a parent referenced by an unchanged child table
-  when that simple-name child has exactly one outgoing foreign key to the parent,
+  when that simple-name child has one or more outgoing foreign keys to the parent,
   plain unchanged columns and no unadmitted defaults,
   unsupported secondary constraints or sequence ownership. The complete unchanged
   set of table-level child CHECK and UNIQUE constraints may accompany that
-  parent-directed foreign key. One unchanged child primary key
+  parent-directed foreign keys. One unchanged child primary key
   and its native NOT NULL facts, or explicit unchanged NOT NULL column facts,
   may also survive both stages. A UNIQUE constraint may use
   native inline or table-level syntax; the intermediate child definition must
@@ -534,7 +534,7 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   The child may also have unchanged foreign keys to other unchanged
   same-schema parents. Each referenced parent's semantic definition is bound
   into the review and checked after commit. The intermediate definition removes
-  only the key to the rebuilt parent; native staging must retain and verify
+  exactly all keys to the rebuilt parent; native staging must retain and verify
   every other edge before dropping its predecessor. Changed referenced parents
   remain blocked.
   Each child may also carry unchanged plain, nonunique independent
@@ -557,22 +557,22 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   and after commit; a missing or changed binding rolls the whole transaction
   back or leaves a committed result unverified. The reviewer
   supplies the complete intermediate child CREATE TABLE definition without
-  the foreign key. The one-time receipt binds the parent, child, their
+  any key to the rebuilt parent. The one-time receipt binds the parent, child, their
   columns and constraint children, and both complete CREATE definitions.
-  In one transaction the child is copied to a constraint-free stage and
+  In one transaction the child is copied to a stage without those parent keys and
   swapped; the parent is rebuilt under the ordinary row, index, comment and
   dependency checks; then the child is copied into a second stage carrying
-  its original foreign key and swapped again. Each stage must match reviewed
+  all its original foreign keys and swapped again. Each stage must match reviewed
   native columns and constraint facts and preserve row multisets before its
   predecessor is dropped. Any failure rolls back both tables; fresh discovery
-  verifies both table definitions, rows and the restored foreign key. More
+  verifies both table definitions, rows and every restored foreign key. More
   complex inbound graphs remain blocked. The companion
   ``rebuild-check-with-inbound-children`` intent accepts two to sixty-three distinct
   qualifying children, each with its own complete intermediate definition.
   The parent may also retain an independent unchanged UNIQUE constraint set;
   staging verifies its exact native columns and definition before copying rows
-  or dropping the old parent. All child foreign keys are detached before the
-  parent swap, then each child
+  or dropping the old parent. All child keys to the rebuilt parent are detached
+  before the parent swap, then each child
   is restored and independently row-checked within the same transaction and
   receipt. Sixty-three simple children produce 508 reviewed statements; child
   indexes or comments can lower the count that fits the 512-statement budget.

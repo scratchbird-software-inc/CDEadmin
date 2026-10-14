@@ -1314,7 +1314,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             generated_names is None or
             len({item.get('name') for item in columns if isinstance(item, dict)}) !=
                 len(columns) or
-            not isinstance(constraints, list) or len(parent_foreign) != 1 or
+            not isinstance(constraints, list) or not parent_foreign or
             len(constraints) != len(checks) + len(uniques) +
                 len(primary) + len(nulls) + len(foreign) or
             any(not isinstance(item.get('column_names'), list) or
@@ -1325,7 +1325,7 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             any(not isinstance(item, dict) or
                 (item.get('name') not in generated_names and
                     not constant_default(item.get('default'))) for item in columns)):
-        raise ValueError('Inbound child requires one parent key, bounded constraints and admitted defaults')
+        raise ValueError('Inbound child requires parent keys, bounded constraints and admitted defaults')
     other_parent_sha256 = {}
     for edge in other_foreign:
         referenced = edge.get('referenced_table')
@@ -1353,21 +1353,21 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
     source = _validated_ddl(intermediate_ddl, 'table', child['path'])
     interim_sections = _table_definition_sections(source, inline_unique=True)
     original_secondary = original_sections[1] if original_sections else ()
-    parent_clause = parent_foreign[0].get('constraint_text')
-    parent_sections = (_table_definition_sections(
-        'CREATE TABLE scratchrobin_fk_clause (id INTEGER, ' + parent_clause + ')')
-        if isinstance(parent_clause, str) else None)
-    retained_sections = [tuple((*original_secondary[:position],
-        *original_secondary[position + 1:]))
-        for position, section in enumerate(original_secondary)
-        if parent_sections is not None and len(parent_sections[1]) == 1 and
-            section == parent_sections[1][0]]
+    retained_sections = list(original_secondary)
+    for edge in parent_foreign:
+        clause = edge.get('constraint_text')
+        parsed = (_table_definition_sections(
+            'CREATE TABLE scratchrobin_fk_clause (id INTEGER, ' + clause + ')')
+            if isinstance(clause, str) else None)
+        if (parsed is None or len(parsed[1]) != 1 or
+                parsed[1][0] not in retained_sections):
+            raise ValueError('Intermediate child must account for every rebuilt parent foreign key')
+        retained_sections.remove(parsed[1][0])
     if (original_sections is None or interim_sections is None or
             original_sections[0] != interim_sections[0] or
             len(original_secondary) != len(checks) + len(uniques) + len(foreign) or
-            len(retained_sections) != 1 or
-            interim_sections[1] != retained_sections[0]):
-        raise ValueError('Intermediate child must remove only the rebuilt parent foreign key')
+            interim_sections[1] != tuple(retained_sections)):
+        raise ValueError('Intermediate child must remove exactly the rebuilt parent foreign keys')
     original_prefix = re.match(r'^\s*CREATE\s+TABLE\s+(?:' +
         re.escape(child['name']) + '|' + re.escape(_quote(child['name'])) +
         r')(?=\s*\()', original, re.I) if isinstance(original, str) else None
