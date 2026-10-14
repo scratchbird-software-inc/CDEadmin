@@ -1676,6 +1676,10 @@ def test_large_inbound_child_set_is_bounded_and_atomic(tmp_path, child_count, in
     ('random()', 'DOUBLE', True), ('uuid()', 'UUID', True),
     ('current_date', 'DATE', True), ('current_time', 'TIME', True),
     ('current_timestamp', 'TIMESTAMP', True),
+    ("CAST('2024-01-01' AS DATE)", 'DATE', True),
+    ('CAST(1 AS DECIMAL(10,2))', 'DECIMAL(10,2)', True),
+    ("CAST('{\"a\":1}' AS JSON)", 'JSON', True),
+    ('CAST(random() AS DOUBLE)', 'DOUBLE', False),
     ("current_setting('TimeZone')", 'VARCHAR', False)])
 def test_inbound_child_native_default_preserves_existing_values(
         tmp_path, expression, data_type, admitted):
@@ -1686,6 +1690,8 @@ def test_inbound_child_native_default_preserves_existing_values(
         'payload VARCHAR CHECK(length(payload) > 0))')
     connection.execute("INSERT INTO parent VALUES (1, 'aa')")
     columns = f'id {data_type} DEFAULT({expression}), parent_id INTEGER'
+    intermediate_columns = (columns.replace('AS JSON)', 'AS "JSON")')
+        if data_type == 'JSON' else columns)
     connection.execute('CREATE TABLE child(' + columns + ', '
         'FOREIGN KEY(parent_id) REFERENCES parent(id))')
     connection.execute('INSERT INTO child(parent_id) VALUES (1)')
@@ -1716,7 +1722,7 @@ def test_inbound_child_native_default_preserves_existing_values(
             'complete_definition_confirmed': True, 'preserve_rows_confirmed': True,
             'inbound_child_resource_id': child['resource_id'],
             'intermediate_child_ddl': f'CREATE TABLE "{root}"."main"."child" '
-                '(' + columns + ')'}
+                '(' + intermediate_columns + ')'}
         preview = plan(baseline, desired, baseline)
         assert preview['application_supported'] is admitted, preview['blockers']
         if not admitted:

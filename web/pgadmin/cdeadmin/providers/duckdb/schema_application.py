@@ -146,7 +146,13 @@ def apply_review(provider, route, record):
                             return sorted((kind, tuple(names or ()), referenced or '',
                                 tuple(referenced_names or ()), definition or '')
                                 for kind, names, referenced, referenced_names, definition in items)
-                        if (columns != expected_columns or
+                        from ...workspace.duckdb_schema_plan import _native_default_equivalent
+                        if (len(columns) != len(expected_columns) or any(
+                                actual[0] != expected[0] or
+                                actual[1] != expected[1] or
+                                actual[3] != expected[3] or
+                                not _native_default_equivalent(expected[2], actual[2])
+                                for actual, expected in zip(columns, expected_columns)) or
                                 normalized(constraints) != normalized(expected_constraints)):
                             raise ValueError('Inbound child staging differs from reviewed model')
                         if connection.execute(inbound[
@@ -429,15 +435,18 @@ def apply_review(provider, route, record):
                                     operation['desired_view_column_sha256'][column_id]
                                 for column_id in operation.get('affected_view_column_ids', []))
                         if verified and operation.get('inbound_children'):
-                            from ...workspace.duckdb_schema_plan import _quote
+                            from ...workspace.duckdb_schema_plan import (
+                                _quote, _inbound_definition_matches)
                             verified = (all(connection.execute('SELECT count(*) FROM ' +
                                 '.'.join(_quote(part) for part in record['baseline']['rows'][
                                     item['child_resource_id']]['path'])).fetchone()[0] ==
                                 inbound_rows[item['child_resource_id']]
                                 for item in operation['inbound_children']) and
                                 all(observed['rows'].get(identity) is not None and
-                                    digest(_definition(observed['rows'][identity])) ==
-                                    operation['desired_inbound_sha256'][identity]
+                                    digest(_definition(record['desired']['rows'][identity])) ==
+                                    operation['desired_inbound_sha256'][identity] and
+                                    _inbound_definition_matches(observed['rows'][identity],
+                                        record['desired']['rows'][identity])
                                     for identity in operation['affected_inbound_ids']))
                         if verified:
                             verified = all(observed['rows'].get(macro_id) is not None and

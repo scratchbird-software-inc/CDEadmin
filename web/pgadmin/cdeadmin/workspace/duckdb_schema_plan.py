@@ -1118,6 +1118,68 @@ def _validated_replayed_comment(kind, target, comment):
     return source
 
 
+def _literal_cast_signature(value):
+    """Recognize a bounded native literal cast without evaluating it."""
+    if not isinstance(value, str) or len(value.encode('utf8')) > 256:
+        return None
+    atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
+        r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
+    scalar = (r'(?:BOOLEAN|TINYINT|SMALLINT|INTEGER|BIGINT|UTINYINT|'
+        r'USMALLINT|UINTEGER|UBIGINT|HUGEINT|UHUGEINT|REAL|FLOAT|DOUBLE|'
+        r'DECIMAL|VARCHAR|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|UUID|JSON|BLOB|INTERVAL)')
+    found = re.fullmatch(r'CAST\(\s*(' + atom + r')\s+AS\s+("?' + scalar +
+        r'"?)(?:\(\s*([0-9]+)(?:\s*,\s*([0-9]+))?\s*\))?\s*\)',
+        value.strip(), re.I)
+    if found is None or found[2].startswith('"') != found[2].endswith('"'):
+        return None
+    literal = found[1].casefold() if found[1].casefold() in {
+        'true', 'false', 'null'} else found[1]
+    return literal, found[2].strip('"').casefold(), found[3], found[4]
+
+
+def _native_default_equivalent(expected, observed):
+    if expected == observed:
+        return True
+    signature = _literal_cast_signature(expected)
+    return signature is not None and signature == _literal_cast_signature(observed)
+
+
+def _inbound_definition_matches(observed, expected):
+    """Compare unchanged FK-child facts across native literal-cast rendering."""
+    if observed.get('kind') != expected.get('kind'):
+        return False
+    actual, desired = deepcopy(_definition(observed)), deepcopy(_definition(expected))
+    if observed['kind'] == 'table':
+        def ddl_tokens(source):
+            tokens = create_definition_tokens(source, 'table')
+            if tokens is None:
+                return None
+            return tuple(('word', word) if index and
+                tokens[index - 1][1] == 'as' and
+                word.casefold() in {'boolean', 'tinyint', 'smallint', 'integer',
+                    'bigint', 'utinyint', 'usmallint', 'uinteger', 'ubigint',
+                    'hugeint', 'uhugeint', 'real', 'float', 'double', 'decimal',
+                    'varchar', 'date', 'time', 'timestamp', 'timestamptz',
+                    'uuid', 'json', 'blob', 'interval'} else (kind, word)
+                for index, (kind, word) in enumerate(tokens))
+        actual['ddl'], desired['ddl'] = ddl_tokens(actual['ddl']), ddl_tokens(desired['ddl'])
+        if actual['ddl'] is None or desired['ddl'] is None:
+            return False
+        old_columns, new_columns = actual.get('columns'), desired.get('columns')
+        if (not isinstance(old_columns, list) or not isinstance(new_columns, list) or
+                len(old_columns) != len(new_columns)):
+            return False
+        for old_column, new_column in zip(old_columns, new_columns):
+            if _native_default_equivalent(new_column.get('default'),
+                    old_column.get('default')):
+                old_column['default'] = new_column.get('default')
+    elif observed['kind'] == 'column':
+        if _native_default_equivalent(desired['catalog'].get('default'),
+                actual['catalog'].get('default')):
+            actual['catalog']['default'] = desired['catalog'].get('default')
+    return _equal(actual, desired)
+
+
 def _validated_inbound_child(before, child_id, intermediate_ddl,
         baseline, live, desired):
     """Bind one plain FK child for a three-phase parent rebuild."""
@@ -1134,6 +1196,8 @@ def _validated_inbound_child(before, child_id, intermediate_ddl,
             return True
         atom = (r"(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|"
             r"'(?:[^']|'')*'|TRUE|FALSE|NULL)")
+        if _literal_cast_signature(value) is not None:
+            return True
         token = re.compile(r'\s*(?:' + atom + r'|\|\||[()+*/%-])', re.I)
         offset, literal = 0, False
         while offset < len(value) and value[offset:].strip():

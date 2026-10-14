@@ -540,7 +540,15 @@ DUCK-COMP-05: DDN catalog, data and design exchange
   may survive both child stages. Every existing column is copied explicitly,
   so these expressions are not used to regenerate existing values. Stage
   catalog facts and the complete row multiset must match before each child
-  swap; arbitrary function calls remain blocked.
+  swap; arbitrary function calls remain blocked. Native catalog-normalized
+  ``CAST(literal AS type)`` defaults may also survive when the source is one
+  numeric, string, boolean or NULL literal and the destination is an admitted
+  built-in scalar type with bounded length or precision. User-defined casts,
+  nested expressions and function calls remain blocked. Both child stages
+  must retain the native default fact; a staged literal cast may differ only
+  in built-in type quoting or numeric type-parameter whitespace, which are
+  normalized for comparison. Other default text remains exact. Explicit row
+  copies must not evaluate it for existing rows.
   Each stage's native default facts must match the reviewed child columns
   before the old child is dropped.
   An unchanged virtual generated child column may survive both stages under
