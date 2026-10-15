@@ -549,6 +549,7 @@ def scan_support_manifests(source: Path, policy: dict) -> list[dict]:
 
 
 def evaluate(source: Path, policy: dict) -> dict:
+    source = source.resolve()
     violations, inventory = scan_legacy_driver(source, policy)
     violations.extend(scan_common_and_providers(source, policy))
     violations.extend(scan_support_manifests(source, policy))

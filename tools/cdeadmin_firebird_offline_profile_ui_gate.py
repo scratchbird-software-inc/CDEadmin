@@ -6,6 +6,7 @@ configuration is mutated. Evidence belongs outside the source tree.
 """
 
 import argparse
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -36,7 +37,7 @@ from selenium.webdriver.support.ui import WebDriverWait  # noqa: E402
 
 
 def prepare_copy(database, user, port):
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         rows = connection.execute('''
             SELECT s.id, e.id, r.id, r.configuration
             FROM server s JOIN user u ON u.id = s.user_id
@@ -131,7 +132,7 @@ def run(options):
                 control.click()
 
                 def saved(_browser):
-                    with sqlite3.connect(database) as connection:
+                    with closing(sqlite3.connect(database)) as connection, connection:
                         return connection.execute(
                             'SELECT host FROM server WHERE id = ?',
                             (server,)).fetchone() == ('127.0.0.10',)
@@ -143,7 +144,7 @@ def run(options):
                 ''')
                 if label != 'localhost':
                     raise AssertionError('Post-save server label changed')
-                with sqlite3.connect(database) as connection:
+                with closing(sqlite3.connect(database)) as connection, connection:
                     count = connection.execute('''SELECT count(*) FROM
                         cde_endpoint_database_target WHERE endpoint_id = ?''',
                                                (endpoint,)).fetchone()[0]
@@ -175,7 +176,7 @@ def run(options):
                 remove.click()
 
                 def removed(_browser):
-                    with sqlite3.connect(database) as connection:
+                    with closing(sqlite3.connect(database)) as connection, connection:
                         return connection.execute(
                             'SELECT id FROM server WHERE id = ?',
                             (server,)).fetchone() is None
@@ -243,7 +244,7 @@ def run(options):
                 save.click()
 
                 def registered(_browser):
-                    with sqlite3.connect(database) as connection:
+                    with closing(sqlite3.connect(database)) as connection, connection:
                         row = connection.execute('''SELECT s.host, e.id
                             FROM server s JOIN cde_endpoint e
                             ON e.legacy_server_id = s.id

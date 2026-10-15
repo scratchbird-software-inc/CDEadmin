@@ -3,6 +3,7 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 import pytest
+from pgadmin.cdeadmin.operations.fileio import has_private_file_permissions
 from tools.tests.test_postgresql_schema_plan import documents as base_documents, IDENTITY
 from pgadmin.cdeadmin.workspace.postgresql_schema_plan import build_plan
 from pgadmin.cdeadmin.workspace.postgresql_schema_apply import PostgreSQLSchemaApplications
@@ -33,7 +34,7 @@ def request(receipt):
 def test_review_and_confirmation_owner_binding_expiry(tmp_path):
     store, receipt = review(tmp_path)
     assert not {'owner', 'binding', 'baseline', 'desired'} & receipt.keys()
-    assert store.path.stat().st_mode & 0o777 == 0o600
+    assert has_private_file_permissions(store.path)
     execute = Mock()
     for owner, binding in [(8, 'bound-route'), (7, 'other')]:
         with pytest.raises(SchemaApplyError):store.apply(request(receipt), owner, binding, execute)

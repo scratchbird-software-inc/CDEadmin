@@ -1,5 +1,5 @@
 import {TextDecoder, TextEncoder} from 'util';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {renderBlobChunk} from 'sources/Dialogs/FirebirdBlobChunk';
 import FirebirdBlobEditor from 'sources/Dialogs/FirebirdBlobEditor';
 import {blobBytes, blobImport, blobDraft, BLOB_EDIT_LIMIT} from 'sources/Dialogs/firebirdBlobValue';
@@ -49,4 +49,17 @@ describe('Firebird typed BLOB editing', () => {
     expect(screen.getByLabelText('BLOB Base64')).toHaveAttribute('readonly');
     expect(screen.getByText('Export file')).not.toBeDisabled();
   });
+  it('discards a late file import when the native value changes', async () => {
+    let finish;
+    const props = {value: {text: 'old', isNull: false}, kind: 'text', label: 'PAYLOAD', onApply: jest.fn(), onClose: jest.fn()};
+    const {rerender} = render(<Component {...props} />);
+    fireEvent.change(screen.getByLabelText('Import BLOB file'), {target: {files: [{size: 3, arrayBuffer: () => new Promise(resolve => {finish = resolve;})}]}});
+    rerender(<Component {...props} value={{text: 'new native value', isNull: false}} />);
+    await act(async () => {finish(new TextEncoder().encode('old imported bytes').buffer);});
+    expect(screen.getByLabelText('BLOB text')).toHaveValue('new native value');
+    expect(props.onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Apply to row'));
+    expect(props.onApply).toHaveBeenCalledWith({text: 'new native value', isNull: false});
+  });
+
 });

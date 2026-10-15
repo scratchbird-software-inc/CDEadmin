@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import { app, Menu, ipcMain, BrowserWindow, globalShortcut } from 'electron';
+import { nativeMenuTemplate } from './menuTemplate.js';
 
 const isMac = process.platform == 'darwin';
 const isLinux = process.platform == 'linux';
@@ -177,7 +178,7 @@ function buildMenu(applicationMenus, cdeadminMainScreen, configStore, callbacks)
 
   template.push(applicationMenus[applicationMenus.length - 1]);
 
-  return Menu.buildFromTemplate(template);
+  return Menu.buildFromTemplate(nativeMenuTemplate(template));
 }
 
 function buildAndSetMenus(menus, cdeadminMainScreen, configStore, callbacks={}) {

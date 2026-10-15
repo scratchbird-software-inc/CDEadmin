@@ -770,7 +770,8 @@ export default function Layout({groups, noContextGroups, getLayoutInstance, layo
 
   useEffect(()=>{
     layoutDockerObj.workspaceHost.registerWindow({
-      workspaceId: layoutId || 'default',
+      workspaceId: layoutId?.startsWith('Workspace/Layout-') ?
+        layoutId.slice('Workspace/Layout-'.length) : WORKSPACES.DEFAULT,
       role: 'workspace',
     }).catch(()=>{/* Browser hosts have no registration service. */});
     const removeListener = layoutDockerObj.eventBus.registerListener(LAYOUT_EVENTS.REMOVE, (panelId)=>{

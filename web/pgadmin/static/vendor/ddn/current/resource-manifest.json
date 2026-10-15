@@ -1,7 +1,7 @@
 {
   "version": "0.8.0",
   "license": "GPL-2.0-or-later",
-  "intake_tool_sha256": "8029de0cd1bc13f062f2923f15a2ca28d20ca60552ac0a9f4f32bf4bca97d001",
+  "intake_tool_sha256": "4386e0cd31ef7bbb32297c14f1e5e20f959addeefe3feb7520d8d660c00835c0",
   "source": {
     "revision": "92daf7541d5f4447f4935b1c0f3cdc84b3cb4ff3",
     "status": "",
@@ -3040,6 +3040,15 @@
       "website/tools/studio/index.html": "ac0f17c87612db213e08e10cf7938ba61cefd068cc3f89b6ffef64743aad1d6b",
       "website/tools/viewer/index.html": "4d2d3964bb9c5430fc3d5d6dd82d3eddee67000842a1e78a4237a5f1b4184929"
     }
+  },
+  "source_adjustments": [
+    {
+      "patch": "tools/dependency_patches/ddn-windows-paths.patch",
+      "sha256": "d9cb15384b75c3577b71d5aaa9c29c956dcb03f6192106b1327670c4d58c792c"
+    }
+  ],
+  "adjusted_source_sha256": {
+    "tools/rollup.config.mjs": "bf6f2d9bc18b931f5f3d3d7178dbd7e563f48a3f4ccf21e22bf28c39e8d3ed3d"
   },
   "artifacts": {
     "LICENSE": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",

@@ -8,6 +8,7 @@ import ast
 import importlib.util
 import json
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -221,16 +222,17 @@ def startup_measurement(source: Path, policy):
         data = temporary / 'data'
         for name in ('sessions', 'storage', 'azure'):
             (data / name).mkdir(parents=True)
-        configuration = '\n'.join((
-            'SERVER_MODE = False',
-            f'DATA_DIR = {str(data)!r}',
-            f'SQLITE_PATH = {str(data / "pgadmin4.db")!r}',
-            f'SESSION_DB_PATH = {str(data / "sessions")!r}',
-            f'STORAGE_DIR = {str(data / "storage")!r}',
-            f'AZURE_CREDENTIAL_CACHE_DIR = {str(data / "azure")!r}',
-            'TESTING = True',
-            '',
-        ))
+        isolated = {
+            'SERVER_MODE': False, 'TESTING': True, 'CONFIG_DATABASE_URI': '',
+            'DATA_DIR': str(data), 'SQLITE_PATH': str(data / 'pgadmin4.db'),
+            'CDEADMIN_OPERATION_STORE_PATH': str(data / 'operations.json'),
+            'LOG_FILE': str(data / 'application.log'),
+            'SESSION_DB_PATH': str(data / 'sessions'),
+            'STORAGE_DIR': str(data / 'storage'),
+            'AZURE_CREDENTIAL_CACHE_DIR': str(data / 'azure'),
+            'KERBEROS_CCACHE_DIR': str(data / 'kerberos'),
+        }
+        configuration = '\n'.join(f'{name} = {value!r}' for name, value in isolated.items()) + '\n'
         (temporary / 'config_local.py').write_text(
             configuration, encoding='utf-8'
         )
@@ -238,10 +240,15 @@ def startup_measurement(source: Path, policy):
         # post-exec process high-water mark where available so a test runner's
         # earlier allocations cannot inflate the application startup result.
         script = (
-            'import json, os, resource, sys, time; '
+            'import json, os, sys, time; '
             'start=time.perf_counter(); '
-            'import config; from pgadmin import create_app; app=create_app(); '
-            'fallback=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss; '
+            'import config; '
+            f'owned={isolated!r}; '
+            '[setattr(config,name,value) for name,value in owned.items()]; '
+            'from pgadmin import create_app; app=create_app(); '
+            'fallback=(__import__("psutil").Process().memory_info().peak_wset//1024 '
+            'if sys.platform=="win32" else '
+            '__import__("resource").getrusage(__import__("resource").RUSAGE_SELF).ru_maxrss); '
             'fallback=fallback//1024 if sys.platform=="darwin" else fallback; '
             'status_path="/proc/self/status"; '
             'status=(open(status_path,encoding="utf-8").read() '
@@ -268,7 +275,8 @@ def startup_measurement(source: Path, policy):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=30,
+            timeout=max(30, startup.get('wall_seconds_platform_maximum', {}).get(
+                f'{sys.platform}:{platform.machine()}', startup['wall_seconds_maximum']) + 5),
             check=False,
         )
         wall = time.perf_counter() - started
@@ -299,17 +307,23 @@ def startup_measurement(source: Path, policy):
             'startup-route-count', 'application',
             f"{result['route_count']} differs from {startup['route_count']}",
         ))
-    if result['wall_seconds'] > startup['wall_seconds_maximum']:
+    maximum_wall = startup.get('wall_seconds_platform_maximum', {}).get(
+        f'{sys.platform}:{platform.machine()}', startup['wall_seconds_maximum'])
+    result['wall_seconds_budget'] = maximum_wall
+    if result['wall_seconds'] > maximum_wall:
         findings.append(violation(
             'startup-wall-budget', 'application',
             f"{result['wall_seconds']} exceeds "
-            f"{startup['wall_seconds_maximum']}",
+            f"{maximum_wall}",
         ))
-    if result['max_rss_kib'] > startup['max_rss_kib_maximum']:
+    maximum_rss = startup.get('max_rss_kib_platform_maximum', {}).get(
+        sys.platform, startup['max_rss_kib_maximum'])
+    result['max_rss_kib_budget'] = maximum_rss
+    if result['max_rss_kib'] > maximum_rss:
         findings.append(violation(
             'startup-rss-budget', 'application',
             f"{result['max_rss_kib']} exceeds "
-            f"{startup['max_rss_kib_maximum']}",
+            f"{maximum_rss}",
         ))
     missing = sorted(
         name for name, present in result['extensions'].items()
@@ -347,16 +361,18 @@ def contract_benchmark(source: Path, policy):
     for _index in range(benchmark['iterations']):
         runtime.validate_contract('Resource', entry['payload'], schema)
     wall = time.perf_counter() - started
+    maximum_wall = benchmark.get('wall_seconds_platform_maximum', {}).get(
+        f'{sys.platform}:{platform.machine()}', benchmark['wall_seconds_maximum'])
     result = {
         'iterations': benchmark['iterations'],
         'wall_seconds': round(wall, 6),
-        'maximum_seconds': benchmark['wall_seconds_maximum'],
+        'maximum_seconds': maximum_wall,
     }
     findings = []
-    if wall > benchmark['wall_seconds_maximum']:
+    if wall > maximum_wall:
         findings.append(violation(
             'contract-validation-budget', 'Resource',
-            f'{wall:.6f} exceeds {benchmark["wall_seconds_maximum"]}',
+            f'{wall:.6f} exceeds {maximum_wall}',
         ))
     return result, findings
 

@@ -1,10 +1,11 @@
 /* global BigInt */
+import {parse as parseLossless, LosslessNumber, isSafeNumber} from 'lossless-json';
 // Bounded recipe materialization. Native preparation remains type authority.
 const bytes = value => new TextEncoder().encode(JSON.stringify(value)).length;
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 function exactValue(value, depth=0) {
   if (depth > 32) throw new Error('Typed value nesting exceeds 32 levels.');
-  if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new Error('Use exact strings or native typed envelopes for fractional and large numeric values.');
+  if (typeof value === 'number' && (!Number.isSafeInteger(value) || Object.is(value, -0))) throw new Error('Use exact strings or native typed envelopes for fractional and large numeric values.');
   if (value !== null && typeof value === 'object') Object.values(value).forEach(item => exactValue(item, depth + 1));
 }
 const integer = value => {
@@ -20,9 +21,26 @@ function random(seed) {
     return ((value ^ value >>> 14) >>> 0) / 4294967296;
   };
 }
+export function parseRecipeJSON(source) {
+  if (typeof source !== 'string' || new TextEncoder().encode(source).length > 1024 * 1024) throw new Error('Recipe/value file exceeds 1 MiB.');
+  // Preserve native keys such as __proto__: use the lossless parse only to
+  // validate number tokens, then let JSON.parse construct the actual values.
+  const strings = new Set((source.match(/"(?:\\[\s\S]|[^"\\])*"/g) || []).map(token => JSON.parse(token)));
+  let protectedKey = '__firebird_json_key__';
+  while (strings.has(protectedKey)) protectedKey += '_';
+  const protectedSource = source.replace(/"(?:\\[\s\S]|[^"\\])*"/g, (token, offset) =>
+    JSON.parse(token) === '__proto__' && /^\s*:/.test(source.slice(offset + token.length)) ? JSON.stringify(protectedKey) : token);
+  parseLossless(protectedSource, (key, value) => {
+    if (!(value instanceof LosslessNumber)) return value;
+    const literal = value.value, number = Number(literal);
+    if (/^-?\d+$/.test(literal) && Number.isSafeInteger(number) && !Object.is(number, -0)) return number;
+    if (key === 'nullPercent' && Number.isFinite(number) && isSafeNumber(literal)) return number;
+    throw new Error('Use exact decimal strings or native typed envelopes for fractional, large or signed-zero values.');
+  });
+  return JSON.parse(source);
+}
 export function parseRecipe(source) {
-  if (typeof source !== 'string' || new TextEncoder().encode(source).length > 1024 * 1024) throw new Error('Recipe exceeds 1 MiB.');
-  const recipe = JSON.parse(source);
+  const recipe = parseRecipeJSON(source);
   if (recipe?.format !== 'scratchrobin.firebird.test-data@1' || !Number.isInteger(recipe.seed) || recipe.seed < 0 || recipe.seed > 4294967295 ||
       !Array.isArray(recipe.tables) || !recipe.tables.length || recipe.tables.length > 32) throw new Error('Invalid Firebird recipe format, seed or table count.');
   return recipe;
@@ -69,12 +87,13 @@ export function materializeTestData(recipe, catalogs) {
     }
     for (const key of catalogs[name].foreignKeys || []) {
       if (!selected.has(key.table)) continue;
-      // Existing values or explicit all-NULL values do not depend on new rows.
-      const independent = key.columns.every(column => {
-        const source = entry.columns[column];
-        return source && (source.kind === 'existing' || source.nullPercent === 100 || (source.kind === 'constant' && source.value === null));
-      });
-      if (!independent) required.add(key.table);
+      // Firebird skips a composite FK check when any segment is NULL.
+      // An omitted native default is not evidence of a generated NULL value.
+      const sources = key.columns.map(column => entry.columns[column]);
+      const nullSegment = sources.some(source => source && source.kind !== 'default' &&
+        (source.nullPercent === 100 || source.kind === 'constant' && source.value === null));
+      const existing = sources.every(source => source?.kind === 'existing');
+      if (!nullSegment && !existing) required.add(key.table);
     }
     dependencies.set(name, required);
   }
@@ -159,4 +178,11 @@ export function tableForeignKeys(resource) {
 export function generatorTable(resource) {
   const native = resource.native || resource.extensions?.firebird?.native || {};
   return resource.resource_kind === 'table' && native.system_object !== true;
+}
+
+
+// A successful HTTP response is not proof that a native transaction ended.
+export function firebirdTransactionIdle(presentation) {
+  const observation = presentation?.provider_payload;
+  return observation?.attachment_live === true && observation.state === 'idle' && observation.in_transaction === false;
 }

@@ -107,12 +107,13 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       } catch (failure) {if (serial === fileToken.current) setError(failure.message);}
       finally {if (serial === fileToken.current) setMerging(false);}
     }}>Merge latest native relations into design</Button>
+    {engine === 'firebird' && <Alert severity="info">Field datatype, nullable and description edits can prepare native review for existing columns. Domains, arrays, computed values, identities and explicit lifecycle changes retain their native definitions. Labels, layout and hidden fields never imply rename or deletion.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}
     {!editing && <DDNViewerSurface snapshot={draft} onSelectionChange={value => {selected.current = value;}} />}
     <Dialog fullScreen open={editing} onClose={closeEditor}>
       <Box sx={{display: 'flex', alignItems: 'center', gap: 2, p: 1}}>
         <FormReference formKey={`${engine}-relational-diagram`} />
-        <Box sx={{flex: 1}}>Relational design — changes affect the diagram only.</Box>
+        <Box sx={{flex: 1}}>Relational design — database changes require separate native review and explicit application.</Box>
         <Button onClick={() => download(JSON.stringify(captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download edited design</Button>
         <Button onClick={closeEditor}>Return to diagram viewer</Button>
       </Box>

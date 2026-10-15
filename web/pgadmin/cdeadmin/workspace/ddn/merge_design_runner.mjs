@@ -1,3 +1,4 @@
+import {Buffer} from 'node:buffer';
 import runtime from '../../../static/vendor/ddn/current/ddn.mjs';
 import {mergeDesign} from './merge_design.mjs';
 

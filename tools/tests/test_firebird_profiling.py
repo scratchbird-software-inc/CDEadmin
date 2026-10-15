@@ -46,3 +46,28 @@ def test_synchronous_profile_cannot_silently_run_without_profiling(rig):
     with pytest.raises(RelationalClientError, match='asynchronous'):
         rig.client.execute(rig.handle, {'source': 'SELECT 42', 'output_policy': {'firebird_profile': True}})
     rig.cursor.execute.assert_not_called()
+
+
+@pytest.mark.parametrize('cleanup_failed', [False, True])
+def test_profiler_admission_failure_never_dispatches_and_quarantines_failed_cleanup(rig, cleanup_failed):
+    error = RelationalClientError('Diagnostic admission unavailable')
+    error.diagnostic_cleanup_failed = cleanup_failed
+    with patch('pgadmin.cdeadmin.providers.firebird.profiling.transaction', side_effect=error):
+        query = rig.client.submit_query(rig.handle, {'source': 'SELECT 42',
+            'output_policy': {'firebird_profile': True}})
+        query.worker.join(5)
+        assert query.done
+    payload = rig.client.describe_result(query)['payload']
+    assert payload['execution_state'] == 'failed'
+    assert payload['profiling']['state'] == ('admission-unknown' if cleanup_failed else 'admission-failed')
+    assert payload['profiling']['errors'][0]['stage'] == 'admission'
+    rig.cursor.execute.assert_not_called()
+    rig.handle.commit.assert_not_called()
+    rig.handle.rollback.assert_not_called()
+    if cleanup_failed:
+        assert payload['session_reuse_blocked']
+        with pytest.raises(RelationalClientError, match='profiler state'):
+            rig.client.submit_query(rig.handle, {'source': 'SELECT 42'})
+    else:
+        with rig.client._exclusive(rig.handle):
+            pass

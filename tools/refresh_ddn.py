@@ -15,10 +15,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
-                                    '/home/dcalford/Sandbox/Diagram-Design-Notation'))
+                                    str(ROOT.parent / 'Diagram-Design-Notation')))
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
-                                  '/home/dcalford/SandBox/temp-workarea/ddn-intake'))
+                                  str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'
+WINDOWS_PATCH = ROOT / 'tools/dependency_patches/ddn-windows-paths.patch'
 
 
 def git(source, *args):
@@ -48,10 +49,16 @@ def inventory(source):
 def refresh(source, work):
     work.mkdir(parents=True, exist_ok=True)
     before = inventory(source)
+    # Apply the portable path correction on every host. The captured source,
+    # declarations and generated bundle then have one provenance identity on
+    # Windows, macOS and Linux, rather than host-specific release candidates.
+    adjustments = [{'patch': str(WINDOWS_PATCH.relative_to(ROOT)),
+                    'sha256': digest(WINDOWS_PATCH)}]
     manifest_path = DEST / 'resource-manifest.json'
     if manifest_path.exists():
         previous = json.loads(manifest_path.read_text())
         if (previous.get('intake_tool_sha256') == digest(Path(__file__)) and
+            previous.get('source_adjustments', []) == adjustments and
             previous.get('source') == before and all(
             (DEST / name).is_file() and digest(DEST / name) == sha
             for name, sha in previous.get('artifacts', {}).items()
@@ -69,18 +76,38 @@ def refresh(source, work):
                 raise RuntimeError('DDN changed during capture; retry intake')
         if inventory(source) != before:
             raise RuntimeError('DDN changed during capture; retry intake')
+        adjusted_files = {}
+        if adjustments:
+            subprocess.run(['git', 'apply', '--check', '--ignore-space-change',
+                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
+            subprocess.run(['git', 'apply', '--ignore-space-change',
+                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
+            name = 'tools/rollup.config.mjs'
+            adjusted_files[name] = digest(snapshot / name)
         # Build tools consume pinned installed dependencies without modifying them.
-        (snapshot / 'node_modules').symlink_to(source / 'node_modules',
-                                             target_is_directory=True)
+        if os.name == 'nt':
+            # Ordinary Windows developer accounts may not create symlinks.
+            # DDN's dependency tree is small; copy it without requiring admin
+            # privileges or changing the host's Developer Mode/security policy.
+            shutil.copytree(source / 'node_modules', snapshot / 'node_modules')
+        else:
+            (snapshot / 'node_modules').symlink_to(source / 'node_modules',
+                                                 target_is_directory=True)
         env = {**os.environ, 'TMPDIR': str(work)}
         env.pop('DDN_SDK_OUT', None)
         env.pop('DDN_SDK_MANIFEST', None)
         log = work / 'build.log'
-        with log.open('w') as output:
-            for tool in ('build-sdk.js', 'build-tool.js'):
-                subprocess.run(['node', 'tools/' + tool], cwd=snapshot,
-                               env=env, stdout=output,
-                               stderr=subprocess.STDOUT, check=True)
+        try:
+            with log.open('w', encoding='utf-8') as output:
+                for tool in ('build-sdk.js', 'build-tool.js'):
+                    subprocess.run(['node', 'tools/' + tool], cwd=snapshot,
+                                   env=env, stdout=output,
+                                   stderr=subprocess.STDOUT, check=True)
+        except subprocess.CalledProcessError:
+            # Temporary captures are removed on failure. Preserve and expose
+            # the actual builder error in CI, not only its exit status.
+            print(log.read_text(encoding='utf-8', errors='replace'))
+            raise
         stage = Path(scratch) / 'vendor'
         stage.mkdir()
         for name in ('ddn.global.js', 'ddn.global.min.js', 'ddn.global.min.js.map',
@@ -98,6 +125,8 @@ def refresh(source, work):
         manifest = {'version': package['version'], 'license': package['license'],
                     'intake_tool_sha256': digest(Path(__file__)),
                     'source': before,
+                    'source_adjustments': adjustments,
+                    'adjusted_source_sha256': adjusted_files,
                     'artifacts': {p.name: digest(p) for p in sorted(stage.iterdir())}}
         (stage / 'resource-manifest.json').write_text(
             json.dumps(manifest, indent=2) + '\n')

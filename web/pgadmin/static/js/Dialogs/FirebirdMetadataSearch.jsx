@@ -15,22 +15,27 @@ export default function FirebirdMetadataSearch({targets, post, onOpen}) {
   const [results, setResults] = useState([]);
   const [busy, setBusy] = useState(false);
   const [stopped, setStopped] = useState(false);
-  const stop = useRef(false), mounted = useRef(true);
-  useEffect(() => {mounted.current = true; return () => {mounted.current = false; stop.current = true;};}, []);
+  const stop = useRef(false), generation = useRef(0);
+  const targetScope = JSON.stringify(targets.map(target => [target.target_id, target.database, target.label]));
+  useEffect(() => {
+    generation.current++; stop.current = true; setResults([]); setSelected([]); setBusy(false); setStopped(false);
+    return () => {generation.current++; stop.current = true;};
+  }, [post, targetScope]);
   const toggle = (values, value) => values.includes(value) ? values.filter(item => item !== value) : [...values, value];
   const run = async () => {
+    const serial = ++generation.current;
     stop.current = false; setStopped(false); setBusy(true); setResults([]);
     try {
       for (const target of targets.filter(item => selected.includes(item.target_id))) {
-        if (stop.current) break;
+        if (stop.current || serial !== generation.current) break;
         let result;
         try {
           result = await post({action: 'firebird_metadata_search', request: {target_id: target.target_id, query, kind, fields}});
           if (result.target_id !== target.target_id) throw new Error('ScopeMismatch');
         } catch {result = {error: 'Database search unavailable. Check registration, credentials and catalog access.'};}
-        if (mounted.current) setResults(current => [...current, {target, ...result}]);
+        if (serial === generation.current) setResults(current => [...current, {target, ...result}]);
       }
-    } finally {if (mounted.current) {setBusy(false); setStopped(stop.current);}}
+    } finally {if (serial === generation.current) {setBusy(false); setStopped(stop.current);}}
   };
   return <Box data-cde-compact-form sx={{p: 2, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-metadata-search" />
@@ -50,6 +55,10 @@ export default function FirebirdMetadataSearch({targets, post, onOpen}) {
         <Typography>{result.match_count} matches. {result.coverage}</Typography>
         {result.truncated && <Alert severity="warning">Only the first 500 matches are shown. Narrow the search.</Alert>}
         {result.missing_ddl_count > 0 && <Alert severity="warning">Native DDL unavailable for {result.missing_ddl_count} objects.</Alert>}
+        {(result.catalog_coverage || []).filter(item => item.state === 'partial').map((item, index) => <Alert severity="warning" key={'coverage-' + index}>
+          Partial native catalog. Unavailable sections: {(item.unavailable_sections || []).join(', ') || 'not reported'}.
+        </Alert>)}
+        {(result.catalog_warnings || []).map((warning, index) => <Alert severity="warning" key={'warning-' + index}>{warning}</Alert>)}
         {(result.catalog_observations || []).filter(item => !item.available).map((item, index) => <Alert severity="warning" key={index}>{item.section}: unavailable ({item.error_type}).</Alert>)}
         <Box sx={{height: 360, minWidth: 0, overflow: 'auto'}}>
           <PagedDataGrid readOnly rows={result.matches} rowKeyGetter={row => row.resource_id}

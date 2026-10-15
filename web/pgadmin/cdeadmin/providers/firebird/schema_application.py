@@ -19,6 +19,12 @@ def capture(connection, target):
 
 
 def apply_review(provider, route, record):
+    from .ddl_dialect import generated_dialect
+    with generated_dialect(record['plan']['sql_dialect']):
+        return _apply_review(provider, route, record)
+
+
+def _apply_review(provider, route, record):
     provider._admit_transport({'route': route})
     provider.permissions.require('administer', 'resource')
     client = provider.client

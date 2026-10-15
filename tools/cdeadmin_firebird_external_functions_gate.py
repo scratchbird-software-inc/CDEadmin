@@ -60,6 +60,9 @@ def archive_files(files):
     return buffer.getvalue()
 
 
+from pgadmin.cdeadmin.operations.fileio import private_file
+
+
 def browser_checks(options, route, password, container, build_root, *,
                    gate_kind='external-functions',
                    fixture_kind='firebird-udf-qualification'):
@@ -72,6 +75,7 @@ def browser_checks(options, route, password, container, build_root, *,
     checks = []
     try:
         with os.fdopen(descriptor, 'w') as output:
+            private_file(private_profile)
             json.dump({'profiles': [profile]}, output)
         root = Path(__file__).resolve().parents[1]
         for scale in options.font_scale or (100, 200, 300):

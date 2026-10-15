@@ -90,7 +90,12 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
         permissions = SimpleNamespace(
             require=lambda *_args: None,
             acquire_secret=lambda *_args: SecretLease(password))
-        client = _create_client(permissions)
+        if embedded:
+            from pgadmin.cdeadmin.providers.firebird.embedded_provider import PROFILE, ADMINISTRATION
+            client = _create_client(permissions, attachment_mode='embedded',
+                                    profile=PROFILE, administration=ADMINISTRATION)
+        else:
+            client = _create_client(permissions, attachment_mode='network')
         destination = database_dsn(target['database'], target.get('host'),
                                    target.get('port'), target.get('protocol'))
         args = _database_create_arguments(
@@ -113,6 +118,18 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
                       "'ENGINE_VERSION') FROM RDB$DATABASE")[0][0]
         receipt['engine_version'] = version
         assert version == '5.0.4'
+        protocol = sql(owner, 'SELECT MON$REMOTE_PROTOCOL FROM MON$ATTACHMENTS '
+                       'WHERE MON$ATTACHMENT_ID=CURRENT_CONNECTION')[0][0]
+        receipt['remote_protocol'] = protocol
+        receipt['auth_method'] = sql(owner, 'SELECT MON$AUTH_METHOD FROM MON$ATTACHMENTS '
+                                    'WHERE MON$ATTACHMENT_ID=CURRENT_CONNECTION')[0][0]
+        assert (protocol is None) if embedded else bool(protocol)
+        if route.get('protocol') == 'XNET':
+            assert protocol == 'XNET', protocol
+        if route.get('trusted_auth'):
+            receipt['authenticated_user'] = sql(owner, 'SELECT CURRENT_USER FROM RDB$DATABASE')[0][0]
+            assert receipt['authenticated_user'] == 'SYSDBA'
+            assert receipt['auth_method'] == 'Win_Sspi'
         sql(owner, 'CREATE TABLE OWNED_DRIVER(ID INT PRIMARY KEY, '
             '"été" VARCHAR(80) CHARACTER SET UTF8, '
             'A INTEGER[-1:1], TXT BLOB SUB_TYPE TEXT CHARACTER SET UTF8)')

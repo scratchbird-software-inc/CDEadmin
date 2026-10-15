@@ -19,6 +19,7 @@ import threading
 from pathlib import Path
 
 from .models import OperationBusError
+from .fileio import durable_replace, private_file
 
 
 STATE_VERSION = 1
@@ -109,14 +110,14 @@ class JsonOperationStore(MemoryOperationStore):
                 prefix=f'.{self.path.name}.', delete=False,
             ) as stream:
                 temporary = Path(stream.name)
-                os.chmod(temporary, 0o600)
+                private_file(temporary)
                 json.dump(
                     candidate, stream, sort_keys=True,
                     separators=(',', ':'),
                 )
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, self.path)
+            durable_replace(temporary, self.path)
         except OSError as exc:
             if temporary is not None:
                 try:

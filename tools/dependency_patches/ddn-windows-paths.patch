@@ -1,0 +1,26 @@
+--- a/tools/rollup.config.mjs
++++ b/tools/rollup.config.mjs
+@@ -66,7 +66,7 @@
+ const siblingExternal = {
+   name: 'ddn-sibling-externals',
+   resolveId(source, importer) {
+-    if (SIBLING_SPEC.test(source) && importer && importer.includes('/tools/rollup/entries/'))
++    if (SIBLING_SPEC.test(source) && importer && importer.split(path.sep).join('/').includes('/tools/rollup/entries/'))
+       return { id: source, external: true };
+     return null;
+   },
+@@ -74,12 +74,12 @@
+ 
+ function externalsFor(name) {
+   return (id, parent, isResolved) => {
+-    if (SIBLING_SPEC.test(id)) return name !== 'global' && !!parent && parent.includes('/tools/rollup/entries/');
++    if (SIBLING_SPEC.test(id)) return name !== 'global' && !!parent && parent.split(path.sep).join('/').includes('/tools/rollup/entries/');
+     const base = path.basename(id);
+     const owner = memberFile.get(base);
+     if (!owner) return false;
+     if (name === 'global') return false; // the all-in-one owns every module
+-    return owner !== name && (isResolved || id.includes('/runtime/') || id.startsWith('.'));
++    return owner !== name && (isResolved || id.split(path.sep).join('/').includes('/runtime/') || id.startsWith('.'));
+   };
+ }
+ function pathsFor() {

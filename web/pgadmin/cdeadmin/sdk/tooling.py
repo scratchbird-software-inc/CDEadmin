@@ -40,7 +40,7 @@ def _safe_root(value):
     if not path.is_absolute():
         raise ProviderToolError('tool workspace must be an absolute path')
     path = path.resolve(strict=False)
-    forbidden = {Path('/'), Path.home().resolve(strict=False)}
+    forbidden = {Path(path.anchor), Path.home().resolve(strict=False)}
     if path in forbidden:
         raise ProviderToolError('tool workspace grant is over-broad')
     return path
@@ -188,8 +188,9 @@ class ProviderToolRunner:
                     dir=workspace
                 )
                 config_path = Path(name)
-                os.fchmod(descriptor, 0o600)
                 with os.fdopen(descriptor, 'wb') as stream:
+                    from ..operations.fileio import private_file
+                    private_file(config_path)
                     stream.write(bytes(secret_config))
                     stream.flush()
                     os.fsync(stream.fileno())

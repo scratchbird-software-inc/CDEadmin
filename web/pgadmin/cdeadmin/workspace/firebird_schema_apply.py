@@ -8,6 +8,7 @@ import time
 import uuid
 
 from ..operations.store import JsonOperationStore
+from ..operations.fileio import exclusive_file_lock
 from .firebird_schema_plan import digest, DERIVED
 from .firebird_creation_graph import INSTRUCTION
 from .firebird_lifecycle_plan import INSTRUCTION as LIFECYCLE
@@ -26,23 +27,14 @@ class SchemaApplications:
 
     @contextmanager
     def _store(self):
-        try:
-            import fcntl
-        except ImportError:
-            raise SchemaApplyError('Native schema application needs supported host locking') from None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Each worker reloads while holding the same exclusive file lock. This
         # store is separate from the operation bus's process-local store cache.
         with self.lock:
             fd = os.open(str(self.path) + '.lock', os.O_RDWR | os.O_CREAT, 0o600)
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX)
-                yield JsonOperationStore(self.path)
-                directory = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-                try:
-                    os.fsync(directory)
-                finally:
-                    os.close(directory)
+                with exclusive_file_lock(fd):
+                    yield JsonOperationStore(self.path)
             finally:
                 os.close(fd)
 

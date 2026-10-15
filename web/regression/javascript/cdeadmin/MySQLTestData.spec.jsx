@@ -30,10 +30,10 @@ describe('MySQL native test-data recipes', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Add table'}));
     const recipe = JSON.parse(screen.getByRole('textbox', {name: 'Test-data recipe JSON'}).value);
     expect(recipe.format).toBe('scratchrobin.mariadb.test-data@1');
-    post.mockResolvedValue({source: "INSERT INTO native VALUES (VEC_FromText('[1,2]'));", rows: 10, tables: 1});
+    post.mockResolvedValue({source: 'INSERT INTO native VALUES (VEC_FromText(\'[1,2]\'));', rows: 10, tables: 1});
     fireEvent.click(screen.getByRole('button', {name: 'Generate SQL preview'}));
     await screen.findByText('10 rows in 1 tables generated; not executed.');
-    expect(screen.getByRole('textbox', {name: 'Generated MariaDB SQL'})).toHaveValue("INSERT INTO native VALUES (VEC_FromText('[1,2]'));");
+    expect(screen.getByRole('textbox', {name: 'Generated MariaDB SQL'})).toHaveValue('INSERT INTO native VALUES (VEC_FromText(\'[1,2]\'));');
     expect(post).toHaveBeenLastCalledWith({action: 'mariadb_test_data', request: {database_target_id: 'maria-target', recipe}});
     expect(post.mock.calls.every(([request]) => request.action === 'mariadb_test_data')).toBe(true);
   });

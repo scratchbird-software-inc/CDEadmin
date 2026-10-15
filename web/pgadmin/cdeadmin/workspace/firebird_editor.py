@@ -18,3 +18,38 @@ def languages(values):
                                                   if not item.get('non_reserved') and item['native_name'] in words],
                                'authority': 'lexical display only; native engine validates SQL'}
     return result
+
+
+COMPLETION_KINDS = frozenset({'table', 'view', 'column', 'procedure', 'function',
+    'external-function', 'package', 'sequence', 'domain', 'exception',
+    'collation', 'character-set'})
+
+
+def metadata(snapshot):
+    from .firebird_catalog_export import native_metadata
+    resources, total, size = [], 0, 0
+    for item in snapshot['resources']:
+        kind = item['resource_kind']
+        if kind not in COMPLETION_KINDS:
+            continue
+        native = native_metadata(item)
+        if native.get('package') and (str(native.get('private_flag')) != '0'):
+            continue  # Private/unknown package members are not public names.
+        total += 1
+        if len(resources) >= 25000:
+            continue
+        entry = {key:item.get(key) for key in ('resource_id','resource_kind','display_name','display_path')}
+        if kind in {'procedure','function','external-function'}:
+            entry['package_name'] = native.get('package')
+            parameters = native.get('parameters', [])
+            entry['parameters'] = [{key:parameter.get(key) for key in ('name','mode','position')}
+                for parameter in parameters[:256] if isinstance(parameter,dict)]
+            entry['parameters_truncated'] = len(parameters)>256
+        count = len(json.dumps(entry, ensure_ascii=False).encode('utf-8'))
+        if size + count > 8 * 1024 * 1024:
+            continue
+        size += count
+        resources.append(entry)
+    return {'resources':resources, 'generation':snapshot['generation'],
+        'truncated':total>len(resources), 'visible_resource_count':total,
+        'coverage':'Native visible relations, columns, public routines/packages, sequences, types and exceptions; inaccessible metadata is not inferred'}

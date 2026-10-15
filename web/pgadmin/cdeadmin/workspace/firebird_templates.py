@@ -18,6 +18,14 @@ DEFAULTS = {
 
 
 def context(snapshot, resource_id):
+    from ..providers.firebird.ddl_dialect import generated_dialect
+    databases = [native_metadata(row) for row in snapshot['resources'] if row['resource_kind'] == 'database']
+    dialect = int(databases[0]['sql_dialect']) if len(databases) == 1 and str(databases[0].get('sql_dialect')) in {'1','3'} else 3
+    with generated_dialect(dialect):
+        return _context(snapshot, resource_id, dialect)
+
+
+def _context(snapshot, resource_id, dialect):
     objects = {row['resource_id']: row for row in snapshot['resources']}
     selected = objects.get(resource_id)
     if selected is None:
@@ -44,17 +52,17 @@ def context(snapshot, resource_id):
     if columns:
         templates['select'] = DEFAULTS['select']
         native = native_metadata(selected)
-        if kind == 'table' and native.get('system_object') is not True and str(native.get('relation_type')) in {'0', '2', '4', '5'}:
+        if kind == 'table' and native.get('system_object') is False and str(native.get('relation_type')) in {'0', '2', '4', '5'}:
             if writable:
                 templates['insert'] = DEFAULTS['insert']
             if str(native.get('relation_type')) != '2':
                 if writable:
                     templates['update'] = DEFAULTS['update']
                 templates['delete'] = DEFAULTS['delete']
-    if kind == 'table' and native_metadata(selected).get('system_object') is not True and str(native_metadata(selected).get('relation_type')) in {'0', '2', '4', '5'}:
+    if kind == 'table' and native_metadata(selected).get('system_object') is False and str(native_metadata(selected).get('relation_type')) in {'0', '2', '4', '5'}:
         templates['trigger'] = DEFAULTS['trigger']
     return {'resource_id': resource_id, 'resource_kind': kind, 'name': selected['display_name'],
-            'generation': snapshot['generation'], 'templates': templates, 'substitutions': substitutions,
+            'generation': snapshot['generation'], 'database_sql_dialect': dialect, 'templates': templates, 'substitutions': substitutions,
             'parameter_columns': [row['display_name'] for row in writable],
             'definition_unavailable': native_metadata(selected).get('ddl_unavailable_reason') if not definitions else None,
             'authority': 'source template only; native preparation and permissions remain authoritative'}
@@ -65,7 +73,9 @@ def render(context, template, new_name=None):
         raise ValueError('Template must contain 1–65536 UTF-8 bytes without NUL')
     values = dict(context['substitutions'])
     if new_name:
-        values['new_object'] = identifier(new_name)
+        from ..providers.firebird.ddl_dialect import generated_dialect
+        with generated_dialect(context.get('database_sql_dialect', 3)):
+            values['new_object'] = identifier(new_name)
     def replace(match):
         token = match.group(1).strip()
         if token not in TOKENS or not isinstance(values.get(token), str) or not values[token]:

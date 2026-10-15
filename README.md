@@ -22,6 +22,8 @@ are separate from the application release gate.
 
 For a fresh development machine, see the
 [Windows/macOS/Linux development and demo setup guide](tools/development/README.md).
+
+[Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
 
@@ -57,11 +59,12 @@ hosting action must be backed up and reviewed before it is performed.
 ## Current development status
 
 CDEadmin is currently version **0.1.0-dev** and is not approved for production
-release. The project contains **24 engine connector roots** and **26 provider
+release. The project contains **24 engine connector roots** and **27 provider
 profiles**. A connector root is the top-level explorer grouping for an engine;
 a provider profile is an exact protocol/dialect implementation. YugabyteDB
-YSQL/YCQL and OpenSearch native/SQL-PPL each have separate profiles under one
-engine root. These are inventory counts, not 24 or 26 completed release gates.
+YSQL/YCQL, OpenSearch native/SQL-PPL, and Firebird network/embedded each have
+separate profiles under one engine root. These are inventory counts, not 24 or
+27 completed release gates.
 
 The provider portfolio covers PostgreSQL, MySQL, MariaDB, Firebird, DuckDB,
 SQLite, MongoDB, Neo4j, Cassandra, Redis, XTDB, ClickHouse, InfluxDB, Milvus,
@@ -204,6 +207,12 @@ described above.
 
 ## Prerequisites
 
+For native Windows x64, Intel macOS and Apple Silicon setup, follow the
+[native development guide](tools/development/NATIVE.md). It provisions the
+required native clients, builds the frontend and runs the platform checks
+without WSL, Docker or Linux libraries. The GitHub **Native development
+environments** workflow tests each host separately.
+
 - Python 3.14 or later (the standard 3.14 build is the current installation baseline)
 - Node.js 20 or later
 - Yarn through Corepack
@@ -237,7 +246,8 @@ make install-node
 make bundle
 ```
 
-On Windows, run `yarn install` and `yarn run bundle` from `web/`.
+On Windows and macOS, use the native guide's `frontend` stage to build with
+the required host tools and memory settings.
 
 ## Development configuration and startup
 

@@ -46,7 +46,7 @@ web/pgadmin/misc/themes/pgadmin.themes.json
 web/geckodriver.log
 web/regression/test_config.json
 web/regression/.coveragerc
-node_modules/
+node_modules
 web/pgAdmin/static/js/generated
 web/pgadmin/static/js/generated
 web/yarn-error.log
@@ -57,6 +57,7 @@ auditpy.txt
 /venv/
 /.venv/
 /.devstate/
+/.native/
 .scannerwork/
 web/coverage/
 web/.coverage

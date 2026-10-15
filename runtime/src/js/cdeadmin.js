@@ -26,6 +26,12 @@ import {
   validateWindowRegistration,
 } from './workspaceProtocol.js';
 
+if (process.env.CDEADMIN_DESKTOP_DATA_DIR) {
+  const directory = path.resolve(process.env.CDEADMIN_DESKTOP_DATA_DIR);
+  fs.mkdirSync(directory, {recursive: true});
+  app.setPath('userData', directory);
+}
+
 const configStore = new Store({
   defaults: {
     fixedPort: false,
@@ -108,7 +114,13 @@ if (!gotTheLock) {
 }
 
 // Override the paths above, if a developer needs to
-if (fs.existsSync('dev_config.json')) {
+if (process.env.CDEADMIN_DESKTOP_PYTHON || process.env.CDEADMIN_DESKTOP_LAUNCHER) {
+  if (!process.env.CDEADMIN_DESKTOP_PYTHON || !process.env.CDEADMIN_DESKTOP_LAUNCHER) {
+    throw new Error('Native desktop requires both Python and launcher paths');
+  }
+  pythonPath = path.resolve(process.env.CDEADMIN_DESKTOP_PYTHON);
+  cdeadminFile = path.resolve(process.env.CDEADMIN_DESKTOP_LAUNCHER);
+} else if (fs.existsSync('dev_config.json')) {
   try {
     let dev_config = JSON.parse(fs.readFileSync('dev_config.json'));
     pythonPath = path.resolve(dev_config['pythonPath']);
@@ -255,7 +267,7 @@ function startDesktopMode() {
   misc.writeServerLog('Runtime Config File: "' + path.resolve(configStore.path) + '"');
   misc.writeServerLog('Webapp Path: "' + cdeadminFile + '"');
   misc.writeServerLog('CDEadmin Command: "' + command + '"');
-  misc.writeServerLog('Environment: ');
+  misc.writeServerLog('Native runtime paths: ');
   Object.keys(process.env).forEach(function (key) {
     // Below code is included only for Mac OS as default path for azure CLI
     // installation path is not included in PATH variable while spawning
@@ -270,7 +282,10 @@ function startDesktopMode() {
       process.env[key] = _libpq_path + ';' + process.env[key];
     }
 
-    misc.writeServerLog('  - ' + key + ': ' + process.env[key]);
+    if (['PATH', 'PYTHONPATH', 'CDEADMIN_FIREBIRD_CLIENT_LIBRARY', 'FIREBIRD',
+      'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH'].includes(key.toUpperCase())) {
+      misc.writeServerLog('  - ' + key + ': ' + process.env[key]);
+    }
   });
   misc.writeServerLog('--------------------------------------------------------\n');
 

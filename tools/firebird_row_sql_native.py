@@ -6,7 +6,7 @@ import subprocess
 
 def qualify(connection):
     from pgadmin.cdeadmin.providers.firebird.grid_values import bind_value
-    module = Path(__file__).resolve().parents[1] / 'web/pgadmin/static/js/Dialogs/firebirdRowSql.js'
+    module = Path(__file__).resolve().parents[1] / 'web/pgadmin/static/js/Dialogs/firebirdRowSqlHelpers.js'
     runner = """
 import {readFileSync} from 'node:fs';
 const m = await import('data:text/javascript;base64,' + readFileSync(process.argv[1]).toString('base64'));

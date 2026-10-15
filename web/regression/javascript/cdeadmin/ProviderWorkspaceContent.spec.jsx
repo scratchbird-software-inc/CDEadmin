@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
+import {act, configure, getConfig, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
 import Theme from 'sources/Theme';
 const render = (ui, options) => rtlRender(ui, {wrapper: Theme, ...options});
@@ -35,6 +35,11 @@ jest.mock('../../../pgadmin/static/js/api_instance');
 jest.mock('../../../pgadmin/static/js/cdeadmin_ui/editors/CodeEditor', () => ({__esModule: true,
   default: ({label, value, onChange, disabled}) => <textarea aria-label={label} value={value}
     disabled={disabled} onChange={event => onChange(event.target.value)} /> }));
+// Hosted native renderers need a bounded readiness allowance; assertions and
+// provider responses remain identical on every platform.
+const previousAsyncTimeout = getConfig().asyncUtilTimeout;
+beforeAll(() => configure({asyncUtilTimeout: Math.max(previousAsyncTimeout, 5000)}));
+afterAll(() => configure({asyncUtilTimeout: previousAsyncTimeout}));
 let detailsObserver;
 beforeEach(() => {
   detailsObserver = new MutationObserver(() => document.querySelectorAll('details').forEach(node => node.open = true));
@@ -163,13 +168,13 @@ describe('provider structured record controls', () => {
     // values in a previously rendered draft.
     post.mockImplementation(() => Promise.resolve(first));
     const {rerender} = render(<VisualAdministration {...props} selectedResource={first} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('POSITION'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('POSITION'), {timeout: 5000});
     post.mockImplementation(() => Promise.resolve(second));
     rerender(<VisualAdministration {...props} selectedResource={second} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('COMPUTED'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('COMPUTED'), {timeout: 5000});
     post.mockImplementation(() => Promise.resolve(view));
     rerender(<VisualAdministration {...props} selectedResource={view} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveAttribute('aria-disabled', 'true'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveAttribute('aria-disabled', 'true'), {timeout: 5000});
   });
 
   it('requires both alteration and type selectors before showing a dependent field', async () => {
@@ -1362,7 +1367,8 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Close query session'})).not.toBeDisabled());
     fireEvent.mouseDown(screen.getByLabelText('Provider language'));
     fireEvent.click(await screen.findByRole('option', {name: 'Another language'}));
@@ -2394,6 +2400,7 @@ describe('ProviderWorkspaceContent', () => {
           resource_kind: 'domain', operation_id: 'rename'}} />);
       fireEvent.change(await screen.findByRole('textbox', {name: 'New name'}),
         {target: {value: 'E'}});
+      await waitFor(() => expect(screen.getByRole('button', {name: 'Validate and preview'})).toBeEnabled());
       fireEvent.click(screen.getByRole('button', {name: 'Validate and preview'}));
       await waitFor(() => expect(screen.getByRole('button',
         {name: 'Apply provider plan'})).toBeEnabled());

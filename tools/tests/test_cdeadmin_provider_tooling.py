@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import sys
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,7 +66,7 @@ class ProviderToolRunnerTests(unittest.TestCase):
     def test_grants_and_arguments_fail_closed(self):
         with self.assertRaisesRegex(ProviderToolError, 'over-broad'):
             ProviderToolGrant(
-                executable_id='python', workspace='/',
+                executable_id='python', workspace=Path(tempfile.gettempdir()).anchor,
                 endpoint_host='127.0.0.1', endpoint_port=27017,
             )
         with tempfile.TemporaryDirectory(
@@ -96,7 +97,7 @@ class ProviderToolRunnerTests(unittest.TestCase):
                 ], secret_environment={'NEO4J_PASSWORD': secret},
                 redact_values=(secret,),
             )
-            self.assertEqual('[redacted]\n', result['stdout'])
+            self.assertEqual('[redacted]' + os.linesep, result['stdout'])
             with self.assertRaisesRegex(ProviderToolError, 'not granted'):
                 runner.run(
                     grant, ['-c', 'pass'],
@@ -126,7 +127,7 @@ class ProviderToolRunnerTests(unittest.TestCase):
                 secret_argument_position=2,
                 redact_values=('private-config',),
             )
-            self.assertEqual('[redacted]SELECT 1;\n', result['stdout'])
+            self.assertEqual('[redacted]SELECT 1;' + os.linesep, result['stdout'])
             self.assertEqual([input_path], list(root.iterdir()))
             with tempfile.NamedTemporaryFile() as outside:
                 with self.assertRaisesRegex(ProviderToolError, 'escapes'):
@@ -158,7 +159,7 @@ class ProviderToolRunnerTests(unittest.TestCase):
                 redact_values=('private-password-file',),
             )
             self.assertEqual(0, result['return_code'])
-            self.assertEqual('-pwf\n[redacted]', result['stdout'])
+            self.assertEqual('-pwf' + os.linesep + '[redacted]', result['stdout'])
             self.assertEqual([], list(Path(workspace).iterdir()))
 
 

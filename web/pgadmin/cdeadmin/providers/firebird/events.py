@@ -98,6 +98,10 @@ class EventSubscriptions:
                 close(connection)
                 item.cleanup_confirmed = True
                 item.state = 'failed'
+            except Exception as cleanup_error:
+                # Preserve the subscription receipt even when thread startup
+                # and attachment release both fail.
+                item.error_type = type(cleanup_error).__name__
             finally:
                 item.done.set()
         return item.snapshot()

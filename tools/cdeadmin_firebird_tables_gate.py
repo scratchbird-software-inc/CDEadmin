@@ -36,6 +36,9 @@ else:
     )
 
 
+from pgadmin.cdeadmin.operations.fileio import private_file
+
+
 def external_browser(route, options, result):
     """Exercise external-file forms without persisting test credentials."""
     root = options.output.parent / 'external-browser'
@@ -46,6 +49,7 @@ def external_browser(route, options, result):
         descriptor = os.open(profiles, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                              0o600)
         with os.fdopen(descriptor, 'w') as stream:
+            private_file(profiles)
             json.dump({'profiles': [{'engine': 'firebird', **route}]}, stream)
         for scale, theme in (('100', 'default'), ('200', 'high-contrast')):
             evidence = root / ('scale-' + scale)

@@ -25,8 +25,17 @@ def qualify(connection, route, password, destination=None, destination_route=Non
     connection.rollback()
     model = build_export(rows, endpoint_id='owned', target_id='owned', generation='native',
                          resource_id='table:DATA_EXPORT_TEST', native_model=True)
-    client = _create_client(SimpleNamespace(acquire_secret=lambda *_: SecretLease(password)))
-    scoped = {**route, 'credential_reference_id': 'owned-export', 'principal_reference': 'owned-export',
+    permissions = SimpleNamespace(require=lambda *_: True,
+                                  acquire_secret=lambda *_: SecretLease(password))
+    embedded = route.get('attachment_mode') == 'embedded'
+    if embedded:
+        from pgadmin.cdeadmin.providers.firebird.embedded_provider import PROFILE, ADMINISTRATION
+        client = _create_client(permissions, attachment_mode='embedded', profile=PROFILE,
+                                administration=ADMINISTRATION)
+    else:
+        client = _create_client(permissions, attachment_mode='network')
+    credentials = {} if embedded else {'credential_reference_id': 'owned-export', 'principal_reference': 'owned-export'}
+    scoped = {**route, **credentials,
               'transaction_access': 'READ', 'transaction_isolation': 'SNAPSHOT',
               'transaction_auto_commit': False, 'transaction_ignore_limbo': False}
     handles, actions, pages = {}, [], []
@@ -60,6 +69,9 @@ def qualify(connection, route, password, destination=None, destination_route=Non
     try:
         result = capture(Host(), None, model, contents='both')
         document = json.loads(result['download_text'])
+        from pgadmin.cdeadmin.workspace.firebird_data_ddn import read
+        assert result['ddn'].get('snapshot'), result['ddn']
+        assert json.loads(read(result['ddn']['download_text'])) == document
         table = document['tables'][0]
         assert result['row_count'] == 205 and pages == [200, 5], (result['row_count'], pages)
         assert actions == ['rollback'] and not handles
@@ -88,10 +100,9 @@ def qualify(connection, route, password, destination=None, destination_route=Non
             destination_model = build_export(_resources(destination, {}), endpoint_id='destination',
                 target_id='destination', generation='native-destination', native_model=True)
             destination.rollback()
-            planned = preview(result['download_text'], destination_model)
+            planned = preview(result['ddn']['download_text'], destination_model)
             assert planned['identity_requirements'] and all(op['override_identity'] for op in planned['operations'])
-            write_route = {**destination_route, 'credential_reference_id': 'owned-export',
-                'principal_reference': 'owned-export', 'transaction_access': 'WRITE',
+            write_route = {**destination_route, **credentials, 'transaction_access': 'WRITE',
                 'transaction_isolation': 'SNAPSHOT', 'transaction_auto_commit': False}
             for outcome in ('rollback', 'commit'):
                 handle = client.open_session({'route': write_route})
@@ -127,7 +138,7 @@ def qualify(connection, route, password, destination=None, destination_route=Non
                       'independent_visibility_verified': True}
         return {'passed': True, 'rows': 205, 'pages': pages, 'concurrent_commit_excluded': True,
                 'exact_numeric_blob_array_empty_null_and_negative_zero': True,
-                'owned_snapshot_released': True, 'sha256': result['sha256'], 'native_import': replay}
+                'owned_snapshot_released': True, 'static_ddn_roundtrip_and_native_import': True, 'sha256': result['sha256'], 'native_import': replay}
     finally:
         for handle in handles.values(): client.close_session(handle)
         client.close()

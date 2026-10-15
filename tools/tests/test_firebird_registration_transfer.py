@@ -46,7 +46,10 @@ def rig():
 
 
 def request(rig, **changes):
-    return {'target_id': rig.target.id, 'destination_server_id': rig.source.id,
+    destination = rig.destination if changes.get('destination_server_id') == rig.destination.id else rig.source
+    return {'source_generation': rig.source.endpoint_profile.profile_generation,
+            'destination_generation': destination.endpoint_profile.profile_generation,
+            'target_id': rig.target.id, 'destination_server_id': rig.source.id,
             'operation': 'clone', 'display_name': 'Alias', 'credentials': 'source',
             'confirmed': True, **changes}
 
@@ -164,6 +167,7 @@ def test_concurrent_clones_cannot_admit_two_identical_names(rig):
     from threading import Barrier
     barrier = Barrier(2)
     source_id, target_id = rig.source.id, rig.target.id
+    generation = rig.source.endpoint_profile.profile_generation
     class Registry:
         @contextmanager
         def endpoint_configuration_change(self, _endpoint_id):
@@ -176,7 +180,8 @@ def test_concurrent_clones_cannot_admit_two_identical_names(rig):
             try:
                 return transfer(service, source, {'target_id': target_id,
                     'destination_server_id': source_id, 'operation': 'clone',
-                    'display_name': 'Concurrent alias', 'credentials': 'source', 'confirmed': True})
+                    'display_name': 'Concurrent alias', 'credentials': 'source', 'confirmed': True,
+                    'source_generation': generation, 'destination_generation': generation})
             except EndpointRegistrationError as error:
                 return {'refused': str(error)}
             finally:
@@ -188,3 +193,63 @@ def test_concurrent_clones_cannot_admit_two_identical_names(rig):
     assert sum('refused' in item for item in results) == 1, results
     rig.model.db.session.expire_all()
     assert rig.model.EndpointDatabaseTarget.query.filter_by(display_name='Concurrent alias').count() == 1
+
+
+@pytest.mark.parametrize('endpoint_name', ['source', 'destination'])
+def test_reviewed_generation_cannot_follow_later_configuration(rig, endpoint_name):
+    reviewed = request(rig, destination_server_id=rig.destination.id)
+    endpoint = getattr(rig, endpoint_name).endpoint_profile
+    endpoint.profile_generation = str(uuid.uuid4())
+    rig.model.db.session.commit()
+    with pytest.raises(EndpointRegistrationError, match='configuration changed'):
+        transfer(rig.service, rig.source, reviewed)
+    assert rig.model.EndpointDatabaseTarget.query.count() == 1
+    assert rig.target.active and rig.target.display_name == 'Original'
+
+
+def test_destination_credentials_inherit_role_and_charset(rig):
+    rig.target.configuration = json.dumps({'role': 'SOURCE_ONLY', 'charset': 'ASCII', 'sql_dialect': 1})
+    rig.model.db.session.commit()
+    result = transfer(rig.service, rig.source, request(rig, credentials='destination'))
+    clone = rig.model.db.session.get(rig.model.EndpointDatabaseTarget, result['target']['target_id'])
+    assert json.loads(clone.configuration) == {'sql_dialect': 1}
+    assert not clone.registration_credentials
+    assert clone.registration_user is None and clone.registration_password is None
+
+
+@pytest.mark.parametrize('profile_id', ['firebird-native', 'firebird-embedded'])
+def test_created_database_gets_new_identity_beside_existing_alias(rig, profile_id):
+    rig.source.endpoint_profile.profile_id = profile_id
+    rig.model.db.session.commit()
+    old_id = rig.target.id
+    value = rig.service.retain_created_database(rig.source, {
+        'database': rig.target.database, 'display_name': 'Replacement'})
+    replacement = next(item for item in value['targets'] if item['display_name'] == 'Replacement')
+    assert replacement['target_id'] != old_id and replacement['active']
+    assert rig.target.id == old_id and not rig.target.active
+    assert rig.target.display_name == 'Original'
+    assert rig.model.EndpointDatabaseTarget.query.count() == 2
+
+
+@pytest.mark.parametrize('profile_id', ['firebird-native', 'firebird-embedded'])
+def test_created_database_registration_collision_keeps_existing_alias(rig, profile_id):
+    rig.source.endpoint_profile.profile_id = profile_id
+    rig.model.db.session.commit()
+    generation = rig.source.endpoint_profile.profile_generation
+    with pytest.raises(EndpointRegistrationError, match='without repeating native creation'):
+        rig.service.retain_created_database(rig.source, {
+            'database': rig.target.database, 'display_name': rig.target.display_name})
+    assert rig.model.EndpointDatabaseTarget.query.count() == 1
+    assert rig.target.active
+    assert rig.source.endpoint_profile.profile_generation == generation
+
+
+def test_removing_inactive_alias_invalidates_reviewed_transfer(rig):
+    cloned = transfer(rig.service, rig.source, request(rig))
+    reviewed = request(rig, display_name='Later clone')
+    rig.service.delete_database_target(rig.source, cloned['target']['target_id'],
+                                      {'confirmation': rig.target.database})
+    assert rig.source.endpoint_profile.profile_generation != reviewed['source_generation']
+    with pytest.raises(EndpointRegistrationError, match='configuration changed'):
+        transfer(rig.service, rig.source, reviewed)
+    assert rig.model.EndpointDatabaseTarget.query.count() == 1

@@ -291,8 +291,8 @@ Catalog document admission and comparison
 
 The export form also accepts a single UTF-8 catalog DDN document for read-only
 comparison with the selected authorized database generation. The paired public
-DDN parser reads the document; no imports, external assets or embedded SQL are
-executed. Admission is bounded by the export limits, parser memory, concurrency
+DDN parser reads the document and resolves imports only inside its admitted
+in-memory workspace. External assets and embedded SQL are never executed. Admission is bounded by the export limits, parser memory, concurrency
 and timeout. Duplicate identities, invalid JSON, duplicate JSON properties,
 non-finite numbers, inconsistent object counts and unsupported mapping versions
 are refused. Native JSON is decoded on the host to preserve integer precision.
@@ -315,7 +315,7 @@ and compares them with an authorized current capture. All three must identify
 the same registered database. Native planning coverage includes standalone
 sequences, exceptions, indexes, roles, BLOB filters, domains, tables, columns,
 constraints, triggers, standalone procedures/functions, packages and views on
-Firebird 5 / dialect 3, including the explicit identity, removal, domain-type and
+Firebird 5 / stored dialect 1 or 3, including the explicit identity, removal, domain-type and
 column-domain lifecycles below, subject to
 the per-kind contracts below. Coverage is reported in the
 plan; it does not imply support for every catalog kind. Changed unsupported
@@ -369,9 +369,11 @@ external resolution. Native identities remain independent of file placement.
 Import/comparison/planning accept either the original DDN source or the complete
 workspace JSON download. All contained files are parsed through the paired DDN
 API, and resource/UID uniqueness and object count are checked across all files.
-Duplicate JSON properties, unsupported envelope fields, paths outside the flat
-catalog filename set, unknown entry/view, imports and multiple provenance records
-are rejected. Limits remain 20,000 resources and an 8 MiB downloaded artifact,
+Duplicate JSON properties, unsupported envelope fields, unsafe relative paths,
+unknown entry/view and multiple provenance records are rejected. Nested .ddn
+files and relative imports within the admitted workspace are accepted. Missing,
+external, root-escaping or cyclic imports are rejected. Every contained view,
+including hidden/unselected views, validates through the public DDN runtime. Limits remain 20,000 resources and an 8 MiB downloaded artifact,
 with at most 64 files and 2,000,000 UTF-16 units per file. Pages are bounded by
 both 100 records and source size. A record or provenance block too large to fit
 one admitted file is refused explicitly; it is never split or truncated. Source
@@ -532,7 +534,7 @@ remain outside this creation contract.
 Reviewed native application
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For admitted Firebird 5 dialect 3 operations, a separate Prepare application
+For admitted Firebird 5 operations, a separate Prepare application
 request reauthorizes the registered target, refreshes metadata and verifies the
 execution fingerprint of the displayed plan. A five-minute review binds the
 owner, endpoint/target, route configuration, native database GUID/file identity,
@@ -1184,8 +1186,9 @@ UID. It builds baseline and desired catalog documents for the existing
 three-way planner, retaining uncaptured objects unchanged. The original native
 facts, not the latest capture, form the baseline for the selected definitions.
 
-Diagram labels, field display types, view membership and edge geometry remain
-presentation; native changes use the explicitly recorded native facts. Missing
+Diagram labels, view membership and edge geometry remain presentation. Native
+changes use explicitly recorded native facts or the bounded graphical column
+properties described below. Missing
 or hidden relational elements do not imply deletion. New identities and missing
 native objects require explicit catalog design reconciliation. Duplicate or
 foreign UIDs, changed adapter-only foreign-key column labels and unsupported
@@ -1200,3 +1203,46 @@ Field omissions are presentation only. Native and graphical changes to the same
 clause must agree; new/renamed field identities need explicit reconciliation.
 This scoped adapter supersedes the presentation-only rule for those properties
 on MySQL; it does not change the native meaning of other engines' diagram fields.
+
+
+Firebird exchange and migration qualification (FB-COMP-03/09)
+-----------------------------------------------------------
+
+Firebird relational handoff admits datatype, nullable and description edits on
+existing UID-bound columns. Scalar native types include exact numerics, decimal
+floating point, temporal/time-zone, character and binary types. Character types
+require explicit observed CHARACTER SET; collations must belong to that set.
+The adapter reconstructs physical native descriptors and passes them to the
+existing three-way planner. Conflicting native/graphical edits are rejected.
+Omitted properties do not remove facts. Arrays, named domains, computed/identity
+columns and specialized types retain their complete native JSON and specialized
+lifecycle review; a graphical string cannot erase those constraints. New objects,
+renames, constraints and removals use explicit native definitions/lifecycle
+intent through the catalog designer and the same review/apply path.
+
+Planning binds the observed stored database dialect independently of the client
+attachment dialect. Dialect 1 emits representable unquoted identifiers and blocks
+unrepresentable names; it never folds an authored quoted identity into another
+object. Dialect drift invalidates a review. Types and statements remain subject
+to the selected dialect and Firebird's native acceptance.
+
+Data archives additionally contain portable static DDN table views, paged at
+100 rows and the paired source-size limit. Exact typed values remain JSON text:
+large integers, decimals, binary, arrays, time zones, NULL and empty values are
+not converted into diagram display numbers. The complete column-layout/provenance
+envelope accompanies the views. Row UIDs are export ordinals, not database keys.
+The viewer selects every page; downloads include the complete workspace. A DDN
+size failure explicitly disables that artifact while retaining the complete
+native archive. DDN import reconstructs the versioned archive and uses existing
+destination-layout checks, reviewed row ordering, staging and separately chosen
+native commit/rollback. Metadata in the data envelope is never executable SQL.
+
+The local qualification gate is ``tools/cdeadmin_firebird_ddn_exchange_gate.py``.
+It runs separate owned fixtures for native schema families, graphical handoff on
+network and embedded attachments, stored dialect 1, typed DDN data replay, native
+ISQL export restoration and commit reply loss. SQL replay covers cyclic foreign
+keys, mutual PSQL/package bodies, comments, grants, trigger families and inactive
+indexes. Reply loss retains an unknown outcome and a spent durable review token;
+independent rediscovery cannot retroactively assert receipt of the lost reply.
+Linux Firebird 5.0.4 evidence does not qualify Windows/macOS, another engine, or
+human-team form validation.

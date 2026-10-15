@@ -21,6 +21,7 @@ from unittest.mock import patch, Mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
+NATIVE_EXECUTABLE = str(Path(sys.executable).resolve())
 WEB = ROOT / 'web'
 if str(WEB) not in sys.path:
     sys.path.insert(0, str(WEB))
@@ -363,6 +364,18 @@ class _IgniteClient:
 
 
 class DistributedProviderTests(unittest.TestCase):
+    def test_foundationdb_descriptors_do_not_load_an_optional_native_client(self):
+        module = SimpleNamespace(
+            is_api_version_selected=Mock(return_value=False),
+            get_api_version=Mock(return_value=730),
+            api_version=Mock(side_effect=RuntimeError('native SDK absent')),
+        )
+        backend = FoundationDBBackend(module=module)
+        module.api_version.assert_not_called()
+        with self.assertRaisesRegex(NativeDistributedError, 'native client library is unavailable'):
+            backend._configure_network({'tls_mode': 'disabled'}, None)
+        module.api_version.assert_called_once_with(730)
+
 
     def test_distributed_resource_properties_follow_native_object_kind(self):
         table = resource(
@@ -1073,7 +1086,7 @@ class DistributedProviderTests(unittest.TestCase):
 
     def test_vitess_control_plane_connection_options_are_typed(self):
         with TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             files = {}
             for key in (
                     'vtctld_grpc_ca', 'vtctld_grpc_cert',
@@ -1117,7 +1130,7 @@ class DistributedProviderTests(unittest.TestCase):
 
     def test_vitess_control_plane_connection_options_fail_closed(self):
         with TemporaryDirectory() as directory:
-            certificate = Path(directory) / 'client.crt'
+            certificate = Path(directory).resolve() / 'client.crt'
             certificate.touch()
             with self.assertRaisesRegex(
                     RelationalClientError, 'certificate and key'):
@@ -1802,7 +1815,7 @@ class DistributedProviderTests(unittest.TestCase):
 
     def test_foundationdb_preserves_multicall_tool_symlink_name(self):
         with TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             target = root / 'fdbbackup'
             target.write_text('#!/bin/sh\n', encoding='utf-8')
             target.chmod(0o700)
@@ -1989,7 +2002,7 @@ class DistributedProviderTests(unittest.TestCase):
     def test_tidb_br_recovery_is_typed_allowlisted_and_native(self):
         route = {
             'host': '127.0.0.1', 'port': 4000,
-            'br_path': '/bin/true',
+            'br_path': NATIVE_EXECUTABLE,
             'br_pd_addresses': '127.0.0.1:2379,127.0.0.2:2379',
             'br_storage_allowlist': 'local:///srv/cdeadmin/backups/',
         }
@@ -2022,7 +2035,7 @@ class DistributedProviderTests(unittest.TestCase):
         ) as runner:
             response = run_tidb_br(route, action['arguments'])
         command = runner.call_args.args[0]
-        self.assertEqual('/usr/bin/true', command[0])
+        self.assertEqual(NATIVE_EXECUTABLE, command[0])
         self.assertIn(
             '--pd=127.0.0.1:2379,127.0.0.2:2379', command)
         self.assertFalse(response['automatic_mutation_retry'])
@@ -2038,7 +2051,7 @@ class DistributedProviderTests(unittest.TestCase):
         )
         route = {
             'host': '127.0.0.1', 'port': 4000, 'user': 'root',
-            'br_path': '/bin/true',
+            'br_path': NATIVE_EXECUTABLE,
             'br_pd_addresses': '127.0.0.1:2379',
             'br_storage_allowlist': ['local:///approved/'],
             'br_backup_artifacts': [{
@@ -2103,7 +2116,7 @@ class DistributedProviderTests(unittest.TestCase):
     def test_tidb_ticdc_lifecycle_is_allowlisted_and_redacted(self):
         route = {
             'host': '127.0.0.1', 'port': 4000,
-            'ticdc_path': '/bin/true',
+            'ticdc_path': NATIVE_EXECUTABLE,
             'ticdc_server': 'http://127.0.0.1:8300',
             'ticdc_sink_allowlist': 'kafka://broker.internal/',
         }
@@ -2137,7 +2150,7 @@ class DistributedProviderTests(unittest.TestCase):
         ) as runner:
             response = run_tidb_cdc(route, action['arguments'])
         command = runner.call_args.args[0]
-        self.assertEqual('/usr/bin/true', command[0])
+        self.assertEqual(NATIVE_EXECUTABLE, command[0])
         self.assertEqual([
             '--server', 'http://127.0.0.1:8300',
         ], command[-2:])
@@ -2145,11 +2158,11 @@ class DistributedProviderTests(unittest.TestCase):
 
     def test_tidb_ticdc_tls_and_password_are_provider_owned(self):
         route = {
-            'ticdc_path': '/bin/true',
+            'ticdc_path': NATIVE_EXECUTABLE,
             'ticdc_server': 'https://cdc.internal:8300',
-            'ticdc_ca': '/bin/true',
-            'ticdc_cert': '/bin/true',
-            'ticdc_key': '/bin/true',
+            'ticdc_ca': NATIVE_EXECUTABLE,
+            'ticdc_cert': NATIVE_EXECUTABLE,
+            'ticdc_key': NATIVE_EXECUTABLE,
             'ticdc_user': 'cdeadmin',
             'ticdc_password': 'secret-canary',
         }
@@ -2177,7 +2190,7 @@ class DistributedProviderTests(unittest.TestCase):
     def test_tidb_sql_user_is_not_reused_as_ticdc_principal(self):
         route = {
             'user': 'sql-root',
-            'ticdc_path': '/bin/true',
+            'ticdc_path': NATIVE_EXECUTABLE,
             'ticdc_server': 'http://127.0.0.1:8300',
         }
         version = SimpleNamespace(
@@ -2223,7 +2236,7 @@ class DistributedProviderTests(unittest.TestCase):
             config, module=SimpleNamespace(connect=lambda **_kwargs: None)
         )
         request = {'provider_payload': {'route': {
-            'ticdc_path': '/bin/true',
+            'ticdc_path': NATIVE_EXECUTABLE,
             'ticdc_server': 'https://cdc.internal:8300',
             'credential_references': {
                 'tidb_ticdc_password': 'ticdc-reference',
@@ -2456,7 +2469,7 @@ class DistributedProviderTests(unittest.TestCase):
             'draft': {'checks': 'strict', 'wait': 'none'},
             '_provider_route': {
                 'host': '127.0.0.1', 'port': 26257,
-                'cockroach_path': '/bin/true',
+                'cockroach_path': NATIVE_EXECUTABLE,
                 'cockroach_insecure': True,
             },
         })
@@ -2477,7 +2490,7 @@ class DistributedProviderTests(unittest.TestCase):
                 compiled['provider_action']['arguments'],
             )
         command = runner.call_args.args[0]
-        self.assertEqual('/usr/bin/true', command[0])
+        self.assertEqual(NATIVE_EXECUTABLE, command[0])
         self.assertEqual('7', command[-1])
         self.assertIn('--host=127.0.0.1:26257', command)
         self.assertIn('--format=json', command)

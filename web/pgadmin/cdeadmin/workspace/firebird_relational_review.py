@@ -52,7 +52,7 @@ def read_relations(snapshot, *, engine="firebird"):
             raise ValueError('Duplicate relational field identity')
         children = []
         for row in rows:
-            if engine in {'postgresql', 'mysql', 'mariadb'}:
+            if engine in {'firebird', 'postgresql', 'mysql', 'mariadb'}:
                 row['fields'] = {field['uid']: {**field['properties'], '_label': field['label'],
                     '_property_names': field['property_names']} for field in parsed['field_records']
                                  if field['parent_resource_id'] == row['resource_id']}
@@ -71,7 +71,8 @@ def read_relations(snapshot, *, engine="firebird"):
                 if uid not in fields:
                     raise ValueError('Relational column facts lack their exact field identity')
                 children.append({**column, 'uid': uid, 'native_json': _exact_json(column['native']),
-                                 'parent_resource_id': row['resource_id']})
+                                 'parent_resource_id': row['resource_id'],
+                                 'fields': row.get('fields', {}).get(uid, {})})
         if engine in {"mysql", "mariadb"} and rows:
             rows[0]["graphical_relationships"] = parsed.get("relationships", [])
         combined = rows + children
@@ -131,6 +132,9 @@ def handoff(catalog_snapshot, original, desired, *, engine="firebird", allow_new
                 from .mysql_relational_constraints import merge_constraints
                 facts[1] = merge_constraints({'name':live['name'],'native':facts[0]},facts[1],
                     constraint_changes[identity],mode,engine=engine)
+        if engine == 'firebird' and row.get('parent_resource_id'):
+            from .firebird_relational_fields import merge_fields
+            facts[1] = merge_fields(old, row, current)
         if engine == 'postgresql':
             from .postgresql_relational_fields import merge_fields
             facts[1] = merge_fields(old, row)

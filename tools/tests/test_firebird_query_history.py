@@ -143,3 +143,35 @@ def test_native_error_is_preserved_when_history_observation_also_fails():
         service._record_query_request(server, SCOPE.target, 3, 'select 1', False, 'statement', execute)
     assert raised.value is native_error
     execute.assert_called_once_with()
+
+
+
+@pytest.mark.parametrize('source',["CONNECT 'remote:db' USER 'name' PASS 'test-only-credential';", "CREATE DATABASE 'newdb' USER 'name' PASS 'test-only-credential';"])
+def test_connection_source_never_persists_abbreviated_credentials(history,source):
+    store,_=history
+    store.configure(SCOPE,POLICY)
+    store.record(SCOPE,source,kind='script-prepared')
+    assert store.read(SCOPE)['entries'][0]['source'] is None
+    from sqlalchemy.orm import Session
+    with Session(store.engine) as session:
+        assert b'test-only-credential' not in b''.join(row.query_info for row in session.query(QueryHistoryModel).all())
+
+
+def test_history_policy_and_source_survive_new_application_store_connections(history):
+    store, _ = history
+    store.configure(SCOPE, POLICY)
+    entry = store.record(SCOPE, 'SELECT 42 FROM RDB$DATABASE')
+    store.observation(SCOPE, entry['entry_id'], 'accepted')
+    location = store.engine.url
+    store.engine.dispose()
+    reopened_engine = create_engine(location)
+    try:
+        reopened = QueryHistory(reopened_engine, QueryHistoryModel, store.clock)
+        result = reopened.read(SCOPE, 'select 42')
+        assert result['policy'] == POLICY
+        assert result['entries'][0]['entry_id'] == entry['entry_id']
+        assert result['entries'][0]['request_state'] == 'accepted'
+        assert result['entries'][0]['source'] == 'SELECT 42 FROM RDB$DATABASE'
+        assert reopened.read(HistoryScope(2, 2, SCOPE.target, 3))['entries'] == []
+    finally:
+        reopened_engine.dispose()

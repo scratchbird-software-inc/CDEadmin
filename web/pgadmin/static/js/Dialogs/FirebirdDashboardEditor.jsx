@@ -33,13 +33,13 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
   useEffect(() => {
     let active = true;
     getApiInstance().get(endpoint).then(async ({data}) => {
-      if(['postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) && !data.data.snapshot) {
-        const monitor = serverId == null ? url_for(`cdeadmin_${engine}_monitoring.fleet`) :
-          url_for(`cdeadmin_${engine}_monitoring.monitoring`, {sid: serverId}) +
+      if(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) && !data.data.snapshot) {
+        const monitor = serverId == null ? url_for(engine === 'firebird' ? 'cdeadmin_monitoring.fleet' : `cdeadmin_${engine}_monitoring.fleet`) :
+          url_for(engine === 'firebird' ? 'cdeadmin_monitoring.monitoring' : `cdeadmin_${engine}_monitoring.monitoring`, {sid: serverId}) +
           (targetId ? `?target_id=${encodeURIComponent(targetId)}` : '');
         const current = (await getApiInstance().get(monitor)).data.data;
         const scope = serverId == null ? 'engine' : targetId ? 'database' : 'server';
-        const files = engine === 'sqlite' ? (serverId == null ? sqliteFleetFiles(current) : sqliteDashboardFiles(current, scope)) : engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(current) : duckdbDashboardFiles(current, scope)) : ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(current, engine) : mysqlDashboardFiles(current, scope, engine)) :
+        const files = engine === 'firebird' ? (serverId == null ? firebirdFleetFiles(current) : firebirdDashboardFiles(current, 'Firebird dashboard draft', scope)) : engine === 'sqlite' ? (serverId == null ? sqliteFleetFiles(current) : sqliteDashboardFiles(current, scope)) : engine === 'duckdb' ? (serverId == null ? duckdbFleetFiles(current) : duckdbDashboardFiles(current, scope)) : ['mysql', 'mariadb'].includes(engine) ? (serverId == null ? mysqlFleetFiles(current, engine) : mysqlDashboardFiles(current, scope, engine)) :
           serverId == null ? postgresqlFleetFiles(current) : postgresqlDashboardFiles(current, 'PostgreSQL dashboard draft', scope);
         const {viewer} = await loadDDNLibraries();
         // Discover binding identities, but never persist sampled telemetry in a draft.

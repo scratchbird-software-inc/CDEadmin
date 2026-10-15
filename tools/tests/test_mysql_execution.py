@@ -149,6 +149,34 @@ def test_late_error_keeps_earlier_result_and_protocol_failure_quarantines():
     connection.ping.assert_not_called()
 
 
+def test_c_driver_ok_then_rows_keeps_raw_values_and_later_server_error():
+    from mysql.connector.errors import ProgrammingError
+    owner, connection, native = harness([[], [1]])
+    mode = {'raw': False}  # The preceding identity/catalog cursor used typed rows.
+    connection._cmysql = SimpleNamespace(raw=lambda enabled: mode.update(raw=enabled))
+    fetch = native.fetchone
+    advance = native.nextset
+
+    def fetchone():
+        row = fetch()
+        # The C connector's initial OK response leaves its previous conversion
+        # mode intact, even though this query cursor was requested raw=True.
+        return row if mode['raw'] or row is None else (int(row[0]),)
+
+    def nextset():
+        if native.index == 1:
+            raise ProgrammingError(msg='Owned later statement failed', errno=1146, sqlstate='42S02')
+        return advance()
+
+    native.fetchone = fetchone
+    native.nextset = nextset
+    token = owner.execute(connection, {'source': 'INSERT; SELECT; failing SELECT'}, {})
+    pages = drain(owner, token)
+    assert [row for page in pages for row in page['payload']['rows']] == [(1,)]
+    assert pages[-1]['payload']['error']['errno'] == 1146
+    assert pages[-1]['payload']['session_reuse_blocked'] is False
+
+
 def test_cancel_verifies_winning_endpoint_before_native_kill():
     owner, connection, native = harness([list(range(4096))])
     connection.server_host = 'winning-host'

@@ -1,7 +1,7 @@
 import {duckdbExecution} from '../../../pgadmin/static/js/cdeadmin_ui/editors/duckdbExecution';
 
 test('prepares native DuckDB statement spans around Unicode and quoted semicolons', async () => {
-  const first = "SELECT '😀;'", second = 'SELECT 2';
+  const first = 'SELECT \'😀;\'', second = 'SELECT 2';
   const source = first + ';\n' + second + ';';
   const validate = jest.fn().mockResolvedValue({syntax_valid: true, statements: [
     {source: first, start: 0, end: Array.from(first).length},
