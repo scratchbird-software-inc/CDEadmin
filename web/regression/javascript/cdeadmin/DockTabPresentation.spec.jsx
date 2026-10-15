@@ -70,13 +70,18 @@ describe('CDEadmin main dock tab switcher', () => {
       '& > .dock > .dock-bar:has(.dock-tab):not(:has(.dock-tab ~ .dock-tab))'
     ]).toEqual({display: 'none'});
     const main = panel['&.dock-style-playground']['&[data-dockid="id-main"]'];
-    const tab = main['& > .dock > .dock-bar']['& .dock-tab'];
+    const dockBar = main['& > .dock > .dock-bar'];
+    expect(dockBar.minHeight).toBe('30px');
+    expect(dockBar.maxHeight).toBe('30px');
+    const tab = dockBar['& .dock-tab'];
     expect(tab.filter).toBe(
       'brightness(var(--cde-inactive-brightness, 0.85))'
     );
     expect(tab.margin).toBe(0);
     expect(tab.height).toBe('100%');
-    expect(main['& > .dock > .dock-bar']['& .dock-nav, & .dock-nav-wrap, & .dock-nav-list'].padding).toBe(0);
+    expect(dockBar['& .dock-nav, & .dock-nav-wrap, & .dock-nav-list'].padding).toBe(0);
+    expect(tab['& > div'].alignItems).toBe('center');
+    expect(tab['& > div'].paddingLeft).toBe('5px');
     expect(tab['&.dock-tab-active']).toMatchObject({
       backgroundColor: '#00f',
       color: '#fff',

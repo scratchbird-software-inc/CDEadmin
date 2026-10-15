@@ -752,47 +752,53 @@ def create_app(app_name=None):
                             inst_key.Close()
                     except Exception:
                         pass
-        else:
-            # We use the postgres-winreg.ini file on non-Windows
+        elif os.name != 'nt':
+            # Unix hosts may auto-register from postgres-reg.ini.
             from configparser import ConfigParser
 
             registry = ConfigParser()
+            try:
+                registry.read('/etc/postgres-reg.ini')
+                sections = registry.sections()
 
-        try:
-            registry.read('/etc/postgres-reg.ini')
-            sections = registry.sections()
+                # Loop the sections, and get the data from any that are PG
+                # or PPAS
+                for section in sections:
+                    if (
+                        section.startswith('PostgreSQL/') or
+                        section.startswith('EnterpriseDB/')
+                    ):
+                        svr_name = registry.get(section, 'Description')
+                        svr_superuser = registry.get(section, 'Superuser')
 
-            # Loop the sections, and get the data from any that are PG or PPAS
-            for section in sections:
-                if (
-                    section.startswith('PostgreSQL/') or
-                    section.startswith('EnterpriseDB/')
-                ):
-                    svr_name = registry.get(section, 'Description')
-                    svr_superuser = registry.get(section, 'Superuser')
+                        # getint function throws exception if value is blank.
+                        # Ex: Port=
+                        # In such case we should handle the exception and
+                        # continue to read the next section of the config
+                        # file.
+                        try:
+                            svr_port = registry.getint(section, 'Port')
+                        except ValueError:
+                            continue
 
-                    # getint function throws exception if value is blank.
-                    # Ex: Port=
-                    # In such case we should handle the exception and continue
-                    # to read the next section of the config file.
-                    try:
-                        svr_port = registry.getint(section, 'Port')
-                    except ValueError:
-                        continue
+                        svr_discovery_id = section
+                        description = registry.get(section, 'Description')
+                        data_directory = registry.get(
+                            section, 'DataDirectory'
+                        )
+                        svr_comment = gettext(
+                            "Auto-detected {0} installation with the data "
+                            "directory at {1}"
+                        ).format(description, data_directory)
+                        add_server(
+                            user_id, servergroup_id, svr_name,
+                            svr_superuser, svr_port, svr_discovery_id,
+                            svr_comment
+                        )
 
-                    svr_discovery_id = section
-                    description = registry.get(section, 'Description')
-                    data_directory = registry.get(section, 'DataDirectory')
-                    svr_comment = gettext("Auto-detected {0} installation "
-                                          "with the data directory at {1}"
-                                          ).format(description, data_directory)
-                    add_server(user_id, servergroup_id, svr_name,
-                               svr_superuser, svr_port, svr_discovery_id,
-                               svr_comment)
-
-        except Exception as e:
-            print(str(e))
-            db.session.rollback()
+            except Exception as e:
+                print(str(e))
+                db.session.rollback()
 
     @user_logged_in.connect_via(app)
     @user_logged_out.connect_via(app)

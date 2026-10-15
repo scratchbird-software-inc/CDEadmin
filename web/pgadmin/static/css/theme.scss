@@ -8,7 +8,8 @@
 
 // Custom web UI styles. gulp compiles this file to theme.css, which
 // style.css includes last via @import './theme.css'.
-.css-1aqhq9s .css-f3842r {
+// Use stable WelcomeDashboard class names — Emotion hashes change per theme.
+.WelcomeDashboard-root {
     background: #EFF4FC;
 
     .WelcomeDashboard-card {
@@ -23,9 +24,9 @@
     .WelcomeDashboard-launchGrid {
         grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
     }
-    
+
     .WelcomeDashboard-launchTile {
-        border: none;
+        border: none !important;
         border-radius: 20px;
         color: #326690 !important;
         box-shadow: 4px 4px 20px -15px;
@@ -33,11 +34,16 @@
         svg {
             color: #326690;
         }
+
+        &:hover:not(:disabled) {
+            border: none !important;
+        }
     }
 }
 
 .dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"] > .dock > .dock-bar {
-    min-height: max(34px, 3.25rem, var(--cde-tab-height, 34px)) !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
 
     .dock-ink-bar {
         display: none !important;
@@ -99,7 +105,7 @@
 
 .dock-layout .dock-panel.dock-style-playground[data-dockid="id-main"]>.dock>.dock-bar .dock-tab {
     padding: 0 !important;
-    margin: 0 12px 0 0 !important;
+    margin: 0 !important;
 
     &.dock-tab-active {
         background: #0077B6 !important;
@@ -112,6 +118,14 @@
     }
 
     > div {
-        padding: 0 !important;
+        align-items: center !important;
+        padding: 0 0 0 5px !important;
+    }
+}
+
+// Dark mode keeps the same layout, radii, and shadows as light — colour only.
+html[data-theme="dark"] {
+    .WelcomeDashboard-root {
+        background: #121212;
     }
 }

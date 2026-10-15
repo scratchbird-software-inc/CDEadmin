@@ -2,7 +2,6 @@ import { Box, Icon } from '@mui/material';
 import { useState } from 'react';
 import { InputSelectNonSearch, InputText, MESSAGE_TYPE, NotifierMessage } from '../components/FormComponents';
 import BasePage, { SecurityButton } from './BasePage';
-import LoginIllustration from './LoginIllustration';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
 import {QAVisualIdentityToggle} from 'sources/cdeadmin_ui/qa';
@@ -29,7 +28,7 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
         marginRight: 'auto',
         marginLeft: 'auto'
       }} textCenter />}
-      <BasePage title={gettext('Login')} pageImage={<LoginIllustration />} {...props}>
+      <BasePage title={gettext('Login')} {...props}>
         <form data-cdeadmin-qa-key="security.login.form"
           style={{display:'flex', gap:'15px', flexDirection:'column'}}
           action={loginUrl} method="POST">

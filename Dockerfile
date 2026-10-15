@@ -28,14 +28,18 @@ RUN apk add --no-cache \
     nasm \
     nodejs \
     npm \
+    python3 \
     yarn \
     zlib-dev
 
+# webpack.config.js runs ../tools/refresh_ddn.py from web/ (repo-root layout).
+COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
 # Create the CDEadmin build directory and copy the source into it.
 COPY web /cdeadmin/web
 WORKDIR /cdeadmin/web
 
 # Build the JS vendor code in the app-builder, and then remove the vendor source.
+ENV SCRATCHROBIN_DDN_OFFLINE=1
 RUN --mount=type=bind,source=.git,target=/cdeadmin/.git \
     --mount=type=tmpfs,target=node_modules \
     --mount=type=tmpfs,target=pgadmin/static/js/generated/.cache \

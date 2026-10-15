@@ -29,6 +29,28 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def verify_vendored_only():
+    """Check the checked-in vendor bundle without the sister-project checkout."""
+    manifest_path = DEST / 'resource-manifest.json'
+    if not manifest_path.exists():
+        raise RuntimeError(
+            'No vendored DDN bundle at web/pgadmin/static/vendor/ddn/current')
+    previous = json.loads(manifest_path.read_text())
+    tool_hash = digest(Path(__file__))
+    if previous.get('intake_tool_sha256') != tool_hash:
+        print('Note: refresh_ddn.py differs from manifest; offline artifact check only')
+    artifacts = previous.get('artifacts') or {}
+    if not artifacts:
+        raise RuntimeError('Vendored DDN manifest has no artifacts')
+    for name, sha in artifacts.items():
+        path = DEST / name
+        if not path.is_file() or digest(path) != sha:
+            raise RuntimeError(
+                f'Vendored DDN artifact missing or stale: {name}')
+    print('DDN vendored snapshot verified (offline):',
+          previous.get('version', 'unknown'))
+
+
 def inventory(source):
     # Include uncommitted and untracked source, never ignored caches/dependencies.
     paths = git(source, 'ls-files', '-z', '--cached', '--others',
@@ -46,6 +68,10 @@ def inventory(source):
 
 
 def refresh(source, work):
+    offline = os.environ.get('SCRATCHROBIN_DDN_OFFLINE', '').strip().lower()
+    if offline in ('1', 'true', 'yes'):
+        verify_vendored_only()
+        return
     work.mkdir(parents=True, exist_ok=True)
     before = inventory(source)
     manifest_path = DEST / 'resource-manifest.json'
