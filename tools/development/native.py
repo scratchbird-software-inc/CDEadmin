@@ -43,6 +43,8 @@ def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
 
 def environment():
     env = dict(os.environ)
+    env['PYTHONUTF8'] = '1'
+    env['PYTHONIOENCODING'] = 'utf-8'
     additions = []
     if platform.system() == 'Darwin' and shutil.which('brew'):
         for formula in ('libpq', 'mariadb-connector-c', 'krb5'):
@@ -189,6 +191,9 @@ def ci(evidence):
 
 
 def main():
+    for output in (sys.stdout, sys.stderr):
+        if hasattr(output, 'reconfigure'):
+            output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('doctor', 'python', 'ddn', 'frontend',
                                          'configure', 'init', 'run', 'verify', 'ci'))
