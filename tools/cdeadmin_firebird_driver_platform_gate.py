@@ -129,7 +129,7 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
         if route.get('trusted_auth'):
             receipt['authenticated_user'] = sql(owner, 'SELECT CURRENT_USER FROM RDB$DATABASE')[0][0]
             assert receipt['authenticated_user'] == 'SYSDBA'
-            assert receipt['auth_method'] == 'Win_Sspi'
+            assert receipt['auth_method'] in {'Win_Sspi', 'Mapped from Win_Sspi'}
         sql(owner, 'CREATE TABLE OWNED_DRIVER(ID INT PRIMARY KEY, '
             '"été" VARCHAR(80) CHARACTER SET UTF8, '
             'A INTEGER[-1:1], TXT BLOB SUB_TYPE TEXT CHARACTER SET UTF8)')
@@ -174,6 +174,29 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
         finally:
             stream('close')
         receipt['checks'].append('bounded_blob_stream')
+        client.control_transaction(owner, 'rollback')
+        sql(owner, 'CREATE TABLE OWNED_GB ("ḿ︐" VARCHAR(40) CHARACTER SET GB18030, '
+            'A VARCHAR(20)[0:1] CHARACTER SET GB18030)')
+        client.control_transaction(owner, 'commit')
+        gb = client.open_session({'route': dict(target, charset='GB18030')})
+        try:
+            value = 'ḿ︐龴🙂'
+            statement = 'INSERT INTO OWNED_GB ("ḿ︐", A) VALUES (?, ?)'
+            sql(gb, statement, [value, [value, '日本']])
+            transaction_id = gb.main_transaction.info.id
+            del gb._cdeadmin_gb18030_encoding
+            from pgadmin.cdeadmin.providers.firebird.gb18030_profile import encoding
+            receipt['gb18030_encoding'] = encoding(gb)
+            assert gb.main_transaction.is_active() and gb.main_transaction.info.id == transaction_id
+            assert sql(observer, 'SELECT COUNT(*) FROM OWNED_GB') == [(0,)]
+            client.control_transaction(observer, 'rollback')
+            assert sql(gb, 'SELECT "ḿ︐", A FROM OWNED_GB') == [(value, [value, '日本'])]
+            client.control_transaction(gb, 'rollback')
+            assert sql(gb, 'SELECT COUNT(*) FROM OWNED_GB') == [(0,)]
+            client.control_transaction(gb, 'rollback')
+            receipt['checks'].append('native_gb18030_profile_roundtrip')
+        finally:
+            client.close_session(gb)
         if exhaustive_codecs:
             from tools.cdeadmin_firebird_legacy_codec_oracle_gate import (
                 qualify as legacy_codecs,

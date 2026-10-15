@@ -36,6 +36,17 @@ profiling/statistics, data export/import, test-data generation, metadata search,
 BLOB operations, DDN/native SQL replay, events, recreate-empty and registration
 clone/move. Failures are collected without discarding other workflow outcomes.
 Each workflow must release its handles and remove its owned databases.
+Each workflow runs in a separate bounded native process. A crash or stalled
+native call preserves its failure and traceback without skipping later workflows.
+
+GB18030 selects a qualified conversion profile from the connected engine's
+observed mappings. Its ICU data may differ across native distributions; the
+client operating system is not used to guess a remote server's mapping. The
+probe owns a separate read-only transaction and leaves user work untouched.
+Native checks cover SQL/metadata, scalar and ARRAY roundtrips and pending-work
+preservation as well as the complete conversion domains. Unknown profiles fail
+explicitly. The pinned event driver uses a fixed-prefix variadic binding so
+Apple Silicon receives native event names through its actual C calling convention.
 
 Windows additionally qualifies actual XNET shared memory and Win_Sspi trusted
 authentication. Its owned server uses a unique IPC name and an isolated global
@@ -44,6 +55,10 @@ wire encryption negotiation because Win_Sspi supplies no encryption key;
 password/TCP checks still require encryption. Receipts must observe XNET and
 Win_Sspi explicitly; TCP or embedded fallback does not qualify them. Native
 client binaries must match the host's PE, Mach-O or ELF format.
+The native mapped-authentication receipt ``Mapped from Win_Sspi`` is also
+accepted; another plugin or an inferred trusted-authentication flag is refused.
+Creation paths retain server-side Windows drive/UNC or POSIX semantics from
+any application host, with ambiguous paths and lexical root escapes refused.
 
 GitHub and local execution
 ---------------------------
@@ -51,12 +66,15 @@ GitHub and local execution
 The native development workflow supports ``firebird-platform`` as a targeted
 stage. A fresh Windows or Mac run can use::
 
-    gh workflow run native-development.yml --ref <candidate-branch> -f stages=prerequisites,doctor,clients,python,frontend,firebird-platform
+    gh workflow run native-development.yml --ref <candidate-branch> -f stages=prerequisites,doctor,clients,python,frontend-install,firebird-platform
 
 The default platform list is Windows x64, Intel macOS and Apple Silicon macOS.
 The existing full development environment stages remain distinct from this
 Firebird-specific qualification. The workflow checks out the exact candidate
-revision and the DDN revision recorded by that candidate. Source checkout uses
+revision. ``frontend-install`` supplies the locked Node dependencies used by
+backend helpers; the ``frontend`` stage separately compiles the application.
+The workflow also checks out
+the DDN revision recorded by that candidate. Source checkout uses
 LF files on every host, avoiding accidental hash differences from Git conversion.
 Before each build/test batch, the current designated DDN snapshot is refreshed
 with its runtime, editor, declarations, assets and provenance together.

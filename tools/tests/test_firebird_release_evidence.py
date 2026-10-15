@@ -31,8 +31,10 @@ def platform_proof(root, host):
                   'attachment_mode': 'embedded' if mode == 'embedded' else 'network',
                   'checks': ['legacy-codecs', 'gb18030-codec', 'unicode-fss-codec',
                     'provider_create_and_independent_open', 'metadata_scalar_array_blob_pending_visibility',
-                    'rollback_and_committed_visibility', 'bounded_blob_stream', 'native_services_attachment'],
+                    'rollback_and_committed_visibility', 'bounded_blob_stream',
+                    'native_gb18030_profile_roundtrip', 'native_services_attachment'],
                   'remote_protocol': None if mode == 'embedded' else 'XNET' if mode == 'xnet' else 'TCPv4',
+                  'authenticated_user': 'SYSDBA' if mode == 'win-sspi' else None,
                   'auth_method': 'Win_Sspi' if mode == 'win-sspi' else 'Srp'}
         driver_path = mode + '/driver/summary.json'
         workflow_path = mode + '/workflows/summary.json'
@@ -110,11 +112,18 @@ def test_rehashed_but_failed_native_driver_cannot_be_hidden(tmp_path, action):
     assert inspect_receipt(path, digest(SOURCE))[1]
 
 
-@pytest.mark.parametrize('mode,field,value', [('xnet','remote_protocol','TCPv4'), ('win-sspi','auth_method','Srp')])
+@pytest.mark.parametrize('mode,field,value', [('xnet','remote_protocol','TCPv4'),
+    ('win-sspi','auth_method','Srp'), ('win-sspi','authenticated_user','unexpected')])
 def test_windows_specific_transports_need_actual_observations(tmp_path, mode, field, value):
     path = platform_proof(tmp_path/'win', 'windows-x64')
     mutate(path, lambda x:x.update({field:value}), mode+'/driver/summary.json')
     assert inspect_receipt(path, digest(SOURCE))[1]
+
+
+def test_windows_mapped_trusted_auth_retains_native_plugin_evidence(tmp_path):
+    path = platform_proof(tmp_path/'win', 'windows-x64')
+    mutate(path, lambda x:x.update(auth_method='Mapped from Win_Sspi'), 'win-sspi/driver/summary.json')
+    assert inspect_receipt(path, digest(SOURCE))[1] == []
 
 
 @pytest.mark.parametrize('action', [

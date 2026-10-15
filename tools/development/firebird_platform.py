@@ -28,6 +28,7 @@ def run_mode(mode, route, directory, runtime, evidence, password, *, workflows, 
     route_file = target / 'route.json'
     route_file.write_text(json.dumps(route, indent=2) + '\n', encoding='utf-8')
     env = dict(os.environ, FIREBIRD=str(runtime), FIREBIRD_LOCK=str(runtime / 'lock'),
+               PYTHONFAULTHANDLER='1',
                CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(library(runtime)))
     for key in ('ISC_USER', 'ISC_PASSWORD', 'ISC_DATABASE', 'ISC_ROLE'):
         env.pop(key, None)

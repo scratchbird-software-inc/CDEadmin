@@ -320,10 +320,12 @@ def stage(name, evidence):
                 log=evidence / 'host-contracts.log', timeout=300)
     elif name == 'ddn':
         ddn(evidence)
-    elif name == 'frontend':
+    elif name in {'frontend', 'frontend-install'}:
         ddn(evidence)
         command(['corepack', 'yarn', 'install', '--immutable'],
                 cwd=ROOT / 'web', env=env, log=evidence / 'yarn-install.log')
+        if name == 'frontend-install':
+            return
         command(['corepack', 'yarn', 'run', 'linter'], cwd=ROOT / 'web',
                 env=env, log=evidence / 'frontend-lint.log')
         heap = int(env.get('CDEADMIN_NODE_HEAP_MB', '4608' if platform.system() == 'Darwin'
@@ -410,7 +412,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -458,7 +460,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()

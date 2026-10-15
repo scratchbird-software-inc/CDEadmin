@@ -69,7 +69,9 @@ def qualify(native, admin, route, accounts, evidence, root):
                 'provider_encode_mismatches': {},
                 'provider_decode_mismatches': {}}
             cur.execute(ENCODE.format(charset=charset))
-            selected_codec = codec_name(charset)
+            from pgadmin.cdeadmin.providers.firebird.gb18030_profile import encoding
+            selected_codec = encoding(admin)
+            result['selected_codec'] = selected_codec
             encoded = set()
             digest = hashlib.sha256()
             for cp, raw in cur:

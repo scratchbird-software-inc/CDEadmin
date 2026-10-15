@@ -152,7 +152,7 @@ def inspect_receipt(path, expected_source):
                 errors.append(f'{mode}: selected native library hash differs')
             required_checks = {'provider_create_and_independent_open',
                 'metadata_scalar_array_blob_pending_visibility', 'rollback_and_committed_visibility',
-                'bounded_blob_stream'}
+                'bounded_blob_stream', 'native_gb18030_profile_roundtrip'}
             if mode != 'embedded':
                 required_checks.add('native_services_attachment')
             if not required_checks <= set(native.get('checks', [])):
@@ -169,8 +169,10 @@ def inspect_receipt(path, expected_source):
                 errors.append(f'{mode}: native transport was not observed')
             if mode == 'xnet' and native.get('remote_protocol') != 'XNET':
                 errors.append('xnet: native shared-memory transport missing')
-            if mode == 'win-sspi' and native.get('auth_method') != 'Win_Sspi':
+            if mode == 'win-sspi' and native.get('auth_method') not in {'Win_Sspi', 'Mapped from Win_Sspi'}:
                 errors.append('win-sspi: native trusted authentication missing')
+            if mode == 'win-sspi' and native.get('authenticated_user') != 'SYSDBA':
+                errors.append('win-sspi: isolated native user mapping differs')
             if mode in {'network', 'embedded'}:
                 if not {'legacy-codecs', 'gb18030-codec', 'unicode-fss-codec'} <= set(native.get('checks', [])):
                     errors.append(f'{mode}: exhaustive native conversion checks missing')

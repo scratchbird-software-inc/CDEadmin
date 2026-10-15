@@ -16,7 +16,7 @@ from pgadmin.cdeadmin.security.secrets import SecretLease
 from tools.firebird_release_evidence import WORKFLOWS, source_snapshot
 
 
-def qualify(route, directory, evidence, *, password=None, path_style='posix'):
+def qualify(route, directory, evidence, *, password=None, path_style='posix', only=None):
     import firebird.driver as native
     evidence = Path(evidence)
     evidence.mkdir(parents=True, exist_ok=False)
@@ -32,7 +32,7 @@ def qualify(route, directory, evidence, *, password=None, path_style='posix'):
     if embedded and password is not None:
         raise ValueError('Embedded mode does not use a password')
     _configure_client_library(native)
-    for name in WORKFLOWS:
+    for name in ((only,) if only else WORKFLOWS):
         item = {'check': name, 'status': 'failed', 'owned_databases_removed': False,
                 'handles_released': False}
         target = evidence / name
@@ -124,15 +124,73 @@ def qualify(route, directory, evidence, *, password=None, path_style='posix'):
     return result
 
 
+def run(route, directory, evidence, *, password=None, path_style='posix'):
+    """A native crash or hang in one workflow must preserve the rest's inventory."""
+    from tools.development.native import command
+    evidence = Path(evidence)
+    if any(key in route for key in ('database', 'password', 'principal_reference', 'credential_reference_id')):
+        raise ValueError('Use a credential-free route without an existing database')
+    evidence.mkdir(parents=True, exist_ok=False)
+    before = source_snapshot()
+    route_file = evidence / 'route.json'
+    route_file.write_text(json.dumps(route, indent=2) + '\n', encoding='utf-8')
+    env = dict(os.environ, PYTHONFAULTHANDLER='1')
+    if password is not None:
+        env['CDEADMIN_OWNED_WORKFLOW_PASSWORD'] = password
+    checks = []
+    for name in WORKFLOWS:
+        item = {'check': name, 'status': 'failed', 'owned_databases_removed': False,
+                'handles_released': False}
+        target = evidence / name
+        args = [sys.executable, '-X', 'faulthandler', '-m',
+                'tools.cdeadmin_firebird_workflow_platform_gate', '--route-json', route_file,
+                '--fixture-directory', directory, '--path-style', path_style,
+                '--evidence', target, '--case', name]
+        if password is not None:
+            args += ['--password-env', 'CDEADMIN_OWNED_WORKFLOW_PASSWORD']
+        process_error = None
+        try:
+            command(args, env=env, log=evidence / (name + '.log'), timeout=300)
+        except Exception as error:
+            process_error = type(error).__name__
+        try:
+            native = json.loads((target / 'summary.json').read_text(encoding='utf-8'))
+            observed = native['checks']
+            if (len(observed) == 1 and observed[0]['check'] == name and
+                    native['source_unchanged'] is True and native['source']['sha256'] == before['sha256']):
+                item = observed[0]
+                item['native_process_receipt'] = name + '/summary.json'
+        except (OSError, ValueError, KeyError, TypeError):
+            item['native_receipt_unavailable'] = True
+        if process_error:
+            item.update(status='failed', native_process_error=process_error)
+        checks.append(item)
+    after = source_snapshot()
+    result = {'schema': 'cdeadmin.firebird-workflow-platform-proof.v1', 'source': before,
+              'source_unchanged': before['sha256'] == after['sha256'],
+              'attachment_mode': 'embedded' if route.get('attachment_mode') == 'embedded' else 'network',
+              'checks': checks, 'complete': all(item['status'] == 'passed' for item in checks)
+              and before['sha256'] == after['sha256']}
+    (evidence / 'summary.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    return result
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--route-json', type=Path, required=True)
     parser.add_argument('--fixture-directory', required=True)
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--password-env')
+    parser.add_argument('--case', choices=WORKFLOWS, help='One owned child process within the complete inventory')
     parser.add_argument('--path-style', choices=('windows', 'posix'), default='windows' if os.name == 'nt' else 'posix')
     args = parser.parse_args()
     route = json.loads(args.route_json.read_text(encoding='utf-8'))
     password = os.environ[args.password_env] if args.password_env else None
-    receipt = qualify(route, args.fixture_directory, args.evidence, password=password, path_style=args.path_style)
+    if args.case:
+        import faulthandler
+        faulthandler.dump_traceback_later(120, repeat=True)
+        receipt = qualify(route, args.fixture_directory, args.evidence, password=password,
+                          path_style=args.path_style, only=args.case)
+    else:
+        receipt = run(route, args.fixture_directory, args.evidence, password=password, path_style=args.path_style)
     raise SystemExit(0 if receipt['complete'] else 1)

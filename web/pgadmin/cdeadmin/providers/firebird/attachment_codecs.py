@@ -45,13 +45,19 @@ def _document():
         'attachment_codec_tables_5_0_4.json').read_text())
 
 
+@lru_cache(maxsize=1)
+def _gb_profiles():
+    return json.loads(Path(__file__).with_name('gb18030_profiles_5_0_4.json').read_text())
+
+
 def native_name(identifier):
     return _document()['charsets'].get(str(identifier))
 
 
 @lru_cache(maxsize=32)
 def tables(name):
-    table = _document()['tables'][name]
+    table = (_gb_profiles()[name] if name == 'GB18030_LEGACY'
+             else _document()['tables'][name])
     return (MappingProxyType({bytes.fromhex(key): chr(value)
                               for key, value in table['decode'].items()}),
             MappingProxyType({int(key): bytes.fromhex(value)
@@ -62,7 +68,7 @@ def _codec(name):
     decoding, encoding = tables(name)
     leads = frozenset(key[0] for key in decoding if len(key) == 2)
     codec_name = PREFIX + name.lower()
-    gb18030 = name == 'GB18030'
+    gb18030 = name in {'GB18030', 'GB18030_LEGACY'}
 
     def strict(errors):
         if errors != 'strict':
@@ -135,7 +141,7 @@ def _search(name):
         if charset == 'UNICODE_FSS':
             from .fss_codec import codec
             return codec()
-        if charset in PRIVATE_CHARSETS:
+        if charset in PRIVATE_CHARSETS or charset == 'GB18030_LEGACY':
             return _codec(charset)
     return None
 
@@ -144,6 +150,6 @@ codecs.register(_search)
 
 
 def codec_name(charset):
-    if charset not in PRIVATE_CHARSETS:
+    if charset not in PRIVATE_CHARSETS and charset != 'GB18030_LEGACY':
         raise ValueError('No private native codec for this character set')
     return PREFIX + charset.lower()
