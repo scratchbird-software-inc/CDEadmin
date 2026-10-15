@@ -42,6 +42,19 @@ class NativeSetupTests(unittest.TestCase):
             native.configure()
         self.assertEqual(target.read_text(), 'private configuration')
 
+    def test_windows_corepack_uses_node_without_a_command_shell(self):
+        wrapper = self.root / 'Node With Spaces/corepack.CMD'
+        cli = wrapper.parent / 'node_modules/corepack/dist/corepack.js'
+        cli.parent.mkdir(parents=True)
+        cli.touch()
+        with patch.object(native.platform, 'system', return_value='Windows'), \
+                patch.object(native.shutil, 'which', return_value=str(wrapper)), \
+                patch.object(native.subprocess, 'run') as execute:
+            native.command(['corepack', 'yarn', 'install', '--immutable'], cwd=self.root)
+        self.assertEqual(execute.call_args.args[0],
+                         ['node', str(cli), 'yarn', 'install', '--immutable'])
+        self.assertNotIn('shell', execute.call_args.kwargs)
+
     def test_cached_download_is_rehashed(self):
         downloads = self.root / 'downloads'
         downloads.mkdir()

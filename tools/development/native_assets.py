@@ -61,8 +61,9 @@ def msvc(env):
     if not root:
         raise RuntimeError('Install Visual Studio C++ Build Tools and Windows SDK')
     bat = Path(root) / 'Common7/Tools/VsDevCmd.bat'
-    result = subprocess.check_output(['cmd.exe', '/d', '/s', '/c',
-                                     f'""{bat}" -arch=x64 >nul && set"'],
+    # Supply cmd.exe its complete command line: list2cmdline's extra escaping
+    # of embedded quotes otherwise breaks a path under Program Files.
+    result = subprocess.check_output(f'cmd.exe /d /s /c ""{bat}" -arch=x64 >nul && set"',
                                     text=True, errors='replace', env=env)
     selected = dict(env)
     for line in result.splitlines():

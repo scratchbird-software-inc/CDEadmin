@@ -25,10 +25,18 @@ PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt'
 def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
     """Preserve output and bound children; never invoke an implicit shell."""
     args = [str(item) for item in args]
-    # Windows cannot directly spawn Corepack's .cmd shim with shell=False.
-    executable = shutil.which(args[0])
-    if os.name == 'nt' and executable and executable.endswith('.cmd'):
-        args = ['cmd.exe', '/d', '/c', executable, *args[1:]]
+    # Invoke Node CLIs directly. Windows can resolve an extensionless POSIX
+    # shim before its .cmd sibling, and cmd.exe would add shell quoting rules.
+    if platform.system() == 'Windows' and args[0] in ('corepack', 'npm'):
+        executable = shutil.which(args[0] + '.cmd', path=(env or os.environ).get('PATH'))
+        if not executable:
+            raise FileNotFoundError(args[0] + '.cmd')
+        relative = ('corepack/dist/corepack.js' if args[0] == 'corepack'
+                    else 'npm/bin/npm-cli.js')
+        cli = Path(executable).parent / 'node_modules' / relative
+        if not cli.is_file():
+            raise FileNotFoundError(cli)
+        args = ['node', str(cli), *args[1:]]
     print('+ ' + ' '.join(args), flush=True)
     if log:
         with Path(log).open('w', encoding='utf-8') as output:
