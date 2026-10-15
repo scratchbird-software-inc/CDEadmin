@@ -16,7 +16,12 @@ Use a local writable checkout, standard CPython 3.14, Node 22.22.x, Corepack,
 Git and CMake. Keep the repository's Yarn pin and lockfile. Do not copy another
 machine's virtual environment, native runtime, node_modules or configuration DB.
 
-On Windows install Visual Studio C++ Build Tools with the Windows SDK. Run
+On Windows install Visual Studio C++ Build Tools with the Windows SDK and the
+[current x64 Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+The redistributable must be at least as recent as the toolset used by the
+native clients. The runtime hook loads it before vendor DLL directories;
+an older CRT bundled with one engine must not be selected for another.
+Run
 PowerShell with ordinary developer permissions. This bootstrap targets x64
 Python and native x64 libraries; Windows ARM is not qualified by the matrix.
 
