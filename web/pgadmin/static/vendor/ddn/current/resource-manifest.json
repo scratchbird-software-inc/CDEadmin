@@ -1,7 +1,7 @@
 {
   "version": "0.8.0",
   "license": "GPL-2.0-or-later",
-  "intake_tool_sha256": "5b83a94b5f54aef78720686fc4ec7fc96658a0ed9c83ac66f70249d0900c7138",
+  "intake_tool_sha256": "7912b8d59b3aa9417ef2e8a9c0621bc011b4289aedaec3a89f73f56dbeccd9c2",
   "source": {
     "revision": "92daf7541d5f4447f4935b1c0f3cdc84b3cb4ff3",
     "status": "",
@@ -3041,6 +3041,8 @@
       "website/tools/viewer/index.html": "4d2d3964bb9c5430fc3d5d6dd82d3eddee67000842a1e78a4237a5f1b4184929"
     }
   },
+  "source_adjustments": [],
+  "adjusted_source_sha256": {},
   "artifacts": {
     "LICENSE": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
     "NOTICE.md": "7e399d9e0354f8a575651e547ff8f2b567170462fce75d2a87874d0ec728ea25",

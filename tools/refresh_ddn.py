@@ -19,6 +19,7 @@ DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                                   '/home/dcalford/SandBox/temp-workarea/ddn-intake'))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'
+WINDOWS_PATCH = ROOT / 'tools/dependency_patches/ddn-windows-paths.patch'
 
 
 def git(source, *args):
@@ -48,10 +49,14 @@ def inventory(source):
 def refresh(source, work):
     work.mkdir(parents=True, exist_ok=True)
     before = inventory(source)
+    adjustments = ([{'patch': str(WINDOWS_PATCH.relative_to(ROOT)),
+                     'sha256': digest(WINDOWS_PATCH)}]
+                   if os.name == 'nt' else [])
     manifest_path = DEST / 'resource-manifest.json'
     if manifest_path.exists():
         previous = json.loads(manifest_path.read_text())
         if (previous.get('intake_tool_sha256') == digest(Path(__file__)) and
+            previous.get('source_adjustments', []) == adjustments and
             previous.get('source') == before and all(
             (DEST / name).is_file() and digest(DEST / name) == sha
             for name, sha in previous.get('artifacts', {}).items()
@@ -69,6 +74,14 @@ def refresh(source, work):
                 raise RuntimeError('DDN changed during capture; retry intake')
         if inventory(source) != before:
             raise RuntimeError('DDN changed during capture; retry intake')
+        adjusted_files = {}
+        if adjustments:
+            subprocess.run(['git', 'apply', '--check', '--ignore-space-change',
+                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
+            subprocess.run(['git', 'apply', '--ignore-space-change',
+                            str(WINDOWS_PATCH)], cwd=snapshot, check=True)
+            name = 'tools/rollup.config.mjs'
+            adjusted_files[name] = digest(snapshot / name)
         # Build tools consume pinned installed dependencies without modifying them.
         if os.name == 'nt':
             # Ordinary Windows developer accounts may not create symlinks.
@@ -110,6 +123,8 @@ def refresh(source, work):
         manifest = {'version': package['version'], 'license': package['license'],
                     'intake_tool_sha256': digest(Path(__file__)),
                     'source': before,
+                    'source_adjustments': adjustments,
+                    'adjusted_source_sha256': adjusted_files,
                     'artifacts': {p.name: digest(p) for p in sorted(stage.iterdir())}}
         (stage / 'resource-manifest.json').write_text(
             json.dumps(manifest, indent=2) + '\n')

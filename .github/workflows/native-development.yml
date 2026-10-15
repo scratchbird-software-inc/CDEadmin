@@ -70,6 +70,21 @@ jobs:
           if ($dependencyExit) { exit $dependencyExit }
           python -m uv run --no-project --python 3.14 python tools/development/native.py ci --evidence $env:CDEADMIN_NATIVE_EVIDENCE
           exit $LASTEXITCODE
+      - name: Qualify configured disposable network engines
+        if: ${{ !cancelled() && vars.CDEADMIN_NATIVE_ROUTES_JSON != '' }}
+        env:
+          ROUTES_JSON: ${{ vars.CDEADMIN_NATIVE_ROUTES_JSON }}
+          CDEADMIN_TEST_POSTGRES_PASSWORD: ${{ secrets.CDEADMIN_TEST_POSTGRES_PASSWORD }}
+          CDEADMIN_TEST_FIREBIRD_PASSWORD: ${{ secrets.CDEADMIN_TEST_FIREBIRD_PASSWORD }}
+          CDEADMIN_TEST_MYSQL_PASSWORD: ${{ secrets.CDEADMIN_TEST_MYSQL_PASSWORD }}
+          CDEADMIN_TEST_MARIADB_PASSWORD: ${{ secrets.CDEADMIN_TEST_MARIADB_PASSWORD }}
+        run: |
+          $env:CDEADMIN_NATIVE_ROUTES = Join-Path '${{ runner.temp }}' 'native-routes.json'
+          [System.IO.File]::WriteAllText($env:CDEADMIN_NATIVE_ROUTES, $env:ROUTES_JSON)
+          $env:SCRATCHROBIN_DDN_SOURCE = Join-Path '${{ runner.temp }}' 'Diagram-Design-Notation'
+          $env:SCRATCHROBIN_DDN_WORK = Join-Path '${{ runner.temp }}' 'ddn-intake'
+          python -m uv run --no-project --python 3.14 python tools/development/native.py network --evidence '${{ runner.temp }}/cdeadmin-native-network'
+          exit $LASTEXITCODE
       - name: Publish failure inventory to the job summary
         if: always()
         run: |

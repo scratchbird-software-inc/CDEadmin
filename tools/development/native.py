@@ -183,6 +183,14 @@ def stage(name, evidence):
         command([PYTHON, ROOT / 'tools/development/native_verify.py',
                  '--evidence', evidence / 'verification'], env=env,
                 log=evidence / 'verification.log')
+    elif name == 'network':
+        ddn(evidence)
+        routes = os.environ.get('CDEADMIN_NATIVE_ROUTES')
+        if not routes:
+            raise RuntimeError('Set CDEADMIN_NATIVE_ROUTES to the disposable network route JSON')
+        command([PYTHON, ROOT / 'tools/development/native_network.py', '--routes',
+                 routes, '--evidence', evidence / 'network'], env=env,
+                log=evidence / 'network.log')
     else:
         raise ValueError(name)
 
@@ -235,7 +243,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'python', 'ddn', 'frontend',
-                                         'configure', 'init', 'run', 'verify', 'ci'))
+                                         'configure', 'init', 'run', 'verify', 'network', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     args = parser.parse_args()
     evidence = args.evidence.resolve()

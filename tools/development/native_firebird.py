@@ -6,6 +6,7 @@ import sys
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'web'))
 import config  # Initialize the inherited import boundary before providers.
 
@@ -33,7 +34,7 @@ def run(evidence):
                                                {'sql_dialect': 3}, native)
         connection = client.config.database_creator(**arguments)
         identity = _client_library_identity(native)
-        assert identity['client_library_version'] == '5.0.4', identity
+        assert identity['client_library_version'] == '5.0', identity
         with connection.cursor() as cursor:
             cursor.execute("SELECT RDB$GET_CONTEXT('SYSTEM','ENGINE_VERSION') FROM RDB$DATABASE")
             assert cursor.fetchone() == ('5.0.4',)

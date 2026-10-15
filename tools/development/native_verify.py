@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'web'))
 
 
@@ -54,7 +55,9 @@ def child(name, evidence, port):
         _configure_client_library(firebird)
         identity = _client_library_identity(firebird)
         print(json.dumps(identity, indent=2))
-        assert identity['client_library_version'] == '5.0.4'
+        # isc_get_client_version reports major/minor; the asset hash and
+        # embedded ENGINE_VERSION observation establish the maintenance build.
+        assert identity['client_library_version'] == '5.0'
         assert duckdb.__version__ == '1.5.2'
         assert pyarrow.__version__ == '25.0.1'
         assert sqlite3.sqlite_version == '3.53.0', sqlite3.sqlite_version
