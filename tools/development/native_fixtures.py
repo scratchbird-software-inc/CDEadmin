@@ -262,11 +262,13 @@ def firebird(directory, evidence, env, *, platform_routes=False):
     lock = runtime / 'lock'
     lock.mkdir(exist_ok=True)
     windows_routes = platform_routes and os.name == 'nt'
+    instance = 'SR_' + uuid.uuid4().hex
     (runtime / 'firebird.conf').write_text(
         'RemoteBindAddress = 127.0.0.1\nAuthServer = Srp256,Srp' +
         (',Win_Sspi' if windows_routes else '') + '\nUserManager = Srp\n' +
-        ('WireCrypt = Enabled\nIpcName = SR_' + uuid.uuid4().hex + '\n' if windows_routes
+        ('WireCrypt = Enabled\n' if windows_routes
          else 'WireCrypt = Required\n') +
+        ('IpcName = ' + instance + '\n' if os.name == 'nt' else '') +
         'SecurityDatabase = ' + str(security) + '\n', encoding='utf-8')
     (runtime / 'databases.conf').write_text('', encoding='utf-8')
     selected = dict(env, FIREBIRD=str(runtime), FIREBIRD_LOCK=str(lock))
@@ -284,14 +286,20 @@ def firebird(directory, evidence, env, *, platform_routes=False):
     if completed.returncode:
         raise RuntimeError('Owned Firebird security initialization failed')
     server = executable_root / ('firebird.exe' if os.name == 'nt' else 'firebird')
-    args = [server, '-a' if os.name == 'nt' else '-d', '-p', selected_port,
-            '-e', runtime, '-el', lock, '-em', runtime]
-    with running(args, selected_port, selected, evidence / 'server.log', owner_argument=runtime):
-        route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'SYSDBA',
-                 'charset': 'UTF8', 'auth_plugin_list': 'Srp256,Srp', 'wire_crypt': 'Required'}
-        yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD',
-               'database_directory': str(directory),
-               'path_style': 'windows' if os.name == 'nt' else 'posix'}, password
+    # Windows' raw command-line parser does not consume POSIX -e/-el/-em
+    # paths; a hyphen inside such a path can be interpreted as a new switch.
+    args = ([server, '-a', '-p', selected_port, '-s', instance] if os.name == 'nt'
+            else [server, '-d', '-p', selected_port, '-e', runtime, '-el', lock, '-em', runtime])
+    try:
+        with running(args, selected_port, selected, evidence / 'server.log', owner_argument=runtime):
+            route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'SYSDBA',
+                     'charset': 'UTF8', 'auth_plugin_list': 'Srp256,Srp', 'wire_crypt': 'Required'}
+            yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD',
+                   'database_directory': str(directory),
+                   'path_style': 'windows' if os.name == 'nt' else 'posix'}, password
+    finally:
+        if (runtime / 'firebird.log').is_file():
+            shutil.copyfile(runtime / 'firebird.log', evidence / 'native-server.log')
 
 
 def run_engine(engine, target):

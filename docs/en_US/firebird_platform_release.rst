@@ -28,6 +28,9 @@ API or network credential substitution.
 Both modes run all 47 legacy charset checks, the complete GB18030 Unicode and
 admitted byte-grammar domains, and UNICODE_FSS conversion against the native
 engine. ``--quick-codecs`` is diagnostic only and cannot qualify a release.
+The ``firebird-codecs`` development stage (``--driver-only`` on the platform
+runner) preserves exhaustive conversion differences and transport observations
+without workflows; it deliberately returns an incomplete release receipt.
 Independent workflow fixtures cover editor execution, row SQL, templates,
 profiling/statistics, data export/import, test-data generation, metadata search,
 BLOB operations, DDN/native SQL replay, events, recreate-empty and registration

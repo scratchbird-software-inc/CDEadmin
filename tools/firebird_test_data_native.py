@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+import shutil
 
 
 def qualify(connection, client, route):
@@ -41,7 +42,7 @@ def qualify(connection, client, route):
         runner = r"""
 import {pathToFileURL} from 'node:url';
 const m = await import(pathToFileURL(process.argv[1]).href);
-const catalogs = JSON.parse(process.argv[2]);
+const catalogs = JSON.parse((await import('node:fs')).readFileSync(0, 'utf8'));
 for (const item of Object.values(catalogs)) item.foreignKeys = m.tableForeignKeys(item.resource);
 const constant = value => ({kind:'constant',value});
 const sequential = start => ({kind:'sequential',start,step:'1'});
@@ -57,8 +58,11 @@ const result = m.materializeTestData(recipe,catalogs);
 if(JSON.stringify(result)!==JSON.stringify(m.materializeTestData(recipe,catalogs))) throw new Error('Unstable seed');
 process.stdout.write(JSON.stringify(result));
 """
-        generated = subprocess.run(['node', '--input-type=module', '-e', runner, str(module),
-                                    json.dumps(catalogs)], capture_output=True, text=True,
+        node = shutil.which('node')
+        if node is None:
+            raise FileNotFoundError('Native Node executable is unavailable')
+        generated = subprocess.run([node, '--input-type=module', '-e', runner, str(module)],
+                                   input=json.dumps(catalogs), capture_output=True, text=True,
                                    timeout=30, check=True)
         preview = json.loads(generated.stdout)
         assert len(preview['operations']) == 10, preview

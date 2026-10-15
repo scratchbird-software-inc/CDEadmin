@@ -65,13 +65,21 @@ def qualify(native, admin, route, accounts, evidence, root):
             result = {
                 'charset': charset,
                 'encode_differences': {},
-                'decode_differences': {}}
+                'decode_differences': {},
+                'provider_encode_mismatches': {},
+                'provider_decode_mismatches': {}}
             cur.execute(ENCODE.format(charset=charset))
             selected_codec = codec_name(charset)
             encoded = set()
             digest = hashlib.sha256()
             for cp, raw in cur:
-                assert chr(cp).encode(selected_codec) == raw, cp
+                try:
+                    actual = chr(cp).encode(selected_codec)
+                except UnicodeError:
+                    actual = None
+                if actual != raw:
+                    result['provider_encode_mismatches'][str(cp)] = {
+                        'native': raw.hex(), 'provider': actual.hex() if actual is not None else None}
                 encoded.add(cp)
                 digest.update(cp.to_bytes(4, 'big') + raw)
                 try:
@@ -90,7 +98,12 @@ def qualify(native, admin, route, accounts, evidence, root):
             accepted = set()
             digest = hashlib.sha256()
             for raw, txt in cur:
-                assert raw.decode(selected_codec) == txt, raw.hex()
+                try:
+                    actual = raw.decode(selected_codec)
+                except UnicodeError:
+                    actual = None
+                if actual != txt:
+                    result['provider_decode_mismatches'][raw.hex()] = {'native': txt, 'provider': actual}
                 accepted.add(raw)
                 digest.update(bytes([len(raw)]) + raw + txt.encode('utf8'))
                 try:
@@ -120,7 +133,8 @@ def qualify(native, admin, route, accounts, evidence, root):
                 except UnicodeDecodeError:
                     pass
                 else:
-                    raise AssertionError(raw.hex())
+                    result['provider_decode_mismatches'][raw.hex()] = {
+                        'native': None, 'provider': raw.decode(selected_codec)}
                 try:
                     raw.decode(codec)
                 except UnicodeError:
@@ -128,6 +142,8 @@ def qualify(native, admin, route, accounts, evidence, root):
                 result['decode_rejected_python_accepts'].append(raw.hex())
             (evidence / 'GB18030.json').write_text(
                 json.dumps(result, indent=2) + '\n')
+            assert not result['provider_encode_mismatches'], 'Native GB18030 encode profile differs; see receipt'
+            assert not result['provider_decode_mismatches'], 'Native GB18030 decode profile differs; see receipt'
 
 
 if __name__ == '__main__':

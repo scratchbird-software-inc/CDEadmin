@@ -69,7 +69,7 @@ def run_mode(mode, route, directory, runtime, evidence, password, *, workflows, 
             'workflows': list(WORKFLOWS) if workflows else [], 'exhaustive_codecs': codecs}
 
 
-def qualify(runtime_source, evidence, *, codecs=True):
+def qualify(runtime_source, evidence, *, codecs=True, workflows=True):
     runtime_source, evidence = Path(runtime_source).resolve(), Path(evidence).resolve()
     if evidence.is_relative_to(ROOT):
         raise ValueError('Keep qualification evidence outside the repository')
@@ -105,7 +105,7 @@ def qualify(runtime_source, evidence, *, codecs=True):
                                               platform_routes=True) as (specification, password):
                     runtime = network / 'runtime'
                     modes.append(run_mode('network', specification['route'], network, runtime,
-                                          evidence, password, workflows=True, codecs=codecs))
+                                          evidence, password, workflows=workflows, codecs=codecs))
                     if os.name == 'nt':
                         route = dict(specification['route'], protocol='XNET')
                         route.pop('host');route.pop('port')
@@ -127,7 +127,7 @@ def qualify(runtime_source, evidence, *, codecs=True):
             (runtime / 'databases.conf').write_text('', encoding='utf-8')
             try:
                 modes.append(run_mode('embedded', {'attachment_mode': 'embedded', 'user': 'SYSDBA',
-                    'charset': 'UTF8'}, embedded, runtime, evidence, None, workflows=True, codecs=codecs))
+                    'charset': 'UTF8'}, embedded, runtime, evidence, None, workflows=workflows, codecs=codecs))
             except Exception as error:
                 errors.append({'scope': 'embedded', 'error_type': type(error).__name__})
         cleanup = not root.exists()
@@ -146,7 +146,7 @@ def qualify(runtime_source, evidence, *, codecs=True):
               'scope': 'native driver, codecs and portable backend workflows; human forms and signed packages separate'}
     result['complete'] = bool(cleanup and not errors and result['source_unchanged'] and
         result['runtime_template_unchanged'] and {item['mode'] for item in modes} == required and
-        all(item['complete'] for item in modes) and codecs)
+        all(item['complete'] for item in modes) and codecs and workflows)
     result['artifacts'] = artifacts(evidence)
     (evidence / 'platform.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'host': result['host'], 'complete': result['complete'],
@@ -159,6 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('--runtime-root', type=Path, required=True)
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--quick-codecs', action='store_true', help='Diagnostic only; cannot qualify a release')
+    parser.add_argument('--driver-only', action='store_true', help='Native codec/transport diagnosis; cannot qualify a release')
     args = parser.parse_args()
-    result = qualify(args.runtime_root, args.evidence, codecs=not args.quick_codecs)
+    result = qualify(args.runtime_root, args.evidence, codecs=not args.quick_codecs, workflows=not args.driver_only)
     raise SystemExit(0 if result['complete'] else 1)

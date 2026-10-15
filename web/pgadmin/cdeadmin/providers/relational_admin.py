@@ -4987,8 +4987,8 @@ class RelationalAdministration:
                     from .firebird.connection_strings import target_path
                     server_path = target_path(
                         current, route.get('host'), route.get('port'))
-                    if server_path.startswith('/'):
-                        root = posixpath.dirname(server_path)
+                    from .firebird.creation_paths import parent_path
+                    root = parent_path(server_path)
         if not isinstance(root, str) or not root:
             raise RelationalClientError(
                 'endpoint has no approved database creation root'
@@ -5010,23 +5010,9 @@ class RelationalAdministration:
             from .firebird.creation_options import creation_sweep_interval
             creation_stored_pages(request['draft'])
             creation_sweep_interval(request['draft'])
-            root_path = posixpath.normpath(root)
-            if not posixpath.isabs(root_path):
-                raise RelationalClientError(
-                    'Firebird database creation root must be absolute'
-                )
             requested = requested_path.strip() if requested_path else filename
-            database_path = posixpath.normpath(
-                requested if posixpath.isabs(requested)
-                else posixpath.join(root_path, requested)
-            )
-            if not (
-                database_path == root_path or
-                database_path.startswith(root_path.rstrip('/') + '/')
-            ):
-                raise RelationalClientError(
-                    'database file escapes the approved creation root'
-                )
+            from .firebird.creation_paths import resolve
+            database_path = resolve(root, requested)
             from .firebird.connection_strings import database_dsn
             protocol = route.get('protocol')
             database = database_dsn(
