@@ -59,6 +59,34 @@ def port():
         return listener.getsockname()[1]
 
 
+def tls_certificate(directory):
+    """Issue an owned loopback certificate for verified native TLS routes."""
+    from datetime import datetime, timedelta, timezone
+    from ipaddress import ip_address
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'localhost')])
+    now = datetime.now(timezone.utc)
+    certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+        .public_key(key.public_key()).serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=2))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(x509.SubjectAlternativeName([
+            x509.DNSName('localhost'), x509.IPAddress(ip_address('127.0.0.1'))]), critical=False)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .sign(key, hashes.SHA256()))
+    cert = directory / 'server.crt'
+    secret = directory / 'server.key'
+    cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    secret.write_bytes(key.private_bytes(serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+    secret.chmod(0o600)
+    return cert, secret
+
+
 @contextmanager
 def postgres_running(root, data, selected_port, env, evidence):
     control = binary(root, 'pg_ctl')
@@ -160,11 +188,16 @@ def sql_server(engine, directory, evidence, env):
                 '--no-defaults', '--basedir=' + str(root), '--datadir=' + str(data),
                 '--bind-address=127.0.0.1', '--port=' + str(selected_port),
                 '--socket=' + str(directory / 'owned.sock')]
+        certificate, key = tls_certificate(directory)
+        args += ['--ssl-ca=' + str(certificate), '--ssl-cert=' + str(certificate),
+                 '--ssl-key=' + str(key)]
         if engine == 'mysql':
             args += ['--mysqlx-bind-address=127.0.0.1', '--mysqlx-port=' + str(port())]
         if os.name == 'nt':
             args.append('--console')
-        route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'root'}
+        route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'root',
+                 'ssl_ca': str(certificate), 'ssl_verify_cert': True}
+        route.update({'ssl_verify_identity': True} if engine == 'mysql' else {'ssl': True})
         manager = running(args, selected_port, env, evidence / 'server.log', owner_argument=data)
     password = secrets.token_urlsafe(32)
     with manager:
