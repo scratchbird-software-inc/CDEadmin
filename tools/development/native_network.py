@@ -34,6 +34,26 @@ def execute(engine, specification, evidence):
         raise ValueError('Network route must not contain passwords')
     variable = specification.get('password_env')
     password = os.environ[variable] if variable else None
+    if variable == 'CDEADMIN_OWNED_FIXTURE_PASSWORD' and engine in ('mysql', 'mariadb'):
+        # Owned loopback diagnostics only; external gate failures stay redacted.
+        connector = importlib.import_module('mysql.connector' if engine == 'mysql' else 'mariadb')
+        connect = connector.connect
+
+        def observed_connect(*args, **kwargs):
+            import psutil
+            if os.name == 'nt':
+                print(json.dumps({'loaded_native_libraries': [m.path for m in psutil.Process().memory_maps()
+                    if any(name in m.path.lower() for name in ('libssl', 'libcrypto', 'libmariadb', '_mysql_connector'))]}), flush=True)
+            try:
+                return connect(*args, **kwargs)
+            except Exception as error:
+                print(json.dumps({'owned_connect_error': type(error).__name__,
+                    'message': str(error).replace(password, '[secret]')[:1024] if password else str(error)[:1024],
+                    'errno': getattr(error, 'errno', None),
+                    'sqlstate': getattr(error, 'sqlstate', None),
+                    'option_names': sorted(kwargs)}), flush=True)
+                raise
+        connector.connect = observed_connect
     module = importlib.import_module('tools.cdeadmin_' + engine + '_driver_platform_gate')
     if engine == 'postgresql':
         receipt = module.qualify(route, password, evidence)
