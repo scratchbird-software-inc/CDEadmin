@@ -2,8 +2,14 @@ name: Native development environments
 
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'JSON runner list; default qualifies all three native hosts'
+        required: true
+        default: '["windows-2025", "macos-15-intel", "macos-15"]'
   push:
-    branches: ['codex/native-dev-*']
+    branches: [master]
+    paths: ['tools/development/**', 'tools/refresh_ddn.py', 'requirements.txt', '.github/workflows/native-development.yml']
 
 permissions:
   contents: read
@@ -18,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-15-intel, macos-15]
+        os: ${{ fromJSON(inputs.platforms || '["windows-2025", "macos-15-intel", "macos-15"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     defaults:

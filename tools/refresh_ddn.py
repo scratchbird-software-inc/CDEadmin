@@ -82,11 +82,17 @@ def refresh(source, work):
         env.pop('DDN_SDK_OUT', None)
         env.pop('DDN_SDK_MANIFEST', None)
         log = work / 'build.log'
-        with log.open('w') as output:
-            for tool in ('build-sdk.js', 'build-tool.js'):
-                subprocess.run(['node', 'tools/' + tool], cwd=snapshot,
-                               env=env, stdout=output,
-                               stderr=subprocess.STDOUT, check=True)
+        try:
+            with log.open('w', encoding='utf-8') as output:
+                for tool in ('build-sdk.js', 'build-tool.js'):
+                    subprocess.run(['node', 'tools/' + tool], cwd=snapshot,
+                                   env=env, stdout=output,
+                                   stderr=subprocess.STDOUT, check=True)
+        except subprocess.CalledProcessError:
+            # Temporary captures are removed on failure. Preserve and expose
+            # the actual builder error in CI, not only its exit status.
+            print(log.read_text(encoding='utf-8', errors='replace'))
+            raise
         stage = Path(scratch) / 'vendor'
         stage.mkdir()
         for name in ('ddn.global.js', 'ddn.global.min.js', 'ddn.global.min.js.map',

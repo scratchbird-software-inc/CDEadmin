@@ -13,6 +13,8 @@ import zipfile
 from native import ROOT, STATE, command
 
 ASSETS = {
+    'python': ('https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz',
+               'c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73'),
     'sqlite': ('https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip',
                'bf3733d7c71b3ab0f6fd8a9ea0052ad87fa037d94333e14ce09878ba3492c3b0'),
     'mariadb-c': ('https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.4.8.tar.gz',
@@ -79,6 +81,7 @@ def paths(env):
         additions += list({p.parent for p in kerberos.rglob('gssapi64.dll')})
     selected['PATH'] = os.pathsep.join([*(str(p) for p in additions), env['PATH']])
     selected['MARIADB_CC_INSTALL_DIR'] = str(STATE / 'mariadb-c')
+    selected['PG_CONFIG'] = str(STATE / 'postgres/pgsql/bin/pg_config.exe') if os.name == 'nt' else selected.get('PG_CONFIG', 'pg_config')
     firebird = STATE / 'firebird'
     if platform.system() == 'Windows':
         selected['CDEADMIN_FIREBIRD_CLIENT_LIBRARY'] = str(firebird / 'fbclient.dll')
@@ -161,6 +164,37 @@ def clients(evidence, env):
         if not alias.exists():
             alias.symlink_to('libsqlite3.0.dylib')
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
+    if platform.system() == 'Darwin':
+        build_macos_python(evidence, env)
+
+
+def build_macos_python(evidence, env):
+    """Own CPython build links the required SQLite, never Apple's system copy."""
+    prefix = STATE / 'python'
+    if (prefix / '.cdeadmin-complete').is_file():
+        return
+    source = STATE / 'python-source'
+    source.mkdir(exist_ok=True)
+    if not (source / 'Python-3.14.8/configure').exists():
+        with tarfile.open(download('python')) as archive:
+            archive.extractall(source, filter='data')
+    openssl = subprocess.check_output(['brew', '--prefix', 'openssl@3'], text=True).strip()
+    sqlite = STATE / 'sqlite'
+    selected = dict(env, LIBSQLITE3_CFLAGS='-I' + str(sqlite),
+                    LIBSQLITE3_LIBS='-L' + str(sqlite) + ' -lsqlite3',
+                    LDFLAGS='-Wl,-rpath,' + str(sqlite))
+    build = STATE / 'python-build'
+    build.mkdir(exist_ok=True)
+    command([source / 'Python-3.14.8/configure', '--prefix=' + str(prefix),
+             '--with-openssl=' + openssl, '--with-openssl-rpath=auto',
+             '--with-ensurepip=install'], cwd=build, env=selected,
+            log=evidence / 'python-configure.log')
+    command(['make', '-j3'], cwd=build, env=selected, log=evidence / 'python-build.log')
+    command(['make', 'install'], cwd=build, env=selected, log=evidence / 'python-install.log')
+    command([prefix / 'bin/python3.14', '-c',
+             'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; print(ssl.OPENSSL_VERSION)'],
+            env=selected, log=evidence / 'python-runtime.log')
+    (prefix / '.cdeadmin-complete').write_text(ASSETS['python'][1], encoding='utf-8')
 
 
 def install_python_runtime_hook(python, env):
@@ -172,7 +206,8 @@ def install_python_runtime_hook(python, env):
     site = Path(subprocess.check_output([str(python), '-c',
                 'import sysconfig;print(sysconfig.get_path("purelib"))'],
                 env=env, text=True).strip())
-    directories = [str(STATE / 'mariadb-c/lib'), str(STATE / 'postgres/pgsql/bin'),
+    directories = [str(STATE / 'mariadb-c/lib'), str(STATE / 'mariadb-c/bin'),
+                   str(STATE / 'postgres/pgsql/bin'),
                    str(STATE / 'firebird')]
     kerberos = STATE / 'kerberos'
     directories += [str(p.parent) for p in kerberos.rglob('gssapi64.dll')]

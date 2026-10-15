@@ -114,7 +114,10 @@ def stage(name, evidence):
     elif name == 'doctor':
         checks = {'standard Python 3.14': sys.version_info[:2] == (3, 14)
                   and not sysconfig_free_threaded(),
-                  'Windows or macOS': platform.system() in ('Windows', 'Darwin')}
+                  'Windows or macOS': platform.system() in ('Windows', 'Darwin'),
+                  'native architecture': (platform.machine().lower() in ('amd64', 'x86_64')
+                      if platform.system() == 'Windows' else
+                      platform.machine().lower() in ('arm64', 'x86_64'))}
         checks.update({tool: bool(shutil.which(tool))
                        for tool in ('git', 'node', 'corepack', 'cmake')})
         print(json.dumps(checks, indent=2))
@@ -125,12 +128,16 @@ def stage(name, evidence):
         from native_assets import clients
         clients(evidence, env)
     elif name == 'python':
+        ddn(evidence)
         from native_assets import msvc, install_python_runtime_hook, download
         env = msvc(env)
         if not PYTHON.exists():
             if PYTHON.parents[1].exists():
                 raise RuntimeError('Incomplete .venv; inspect before replacing')
-            command([sys.executable, '-m', 'venv', ROOT / '.venv'])
+            interpreter = STATE / 'python/bin/python3.14' if platform.system() == 'Darwin' else Path(sys.executable)
+            if not interpreter.is_file():
+                raise RuntimeError('Run clients successfully to build the native interpreter')
+            command([interpreter, '-m', 'venv', ROOT / '.venv'], env=env)
         install_python_runtime_hook(PYTHON, env)
         command([PYTHON, '-m', 'pip', 'install', '--upgrade', 'pip',
                  'setuptools', 'wheel', 'packaging'], env=env,
@@ -139,7 +146,6 @@ def stage(name, evidence):
         requirements(selected)
         command([PYTHON, '-m', 'pip', 'install', '-r', selected], env=env,
                 log=evidence / 'dependencies.log')
-        ddn(evidence)
         archive = download('mariadb-python')
         # The build runner requires a fresh external output directory and
         # records the same-version patch and native wheel hashes.

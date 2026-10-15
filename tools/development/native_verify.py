@@ -132,6 +132,7 @@ def verify(evidence):
         'exact-native-runtimes': [sys.executable, __file__, '--child', 'runtime', '--evidence', evidence],
         'sqlite-provider': [sys.executable, '-m', 'tools.cdeadmin_sqlite_driver_platform_gate', '--evidence', evidence / 'sqlite'],
         'duckdb-provider': [sys.executable, '-m', 'tools.cdeadmin_duckdb_driver_platform_gate', '--evidence', evidence / 'duckdb'],
+        'firebird-embedded': [sys.executable, ROOT / 'tools/development/native_firebird.py', '--evidence', evidence / 'firebird'],
         'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
         'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--runInBand', '--json', '--outputFile', evidence / 'javascript.json'],
         'identity': [sys.executable, '-m', 'tools.cdeadmin_product_identity', '--source', ROOT, '--skip-inventory', '--output', evidence / 'identity.json'],
