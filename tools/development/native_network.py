@@ -35,6 +35,9 @@ def execute(engine, specification, evidence):
     variable = specification.get('password_env')
     password = os.environ[variable] if variable else None
     if variable == 'CDEADMIN_OWNED_FIXTURE_PASSWORD' and engine in ('mysql', 'mariadb'):
+        if os.name == 'nt':
+            from windows_faults import install
+            fault_observer = install()  # Keep the callback alive through the native gate.
         # Owned loopback diagnostics only; external gate failures stay redacted.
         connector = importlib.import_module('mysql.connector' if engine == 'mysql' else 'mariadb')
         connect = connector.connect
@@ -43,7 +46,7 @@ def execute(engine, specification, evidence):
             import psutil
             if os.name == 'nt':
                 print(json.dumps({'loaded_native_libraries': [m.path for m in psutil.Process().memory_maps()
-                    if any(name in m.path.lower() for name in ('libssl', 'libcrypto', 'libmariadb', '_mysql_connector'))]}), flush=True)
+                    if any(name in m.path.lower() for name in ('libssl', 'libcrypto', 'libmysql', 'libmariadb', '_mysql_connector'))]}), flush=True)
             try:
                 return connect(*args, **kwargs)
             except Exception as error:

@@ -30,7 +30,7 @@ class NativeSetupTests(unittest.TestCase):
                 patch.object(native.platform, 'platform', return_value='owned-test-platform'), \
                 patch.object(native.subprocess, 'check_output', return_value='revision'):
             self.assertEqual(native.ci(self.root), 1)
-        self.assertEqual(selected.call_count, 8)
+        self.assertEqual(selected.call_count, 9)
         receipt = json.loads((self.root / 'receipt.json').read_text())
         self.assertFalse(receipt['complete'])
         self.assertEqual([s['stage'] for s in receipt['steps'] if s['status'] == 'failed'],

@@ -54,6 +54,7 @@ python tools/development/native.py clients --evidence $evidence
 python tools/development/native.py python --evidence $evidence
 python tools/development/native.py servers --evidence $evidence
 python tools/development/native.py frontend --evidence $evidence
+python tools/development/native.py desktop --evidence $evidence
 python tools/development/native.py configure --evidence $evidence
 python tools/development/native.py init --evidence $evidence
 python tools/development/native.py verify --evidence $evidence
@@ -76,6 +77,7 @@ bash tools/development/native.sh clients --evidence "$HOME/dev-evidence/cdeadmin
 bash tools/development/native.sh python --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh servers --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh frontend --evidence "$HOME/dev-evidence/cdeadmin-native"
+bash tools/development/native.sh desktop --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh configure --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh init --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh verify --evidence "$HOME/dev-evidence/cdeadmin-native"
@@ -92,6 +94,13 @@ Open <http://127.0.0.1:5051>. `init` prompts for the initial application account
 its credentials are separate from database credentials. `configure` preserves
 existing configuration. Use a fresh evidence directory for each verification
 run; existing receipts and owned fixtures are not overwritten.
+
+To launch the Electron desktop application, use `run-desktop` in place of
+`run`. It uses the same native Python environment and canonical launcher,
+with desktop preferences under `.devstate/desktop`. Existing `dev_config.json`
+and installed application profiles are preserved. The desktop verification
+launches Electron and checks that the compiled explorer workbench mounts,
+using an isolated configuration database and desktop profile.
 
 ## What is provisioned and tested
 
@@ -126,9 +135,10 @@ establish availability of all their external administrative executables.
 The fixtures stage starts uniquely owned, loopback-only native PostgreSQL,
 MySQL, MariaDB and Firebird servers, runs the existing network-driver gates,
 then stops them and removes their data. It does not start/stop installed services
-or use their data. PostgreSQL/MySQL/MariaDB test accounts are explicitly
-passwordless within these disposable loopback fixtures. Firebird uses a random
-password in a copied security database. A cleanup failure fails qualification.
+or use their data. Test accounts use generated secrets supplied through the
+production secret-lease boundary. MySQL and MariaDB use owned TLS certificates
+with certificate verification. Firebird uses a copied security database.
+A cleanup failure fails qualification.
 GitHub's full matrix runs these fixtures without private network credentials.
 Distributed topologies and enterprise authentication require additional estates.
 
@@ -184,9 +194,13 @@ gh workflow run native-development.yml --ref <branch>
 
 The default matrix includes all three platforms. `platforms` accepts a JSON
 runner list for a targeted repair run. The workflow uses ordinary shell steps
-because this repository currently permits local actions only. It does not
+and a repository-local evidence uploader because this repository currently
+permits local actions only. It does not
 relax repository/organization action permissions. Logs retain build output,
 failure inventories and receipts; the job summary lists stage results.
+Download each platform's evidence artifact for receipts, test XML, build logs
+and browser/desktop screenshots. Private keys, owned server data and browser
+profiles are excluded. Artifacts are retained for 14 days.
 
 The `ci` stage installs host prerequisites only when `GITHUB_ACTIONS=true`;
 local developers use explicit stages and review host prerequisite installation.

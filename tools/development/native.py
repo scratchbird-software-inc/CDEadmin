@@ -21,7 +21,7 @@ STATE = ROOT / '.native'
 PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt'
                            else 'bin/python')
 FULL_STAGES = ('prerequisites', 'doctor', 'clients', 'python', 'servers',
-               'frontend', 'verify', 'fixtures')
+               'frontend', 'desktop', 'verify', 'fixtures')
 
 
 def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
@@ -217,6 +217,18 @@ def stage(name, evidence):
                 env=build_env, log=evidence / 'frontend.log')
         command(['corepack', 'yarn', 'run', 'git:hash'], cwd=ROOT / 'web', env=env,
                 log=evidence / 'frontend-revision.log')
+    elif name == 'desktop':
+        ddn(evidence)
+        command(['corepack', 'yarn', 'install', '--immutable'], cwd=ROOT / 'runtime',
+                env=env, log=evidence / 'desktop-install.log')
+        command(['corepack', 'yarn', 'run', 'linter'], cwd=ROOT / 'runtime',
+                env=env, log=evidence / 'desktop-lint.log')
+    elif name == 'run-desktop':
+        env.update(CDEADMIN_DESKTOP_PYTHON=str(PYTHON),
+                   CDEADMIN_DESKTOP_LAUNCHER=str(ROOT / 'web/CDEadmin.py'),
+                   CDEADMIN_DESKTOP_DATA_DIR=str(ROOT / '.devstate/desktop'))
+        command(['node', ROOT / 'runtime/node_modules/electron/cli.js', '.'],
+                cwd=ROOT / 'runtime', env=env, timeout=None)
     elif name == 'configure':
         configure()
     elif name == 'init':
@@ -296,7 +308,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'configure', 'init', 'run', 'verify', 'network', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()
