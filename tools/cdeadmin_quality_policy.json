@@ -36,6 +36,7 @@
   "startup": {
     "route_count": 1407,
     "wall_seconds_maximum": 8.0,
+    "wall_seconds_platform_maximum": {"darwin:x86_64": 20.0},
     "max_rss_kib_maximum": 240000,
     "max_rss_kib_platform_maximum": {"darwin": 256000},
     "required_extensions": [
@@ -54,6 +55,7 @@
   },
   "contract_benchmark": {
     "iterations": 5000,
-    "wall_seconds_maximum": 1.5
+    "wall_seconds_maximum": 1.5,
+    "wall_seconds_platform_maximum": {"darwin:x86_64": 2.5}
   }
 }

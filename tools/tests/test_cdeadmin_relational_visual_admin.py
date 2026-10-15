@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import io
 
 import sqlite3
@@ -1047,7 +1048,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         self.assertIsNone(page['rows'][0]['identity_token'])
 
     def test_sqlite_nullable_primary_key_does_not_issue_ambiguous_row_identity(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute('CREATE TABLE widgets(id TEXT PRIMARY KEY, name TEXT)')
             connection.executemany('INSERT INTO widgets VALUES (?, ?)',
                                    [(None, 'one'), (None, 'two'), ('named', 'three')])
@@ -1060,7 +1061,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         self.assertIsInstance(by_name['three']['identity_token'], str)
 
     def test_sqlite_without_rowid_composite_key_edits_exact_native_row(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute('CREATE TABLE widgets(a TEXT, b INTEGER, name TEXT, '
                                'PRIMARY KEY(a,b)) WITHOUT ROWID')
             connection.executemany('INSERT INTO widgets VALUES (?, ?, ?)',
@@ -1076,7 +1077,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'selector': {'identity_token': token}, 'concurrency_token': token,
             'changes': {'name': 'after'}}, self.target))
         self.apply(planned)
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             self.assertEqual(connection.execute(
                 'SELECT b,name FROM widgets ORDER BY b').fetchall(),
                 [(1, 'after'), (2, 'untouched')])
@@ -1301,7 +1302,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             self.client._forget_and_close(writer)
 
     def test_row_pages_use_opaque_provider_continuations_and_cancel(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 'CREATE TABLE widgets(id INTEGER PRIMARY KEY, name TEXT)'
             )
@@ -1364,7 +1365,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         )
 
     def test_sqlite_native_backup_restore_and_maintenance_execute(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 'CREATE TABLE restore_probe('
                 'id INTEGER PRIMARY KEY, value TEXT)'
@@ -1398,7 +1399,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'sqlite-online-backup',
             backed_up['driver_observation']['operation'],
         )
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 "UPDATE restore_probe SET value = 'after-backup' WHERE id = 1"
             )
@@ -1410,7 +1411,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'sqlite-online-restore',
             restored['driver_observation']['operation'],
         )
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             value = connection.execute(
                 'SELECT value FROM restore_probe WHERE id = 1'
             ).fetchone()[0]
@@ -1527,7 +1528,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         self.assertEqual(database, Path(
             created_result['endpoint_database_target']['database']
         ))
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             self.assertEqual(8192, connection.execute(
                 'PRAGMA page_size'
             ).fetchone()[0])
@@ -1571,7 +1572,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'provider_payload'
         ]['compiled']['statements']])
         self.apply(altered)
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             self.assertEqual(8, connection.execute(
                 'PRAGMA user_version'
             ).fetchone()[0])

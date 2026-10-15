@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / 'web'
+NATIVE_TOOL_WORKSPACE = str((Path(tempfile.gettempdir()) / 'cdeadmin-tools').resolve())
 if str(WEB) not in sys.path:
     sys.path.insert(0, str(WEB))
 if 'pgadmin' not in sys.modules:
@@ -574,7 +575,7 @@ class CassandraProviderTests(unittest.TestCase):
             'resource_kind': 'repair', 'operation_id': 'execute',
             'draft': {'action': 'repair',
                       'arguments': {'keyspace': 'qualification'}},
-            '_provider_route': route(tool_workspace='/tmp/cdeadmin-tools'),
+            '_provider_route': route(tool_workspace=NATIVE_TOOL_WORKSPACE),
         })
         self.assertEqual('repair', plan['command_preview']['tool'][
             'provider_tool'
@@ -606,7 +607,7 @@ class CassandraProviderTests(unittest.TestCase):
                 'name': 'qualification', 'keyspace': 'qualification',
             }},
             'native': {}, '_provider_route': route(
-                tool_workspace='/tmp/cdeadmin-tools', jmx_port=7199,
+                tool_workspace=NATIVE_TOOL_WORKSPACE, jmx_port=7199,
                 jmx_auth_mode='password', jmx_username='operator',
                 credential_references={'jmx_password': 'jmx-secret'},
                 principal_reference='principal-one',
@@ -696,7 +697,7 @@ class CassandraProviderTests(unittest.TestCase):
             'shell', 'file', {'path': 'query.cql'},
             adapter._route({'route': route(
                 tls_mode='self-signed',
-                tool_workspace='/tmp/cdeadmin-tools',
+                tool_workspace=NATIVE_TOOL_WORKSPACE,
             )}),
         )
         self.assertEqual('cqlsh', executable)
@@ -713,7 +714,7 @@ class CassandraProviderTests(unittest.TestCase):
                 'native': {},
                 '_provider_route': route(
                     tls_mode='system-ca',
-                    tool_workspace='/tmp/cdeadmin-tools',
+                    tool_workspace=NATIVE_TOOL_WORKSPACE,
                 ),
             }})
 

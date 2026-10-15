@@ -285,6 +285,8 @@ def stage(name, evidence):
                 env=env, log=evidence / 'desktop-install.log')
         command(['corepack', 'yarn', 'run', 'linter'], cwd=ROOT / 'runtime',
                 env=env, log=evidence / 'desktop-lint.log')
+        command(['node', '--test', ROOT / 'runtime/src/js/menuTemplate.test.js'],
+                env=env, log=evidence / 'desktop-menu.log')
     elif name == 'run-desktop':
         env.update(CDEADMIN_DESKTOP_PYTHON=str(PYTHON),
                    CDEADMIN_DESKTOP_LAUNCHER=str(ROOT / 'web/CDEadmin.py'),

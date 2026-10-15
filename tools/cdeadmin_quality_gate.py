@@ -8,6 +8,7 @@ import ast
 import importlib.util
 import json
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -301,11 +302,14 @@ def startup_measurement(source: Path, policy):
             'startup-route-count', 'application',
             f"{result['route_count']} differs from {startup['route_count']}",
         ))
-    if result['wall_seconds'] > startup['wall_seconds_maximum']:
+    maximum_wall = startup.get('wall_seconds_platform_maximum', {}).get(
+        f'{sys.platform}:{platform.machine()}', startup['wall_seconds_maximum'])
+    result['wall_seconds_budget'] = maximum_wall
+    if result['wall_seconds'] > maximum_wall:
         findings.append(violation(
             'startup-wall-budget', 'application',
             f"{result['wall_seconds']} exceeds "
-            f"{startup['wall_seconds_maximum']}",
+            f"{maximum_wall}",
         ))
     maximum_rss = startup.get('max_rss_kib_platform_maximum', {}).get(
         sys.platform, startup['max_rss_kib_maximum'])
@@ -352,16 +356,18 @@ def contract_benchmark(source: Path, policy):
     for _index in range(benchmark['iterations']):
         runtime.validate_contract('Resource', entry['payload'], schema)
     wall = time.perf_counter() - started
+    maximum_wall = benchmark.get('wall_seconds_platform_maximum', {}).get(
+        f'{sys.platform}:{platform.machine()}', benchmark['wall_seconds_maximum'])
     result = {
         'iterations': benchmark['iterations'],
         'wall_seconds': round(wall, 6),
-        'maximum_seconds': benchmark['wall_seconds_maximum'],
+        'maximum_seconds': maximum_wall,
     }
     findings = []
-    if wall > benchmark['wall_seconds_maximum']:
+    if wall > maximum_wall:
         findings.append(violation(
             'contract-validation-budget', 'Resource',
-            f'{wall:.6f} exceeds {benchmark["wall_seconds_maximum"]}',
+            f'{wall:.6f} exceeds {maximum_wall}',
         ))
     return result, findings
 

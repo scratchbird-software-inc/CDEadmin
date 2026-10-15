@@ -93,6 +93,15 @@ def qualify(evidence):
                     result = call('Runtime.evaluate', {'expression': '''Boolean(document.querySelector('[data-cdeadmin-shell="zero-grey"]') && document.querySelector('[data-cdeadmin-qa-key="explorer-workspace"]'))''', 'returnByValue': True})
                     if result.get('result', {}).get('value') is True:
                         receipt['workbench_mounted'] = True
+                        workspace = call('Runtime.evaluate', {'expression': '''(async () => {
+                          const bridge = window.electronUI.workspaceWindows;
+                          const registration = await bridge.registerWindow({workspaceId: 'default_workspace', role: 'main'});
+                          const displays = await bridge.listDisplays();
+                          return {windowId: registration.windowId, displays: displays.length};
+                        })()''', 'awaitPromise': True, 'returnByValue': True})
+                        receipt['native_workspace'] = workspace.get('result', {}).get('value')
+                        if not receipt['native_workspace'] or not receipt['native_workspace']['displays']:
+                            raise RuntimeError('Native workspace registration/display enumeration failed')
                         receipt['chromium'] = call('Browser.getVersion').get('product')
                         shot = call('Page.captureScreenshot', {'format': 'png'})
                         (evidence / 'workbench.png').write_bytes(base64.b64decode(shot['data']))
@@ -122,9 +131,14 @@ def qualify(evidence):
         _, alive = psutil.wait_procs(descendants, timeout=15)
         if alive:
             receipt.update(complete=False, cleanup_error='Owned desktop processes did not stop')
+        desktop_log = (evidence / 'desktop.log').read_text(encoding='utf-8', errors='replace')
+        main_errors = [line for line in desktop_log.splitlines()
+                       if 'Error occurred in handler' in line or 'Uncaught Exception' in line]
+        if main_errors:
+            receipt.update(complete=False, main_process_errors=main_errors)
         (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
         print(json.dumps(receipt, indent=2))
-        print((evidence / 'desktop.log').read_text(encoding='utf-8', errors='replace'))
+        print(desktop_log)
     return 0 if receipt['complete'] else 1
 
 

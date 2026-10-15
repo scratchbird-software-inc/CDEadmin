@@ -116,7 +116,9 @@ def _database_operation(connection, route, operation, options):
                 'SQLite backup did not pass quick_check')
         destination.close()
         destination = None
-        with open(staging, 'rb') as stream:
+        # Windows _commit (used by fsync) requires a writable handle.
+        # This is our closed, validated staging file, before publication.
+        with open(staging, 'r+b') as stream:
             os.fsync(stream.fileno())
         if overwrite:
             current = os.lstat(target) if os.path.lexists(target) else None

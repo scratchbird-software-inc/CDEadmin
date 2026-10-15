@@ -226,3 +226,9 @@ Darwin has a 256,000 KiB budget: the first Apple Silicon run measured
 240,336 KiB, just above the original boundary. The explicit platform budget
 keeps a bounded allowance for its native runtime footprint and is recorded
 with each startup measurement.
+
+Intel macOS has explicit wall-time budgets of 20 seconds for startup and
+2.5 seconds for 5,000 contract validations. Its first hosted run measured
+15.33 and 1.79 seconds respectively. Linux, Windows and Apple Silicon retain
+the original 8-second and 1.5-second limits. Receipts record the selected
+budgets; functional checks, route counts and validation work are identical.

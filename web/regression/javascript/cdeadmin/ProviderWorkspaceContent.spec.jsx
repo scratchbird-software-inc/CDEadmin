@@ -1362,7 +1362,8 @@ describe('ProviderWorkspaceContent', () => {
     });
     render(<ProviderWorkspaceContent closeModal={jest.fn()}
       endpointUrl="/workspace/1" initialTab="studio" />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Close query session'})).not.toBeDisabled());
     fireEvent.mouseDown(screen.getByLabelText('Provider language'));
     fireEvent.click(await screen.findByRole('option', {name: 'Another language'}));
@@ -2394,6 +2395,7 @@ describe('ProviderWorkspaceContent', () => {
           resource_kind: 'domain', operation_id: 'rename'}} />);
       fireEvent.change(await screen.findByRole('textbox', {name: 'New name'}),
         {target: {value: 'E'}});
+      await waitFor(() => expect(screen.getByRole('button', {name: 'Validate and preview'})).toBeEnabled());
       fireEvent.click(screen.getByRole('button', {name: 'Validate and preview'}));
       await waitFor(() => expect(screen.getByRole('button',
         {name: 'Apply provider plan'})).toBeEnabled());
