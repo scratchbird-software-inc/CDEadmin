@@ -13,7 +13,10 @@ on:
         default: 'prerequisites,doctor,clients,python,servers,frontend,desktop,verify,fixtures'
   push:
     branches: [master]
-    paths: ['tools/development/**', 'tools/refresh_ddn.py', 'requirements.txt', '.github/workflows/native-development.yml']
+    paths: ['web/**', 'runtime/**', 'tools/**', 'requirements.txt', '.github/workflows/native-development.yml', '.github/actions/native-evidence/**']
+  pull_request:
+    branches: [master]
+    paths: ['web/**', 'runtime/**', 'tools/**', 'requirements.txt', '.github/workflows/native-development.yml', '.github/actions/native-evidence/**']
 
 permissions:
   contents: read
@@ -24,13 +27,14 @@ env:
 
 jobs:
   native:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: ${{ matrix.os }} / CPython 3.14
     strategy:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(inputs.platforms || '["windows-2025", "macos-15-intel", "macos-15"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
+    timeout-minutes: ${{ matrix.os == 'windows-2025' && 180 || 360 }}
     defaults:
       run:
         shell: pwsh
@@ -76,7 +80,7 @@ jobs:
           python -m uv run --no-project --python 3.14 python tools/development/native.py ci --evidence $env:CDEADMIN_NATIVE_EVIDENCE --stages $env:NATIVE_STAGES
           exit $LASTEXITCODE
       - name: Qualify configured disposable network engines
-        if: ${{ !cancelled() && vars.CDEADMIN_NATIVE_ROUTES_JSON != '' }}
+        if: ${{ !cancelled() && vars.CDEADMIN_NATIVE_ROUTES_JSON != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           ROUTES_JSON: ${{ vars.CDEADMIN_NATIVE_ROUTES_JSON }}
           CDEADMIN_TEST_POSTGRES_PASSWORD: ${{ secrets.CDEADMIN_TEST_POSTGRES_PASSWORD }}

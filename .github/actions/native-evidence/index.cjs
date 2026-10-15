@@ -6,7 +6,7 @@ function collect(root) {
     for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) {
-        if (!entry.name.startsWith('owned-') && !entry.name.startsWith('mariadb-parent-') && entry.name !== 'ddn-intake') visit(target);
+        if (!entry.name.startsWith('owned-') && !entry.name.startsWith('mariadb-parent-') && !entry.name.startsWith('scratchbird-parent-') && entry.name !== 'ddn-intake') visit(target);
       } else if (entry.isFile() && ['.json', '.xml', '.log', '.png', '.md'].includes(path.extname(entry.name))) {
         files.push(target);
       }

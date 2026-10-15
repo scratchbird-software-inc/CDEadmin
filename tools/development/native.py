@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -20,8 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / '.native'
 PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt'
                            else 'bin/python')
-SCRATCHBIRD_DRIVER = ('scratchbird @ git+https://github.com/scratchbird-software-inc/ScratchBird.git'
-                     '@54b029a498393de0fb6b765996cc4f7c57211049#subdirectory=project/drivers/driver/python')
+SCRATCHBIRD_DRIVER_REVISION = '54b029a498393de0fb6b765996cc4f7c57211049'
 FULL_STAGES = ('prerequisites', 'doctor', 'clients', 'python', 'servers',
                'frontend', 'desktop', 'verify', 'fixtures')
 
@@ -48,12 +48,29 @@ def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
         args[0] = executable
     print('+ ' + ' '.join(args), flush=True)
     if log:
-        with Path(log).open('w', encoding='utf-8') as output:
-            result = subprocess.run(args, cwd=cwd, env=env, stdout=output,
-                                    stderr=subprocess.STDOUT, timeout=timeout)
-        # GitHub retains this output even when subsequent stages fail.
-        print(Path(log).read_text(encoding='utf-8', errors='replace'), flush=True)
-        result.check_returncode()
+        try:
+            with Path(log).open('w', encoding='utf-8') as output:
+                process = subprocess.Popen(args, cwd=cwd, env=env, stdout=output,
+                    stderr=subprocess.STDOUT, start_new_session=os.name != 'nt')
+                try:
+                    status = process.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    if process.poll() is None:
+                        if os.name == 'nt':
+                            subprocess.run(['taskkill.exe', '/PID', str(process.pid), '/T', '/F'],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, timeout=30)
+                        else:
+                            os.killpg(process.pid, signal.SIGKILL)
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=30)
+                    raise
+            if status:
+                raise subprocess.CalledProcessError(status, args)
+        finally:
+            # Preserve diagnostics even when the child exceeds its deadline.
+            if Path(log).is_file():
+                print(Path(log).read_text(encoding='utf-8', errors='replace'), flush=True)
     else:
         subprocess.run(args, cwd=cwd, env=env, check=True, timeout=timeout)
 
@@ -101,7 +118,49 @@ def requirements(destination):
         '-r ' + (ROOT / 'requirements.txt').as_posix() + '\n' +
         '-r ' + (ROOT / 'tools/reference_engine_demos/requirements.txt').as_posix()
         + '\n-r ' + (ROOT / 'web/regression/requirements.txt').as_posix()
-        + '\npytest==8.4.2\n' + SCRATCHBIRD_DRIVER + '\n', encoding='utf-8')
+        + '\npytest==8.4.2\n', encoding='utf-8')
+
+
+def install_scratchbird_driver(env, evidence):
+    """Capture only the official pure-Python SDK, without an engine checkout."""
+    source = STATE / 'scratchbird-sdk'
+    url = 'https://github.com/scratchbird-software-inc/ScratchBird.git'
+    relative = 'project/drivers/driver/python'
+    if not source.exists():
+        command(['git', 'init', source], env=env)
+        command(['git', '-C', source, 'remote', 'add', 'origin', url], env=env)
+    else:
+        origin = subprocess.check_output(['git', '-C', str(source), 'remote', 'get-url', 'origin'], text=True).strip()
+        if origin != url:
+            raise RuntimeError('Refusing to modify an unknown ScratchBird SDK checkout')
+        command(['git', '-C', source, 'diff', '--quiet', 'HEAD', '--'], env=env)
+    command(['git', '-C', source, 'fetch', '--depth=1', '--filter=blob:none', 'origin',
+             SCRATCHBIRD_DRIVER_REVISION], env=env, log=evidence / 'scratchbird-fetch.log')
+    command(['git', '-C', source, 'sparse-checkout', 'set', '--cone', relative], env=env)
+    command(['git', '-C', source, 'checkout', '--detach', 'FETCH_HEAD'], env=env,
+            log=evidence / 'scratchbird-checkout.log')
+    import tempfile
+    import tarfile
+    output = Path(tempfile.mkdtemp(prefix='scratchbird-parent-', dir=evidence))
+    archive = output / 'source.tar'
+    command(['git', '-C', source, 'archive', '--format=tar', '--output', archive,
+             'HEAD', relative], env=env)
+    with tarfile.open(archive) as captured:
+        captured.extractall(output / 'source', filter='data')
+    wheels = output / 'wheels'
+    command([PYTHON, '-m', 'pip', 'wheel', '--no-deps', '--wheel-dir', wheels, output / 'source' / relative],
+            env=env, log=evidence / 'scratchbird-build.log')
+    selected = list(wheels.glob('scratchbird-*.whl'))
+    if len(selected) != 1 or not selected[0].name.endswith('-py3-none-any.whl'):
+        raise RuntimeError('Expected one official pure-Python ScratchBird driver wheel')
+    command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', selected[0]],
+            env=env, log=evidence / 'scratchbird-install.log')
+    receipt = {'repository': url, 'revision': SCRATCHBIRD_DRIVER_REVISION,
+        'source_tree': subprocess.check_output(['git', '-C', str(source), 'rev-parse',
+            'HEAD:' + relative], text=True).strip(),
+        'wheel_sha256': hashlib.sha256(selected[0].read_bytes()).hexdigest(),
+        'live_history_qualification': 'requires compatible ScratchBird server'}
+    (evidence / 'scratchbird-driver.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
 
 
 def ddn(evidence):
@@ -196,6 +255,7 @@ def stage(name, evidence):
         command([PYTHON, '-m', 'pip', 'install', '--no-deps',
                  '--force-reinstall', wheels[0]], env=env,
                 log=evidence / 'mariadb-python-install.log')
+        install_scratchbird_driver(env, evidence)
         command([PYTHON, '-m', 'pip', 'check'], env=env,
                 log=evidence / 'pip-check.log')
         command([PYTHON, '-m', 'pip', 'freeze', '--all'], env=env,

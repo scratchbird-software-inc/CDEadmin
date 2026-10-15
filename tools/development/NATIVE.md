@@ -126,7 +126,9 @@ driver from engine revision `54b029a498393de0fb6b765996cc4f7c57211049`.
 It uses host Python sockets/TLS and requires no Linux client library. This
 provides the client needed by persistent monitoring history; live archive
 acceptance still requires a compatible ScratchBird server and disposable
-history credentials. The driver revision is retained in `pip freeze` evidence.
+history credentials. Its source revision/tree and built-wheel hash are recorded
+in `scratchbird-driver.json`. Only the SDK subtree is captured, avoiding an
+unneeded full engine checkout and Windows path-length failures in other drivers.
 
 Verification collects dependency imports, exact runtime admission, the existing
 SQLite and DuckDB native provider gates, embedded Firebird editor/row/template/

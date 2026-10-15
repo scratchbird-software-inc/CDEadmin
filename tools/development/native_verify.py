@@ -187,7 +187,8 @@ def verify(evidence):
         result = {'check': name, 'status': 'failed'}
         try:
             command(args, cwd=ROOT / 'web' if name == 'javascript-contracts' else ROOT,
-                    log=evidence / (name + '.log'))
+                    log=evidence / (name + '.log'),
+                    timeout=3600 if name in ('python-contracts', 'javascript-contracts') else 300)
             result['status'] = 'passed'
         except Exception as error:
             result['error'] = str(error)

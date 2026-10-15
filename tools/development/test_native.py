@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -21,6 +22,27 @@ class NativeSetupTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+
+    def test_timeout_preserves_output_and_stops_owned_descendants(self):
+        import psutil
+        marker = self.root / 'child.pid'
+        script = ('import subprocess,sys,time; from pathlib import Path; '
+                  'p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)",sys.argv[2]]); '
+                  'Path(sys.argv[1]).write_text(str(p.pid)); '
+                  'print("owned child ready",flush=True);time.sleep(60)')
+        log = self.root / 'timeout.log'
+        with self.assertRaises(subprocess.TimeoutExpired):
+            native.command([sys.executable, '-c', script, marker, self.root],
+                           cwd=self.root, log=log, timeout=2)
+        self.assertIn('owned child ready', log.read_text())
+        try:
+            child = psutil.Process(int(marker.read_text()))
+            active = child.is_running() and child.status() != psutil.STATUS_ZOMBIE
+            if active and str(self.root) in child.cmdline():
+                child.kill()
+            self.assertFalse(active, 'Timed-out command left an owned child running')
+        except psutil.NoSuchProcess:
+            pass
 
     def test_ci_collects_later_failures_and_never_labels_them_passed(self):
         def stage(name, _):

@@ -10,7 +10,7 @@ test('preserves receipts and screenshots while excluding private keys and owned 
   try {
     for (const name of ['receipt.json', 'verify/python.xml', 'verify/workbench.png', 'fixtures/qualification.log',
       'fixtures/server.key', 'fixtures/owned-test/private.json', 'ddn-intake/snapshot/private.json',
-      'mariadb-parent-test/build/source.json']) {
+      'mariadb-parent-test/build/source.json', 'scratchbird-parent-test/source/private.json']) {
       const target = path.join(root, name);
       fs.mkdirSync(path.dirname(target), {recursive: true});
       fs.writeFileSync(target, 'fixture');
