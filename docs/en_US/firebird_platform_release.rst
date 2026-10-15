@@ -106,6 +106,8 @@ uses its native absolute paths. Linux contributors may use their owned Firebird
 5.0.4 build; Windows and Mac contributors use their matching native distribution.
 No Docker or Linux client extraction is used by this platform runner. Native
 development setup and Electron/browser startup remain separate checks.
+The runner supplies the application import path to each workflow subprocess;
+local contributors do not need to export ``PYTHONPATH`` in their shell.
 
 Source and artifact reconciliation
 -----------------------------------

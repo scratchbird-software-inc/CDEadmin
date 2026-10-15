@@ -30,6 +30,10 @@ def run_mode(mode, route, directory, runtime, evidence, password, *, workflows, 
     env = dict(os.environ, FIREBIRD=str(runtime), FIREBIRD_LOCK=str(runtime / 'lock'),
                PYTHONFAULTHANDLER='1',
                CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(library(runtime)))
+    # Fresh workflow processes need the same application import boundary as
+    # this runner. A caller's activated venv does not add web/ to sys.path.
+    env['PYTHONPATH'] = os.pathsep.join(value for value in (
+        str(ROOT / 'web'), str(ROOT), env.get('PYTHONPATH')) if value)
     for key in ('ISC_USER', 'ISC_PASSWORD', 'ISC_DATABASE', 'ISC_ROLE'):
         env.pop(key, None)
     if password is not None:
