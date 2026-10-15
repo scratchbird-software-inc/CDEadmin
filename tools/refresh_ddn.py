@@ -52,7 +52,7 @@ def refresh(source, work):
     # Apply the portable path correction on every host. The captured source,
     # declarations and generated bundle then have one provenance identity on
     # Windows, macOS and Linux, rather than host-specific release candidates.
-    adjustments = [{'patch': str(WINDOWS_PATCH.relative_to(ROOT)),
+    adjustments = [{'patch': WINDOWS_PATCH.relative_to(ROOT).as_posix(),
                     'sha256': digest(WINDOWS_PATCH)}]
     manifest_path = DEST / 'resource-manifest.json'
     if manifest_path.exists():

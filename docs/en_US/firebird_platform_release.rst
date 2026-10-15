@@ -50,6 +50,16 @@ Native checks cover SQL/metadata, scalar and ARRAY roundtrips and pending-work
 preservation as well as the complete conversion domains. Unknown profiles fail
 explicitly. The pinned event driver uses a fixed-prefix variadic binding so
 Apple Silicon receives native event names through its actual C calling convention.
+The Mac binding zero-extends the bounded event count to 32 bits to accommodate
+Apple libffi's fixed-argument validation. Focused native diagnosis covers
+concurrent one-name and fifteen-name collectors and a 127-byte UTF-8 event name.
+The subscription owns the pinned driver's native event buffers. Confirmed
+cancellation and thread release precede deallocation through the admitted client;
+failed cancellation retains the buffers for the connection's owned cleanup retry.
+The fixed-count representation follows `Apple's argument-extension rules
+<https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms>`_;
+the narrow-argument check is visible in `Apple's libffi implementation
+<https://github.com/apple-oss-distributions/libffi/blob/main/src/prep_cif.c>`_.
 
 Windows additionally qualifies actual XNET shared memory and Win_Sspi trusted
 authentication. Its owned server uses a unique IPC name and an isolated global

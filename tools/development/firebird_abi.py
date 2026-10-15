@@ -29,26 +29,35 @@ def child(runtime, database, evidence):
     adapter = importlib.util.module_from_spec(spec);spec.loader.exec_module(adapter)
     result = {'schema': 'cdeadmin.firebird-event-abi-diagnostic.v1', 'passed': False,
               'release_qualified': False, 'failures': []}
-    connection = collector = None
+    connection = None
+    collectors = []
     try:
         adapter.install(api)
         connection = native.create_database(str(database), user='SYSDBA', charset='UTF8')
         event = 'SR_ABI_' + uuid.uuid4().hex[:12]
-        collector = connection.event_collector([event])
-        collector.begin()
-        deadline = time.monotonic() + 10
-        while collector._EventCollector__event_blocks[0]._EventBlock__first:
-            if time.monotonic() > deadline:
-                raise TimeoutError('Native event baseline was not delivered')
-            time.sleep(.05)
+        names = [event + '_' + str(index) for index in range(14)] + ['Ω' * 63 + 'X']
+        for group in ([names[0]], names):
+            collector = adapter.event_collector(connection, group)
+            collectors.append(collector)
+            collector.begin()
+            deadline = time.monotonic() + 10
+            while collector._EventCollector__event_blocks[0]._EventBlock__first:
+                if time.monotonic() > deadline:
+                    raise TimeoutError('Native event baseline was not delivered')
+                time.sleep(.05)
         with connection.cursor() as cursor:
-            cursor.execute("EXECUTE BLOCK AS BEGIN POST_EVENT '" + event + "'; END")
+            cursor.execute("EXECUTE BLOCK AS BEGIN POST_EVENT '" + names[0] +
+                           "'; POST_EVENT '" + names[-1] + "'; END")
         connection.commit()
-        deadline = time.monotonic() + 10
-        while collector.wait(.05)[event] != 1:
-            if time.monotonic() > deadline:
-                raise TimeoutError('Native committed event was not delivered')
+        for collector, group in zip(collectors, ([names[0]], names)):
+            deadline = time.monotonic() + 10
+            expected = {name: int(name in (names[0], names[-1])) for name in group}
+            while collector.wait(.05) != expected:
+                if time.monotonic() > deadline:
+                    raise TimeoutError('Native committed event was not delivered')
         result['committed_count'] = 1
+        result['concurrent_collector_sizes'] = [1, 15]
+        result['maximum_utf8_event_name_bytes'] = len(names[-1].encode('utf-8'))
         result['passed'] = True
     except BaseException as error:
         # Only generated local fixtures are used; no password is acquired or
@@ -57,7 +66,10 @@ def child(runtime, database, evidence):
         traceback.print_exc()
     finally:
         try:
-            if collector is not None: collector.close()
+            for collector in reversed(collectors): collector.close()
+            if collectors:
+                result['event_buffers_released'] = all(item.buffers_released for item in collectors)
+                assert result['event_buffers_released']
             if connection is not None: connection.drop_database()
             result['handles_released'] = True
         except BaseException as error:
