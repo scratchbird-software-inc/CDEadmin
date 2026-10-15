@@ -1,4 +1,4 @@
-﻿const webpack = require('webpack');
+const webpack = require('webpack');
 const config = require('./webpack.config.js')[0];
 config.entry = { 'security.pages': 'security.pages' };
 config.watch = true;
@@ -13,6 +13,6 @@ webpack(config, (err, stats) => {
     return;
   }
   const asset = (info.assets || []).find((item) => item.name === 'security.pages.js');
-  console.log(stats.hasWarnings() ? 'compiled with warnings' : 'compiled successfully');
-  if (asset) console.log('security.pages.js emitted=' + asset.emitted + ' size=' + asset.size);
+  process.stdout.write((stats.hasWarnings() ? 'compiled with warnings' : 'compiled successfully') + '\n');
+  if (asset) process.stdout.write('security.pages.js emitted=' + asset.emitted + ' size=' + asset.size + '\n');
 });

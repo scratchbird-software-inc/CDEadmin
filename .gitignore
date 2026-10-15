@@ -57,6 +57,7 @@ auditpy.txt
 /venv/
 /.venv/
 /.devstate/
+/.env.dev
 /.native/
 .scannerwork/
 web/coverage/

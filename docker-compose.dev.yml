@@ -19,15 +19,17 @@ services:
         INSTALL_DEMO_REQUIREMENTS: ${INSTALL_DEMO_REQUIREMENTS:-0}
         NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE:-8192}
     ports:
-      - "${CDEADMIN_HTTP_PORT:-5051}:5051"
+      - "127.0.0.1:${CDEADMIN_HTTP_PORT:-5051}:5051"
     environment:
       CDEADMIN_DEFAULT_EMAIL: ${CDEADMIN_DEFAULT_EMAIL:-developer@example.com}
       CDEADMIN_DEFAULT_PASSWORD: ${CDEADMIN_DEFAULT_PASSWORD:-CDEadminDev-2026!}
-      SCRATCHROBIN_DDN_OFFLINE: "1"
     volumes:
-      # Live Python / JSX sources (image keeps node_modules and webpack output).
+      # Live sources; generated assets are supplied by the built image below.
       - ./web/pgadmin:/cdeadmin/web/pgadmin
       - ./.devstate/application:/cdeadmin/.devstate/application
+    tmpfs:
+      - /cdeadmin/web/pgadmin/static/js/generated
+      - /cdeadmin/web/pgadmin/static/css
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -35,7 +37,7 @@ services:
     profiles: ["databases", "mongodb"]
     image: mongo:8.2.6
     ports:
-      - "${MONGODB_PORT:-27017}:27017"
+      - "127.0.0.1:${MONGODB_PORT:-27017}:27017"
     volumes:
       - cdeadmin-dev-mongodb:/data/db
       - ./tools/development/mongodb/init:/docker-entrypoint-initdb.d:ro

@@ -71,14 +71,15 @@ def inventory(source):
 def refresh(source, work):
     offline = os.environ.get('SCRATCHROBIN_DDN_OFFLINE', '').strip().lower()
     if offline in ('1', 'true', 'yes'):
-        verify_vendored_only()
-        return
+        raise RuntimeError('Builds require a current DDN source checkout; '
+                           'set SCRATCHROBIN_DDN_SOURCE. Use --verify-vendored '
+                           'only to inspect artifacts, not to validate a build.')
     work.mkdir(parents=True, exist_ok=True)
     before = inventory(source)
     # Apply the portable path correction on every host. The captured source,
     # declarations and generated bundle then have one provenance identity on
     # Windows, macOS and Linux, rather than host-specific release candidates.
-    adjustments = [{'patch': str(WINDOWS_PATCH.relative_to(ROOT)),
+    adjustments = [{'patch': WINDOWS_PATCH.relative_to(ROOT).as_posix(),
                     'sha256': digest(WINDOWS_PATCH)}]
     manifest_path = DEST / 'resource-manifest.json'
     if manifest_path.exists():
@@ -169,5 +170,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=DEFAULT_SOURCE)
     parser.add_argument('--work', type=Path, default=DEFAULT_WORK)
+    parser.add_argument('--verify-vendored', action='store_true',
+                        help='Inspect artifact integrity only; no freshness '
+                             'or build qualification')
     args = parser.parse_args()
-    refresh(args.source.resolve(), args.work.resolve())
+    if args.verify_vendored:
+        verify_vendored_only()
+    else:
+        refresh(args.source.resolve(), args.work.resolve())

@@ -34,12 +34,16 @@ RUN apk add --no-cache \
 
 # webpack.config.js runs ../tools/refresh_ddn.py from web/ (repo-root layout).
 COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
+COPY tools/dependency_patches/ /cdeadmin/tools/dependency_patches/
+COPY tools/development/docker/prepare_ddn.py /cdeadmin/tools/development/docker/prepare_ddn.py
 # Create the CDEadmin build directory and copy the source into it.
 COPY web /cdeadmin/web
 WORKDIR /cdeadmin/web
 
 # Build the JS vendor code in the app-builder, and then remove the vendor source.
-ENV SCRATCHROBIN_DDN_OFFLINE=1
+ENV SCRATCHROBIN_DDN_SOURCE=/cdeadmin/ddn-source
+ENV SCRATCHROBIN_DDN_WORK=/cdeadmin/ddn-intake
+RUN python3 /cdeadmin/tools/development/docker/prepare_ddn.py /cdeadmin/ddn-source
 RUN --mount=type=bind,source=.git,target=/cdeadmin/.git \
     --mount=type=tmpfs,target=node_modules \
     --mount=type=tmpfs,target=pgadmin/static/js/generated/.cache \

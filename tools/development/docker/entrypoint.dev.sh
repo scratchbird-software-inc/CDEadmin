@@ -9,6 +9,11 @@ TEMPLATE="${ROOT}/tools/development/docker/config_local.docker.py"
 
 mkdir -p "${ROOT}/.devstate/application"
 
+# Compose overlays these generated asset directories so the source bind mount
+# cannot hide the bundle built into this image. Never copy over JSX sources.
+cp -a "${ROOT}/frontend-generated/." "${WEB}/pgadmin/static/js/generated/"
+cp -a "${ROOT}/frontend-css/." "${WEB}/pgadmin/static/css/"
+
 # Regenerate if missing or still using the old double-.. path (/.devstate/...).
 if [[ ! -f "${CONFIG}" ]] \
     || grep -qF "'..', '..', '.devstate'" "${CONFIG}"; then

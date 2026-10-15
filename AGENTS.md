@@ -1,5 +1,18 @@
 # ScratchRobin project instructions
 
+## Shared development branch
+
+Owner direction, 2026-10-15: `master` is the shared development branch. Review
+and integrate published development branches, preserving their commits and the
+current UX and backend functionality. Temporary integration branches/worktrees
+may be used for conflict resolution and verification; synchronize completed work
+back to `master` and advance the development branches to the same commit. Keep
+deployment output such as `gh-pages` separate from application source.
+
+Preserve uncommitted files and staged changes in existing checkouts. Refresh DDN
+and run affected regression checks before publishing integrations. Report native
+qualification that is still running separately from completed verification.
+
 ## Firebird feature completion
 
 Owner direction, 2026-10-10: all functionality identified in the FlameRobin

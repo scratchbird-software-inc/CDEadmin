@@ -26,9 +26,10 @@ Override credentials via `.env.dev` (see `.env.dev.example`).
 - **`tools/reference_engine_demos/requirements.txt`** — optional demo drivers; enable with
   `INSTALL_DEMO_REQUIREMENTS=1` at build time.
 - **Frontend** — `yarn install --immutable` and `yarn webpacker` during image build.
-  Webpack invokes `tools/refresh_ddn.py`; the image copies that script and sets
-  `SCRATCHROBIN_DDN_OFFLINE=1` so the checked-in `vendor/ddn/current` bundle is
-  verified without the sister-project checkout.
+  The image acquires the exact DDN source revision in the candidate manifest,
+  verifies its source hashes, installs its pinned build dependencies, and runs
+  the ordinary `tools/refresh_ddn.py` gate. Internet access is required.
+  Unpublished DDN source changes must be reconciled before packaging.
 
 Rebuild after changing `requirements.txt`, `web/package.json`, or `yarn.lock`:
 
@@ -53,12 +54,13 @@ the failure happens on `yarn webpacker` when Node’s heap limit is too low for 
 | `./web/pgadmin` | `/cdeadmin/web/pgadmin` | Mounted; edit Python/JSX here |
 | `./.devstate/application` | config SQLite, sessions, storage | Persists logins between restarts |
 
-Webpack bundles and `node_modules` stay in the image. After JSX changes, rebuild the
-`web` service or run webpack inside the container:
+The image supplies compiled JavaScript and CSS through container-only temporary
+mounts beneath the source mount. It copies only generated assets at startup;
+JSX files are never copied back to the host. Python edits reload automatically.
+After JSX, SCSS or other frontend changes, rebuild and recreate the web service:
 
 ```bash
-docker compose -f docker-compose.dev.yml run --rm web \
-  bash -lc 'cd /cdeadmin/web && corepack yarn webpacker'
+docker compose -f docker-compose.dev.yml up --build --force-recreate web
 ```
 
 ## Databases
@@ -69,7 +71,7 @@ running web container can reach it as `postgresql:5432`. From the host it is
 
 ```bash
 docker run -d --name cdeadmin-postgresql --network cdeadmin-dev_default \
-  --network-alias postgresql -p 55432:5432 \
+  --network-alias postgresql -p 127.0.0.1:55432:5432 \
   -e POSTGRES_USER=cdeadmin_demo -e POSTGRES_PASSWORD=CDEadminDemo-2026! \
   -e POSTGRES_DB=cdeadmin_demo \
   -v cdeadmin-postgresql:/var/lib/postgresql/data postgres:16-alpine
@@ -114,6 +116,7 @@ On first start, `web/config_local.py` is created from
 (`DEBUG=True`, listen `0.0.0.0:5051`). To customize, copy that file to
 `web/config_local.py` on the host and add a bind mount in `docker-compose.dev.yml`.
 
-This stack is for **local UI and API development**. Full multi-engine native clients
-and the complete demo estate remain on the Linux `dev.sh` workflow documented in
-[../README.md](../README.md).
+This stack is optional for **local UI and API development**. Windows and macOS
+native development use [../NATIVE.md](../NATIVE.md)
+and require no Docker or Linux runtime. The complete Linux demo estate uses
+the `dev.sh` workflow documented in [../README.md](../README.md).
