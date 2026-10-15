@@ -1,8 +1,10 @@
 """Exact native server/tool kits for owned Windows and macOS test fixtures."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -94,12 +96,36 @@ def postgres(evidence, env):
     (root / '.cdeadmin-server-complete').write_text(ASSETS['postgres-source'][1], encoding='utf-8')
 
 
-def mariadb(evidence, env):
+def patch_mariadb_darwin_linker(tree, evidence):
+    # ColumnStore's GNU ld switch breaks Apple ld header/function probe links
+    # and poisons shared HAVE_* cache values subsequently used by Mroonga.
+    path = tree / 'storage/columnstore/CMakeLists.txt'
+    old = 'SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--as-needed")'
+    new = 'IF(NOT APPLE)\n' + old + '\nENDIF()'
+    before = path.read_bytes()
+    source = before.decode('utf-8')
+    if new not in source:
+        if source.count(old) != 1:
+            raise RuntimeError('MariaDB Darwin linker patch no longer matches pinned source')
+        path.write_text(source.replace(old, new), encoding='utf-8')
+    after = path.read_bytes()
+    (evidence / 'mariadb-source-patch.json').write_text(json.dumps({
+        'archive_sha256': ASSETS['mariadb-source'][1],
+        'source_path': str(path.relative_to(tree)),
+        'before_sha256': hashlib.sha256(before).hexdigest(),
+        'after_sha256': hashlib.sha256(after).hexdigest(),
+        'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        'change': 'Apply GNU ld --as-needed only on non-Apple toolchains; retain storage engines',
+    }, indent=2), encoding='utf-8')
+    return hashlib.sha256(after).hexdigest()[:12]
+
+
+def mariadb(evidence, env, *, configure_only=False):
     root = STATE / 'mariadb'
     if platform.system() == 'Windows':
         unpack('mariadb-windows', root)
         return
-    if (root / '.cdeadmin-server-complete').exists():
+    if not configure_only and (root / '.cdeadmin-server-complete').exists():
         return
     source = STATE / 'mariadb-source'
     source.mkdir(exist_ok=True)
@@ -107,7 +133,9 @@ def mariadb(evidence, env):
     if not tree.exists():
         with tarfile.open(download('mariadb-source')) as archive:
             archive.extractall(source, filter='data')
-    build = STATE / 'mariadb-build'
+    patch_id = patch_mariadb_darwin_linker(tree, evidence)
+    # Isolate CMake caches that previously admitted incorrect HAVE_* values.
+    build = STATE / ('mariadb-build-' + patch_id)
     bison = brew_prefix('bison')
     zlib = brew_prefix('zlib')
     lz4 = brew_prefix('lz4')
@@ -120,24 +148,31 @@ def mariadb(evidence, env):
     for variable in ('CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH'):
         selected.pop(variable, None)
     selected.update(SDKROOT=sdk, CC=cc, CXX=cxx)
-    command(['cmake', '-S', tree, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
-             '-DCMAKE_OSX_SYSROOT=' + sdk, '-DCMAKE_C_COMPILER=' + cc,
-             '-DCMAKE_CXX_COMPILER=' + cxx,
-             '-DZLIB_INCLUDE_DIR=' + zlib + '/include',
-             '-DZLIB_LIBRARY=' + zlib + '/lib/libz.dylib',
-             # MariaDB's find modules expose plural include variables, while
-             # its RocksDB consumer reads the singular variants. Supply both
-             # from the same native prefix so every storage engine builds.
-             '-DLZ4_INCLUDE_DIRS=' + lz4 + '/include',
-             '-DLZ4_INCLUDE_DIR=' + lz4 + '/include',
-             '-DLZ4_LIBRARIES=' + lz4 + '/lib/liblz4.dylib',
-             '-DZSTD_INCLUDE_DIRS=' + zstd + '/include',
-             '-DZSTD_INCLUDE_DIR=' + zstd + '/include',
-             '-DZSTD_LIBRARIES=' + zstd + '/lib/libzstd.dylib',
-             '-DCMAKE_INSTALL_PREFIX=' + str(root), '-DWITH_UNIT_TESTS=OFF',
-             '-DWITH_SSL=system', '-DOPENSSL_ROOT_DIR=' + brew_prefix('openssl@3'),
-             '-DDEFAULT_CHARSET=utf8mb4', '-DDEFAULT_COLLATION=utf8mb4_general_ci'],
-            env=selected, log=evidence / 'mariadb-configure.log')
+    try:
+        command(['cmake', '-S', tree, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+                 '-DCMAKE_OSX_SYSROOT=' + sdk, '-DCMAKE_C_COMPILER=' + cc,
+                 '-DCMAKE_CXX_COMPILER=' + cxx,
+                 '-DZLIB_INCLUDE_DIR=' + zlib + '/include',
+                 '-DZLIB_LIBRARY=' + zlib + '/lib/libz.dylib',
+                 # MariaDB's find modules expose plural include variables, while
+                 # its RocksDB consumer reads the singular variants. Supply both
+                 # from the same native prefix so every storage engine builds.
+                 '-DLZ4_INCLUDE_DIRS=' + lz4 + '/include',
+                 '-DLZ4_INCLUDE_DIR=' + lz4 + '/include',
+                 '-DLZ4_LIBRARIES=' + lz4 + '/lib/liblz4.dylib',
+                 '-DZSTD_INCLUDE_DIRS=' + zstd + '/include',
+                 '-DZSTD_INCLUDE_DIR=' + zstd + '/include',
+                 '-DZSTD_LIBRARIES=' + zstd + '/lib/libzstd.dylib',
+                 '-DCMAKE_INSTALL_PREFIX=' + str(root), '-DWITH_UNIT_TESTS=OFF',
+                 '-DWITH_SSL=system', '-DOPENSSL_ROOT_DIR=' + brew_prefix('openssl@3'),
+                 '-DDEFAULT_CHARSET=utf8mb4', '-DDEFAULT_COLLATION=utf8mb4_general_ci'],
+                env=selected, log=evidence / 'mariadb-configure.log')
+    finally:
+        configure_log = build / 'CMakeFiles/CMakeConfigureLog.yaml'
+        if configure_log.is_file():
+            shutil.copy2(configure_log, evidence / 'mariadb-configure-probes.log')
+    if configure_only:
+        return
     command(['cmake', '--build', build, '--parallel', '2'], env=selected,
             log=evidence / 'mariadb-server-build.log', timeout=7200)
     command(['cmake', '--install', build], env=selected, log=evidence / 'mariadb-server-install.log')

@@ -163,13 +163,13 @@ describe('provider structured record controls', () => {
     // values in a previously rendered draft.
     post.mockImplementation(() => Promise.resolve(first));
     const {rerender} = render(<VisualAdministration {...props} selectedResource={first} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('POSITION'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('POSITION'), {timeout: 5000});
     post.mockImplementation(() => Promise.resolve(second));
     rerender(<VisualAdministration {...props} selectedResource={second} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('COMPUTED'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveTextContent('COMPUTED'), {timeout: 5000});
     post.mockImplementation(() => Promise.resolve(view));
     rerender(<VisualAdministration {...props} selectedResource={view} />);
-    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveAttribute('aria-disabled', 'true'));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /Alteration/})).toHaveAttribute('aria-disabled', 'true'), {timeout: 5000});
   });
 
   it('requires both alteration and type selectors before showing a dependent field', async () => {

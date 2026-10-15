@@ -63,7 +63,10 @@ def qualify(evidence):
                     if message.get('method') == 'Runtime.exceptionThrown':
                         receipt['console_errors'].append(message['params']['exceptionDetails'].get('text', 'Uncaught exception'))
                     if message.get('method') == 'Runtime.consoleAPICalled' and message['params']['type'] == 'error':
-                        receipt['console_errors'].append('Electron renderer console error')
+                        receipt['console_errors'].append({
+                            'message': ' '.join(str(arg.get('value', arg.get('description', arg.get('type', 'unknown'))))
+                                for arg in message['params'].get('args', []))[:4096],
+                            'stack': message['params'].get('stackTrace', {}).get('callFrames', [])[:8]})
                     if message.get('id') == sequence:
                         if 'error' in message:
                             raise RuntimeError('Electron debugger command failed: ' + method)

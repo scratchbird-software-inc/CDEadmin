@@ -11,3 +11,12 @@ source file SHA-256 in the consumed resource manifest. The original sister
 checkout remains untouched. A changed upstream configuration that no longer
 accepts the patch must be reconciled explicitly; the last admitted bundle is
 preserved when capture or build fails.
+
+Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
+`native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld
+`--as-needed` flag is conditional on a non-Apple toolchain. On Intel macOS its
+unconditional use makes CMake header/function probes fail and contaminates
+Mroonga's shared feature cache. Storage engines retain their upstream build
+selection. `mariadb-source-patch.json` records the archive, before/after source
+hashes and patch runner hash; a separate CMake build directory avoids old probe
+cache values. The read-only reference source remains untouched.

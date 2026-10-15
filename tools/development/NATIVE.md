@@ -257,3 +257,9 @@ gh workflow run native-development.yml --ref <branch> -f platforms='["windows-20
 POSIX reference-estate shell launcher execution is qualified on POSIX hosts.
 Windows runs the separate native fixture lifecycle; it does not need Bash to
 run the application or native qualification commands.
+
+`mariadb-configure` captures the native MariaDB CMake header/function probe
+inventory without building or installing the server. `desktop-probe` checks an
+already provisioned Python/frontend/Electron environment and retains renderer
+error messages and stacks. These optional diagnostic stages do not establish
+full environment acceptance; the default nine stages remain unchanged.

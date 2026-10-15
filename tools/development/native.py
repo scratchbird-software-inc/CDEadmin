@@ -214,6 +214,15 @@ def stage(name, evidence):
         ddn(evidence)
         from native_assets import clients
         clients(evidence, env)
+    elif name == 'mariadb-configure':
+        if platform.system() != 'Darwin':
+            raise RuntimeError('MariaDB source configuration diagnosis requires macOS')
+        ddn(evidence)
+        from native_servers import SERVER_ASSETS, mariadb
+        from native_assets import ASSETS
+        ASSETS.update(SERVER_ASSETS)
+        STATE.mkdir(exist_ok=True)
+        mariadb(evidence, env, configure_only=True)
     elif name == 'servers':
         ddn(evidence)
         from native_servers import servers
@@ -305,6 +314,11 @@ def stage(name, evidence):
                 env=env, log=evidence / 'desktop-lint.log')
         command(['node', '--test', ROOT / 'runtime/src/js/menuTemplate.test.js'],
                 env=env, log=evidence / 'desktop-menu.log')
+    elif name == 'desktop-probe':
+        ddn(evidence)
+        command([PYTHON, ROOT / 'tools/development/native_desktop.py',
+                 '--evidence', evidence / 'desktop-probe'], env=env,
+                log=evidence / 'desktop-probe.log', timeout=300)
     elif name == 'run-desktop':
         env.update(CDEADMIN_DESKTOP_PYTHON=str(PYTHON),
                    CDEADMIN_DESKTOP_LAUNCHER=str(ROOT / 'web/CDEadmin.py'),
@@ -342,7 +356,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -390,7 +404,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()
