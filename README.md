@@ -207,6 +207,12 @@ described above.
 
 ## Prerequisites
 
+For native Windows x64, Intel macOS and Apple Silicon setup, follow the
+[native development guide](tools/development/NATIVE.md). It provisions the
+required native clients, builds the frontend and runs the platform checks
+without WSL, Docker or Linux libraries. The GitHub **Native development
+environments** workflow tests each host separately.
+
 - Python 3.14 or later (the standard 3.14 build is the current installation baseline)
 - Node.js 20 or later
 - Yarn through Corepack
@@ -240,7 +246,8 @@ make install-node
 make bundle
 ```
 
-On Windows, run `yarn install` and `yarn run bundle` from `web/`.
+On Windows and macOS, use the native guide's `frontend` stage to build with
+the required host tools and memory settings.
 
 ## Development configuration and startup
 
