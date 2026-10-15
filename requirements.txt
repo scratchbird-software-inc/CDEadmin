@@ -44,6 +44,9 @@ Flask==3.1.*
 google-api-python-client==2.*
 google-auth-oauthlib==1.4.0
 gssapi==1.11.*
+# The official Cassandra driver supports asyncore through this backport on
+# Python 3.12+, including Windows wheels without the optional libev extension.
+pyasyncore==1.0.5; sys_platform == 'win32'
 jsonformatter~=0.3.4
 keyring==25.*
 ldap3==2.*
@@ -70,8 +73,9 @@ pyarrow==25.0.1
 pyotp==2.*
 python-dateutil==2.*
 pytz==2026.*
-# pinned for https://github.com/andfoy/pywinpty/issues/545
-pywinpty==2.0.*; sys_platform=="win32"
+# 2.0.x builds against PyO3 with a Python 3.13 maximum. Native Windows
+# CPython 3.14 requires the 3.x wheels; qualify terminal behavior on Windows.
+pywinpty==3.0.5; sys_platform=="win32"
 qrcode[pil]==8.*
 setuptools==84.*
 SQLAlchemy==2.*

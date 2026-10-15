@@ -23,6 +23,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 if __package__:
+    from .firebird_server_paths import server_path
+else:
+    from firebird_server_paths import server_path
+
+if __package__:
     from .cdeadmin_firebird_ui_completed_orchestrator import (
         ROOT,
         _free_port,
@@ -196,7 +201,7 @@ def gate_command(options, url, database_label, config_database=None):
             )
         command.extend([
             '--config-db', str(config_database),
-            '--database-root', str(Path(options.database).parent),
+            '--database-root', str(server_path(options.database).parent),
             '--host', options.host,
             '--firebird-port', str(options.firebird_port),
             '--user', options.user,
@@ -252,7 +257,7 @@ def run(options):
         data_dir.mkdir()
         config_database = data_dir / 'cdeadmin.db'
         _snapshot_config(options.source_config_db, config_database)
-        database_label = Path(options.database).name
+        database_label = server_path(options.database).name
         _retarget_config(
             config_database, options.desktop_user, options.database,
             database_label, options.firebird_port,

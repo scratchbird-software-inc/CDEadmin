@@ -361,10 +361,38 @@ def _relational_editor_evidence(provider, request, engine):
         passed.setdefault(kind, set()).add(operation)
 
     def attempt(label, kind, operation, draft, target=None):
-        # MariaDB's native DROP forms have no generic CASCADE switch.
+        # These native DROP forms have no generic CASCADE switch.
         # Build the fixture in its native shape; never suppress true intent.
-        if engine == 'mariadb' and draft.get('cascade') is False:
+        if (engine in {'mariadb', 'sqlite', 'firebird'} and
+                draft.get('cascade') is False):
             draft = {key: value for key, value in draft.items() if key != 'cascade'}
+        if engine == 'firebird':
+            draft = dict(draft)
+            if kind == 'table' and operation in {'create', 'alter'}:
+                key = 'columns' if operation == 'create' else 'add_columns'
+                if key in draft:
+                    draft[key] = [{
+                        'name': item['name'], 'column_mode': 'STORED',
+                        'data_type': item['type'],
+                        'constraints': ([{'kind': 'PRIMARY KEY'}]
+                                        if item.get('primary_key') else
+                                        [{'kind': 'NOT NULL'}]
+                                        if item.get('nullable') is False else []),
+                    } for item in draft[key]]
+            if kind == 'column' and operation == 'create':
+                draft = {key: value for key, value in draft.items()
+                         if key not in {'nullable', 'default', 'primary_key'}}
+                draft['column_mode'] = 'STORED'
+            if kind == 'sequence' and operation in {'create', 'alter'}:
+                for key in ('start', 'restart'):
+                    if key in draft and isinstance(draft[key], int):
+                        draft[key] = str(draft[key])
+            if kind == 'index' and operation == 'create':
+                draft['index_kind'] = 'columns'
+            if kind == 'procedure' and operation in {'create', 'alter'}:
+                draft.pop('returns', None)
+            if kind == 'function' and operation in {'create', 'alter'}:
+                draft.pop('return_parameters', None)
         try:
             result = _apply_editor(
                 provider, route, kind, operation, draft, target=target,
@@ -737,7 +765,9 @@ def _relational_editor_evidence(provider, request, engine):
                     'column', 'alter'):
                 attempt(
                     'column.alter', 'column', 'alter', {
-                        'properties': {'set_default': '9'},
+                        **({'action': 'SET DEFAULT', 'default_kind': 'NUMBER',
+                            'default_value': '9'} if engine == 'firebird' else
+                           {'properties': {'set_default': '9'}}),
                     }, column,
                 )
             if column is not None and attempt(
@@ -2163,6 +2193,8 @@ def _relational_editor_evidence(provider, request, engine):
                 }, role,
             )
             grant_draft = {
+                'privilege_scope': 'object',
+                'principal_kind': 'ROLE',
                 'principal': 'cde_editor_role', 'object_type': 'TABLE',
                 'object_name': 'QUALIFICATION', 'privileges': ['SELECT'],
                 'grant_option': False,
@@ -2175,7 +2207,7 @@ def _relational_editor_evidence(provider, request, engine):
                     'privilege.revoke', 'privilege', 'revoke', {
                         key: value for key, value in grant_draft.items()
                         if key != 'grant_option'
-                    } | {'confirmation': 'revoke-live-editor-grant'},
+                    } | {'confirmation': 'cde_editor_role'},
                     privilege_target,
                 )
             attempt(
@@ -2276,7 +2308,7 @@ def _relational_editor_evidence(provider, request, engine):
                 attempt(
                     'sequence.drop', 'sequence', 'drop', {
                         'cascade': False,
-                        'confirmation': 'drop-live-editor-sequence',
+                        'confirmation': 'cde_editor_sequence',
                     }, sequence,
                 )
 
@@ -2370,6 +2402,10 @@ def _relational_editor_evidence(provider, request, engine):
                         'header': (
                             'BEGIN FUNCTION VALUE_ONE RETURNS INTEGER; END'
                         ),
+                    }, package,
+                )
+                attempt(
+                    'package.replace_body', 'package', 'replace_body', {
                         'body': (
                             'BEGIN FUNCTION VALUE_ONE RETURNS INTEGER AS '
                             'BEGIN RETURN 2; END END'
@@ -2379,7 +2415,7 @@ def _relational_editor_evidence(provider, request, engine):
                 attempt(
                     'package.drop', 'package', 'drop', {
                         'cascade': False,
-                        'confirmation': 'drop-live-editor-package',
+                        'confirmation': 'cde_editor_package',
                     }, package,
                 )
 
@@ -4182,7 +4218,7 @@ class _FirebirdAccount:
 
 def _live_result(provider, operation, engine):
     """Consume the native asynchronous contract before inspecting evidence."""
-    if engine not in {'mysql', 'mariadb', 'duckdb'}:
+    if engine not in {'mysql', 'mariadb', 'duckdb', 'sqlite', 'firebird'}:
         return provider.describe_result(operation)
     rows = []
     deadline = time.monotonic() + 30
@@ -4194,7 +4230,11 @@ def _live_result(provider, operation, engine):
             raise RuntimeError('Live qualification result exceeds its row bound')
         if result.get('complete'):
             if payload.get('error'):
-                raise RuntimeError('Native live query failed (' + str(payload['error'].get('errno')) + ')')
+                error = payload['error']
+                raise RuntimeError(
+                    'Native live query failed (' +
+                    str(error.get('type', 'unknown')) + '; errno=' +
+                    str(error.get('errno')) + ')')
             payload['rows'] = rows
             return result
         time.sleep(0.01)
@@ -4833,8 +4873,9 @@ def verify_embedded(engine, dialect_qualification=False):
                     'execution_id': f'{engine}-live-fault',
                     'source': 'SELECT * FROM cdeadmin_live_missing_object',
                 })
-                if engine == 'duckdb':
-                    invalid_result = _live_result(provider, invalid_operation, engine)
+                if engine in {'duckdb', 'sqlite'}:
+                    invalid_result = _live_result(
+                        provider, invalid_operation, engine)
                     invalid_failed = bool(invalid_result['extensions'][engine][
                         'payload'].get('error'))
             except Exception:
@@ -5130,7 +5171,7 @@ def verify(
                 'execution_id': f'{engine}-live-fault',
                 'source': 'SELECT * FROM cdeadmin_live_missing_object',
             })
-            if engine in {'mysql', 'mariadb'}:
+            if engine in {'mysql', 'mariadb', 'firebird'}:
                 _live_result(provider, fault_operation, engine)
         except Exception as exc:
             if secret_leak_marker and secret_leak_marker in str(exc):

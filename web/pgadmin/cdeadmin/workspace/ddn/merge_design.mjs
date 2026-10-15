@@ -1,3 +1,4 @@
+import {admitWorkspace} from './workspace_admission.mjs';
 // Source ranges come from the public DDN parser. Preserve authored source
 // outside changed native blocks byte for byte, including view appearance.
 export function mergeDesign(runtime, baseline, draft, incoming) {
@@ -5,12 +6,12 @@ export function mergeDesign(runtime, baseline, draft, incoming) {
   const parse = (snapshot, name) => {
     if (!(name in snapshot.files)) return null;
     const parsed = runtime.parse(snapshot.files[name], name);
-    if (parsed.imports.length) throw new Error('Imported design workspaces require manual reconciliation.');
     return parsed;
   };
   // Validate authored-only files too; imports cannot bypass this boundary by
   // appearing outside the incoming/native file set.
   for (const snapshot of [baseline, draft, incoming]) {
+    admitWorkspace(snapshot);
     for (const name of Object.keys(snapshot.files)) parse(snapshot, name);
   }
   const raw = (snapshot, name, node) => node ? snapshot.files[name].slice(node.start, node.end) : null;

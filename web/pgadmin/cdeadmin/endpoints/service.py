@@ -997,7 +997,7 @@ class EndpointService:
                         remaining,
                         key=lambda item: (item.display_name, item.id),
                     ).active = True
-                endpoint.profile_generation = str(uuid.uuid4())
+            endpoint.profile_generation = str(uuid.uuid4())
         return self.database_catalog(server)
 
     @staticmethod
@@ -1019,22 +1019,29 @@ class EndpointService:
         targeting = profile.get('database_targeting', {})
         if not targeting.get('create_and_activate'):
             return None
-        return self._retain_database_target(server, target)
+        return self._retain_database_target(
+            server, target, new_identity=profile.get('engine_id') == 'firebird')
 
     def retain_registered_database(self, server, target):
         """Make a registration database a first-class endpoint child."""
         return self._retain_database_target(server, target)
 
     @_connection_change
-    def _retain_database_target(self, server, target):
+    def _retain_database_target(self, server, target, *, new_identity=False):
         from pgadmin.model import EndpointDatabaseTarget, db
 
         endpoint, _profile = self._managed_endpoint(server)
         database, display_name = self._database_target_input(target)
         with self._database_catalog_transaction():
+            if new_identity and any(item.display_name == display_name
+                                    for item in endpoint.database_targets):
+                raise EndpointRegistrationError(
+                    'Created database registration name already exists; '
+                    'inspect local registrations without repeating native creation')
+            model = (None if new_identity else
+                     self._unambiguous_database_target(endpoint, database))
             for item in endpoint.database_targets:
                 item.active = False
-            model = self._unambiguous_database_target(endpoint, database)
             if model is None:
                 model = EndpointDatabaseTarget(
                     id=str(uuid.uuid4()), endpoint_id=endpoint.id,

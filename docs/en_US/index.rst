@@ -75,8 +75,15 @@ upstream attribution.
    compact_forms
    native_navigation_forms
    firebird_functional_completion
+   firebird_editor_diagnostics
+   firebird_data_workflows
+   firebird_desktop_lifecycle
+   firebird_platform_release
    firebird_form_parity
    firebird_dashboards
+   firebird_dashboard_collectors
+   firebird_catalog_completeness
+   monitoring_history
    ddn_database_roundtrip
    mysql_functional_completion
    mariadb_functional_completion

@@ -9,7 +9,7 @@ from .firebird_trigger_plan import model as trigger_model
 
 FIELDS = {'sql_security', 'publication_enabled', 'description'}
 STRUCTURE = {'relation_type', 'external_file', 'columns', 'constraints', 'indexes', 'triggers'}
-DERIVED = {'column_order', 'ddl_available', 'ddl_unavailable_reason', 'metadata_warnings'}
+DERIVED = {'publications', 'column_order', 'ddl_available', 'ddl_unavailable_reason', 'metadata_warnings'}
 
 
 def model(row):

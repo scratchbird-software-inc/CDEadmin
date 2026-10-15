@@ -24,6 +24,7 @@ import unittest
 import uuid
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 from types import ModuleType, SimpleNamespace
 
 
@@ -426,6 +427,10 @@ class DescriptorLimitTests(unittest.TestCase):
             service.descriptor('first')
 
 
+def large_renderer(_metadata, _records):
+    return b'x' * (2 * 1024 * 1024)
+
+
 class ProductionRendererTests(unittest.TestCase):
 
     def test_pdf_export_embeds_unicode_fonts_and_has_no_active_content(self):
@@ -438,14 +443,10 @@ class ProductionRendererTests(unittest.TestCase):
         self.assertIn(b'/ToUnicode', content)
         self.assertNotIn(b'/JavaScript', content)
         self.assertNotIn(b'/OpenAction', content)
-        if shutil.which('pdftotext'):
-            extracted = subprocess.run(
-                ['pdftotext', '-', '-'], input=content,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                check=True,
-            ).stdout.decode('utf-8')
-            self.assertIn('Café Привет', extracted)
-            self.assertIn('<script>bad</script>', extracted)
+        from pypdf import PdfReader
+        extracted = '\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(content)).pages)
+        self.assertIn('Café Привет', extracted)
+        self.assertIn('<script>bad</script>', extracted)
 
     def test_pdf_export_is_deterministic_and_reports_bounds(self):
         records = [{'value': index} for index in range(1002)]
@@ -453,27 +454,19 @@ class ProductionRendererTests(unittest.TestCase):
         first = export_pdf(metadata, records)
         second = export_pdf(metadata, records)
         self.assertEqual(first, second)
-        if shutil.which('pdftotext'):
-            extracted = subprocess.run(
-                ['pdftotext', '-', '-'], input=first,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                check=True,
-            ).stdout.decode('utf-8')
-            self.assertIn('2 additional rows omitted', extracted)
-            self.assertNotIn('\n1000\n', extracted)
+        from pypdf import PdfReader
+        extracted = '\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(first)).pages)
+        self.assertIn('2 additional rows omitted', extracted)
+        self.assertNotIn('\n1000\n', extracted)
         columns = [{'name': f'column_{index}'} for index in range(30)]
         row = {
             f'column_{index}': 'bounded-value-' * 100 for index in range(30)
         }
         wide = export_pdf({'schema': {'columns': columns}}, [row])
         self.assertTrue(wide.startswith(b'%PDF-'))
-        if shutil.which('pdftotext'):
-            extracted = subprocess.run(
-                ['pdftotext', '-', '-'], input=wide,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                check=True,
-            ).stdout.decode('utf-8')
-            self.assertIn('6 additional columns omitted', extracted)
+        from pypdf import PdfReader
+        extracted = '\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(wide)).pages)
+        self.assertIn('6 additional columns omitted', extracted)
 
     def test_xlsx_export_is_valid_formula_safe_office_open_xml(self):
         content = export_xlsx({'schema': {'columns': [
@@ -629,6 +622,17 @@ class ProductionRendererTests(unittest.TestCase):
             2.0,
         )
         self.assertEqual('document', actual['family'])
+
+    def test_native_spawn_initializes_app_imports_before_rendering(self):
+        with patch.object(multiprocessing, 'get_all_start_methods', return_value=['spawn']):
+            actual = ProcessRendererExecutor().run(
+                render_document, {'result_kind': 'document', 'schema': {}},
+                ({'id': 1},), 2.0)
+        self.assertEqual('document', actual['family'])
+
+    def test_large_worker_result_is_drained_before_process_join(self):
+        payload = ProcessRendererExecutor().run(large_renderer, {}, (), 3.0)
+        self.assertEqual(b'x' * (2 * 1024 * 1024), payload)
 
     def test_pdf_export_crosses_real_worker_boundary(self):
         executor = ProcessRendererExecutor()

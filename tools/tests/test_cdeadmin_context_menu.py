@@ -112,12 +112,19 @@ class ContextMenuTests(unittest.TestCase):
         server_actions = endpoint_context_actions(embedded, 'verified')
         self.assertNotIn('endpoint.firebird.activate_shadow', {
             item['command_id'] for item in server_actions})
+        commands = {item['command_id'] for item in server_actions}
+        self.assertIn('endpoint.firebird.monitoring', commands)
+        self.assertIn('endpoint.firebird.dashboard_editor', commands)
+        self.assertNotIn('endpoint.firebird.monitoring_policy', commands)
         actions = database_target_context_actions(embedded, {
             'target_id': 'owned', 'database': '/owned/example.fdb',
             'display_name': 'owned',
         })
         operations = {item['arguments'].get('operation_id') for item in actions}
         self.assertFalse(operations & _FIREBIRD_SERVICE_OPERATIONS)
+        commands = {item['command_id'] for item in actions}
+        for name in ('monitoring', 'monitoring_policy', 'dashboard_editor'):
+            self.assertIn('database.firebird.' + name, commands)
         self.assertIn('add_files', operations)
         self.assertIn('inspect_limbo', operations)
 

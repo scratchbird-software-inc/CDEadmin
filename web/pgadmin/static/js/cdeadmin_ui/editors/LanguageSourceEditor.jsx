@@ -92,9 +92,9 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       const from = mode === 'selection' ? (selection?.from ?? plainEditor.current?.selectionStart ?? 0) : cursor;
       const to = mode === 'selection' ? (selection?.to ?? plainEditor.current?.selectionEnd ?? from) : cursor;
       const nativeValidate = async input => post({
-          action: 'source_validate', session_id: await ensureSession(), source: input,
-          database_target_id: databaseTargetId,
-        });
+        action: 'source_validate', session_id: await ensureSession(), source: input,
+        database_target_id: databaseTargetId,
+      });
       const value = firebird ? firebirdExecution(source, mode, from, to) :
         nativeProfile === 'duckdb-sql' ?
           await duckdbExecution(source, mode, from, to, nativeValidate) :
@@ -106,7 +106,8 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       if (mounted.current && current === generation.current) {setPrepared(null); setError(failure.message);}
     } finally {if (mounted.current) setChecking(false);}
   };
-  useEffect(() => {generation.current++;setValidation(null);setPrepared(null);}, [source, language?.language_profile, databaseTargetId]);
+  useEffect(() => {generation.current++;setValidation(null);setPrepared(null);setChecking(false);},
+    [source, language?.language_profile, databaseTargetId, post, clientSqlDialect]);
   useEffect(() => {mounted.current=true;return () => {mounted.current=false;generation.current++;};}, []);
   const send = (payload) => post({...payload, database_target_id: databaseTargetId});
   const inspect = async (script, executionSource=source) => {

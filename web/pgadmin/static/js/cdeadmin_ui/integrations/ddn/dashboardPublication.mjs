@@ -72,6 +72,13 @@ function postgresDynamic(id, scope) {
   ];
   return patterns.some(pattern => pattern.test(id));
 }
+function firebirdDynamic(id, scope) {
+  const database = scope === 'engine' ? /^fleetdb_[0-9]+_[a-f0-9]{2,1024}_(?:[0-9]|1[0-2]|finding_[a-f0-9]{2,1024})$/ :
+    /^database_[a-f0-9]{2,1024}_(?:[0-9]|1[0-3]|finding_[a-f0-9]{2,1024})$/;
+  return scope === 'engine' ? database.test(id) || /^server_[0-9]+_[0-8]$/.test(id) ||
+    /^aggregate_[0-9]+_(?:[0-9]|1[0-9])$/.test(id) :
+    scope === 'server' && (database.test(id) || id === 'empty_0');
+}
 const unavailable = {value: 'Unavailable', unit: '', rate: ''};
 function check(condition, message) { if(!condition) throw new Error(message); }
 function records(runtime, files) {
@@ -91,15 +98,14 @@ export function validatePublication(runtime, snapshot, scope, engine='firebird')
   const source = snapshot.files['dashboard.ddn'];
   check(typeof source === 'string' && new TextEncoder().encode(source).length <= 512 * 1024, 'Dashboard source exceeds its limit.');
   const {parsed, rows} = records(runtime, snapshot.files);
-  check(engine === 'firebird' ? !['scratchrobin.postgresql.monitoring', 'scratchrobin.mysql.monitoring', 'scratchrobin.mariadb.monitoring', 'scratchrobin.duckdb.monitoring', 'scratchrobin.sqlite.monitoring'].includes(parsed.module) :
-    parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
+  check(parsed.module === `scratchrobin.${engine}.monitoring`, 'Wrong dashboard engine module.');
   check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)), 'Unsupported dashboard declaration.');
   const allowed = new Set(Object.entries(bindings[scope]).flatMap(([prefix, count]) =>
     Array.from({length: count}, (_, index) => `${prefix}_${index}`)));
-  check(rows.length > 0 && rows.length <= (engine === 'firebird' ? allowed.size : 4096), 'Dashboard needs admitted metric records.');
+  check(rows.length > 0 && rows.length <= 4096, 'Dashboard needs admitted metric records.');
   const seen = new Set();
   for(const row of rows) {
-    check((allowed.has(row.id) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
+    check((allowed.has(row.id) || (engine === 'firebird' && firebirdDynamic(row.id, scope)) || (engine === 'postgresql' && postgresDynamic(row.id, scope)) ||
       (engine === 'duckdb' && duckdbDynamic(row.id, scope)) ||
       (engine === 'sqlite' && sqliteDynamic(row.id, scope)) ||
       (['mysql', 'mariadb'].includes(engine) && mysqlDynamic(row.id, scope, engine))) && !seen.has(row.id), 'Unknown, duplicate or wrong-scope metric binding.');

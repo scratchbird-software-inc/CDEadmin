@@ -1,5 +1,9 @@
 # New-machine development setup: ScratchRobin CDE Administrator
 
+For native Windows, Intel macOS and Apple Silicon macOS development, use
+[Native development setup and GitHub qualification](NATIVE.md). The guide below
+describes the existing Linux-hosted reference estate and its WSL/remote wrappers.
+
 This is the setup guide for a developer with a fresh checkout, not a production
 deployment guide. It includes the Python application, built browser UI, native
 client tools, and reference-engine Docker samples. Native ScratchBird is excluded.

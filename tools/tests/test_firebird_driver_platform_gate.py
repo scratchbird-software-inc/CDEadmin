@@ -32,5 +32,6 @@ def test_embedded_rejects_password_before_native_creation(tmp_path):
             as factory:
         with pytest.raises(ValueError, match='password'):
             run({'attachment_mode': 'embedded'}, str(tmp_path),
-                tmp_path / 'evidence', password='not-a-real-secret')
+                tmp_path / 'evidence', password='not-a-real-secret',
+                path_style='windows' if __import__('os').name == 'nt' else 'posix')
         factory.assert_not_called()

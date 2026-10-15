@@ -398,10 +398,10 @@ def test_wal_page_size_mismatch_preserves_native_refusal(client, tmp_path):
     assert handle.execute('SELECT * FROM original').fetchall() == [(42,)]
 
 
-def test_deadline_validation_is_owned_by_sqlite():
+def test_deadline_validation_is_owned_by_sqlite(tmp_path):
     from pgadmin.cdeadmin.providers.sqlite.provider import ADMINISTRATION
     validate = ADMINISTRATION._validate_sqlite_database_operation
-    draft = {'backup_path': '/owned/backup.sqlite', 'backup_timeout': .5}
+    draft = {'backup_path': str((tmp_path / 'backup.sqlite').resolve()), 'backup_timeout': .5}
     assert validate('backup', draft, {}) == []
     for value in [False, 0, -1, float('inf'), float('nan'), '30']:
         errors = validate('backup', dict(draft, backup_timeout=value), {})

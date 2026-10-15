@@ -30,8 +30,11 @@ provider.py currently adds MON$ metric descriptors without sampling their live
 values. It separately collects database information and service-manager values.
 The initial proposal did not qualify live series. The dedicated monitoring
 adapter and bounded process-local policy runtime now have the implementation
-evidence described below. The single-process host and basic DDN dashboard bindings
-are described below; durable history and the full dashboard family remain open.
+evidence described below. The single-process host, network/embedded collection
+and versioned live dashboard bindings are implemented; see
+:doc:`firebird_dashboard_collectors` for the current qualification and limits.
+Native persistent history acceptance remains a separate ScratchBird destination
+gate.
 
 Three dashboard layouts
 =======================
@@ -608,14 +611,14 @@ returns an asset conflict, including when separate application workers loaded
 the same version. The service continues assigning version numbers; no schema
 migration or additional definition store is introduced.
 
-Current-run scope correction, 2026-10-10
----------------------------------------
+Current completion scope correction, 2026-10-14
+---------------------------------------------
 
-The owner defers persistent monitoring history and the ScratchBird connection
-until a later run. Windows/macOS implementation qualification and QA belong to
-the separate platform teams. These items remain future/cross-team obligations;
-they are not blockers or acceptance requirements for this run, and must not be
-reported as unfinished work assigned to this run.
+The owner's newer completion direction includes persistent monitoring history
+and the ScratchBird connection. Those backend obligations remain open until
+implemented and qualified. Windows/macOS implementation qualification and QA
+belong to the separate platform teams. Form validation belongs to the human
+team.
 
 Everything else remains in scope: published dashboard definitions and authorized
 live bindings, standard metrics, trends and drill-downs using available samples,
@@ -624,9 +627,8 @@ FlameRobin parity workflows, compact native forms and end-to-end qualification
 on the available local platform. A bounded volatile sample window must display
 its gaps and retention limits; it must not imply durable historical coverage.
 
-This deferral applies to monitoring observations, not to persistent searchable
-SQL history (FB-COMP-05), saved dashboard definitions, DDN design assets or saved
-test-data recipes. Those persistence requirements remain in this run. Completing
+Persistent searchable SQL history (FB-COMP-05), saved dashboard definitions,
+DDN design assets and saved test-data recipes also remain in scope. Completing
 a draft editor alone does not complete dashboard publication or FB-COMP-18.
 
 
@@ -643,14 +645,16 @@ policies and native state are unaffected by publication.
 
 The initial binding contract is ``firebird-observations-v1``: one dashboard.ddn
 file, one observations block, string-valued value/unit/rate records, no imports,
-and only the known record identifiers for engine summaries, server metrics or
-database metrics. Arbitrary queries, routes and new data blocks are not bindings.
+and only admitted record identifiers for engine summaries, registered endpoint/
+database details, scoped aggregates/findings, service metrics or database metrics.
+Dynamic bindings use registered identities rather than list order or labels. Arbitrary queries, routes and new data blocks are not bindings.
 Unbound source record values are replaced with unavailable placeholders before
 publication. Live values come only from the authorized current snapshot, replace
 records by stable key using DDN's public replaceData API, and never enter the
 saved publication. Invalid layouts or refreshes show an error, not old telemetry.
-Engine summary customization initially covers the fixed inventory/coverage
-measures; per-endpoint detail layout customization remains separate work.
+Engine and server customization includes registered database detail panels and
+scoped endpoint aggregates. These dynamic bindings use registration identities
+and become unavailable when the identity is absent from the authorized snapshot.
 
 A host Node.js executable (configured with CDEADMIN_DDN_NODE, default node) runs
 the shipped validator against the vendored paired DDN library. No browser-supplied
@@ -894,3 +898,30 @@ buffers only; it never starts a collector or mixes independent transaction
 windows into a synthetic history. Publication detail includes a DDN relationship
 view of captured native publication/table membership, with independent truncation
 and unavailable-attribute indications. It does not invent replica endpoints.
+
+
+Persistent archive implementation (2026-10-14)
+---------------------------------------------
+
+The Firebird network collector now supports an explicit ScratchBird history
+policy, independent destination transactions, exact sample storage, retention,
+reset-aware downsampling, bounded authorized history queries and historical DDN
+trend browsing. See :doc:`monitoring_history` for configuration, explicit schema
+initialization, scheduled maintenance, failure semantics and qualification limits.
+Earlier references to future history describe the previous volatile-only release.
+Native completion requires a serving ScratchBird destination; application contract
+tests alone do not close that acceptance obligation.
+
+
+Dashboard and collector qualification update (2026-10-14)
+--------------------------------------------------------
+
+The dedicated Linux native gate now covers both network and embedded collector
+hosts and their actual samples through publication, redaction, live rebinding
+and all-view rendering. It checks native role admission, background sampling,
+expiry/revocation, reconnect epochs, unconfirmed release/retry and preservation of
+interactive transactions. See :doc:`firebird_dashboard_collectors` for commands,
+identity contracts and process/platform boundaries. This supersedes the earlier
+network-only collector and fixed-summary-only publication limitations. The
+separate native ScratchBird history gate remains open until its destination
+serves; collector success is not archive acceptance.

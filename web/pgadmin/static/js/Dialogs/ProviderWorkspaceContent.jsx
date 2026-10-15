@@ -1976,7 +1976,7 @@ KeyValueDataGrid.propTypes = {
 };
 
 export function StructuredDataGrid({catalog, resources, post, setError,
-  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled}) {
+  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled, clientSqlDialect=3}) {
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
   const themeScale = theme.cdeadminPresentation?.scale ?? 100;
@@ -2329,6 +2329,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
     editable: false,
     renderCell: ({row}) => !editMode ? <span title={editorValue(row[column.name])}>{row[column.name] === null ? 'NULL' : editorValue(row[column.name])}</span> : <Box sx={{display: 'flex', alignItems: 'center'}}>
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
+        blobIdentity={JSON.stringify([selectedDatabaseTargetId, targetId, row.__identityToken, column.name])}
         spec={column.array_spec}
         firebirdBlob={languageProfile?.startsWith('firebird-') && column.native_type === 'BLOB' && ['text', 'binary'].includes(column.input_kind)}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
@@ -2479,7 +2480,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
       </Alert>
       {languageProfile?.startsWith('firebird-') && <Box component="details" sx={{my: 1}}>
         <Box component="summary" sx={{cursor: 'pointer'}}>{gettext('Generate SQL from fetched rows')}</Box>
-        <FirebirdRowSql page={page} table={target?.display_name || ''}
+        <FirebirdRowSql page={page} table={target?.display_name || ''} clientSqlDialect={clientSqlDialect}
           onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />
       </Box>}
       <ProviderDataGrid columns={gridColumns} rows={gridRows} paginate={false}
@@ -2502,6 +2503,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
 }
 
 StructuredDataGrid.propTypes = {
+  clientSqlDialect: PropTypes.number,
   catalog: PropTypes.object,
   resources: PropTypes.array,
   post: PropTypes.func.isRequired,
@@ -6418,8 +6420,12 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         maxHeight: 240, bgcolor: 'background.default'}}>
         {JSON.stringify(plan, null, 2)}
       </Box>}
-      {result && <Alert severity="success" sx={{mt: 2}}>
-        {gettext('The provider completed the native database operation. Refreshing the navigator will show provider-observed state.')}
+      {result && <Alert severity={recreateEmpty &&
+        result?.provider_result?.driver_observation?.driver_returned !== true ? 'warning' : 'success'} sx={{mt: 2}}>
+        {recreateEmpty ? (result?.provider_result?.driver_observation?.driver_returned === true ?
+          gettext('The native drop completed. The original database is absent. Creation requires a separate review and confirmation.') :
+          gettext('Native drop completion is unconfirmed. Inspect the operation receipt and server state; creation and automatic retry are disabled.')) :
+          gettext('The provider completed the native database operation. Refreshing the navigator will show provider-observed state.')}
       </Alert>}
       {(result?.workspace_follow_up || []).filter((item) =>
         item.state === 'failed').map((item) => <Alert severity="warning"
@@ -6431,7 +6437,11 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         {gettext('The drop outcome requires review. Inspect the operation receipt and server state before opening another workflow; creation and automatic retry are disabled.')}
       </Alert>}
       {recreateEmpty && result?.provider_result?.driver_observation?.driver_returned === true &&
-        result?.provider_result?.dropped_endpoint_database_target && droppedPath &&
+        result?.provider_result?.dropped_endpoint_database_target?.target_id === initialTargetId && droppedPath &&
+        Array.isArray(result.database_targets?.targets) &&
+        !result.database_targets.targets.some(target => target.target_id === initialTargetId) &&
+        (result.workspace_follow_up || []).some(item =>
+          item.action === 'remove_dropped_database_registration' && item.state === 'complete') &&
         !(result.workspace_follow_up || []).some(item => item.state === 'failed') &&
         onRecreateEmpty && <Button sx={{mt: 2}} variant="contained"
         onClick={() => onRecreateEmpty(droppedPath)}>
@@ -8327,9 +8337,10 @@ export default function ProviderWorkspaceContent({
       ) &&
         <StructuredDataGrid catalog={workspace.visual_admin}
           sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
-          onLoadSql={({source: generatedSource, parameters}) => {
+          clientSqlDialect={clientSqlDialect}
+          onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
             if (busy || occurrenceId || scriptLocked) return;
-            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(3); setTab('studio');
+            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(generatedDialect); setTab('studio');
           }}
           resources={resourcePage?.items || []}
           post={post} setError={setError}

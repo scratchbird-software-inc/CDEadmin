@@ -114,6 +114,34 @@ and no SQL is replayed. Use a UTF8 attachment for unrestricted Unicode SQL,
 input and text BLOBs. BMP FSS BLOBs, exact scalar reads and character ARRAY reads
 are qualified separately. These engine limits are not Windows/macOS UX issues.
 
+Network administration task qualification
+----------------------------------------
+
+``tools/cdeadmin_firebird_network_tasks_gate.py`` runs the generic provider
+checks and the specialized native object gates together. It covers every task
+declared by the exact Firebird 5.0.4 network dialect contract, including global
+and local mappings, storage, shadows, external functions, BLOB filters, native
+object replacement, role membership, privileges, view writes and column order.
+Use the supported Python 3.14 runtime and pinned driver 1.10.11:
+
+.. code-block:: bash
+
+   PYTHONPATH=tools:web:. LD_LIBRARY_PATH=/path/to/firebird/lib \
+     python tools/cdeadmin_firebird_network_tasks_gate.py \
+       --runtime-root /path/to/firebird \
+       --source-root /path/to/firebird-source \
+       --ddn-work /path/to/external/ddn-intake \
+       --evidence-root /path/to/external/new-evidence
+
+The exact Firebird Docker image must be available for the container gates.
+Each gate owns its server, databases, files and security changes. The runner
+refreshes DDN before each gate and records receipt hashes and source bindings.
+It collects all gate results and returns failure for missing tasks, failed
+gates, source changes or a changed DDN snapshot. Only explicit successful native
+task receipts contribute coverage. The generic verifier's partial task list
+alone cannot close the network dialect. Form validation and whole-product
+acceptance remain separate responsibilities.
+
 Additional qualification responsibilities
 -----------------------------------------
 
@@ -141,3 +169,25 @@ uncommitted source hashes, architecture, driver/native-library versions,
 redacted reproduction and receipt. A successful Linux test must not be recorded
 as Windows/macOS acceptance. UI and packaging acceptance are independent of
 backend feature coverage; unresolved backend defects remain explicit work.
+
+
+Catalog inventory qualification
+===============================
+
+Use ``tools/cdeadmin_firebird_catalog_completeness_gate.py`` to reconcile raw
+native catalog identities against provider resources and actual navigator
+reachability. It includes restricted network and embedded captures, account
+attribute and plugin-binding checks, and the named catalog/driver-information
+failure-injection gate. See :doc:`firebird_catalog_completeness`. Catalog identities
+include authentication plugins for users and package scope for routine members;
+consumers must preserve the returned opaque resource IDs when navigating or
+performing operations. Existing cached user IDs require a catalog refresh.
+
+Platform and release evidence pipeline
+======================================
+
+The portable driver gate now constructs the embedded provider for embedded
+routes and records native transport/authentication observations. The broader
+``firebird-platform`` stage adds exhaustive conversions, the completed backend
+workflow inventory, Windows XNET/Win_Sspi fixtures and content-bound release
+aggregation. See :doc:`firebird_platform_release` for execution and scope.

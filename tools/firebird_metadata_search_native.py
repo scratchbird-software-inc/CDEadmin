@@ -1,7 +1,7 @@
 """Search native catalog names, comments, source and column metadata."""
 
 
-def qualify(connection):
+def qualify(connection, other=None):
     from pgadmin.cdeadmin.providers.firebird.provider import _resources
     from pgadmin.cdeadmin.workspace.firebird_search import search
     with connection.cursor() as cursor:
@@ -21,4 +21,20 @@ def qualify(connection):
         assert result['match_count'] > 0, (name, result)
         checks[name] = {'count': result['match_count'], 'ids': [item['resource_id'] for item in result['matches']]}
     assert search(snapshot, 'x.*; DROP TABLE SEARCH_NATIVE', {'source', 'name'})['match_count'] == 0
-    return {'passed': True, 'native_checks': checks, 'literal_query_not_executed': True}
+    isolated = None
+    if other is not None:
+        with other.cursor() as cursor:
+            cursor.execute('CREATE TABLE SEARCH_NATIVE (OTHER_FIELD INTEGER)')
+        other.commit()
+        with other.cursor() as cursor:
+            cursor.execute("COMMENT ON TABLE SEARCH_NATIVE IS 'Other database only'")
+        other.commit()
+        independent = {'generation': 'independent-native-search', 'resources': _resources(other, {})}
+        other.rollback()
+        assert search(independent, 'needle comment 世界', {'description'})['match_count'] == 0
+        assert search(independent, 'search_field', {'fields'})['match_count'] == 0
+        assert search(independent, 'other_field', {'fields'}, 'table')['match_count'] > 0
+        assert search(snapshot, 'other_field', {'fields'})['match_count'] == 0
+        isolated = True
+    return {'passed': True, 'native_checks': checks, 'literal_query_not_executed': True,
+            'independent_database_catalogs_isolated': isolated}

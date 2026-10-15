@@ -792,24 +792,25 @@ def endpoint_context_actions(
             arguments={'tab': 'firebird-server-catalog'}, enabled=ready,
             disabled_reason='' if ready else blocked,
         ))
-        if profile.get('route_kind') == 'network':
+        actions.append(_action(
+            'endpoint.firebird.dashboard_editor', 'Edit dashboard...',
+            'open_firebird_dashboard_editor', icon='action.edit',
+            group='availability', mutation='write', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can edit its dashboard.',
+        ))
+        for tab, label in (
+                ('monitoring', 'Firebird server dashboard...'),
+                ('monitoring_policy', 'Configure monitoring collection...')):
+            if tab == 'monitoring_policy' and profile.get('route_kind') != 'network':
+                continue
             actions.append(_action(
-                'endpoint.firebird.dashboard_editor', 'Edit dashboard...',
-                'open_firebird_dashboard_editor', icon='action.edit',
-                group='availability', mutation='write', enabled=can_manage,
-                disabled_reason='' if can_manage else 'Only the endpoint owner can edit its dashboard.',
+                f'endpoint.firebird.{tab}', label, 'open_workspace',
+                icon='action.view', group='availability',
+                mutation='admin' if tab == 'monitoring_policy' else 'read',
+                arguments={'tab': tab}, enabled=ready and can_manage,
+                disabled_reason=blocked if not ready else
+                '' if can_manage else 'Only the endpoint owner can monitor it.',
             ))
-            for tab, label in (
-                    ('monitoring', 'Firebird server dashboard...'),
-                    ('monitoring_policy', 'Configure monitoring collection...')):
-                actions.append(_action(
-                    f'endpoint.firebird.{tab}', label, 'open_workspace',
-                    icon='action.view', group='availability',
-                    mutation='admin' if tab == 'monitoring_policy' else 'read',
-                    arguments={'tab': tab}, enabled=ready and can_manage,
-                    disabled_reason=blocked if not ready else
-                    '' if can_manage else 'Only the endpoint owner can monitor it.',
-                ))
     actions.extend([
         _action(
             f'endpoint.{engine_id}.create_database',
@@ -1002,12 +1003,7 @@ def database_target_context_actions(
             'open_workspace', icon='action.edit', group='database',
             arguments={**base, 'tab': 'firebird-test-data'},
         ))
-    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
-        actions.append(_action(
-            'database.firebird.isql', 'Open external Firebird ISQL...',
-            'open_workspace', icon='action.script', group='database',
-            arguments={**base, 'tab': 'firebird-isql'},
-        ))
+    if engine_id == 'firebird':
         actions.append(_action(
             'database.firebird.dashboard_editor', 'Edit dashboard...',
             'open_firebird_dashboard_editor', icon='action.edit',
@@ -1022,6 +1018,12 @@ def database_target_context_actions(
                 mutation='admin' if tab == 'monitoring_policy' else 'read',
                 arguments={**base, 'tab': tab},
             ))
+    if engine_id == 'firebird' and profile.get('route_kind') == 'network':
+        actions.append(_action(
+            'database.firebird.isql', 'Open external Firebird ISQL...',
+            'open_workspace', icon='action.script', group='database',
+            arguments={**base, 'tab': 'firebird-isql'},
+        ))
         actions.append(_action(
             'database.firebird.backup', 'Backup...', 'open_workspace',
             icon='action.backup', group='database', priority=13,

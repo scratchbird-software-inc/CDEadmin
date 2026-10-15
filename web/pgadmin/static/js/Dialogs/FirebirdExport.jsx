@@ -19,6 +19,7 @@ export default function FirebirdExport({post, generation, selectedResource, reso
   const [designRequest, setDesignRequest] = useState(null);
   const [sqlResult, setSqlResult] = useState(null);
   const [dataResult, setDataResult] = useState(null);
+  const [dataPage, setDataPage] = useState(0);
   const [resourceId, setResourceId] = useState(selectedResource?.resource_id || '');
   const branches = resources.filter(item => !['service-operation', 'metric'].includes(item.resource_kind));
   const visibleBranches = branches.filter(item => item.resource_id === resourceId ||
@@ -35,14 +36,15 @@ export default function FirebirdExport({post, generation, selectedResource, reso
     token.current++;
     setResult(null); setDiagram(null); setDesignRequest(null); setSqlResult(null); setDataResult(null); setError(''); setBusy(false);
     setSource(''); setFilename(''); setComparison(null);
+    setResourceId(selectedResource?.resource_id || '');
     return () => {token.current++;};
-  }, [post]);
+  }, [post, databaseTargetId]);
   const capture = async (compare = false, sql = false, contents = null) => {
     const requestToken = ++token.current;
     setBusy(true); setError(''); setResult(null); setSqlResult(null); setDataResult(null); setComparison(null);
     try {
       const response = await post({action: compare ? 'firebird_catalog_compare' : sql ? 'firebird_sql_export' : contents ? 'firebird_data_export' : 'firebird_catalog_export', request: {
-        generation, include_system: includeSystem, refresh,
+        generation, database_target_id: databaseTargetId, include_system: includeSystem, refresh,
         ...(contents ? {contents} : {}),
         ...(compare ? {source} : {}),
         ...(scope === 'branch' ? {resource_id: resourceId} : {}),
@@ -50,7 +52,7 @@ export default function FirebirdExport({post, generation, selectedResource, reso
       if(requestToken !== token.current) return;
       if(compare) {setComparison(response); setPage(0);}
       else if(sql) setSqlResult(response);
-      else if(contents) setDataResult(response);
+      else if(contents) {setDataResult(response); setDataPage(0);}
       else {setResult(response); setDiagram(response.diagram || null); setView(response.snapshot.view);
         setSource(JSON.stringify(response.snapshot)); setFilename('Captured native catalog');}
       if(refresh) await onCatalogRefresh?.();
@@ -126,6 +128,15 @@ export default function FirebirdExport({post, generation, selectedResource, reso
       <Alert severity="info">{gettext('Lossless native data archive captured in a separate read-only snapshot. The snapshot has been released. Computed and identity metadata remain explicit; this document is not an executable SQL script.')}</Alert>
       <Box>{dataResult.table_count} {gettext('tables')}; {dataResult.row_count} {gettext('rows')}. {gettext('Contents')}: {dataResult.contents}</Box>
       <Button onClick={() => download(dataResult)}>{gettext('Download data archive')}</Button>
+      {dataResult.ddn?.snapshot && <>
+        <Button onClick={() => download(dataResult.ddn)}>{gettext('Download static data DDN')}</Button>
+        <Alert severity="info">{gettext('Static captured data. Exact JSON values preserve native types; row ordinals are export positions, not native keys. Import requires separate destination review.')}</Alert>
+        <TextField select label={gettext('Static data page')} value={dataPage} onChange={(event) => setDataPage(Number(event.target.value))}>
+          {dataResult.ddn.views.map((item, index) => <MenuItem key={item.id} value={index}>{item.label}</MenuItem>)}
+        </TextField>
+        <DDNViewerSurface snapshot={{...dataResult.ddn.snapshot, ...dataResult.ddn.views[dataPage], view: dataResult.ddn.views[dataPage].id}} />
+      </>}
+      {dataResult.ddn?.unavailable && <Alert severity="warning">{dataResult.ddn.reason}</Alert>}
     </>}
     {sqlResult && <>
       <Alert severity="info">{gettext('Native metadata only. Review ownership and external prerequisites before execution. This file has no connection credentials or transaction outcome statements. Data export is separate.')}</Alert>

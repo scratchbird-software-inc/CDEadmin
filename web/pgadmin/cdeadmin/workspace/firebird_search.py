@@ -40,11 +40,14 @@ def strings(value, depth=0):
 
 
 def search(snapshot, query, fields, kind='', limit=500):
-    matches, total, missing_ddl, observations = [], 0, 0, []
+    matches, total, missing_ddl, observations, warnings, coverage = [], 0, 0, [], [], []
     for resource in snapshot['resources']:
         native = native_metadata(resource) or {}
         if resource.get('resource_kind') == 'database':
             observations.extend(native.get('catalog_observations') or [])
+            warnings.extend(native.get('catalog_warnings') or [])
+            if native.get('catalog_coverage'):
+                coverage.append(native['catalog_coverage'])
         missing_ddl += bool(native.get('ddl_unavailable_reason'))
         if kind and resource.get('resource_kind') != kind:
             continue
@@ -75,5 +78,6 @@ def search(snapshot, query, fields, kind='', limit=500):
             'snippet': text[offset:offset + 240], 'snippet_truncated': len(text) > 240})
     return {'matches': matches, 'match_count': total, 'truncated': total > len(matches),
             'generation': snapshot['generation'], 'missing_ddl_count': missing_ddl,
-            'catalog_observations': observations,
+            'catalog_observations': observations, 'catalog_coverage': coverage,
+            'catalog_warnings': warnings,
             'coverage': 'Current attachment-visible catalog only; unavailable metadata is not searched'}

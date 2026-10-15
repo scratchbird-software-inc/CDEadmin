@@ -5,6 +5,9 @@ import {DDNDesignerSurface, DDNViewerSurface, setDDNLibraryLoaderForTests,
 import {withTheme} from '../fake_theme';
 const files = {'model.ddn': 'ddn "0.5"; module "test"; data model { object a "Alpha" { kind: table; } } view main { data: [@model]; select: [@model.a]; }'};
 describe('current DDN surfaces', () => {
+  const originalHeight=window.innerHeight;
+  beforeAll(()=>{window.innerHeight=1200;});
+  afterAll(()=>{window.innerHeight=originalHeight;});
   beforeEach(() => {
     setDDNLibraryLoaderForTests(async () => [viewer]);
     viewer.setTextProvider((text, size) => ({width: String(text).length * size * 0.6,
@@ -22,6 +25,20 @@ describe('current DDN surfaces', () => {
     expect(container.querySelector('iframe')).toBeNull();
     fireEvent.click(screen.getByRole('button', {name: 'Export SVG'}));
     expect(onExport.mock.calls[0][0]).toContain('<svg'); unmount();
+  });
+  it('lets passive dashboard viewers reach additional views without editing controls', async () => {
+    const Component=withTheme(DDNViewerSurface);
+    const onSelectionChange=jest.fn();
+    const pages={'model.ddn':files['model.ddn']+' view second "Second page" {data:[@model];select:[@model.a];}'};
+    const {rerender}=render(<Component files={pages} presentation viewSelection onSelectionChange={onSelectionChange} />);
+    const selector=await screen.findByRole('combobox', {name:'Dashboard view'});
+    fireEvent.mouseDown(selector);
+    fireEvent.click(await screen.findByRole('option', {name:'model.ddn / Second page'}));
+    await waitFor(()=>expect(onSelectionChange).toHaveBeenCalledWith({entry:'model.ddn',view:'second'}));
+    rerender(<Component files={{'model.ddn':pages['model.ddn']+' // refreshed values'}} presentation viewSelection onSelectionChange={onSelectionChange} />);
+    await waitFor(()=>expect(onSelectionChange.mock.calls.at(-1)[0]).toEqual({entry:'model.ddn',view:'second'}));
+    expect(screen.queryByRole('button', {name:'Save'})).toBeNull();
+    expect(screen.queryByRole('button', {name:'Export SVG'})).toBeNull();
   });
   it('uses only the viewer for read-only editor assets', async () => {
     const Component = withTheme(DDNDesignerSurface);

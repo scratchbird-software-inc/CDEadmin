@@ -1144,6 +1144,11 @@ ALLOWED_LLM_API_URLS = [
 # Users can override this in their preferences.
 MAX_LLM_TOOL_ITERATIONS = 20
 
+# Optional native ScratchBird monitoring archive. Destination credentials belong
+# in the server environment named by password_env. Initialize the destination
+# explicitly with tools/cdeadmin_monitoring_history.py before enabling policies.
+CDEADMIN_MONITORING_HISTORY = {'enabled': False}
+
 #############################################################################
 # Patch the default config with custom config and other manipulations
 #############################################################################

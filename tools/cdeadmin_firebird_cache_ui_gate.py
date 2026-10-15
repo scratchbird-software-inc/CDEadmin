@@ -6,6 +6,11 @@ import os
 import re
 import traceback
 from pathlib import Path
+
+if __package__:
+    from .firebird_server_paths import server_path
+else:
+    from firebird_server_paths import server_path
 from types import SimpleNamespace
 
 from selenium.webdriver.common.by import By
@@ -40,8 +45,8 @@ def owned_profile(options):
             profile.get('port') != options.firebird_port or
             profile.get('user') != options.user or
             profile.get('database') != path or
-            options.database != Path(path).name or
-            options.database_root != str(Path(path).parent) or
+            options.database != server_path(path).name or
+            server_path(options.database_root) != server_path(path).parent or
             not re.fullmatch('[0-9a-f]{64}', container)):
         raise ValueError('Browser target is not the owned cache fixture')
     owner = docker('inspect', '--format',

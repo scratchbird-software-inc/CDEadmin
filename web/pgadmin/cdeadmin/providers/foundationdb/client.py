@@ -227,9 +227,8 @@ class FoundationDBBackend:
                 'FoundationDB requires its official Python binding and '
                 'client library'
             ) from exc
-        if not self.fdb.is_api_version_selected():
-            self.fdb.api_version(730)
-        elif self.fdb.get_api_version() != 730:
+        if (self.fdb.is_api_version_selected() and
+                self.fdb.get_api_version() != 730):
             raise NativeDistributedError(
                 'FoundationDB API version must be 730')
         self._databases = []
@@ -305,6 +304,17 @@ class FoundationDBBackend:
         ))
         fingerprint = (values, bool(password))
         with self._network_lock:
+            # Static provider descriptors must not load the optional native
+            # client. Select the process-wide API only for an actual session.
+            try:
+                if not self.fdb.is_api_version_selected():
+                    self.fdb.api_version(730)
+                elif self.fdb.get_api_version() != 730:
+                    raise NativeDistributedError('FoundationDB API version must be 730')
+            except NativeDistributedError:
+                raise
+            except Exception:
+                raise NativeDistributedError('FoundationDB native client library is unavailable') from None
             owner = type(self)
             if owner._network_fingerprint not in {None, fingerprint}:
                 raise NativeDistributedError(

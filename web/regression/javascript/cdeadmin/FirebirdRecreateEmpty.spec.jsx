@@ -38,7 +38,7 @@ async function drop() {
     fireEvent.click(screen.getByRole('button', {name: 'drop native database'}));
   });
 }
-const success = {database_targets: {targets: []}, provider_result: {driver_observation: {driver_returned: true},
+const success = {workspace_follow_up: [{action: 'remove_dropped_database_registration', state: 'complete'}], database_targets: {targets: []}, provider_result: {driver_observation: {driver_returned: true},
   dropped_endpoint_database_target: {target_id: 'old'}}};
 
 describe('Firebird recreate empty', () => {
@@ -62,6 +62,10 @@ describe('Firebird recreate empty', () => {
   });
   it.each([
     new Error('Response lost'), {},
+    {...success, database_targets: undefined},
+    {...success, workspace_follow_up: []},
+    {...success, database_targets: {targets: [{target_id: 'old'}]}},
+    {...success, provider_result: {...success.provider_result, dropped_endpoint_database_target: {target_id: 'different'}}},
     {...success, workspace_follow_up: [{state: 'failed', action: 'delete', message: 'Registration cleanup failed'}]},
   ])('does not continue or replay on missing proof or failed cleanup %#', async outcome => {
     const {post, onRecreateEmpty} = mount(outcome);
@@ -72,6 +76,9 @@ describe('Firebird recreate empty', () => {
     expect(screen.getByRole('button', {name: 'Validate and preview'})).toBeDisabled();
     expect(screen.getByRole('button', {name: 'drop native database'})).toBeDisabled();
     expect(onRecreateEmpty).not.toHaveBeenCalled();
+    if (!(outcome instanceof Error) && !outcome?.provider_result?.driver_observation?.driver_returned) {
+      expect(screen.getByText(/Native drop completion is unconfirmed/)).toBeInTheDocument();
+    }
   });
   it('prefills the new filename without submitting creation', async () => {
     const {post} = mount({}, 'create');

@@ -71,9 +71,30 @@ def test_authored_only_files_are_parsed_and_selected_view_must_exist():
     with pytest.raises(ValueError):
         merge_design({'baseline': snapshot(), 'draft': authored, 'incoming': snapshot()})
     authored['files']['extra.ddn'] = 'ddn "0.5"; module "extra"; import "design.ddn" as shared;'
-    with pytest.raises(ValueError, match='Imported design workspaces'):
-        merge_design({'baseline': snapshot(), 'draft': authored, 'incoming': snapshot()})
+    assert merge_design({'baseline': snapshot(), 'draft': authored, 'incoming': snapshot()}) == authored
     authored = snapshot()
     authored['view'] = 'missing'
-    with pytest.raises(ValueError, match='selected design view'):
+    with pytest.raises(ValueError, match='selected.*view'):
         merge_design({'baseline': snapshot(), 'draft': authored, 'incoming': snapshot()})
+
+
+def imported(name='Old'):
+    value = snapshot(name)
+    source = value['files'].pop('design.ddn')
+    data, view = source.split('view v', 1)
+    value['entry'] = 'views/main.ddn'
+    value['files'] = {'model.ddn': data,
+        'views/main.ddn': 'ddn "0.5"; module "test.engine.views"; import "../model.ddn" as model; view v' + view.replace('@items', '@model.items')}
+    return value
+
+
+def test_imported_refresh_preserves_authored_view_and_updates_native_block():
+    baseline = imported()
+    draft = deepcopy(baseline)
+    draft['files']['views/main.ddn'] = draft['files']['views/main.ddn'].replace('"Native"', '"Authored"')
+    result = merge_design({'baseline': baseline, 'draft': draft, 'incoming': imported('New')})
+    assert 'object a "New"' in result['files']['model.ddn']
+    assert result['files']['views/main.ddn'] == draft['files']['views/main.ddn']
+    conflicting = imported('Authored')
+    with pytest.raises(ValueError, match='changed on both sides'):
+        merge_design({'baseline': baseline, 'draft': conflicting, 'incoming': imported('New')})

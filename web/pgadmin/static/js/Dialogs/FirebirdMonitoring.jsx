@@ -3,6 +3,7 @@ import FirebirdMonitoringDetails from './FirebirdMonitoringDetails';
 import FirebirdDatabaseRanking from './FirebirdDatabaseRanking';
 import FirebirdEngineTrends from './FirebirdEngineTrends';
 import FirebirdTrendView from './FirebirdTrendView';
+import FirebirdHistoryView from './FirebirdHistoryView';
 import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Radio, RadioGroup, TextField} from '@mui/material';
@@ -13,11 +14,12 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {bindPublication} from '../cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
-import {firebirdDashboardFiles, firebirdFleetFiles, firebirdServerDatabaseFiles} from '../cdeadmin_ui/integrations/ddn/firebirdDashboard';
+import {firebirdDashboardFiles, firebirdFleetFiles} from '../cdeadmin_ui/integrations/ddn/firebirdDashboard';
 
 export default function FirebirdMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate}) {
   const [snapshot, setSnapshot] = useState(null);
   const [showTrends, setShowTrends] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [publishedView, setPublishedView] = useState(null);
   const [publishedVersion, setPublishedVersion] = useState(0);
@@ -26,7 +28,7 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
   const [credentialMode, setCredentialMode] = useState('registration');
   const [credentials, setCredentials] = useState({username: '', password: '', role: ''});
   const [policy, setPolicy] = useState({interval_seconds: targetId ? 5 : 15,
-    retain_samples: 120, lease_seconds: 3600, heartbeat_enabled: false, heartbeat_timeout_seconds: null, metadata_interval_seconds: 60,
+    retain_samples: 120, lease_seconds: 3600, history_enabled: false, heartbeat_enabled: false, heartbeat_timeout_seconds: null, metadata_interval_seconds: 60,
     max_transaction_age_seconds: 0, max_backup_state_seconds: 0,
     require_wire_encryption: false, expected_encryption_state: null});
   const endpoint = useMemo(() => engineMode ? url_for('cdeadmin_monitoring.fleet') : url_for('cdeadmin_monitoring.monitoring', {sid: serverId}) +
@@ -72,7 +74,6 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
   const files = useMemo(() => engineMode ? firebirdFleetFiles(snapshot) : firebirdDashboardFiles(snapshot,
     targetId ? 'Firebird database dashboard' : 'Firebird server dashboard',
     targetId ? 'database' : 'server'), [snapshot, targetId, engineMode]);
-  const databaseFiles = useMemo(() => firebirdServerDatabaseFiles(snapshot), [snapshot]);
   const heartbeatValid = !policy.heartbeat_enabled || policy.heartbeat_timeout_seconds === null ||
     (Number.isInteger(policy.heartbeat_timeout_seconds) &&
       policy.heartbeat_timeout_seconds >= policy.interval_seconds + 5 && policy.heartbeat_timeout_seconds <= 3600);
@@ -82,7 +83,7 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
       const response = remove ? await getApiInstance().delete(endpoint) :
         await getApiInstance().post(endpoint, {...policy,
           heartbeat_timeout_seconds: policy.heartbeat_enabled ? policy.heartbeat_timeout_seconds : null,
-          ...(credentialMode === 'dedicated' ? {credentials} : {})});
+          ...(snapshot?.attachment_mode !== 'embedded' && credentialMode === 'dedicated' ? {credentials} : {})});
       setSnapshot(response.data.data);
     } catch(err) {
       setError(err.response?.data?.errormsg || gettext('Monitoring policy change failed.'));
@@ -93,6 +94,7 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
     <FormReference formKey={showPolicy ? 'firebird-monitoring-policy' : 'firebird-dashboard'} />
     {!showPolicy && publishedVersion > 0 && <Box>Published layout revision {publishedVersion}</Box>}
     {error && <Alert severity="error">{error}</Alert>}
+    {snapshot?.scope_note && <Alert severity="info">{snapshot.scope_note}</Alert>}
     {!showPolicy && snapshot && onNavigate && <Box aria-label="Dashboard navigation">
       <TextField select size="small" label={gettext('Open dashboard')} value=""
         sx={{width: '24rem', maxWidth: '100%'}} onChange={(event) => {
@@ -104,12 +106,16 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
           ...server.databases.map((database) => <MenuItem key={`${server.server_id}:${database.target_id}`}
             value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
         ]) : [
-          ...(targetId ? [<MenuItem key="server" value={JSON.stringify([serverId, null, snapshot.navigation?.name])}>{gettext('Server dashboard')}</MenuItem>] : []),
+          ...(targetId ? [<MenuItem key="server" value={JSON.stringify([serverId, null, snapshot.navigation?.name])}>{snapshot.attachment_mode === 'embedded' ? gettext('Registered files dashboard') : gettext('Server dashboard')}</MenuItem>] : []),
           ...(!targetId ? (snapshot.navigation?.databases || []).map((database) => <MenuItem key={database.target_id}
             value={JSON.stringify([serverId, database.target_id, database.name])}>{database.name}</MenuItem>) : []),
         ]}
       </TextField>
     </Box>}
+    {!showPolicy && !engineMode && <FormControlLabel label={gettext('Persistent history')}
+      control={<Checkbox checked={showHistory} onChange={(event) => setShowHistory(event.target.checked)} />} />}
+    {!showPolicy && !engineMode && showHistory && <FirebirdHistoryView key={`${serverId}:${targetId || ''}`}
+      serverId={serverId} targetId={targetId} />}
     {!showPolicy && !engineMode && snapshot?.samples?.length > 0 && <FormControlLabel label={gettext('Recent observations')}
       control={<Checkbox checked={showTrends} onChange={(event) => setShowTrends(event.target.checked)} />} />}
     {!showPolicy && !engineMode && snapshot && showTrends && <FirebirdTrendView
@@ -118,8 +124,6 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
       <FormControlLabel label={gettext('Activity details')} control={<Checkbox checked={showActivity} onChange={(event) => setShowActivity(event.target.checked)} />} />
       {showActivity && <FirebirdActivityView snapshot={snapshot} serverId={serverId} targetId={targetId} />}
     </>}
-    {!showPolicy && !engineMode && !targetId && snapshot && <DDNViewerSurface
-      files={databaseFiles} entry="dashboard.ddn" view="dashboard" presentation />}
     {!showPolicy && !targetId && snapshot && <FirebirdDatabaseRanking snapshot={snapshot} engineMode={engineMode} />}
     {!showPolicy && engineMode && snapshot && <FirebirdEngineTrends fleet={snapshot} />}
     {!showPolicy && !engineMode && snapshot && <FirebirdMonitoringDetails
@@ -131,12 +135,13 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
         {gettext('Active monitoring account')}: {snapshot.authentication.username || gettext('Registration authentication')}
         {snapshot.authentication.role ? ` (${snapshot.authentication.role})` : ''}
       </Alert>}
-      <RadioGroup row aria-label={gettext('Monitoring authentication')} value={credentialMode}
+      {snapshot?.attachment_mode === 'embedded' && <Alert severity="info">{gettext('Embedded collection uses authorized local file access. Passwords and network service authentication do not apply.')}</Alert>}
+      {snapshot?.attachment_mode !== 'embedded' && <RadioGroup row aria-label={gettext('Monitoring authentication')} value={credentialMode}
         onChange={(event) => { setCredentialMode(event.target.value); setCredentials((value) => ({...value, password: ''})); }}>
         <FormControlLabel value="registration" control={<Radio />} label={gettext('Use current connection credentials')} />
         <FormControlLabel value="dedicated" control={<Radio />} label={gettext('Use dedicated monitoring account')} />
-      </RadioGroup>
-      {credentialMode === 'dedicated' && <>
+      </RadioGroup>}
+      {snapshot?.attachment_mode !== 'embedded' && credentialMode === 'dedicated' && <>
         <TextField size="small" label={gettext('Monitoring username')} value={credentials.username}
           autoComplete="off" onChange={(event) => setCredentials({...credentials, username: event.target.value})} />
         <TextField size="small" label={gettext('Monitoring password')} type="password" value={credentials.password}
@@ -152,6 +157,10 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
           value={policy[key]} onChange={(event) => setPolicy({...policy, [key]: Number(event.target.value)})} />)}
       <FormControlLabel label={gettext('Use completed refreshes as availability heartbeats')}
         control={<Checkbox checked={policy.heartbeat_enabled} onChange={(event) => setPolicy({...policy, heartbeat_enabled: event.target.checked})} />} />
+      <FormControlLabel label={gettext('Archive observations in configured ScratchBird history')}
+        control={<Checkbox checked={policy.history_enabled} onChange={(event) => setPolicy({...policy, history_enabled: event.target.checked})} />} />
+      {snapshot?.history_storage && <Alert severity="info">History write: {snapshot.history_storage.status}.
+        Unconfirmed writes: {snapshot.history_storage.failures}.</Alert>}
       {policy.heartbeat_enabled && <TextField size="small" type="number"
         label={gettext('Heartbeat overdue after (seconds)')}
         value={policy.heartbeat_timeout_seconds ?? ''} error={!heartbeatValid}
@@ -178,11 +187,11 @@ export default function FirebirdMonitoring({serverId, targetId, policyMode=false
       </>}
       <Box>
         <Button disabled={busy || !heartbeatValid || Boolean(snapshot?.authentication) || snapshot?.collection_available === false ||
-          (credentialMode === 'dedicated' && (!credentials.username || !credentials.password))} onClick={() => changePolicy()}>{gettext('Start collection')}</Button>
+          (snapshot?.attachment_mode !== 'embedded' && credentialMode === 'dedicated' && (!credentials.username || !credentials.password))} onClick={() => changePolicy()}>{gettext('Start collection')}</Button>
         <Button disabled={busy} onClick={() => changePolicy(true)}>{gettext('Stop collection')}</Button>
       </Box>
     </Box> : snapshot && <DDNViewerSurface files={files} snapshot={publishedView || undefined} entry="dashboard.ddn"
-      view="dashboard" presentation />}
+      view="dashboard" presentation viewSelection />}
   </Box>;
 }
 FirebirdMonitoring.propTypes = {serverId: PropTypes.number,

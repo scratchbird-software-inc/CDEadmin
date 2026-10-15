@@ -1,0 +1,12 @@
+name: Preserve native qualification evidence
+description: Upload native receipts, test results, logs and browser screenshots
+inputs:
+  path:
+    description: External qualification evidence directory
+    required: true
+  name:
+    description: Unique artifact name for this host and attempt
+    required: true
+runs:
+  using: node24
+  main: index.cjs

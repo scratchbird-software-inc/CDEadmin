@@ -40,6 +40,10 @@ from werkzeug.utils import find_modules
 from jinja2 import select_autoescape
 from flask_wtf.csrf import CSRFError
 
+# A spawned worker can import this package before the canonical launcher.
+# Initialize the configuration boundary before model/utils import each other.
+import config
+
 from pgadmin.model import db, Role, Server, SharedServer, ServerGroup, \
     User, Keys, Version, SCHEMA_VERSION as CURRENT_SCHEMA_VERSION
 from pgadmin.utils import PgAdminModule, driver, KeyManager, heartbeat
@@ -752,6 +756,7 @@ def create_app(app_name=None):
                             inst_key.Close()
                     except Exception:
                         pass
+            return
         else:
             # We use the postgres-winreg.ini file on non-Windows
             from configparser import ConfigParser

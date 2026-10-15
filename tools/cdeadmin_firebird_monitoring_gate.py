@@ -247,7 +247,9 @@ def run(profiles):
         result['status'] = 'passed'
     except Exception as error:
         result['failures'].append({
-            'phase': 'qualification', 'type': type(error).__name__})
+            'phase': 'qualification', 'type': type(error).__name__,
+            'frames': [{'function': f.name, 'line': f.lineno}
+                       for f in traceback.extract_tb(error.__traceback__)]})
     finally:
         if grant is not None:
             grant.revoke()

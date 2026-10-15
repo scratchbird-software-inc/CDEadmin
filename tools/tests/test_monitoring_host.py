@@ -188,3 +188,24 @@ def test_statement_inspection_retains_owner_and_target_scope(tmp_path, monkeypat
         assert authorize(config, 'view') is False
     finally:
         value.close()
+
+
+def test_history_read_while_disabled_rechecks_scope_without_creating_collector(tmp_path, monkeypatch):
+    value, scope = host(tmp_path, monkeypatch)
+    value.history = Mock()
+    value.history.query.return_value = {'samples': [], 'history': 'scratchbird'}
+    monkeypatch.setattr(value, 'definition_scope', lambda *_: {})
+    try:
+        result = value.historical(1, 7, 'database', {'start': 'start', 'end': 'end'})
+        assert result['history'] == 'scratchbird'
+        assert value.ownership.fd is None and not value._grants
+        with pytest.raises(PermissionError):
+            value.historical(2, 7, 'database', {'start': 'start', 'end': 'end'})
+        def changed(*args, **kwargs):
+            scope['generation'] = 'changed'
+            return {'samples': ['must-not-leak']}
+        value.history.query.side_effect = changed
+        with pytest.raises(PermissionError):
+            value.historical(1, 7, 'database', {'start': 'start', 'end': 'end'})
+    finally:
+        value.close()

@@ -14,13 +14,14 @@ from pgadmin.cdeadmin.workspace.firebird_catalog_import import read_catalog
 from pgadmin.cdeadmin.workspace.duckdb_schema_plan import plan
 
 
-def test_attachment_options_and_foreign_locations_do_not_export_credentials():
+def test_attachment_options_and_foreign_locations_do_not_export_credentials(tmp_path):
     value = catalog.database_location("host=remote password='private words'", 'postgres',
         {'password': 'private words', 'encryption_key': 'key', 'read_only': True})
     assert value['path'] is None and value['path_redacted']
     assert value['options'] == {'read_only': True} and value['options_redacted']
     assert 'private' not in json.dumps(value) and 'key' not in json.dumps(value)
-    assert catalog.database_location('/owned/file.duckdb', 'duckdb', {})['path'] == '/owned/file.duckdb'
+    local = str((tmp_path / 'owned.duckdb').resolve())
+    assert catalog.database_location(local, 'duckdb', {})['path'] == local
 
 
 def test_owned_capture_preserves_interactive_work_and_sequence_state(tmp_path):

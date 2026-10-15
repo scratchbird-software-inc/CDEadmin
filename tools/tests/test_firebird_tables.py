@@ -25,7 +25,8 @@ def test_external_browser_profile_is_private_removed_and_both_runs_collected(
 
     def launch(command, **kwargs):
         profile = Path(command[command.index('--profiles') + 1])
-        assert profile.stat().st_mode & 0o777 == 0o600
+        from pgadmin.cdeadmin.operations.fileio import has_private_file_permissions
+        assert has_private_file_permissions(profile)
         saved = json.loads(profile.read_text())['profiles'][0]
         assert saved['password'] == secret
         assert all(secret not in argument for argument in command)

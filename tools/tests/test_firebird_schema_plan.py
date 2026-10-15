@@ -140,3 +140,18 @@ def test_empty_comments_are_native_null_in_the_schema_model():
     assert plan['operations'][0]['statements'] == ['COMMENT ON SEQUENCE "S" IS NULL']
     assert build_plan(base, desired, current)['status'] == 'no-op'
     assert desired['rows']['sequence:S']['native']['description'] == ''
+
+
+def test_stored_dialect_one_generates_native_identifiers_without_case_conversion():
+    base = document([])
+    base['rows']['database:database']['native']['sql_dialect'] = '1'
+    desired = deepcopy(base)
+    new = read_catalog(source([obj('exception', 'UPPER_EXCEPTION', message='native', description=None)]))['rows']['exception:UPPER_EXCEPTION']
+    desired['rows']['exception:UPPER_EXCEPTION'] = new
+    plan = build_plan(base, desired, base)
+    assert plan['status'] == 'review-ready'
+    assert plan['sql_dialect'] == 1
+    assert "CREATE EXCEPTION UPPER_EXCEPTION 'native'" in plan['script']
+    desired['rows']['exception:UPPER_EXCEPTION']['name'] = 'MixedCase'
+    desired['rows']['exception:UPPER_EXCEPTION']['path'] = ['MixedCase']
+    assert build_plan(base, desired, base)['status'] == 'blocked'

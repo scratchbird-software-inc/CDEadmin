@@ -11,6 +11,12 @@ export default function FirebirdProfiler({report, statistics}) {
         {statistics.scope}. Host elapsed: {statistics.elapsed ?? 'unavailable'} nanoseconds.
         Timing covers native dispatch, execution, fetch and cursor release; it is not server CPU time.
       </Alert>
+      <Typography>Sampled attachment: before {statistics.before?.attachment_id ?? 'unavailable'};
+        after {statistics.after?.attachment_id ?? 'unavailable'}.</Typography>
+      {(statistics.unavailable_reasons || []).length > 0 && <Alert severity="warning">
+        Incomplete measurements: {statistics.unavailable_reasons.join(', ')}.
+        {(statistics.reset_counters || []).length > 0 && ' Reset counters: ' + statistics.reset_counters.join(', ') + '.'}
+      </Alert>}
       {(statistics.errors || []).map((error, index) => <Alert key={index} severity="warning">
         {error.stage}: {error.error_type}. Native status: {(error.native_status_codes || []).join(', ')}
       </Alert>)}
@@ -19,7 +25,7 @@ export default function FirebirdProfiler({report, statistics}) {
         <TableBody>{Object.keys(statistics.before?.counters || statistics.after?.counters || {}).map(name => <TableRow key={name}>
           <TableCell>{name}</TableCell><TableCell>{statistics.before?.counters[name] ?? 'Unavailable'}</TableCell>
           <TableCell>{statistics.after?.counters[name] ?? 'Unavailable'}</TableCell>
-          <TableCell>{statistics.deltas[name] ?? 'Unavailable / reset'}</TableCell>
+          <TableCell>{statistics.deltas?.[name] ?? 'Unavailable / reset'}</TableCell>
         </TableRow>)}</TableBody>
       </Table>
     </Box>}

@@ -62,13 +62,15 @@ opened via an authorized context-menu item. Follow
 `docs/en_US/firebird_dashboards.rst`; do not introduce editing or administration
 controls into the viewer or equate collector access with viewer authorization.
 
-## Current-run exclusions (owner correction, 2026-10-10)
+## Current completion scope (owner correction, 2026-10-14)
 
-Persistent monitoring history and the ScratchBird connection are deferred to a
-later run. Windows/macOS work and qualification belong to the separate platform
-teams. Neither is a blocker for this run. All other recorded Firebird/DDN/
-dashboard/form requirements remain in scope, including published live dashboard
-bindings, volatile-window trends, native DDN roundtrip/diff/apply and remaining
-FlameRobin parity. Persistent SQL history, dashboard definitions and recipes are
-not covered by the monitoring-history deferral. Follow the current-run scope
-section of `docs/en_US/firebird_functional_completion.rst` for acceptance.
+The owner now requires PostgreSQL, Firebird network and embedded, MySQL,
+MariaDB, DuckDB and SQLite to reach the same level of backend completion.
+Persistent monitoring history and the ScratchBird connection are included in
+that work. Form validation belongs to the human team. Windows/macOS work and
+qualification remain with the platform teams, and their evidence is required
+before a cross-platform completion claim. All recorded Firebird/DDN/dashboard
+requirements remain in scope, including published live dashboard bindings,
+native DDN roundtrip/diff/apply and remaining FlameRobin parity. Persistent
+SQL history, dashboard definitions and recipes remain in scope. Follow the
+acceptance rules in `docs/en_US/firebird_functional_completion.rst`.

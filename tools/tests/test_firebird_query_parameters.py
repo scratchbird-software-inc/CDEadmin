@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -105,13 +106,14 @@ def test_workspace_transports_array_without_coercing_it_to_a_dictionary():
     from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService
     workspace = object.__new__(ProviderWorkspaceService)
     workspace.endpoint_service = Mock()
-    workspace.endpoint_service.workspace.return_value = ('context', None, None)
+    context = SimpleNamespace(provider_id='org.cdeadmin.mysql')
+    workspace.endpoint_service.workspace.return_value = (context, None, None)
     workspace.studio_service = Mock()
     values = [7, 'text', None]
     workspace.execute('server', 'session', 'source', values,
                       database_target_id='selected-target')
     workspace.studio_service.execute.assert_called_once_with(
-        'context', 'session', 'source', parameters=values,
+        context, 'session', 'source', parameters=values,
         output_policy={'redact_keys': []})
     workspace.endpoint_service.workspace.assert_called_once_with(
         'server', database_target_id='selected-target')

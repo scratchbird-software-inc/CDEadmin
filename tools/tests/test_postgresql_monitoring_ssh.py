@@ -164,7 +164,7 @@ def test_host_requires_reconnect_after_ssh_registration_changes(peer, field, val
 def test_host_reads_key_once_at_admission_and_rejects_changed_path(peer, monkeypatch, tmp_path):
     from pgadmin.cdeadmin.workspace.postgresql_monitoring_host import PostgreSQLMonitoringHost
     pem = io.StringIO(); peer.write_private_key(pem)
-    path = tmp_path / 'owned-key'; path.write_text(pem.getvalue())
+    path = tmp_path / 'owned-key'; path.write_bytes(pem.getvalue().encode('utf-8'))
     monkeypatch.setattr('pgadmin.utils.get_complete_file_path', lambda value: str(path))
     server, manager = ssh_registration(peer)
     server.tunnel_authentication = manager.tunnel_authentication = 1

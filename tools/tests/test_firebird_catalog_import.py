@@ -99,3 +99,48 @@ def test_paired_parser_character_limit_is_checked_before_starting_a_process():
         with pytest.raises(ValueError, match='paired DDN per-file limit'):
             read_catalog('𝟘' * 1000001)
         runner.assert_not_called()
+
+
+def imported_workspace(text):
+    start = text.index('view inventory_1')
+    model, view = text[:start], text[start:]
+    model = model.replace('module "scratchrobin.firebird.catalog"', 'module "scratchrobin.firebird.catalog.model"')
+    view = 'ddn "0.7"; import "../models/native.ddn" as native; module "scratchrobin.firebird.catalog.views";\n' + view.replace('@catalog_', '@native.catalog_')
+    return {'format': 'ddn-workspace@1', 'entry': 'views/catalog.ddn', 'view': 'inventory_1',
+            'files': {'models/native.ddn': model, 'views/catalog.ddn': view}}
+
+
+def test_workspace_imports_preserve_native_records_and_file_locations():
+    snapshot = imported_workspace(source([resource('exact ü', number=2**100)]))
+    value = read_catalog(json.dumps(snapshot))
+    assert value['rows']['exact ü']['native']['number'] == 2**100
+    assert value['rows']['exact ü']['source_location']['file'] == 'models/native.ddn'
+    assert compare_catalogs(value, value)['counts']['equal'] == 1
+
+
+@pytest.mark.parametrize('path', ['../../private.ddn', 'https://example.org/native.ddn', 'file:///etc/native.ddn', '../missing.ddn'])
+def test_imports_cannot_leave_the_admitted_file_set(path):
+    snapshot = imported_workspace(source([resource('table')]))
+    snapshot['files']['views/catalog.ddn'] = snapshot['files']['views/catalog.ddn'].replace('../models/native.ddn', path)
+    with pytest.raises(ValueError):
+        read_catalog(json.dumps(snapshot))
+
+
+def test_invalid_hidden_view_and_import_cycle_are_rejected():
+    snapshot = imported_workspace(source([resource('table')]))
+    snapshot['files']['views/catalog.ddn'] += '\nview broken {data:[@native.missing];}'
+    with pytest.raises(ValueError):
+        read_catalog(json.dumps(snapshot))
+    snapshot = imported_workspace(source([resource('table')]))
+    snapshot['files']['models/native.ddn'] += '\nimport "../views/catalog.ddn" as cycle;'
+    with pytest.raises(ValueError):
+        read_catalog(json.dumps(snapshot))
+
+
+def test_invalid_source_retains_coded_file_offset_without_source_text():
+    with pytest.raises(ValueError) as failure:
+        read_catalog('ddn "0.7"; module "scratchrobin.firebird.catalog"; invalid_secret_source')
+    assert 'DDN_PARSE' in str(failure.value)
+    assert 'catalog.ddn' in str(failure.value)
+    assert 'offset' in str(failure.value)
+    assert 'invalid_secret_source' not in str(failure.value)

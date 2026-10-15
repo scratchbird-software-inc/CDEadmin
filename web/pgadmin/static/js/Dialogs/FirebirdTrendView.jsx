@@ -12,7 +12,7 @@ export default function FirebirdTrendView({snapshot, scope}) {
   const files = useMemo(() => firebirdTrendFiles(snapshot, metric, limit), [snapshot, metric, limit]);
   return <Box sx={{minHeight: 450}}>
     <FormReference formKey="firebird-recent-observations" />
-    <Alert severity="info">Past observations from this process only. Collection: {snapshot.state}.
+    <Alert severity="info">{snapshot.history === 'scratchbird' ? 'Archived ScratchBird observations.' : 'Past observations from this process only.'} Collection: {snapshot.state}.
       Retained: {snapshot.samples?.length || 0}. Evicted: {snapshot.retention_evictions || 0}.
       Latest sample age: {snapshot.sample_age_seconds ?? 'Unknown'} seconds.
       Points are approximate; the table preserves exact values and gaps.</Alert>

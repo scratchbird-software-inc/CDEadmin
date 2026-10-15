@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from contextlib import nullcontext
 
 import pytest
+from pgadmin.cdeadmin.operations.fileio import has_private_file_permissions
 
 from tools.tests.test_firebird_schema_plan import document, seq
 from pgadmin.cdeadmin.workspace.firebird_schema_plan import build_plan
@@ -39,7 +40,7 @@ def test_review_does_not_expose_owner_binding_or_source_documents(tmp_path):
     for owner, binding in [(8, 'route-binding'), (7, 'different')]:
         with pytest.raises(SchemaApplyError):
             store.get(result['review_id'], owner, binding)
-    assert (tmp_path / 'schema.json').stat().st_mode & 0o777 == 0o600
+    assert has_private_file_permissions(tmp_path / 'schema.json')
 
 
 def test_durable_review_preserves_creation_order_and_execution_fingerprint(tmp_path):

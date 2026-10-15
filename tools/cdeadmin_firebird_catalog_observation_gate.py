@@ -9,17 +9,46 @@
 
 import argparse
 import json
+import sys
 import traceback
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from cdeadmin_firebird_admin_mapping_gate import (
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from tools.cdeadmin_firebird_admin_mapping_gate import (
     _create_client, _route_arguments, _resources,
 )
 from pgadmin.cdeadmin.providers.firebird.catalog_reader import CatalogReader
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+
+
+class UnavailableInformation:
+    """Inject at the actual driver boundary, including native info helpers."""
+    def __init__(self, info, field):
+        self.info, self.field = info, field
+
+    def __getattr__(self, name):
+        if name == self.field:
+            raise RuntimeError('private driver details')
+        if name == 'get_info' and self.field == 'stored_page_buffers':
+            from pgadmin.cdeadmin.providers.firebird.attachment_cache import INFO_STORED_PAGE_BUFFERS
+            def get_info(code, *args, **kwargs):
+                if code == INFO_STORED_PAGE_BUFFERS:
+                    raise RuntimeError('private driver details')
+                return self.info.get_info(code, *args, **kwargs)
+            return get_info
+        if name == '_get_data' and self.field in {'encryption_key_name', 'encryption_plugin'}:
+            from pgadmin.cdeadmin.providers.firebird.encryption_info import INFO_FIELDS
+            def get_data(request, *args, **kwargs):
+                if request == bytes([INFO_FIELDS[self.field]]):
+                    raise RuntimeError('private driver details')
+                return self.info._get_data(request, *args, **kwargs)
+            return get_data
+        return getattr(self.info, name)
 
 
 def run(profiles):
@@ -111,14 +140,8 @@ def run(profiles):
         result['subsequent_read_recovered'] = True
         native.rollback()
         for field in database(baseline)['information_observations']:
-            class Information:
-                def __getattr__(self, name):
-                    if name == field:
-                        raise RuntimeError('private driver details')
-                    return getattr(native.info, name)
-
             class Connection:
-                info = Information()
+                info = UnavailableInformation(native.info, field)
 
                 def __getattr__(self, name):
                     return getattr(native, name)
@@ -126,8 +149,10 @@ def run(profiles):
             try:
                 resources = _resources(Connection(), {})
                 metadata = database(resources)
-                assert metadata['information_observations'][field] == {
-                    'available': False, 'error_type': 'RuntimeError'}
+                observed = metadata['information_observations'][field]
+                assert observed['available'] is False
+                assert observed['error_type'] == 'RuntimeError'
+                assert observed.get('native_status_codes', []) == []
                 assert any(field in warning for warning in
                            metadata['catalog_warnings'])
                 assert 'private driver details' not in repr(resources)

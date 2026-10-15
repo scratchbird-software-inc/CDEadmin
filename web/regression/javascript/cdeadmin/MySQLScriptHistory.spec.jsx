@@ -16,7 +16,7 @@ describe('MySQL and MariaDB retained script source history', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Preview script'}));
     await waitFor(() => expect(post).toHaveBeenCalledWith({
       action: 'native_script_prepare', session_id: `${engine}-session`,
-      source: "SELECT 'private';", database_target_id: `${engine}-target`, history_sensitive: true,
+      source: 'SELECT \'private\';', database_target_id: `${engine}-target`, history_sensitive: true, parameters: {},
     }));
     expect(post).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', {name: 'Run / resume retained script'})).toBeEnabled();

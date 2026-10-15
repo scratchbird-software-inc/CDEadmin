@@ -155,9 +155,17 @@ class FirebirdMonitor:
             raise ValueError('Monitoring scope must be database or server')
         if scope == 'database' and not route.get('database'):
             raise ValueError('Database monitoring requires a registered target')
+        embedded = route.get('attachment_mode') == 'embedded'
+        if embedded and scope != 'database':
+            raise ValueError('Embedded Firebird has no server Services API collector')
         if client_factory is None:
             from .provider import _create_client
-            client_factory = _create_client
+            if embedded:
+                from .embedded_provider import PROFILE, ADMINISTRATION
+                client_factory = lambda permissions, **options: _create_client(
+                    permissions, profile=PROFILE, administration=ADMINISTRATION, **options)
+            else:
+                client_factory = _create_client
         self._route = copy.deepcopy(route)
         self._route.update({
             'transaction_isolation': 'SNAPSHOT', 'transaction_access': 'READ',
@@ -166,6 +174,8 @@ class FirebirdMonitor:
             'statement_timeout_ms': 3000, 'session_idle_timeout_seconds': 0,
             'timeout': 5,
         })
+        if embedded:
+            self._route.pop('timeout', None)
         self._client = client_factory(
             permissions, attachment_mode=route.get('attachment_mode', 'network'))
         self.scope = scope
@@ -196,6 +206,7 @@ class FirebirdMonitor:
             result = {
                 'schema': 'firebird-monitoring-sample@1',
                 'sample_id': str(uuid.uuid4()), 'scope': self.scope,
+                'attachment_mode': self._route.get('attachment_mode', 'network'),
                 'started_at': _utc(), 'status': 'available',
                 'last_success_at': self._last_success,
                 'history': 'volatile', 'groups': {},

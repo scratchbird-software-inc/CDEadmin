@@ -26,6 +26,9 @@ def observe(connection):
             'Native attachment character set is not admitted')
     encoding = (codec_name(name) if name in PRIVATE_CHARSETS
                 else CHARSET_MAP[name])
+    if name == 'GB18030':
+        from .gb18030_profile import encoding as native_encoding
+        encoding = native_encoding(connection)
     # Connection construction creates its private query cursor before provider
     # initialization. Update that existing cursor as well as future cursors.
     connection._encoding = encoding

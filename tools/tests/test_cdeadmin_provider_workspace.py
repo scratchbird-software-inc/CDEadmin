@@ -868,7 +868,8 @@ class ProviderWorkspaceTests(unittest.TestCase):
                         self.assertNotIn('secret detail', repr(result))
                         self.assertNotIn('database_targets', result)
                     else:
-                        self.assertNotIn('workspace_follow_up', result)
+                        self.assertEqual([{'action': action, 'state': 'complete'}],
+                                         result['workspace_follow_up'])
                         self.assertEqual({'targets': []},
                                          result['database_targets'])
 

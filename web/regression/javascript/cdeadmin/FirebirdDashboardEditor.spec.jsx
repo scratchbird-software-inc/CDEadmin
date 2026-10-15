@@ -1,10 +1,14 @@
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, configure, getConfig, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import FirebirdDashboardEditor from 'sources/Dialogs/FirebirdDashboardEditor';
 import getApiInstance from 'sources/api_instance';
 import pgAdmin from 'sources/pgadmin';
 import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
 import {loadDDNLibraries} from 'sources/cdeadmin_ui/integrations/ddn/library';
 import {withTheme} from '../fake_theme';
+
+const previousAsyncTimeout = getConfig().asyncUtilTimeout;
+beforeAll(() => configure({asyncUtilTimeout: Math.max(previousAsyncTimeout, 5000)}));
+afterAll(() => configure({asyncUtilTimeout: previousAsyncTimeout}));
 
 jest.mock('sources/api_instance');
 jest.mock('sources/cdeadmin_ui/integrations/ddn/library');
@@ -27,6 +31,7 @@ describe('separate Firebird dashboard draft editor', () => {
     notifier: {confirm: jest.fn(), alert: jest.fn()}};
     api = {get: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 0}, snapshot: null}}})),
       put: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 1}, state: 'draft'}}}))};
+    loadDDNLibraries.mockResolvedValue({viewer});
     getApiInstance.mockReturnValue(api);
   });
   it('loads scoped definitions, seeds no live telemetry, saves only through definition route', async () => {

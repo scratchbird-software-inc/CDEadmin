@@ -1,9 +1,9 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import FirebirdRegistration from 'sources/Dialogs/FirebirdRegistration';
 import {withTheme} from '../fake_theme';
 const Component = withTheme(FirebirdRegistration);
-const catalog = {source_server_id: 10, source: {display_name: 'Owned', database: '/db/owned.fdb'},
-  destinations: [{server_id: 10, name: 'Source'}, {server_id: 11, name: 'Destination'}]};
+const catalog = {source_server_id: 10, source_generation: 'source-generation', source: {display_name: 'Owned', database: '/db/owned.fdb'},
+  destinations: [{server_id: 10, name: 'Source', generation: 'source-generation'}, {server_id: 11, name: 'Destination', generation: 'destination-generation'}]};
 describe('Firebird registration identity transfer', () => {
   let height;
   beforeEach(() => { height = window.innerHeight; window.innerHeight = 1200; });
@@ -20,7 +20,8 @@ describe('Firebird registration identity transfer', () => {
     await waitFor(() => expect(changed).toHaveBeenCalled());
     expect(post.mock.calls[1][0]).toEqual({action: 'database_target_transfer', request: {
       target_id: 'exact-target', destination_server_id: 10, operation: 'clone',
-      display_name: 'Owned clone', credentials: 'source', confirmed: true}});
+      display_name: 'Owned clone', credentials: 'source', confirmed: true, source_generation: 'source-generation',
+      destination_generation: 'source-generation'}});
     expect(button).toBeDisabled();
   });
   it('requires a distinct destination for a move and exposes the credential choice', async () => {
@@ -44,4 +45,22 @@ describe('Firebird registration identity transfer', () => {
     await screen.findByText(/Inspect and refresh both server registrations/);
     expect(button).toBeDisabled(); expect(post).toHaveBeenCalledTimes(2);
   });
+  it('discards an old transfer response after selecting another registration', async () => {
+    let complete;
+    const pending = new Promise(resolve => {complete = resolve;});
+    const post = jest.fn(payload => payload.action === 'database_target_transfer' ? pending : Promise.resolve(catalog));
+    const changed = jest.fn();
+    const {rerender} = render(<Component post={post} targetId="original" onChanged={changed} />);
+    await screen.findByRole('button', {name: 'Clone registration'});
+    fireEvent.click(screen.getByLabelText('I confirm this registration change'));
+    fireEvent.click(screen.getByRole('button', {name: 'Clone registration'}));
+    rerender(<Component post={post} targetId="replacement" onChanged={changed} />);
+    await screen.findByLabelText('Registration display name');
+    await act(async () => {complete({target: {display_name: 'Old completion'}});});
+    expect(changed).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Old completion/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('I confirm this registration change')).not.toBeChecked();
+    expect(post.mock.calls.filter(([value]) => value.action === 'database_target_transfer')).toHaveLength(1);
+  });
+
 });

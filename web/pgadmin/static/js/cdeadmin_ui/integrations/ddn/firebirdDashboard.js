@@ -1,6 +1,10 @@
 import {COUNTER_FIELDS} from './dashboardPublication.mjs';
-import {dashboardPanelFiles} from './dashboardPanels';
+import {dashboardPanelFiles} from './dashboardPanels.js';
 // Fixed native bindings: a dashboard cannot supply SQL or connection routes.
+const hex = (value) => Array.from(new TextEncoder().encode(String(value))).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+const metricNames = ['allocated_bytes', 'memory_used', 'user_attachments', 'oldest_age_seconds', 'crypt_state', 'replica_mode', 'page_reads_per_second', 'page_writes_per_second'];
+const findingRows = (database, prefix) => (database.findings || []).map((finding) => Object.assign([finding.reason, finding.value,
+  `Threshold: ${finding.threshold ?? 'not applicable'}; observed: ${finding.observed_at || 'unknown'}`], {bindingId:`${prefix}_finding_${hex(finding.code)}`}));
 const panelFiles = (panels, title) => dashboardPanelFiles(panels, title, 'scratchrobin.firebird.monitoring');
 
 export function firebirdDashboardFiles(snapshot, title='Firebird dashboard', scope='database') {
@@ -77,6 +81,7 @@ export function firebirdDashboardFiles(snapshot, title='Firebird dashboard', sco
       ['Backup inventory observed at', groups.backup_details?.observed_at, 'cached inventory observation'],
     ]});
   }
+  if(scope === 'server') panels.push(...serverDatabasePanels(snapshot));
   return panelFiles(panels, title);
 }
 
@@ -90,8 +95,8 @@ export function firebirdFleetFiles(snapshot) {
     ['Inventory basis', 'Registered targets and visible attached files are separate inventories', ''],
     ['History', 'Volatile process buffer', ''],
   ]}];
-  for(const [index, server] of (snapshot?.servers || []).entries()) {
-    panels.push({id: `server_${index}`, title: server.name, rows: [
+  for(const server of (snapshot?.servers || [])) {
+    panels.push({id: `server_${server.server_id}`, title: server.name, rows: [
       ['Observation', server.status, ''],
       ['Collection', server.collection_state, ''],
       ['Sample age', server.sample_age_seconds, 'seconds'],
@@ -100,10 +105,9 @@ export function firebirdFleetFiles(snapshot) {
       ['Known database targets', server.known_databases, 'registrations'],
       ['Monitored database targets', server.monitored_databases, 'collectors'],
       ['Attached files', server.attached_databases?.join(', '), 'service-visible only'],
-      ...(server.databases || []).map((db) => [db.name, db.status, 'registered database observation']),
     ]});
-    for(const [dbIndex, database] of (server.databases || []).entries()) {
-      panels.push({id: `database_${index}_${dbIndex}`, title: `${server.name} / ${database.name}`, rows: [
+    for(const database of (server.databases || [])) {
+      panels.push({id: `fleetdb_${server.server_id}_${hex(database.target_id)}`, title: `${server.name} / ${database.name}`, rows: [
         ['Status', database.status, ''], ['Coverage', database.coverage, 'native visibility'],
         ['Sample age', database.sample_age_seconds, 'seconds'],
         ['Allocated bytes', database.metrics?.allocated_bytes, 'bytes'],
@@ -116,45 +120,49 @@ export function firebirdFleetFiles(snapshot) {
         ['Rate interval', database.rate_window?.elapsed_seconds, 'seconds'],
         ['Encryption state', database.metrics?.crypt_state, 'native flag'],
         ['Replica mode', database.metrics?.replica_mode, 'native flag, not replication lag'],
-        ...(database.findings || []).map((finding) => [finding.reason, finding.value,
-          `Threshold: ${finding.threshold ?? 'not applicable'}; observed: ${finding.observed_at || 'unknown'}`]),
+        ...findingRows(database, `fleetdb_${server.server_id}_${hex(database.target_id)}`),
       ]});
     }
-    panels.push({id: `aggregate_${index}`, title: `${server.name} / observed database totals`, rows: [
+    panels.push({id: `aggregate_${server.server_id}`, title: `${server.name} / observed database totals`, rows: [
       ['Identified databases', server.aggregate?.identified_databases, 'GUID and file ID within this endpoint'],
       ['Alias registrations', server.aggregate?.alias_targets, 'excluded from sums'],
       ['Unidentified registrations', server.aggregate?.unidentified_targets, 'excluded from sums'],
-      ...Object.entries(server.aggregate?.metrics || {}).map(([name, metric]) => [
-        name.replaceAll('_', ' '), metric.value,
-        `${metric.observed_databases}/${metric.identified_databases} identified databases observed; ${metric.status || 'availability not reported'}`,
+      ...['allocated_bytes','memory_used','user_attachments','page_reads_per_second','page_writes_per_second'].map((name) => {
+        const metric = server.aggregate?.metrics?.[name] || {};
+        return [
+          name.replaceAll('_', ' '), metric.value,
+          `${metric.observed_databases}/${metric.identified_databases} identified databases observed; ${metric.status || 'availability not reported'}`,
+        ]; }),
+      ...['encrypted','unencrypted','wire_unknown','local','transport_unknown','observed_databases','identified_databases'].map((name) => [
+        `Wire coverage: ${name.replaceAll('_', ' ')}`, server.aggregate?.wire_security?.[name], 'visible user attachments; local and unknown kept separate',
       ]),
-      ...Object.entries(server.aggregate?.wire_security || {}).map(([name, value]) => [
-        `Wire coverage: ${name.replaceAll('_', ' ')}`, value, 'visible user attachments; local and unknown kept separate',
-      ]),
-      ...Object.entries(server.aggregate?.database_encryption || {}).map(([name, value]) => [
-        `Database encryption native state ${name}`, value, 'identified databases, not all registered targets',
+      ...['0','1','2','3','unknown'].map((name) => [
+        `Database encryption native state ${name}`, server.aggregate?.database_encryption?.[name], 'identified databases, not all registered targets',
       ]),
     ]});
   }
   return panelFiles(panels, 'Firebird engine dashboard');
 }
 
-export function firebirdServerDatabaseFiles(snapshot) {
-  const panels = (snapshot?.databases || []).map((database, index) => ({
-    id: `database_${index}`, title: database.name, rows: [
+function serverDatabasePanels(snapshot) {
+  const panels = (snapshot?.databases || []).map((database) => ({
+    id: `database_${hex(database.target_id)}`, title: database.name, rows: [
       ['Status', database.status, ''], ['Coverage', database.coverage, 'native visibility'],
       ['Observed at', database.observed_at, 'UTC'],
       ['Sample age', database.sample_age_seconds, 'seconds'],
       ['Rate observation time', database.rate_window?.ended_at, 'UTC'],
       ['Rate interval', database.rate_window?.elapsed_seconds, 'seconds'],
-      ...Object.entries(database.metrics || {}).map(([name, value]) => [
-        name.replaceAll('_', ' '), value, 'native database observation']),
-      ...(database.findings || []).map((finding) => [finding.reason, finding.value,
-        `Threshold: ${finding.threshold ?? 'not applicable'}; observed: ${finding.observed_at || 'unknown'}`]),
+      ...metricNames.map((name) => [
+        name.replaceAll('_', ' '), database.metrics?.[name], 'native database observation']),
+      ...findingRows(database, `database_${hex(database.target_id)}`),
     ],
   }));
   if(!panels.length) panels.push({id: 'empty', title: 'Registered databases', rows: [
     ['No registered database observations', null, 'No collector is started by this view'],
   ]});
-  return panelFiles(panels, 'Registered database observations');
+  return panels;
+}
+
+export function firebirdServerDatabaseFiles(snapshot) {
+  return panelFiles(serverDatabasePanels(snapshot), 'Registered database observations');
 }

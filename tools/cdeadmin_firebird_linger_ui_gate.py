@@ -11,6 +11,11 @@ import time
 import traceback
 import uuid
 from pathlib import Path
+
+if __package__:
+    from .firebird_server_paths import server_path
+else:
+    from firebird_server_paths import server_path
 from types import SimpleNamespace
 
 from selenium.webdriver.common.by import By
@@ -71,8 +76,8 @@ def owned_profile(options):
             not isinstance(database, str) or not re.fullmatch(
                 r'/var/lib/firebird/data/owned_repair_linger_\d+\.fdb',
                 database) or
-            Path(database).name != options.database or
-            str(Path(database).parent) != options.database_root):
+            server_path(database).name != options.database or
+            server_path(database).parent != server_path(options.database_root)):
         raise ValueError('Browser target is not the owned linger fixture')
     owned_database_open_files(profile.get('owned_container_id', ''), database)
     return profile
