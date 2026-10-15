@@ -7,7 +7,9 @@ servers. A successful environment job is not qualification of unconfigured
 network engines, ScratchBird monitoring history, or every administrative tool.
 
 The GitHub workflow **Native development environments** qualifies Windows x64,
-Intel macOS and Apple Silicon macOS separately. Use its failure inventory and
+Intel macOS and Apple Silicon macOS separately. The tested runner targets
+are Windows Server 2025 x64 and macOS 15 on both architectures; other OS
+versions are not covered by this matrix. Use its failure inventory and
 native provider receipts; a Linux pass does not establish platform support.
 
 ## Prerequisites
@@ -229,6 +231,16 @@ with each startup measurement.
 
 Intel macOS has explicit wall-time budgets of 20 seconds for startup and
 2.5 seconds for 5,000 contract validations. Its first hosted run measured
-15.33 and 1.79 seconds respectively. Linux, Windows and Apple Silicon retain
-the original 8-second and 1.5-second limits. Receipts record the selected
+15.33 and 1.79 seconds respectively. Windows has a 35-second startup budget following hosted measurements of
+18.28 and 27.62 seconds. Linux and Apple Silicon retain the original
+8-second limit. All platforms except Intel Mac retain the 1.5-second
+contract-validation limit. Receipts record the selected
 budgets; functional checks, route counts and validation work are identical.
+
+Native schema review receipts use host process locks and atomic, flushed
+publication before dispatch. Windows uses LockFileEx, write-through moves and
+protected current-user-only DACLs for private files. Renderer process startup
+has a separate 15-second bound; the requested renderer execution deadline
+starts after the worker is ready and is still enforced. The Windows Cassandra
+installation includes the official driver's documented asyncore backport.
+PDF regression checks use a portable Python parser.

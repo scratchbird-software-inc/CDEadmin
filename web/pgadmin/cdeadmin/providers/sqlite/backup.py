@@ -5,7 +5,7 @@ import sqlite3
 import stat
 import tempfile
 import time
-from urllib.parse import quote
+from pathlib import Path
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from ..embedded_route import contained_database
@@ -77,7 +77,7 @@ def _database_operation(connection, route, operation, options):
             if stream.read(16) != b'SQLite format 3\x00':
                 raise RelationalClientError(
                     'SQLite restore source has no SQLite header')
-        uri = 'file:' + quote(target, safe='/') + '?mode=ro'
+        uri = Path(target).as_uri() + '?mode=ro'
         source = sqlite3.connect(uri, uri=True)
         try:
             if source.execute('PRAGMA quick_check(1)').fetchone() != ('ok',):

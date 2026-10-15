@@ -25,6 +25,7 @@ extras==1.0.0
 fixtures==4.3.2
 linecache2==1.0.0
 pbr==7.0.3
+pypdf==6.20.1
 pycodestyle>=2.14.0
 python-mimeparse==2.0.0
 selenium==4.47.0

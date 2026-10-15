@@ -426,9 +426,9 @@ def generate_profiles():
     template = (ROOT / "connection_profiles.template.json").read_text(
         encoding="utf-8"
     )
-    rendered = template.replace("${DEMO_ROOT}", str(ROOT.resolve()))
+    rendered = template.replace("${DEMO_ROOT}", ROOT.resolve().as_posix())
     rendered = rendered.replace(
-        "${REPOSITORY_ROOT}", str(REPOSITORY.resolve())
+        "${REPOSITORY_ROOT}", REPOSITORY.resolve().as_posix()
     )
     document = json.loads(rendered)
     output = RUNTIME / "connection_profiles.json"

@@ -140,7 +140,7 @@ def check_product_banners(source, policy):
         return matches, []
     for path in inventory_files(
             source, policy['inventory_excluded_directories']):
-        relative = str(path.relative_to(source))
+        relative = path.relative_to(source).as_posix()
         if relative in excluded_paths:
             continue
         try:

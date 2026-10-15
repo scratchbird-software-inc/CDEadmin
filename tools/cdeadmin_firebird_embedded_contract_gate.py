@@ -41,7 +41,7 @@ def source_bindings():
              PACKAGE / 'query_client.py', PACKAGE / 'profiling.py',
              PACKAGE / 'query_statistics.py', PACKAGE / 'events.py',
              PACKAGE.parent / 'relational_admin.py']
-    return {str(path.relative_to(root)): hashlib.sha256(
+    return {path.relative_to(root).as_posix(): hashlib.sha256(
         path.read_bytes()).hexdigest() for path in paths}
 
 

@@ -188,8 +188,9 @@ class ProviderToolRunner:
                     dir=workspace
                 )
                 config_path = Path(name)
-                os.fchmod(descriptor, 0o600)
                 with os.fdopen(descriptor, 'wb') as stream:
+                    from ..operations.fileio import private_file
+                    private_file(config_path)
                     stream.write(bytes(secret_config))
                     stream.flush()
                     os.fsync(stream.fileno())

@@ -271,7 +271,8 @@ def startup_measurement(source: Path, policy):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=30,
+            timeout=max(30, startup.get('wall_seconds_platform_maximum', {}).get(
+                f'{sys.platform}:{platform.machine()}', startup['wall_seconds_maximum']) + 5),
             check=False,
         )
         wall = time.perf_counter() - started

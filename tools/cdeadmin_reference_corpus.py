@@ -16,7 +16,7 @@ import argparse
 import hashlib
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 EXPECTED = (
@@ -76,8 +76,9 @@ def _sha256(path):
 def _safe_relative(value):
     if not isinstance(value, str) or not value:
         return False
-    path = Path(value)
-    return not path.is_absolute() and '..' not in path.parts
+    path = PurePosixPath(value)
+    return (not path.is_absolute() and not PureWindowsPath(value).drive
+            and '\\' not in value and '..' not in path.parts)
 
 
 def _yaml_scalar(text, key):

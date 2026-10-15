@@ -44,6 +44,9 @@ Flask==3.1.*
 google-api-python-client==2.*
 google-auth-oauthlib==1.4.0
 gssapi==1.11.*
+# The official Cassandra driver supports asyncore through this backport on
+# Python 3.12+, including Windows wheels without the optional libev extension.
+pyasyncore==1.0.5; sys_platform == 'win32'
 jsonformatter~=0.3.4
 keyring==25.*
 ldap3==2.*

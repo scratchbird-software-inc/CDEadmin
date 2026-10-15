@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path, PurePath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .identity import load_identity, validate_identity
 
@@ -23,7 +23,7 @@ SUPPORTED_PROFILES = frozenset({
 
 
 def _join(base, *parts, windows=False):
-    path_type = PureWindowsPath if windows else PurePath
+    path_type = PureWindowsPath if windows else PurePosixPath
     return str(path_type(base).joinpath(*parts))
 
 

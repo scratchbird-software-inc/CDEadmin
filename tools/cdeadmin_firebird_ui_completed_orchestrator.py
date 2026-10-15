@@ -34,6 +34,11 @@ import uuid
 from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
+
+if __package__:
+    from .firebird_server_paths import server_path
+else:
+    from firebird_server_paths import server_path
 from types import ModuleType
 
 
@@ -121,6 +126,8 @@ def _snapshot_config(source, destination):
                          0o600)
     os.close(descriptor)
     try:
+        from pgadmin.cdeadmin.operations.fileio import private_file
+        private_file(destination)
         uri = source.resolve().as_uri() + '?mode=ro'
         with closing(sqlite3.connect(uri, uri=True)) as reader:
             with closing(sqlite3.connect(destination)) as writer:
@@ -134,7 +141,7 @@ def _snapshot_config(source, destination):
 
 def _retarget_config(database, desktop_user, target_database, target_label,
                      firebird_port, endpoint_user=None, endpoint_role=None):
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         row = connection.execute(
             """
             SELECT s.id, e.id, t.id, r.id, r.configuration
@@ -158,7 +165,7 @@ def _retarget_config(database, desktop_user, target_database, target_label,
         route = json.loads(route_value)
         route.update({
             'host': '127.0.0.1', 'port': firebird_port,
-            'database_create_root': str(Path(target_database).parent),
+            'database_create_root': str(server_path(target_database).parent),
         })
         route.pop('database', None)
         if endpoint_role is not None:

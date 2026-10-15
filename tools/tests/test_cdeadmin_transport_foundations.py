@@ -404,7 +404,7 @@ class EmbeddedRuntimeTests(unittest.TestCase):
         invocation = HelperInvocation(
             self.context.endpoint_id, ('--batch',), b''
         )
-        command = BubblewrapSandbox().command(self.grant(), invocation)
+        command = BubblewrapSandbox(str(self.root / "bwrap")).command(self.grant(), invocation)
         for item in (
             '--unshare-all', '--clearenv', '--ro-bind', '--bind',
             '--chdir',

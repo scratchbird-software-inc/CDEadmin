@@ -46,8 +46,8 @@ class ReferenceEngineDemoTestCase(unittest.TestCase):
             encoding="utf-8"
         )
         cls.profiles = json.loads(
-            template.replace("${DEMO_ROOT}", str(DEMO)).replace(
-                "${REPOSITORY_ROOT}", str(ROOT)
+            template.replace("${DEMO_ROOT}", DEMO.as_posix()).replace(
+                "${REPOSITORY_ROOT}", ROOT.as_posix()
             )
         )["profiles"]
 

@@ -1,0 +1,144 @@
+"""Native host locking and durable publication of local operation receipts."""
+from contextlib import contextmanager
+import os
+from functools import lru_cache
+from pathlib import Path
+import stat
+
+
+@contextmanager
+def exclusive_file_lock(descriptor):
+    if os.name != 'nt':
+        import fcntl
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        return
+    import ctypes
+    from ctypes import wintypes
+    import msvcrt
+
+    class Overlapped(ctypes.Structure):
+        _fields_ = [('Internal', ctypes.c_size_t), ('InternalHigh', ctypes.c_size_t),
+                    ('Offset', wintypes.DWORD), ('OffsetHigh', wintypes.DWORD),
+                    ('hEvent', wintypes.HANDLE)]
+
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.LockFileEx.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
+                                 wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(Overlapped)]
+    kernel.LockFileEx.restype = wintypes.BOOL
+    kernel.UnlockFileEx.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
+                                   wintypes.DWORD, ctypes.POINTER(Overlapped)]
+    kernel.UnlockFileEx.restype = wintypes.BOOL
+    handle = msvcrt.get_osfhandle(descriptor)
+    overlap = Overlapped()
+    # A synchronous exclusive lock waits for the preceding receipt writer.
+    # The stable lock file is separate from the atomically replaced JSON file.
+    if not kernel.LockFileEx(handle, 2, 0, 1, 0, ctypes.byref(overlap)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        yield
+    finally:
+        if not kernel.UnlockFileEx(handle, 0, 1, 0, ctypes.byref(overlap)):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
+def durable_replace(source, target):
+    """Publish a flushed same-volume staging file before native dispatch."""
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.MoveFileExW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+        kernel.MoveFileExW.restype = wintypes.BOOL
+        # No COPY_ALLOWED: cross-volume publication cannot become non-atomic.
+        if not kernel.MoveFileExW(os.fspath(source), os.fspath(target), 1 | 8):
+            raise ctypes.WinError(ctypes.get_last_error())
+    else:
+        os.replace(source, target)
+        descriptor = os.open(os.path.dirname(os.fspath(target)) or '.',
+                             os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+@lru_cache(maxsize=1)
+def _windows_security():
+    import csv
+    import ctypes
+    from ctypes import wintypes
+    import re
+    import subprocess
+    system = Path(os.environ['SystemRoot']) / 'System32'
+    row = next(csv.reader(subprocess.check_output(
+        [str(system / 'whoami.exe'), '/user', '/fo', 'csv', '/nh'],
+        text=True, encoding='utf-8', errors='replace').splitlines()))
+    sid = row[-1].strip()
+    if not re.fullmatch(r'S-\d+(?:-\d+)+', sid):
+        raise OSError('Current Windows user SID is unavailable')
+    api = ctypes.WinDLL('advapi32', use_last_error=True)
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    api.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.DWORD)]
+    api.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    api.SetFileSecurityW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p]
+    api.SetFileSecurityW.restype = wintypes.BOOL
+    api.GetFileSecurityW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p,
+                                   wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    api.GetFileSecurityW.restype = wintypes.BOOL
+    api.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+        ctypes.POINTER(wintypes.LPWSTR), ctypes.POINTER(wintypes.DWORD)]
+    api.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel.LocalFree.restype = ctypes.c_void_p
+    return api, kernel, sid
+
+
+def private_file(path):
+    """Use mode 0600 on POSIX or a protected current-user-only Windows DACL."""
+    if os.name != 'nt':
+        os.chmod(path, 0o600)
+        return
+    import ctypes
+    api, kernel, sid = _windows_security()
+    descriptor = ctypes.c_void_p()
+    if not api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            f'D:P(A;;FA;;;{sid})', 1, ctypes.byref(descriptor), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        if not api.SetFileSecurityW(os.fspath(path), 4 | 0x80000000, descriptor):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        kernel.LocalFree(descriptor)
+
+
+def has_private_file_permissions(path):
+    """Observe the real native access policy, not synthetic Windows mode bits."""
+    if os.name != 'nt':
+        return stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    import ctypes
+    from ctypes import wintypes
+    import re
+    api, kernel, sid = _windows_security()
+    size = wintypes.DWORD()
+    api.GetFileSecurityW(os.fspath(path), 4, None, 0, ctypes.byref(size))
+    if not size.value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    descriptor = ctypes.create_string_buffer(size.value)
+    if not api.GetFileSecurityW(os.fspath(path), 4, descriptor, size.value, ctypes.byref(size)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    text = wintypes.LPWSTR()
+    if not api.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor, 1, 4, ctypes.byref(text), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        sddl = text.value
+        return 'P' in sddl.split('(', 1)[0] and re.findall(r'\(([^)]+)\)', sddl) == [f'A;;FA;;;{sid}']
+    finally:
+        kernel.LocalFree(ctypes.cast(text, ctypes.c_void_p))

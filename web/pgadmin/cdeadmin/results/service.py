@@ -72,54 +72,60 @@ def _worker_call(callback, metadata, records, extra):
     return callback(metadata, records, extra)
 
 
-def _worker_entry(output, callback, metadata, records, extra):
+def _worker_entry(output, ready, launch, callback, metadata, records, extra):
+    ready.set()
+    if not launch.wait(15):
+        return
     try:
-        output.put((
-            'ok', _worker_call(callback, metadata, records, extra)
-        ))
+        output.put(('ok', _worker_call(callback, metadata, records, extra)))
     except BaseException as exc:  # pragma: no cover - child process boundary
         output.put(('error', type(exc).__name__, str(exc)))
 
 
 class ProcessRendererExecutor:
-    """Run rich renderer work in a short-lived isolated process."""
+    """Bound native process startup separately from renderer execution."""
+
+    bootstrap_timeout_seconds = 15.0
 
     def run(self, callback, metadata, records, timeout_seconds, extra=None):
         methods = multiprocessing.get_all_start_methods()
         start_method = 'fork' if 'fork' in methods else 'spawn'
         context = multiprocessing.get_context(start_method)
         output = context.Queue(maxsize=1)
+        ready, launch = context.Event(), context.Event()
         process = context.Process(
             target=_worker_entry,
-            args=(output, callback, metadata, records, extra),
+            args=(output, ready, launch, callback, metadata, records, extra),
         )
         process.start()
         try:
-            process.join(timeout_seconds)
-            if process.is_alive():
-                process.terminate()
-                process.join()
-                raise WorkerIsolationError(
-                    'result renderer exceeded its worker timeout'
-                )
+            if not ready.wait(self.bootstrap_timeout_seconds):
+                raise WorkerIsolationError('result renderer worker could not initialize')
+            launch.set()
             try:
-                response = output.get(timeout=0.5)
+                # Drain while the child is alive: joining before reading can
+                # deadlock the queue feeder for a large, valid PDF/export.
+                response = output.get(timeout=timeout_seconds)
             except queue.Empty as exc:
-                raise WorkerIsolationError(
-                    'result renderer worker returned no response'
-                ) from exc
+                raise WorkerIsolationError('result renderer exceeded its worker timeout') from exc
             if response[0] != 'ok':
                 raise WorkerIsolationError(
                     'result renderer failed in its isolated worker: '
                     f'{response[1]}'
                 )
             return response[1]
-        except WorkerIsolationError:
+        except BaseException:
             if process.is_alive():
                 process.terminate()
-                process.join()
             raise
         finally:
+            process.join(timeout=1)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=5)
             output.close()
             output.join_thread()
 

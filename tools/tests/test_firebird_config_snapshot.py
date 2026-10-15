@@ -11,7 +11,7 @@ from tools.cdeadmin_firebird_ui_completed_orchestrator import _snapshot_config
 
 @pytest.mark.parametrize('journal', ['delete', 'wal'])
 def test_snapshot_includes_commits_but_not_pending_writes(tmp_path, journal):
-    source = tmp_path / 'source ? # config.db'
+    source = tmp_path / ('source # config.db' if __import__('os').name == 'nt' else 'source ? # config.db')
     target = tmp_path / 'snapshot.db'
     with closing(sqlite3.connect(source)) as writer:
         writer.execute(f'PRAGMA journal_mode={journal}')
@@ -23,7 +23,8 @@ def test_snapshot_includes_commits_but_not_pending_writes(tmp_path, journal):
         before = source.read_bytes()
         _snapshot_config(source, target)
         assert source.read_bytes() == before
-        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+        from pgadmin.cdeadmin.operations.fileio import has_private_file_permissions
+        assert has_private_file_permissions(target)
         with closing(sqlite3.connect(target)) as snapshot:
             assert snapshot.execute('SELECT * FROM example').fetchall() == [
                 ('committed',)]
