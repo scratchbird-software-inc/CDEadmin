@@ -93,9 +93,10 @@ def qualify(evidence):
                         time.sleep(.5)
                         continue
                 if connection is not None:
-                    result = call('Runtime.evaluate', {'expression': '''Boolean(document.querySelector('[data-cdeadmin-shell="zero-grey"]') && document.querySelector('[data-cdeadmin-qa-key="explorer-workspace"]'))''', 'returnByValue': True})
+                    result = call('Runtime.evaluate', {'expression': '''Boolean(document.querySelector('[data-cdeadmin-shell="zero-grey"]') && document.querySelector('[data-cdeadmin-qa-key="explorer-workspace"]') && !document.querySelector('#pg-spinner'))''', 'returnByValue': True})
                     if result.get('result', {}).get('value') is True:
                         receipt['workbench_mounted'] = True
+                        receipt['startup_overlay_removed'] = True
                         workspace = call('Runtime.evaluate', {'expression': '''(async () => {
                           const bridge = window.electronUI.workspaceWindows;
                           const registration = await bridge.registerWindow({workspaceId: 'default_workspace', role: 'main'});

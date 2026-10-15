@@ -125,6 +125,28 @@ def requirements(destination):
         + '\npytest==8.4.2\n', encoding='utf-8')
 
 
+def fetch_scratchbird_sdk(source, env, evidence):
+    transient = ('could not resolve host', 'failed to connect', 'connection reset',
+                 'recv failure', 'http/2 stream', 'remote end hung up unexpectedly',
+                 'connection timed out', 'tls connection was non-properly terminated',
+                 'error: 502', 'error: 503', 'error: 504')
+    permanent = ('authentication failed', 'could not read username', 'not our ref',
+                 'repository not found', 'access denied', 'permission denied')
+    for attempt in range(1, 4):
+        log = evidence / ('scratchbird-fetch.log' if attempt == 1 else f'scratchbird-fetch-{attempt}.log')
+        try:
+            command(['git', '-C', source, 'fetch', '--depth=1', '--filter=blob:none',
+                     'origin', SCRATCHBIRD_DRIVER_REVISION],
+                    env=dict(env, GIT_TERMINAL_PROMPT='0'), log=log, timeout=300)
+            return attempt
+        except subprocess.CalledProcessError:
+            detail = log.read_text(encoding='utf-8', errors='replace').casefold()
+            if attempt == 3 or any(reason in detail for reason in permanent) or not any(reason in detail for reason in transient):
+                raise
+            print(f'Transient SDK transport failure; retry {attempt + 1}/3', flush=True)
+            time.sleep(5 * attempt)
+
+
 def install_scratchbird_driver(env, evidence):
     """Capture only the official pure-Python SDK, without an engine checkout."""
     source = STATE / 'scratchbird-sdk'
@@ -137,9 +159,10 @@ def install_scratchbird_driver(env, evidence):
         origin = subprocess.check_output(['git', '-C', str(source), 'remote', 'get-url', 'origin'], text=True).strip()
         if origin != url:
             raise RuntimeError('Refusing to modify an unknown ScratchBird SDK checkout')
-        command(['git', '-C', source, 'diff', '--quiet', 'HEAD', '--'], env=env)
-    command(['git', '-C', source, 'fetch', '--depth=1', '--filter=blob:none', 'origin',
-             SCRATCHBIRD_DRIVER_REVISION], env=env, log=evidence / 'scratchbird-fetch.log')
+        if subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain'],
+                                   text=True).strip():
+            raise RuntimeError('Refusing to modify a dirty ScratchBird SDK checkout')
+    fetch_attempts = fetch_scratchbird_sdk(source, env, evidence)
     command(['git', '-C', source, 'sparse-checkout', 'set', '--cone', relative], env=env)
     command(['git', '-C', source, 'checkout', '--detach', 'FETCH_HEAD'], env=env,
             log=evidence / 'scratchbird-checkout.log')
@@ -160,6 +183,7 @@ def install_scratchbird_driver(env, evidence):
     command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', selected[0]],
             env=env, log=evidence / 'scratchbird-install.log')
     receipt = {'repository': url, 'revision': SCRATCHBIRD_DRIVER_REVISION,
+        'fetch_attempts': fetch_attempts,
         'source_tree': subprocess.check_output(['git', '-C', str(source), 'rev-parse',
             'HEAD:' + relative], text=True).strip(),
         'wheel_sha256': hashlib.sha256(selected[0].read_bytes()).hexdigest(),
@@ -179,6 +203,7 @@ def ddn(evidence):
     command(['git', '-C', source, 'status', '--short'])
     print((source / 'website/docs/developers/tool.md').read_text(
         encoding='utf-8'), flush=True)
+    print((source / 'notation/dist/ddn.d.ts').read_text(encoding='utf-8'), flush=True)
     command([sys.executable, ROOT / 'tools/refresh_ddn.py', '--source',
              source, '--work', work], log=evidence / 'ddn.log')
 

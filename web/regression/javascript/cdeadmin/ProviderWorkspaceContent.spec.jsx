@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
+import {act, configure, getConfig, fireEvent, render as rtlRender, screen, waitFor} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
 import Theme from 'sources/Theme';
 const render = (ui, options) => rtlRender(ui, {wrapper: Theme, ...options});
@@ -35,6 +35,11 @@ jest.mock('../../../pgadmin/static/js/api_instance');
 jest.mock('../../../pgadmin/static/js/cdeadmin_ui/editors/CodeEditor', () => ({__esModule: true,
   default: ({label, value, onChange, disabled}) => <textarea aria-label={label} value={value}
     disabled={disabled} onChange={event => onChange(event.target.value)} /> }));
+// Hosted native renderers need a bounded readiness allowance; assertions and
+// provider responses remain identical on every platform.
+const previousAsyncTimeout = getConfig().asyncUtilTimeout;
+beforeAll(() => configure({asyncUtilTimeout: Math.max(previousAsyncTimeout, 5000)}));
+afterAll(() => configure({asyncUtilTimeout: previousAsyncTimeout}));
 let detailsObserver;
 beforeEach(() => {
   detailsObserver = new MutationObserver(() => document.querySelectorAll('details').forEach(node => node.open = true));

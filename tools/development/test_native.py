@@ -177,5 +177,33 @@ class NativeSetupTests(unittest.TestCase):
         self.assertIn('tools/reference_engine_demos/requirements.txt', path.read_text())
 
 
+class SdkTransportTests(unittest.TestCase):
+    def test_transient_dns_retry_retains_attempts_and_exact_revision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            calls = []
+            def execute(args, **options):
+                calls.append(args)
+                options['log'].write_text('fatal: Could not resolve host: github.com' if len(calls) < 3 else 'captured')
+                if len(calls) < 3:
+                    raise subprocess.CalledProcessError(128, args)
+            with patch.object(native, 'command', side_effect=execute), patch.object(native.time, 'sleep'):
+                self.assertEqual(3, native.fetch_scratchbird_sdk(directory / 'source', {}, directory))
+            self.assertEqual(3, len(list(directory.glob('scratchbird-fetch*.log'))))
+            self.assertTrue(all(args[-1] == native.SCRATCHBIRD_DRIVER_REVISION for args in calls))
+
+    def test_permanent_fetch_failure_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            def execute(args, **options):
+                options['log'].write_text('fatal: remote error: upload-pack: not our ref\nfatal: the remote end hung up unexpectedly')
+                raise subprocess.CalledProcessError(128, args)
+            with patch.object(native, 'command', side_effect=execute) as command, patch.object(native.time, 'sleep') as pause:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    native.fetch_scratchbird_sdk(directory / 'source', {}, directory)
+            self.assertEqual(1, command.call_count)
+            pause.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

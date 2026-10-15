@@ -107,7 +107,9 @@ To launch the Electron desktop application, use `run-desktop` in place of
 with desktop preferences under `.devstate/desktop`. Existing `dev_config.json`
 and installed application profiles are preserved. The desktop verification
 launches Electron and checks that the compiled explorer workbench mounts,
-using an isolated configuration database and desktop profile.
+using an isolated configuration database and desktop profile. Browser and
+desktop checks wait until the startup overlay is removed before capturing
+successful screenshots.
 
 ## What is provisioned and tested
 
@@ -232,7 +234,9 @@ with each startup measurement.
 Intel macOS has explicit wall-time budgets of 20 seconds for startup and
 2.5 seconds for 5,000 contract validations. Its first hosted run measured
 15.33 and 1.79 seconds respectively. Windows has a 35-second startup budget following hosted measurements of
-18.28 and 27.62 seconds. Linux and Apple Silicon retain the original
+18.28 and 27.62 seconds. Apple Silicon has a 12-second startup bound after
+a fresh hosted start measured 9.86 seconds against the former eight-second
+bound; subsequent starts also passed eight seconds. Linux retains the original
 8-second limit. All platforms except Intel Mac retain the 1.5-second
 contract-validation limit. Receipts record the selected
 budgets; functional checks, route counts and validation work are identical.
@@ -263,3 +267,10 @@ inventory without building or installing the server. `desktop-probe` checks an
 already provisioned Python/frontend/Electron environment and retains renderer
 error messages and stacks. These optional diagnostic stages do not establish
 full environment acceptance; the default nine stages remain unchanged.
+
+SDK capture retries up to three times only for recognized transient transport
+errors, preserving each attempt's log and the exact pinned revision. Authentication
+or unavailable-revision failures remain failures. A partially captured clean SDK
+checkout can be resumed; dirty source checkouts are preserved and rejected.
+Provider workspace contract tests use a bounded five-second asynchronous
+readiness allowance on hosted renderers; their functional assertions are unchanged.

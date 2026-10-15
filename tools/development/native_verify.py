@@ -148,7 +148,10 @@ def browser(evidence, url):
             (By.CSS_SELECTOR, '[data-cdeadmin-shell="zero-grey"]')))
         WebDriverWait(driver, 30).until(conditions.presence_of_element_located(
             (By.CSS_SELECTOR, '[data-cdeadmin-qa-key="explorer-workspace"]')))
+        WebDriverWait(driver, 30).until(
+            lambda browser: not browser.find_elements(By.ID, 'pg-spinner'))
         receipt['workbench_mounted'] = True
+        receipt['startup_overlay_removed'] = True
     finally:
         if driver is not None:
             try:
