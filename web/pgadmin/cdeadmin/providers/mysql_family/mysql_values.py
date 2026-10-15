@@ -195,6 +195,16 @@ class Cursor:
     def __init__(self, connection):
         self.native = connection.cursor(raw=True)
         self.encoding = connection.python_charset
+        self._native_c_api = getattr(connection, '_cmysql', None)
+
+    def execute(self, *args, **kwargs):
+        if self._native_c_api is not None:
+            # Connector/Python 26.7's C query path returns early for an OK
+            # response before applying raw=True. A following SELECT in that
+            # batch would otherwise inherit the last catalog cursor's mode.
+            # This changes client conversion only; no SQL is dispatched here.
+            self._native_c_api.raw(True)
+        return self.native.execute(*args, **kwargs)
 
     def __getattr__(self, name):
         return getattr(self.native, name)
