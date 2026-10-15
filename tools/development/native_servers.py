@@ -110,7 +110,15 @@ def mariadb(evidence, env):
     build = STATE / 'mariadb-build'
     bison = brew_prefix('bison')
     selected = dict(env, PATH=bison + '/bin' + os.pathsep + env['PATH'])
+    sdk = subprocess.check_output(['xcrun', '--show-sdk-path'], text=True).strip()
+    cc = subprocess.check_output(['xcrun', '--find', 'clang'], text=True).strip()
+    cxx = subprocess.check_output(['xcrun', '--find', 'clang++'], text=True).strip()
+    for variable in ('CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH'):
+        selected.pop(variable, None)
+    selected.update(SDKROOT=sdk, CC=cc, CXX=cxx)
     command(['cmake', '-S', tree, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+             '-DCMAKE_OSX_SYSROOT=' + sdk, '-DCMAKE_C_COMPILER=' + cc,
+             '-DCMAKE_CXX_COMPILER=' + cxx,
              '-DCMAKE_INSTALL_PREFIX=' + str(root), '-DWITH_UNIT_TESTS=OFF',
              '-DWITH_SSL=system', '-DOPENSSL_ROOT_DIR=' + brew_prefix('openssl@3'),
              '-DDEFAULT_CHARSET=utf8mb4', '-DDEFAULT_COLLATION=utf8mb4_general_ci'],
