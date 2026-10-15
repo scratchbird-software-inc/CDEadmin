@@ -92,9 +92,9 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       const from = mode === 'selection' ? (selection?.from ?? plainEditor.current?.selectionStart ?? 0) : cursor;
       const to = mode === 'selection' ? (selection?.to ?? plainEditor.current?.selectionEnd ?? from) : cursor;
       const nativeValidate = async input => post({
-          action: 'source_validate', session_id: await ensureSession(), source: input,
-          database_target_id: databaseTargetId,
-        });
+        action: 'source_validate', session_id: await ensureSession(), source: input,
+        database_target_id: databaseTargetId,
+      });
       const value = firebird ? firebirdExecution(source, mode, from, to) :
         nativeProfile === 'duckdb-sql' ?
           await duckdbExecution(source, mode, from, to, nativeValidate) :

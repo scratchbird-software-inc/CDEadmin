@@ -1,5 +1,5 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import {generatorTable, materializeTestData, parseRecipe, stageTestData} from 'sources/Dialogs/firebirdTestData';
+import {generatorTable, materializeTestData, parseRecipe, stageTestData} from 'sources/Dialogs/firebirdTestDataHelpers';
 import FirebirdTestData from 'sources/Dialogs/FirebirdTestData';
 import {withTheme} from '../fake_theme';
 

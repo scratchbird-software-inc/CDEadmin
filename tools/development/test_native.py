@@ -67,6 +67,15 @@ class NativeSetupTests(unittest.TestCase):
                 native_assets.download('owned')
             fetch.assert_not_called()
 
+    def test_source_modules_resolve_unambiguously_on_case_insensitive_hosts(self):
+        groups = {}
+        for path in (native.ROOT / 'web/pgadmin').rglob('*'):
+            if path.suffix in ('.js', '.jsx', '.ts', '.tsx'):
+                key = str(path.parent).casefold(), path.stem.casefold()
+                groups.setdefault(key, []).append(str(path.relative_to(native.ROOT)))
+        collisions = [paths for paths in groups.values() if len(paths) > 1]
+        self.assertEqual(collisions, [], 'Extensionless imports collide on Windows/macOS')
+
     def test_host_changes_require_disposable_ci(self):
         with patch.dict(native.os.environ, {}, clear=True), \
                 patch.object(native, 'environment', return_value={}), \

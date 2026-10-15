@@ -39,8 +39,8 @@ export default function DuckDBAttachment({post, databaseTargetId}) {
         onChange={change(setAlias)} sx={{minWidth: 210}} />
       {action === 'attach' && <><TextField size="small" label="Absolute DuckDB file path" value={path} disabled={busy}
         onChange={change(setPath)} sx={{minWidth: 350}} />
-        <FormControlLabel label="Read only" control={<Checkbox checked={readOnly} disabled={busy}
-          onChange={event => {setReadOnly(event.target.checked); setResult(null);}} />} /></>}
+      <FormControlLabel label="Read only" control={<Checkbox checked={readOnly} disabled={busy}
+        onChange={event => {setReadOnly(event.target.checked); setResult(null);}} />} /></>}
       <Button disabled={busy || !alias || (action === 'attach' && !path)} onClick={preview}>Preview native attachment</Button>
       <Button disabled={busy || !result} onClick={download}>Save SQL script</Button>
     </Box>

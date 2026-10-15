@@ -3,7 +3,7 @@ import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
-import {generateRowSql} from './firebirdRowSql';
+import {generateRowSql} from './firebirdRowSqlHelpers';
 
 export default function FirebirdRowSql({page, table, onLoad, disabled}) {
   const [selected, setSelected] = useState([]);

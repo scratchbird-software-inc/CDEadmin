@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
-import {stageTestData} from './firebirdTestData';
+import {stageTestData} from './firebirdTestDataHelpers';
 
 export default function FirebirdDataImport({post, generation, databaseTargetId, onCatalogRefresh, onOpenAllocation, disabled}) {
   const [allocations, setAllocations] = useState([]);

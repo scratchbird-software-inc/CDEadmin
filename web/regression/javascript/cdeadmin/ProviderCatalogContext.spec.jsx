@@ -4,7 +4,9 @@
 // This software is released under the PostgreSQL Licence
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render as renderUnwrapped, screen, waitFor} from '@testing-library/react';
+import Theme from 'sources/Theme';
+const render = (ui, options) => renderUnwrapped(ui, {wrapper: Theme, ...options});
 import ProviderWorkspaceContent from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
 import getApiInstance from '../../../pgadmin/static/js/api_instance';
 

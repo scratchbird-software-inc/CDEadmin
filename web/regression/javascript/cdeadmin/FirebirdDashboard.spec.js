@@ -30,19 +30,19 @@ describe('Firebird native dashboard DDN bindings', () => {
   });
 
   it('renders a native fleet with isolated endpoint registrations and no invented metrics', () => {
-  const files = firebirdFleetFiles({registered_endpoints: 2,
-    status_counts: {reachable: 1, unknown: 1}, servers: [
-      {server_id: 1, name: 'Same name', status: 'reachable', version: '5.0',
-        known_databases: 2, monitored_databases: 1},
-      {server_id: 2, name: 'Same name', status: 'unknown'},
-    ]});
-  const workspace = viewer.createWorkspace(files);
-  try {
-    const rendered = workspace.renderSync({entry: 'dashboard.ddn', view: 'dashboard'});
-    expect(rendered.svg).toContain('Firebird engine dashboard');
-    expect(rendered.svg).toContain('Unavailable');
-    expect(rendered.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
-  } finally { workspace.destroy(); }
-});
+    const files = firebirdFleetFiles({registered_endpoints: 2,
+      status_counts: {reachable: 1, unknown: 1}, servers: [
+        {server_id: 1, name: 'Same name', status: 'reachable', version: '5.0',
+          known_databases: 2, monitored_databases: 1},
+        {server_id: 2, name: 'Same name', status: 'unknown'},
+      ]});
+    const workspace = viewer.createWorkspace(files);
+    try {
+      const rendered = workspace.renderSync({entry: 'dashboard.ddn', view: 'dashboard'});
+      expect(rendered.svg).toContain('Firebird engine dashboard');
+      expect(rendered.svg).toContain('Unavailable');
+      expect(rendered.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
+    } finally { workspace.destroy(); }
+  });
 
 });

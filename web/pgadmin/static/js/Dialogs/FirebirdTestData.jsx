@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
-import {generatorTable, materializeTestData, parseRecipe, stageTestData, tableForeignKeys} from './firebirdTestData';
+import {generatorTable, materializeTestData, parseRecipe, stageTestData, tableForeignKeys} from './firebirdTestDataHelpers';
 
 const save = (value, filename) => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'}));

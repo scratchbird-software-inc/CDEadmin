@@ -1,3 +1,4 @@
+import {Buffer} from 'node:buffer';
 // Public DDN parser only; imported source cannot resolve files or execute SQL.
 import runtime from '../../../static/vendor/ddn/current/ddn.mjs';
 process.stdin.setEncoding('utf8');

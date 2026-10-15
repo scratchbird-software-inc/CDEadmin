@@ -6,17 +6,17 @@ import {schemaCompletionSource, sql} from '@codemirror/lang-sql';
 
 describe('Firebird source formatting and completion', () => {
   it.each([
-    "select q'{line 1\n'quoted'; -- literal}' from rdb$database",
+    'select q\'{line 1\n\'quoted\'; -- literal}\' from rdb$database',
     'select "END""name", 1e+2, .5, x\'ABCD\' from "TABLE" where x != 1',
-    "execute block returns (v varchar(40)) as begin v = ' a  b '; suspend; end",
+    'execute block returns (v varchar(40)) as begin v = \' a  b \'; suspend; end',
     'select 1 -- preserve  comment\nfrom rdb$database /* preserve\ncomment */',
-    "set term ^ ; execute block as begin exit; end ^ set term ; ^",
+    'set term ^ ; execute block as begin exit; end ^ set term ; ^',
   ])('preserves all native tokens for %s', source => {
     const signature = text => firebirdTokens(text).map(({kind, text: token}) => [kind, token]);
     expect(signature(formatFirebird(source))).toEqual(signature(source));
     expect(formatFirebird(formatFirebird(source))).toBe(formatFirebird(source));
   });
-  it.each(["select 'unterminated", 'select "unterminated', 'select /* missing', "select q'{unclosed'"])(
+  it.each(['select \'unterminated', 'select "unterminated', 'select /* missing', 'select q\'{unclosed\''])(
     'refuses malformed lexical source %s', source => expect(() => formatFirebird(source)).toThrow());
   it('uses native names and does not invent missing columns', () => {
     const config = firebirdSQLConfig('SELECT FROM', 3, [
