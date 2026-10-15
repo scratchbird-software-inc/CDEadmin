@@ -110,6 +110,8 @@ def mariadb(evidence, env):
     build = STATE / 'mariadb-build'
     bison = brew_prefix('bison')
     zlib = brew_prefix('zlib')
+    lz4 = brew_prefix('lz4')
+    zstd = brew_prefix('zstd')
     selected = dict(env, PATH=bison + '/bin' + os.pathsep + env['PATH'],
                     PKG_CONFIG_PATH=zlib + '/lib/pkgconfig' + os.pathsep + env.get('PKG_CONFIG_PATH', ''))
     sdk = subprocess.check_output(['xcrun', '--show-sdk-path'], text=True).strip()
@@ -123,6 +125,15 @@ def mariadb(evidence, env):
              '-DCMAKE_CXX_COMPILER=' + cxx,
              '-DZLIB_INCLUDE_DIR=' + zlib + '/include',
              '-DZLIB_LIBRARY=' + zlib + '/lib/libz.dylib',
+             # MariaDB's find modules expose plural include variables, while
+             # its RocksDB consumer reads the singular variants. Supply both
+             # from the same native prefix so every storage engine builds.
+             '-DLZ4_INCLUDE_DIRS=' + lz4 + '/include',
+             '-DLZ4_INCLUDE_DIR=' + lz4 + '/include',
+             '-DLZ4_LIBRARIES=' + lz4 + '/lib/liblz4.dylib',
+             '-DZSTD_INCLUDE_DIRS=' + zstd + '/include',
+             '-DZSTD_INCLUDE_DIR=' + zstd + '/include',
+             '-DZSTD_LIBRARIES=' + zstd + '/lib/libzstd.dylib',
              '-DCMAKE_INSTALL_PREFIX=' + str(root), '-DWITH_UNIT_TESTS=OFF',
              '-DWITH_SSL=system', '-DOPENSSL_ROOT_DIR=' + brew_prefix('openssl@3'),
              '-DDEFAULT_CHARSET=utf8mb4', '-DDEFAULT_COLLATION=utf8mb4_general_ci'],
