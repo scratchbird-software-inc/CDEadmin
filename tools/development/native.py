@@ -55,7 +55,8 @@ def environment():
     env['PATH'] = os.pathsep.join([str(PYTHON.parent), *additions,
                                   env.get('PATH', '')])
     env['PYTHONPATH'] = str(ROOT / 'web')
-    return env
+    from native_assets import paths
+    return paths(env)
 
 
 def configure():
@@ -100,20 +101,37 @@ def ddn(evidence):
 
 def stage(name, evidence):
     env = environment()
-    if name == 'doctor':
+    if name == 'prerequisites':
+        if os.environ.get('GITHUB_ACTIONS') != 'true':
+            raise RuntimeError('Install host prerequisites from NATIVE.md; '
+                               'automatic host changes are limited to disposable CI VMs')
+        if not shutil.which('corepack'):
+            command(['npm', 'install', '--global', 'corepack@0.34.1'], env=env,
+                    log=evidence / 'corepack-install.log')
+        if platform.system() == 'Darwin':
+            command(['brew', 'install', 'libpq', 'openssl@3', 'krb5', 'pkg-config'],
+                    env=env, log=evidence / 'host-prerequisites.log')
+    elif name == 'doctor':
         checks = {'standard Python 3.14': sys.version_info[:2] == (3, 14)
                   and not sysconfig_free_threaded(),
                   'Windows or macOS': platform.system() in ('Windows', 'Darwin')}
         checks.update({tool: bool(shutil.which(tool))
-                       for tool in ('git', 'node', 'corepack')})
+                       for tool in ('git', 'node', 'corepack', 'cmake')})
         print(json.dumps(checks, indent=2))
         if not all(checks.values()):
             raise RuntimeError('Missing native development prerequisites')
+    elif name == 'clients':
+        ddn(evidence)
+        from native_assets import clients
+        clients(evidence, env)
     elif name == 'python':
+        from native_assets import msvc, install_python_runtime_hook, download
+        env = msvc(env)
         if not PYTHON.exists():
             if PYTHON.parents[1].exists():
                 raise RuntimeError('Incomplete .venv; inspect before replacing')
             command([sys.executable, '-m', 'venv', ROOT / '.venv'])
+        install_python_runtime_hook(PYTHON, env)
         command([PYTHON, '-m', 'pip', 'install', '--upgrade', 'pip',
                  'setuptools', 'wheel', 'packaging'], env=env,
                 log=evidence / 'python-tools.log')
@@ -121,6 +139,21 @@ def stage(name, evidence):
         requirements(selected)
         command([PYTHON, '-m', 'pip', 'install', '-r', selected], env=env,
                 log=evidence / 'dependencies.log')
+        ddn(evidence)
+        archive = download('mariadb-python')
+        # The build runner requires a fresh external output directory and
+        # records the same-version patch and native wheel hashes.
+        import tempfile
+        output = Path(tempfile.mkdtemp(prefix='mariadb-parent-', dir=evidence)) / 'build'
+        command([PYTHON, '-m', 'tools.cdeadmin_build_mariadb_driver',
+                 '--archive', archive, '--output', output], env=env,
+                log=evidence / 'mariadb-python-build.log')
+        wheels = list((output / 'wheels').glob('*.whl'))
+        if len(wheels) != 1:
+            raise RuntimeError('Expected one patched MariaDB native wheel')
+        command([PYTHON, '-m', 'pip', 'install', '--no-deps',
+                 '--force-reinstall', wheels[0]], env=env,
+                log=evidence / 'mariadb-python-install.log')
         command([PYTHON, '-m', 'pip', 'check'], env=env,
                 log=evidence / 'pip-check.log')
         command([PYTHON, '-m', 'pip', 'freeze', '--all'], env=env,
@@ -156,7 +189,7 @@ def sysconfig_free_threaded():
 def ci(evidence):
     """Run independent stages after failures; blocked work never counts as pass."""
     steps = []
-    for name in ('doctor', 'python', 'frontend', 'verify'):
+    for name in ('prerequisites', 'doctor', 'clients', 'python', 'frontend', 'verify'):
         started = time.monotonic()
         record = {'stage': name, 'status': 'failed'}
         try:
@@ -195,7 +228,7 @@ def main():
         if hasattr(output, 'reconfigure'):
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('stage', choices=('doctor', 'python', 'ddn', 'frontend',
+    parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'python', 'ddn', 'frontend',
                                          'configure', 'init', 'run', 'verify', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     args = parser.parse_args()

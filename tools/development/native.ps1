@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Position=0)][ValidateSet('doctor','python','ddn','frontend','configure','init','run','verify','ci')]
+    [Parameter(Position=0)][ValidateSet('doctor','clients','python','ddn','frontend','configure','init','run','verify','ci')]
     [string]$Stage = 'doctor',
     [string]$Python = 'python',
     [Parameter(Mandatory=$true)][string]$Evidence

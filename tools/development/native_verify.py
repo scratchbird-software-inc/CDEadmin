@@ -42,10 +42,13 @@ def child(name, evidence, port):
         print(json.dumps({'failures': failures}, indent=2))
         return bool(failures)
     if name == 'runtime':
+        import config  # Initialize the inherited application import boundary.
         import sqlite3
         import duckdb
         import pyarrow
         import firebird.driver as firebird
+        import mariadb
+        assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_exact_temporals'), 'Stock MariaDB connector is insufficient'
         from pgadmin.cdeadmin.providers.firebird.provider import (
             _configure_client_library, _client_library_identity)
         _configure_client_library(firebird)
@@ -124,6 +127,7 @@ def verify(evidence):
     evidence.mkdir(parents=True, exist_ok=False)
     checks = []
     commands = {
+        'native-setup': [sys.executable, '-m', 'unittest', 'discover', '-s', 'tools/development', '-p', 'test_native.py', '-v'],
         'dependency-imports': [sys.executable, __file__, '--child', 'imports', '--evidence', evidence],
         'exact-native-runtimes': [sys.executable, __file__, '--child', 'runtime', '--evidence', evidence],
         'sqlite-provider': [sys.executable, '-m', 'tools.cdeadmin_sqlite_driver_platform_gate', '--evidence', evidence / 'sqlite'],
