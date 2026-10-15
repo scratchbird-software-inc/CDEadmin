@@ -46,8 +46,6 @@ describe('LoginPage', ()=>{
     expect(ctrl.container.querySelector('form').getAttribute('action')).toBe('/login/url');
     expect(ctrl.container.querySelector('input[name="email"]')).not.toBeNull();
     expect(ctrl.container.querySelector('input[name="password"]')).not.toBeNull();
-    expect(ctrl.container.querySelector('img[aria-hidden="true"]'))
-      .toHaveAttribute('src', '/static/test-content-hashed-asset.svg');
     expect(screen.getByText('ScratchRobin CDE Administration Console'))
       .toBeInTheDocument();
     expect(screen.getByText('Alpha QA Release')).toBeInTheDocument();

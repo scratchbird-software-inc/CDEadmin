@@ -15,6 +15,7 @@ import {Box} from '@mui/material';
 import {Icon} from '../icons';
 import {IconButton} from '../primitives/Button';
 import {Drawer, Splitter, StatusBar, Toolbar} from '../layout/WorkbenchChrome';
+import {ActivityThemeToggle} from './ActivityThemeToggle';
 
 export const WORKBENCH_LAYOUT_SCHEMA = 'cdeadmin.workbench-layout.v1';
 export const WORKBENCH_INSPECT_EVENT = 'cdeadmin:workbench-inspect';
@@ -123,34 +124,44 @@ function ActivityRail({activities, active, navigationVisible, onChange}) {
         width: '100%',
         mx: 0,
       }}}>
-    {activities.map((activity) => {
-      const ownsNavigation = activity.navigationVisible !== false;
-      const selected = activity.id === active &&
-        (navigationVisible || !ownsNavigation);
-      return <IconButton key={activity.id}
-        data-cdeadmin-qa-key={`activity-${activity.id}`}
-        data-selected={selected ? 'true' : 'false'}
-        data-visual-emphasis={selected ? 'active' : 'inactive'}
-        label={activity.label} aria-current={selected ? 'page' : undefined}
-        disabled={activity.disabled === true}
-        onClick={() => {
-          if(activity.disabled) return;
-          onChange(activity.id);
-        }}
-        sx={{
-          ...activityControlSx,
-          filter: selected ? 'none' :
-            'brightness(var(--cde-inactive-brightness, 0.85))',
-          '&&&': {
-            backgroundColor: selected ? 'primary.main' : 'transparent',
-            border: 'none',
-            borderRadius: 0,
-            boxShadow: 'none',
-            color: selected ? 'primary.contrastText' : 'inherit',
-          }}}>
-        <Icon iconKey={activity.iconKey || 'command.default'} decorative size="20px" />
-      </IconButton>;
-    })}
+    <Box sx={{display: 'flex', alignItems: 'stretch', flex: '1 1 auto',
+      minWidth: 0, overflowX: 'auto', overflowY: 'hidden',
+      '& > button, & > span': activityControlSx,
+      '& > span > button': {
+        ...activityControlSx,
+        width: '100%',
+        mx: 0,
+      }}}>
+      {activities.map((activity) => {
+        const ownsNavigation = activity.navigationVisible !== false;
+        const selected = activity.id === active &&
+          (navigationVisible || !ownsNavigation);
+        return <IconButton key={activity.id}
+          data-cdeadmin-qa-key={`activity-${activity.id}`}
+          data-selected={selected ? 'true' : 'false'}
+          data-visual-emphasis={selected ? 'active' : 'inactive'}
+          label={activity.label} aria-current={selected ? 'page' : undefined}
+          disabled={activity.disabled === true}
+          onClick={() => {
+            if(activity.disabled) return;
+            onChange(activity.id);
+          }}
+          sx={{
+            ...activityControlSx,
+            filter: selected ? 'none' :
+              'brightness(var(--cde-inactive-brightness, 0.85))',
+            '&&&': {
+              backgroundColor: selected ? 'primary.main' : 'transparent',
+              border: 'none',
+              borderRadius: 0,
+              boxShadow: 'none',
+              color: selected ? 'primary.contrastText' : 'inherit',
+            }}}>
+          <Icon iconKey={activity.iconKey || 'command.default'} decorative size="20px" />
+        </IconButton>;
+      })}
+    </Box>
+    <ActivityThemeToggle />
   </Box>;
 }
 

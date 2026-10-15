@@ -48,7 +48,8 @@ export default function rcdockOverride(theme) {
           },
           '&[data-dockid="id-main"]': {
             '& > .dock > .dock-bar': {
-              minHeight: '42px',
+              minHeight: '30px',
+              maxHeight: '30px',
               padding: 0,
               overflow: 'hidden',
               '& .dock-nav, & .dock-nav-wrap, & .dock-nav-list': {
@@ -63,13 +64,14 @@ export default function rcdockOverride(theme) {
                 margin: 0,
                 filter: 'brightness(var(--cde-inactive-brightness, 0.85))',
                 '& > div': {
-                  alignItems: 'stretch',
+                  alignItems: 'center',
                   display: 'flex',
                   flex: '1 1 auto',
                   fontSize: '1rem',
                   height: '100%',
-                  minHeight: '100%',
+                  minHeight: 0,
                   padding: 0,
+                  paddingLeft: '5px',
                 },
                 '&.dock-tab-active': {
                   backgroundColor: theme.palette.primary.main,

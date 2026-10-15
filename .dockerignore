@@ -1,4 +1,8 @@
 web/node_modules
+/.devstate
+/.native
+/.venv
+/.env.dev
 web/config_*.py
 web/*.log
 web/regression

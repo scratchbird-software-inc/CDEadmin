@@ -78,8 +78,8 @@ describe('CDEadmin presentation profiles', () => {
       accessibility_profile: 'cdeadmin_standard',
     }, {...baseTheme, name: 'dark'});
 
-    expect(value.colors.canvas).toBe('#04054F');
-    expect(value.colors.navigation).toBe('#02196E');
+    expect(value.colors.canvas).toBe('#121212');
+    expect(value.colors.navigation).toBe('#161616');
     expect(value.colors.text).toBe('#EDF2FB');
   });
 

@@ -1,0 +1,72 @@
+# syntax=docker/dockerfile:1
+# Development image: production frontend bundle + Python deps; mount web/pgadmin for edits.
+
+FROM node:22-bookworm AS frontend
+
+# webpack.config.js runs tools/refresh_ddn.py before bundling.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /cdeadmin
+COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
+COPY tools/dependency_patches/ /cdeadmin/tools/dependency_patches/
+COPY tools/development/docker/ /cdeadmin/tools/development/docker/
+COPY web/ /cdeadmin/web/
+WORKDIR /cdeadmin/web
+ENV SCRATCHROBIN_DDN_SOURCE=/cdeadmin/ddn-source
+ENV SCRATCHROBIN_DDN_WORK=/cdeadmin/ddn-intake
+RUN python3 /cdeadmin/tools/development/docker/prepare_ddn.py /cdeadmin/ddn-source
+# Webpack for this tree often needs >3 GiB Node heap; raise if the build still OOMs.
+ARG NODE_MAX_OLD_SPACE_SIZE=6144
+RUN corepack enable \
+    && corepack yarn install --immutable
+RUN NODE_ENV=production NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" \
+    corepack yarn webpacker
+
+FROM python:3.14-bookworm AS runtime
+
+ARG INSTALL_DEMO_REQUIREMENTS=0
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential \
+        pkg-config \
+        libpq-dev \
+        libkrb5-dev \
+        libffi-dev \
+        libssl-dev \
+        libmariadb-dev \
+        libsnappy-dev \
+        zlib1g-dev \
+        libjpeg-dev \
+        libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /cdeadmin
+
+COPY requirements.txt /cdeadmin/requirements.txt
+COPY tools/reference_engine_demos/requirements.txt \
+    /cdeadmin/tools/reference_engine_demos/requirements.txt
+
+RUN python3 -m venv /cdeadmin/.venv \
+    && /cdeadmin/.venv/bin/pip install --no-cache-dir -U pip \
+    && /cdeadmin/.venv/bin/pip install --no-cache-dir -r /cdeadmin/requirements.txt \
+    && if [ "${INSTALL_DEMO_REQUIREMENTS}" = "1" ]; then \
+         /cdeadmin/.venv/bin/pip install --no-cache-dir \
+           -r /cdeadmin/tools/reference_engine_demos/requirements.txt; \
+       fi \
+    && /cdeadmin/.venv/bin/pip check
+
+COPY --from=frontend /cdeadmin/web /cdeadmin/web
+COPY --from=frontend /cdeadmin/web/pgadmin/static/js/generated /cdeadmin/frontend-generated
+COPY --from=frontend /cdeadmin/web/pgadmin/static/css /cdeadmin/frontend-css
+COPY tools/refresh_ddn.py /cdeadmin/tools/refresh_ddn.py
+COPY tools/development/docker/ /cdeadmin/tools/development/docker/
+RUN cp /cdeadmin/tools/development/docker/entrypoint.dev.sh /entrypoint.dev.sh
+
+RUN chmod +x /entrypoint.dev.sh
+
+ENV PATH="/cdeadmin/.venv/bin:${PATH}"
+EXPOSE 5051
+ENTRYPOINT ["/entrypoint.dev.sh"]

@@ -627,9 +627,44 @@ def seed_mongodb():
                             "max_priority": {"$max": "$priority"}}},
                 {"$sort": {"count": -1}}]
     aggregate = list(collection.aggregate(pipeline))
+    customers = database["customers"]
+    customers.delete_many({})
+    customers.insert_many([
+        {"_id": row[0], "name": row[1], "city": row[2], "region": row[3]}
+        for row in CUSTOMERS
+    ])
+    customers.create_index([("name", 1)], name="customer_name")
+    sales = database["sales"]
+    sales.delete_many({})
+    sales.insert_many([
+        {"_id": 5001, "customer_id": 1, "product": "Pump maintenance kit",
+         "quantity": 2, "amount": 249.99, "currency": "CAD",
+         "sold_at": "2025-03-15T14:30:00Z", "status": "completed"},
+        {"_id": 5002, "customer_id": 1,
+         "product": "Annual field-service contract", "quantity": 1,
+         "amount": 4800.0, "currency": "CAD",
+         "sold_at": "2025-01-10T09:00:00Z", "status": "completed"},
+        {"_id": 5003, "customer_id": 2, "product": "Flow meter calibration",
+         "quantity": 1, "amount": 675.5, "currency": "CAD",
+         "sold_at": "2025-04-02T16:45:00Z", "status": "completed"},
+        {"_id": 5004, "customer_id": 2, "product": "Control valve assembly",
+         "quantity": 3, "amount": 2670.0, "currency": "CAD",
+         "sold_at": "2025-05-18T11:20:00Z", "status": "pending"},
+        {"_id": 5005, "customer_id": 3,
+         "product": "Ventilation fan upgrade", "quantity": 4,
+         "amount": 6100.0, "currency": "CAD",
+         "sold_at": "2025-02-28T08:15:00Z", "status": "completed"},
+        {"_id": 5006, "customer_id": 3,
+         "product": "Vibration monitoring sensors", "quantity": 12,
+         "amount": 2223.0, "currency": "CAD",
+         "sold_at": "2025-06-01T13:00:00Z", "status": "shipped"},
+    ])
+    sales.create_index([("customer_id", 1), ("sold_at", -1)],
+                       name="customer_sold_at")
     client.close()
-    return {"database": "cdeadmin_demo", "collections": 2,
-            "documents": 4, "pipeline_result": aggregate}
+    return {"database": "cdeadmin_demo", "collections": 4,
+            "work_orders": 4, "customers": 3, "sales": 6,
+            "pipeline_result": aggregate}
 
 
 def seed_neo4j():

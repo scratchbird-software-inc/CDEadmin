@@ -1,0 +1,47 @@
+# Local development: CDEadmin web. MongoDB is optional (--profile mongodb).
+# PostgreSQL runs as its own container; see tools/development/docker/README.md.
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#   open http://127.0.0.1:5051  (developer@example.com / CDEadminDev-2026!)
+#
+# Python changes under web/pgadmin reload when DEBUG is enabled.
+# Rebuild the web image after dependency or frontend changes:
+#   docker compose -f docker-compose.dev.yml build web
+
+name: cdeadmin-dev
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: tools/development/docker/Dockerfile.dev
+      args:
+        INSTALL_DEMO_REQUIREMENTS: ${INSTALL_DEMO_REQUIREMENTS:-0}
+        NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE:-8192}
+    ports:
+      - "127.0.0.1:${CDEADMIN_HTTP_PORT:-5051}:5051"
+    environment:
+      CDEADMIN_DEFAULT_EMAIL: ${CDEADMIN_DEFAULT_EMAIL:-developer@example.com}
+      CDEADMIN_DEFAULT_PASSWORD: ${CDEADMIN_DEFAULT_PASSWORD:-CDEadminDev-2026!}
+    volumes:
+      # Live sources; generated assets are supplied by the built image below.
+      - ./web/pgadmin:/cdeadmin/web/pgadmin
+      - ./.devstate/application:/cdeadmin/.devstate/application
+    tmpfs:
+      - /cdeadmin/web/pgadmin/static/js/generated
+      - /cdeadmin/web/pgadmin/static/css
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  mongodb:
+    profiles: ["databases", "mongodb"]
+    image: mongo:8.2.6
+    ports:
+      - "127.0.0.1:${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - cdeadmin-dev-mongodb:/data/db
+      - ./tools/development/mongodb/init:/docker-entrypoint-initdb.d:ro
+      - ./tools/development/mongodb/seed:/seed:ro
+
+volumes:
+  cdeadmin-dev-mongodb:

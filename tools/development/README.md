@@ -10,6 +10,13 @@ client tools, and reference-engine Docker samples. Native ScratchBird is exclude
 The scripts reuse the existing engine-specific fixtures rather than creating a
 second, incompatible Compose stack.
 
+## Docker Compose (web + optional databases)
+
+For a containerized loopback stack with `web/pgadmin` bind-mounted for live edits, see
+[docker/README.md](docker/README.md) and run `docker compose -f docker-compose.dev.yml up --build`
+from the repository root. This path installs `requirements.txt` in the image and is
+complementary to the full Linux `dev.sh` workflow below.
+
 ## 1. Choose where the workspace runs
 
 | Host | Full-estate execution environment | Launcher |

@@ -637,7 +637,13 @@ export function presentationThemeOverrides(presentation) {
       fontFamilySourceCode: presentation.monospaceFontFamily,
     },
     palette: {
-      background: {default: colors.canvas, paper: colors.panel},
+      background: {
+        default: colors.canvas,
+        paper: colors.panel,
+        navigation: colors.navigation ?? colors.panel,
+        workspace: colors.workspace ?? colors.canvas,
+        elevated: colors.elevated ?? colors.panel,
+      },
       text: {primary: colors.text, muted: colors.mutedText},
       primary: {
         main: colors.primary,

@@ -7,8 +7,9 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
+import usePreferences from '../../../pgadmin/preferences/static/js/store';
 import {
   DEFAULT_WORKBENCH_LAYOUT, normalizeWorkbenchLayout, WorkbenchLayoutStore,
   requestWorkbenchInspection, WorkbenchShell,
@@ -19,8 +20,26 @@ const activities = [
   {id: 'activity.projects', label: 'Project Explorer', iconKey: 'tool.project-explorer'},
 ];
 
+function activityTabsIn(nav) {
+  return nav.querySelectorAll('button[data-cdeadmin-qa-key^="activity-"]');
+}
+
+function setMiscPreferences(values) {
+  usePreferences.setState({
+    data: Object.entries(values).map(([name, value], id) => ({
+      id, cid: 1, mid: 1, module: 'misc', name, value,
+    })),
+    version: Date.now(),
+    isLoading: false,
+    failed: false,
+  });
+}
+
 describe('Zero-Grey workbench shell', () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => {
+    window.localStorage.clear();
+    setMiscPreferences({theme: 'light'});
+  });
   it('hosts every required shell region with distinct explorer identities', () => {
     const Component = withTheme(WorkbenchShell);
     render(<Component activities={activities} navigationViews={{
@@ -35,9 +54,10 @@ describe('Zero-Grey workbench shell', () => {
 
     expect(screen.getByRole('navigation', {name: 'Application activities'}))
       .toBeInTheDocument();
-    const activityTabs = screen.getByRole('navigation', {
+    const activityNav = screen.getByRole('navigation', {
       name: 'Application activities',
-    }).querySelectorAll('button');
+    });
+    const activityTabs = activityTabsIn(activityNav);
     expect(activityTabs).toHaveLength(2);
     expect([...activityTabs].every((button) => button.querySelector(
       '[data-icon-key]'))).toBe(true);
@@ -45,6 +65,11 @@ describe('Zero-Grey workbench shell', () => {
     expect(activityTabs[0]).toHaveAttribute('data-visual-emphasis', 'active');
     expect(activityTabs[1]).toHaveAttribute('data-selected', 'false');
     expect(activityTabs[1]).toHaveAttribute('data-visual-emphasis', 'inactive');
+    expect(activityNav.querySelector('[data-cdeadmin-qa-key="activity-theme-dark"]'))
+      .toBeInTheDocument();
+    expect(activityTabs[1].compareDocumentPosition(
+      activityNav.querySelector('[data-cdeadmin-qa-key="activity-theme-dark"]')
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('complementary', {name: 'Data Explorer'}))
       .toHaveTextContent('Live resources');
     expect(screen.getByRole('main', {name: 'Main workbench'}))
@@ -55,9 +80,6 @@ describe('Zero-Grey workbench shell', () => {
       .toHaveTextContent('Problems');
     expect(screen.getByRole('status', {name: 'Surface status'}))
       .toHaveTextContent('Connected');
-    const activityNav = screen.getByRole('navigation', {
-      name: 'Application activities',
-    });
     const explorer = screen.getByRole('complementary', {name: 'Data Explorer'});
     const inspector = screen.getByRole('complementary', {name: 'Inspector'});
     const main = screen.getByRole('main', {name: 'Main workbench'});
@@ -71,6 +93,32 @@ describe('Zero-Grey workbench shell', () => {
       .toHaveAttribute('aria-orientation', 'horizontal');
   });
 
+  it('toggles misc.theme between light and dark from the activity rail',
+    async () => {
+      const setPreferences = jest.spyOn(usePreferences.getState(), 'setPreferences')
+        .mockResolvedValue({data: {success: true}});
+      const Component = withTheme(WorkbenchShell);
+      render(<Component activities={activities} navigationViews={{}} />);
+
+      const darkRadio = screen.getByRole('radio', {name: /Dark/});
+      expect(darkRadio).not.toBeChecked();
+      fireEvent.click(darkRadio);
+      await waitFor(() => expect(setPreferences).toHaveBeenCalledWith([{
+        category_id: 1, id: 0, mid: 1, name: 'theme', value: 'dark',
+      }]));
+
+      await act(async () => {
+        setMiscPreferences({theme: 'dark'});
+      });
+      expect(screen.getByRole('radio', {name: /Dark/})).toBeChecked();
+      setPreferences.mockClear();
+      fireEvent.click(screen.getByRole('radio', {name: /Dark/}));
+      await waitFor(() => expect(setPreferences).toHaveBeenCalledWith([{
+        category_id: 1, id: 0, mid: 1, name: 'theme', value: 'light',
+      }]));
+      setPreferences.mockRestore();
+    });
+
   it('starts with no selected activity, navigator, inspector, or reveal buttons',
     () => {
       const Component = withTheme(WorkbenchShell);
@@ -83,9 +131,9 @@ describe('Zero-Grey workbench shell', () => {
         'activity.data': <div>Live resources</div>,
       }} inspector="Details" startCollapsed />);
 
-      for(const tab of screen.getByRole('navigation', {
+      for(const tab of activityTabsIn(screen.getByRole('navigation', {
         name: 'Application activities',
-      }).querySelectorAll('button')) {
+      }))) {
         expect(tab).toHaveAttribute('data-selected', 'false');
         expect(tab).not.toHaveAttribute('aria-current');
       }

@@ -18,10 +18,20 @@ const StyledBox = styled(Box)(({theme}) => ({
     flexDirection: 'column',
     padding: '16px',
     backgroundColor: contentBg,
-    borderRadius: theme.shape.borderRadius,
+    borderRadius: '20px',
+    border: 'none',
     maxHeight: '100%',
     minWidth: '450px',
     maxWidth: '450px',
+    '& .MuiOutlinedInput-root': {
+      borderRadius: '8px',
+      '& fieldset': {
+        borderRadius: '8px',
+      },
+    },
+    '& .MuiButton-root': {
+      borderRadius: '8px',
+    },
     '& .BasePage-item': {
       display: 'flex',
       justifyContent: 'center',
@@ -84,10 +94,12 @@ export default function BasePage({pageImage, title,  children, messages}) {
   }, [messages]);
   return (
     <StyledBox >
-      <Box display="flex" minWidth="80%" gap="40px" alignItems="center" padding="20px 80px">
-        <Box flexGrow={1} height="80%" textAlign="center">
-          {pageImage}
-        </Box>
+      <Box display="flex" minWidth={pageImage ? '80%' : undefined} gap="40px" alignItems="center" justifyContent={pageImage ? 'flex-start' : 'center'} padding="20px 80px">
+        {pageImage &&
+          <Box flexGrow={1} height="80%" textAlign="center">
+            {pageImage}
+          </Box>
+        }
         <Box className='BasePage-pageContent'>
           <Box className='BasePage-item'>
             <div className='BasePage-logo' aria-label='CDEadmin'>CDEadmin</div>

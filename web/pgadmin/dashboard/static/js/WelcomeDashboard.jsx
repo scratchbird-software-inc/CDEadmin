@@ -148,7 +148,7 @@ function DocumentationLaunchers() {
 }
 
 export default function WelcomeDashboard({pgBrowser: _pgBrowser}) {
-  return <Root>
+  return <Root className="WelcomeDashboard-root">
     <div className="WelcomeDashboard-dashboardContainer">
       <section className="WelcomeDashboard-card" aria-labelledby="welcome-title">
         <div className="WelcomeDashboard-cardHeader">{gettext('Welcome')}</div>
