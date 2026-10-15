@@ -7,6 +7,10 @@ on:
         description: 'JSON runner list; default qualifies all three native hosts'
         required: true
         default: '["windows-2025", "macos-15-intel", "macos-15"]'
+      stages:
+        description: 'CI stages; subsets are targeted runs, not full acceptance'
+        required: true
+        default: 'prerequisites,doctor,clients,python,servers,frontend,verify,fixtures'
   push:
     branches: [master]
     paths: ['tools/development/**', 'tools/refresh_ddn.py', 'requirements.txt', '.github/workflows/native-development.yml']
@@ -26,7 +30,7 @@ jobs:
       matrix:
         os: ${{ fromJSON(inputs.platforms || '["windows-2025", "macos-15-intel", "macos-15"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     defaults:
       run:
         shell: pwsh
@@ -60,6 +64,7 @@ jobs:
           CDEADMIN_NATIVE_EVIDENCE: ${{ runner.temp }}/cdeadmin-native-evidence
           SCRATCHROBIN_DDN_SOURCE: ${{ runner.temp }}/Diagram-Design-Notation
           SCRATCHROBIN_DDN_WORK: ${{ runner.temp }}/ddn-intake
+          NATIVE_STAGES: ${{ inputs.stages || 'prerequisites,doctor,clients,python,servers,frontend,verify,fixtures' }}
         run: |
           git clone https://github.com/scratchbird-software-inc/Diagram-Design-Notation.git $env:SCRATCHROBIN_DDN_SOURCE
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -68,7 +73,7 @@ jobs:
           $dependencyExit = $LASTEXITCODE
           Pop-Location
           if ($dependencyExit) { exit $dependencyExit }
-          python -m uv run --no-project --python 3.14 python tools/development/native.py ci --evidence $env:CDEADMIN_NATIVE_EVIDENCE
+          python -m uv run --no-project --python 3.14 python tools/development/native.py ci --evidence $env:CDEADMIN_NATIVE_EVIDENCE --stages $env:NATIVE_STAGES
           exit $LASTEXITCODE
       - name: Qualify configured disposable network engines
         if: ${{ !cancelled() && vars.CDEADMIN_NATIVE_ROUTES_JSON != '' }}

@@ -23,7 +23,7 @@ Python and native x64 libraries; Windows ARM is not qualified by the matrix.
 On macOS install Xcode command-line tools and Homebrew, then:
 
 ```bash
-brew install libpq openssl@3 krb5 pkg-config cmake
+brew install libpq openssl@3 krb5 pkg-config cmake bison icu4c libxml2 lz4 zstd readline
 ```
 
 The clients stage builds an owned CPython 3.14.8 interpreter on macOS against
@@ -52,10 +52,12 @@ $env:SCRATCHROBIN_DDN_SOURCE = 'C:\src\Diagram-Design-Notation'
 python tools/development/native.py doctor --evidence $evidence
 python tools/development/native.py clients --evidence $evidence
 python tools/development/native.py python --evidence $evidence
+python tools/development/native.py servers --evidence $evidence
 python tools/development/native.py frontend --evidence $evidence
 python tools/development/native.py configure --evidence $evidence
 python tools/development/native.py init --evidence $evidence
 python tools/development/native.py verify --evidence $evidence
+python tools/development/native.py fixtures --evidence $evidence
 python tools/development/native.py run --evidence $evidence
 ```
 
@@ -72,17 +74,19 @@ export SCRATCHROBIN_DDN_SOURCE="$HOME/src/Diagram-Design-Notation"
 bash tools/development/native.sh doctor --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh clients --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh python --evidence "$HOME/dev-evidence/cdeadmin-native"
+bash tools/development/native.sh servers --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh frontend --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh configure --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh init --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh verify --evidence "$HOME/dev-evidence/cdeadmin-native"
+bash tools/development/native.sh fixtures --evidence "$HOME/dev-evidence/cdeadmin-native"
 bash tools/development/native.sh run --evidence "$HOME/dev-evidence/cdeadmin-native"
 ```
 
-The Firebird vendor framework requires an administrator installation once.
-The clients stage downloads and verifies the architecture-specific package
-and tells you its location. Install that verified package and rerun clients.
-Only disposable GitHub-hosted VMs install it automatically with `sudo`.
+The clients stage expands the verified, architecture-specific Firebird vendor
+package into this checkout's `.native` directory. It does not execute installer
+scripts, require an administrator framework installation, or register a system
+Firebird service.
 
 Open <http://127.0.0.1:5051>. `init` prompts for the initial application account;
 its credentials are separate from database credentials. `configure` preserves
@@ -108,12 +112,25 @@ SQLite and DuckDB native provider gates, embedded Firebird editor/row/template/
 profiler checks, Python contracts, JavaScript contracts, product identity and
 HTTP startup through `web/CDEadmin.py`. Independent failures are retained.
 
-Complete engine administration also requires each engine's native command-line
-tools. Install the matching MySQL/MariaDB server tools and MySQL Shell, and
-configure their existing `CDEADMIN_*_BINARY` settings. Linux tools extracted by
+The servers stage provisions MySQL 9.7.0, MariaDB 12.2.2, PostgreSQL 18.3 and
+MySQL Shell 9.7.0 with their native administration tools. Windows uses verified
+vendor binary archives. macOS uses verified MySQL/Shell binary archives and
+builds the exact PostgreSQL/MariaDB source releases. These source builds need
+additional time and disk; they do not install into system data directories.
+The launcher supplies the existing `CDEADMIN_*_BINARY` settings while preserving
+explicit developer overrides. Linux tools extracted by
 `reference_engine_demos/bootstrap.py` are not usable on Windows or macOS.
 Other providers may require additional native SDKs/tools; import checks do not
 establish availability of all their external administrative executables.
+
+The fixtures stage starts uniquely owned, loopback-only native PostgreSQL,
+MySQL, MariaDB and Firebird servers, runs the existing network-driver gates,
+then stops them and removes their data. It does not start/stop installed services
+or use their data. PostgreSQL/MySQL/MariaDB test accounts are explicitly
+passwordless within these disposable loopback fixtures. Firebird uses a random
+password in a copied security database. A cleanup failure fails qualification.
+GitHub's full matrix runs these fixtures without private network credentials.
+Distributed topologies and enterprise authentication require additional estates.
 
 ## Native network qualification
 
@@ -153,7 +170,7 @@ Missing routes are reported as unconfigured and do not count as passed.
 For GitHub network checks, set repository variable
 `CDEADMIN_NATIVE_ROUTES_JSON` to the credential-free JSON and the four named
 password secrets. The runners must be able to reach those test servers.
-Without that configuration the environment job does not run network gates.
+Without that configuration GitHub runs only the owned loopback network gates.
 ScratchBird monitoring-history acceptance remains a separate native runtime
 requirement and is not replaced with an embedded history engine.
 

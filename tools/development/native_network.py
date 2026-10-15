@@ -19,6 +19,12 @@ sys.path.insert(0, str(ROOT / 'web'))
 
 def execute(engine, specification, evidence):
     import config
+    if engine == 'postgresql':
+        import shutil
+        executable = shutil.which('pg_dump')
+        if executable:
+            directory = str(Path(executable).parent)
+            config.DEFAULT_BINARY_PATHS.update({'pg': directory, 'pg-18': directory})
     allowed = {'route', 'password_env', 'database_directory', 'path_style'}
     if set(specification) - allowed:
         raise ValueError('Unknown network gate settings; keep credentials outside JSON')

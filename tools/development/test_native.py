@@ -26,9 +26,10 @@ class NativeSetupTests(unittest.TestCase):
             if name in ('python', 'verify'):
                 raise RuntimeError('owned failure ' + name)
         with patch.object(native, 'stage', side_effect=stage) as selected, \
+                patch.object(native.platform, 'platform', return_value='owned-test-platform'), \
                 patch.object(native.subprocess, 'check_output', return_value='revision'):
             self.assertEqual(native.ci(self.root), 1)
-        self.assertEqual(selected.call_count, 6)
+        self.assertEqual(selected.call_count, 8)
         receipt = json.loads((self.root / 'receipt.json').read_text())
         self.assertFalse(receipt['complete'])
         self.assertEqual([s['stage'] for s in receipt['steps'] if s['status'] == 'failed'],
@@ -42,13 +43,22 @@ class NativeSetupTests(unittest.TestCase):
             native.configure()
         self.assertEqual(target.read_text(), 'private configuration')
 
+    def test_targeted_success_is_not_full_environment_acceptance(self):
+        with patch.object(native, 'stage'), \
+                patch.object(native.platform, 'platform', return_value='owned-test-platform'), \
+                patch.object(native.subprocess, 'check_output', return_value='revision'):
+            self.assertEqual(native.ci(self.root, ('doctor',)), 0)
+        receipt = json.loads((self.root / 'receipt.json').read_text())
+        self.assertTrue(receipt['complete'])
+        self.assertFalse(receipt['full_environment_complete'])
+
     def test_windows_corepack_uses_node_without_a_command_shell(self):
         wrapper = self.root / 'Node With Spaces/corepack.CMD'
         cli = wrapper.parent / 'node_modules/corepack/dist/corepack.js'
         cli.parent.mkdir(parents=True)
         cli.touch()
         with patch.object(native.platform, 'system', return_value='Windows'), \
-                patch.object(native.shutil, 'which', return_value=str(wrapper)), \
+                patch.object(native.shutil, 'which', side_effect=lambda name, **_: str(wrapper) if name == 'corepack.cmd' else None), \
                 patch.object(native.subprocess, 'run') as execute:
             native.command(['corepack', 'yarn', 'install', '--immutable'], cwd=self.root)
         self.assertEqual(execute.call_args.args[0],

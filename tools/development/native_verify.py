@@ -110,6 +110,7 @@ def http(evidence):
                         body = response.read()
                         assert body, 'Empty application response'
                         print(f'Canonical launcher HTTP 200 ({len(body)} bytes)')
+                        browser(evidence, f'http://127.0.0.1:{port}/')
                         return
                 except (OSError, urllib.error.URLError):
                     time.sleep(.5)
@@ -123,6 +124,47 @@ def http(evidence):
                 process.kill()
                 process.wait(timeout=15)
             print(log.read_text(encoding='utf-8', errors='replace'))
+
+
+def browser(evidence, url):
+    """Prove the compiled workbench actually mounts in a native browser."""
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.support import expected_conditions as conditions
+    from selenium.webdriver.support.ui import WebDriverWait
+    options = Options()
+    options.add_argument('--headless=new')
+    options.add_argument('--window-size=1440,1000')
+    options.add_argument('--user-data-dir=' + str(evidence / 'owned-browser-profile'))
+    options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+    driver = None
+    receipt = {'workbench_mounted': False, 'complete': False, 'console_errors': []}
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(60)
+        driver.get(url)
+        WebDriverWait(driver, 90).until(conditions.presence_of_element_located(
+            (By.CSS_SELECTOR, '[data-cdeadmin-shell="zero-grey"]')))
+        WebDriverWait(driver, 30).until(conditions.presence_of_element_located(
+            (By.CSS_SELECTOR, '[data-cdeadmin-qa-key="explorer-workspace"]')))
+        receipt['workbench_mounted'] = True
+    finally:
+        if driver is not None:
+            try:
+                messages = driver.get_log('browser')
+                errors = [message for message in messages if message['level'] == 'SEVERE']
+                receipt.update(browser=driver.capabilities.get('browserName'),
+                               version=driver.capabilities.get('browserVersion'),
+                               platform=driver.capabilities.get('platformName'),
+                               console_errors=errors,
+                               complete=receipt['workbench_mounted'] and not errors)
+                driver.save_screenshot(str(evidence / 'workbench.png'))
+            finally:
+                driver.quit()
+        (evidence / 'browser.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
+        print(json.dumps(receipt, indent=2))
+    assert receipt['complete'], 'Native browser did not qualify; see browser.json'
 
 
 def verify(evidence):
@@ -149,7 +191,7 @@ def verify(evidence):
         except Exception as error:
             result['error'] = str(error)
         checks.append(result)
-    result = {'check': 'canonical-launcher-http', 'status': 'failed'}
+    result = {'check': 'canonical-launcher-http-and-browser', 'status': 'failed'}
     try:
         http(evidence)
         result['status'] = 'passed'

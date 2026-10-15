@@ -15,9 +15,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE',
-                                    '/home/dcalford/Sandbox/Diagram-Design-Notation'))
+                                    str(ROOT.parent / 'Diagram-Design-Notation')))
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
-                                  '/home/dcalford/SandBox/temp-workarea/ddn-intake'))
+                                  str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'
 WINDOWS_PATCH = ROOT / 'tools/dependency_patches/ddn-windows-paths.patch'
 

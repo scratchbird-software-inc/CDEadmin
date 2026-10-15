@@ -7,6 +7,9 @@ import platform
 import shutil
 import subprocess
 import tarfile
+import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -41,10 +44,21 @@ def download(name):
     target = cache / url.rsplit('/', 1)[1]
     if not target.exists():
         temporary = target.with_suffix(target.suffix + '.partial')
-        with urllib.request.urlopen(url, timeout=120) as source, temporary.open('wb') as output:
-            shutil.copyfileobj(source, output)
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(url, timeout=120) as source, temporary.open('wb') as output:
+                    shutil.copyfileobj(source, output)
+                break
+            except urllib.error.HTTPError as error:
+                if attempt == 2 or (error.code < 500 and error.code != 429):
+                    raise
+            except (urllib.error.URLError, TimeoutError, ConnectionError):
+                if attempt == 2:
+                    raise
+            time.sleep(2 ** attempt)
         temporary.replace(target)
-    actual = hashlib.sha256(target.read_bytes()).hexdigest()
+    with target.open('rb') as source:
+        actual = hashlib.file_digest(source, 'sha256').hexdigest()
     if actual != expected:
         raise RuntimeError(f'{name} SHA-256 differs from the admitted native asset')
     return target
@@ -81,17 +95,27 @@ def paths(env):
     if kerberos.exists():
         additions += list({p.parent for p in kerberos.rglob('gssapi64.dll')})
     selected['PATH'] = os.pathsep.join([*(str(p) for p in additions), env['PATH']])
+    server_bin = STATE / ('postgres/pgsql/bin' if os.name == 'nt' else 'postgres/bin')
+    selected['PATH'] = str(server_bin) + os.pathsep + selected['PATH']
     selected['MARIADB_CC_INSTALL_DIR'] = str(STATE / 'mariadb-c')
-    selected['PG_CONFIG'] = str(STATE / 'postgres/pgsql/bin/pg_config.exe') if os.name == 'nt' else selected.get('PG_CONFIG', 'pg_config')
+    selected.setdefault('PG_CONFIG', str(STATE / 'postgres/pgsql/bin/pg_config.exe') if os.name == 'nt' else 'pg_config')
     firebird = STATE / 'firebird'
+    selected.setdefault('FIREBIRD_LOCK', str(STATE / 'firebird-lock'))
+    extension = '.exe' if os.name == 'nt' else ''
+    for variable, executable in {
+            'CLIENT': 'mariadb', 'DUMP': 'mariadb-dump', 'UPGRADE': 'mariadb-upgrade',
+            'BINLOG': 'mariadb-binlog', 'ADMIN': 'mariadb-admin'}.items():
+        selected.setdefault('CDEADMIN_MARIADB_' + variable + '_BINARY', str(STATE / 'mariadb/bin' / (executable + extension)))
+    selected.setdefault('CDEADMIN_MYSQLSH_BINARY', str(STATE / 'mysql-shell/bin' / ('mysqlsh' + extension)))
     if platform.system() == 'Windows':
-        selected['CDEADMIN_FIREBIRD_CLIENT_LIBRARY'] = str(firebird / 'fbclient.dll')
+        selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'fbclient.dll'))
     else:
-        framework = Path('/Library/Frameworks/Firebird.framework/Versions/A')
-        selected['CDEADMIN_FIREBIRD_CLIENT_LIBRARY'] = str(framework / 'Libraries/libfbclient.dylib')
-        selected['FIREBIRD'] = str(framework / 'Resources')
+        selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'lib/libfbclient.dylib'))
+        selected.setdefault('FIREBIRD', str(firebird))
         selected['DYLD_LIBRARY_PATH'] = os.pathsep.join([
-            str(STATE / 'sqlite'), str(STATE / 'mariadb-c/lib'),
+            str(STATE / 'sqlite'), str(STATE / 'mariadb-c/lib/mariadb'),
+            str(STATE / 'mariadb-c/lib'),
+            str(firebird / 'lib'), str(firebird),
             selected.get('DYLD_LIBRARY_PATH', '')])
     return selected
 
@@ -100,6 +124,7 @@ def clients(evidence, env):
     if platform.system() not in ('Windows', 'Darwin'):
         raise RuntimeError('Native client provisioning supports Windows and macOS')
     STATE.mkdir(exist_ok=True)
+    (STATE / 'firebird-lock').mkdir(exist_ok=True)
     env = msvc(env)
     if platform.system() == 'Windows':
         for asset, destination in [('postgres-windows', STATE / 'postgres'),
@@ -114,17 +139,21 @@ def clients(evidence, env):
                      'TARGETDIR=' + str(kerberos)], env=env,
                     log=evidence / 'kerberos-extract.log')
     else:
-        # Installing the vendor framework runs package scripts and requires
-        # administrator rights. Developers install the verified package once;
-        # CI permits this only in its disposable GitHub-hosted VM.
-        framework = Path('/Library/Frameworks/Firebird.framework')
-        if not framework.exists():
+        # Expand the vendor kit without executing installer scripts or
+        # registering a system service. The SDK belongs to this checkout.
+        firebird = STATE / 'firebird'
+        if not firebird.exists():
             key = 'arm64' if platform.machine() == 'arm64' else 'x64'
             package = download('firebird-macos-' + key)
-            if os.environ.get('GITHUB_ACTIONS') != 'true':
-                raise RuntimeError(f'Install the verified Firebird package {package}, then rerun clients')
-            command(['sudo', 'installer', '-pkg', package, '-target', '/'],
-                    log=evidence / 'firebird-install.log')
+            with tempfile.TemporaryDirectory(prefix='firebird-kit-', dir=STATE) as temporary:
+                expanded = Path(temporary) / 'expanded'
+                command(['pkgutil', '--expand-full', package, expanded],
+                        log=evidence / 'firebird-extract.log')
+                libraries = [p for p in expanded.rglob('libfbclient.dylib')
+                             if p.parent.name == 'lib' and p.parent.parent.name == 'Resources']
+                if len(libraries) != 1:
+                    raise RuntimeError('Expected one Firebird SDK resource root in vendor package')
+                shutil.copytree(libraries[0].parent.parent, firebird, symlinks=True)
     source = STATE / 'connector-source'
     prefix = STATE / 'mariadb-c'
     if not (prefix / '.cdeadmin-complete').is_file():
@@ -143,6 +172,13 @@ def clients(evidence, env):
         command(['cmake', '--install', build, '--config', 'Release'],
                 env=env, log=evidence / 'connector-install.log')
         (prefix / '.cdeadmin-complete').write_text(ASSETS['mariadb-c'][1], encoding='utf-8')
+    build_sqlite(evidence, env)
+    (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
+    if platform.system() == 'Darwin':
+        build_macos_python(evidence, env)
+
+
+def build_sqlite(evidence, env):
     sqlite = STATE / 'sqlite'
     sqlite.mkdir(exist_ok=True)
     if not (sqlite / 'sqlite3.c').exists():
@@ -151,6 +187,17 @@ def clients(evidence, env):
                 (sqlite / name).write_bytes(archive.read('sqlite-amalgamation-3530000/' + name))
     defines = ['SQLITE_THREADSAFE=1', 'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_RTREE',
                'SQLITE_ENABLE_COLUMN_METADATA']
+    inputs = {'source': ASSETS['sqlite'][1], 'defines': defines,
+              'system': platform.system(), 'machine': platform.machine()}
+    target = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    marker = sqlite / 'build.json'
+    if marker.exists():
+        previous = json.loads(marker.read_text(encoding='utf-8'))
+        with target.open('rb') as source:
+            actual = hashlib.file_digest(source, 'sha256').hexdigest()
+        if previous.get('inputs') == inputs and previous.get('sha256') == actual:
+            return
+        raise RuntimeError('Native SQLite build changed; stop apps and rebuild in a fresh owned runtime')
     if platform.system() == 'Windows':
         command(['cl.exe', '/nologo', '/O2', '/MD', '/LD',
                  '/DSQLITE_API=__declspec(dllexport)', *('/D' + d for d in defines),
@@ -164,16 +211,22 @@ def clients(evidence, env):
         alias = sqlite / 'libsqlite3.dylib'
         if not alias.exists():
             alias.symlink_to('libsqlite3.0.dylib')
-    (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
-    if platform.system() == 'Darwin':
-        build_macos_python(evidence, env)
+    with target.open('rb') as source:
+        actual = hashlib.file_digest(source, 'sha256').hexdigest()
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': actual}, indent=2), encoding='utf-8')
 
 
 def build_macos_python(evidence, env):
     """Own CPython build links the required SQLite, never Apple's system copy."""
     prefix = STATE / 'python'
-    if (prefix / '.cdeadmin-complete').is_file():
-        return
+    marker = prefix / '.cdeadmin-complete'
+    fingerprint = json.dumps({'python': ASSETS['python'][1], 'sqlite': ASSETS['sqlite'][1],
+                              'machine': platform.machine(),
+                              'rpaths': [str(STATE / 'sqlite'), str(STATE / 'firebird')]}, sort_keys=True)
+    if marker.is_file():
+        if marker.read_text(encoding='utf-8') == fingerprint:
+            return
+        raise RuntimeError('Native interpreter build changed; stop apps and use a fresh .native/.venv')
     source = STATE / 'python-source'
     source.mkdir(exist_ok=True)
     if not (source / 'Python-3.14.8/configure').exists():
@@ -183,7 +236,8 @@ def build_macos_python(evidence, env):
     sqlite = STATE / 'sqlite'
     selected = dict(env, LIBSQLITE3_CFLAGS='-I' + str(sqlite),
                     LIBSQLITE3_LIBS='-L' + str(sqlite) + ' -lsqlite3',
-                    LDFLAGS='-Wl,-rpath,' + str(sqlite))
+                    LDFLAGS='-Wl,-rpath,' + str(sqlite) +
+                    ' -Wl,-rpath,' + str(STATE / 'firebird'))
     build = STATE / 'python-build'
     build.mkdir(exist_ok=True)
     command([source / 'Python-3.14.8/configure', '--prefix=' + str(prefix),
@@ -195,7 +249,7 @@ def build_macos_python(evidence, env):
     command([prefix / 'bin/python3.14', '-c',
              'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; print(ssl.OPENSSL_VERSION)'],
             env=selected, log=evidence / 'python-runtime.log')
-    (prefix / '.cdeadmin-complete').write_text(ASSETS['python'][1], encoding='utf-8')
+    marker.write_text(fingerprint, encoding='utf-8')
 
 
 def install_python_runtime_hook(python, env):
@@ -207,7 +261,8 @@ def install_python_runtime_hook(python, env):
     site = Path(subprocess.check_output([str(python), '-c',
                 'import sysconfig;print(sysconfig.get_path("purelib"))'],
                 env=env, text=True).strip())
-    directories = [str(STATE / 'mariadb-c/lib'), str(STATE / 'mariadb-c/bin'),
+    directories = [str(STATE / 'mariadb-c/lib/mariadb'), str(STATE / 'mariadb-c/lib'),
+                   str(STATE / 'mariadb-c/bin'),
                    str(STATE / 'postgres/pgsql/bin'),
                    str(STATE / 'firebird')]
     kerberos = STATE / 'kerberos'

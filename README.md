@@ -22,6 +22,8 @@ are separate from the application release gate.
 
 For a fresh development machine, see the
 [Windows/macOS/Linux development and demo setup guide](tools/development/README.md).
+
+[Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
 

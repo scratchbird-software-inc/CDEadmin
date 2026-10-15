@@ -1,7 +1,7 @@
 {
   "version": "0.8.0",
   "license": "GPL-2.0-or-later",
-  "intake_tool_sha256": "7912b8d59b3aa9417ef2e8a9c0621bc011b4289aedaec3a89f73f56dbeccd9c2",
+  "intake_tool_sha256": "d5ce15a7fc630ffd2e247fc1b8988cd709856e36aeca64cc435c67dc00c8b2c6",
   "source": {
     "revision": "92daf7541d5f4447f4935b1c0f3cdc84b3cb4ff3",
     "status": "",

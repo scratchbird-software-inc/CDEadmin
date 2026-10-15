@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / '.native'
 PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt'
                            else 'bin/python')
+FULL_STAGES = ('prerequisites', 'doctor', 'clients', 'python', 'servers',
+               'frontend', 'verify', 'fixtures')
 
 
 def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
@@ -37,6 +39,11 @@ def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
         if not cli.is_file():
             raise FileNotFoundError(cli)
         args = ['node', str(cli), *args[1:]]
+    # CreateProcess searches the parent's PATH on Windows, not necessarily
+    # the PATH in the child's supplied environment (notably after VsDevCmd).
+    executable = shutil.which(args[0], path=(env or os.environ).get('PATH'))
+    if executable:
+        args[0] = executable
     print('+ ' + ' '.join(args), flush=True)
     if log:
         with Path(log).open('w', encoding='utf-8') as output:
@@ -75,6 +82,10 @@ def configure():
     source = Path(__file__).with_name('config_local.example.py')
     with target.open('x', encoding='utf-8') as output:
         output.write(source.read_text(encoding='utf-8'))
+        postgres = STATE / ('postgres/pgsql/bin' if os.name == 'nt' else 'postgres/bin')
+        output.write('\n# Native PostgreSQL development tools.\n'
+                     f'DEFAULT_BINARY_PATHS = {{"pg": {str(postgres)!r}, '
+                     f'"pg-18": {str(postgres)!r}}}\n')
     target.chmod(0o600)
 
 
@@ -109,6 +120,8 @@ def ddn(evidence):
 
 def stage(name, evidence):
     env = environment()
+    env.setdefault('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'Diagram-Design-Notation'))
+    env.setdefault('SCRATCHROBIN_DDN_WORK', str(evidence / 'ddn-intake'))
     if name == 'prerequisites':
         if os.environ.get('GITHUB_ACTIONS') != 'true':
             raise RuntimeError('Install host prerequisites from NATIVE.md; '
@@ -117,7 +130,8 @@ def stage(name, evidence):
             command(['npm', 'install', '--global', 'corepack@0.34.1'], env=env,
                     log=evidence / 'corepack-install.log')
         if platform.system() == 'Darwin':
-            command(['brew', 'install', 'libpq', 'openssl@3', 'krb5', 'pkg-config'],
+            command(['brew', 'install', 'libpq', 'openssl@3', 'krb5', 'pkg-config',
+                     'cmake', 'bison', 'icu4c', 'libxml2', 'lz4', 'zstd', 'readline'],
                     env=env, log=evidence / 'host-prerequisites.log')
     elif name == 'doctor':
         checks = {'standard Python 3.14': sys.version_info[:2] == (3, 14)
@@ -135,10 +149,22 @@ def stage(name, evidence):
         ddn(evidence)
         from native_assets import clients
         clients(evidence, env)
+    elif name == 'servers':
+        ddn(evidence)
+        from native_servers import servers
+        servers(evidence, env)
+    elif name == 'fixtures':
+        ddn(evidence)
+        command([PYTHON, ROOT / 'tools/development/native_fixtures.py',
+                 '--evidence', evidence / 'fixtures'], env=env,
+                log=evidence / 'fixtures.log', timeout=7200)
     elif name == 'python':
         ddn(evidence)
         from native_assets import msvc, install_python_runtime_hook, download
         env = msvc(env)
+        if platform.system() == 'Darwin':
+            env['LDFLAGS'] = (env.get('LDFLAGS', '') + ' -Wl,-rpath,' +
+                              str(STATE / 'mariadb-c/lib/mariadb')).strip()
         if not PYTHON.exists():
             if PYTHON.parents[1].exists():
                 raise RuntimeError('Incomplete .venv; inspect before replacing')
@@ -178,8 +204,19 @@ def stage(name, evidence):
         ddn(evidence)
         command(['corepack', 'yarn', 'install', '--immutable'],
                 cwd=ROOT / 'web', env=env, log=evidence / 'yarn-install.log')
-        command(['corepack', 'yarn', 'run', 'bundle'], cwd=ROOT / 'web',
-                env=env, log=evidence / 'frontend.log')
+        command(['corepack', 'yarn', 'run', 'linter'], cwd=ROOT / 'web',
+                env=env, log=evidence / 'frontend-lint.log')
+        heap = int(env.get('CDEADMIN_NODE_HEAP_MB', '4608' if platform.system() == 'Darwin'
+                          and platform.machine() == 'arm64' else '6144'))
+        if heap < 3072:
+            raise ValueError('Native production build requires at least a 3072 MB Node heap')
+        build_env = dict(env, NODE_ENV='production', NODE_OPTIONS=f'--max-old-space-size={heap}')
+        # bundle hardcodes 3072 MB. Preserve all its stages while providing a
+        # host-appropriate heap for the complete multi-engine frontend.
+        command(['corepack', 'yarn', 'run', 'webpacker'], cwd=ROOT / 'web',
+                env=build_env, log=evidence / 'frontend.log')
+        command(['corepack', 'yarn', 'run', 'git:hash'], cwd=ROOT / 'web', env=env,
+                log=evidence / 'frontend-revision.log')
     elif name == 'configure':
         configure()
     elif name == 'init':
@@ -208,10 +245,13 @@ def sysconfig_free_threaded():
     return bool(sysconfig.get_config_var('Py_GIL_DISABLED'))
 
 
-def ci(evidence):
+def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
+    selected = tuple(stages) if stages is not None else FULL_STAGES
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(FULL_STAGES):
+        raise ValueError('Select unique, supported CI stages')
     steps = []
-    for name in ('prerequisites', 'doctor', 'clients', 'python', 'frontend', 'verify'):
+    for name in selected:
         started = time.monotonic()
         record = {'stage': name, 'status': 'failed'}
         try:
@@ -225,7 +265,10 @@ def ci(evidence):
     receipt = {'schema': 'cdeadmin.native-development.v1',
                'platform': platform.platform(), 'machine': platform.machine(),
                'python': sys.version, 'steps': steps,
+               'selected_stages': selected,
                'complete': all(item['status'] == 'passed' for item in steps),
+               'full_environment_complete': (selected == FULL_STAGES and
+                    all(item['status'] == 'passed' for item in steps)),
                'source_revision': subprocess.check_output(
                    ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                'source_status': subprocess.check_output(
@@ -235,11 +278,13 @@ def ci(evidence):
                                          encoding='utf-8')
     lines = ['# Native development qualification', '',
              f"Host: {receipt['platform']} / {receipt['machine']}", '',
+             'Scope: ' + ('full environment' if selected == FULL_STAGES else
+                          'targeted repair run: ' + ', '.join(selected)), '',
              '| Stage | Result |', '| --- | --- |']
     lines += [f"| {s['stage']} | {s['status']} |" for s in steps]
-    lines += ['', 'Network engines and ScratchBird history require their own '
-              'native integration receipts; environment checks do not qualify '
-              'unconfigured servers.']
+    lines += ['', 'Owned loopback network-driver receipts are under fixtures. '
+              'Distributed topologies, enterprise authentication, and ScratchBird '
+              'history require separate native integration receipts.']
     (evidence / 'summary.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
     print(json.dumps(receipt, indent=2), flush=True)
     return 0 if receipt['complete'] else 1
@@ -250,16 +295,19 @@ def main():
         if hasattr(output, 'reconfigure'):
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'python', 'ddn', 'frontend',
+    parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
                                          'configure', 'init', 'run', 'verify', 'network', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()
     evidence = args.evidence.resolve()
     if evidence == ROOT or ROOT in evidence.parents:
         parser.error('Evidence must be outside the repository')
     evidence.mkdir(parents=True, exist_ok=True)
     if args.stage == 'ci':
-        return ci(evidence)
+        return ci(evidence, args.stages.split(',') if args.stages else None)
+    if args.stages:
+        parser.error('--stages applies only to ci')
     stage(args.stage, evidence)
     return 0
 
