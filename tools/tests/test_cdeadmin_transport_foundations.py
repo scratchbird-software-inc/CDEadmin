@@ -315,7 +315,7 @@ class EmbeddedRuntimeTests(unittest.TestCase):
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.executable = self.root / 'sqlite3-3.53.0'
         self.executable.write_bytes(b'fake exact sqlite helper')
         self.executable.chmod(0o700)
@@ -424,7 +424,7 @@ class TransportPolicyGateTests(unittest.TestCase):
 
     def test_gate_detects_semantic_authority_method(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             transport = root / 'web/pgadmin/cdeadmin/transports'
             transport.mkdir(parents=True)
             transport.joinpath('bad.py').write_text(

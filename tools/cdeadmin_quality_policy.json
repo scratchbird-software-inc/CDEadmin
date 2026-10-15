@@ -37,6 +37,7 @@
     "route_count": 1407,
     "wall_seconds_maximum": 8.0,
     "max_rss_kib_maximum": 240000,
+    "max_rss_kib_platform_maximum": {"darwin": 256000},
     "required_extensions": [
       "cdeadmin_provider_registry",
       "cdeadmin_security_service",

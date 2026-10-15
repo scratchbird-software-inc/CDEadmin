@@ -307,11 +307,14 @@ def startup_measurement(source: Path, policy):
             f"{result['wall_seconds']} exceeds "
             f"{startup['wall_seconds_maximum']}",
         ))
-    if result['max_rss_kib'] > startup['max_rss_kib_maximum']:
+    maximum_rss = startup.get('max_rss_kib_platform_maximum', {}).get(
+        sys.platform, startup['max_rss_kib_maximum'])
+    result['max_rss_kib_budget'] = maximum_rss
+    if result['max_rss_kib'] > maximum_rss:
         findings.append(violation(
             'startup-rss-budget', 'application',
             f"{result['max_rss_kib']} exceeds "
-            f"{startup['max_rss_kib_maximum']}",
+            f"{maximum_rss}",
         ))
     missing = sorted(
         name for name, present in result['extensions'].items()

@@ -233,7 +233,7 @@ class RelationalInventoryTests(unittest.TestCase):
         except ImportError:
             self.skipTest('DuckDB driver is not installed')
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             attached = root / 'archive.duckdb'
             duckdb.connect(str(attached)).close()
             connection = duckdb.connect(str(root / 'main.duckdb'))
@@ -260,7 +260,7 @@ class RelationalInventoryTests(unittest.TestCase):
     def test_sqlite_attachment_initializer_is_contained_and_discoverable(
             self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             connection = sqlite3.connect(root / 'main.sqlite')
             try:
                 initialize_sqlite_connection(connection, {
@@ -304,7 +304,7 @@ class RelationalInventoryTests(unittest.TestCase):
 
     def test_sqlite_attachment_initializer_rejects_escape(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'approved'
+            root = Path(temporary).resolve() / 'approved'
             root.mkdir()
             connection = sqlite3.connect(root / 'main.sqlite')
             try:
@@ -316,7 +316,7 @@ class RelationalInventoryTests(unittest.TestCase):
                         'filesystem_root': str(root),
                         'attached_databases': [{
                             'name': 'outside',
-                            'database': str(Path(temporary) / 'outside.db'),
+                            'database': str(Path(temporary).resolve() / 'outside.db'),
                         }],
                     })
             finally:
@@ -940,7 +940,7 @@ class RelationalInventoryTests(unittest.TestCase):
             self.assertEqual(3, result['artifact_file_count'])
             self.assertGreater(result['artifact_total_bytes'], 0)
             self.assertEqual('', result['stdout'])
-            self.assertTrue((Path(temporary) / 'backup-one').is_dir())
+            self.assertTrue((Path(temporary).resolve() / 'backup-one').is_dir())
         self.assertEqual(b'mysql-shell-secret-canary\n', observations['input'])
         self.assertNotIn(
             'mysql-shell-secret-canary', ' '.join(observations['arguments'])
@@ -982,7 +982,7 @@ class RelationalInventoryTests(unittest.TestCase):
                 client.run_database_operation(
                     None, route, 'backup_logical', {'path': '../outside'}
                 )
-            incomplete = Path(temporary) / 'incomplete'
+            incomplete = Path(temporary).resolve() / 'incomplete'
             incomplete.mkdir()
             (incomplete / '@.json').write_text('{}', encoding='utf-8')
             with self.assertRaisesRegex(
@@ -1180,7 +1180,7 @@ class RelationalInventoryTests(unittest.TestCase):
         self.assertNotIn('connection_timeout', mariadb)
         self.assertEqual(7, mariadb['connect_timeout'])
         with tempfile.TemporaryDirectory() as temporary:
-            database = str(Path(temporary) / 'one.duckdb')
+            database = str(Path(temporary).resolve() / 'one.duckdb')
             self.assertEqual(
                 {'database': database, 'read_only': True},
                 duckdb_route_arguments({
@@ -1476,9 +1476,9 @@ class RelationalInventoryTests(unittest.TestCase):
 
     def test_embedded_routes_refuse_unapproved_or_escaping_files(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'approved'
+            root = Path(temporary).resolve() / 'approved'
             root.mkdir()
-            outside = Path(temporary) / 'outside.sqlite'
+            outside = Path(temporary).resolve() / 'outside.sqlite'
             with self.assertRaisesRegex(
                 RelationalClientError, 'escapes the approved filesystem root'
             ):
@@ -1500,7 +1500,7 @@ class RelationalInventoryTests(unittest.TestCase):
 
     def test_sqlite_safe_uri_and_session_defaults_are_forwarded(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             database = root / 'inventory db.sqlite'
             values = sqlite_route_arguments({
                 'database': str(database), 'filesystem_root': str(root),
@@ -1520,7 +1520,7 @@ class RelationalInventoryTests(unittest.TestCase):
 
     def test_duckdb_read_only_and_named_scalar_config_are_forwarded(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             values = duckdb_route_arguments({
                 'database': str(root / 'warehouse.duckdb'),
                 'filesystem_root': str(root), 'read_only': True,

@@ -643,7 +643,7 @@ class CassandraProviderTests(unittest.TestCase):
                 return {'return_code': 0, 'stdout': '', 'stderr': ''}
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             auth_jar = root / 'cdeadmin-auth.jar'
             auth_jar.write_bytes(b'qualification-jar')
             (root / 'qualification' / 'widgets').mkdir(parents=True)

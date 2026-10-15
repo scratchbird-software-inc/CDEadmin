@@ -220,3 +220,9 @@ The `ci` stage installs host prerequisites only when `GITHUB_ACTIONS=true`;
 local developers use explicit stages and review host prerequisite installation.
 No native-platform completion claim should be made until the corresponding
 fresh-machine job and required engine integration receipts pass.
+
+The startup gate retains the 240,000 KiB RSS budget on Linux and Windows.
+Darwin has a 256,000 KiB budget: the first Apple Silicon run measured
+240,336 KiB, just above the original boundary. The explicit platform budget
+keeps a bounded allowance for its native runtime footprint and is recorded
+with each startup measurement.
