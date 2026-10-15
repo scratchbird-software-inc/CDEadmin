@@ -40,9 +40,10 @@ import CodeMirror from '../../../../../../static/js/components/ReactCodeMirror';
 import { setEditorPosition } from '../QueryToolDataGrid/Editors';
 import { InputText } from '../../../../../../static/js/components/FormComponents';
 import { isEmptyString, minMaxValidator } from '../../../../../../static/js/validators';
+import {queryToolControlStyles} from 'sources/cdeadmin_ui/editors/QueryToolControls';
 
 const StyledDiv = styled('div')(({theme})=>({
-  padding: '2px',
+  padding: '2px 4px',
   display: 'flex',
   alignItems: 'center',
   flexWrap: 'wrap',
@@ -50,6 +51,7 @@ const StyledDiv = styled('div')(({theme})=>({
   backgroundColor: theme.otherVars.editorToolbarBg,
   justifyContent: 'space-between',
   ...theme.mixins.panelBorder.bottom,
+  ...queryToolControlStyles,
 
   '& .PaginationInputs': {
     display: 'flex',

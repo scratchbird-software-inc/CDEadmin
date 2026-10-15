@@ -1,4 +1,4 @@
-import {Alert, Checkbox, FormControlLabel, TextField} from '@mui/material';
+import {Alert, Box, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import useExecutionPolicy from './useExecutionPolicy';
 import SourceValidation from './SourceValidation';
 /////////////////////////////////////////////////////////////
@@ -523,7 +523,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
   return (
     (<>
       {executionPolicy.uncertain && <Alert severity="error">Execution policy acknowledgement was lost. Execution is blocked. Explicitly select the required policy again before continuing.</Alert>}
-      <StyledBox>
+      <StyledBox className="QueryTool-mainToolbar">
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Open File')} icon={<FolderRoundedIcon />} disabled={!queryToolCtx.params.is_query_tool}
             shortcut={queryToolPref.btn_open_file} onClick={openFile} />
@@ -580,12 +580,15 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
         </PgButtonGroup>
         <SourceValidation api={queryToolCtx.api} eventBus={eventBus} transId={queryToolCtx.params.trans_id}
           disabled={!buttonsDisabled.cancel || !queryToolCtx.params.is_query_tool || policyBlocked} />
-        <TextField size="small" type="number" label={gettext('Rows per fetch')} value={fetchRows}
-          sx={{width: '10rem'}} error={!fetchRowsValid}
-          inputProps={{min: 1, max: 100000, step: 1}}
-          disabled={executionPolicy.pending || !buttonsDisabled.cancel}
-          onChange={event => setFetchRows(event.target.value)} onBlur={applyFetchRows}
-          onKeyDown={event => { if(event.key === 'Enter') { event.preventDefault(); applyFetchRows(); } }} />
+        <Box component="label" sx={{display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, whiteSpace: 'nowrap'}}>
+          {gettext('Rows per fetch')}
+          <TextField size="small" type="number" value={fetchRows}
+            sx={{width: '7rem'}} error={!fetchRowsValid}
+            inputProps={{'aria-label': gettext('Rows per fetch'), min: 1, max: 100000, step: 1}}
+            disabled={executionPolicy.pending || !buttonsDisabled.cancel}
+            onChange={event => setFetchRows(event.target.value)} onBlur={applyFetchRows}
+            onKeyDown={event => { if(event.key === 'Enter') { event.preventDefault(); applyFetchRows(); } }} />
+        </Box>
         <FormControlLabel sx={{m: 0}} label={gettext('Autocommit')} control={<Checkbox size="small"
           checked={Boolean(checkedMenuItems.auto_commit)}
           disabled={executionPolicy.pending || buttonsDisabled['execute-options'] || !queryToolCtx.params.is_query_tool}
