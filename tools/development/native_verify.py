@@ -75,6 +75,8 @@ def child(name, evidence, port):
         config.TESTING = False
         config.DATA_DIR = str(directory)
         config.SQLITE_PATH = str(directory / 'configuration.db')
+        config.CONFIG_DATABASE_URI = ''
+        config.CDEADMIN_OPERATION_STORE_PATH = str(directory / 'operations.json')
         config.LOG_FILE = str(directory / 'application.log')
         config.SESSION_DB_PATH = str(directory / 'sessions')
         config.STORAGE_DIR = str(directory / 'storage')
@@ -181,7 +183,7 @@ def verify(evidence):
         'sqlite-provider': [sys.executable, '-m', 'tools.cdeadmin_sqlite_driver_platform_gate', '--evidence', evidence / 'sqlite'],
         'duckdb-provider': [sys.executable, '-m', 'tools.cdeadmin_duckdb_driver_platform_gate', '--evidence', evidence / 'duckdb'],
         'firebird-embedded': [sys.executable, ROOT / 'tools/development/native_firebird.py', '--evidence', evidence / 'firebird'],
-        'electron-desktop': [sys.executable, ROOT / 'tools/development/native_desktop.py', '--evidence', evidence / 'desktop'],
+        'electron-desktop': [sys.executable, ROOT / 'tools/development/native_desktop.py', '--evidence', evidence / 'desktop', '--runs', '3'],
         'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
         'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2', '--json', '--outputFile', evidence / 'javascript.json'],
         'identity': [sys.executable, '-m', 'tools.cdeadmin_product_identity', '--source', ROOT, '--skip-inventory', '--output', evidence / 'identity.json'],
@@ -191,7 +193,8 @@ def verify(evidence):
         try:
             command(args, cwd=ROOT / 'web' if name == 'javascript-contracts' else ROOT,
                     log=evidence / (name + '.log'),
-                    timeout=3600 if name in ('python-contracts', 'javascript-contracts') else 300)
+                    timeout=3600 if name in ('python-contracts', 'javascript-contracts') else
+                    900 if name == 'electron-desktop' else 300)
             result['status'] = 'passed'
         except Exception as error:
             result['error'] = str(error)

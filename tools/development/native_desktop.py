@@ -21,6 +21,8 @@ def qualify(evidence):
     application.mkdir()
     settings = {'SERVER_MODE': False, 'DEBUG': False, 'TESTING': False,
                 'DATA_DIR': str(application), 'SQLITE_PATH': str(application / 'configuration.db'),
+                'CONFIG_DATABASE_URI': '',
+                'CDEADMIN_OPERATION_STORE_PATH': str(application / 'operations.json'),
                 'LOG_FILE': str(application / 'application.log'),
                 'SESSION_DB_PATH': str(application / 'sessions'),
                 'STORAGE_DIR': str(application / 'storage'),
@@ -146,7 +148,31 @@ def qualify(evidence):
     return 0 if receipt['complete'] else 1
 
 
+def qualify_launches(evidence, runs):
+    if runs == 1:
+        return qualify(evidence)
+    evidence.mkdir(parents=True, exist_ok=False)
+    launches = []
+    for number in range(1, runs + 1):
+        directory = evidence / f'launch-{number}'
+        qualify(directory)
+        receipt = json.loads((directory / 'receipt.json').read_text(encoding='utf-8'))
+        launches.append(dict(receipt, launch=number, evidence_directory=directory.name))
+        if receipt.get('cleanup_error'):
+            break
+    aggregate = dict(launches[-1], launches=launches, requested_launches=runs,
+        complete=len(launches) == runs and all(item['complete'] for item in launches),
+        workbench_mounted=all(item['workbench_mounted'] for item in launches),
+        startup_overlay_removed=all(item.get('startup_overlay_removed') for item in launches),
+        console_errors=[error for item in launches for error in item['console_errors']])
+    (evidence / 'receipt.json').write_text(json.dumps(aggregate, indent=2), encoding='utf-8')
+    print(json.dumps(aggregate, indent=2))
+    return 0 if aggregate['complete'] else 1
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', type=Path, required=True)
-    raise SystemExit(qualify(parser.parse_args().evidence.resolve()))
+    parser.add_argument('--runs', type=int, choices=range(1, 6), default=1)
+    args = parser.parse_args()
+    raise SystemExit(qualify_launches(args.evidence.resolve(), args.runs))

@@ -222,16 +222,17 @@ def startup_measurement(source: Path, policy):
         data = temporary / 'data'
         for name in ('sessions', 'storage', 'azure'):
             (data / name).mkdir(parents=True)
-        configuration = '\n'.join((
-            'SERVER_MODE = False',
-            f'DATA_DIR = {str(data)!r}',
-            f'SQLITE_PATH = {str(data / "pgadmin4.db")!r}',
-            f'SESSION_DB_PATH = {str(data / "sessions")!r}',
-            f'STORAGE_DIR = {str(data / "storage")!r}',
-            f'AZURE_CREDENTIAL_CACHE_DIR = {str(data / "azure")!r}',
-            'TESTING = True',
-            '',
-        ))
+        isolated = {
+            'SERVER_MODE': False, 'TESTING': True, 'CONFIG_DATABASE_URI': '',
+            'DATA_DIR': str(data), 'SQLITE_PATH': str(data / 'pgadmin4.db'),
+            'CDEADMIN_OPERATION_STORE_PATH': str(data / 'operations.json'),
+            'LOG_FILE': str(data / 'application.log'),
+            'SESSION_DB_PATH': str(data / 'sessions'),
+            'STORAGE_DIR': str(data / 'storage'),
+            'AZURE_CREDENTIAL_CACHE_DIR': str(data / 'azure'),
+            'KERBEROS_CCACHE_DIR': str(data / 'kerberos'),
+        }
+        configuration = '\n'.join(f'{name} = {value!r}' for name, value in isolated.items()) + '\n'
         (temporary / 'config_local.py').write_text(
             configuration, encoding='utf-8'
         )
@@ -241,7 +242,10 @@ def startup_measurement(source: Path, policy):
         script = (
             'import json, os, sys, time; '
             'start=time.perf_counter(); '
-            'import config; from pgadmin import create_app; app=create_app(); '
+            'import config; '
+            f'owned={isolated!r}; '
+            '[setattr(config,name,value) for name,value in owned.items()]; '
+            'from pgadmin import create_app; app=create_app(); '
             'fallback=(__import__("psutil").Process().memory_info().peak_wset//1024 '
             'if sys.platform=="win32" else '
             '__import__("resource").getrusage(__import__("resource").RUSAGE_SELF).ru_maxrss); '

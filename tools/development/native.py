@@ -342,8 +342,8 @@ def stage(name, evidence):
     elif name == 'desktop-probe':
         ddn(evidence)
         command([PYTHON, ROOT / 'tools/development/native_desktop.py',
-                 '--evidence', evidence / 'desktop-probe'], env=env,
-                log=evidence / 'desktop-probe.log', timeout=300)
+                 '--evidence', evidence / 'desktop-probe', '--runs', '3'], env=env,
+                log=evidence / 'desktop-probe.log', timeout=900)
     elif name == 'run-desktop':
         env.update(CDEADMIN_DESKTOP_PYTHON=str(PYTHON),
                    CDEADMIN_DESKTOP_LAUNCHER=str(ROOT / 'web/CDEadmin.py'),
@@ -360,7 +360,7 @@ def stage(name, evidence):
         ddn(evidence)
         command([PYTHON, ROOT / 'tools/development/native_verify.py',
                  '--evidence', evidence / 'verification'], env=env,
-                log=evidence / 'verification.log')
+                log=evidence / 'verification.log', timeout=10800)
     elif name == 'network':
         ddn(evidence)
         routes = os.environ.get('CDEADMIN_NATIVE_ROUTES')

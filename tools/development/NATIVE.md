@@ -274,3 +274,16 @@ or unavailable-revision failures remain failures. A partially captured clean SDK
 checkout can be resumed; dirty source checkouts are preserved and rejected.
 Provider workspace contract tests use a bounded five-second asynchronous
 readiness allowance on hosted renderers; their functional assertions are unchanged.
+
+Desktop qualification checks three launches with independent configuration
+and desktop profiles, retaining each screenshot, console inventory and native
+window/display registration. This checks the intermittent renderer errors found
+in earlier Mac runs. The desktop component has a 15-minute ceiling for the
+three launches; full verification allows three hours so independent Python,
+JavaScript and native checks can finish their own bounded failure inventories.
+The workflow's host job deadline still applies.
+
+Qualification explicitly selects its owned SQLite configuration database and
+operation store after loading configuration. An existing developer or system
+configuration database URI and operation-store path cannot redirect these
+startup checks into an installed profile.
