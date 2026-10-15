@@ -1,7 +1,7 @@
 """Variadic names must not become fixed ABI arguments on ARM64."""
 import ctypes
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 import pytest
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION  # noqa
 from pgadmin.cdeadmin.providers.firebird.event_abi import install, _OwnedCollector
@@ -10,6 +10,14 @@ from pgadmin.cdeadmin.providers.firebird.event_abi import install, _OwnedCollect
 @pytest.mark.parametrize('platform', ['linux', 'win32', 'darwin'])
 def test_fixed_event_signature_survives_different_collector_sizes(platform):
     native = Mock(return_value=42)
+    binding = {}
+    def argtypes(*value):
+        if value:
+            binding.update(visible=value[0], converters=tuple(value[0]))
+        return binding['visible']
+    # A ctypes function caches converters in this setter. In-place edits to
+    # the visible signature must not masquerade as an updated native binding.
+    type(native).argtypes = PropertyMock(side_effect=argtypes)
     fixed = (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ushort)
     api = SimpleNamespace(client_library=SimpleNamespace(_handle=51), client_library_name='/native/fbclient',
                           P_isc_event_block_args=fixed)
@@ -21,6 +29,7 @@ def test_fixed_event_signature_survives_different_collector_sizes(platform):
     assert api.isc_event_block(None, None, b'first') == 42
     assert api.isc_event_block(None, None, b'first', b'second') == 42
     assert native.argtypes == [*fixed[:2], ctypes.c_uint32 if platform == 'darwin' else fixed[2]]
+    assert binding['converters'] == tuple(native.argtypes)
     assert native.restype == ctypes.c_int32
     assert native.call_args.args[:3] == (None, None, 2)
     assert [item.value for item in native.call_args.args[3:]] == [b'first', b'second']

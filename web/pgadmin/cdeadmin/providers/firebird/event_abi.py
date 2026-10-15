@@ -107,8 +107,8 @@ def install(api):
         library = ctypes.CDLL(str(api.client_library_name), handle=api.client_library._handle)
         native = library.isc_event_block
         native.restype = ctypes.c_int32
-        native.argtypes = list(api.P_isc_event_block_args)
-        if len(native.argtypes) != 3:
+        fixed = list(api.P_isc_event_block_args)
+        if len(fixed) != 3:
             raise ValueError('Unexpected native event block ABI')
         if sys.platform == 'darwin':
             # Apple's libffi checks fixed arguments after the first one as
@@ -116,7 +116,10 @@ def install(api):
             # Values 1..15 have the same zero-extended register representation
             # as uint32 on both admitted 64-bit Mac ABIs. Keep all three fixed
             # arguments so ARM64 event-name pointers still use variadic slots.
-            native.argtypes[2] = ctypes.c_uint32
+            fixed[2] = ctypes.c_uint32
+        # ctypes caches converters when assigning this property. Mutating an
+        # already assigned list leaves the old uint16 converter active.
+        native.argtypes = fixed
 
         def event_block(event_buffer, result_buffer, *names):
             if not 1 <= len(names) <= 15:

@@ -26,6 +26,16 @@ For a fresh development machine, see the
 [Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
+The standard production frontend build allows a 6 GiB Node heap.
+
+## Shared development branch
+
+Use `master` for shared development. Temporary branches are integrated after
+review and verification, then synchronized to the same commit as `master`.
+Each contributor should keep their own clone and save local work before
+switching branches or pulling updates. Fetch the repository, switch to `master`,
+and use `git pull --ff-only` to receive the shared changes. The `gh-pages` branch
+contains published website output and stays separate from application source.
 
 ## Why this is a hard fork
 

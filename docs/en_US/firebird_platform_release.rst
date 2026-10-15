@@ -93,6 +93,8 @@ Before each build/test batch, the current designated DDN snapshot is refreshed
 with its runtime, editor, declarations, assets and provenance together.
 The portable DDN build-path correction is applied in isolated captures on every
 host, keeping the consumed bundle and its provenance consistent across the matrix.
+Native development evidence also preserves the consumed DDN provenance manifest
+so source and dependency differences can be reviewed directly.
 
 After installing the native dependencies and selecting the qualified complete
 runtime, run the same inventory locally in a fresh process::

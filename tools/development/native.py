@@ -206,6 +206,8 @@ def ddn(evidence):
     print((source / 'notation/dist/ddn.d.ts').read_text(encoding='utf-8'), flush=True)
     command([sys.executable, ROOT / 'tools/refresh_ddn.py', '--source',
              source, '--work', work], log=evidence / 'ddn.log')
+    shutil.copyfile(ROOT / 'web/pgadmin/static/vendor/ddn/current/resource-manifest.json',
+                    evidence / 'ddn-resource-manifest.json')
 
 
 def stage(name, evidence):
@@ -345,8 +347,8 @@ def stage(name, evidence):
         if heap < 3072:
             raise ValueError('Native production build requires at least a 3072 MB Node heap')
         build_env = dict(env, NODE_ENV='production', NODE_OPTIONS=f'--max-old-space-size={heap}')
-        # bundle hardcodes 3072 MB. Preserve all its stages while providing a
-        # host-appropriate heap for the complete multi-engine frontend.
+        # Preserve all bundle stages with the qualified host's heap budget,
+        # including the smaller allowance used on Apple Silicon runners.
         command(['corepack', 'yarn', 'run', 'webpacker'], cwd=ROOT / 'web',
                 env=build_env, log=evidence / 'frontend.log')
         command(['corepack', 'yarn', 'run', 'git:hash'], cwd=ROOT / 'web', env=env,
