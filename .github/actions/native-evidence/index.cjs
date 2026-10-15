@@ -17,7 +17,7 @@ function collect(root) {
 }
 
 async function main() {
-  const {DefaultArtifactClient} = require('@actions/artifact');
+  const {DefaultArtifactClient} = await import('@actions/artifact');
   const root = path.resolve(process.env.INPUT_PATH);
   fs.mkdirSync(root, {recursive: true});
   const manifest = path.resolve('web/pgadmin/static/vendor/ddn/current/resource-manifest.json');
