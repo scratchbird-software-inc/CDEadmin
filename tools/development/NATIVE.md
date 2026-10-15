@@ -231,9 +231,11 @@ Darwin has a 256,000 KiB budget: the first Apple Silicon run measured
 keeps a bounded allowance for its native runtime footprint and is recorded
 with each startup measurement.
 
-Intel macOS has explicit wall-time budgets of 20 seconds for startup and
+Intel macOS has explicit wall-time budgets of 25 seconds for startup and
 2.5 seconds for 5,000 contract validations. Its first hosted run measured
-15.33 and 1.79 seconds respectively. Windows has a 35-second startup budget following hosted measurements of
+15.33 and 1.79 seconds respectively. A later full native run measured
+20.87 seconds for cold startup; the 25-second Intel bound preserves a finite
+allowance for hosted cold starts. Windows has a 35-second startup budget following hosted measurements of
 18.28 and 27.62 seconds. Apple Silicon has a 12-second startup bound after
 a fresh hosted start measured 9.86 seconds against the former eight-second
 bound; subsequent starts also passed eight seconds. Linux retains the original
@@ -298,3 +300,8 @@ bootstrap on documents without startup data (electron/electron#54176).
 Qualification and `run-desktop` observe the actual native executable version
 and reject a stale or overridden runtime. After updating the checkout, rerun
 the `desktop` setup stage to install the current lockfile before launching.
+
+`quality-contracts` runs all quality infrastructure contracts and three separate
+application startup/quality measurements, retaining JUnit and each measurement
+as JSON. It requires the native clients and Python stages; it does not qualify
+network engines or replace the full environment acceptance matrix.

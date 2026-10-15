@@ -331,6 +331,18 @@ def stage(name, evidence):
                 env=build_env, log=evidence / 'frontend.log')
         command(['corepack', 'yarn', 'run', 'git:hash'], cwd=ROOT / 'web', env=env,
                 log=evidence / 'frontend-revision.log')
+    elif name == 'quality-contracts':
+        ddn(evidence)
+        command([PYTHON, '-c',
+                 "import config,pytest; raise SystemExit(pytest.main(["
+                 "'tools/tests/test_cdeadmin_quality_infrastructure.py', "
+                 "'--junitxml=' + __import__('sys').argv[1]]))",
+                 evidence / 'quality-contracts.xml'], env=env,
+                log=evidence / 'quality-contracts.log', timeout=900)
+        for launch in range(1, 4):
+            command([PYTHON, ROOT / 'tools/cdeadmin_quality_gate.py',
+                     '--source', ROOT, '--output', evidence / f'quality-{launch}.json'],
+                    env=env, log=evidence / f'quality-{launch}.log', timeout=300)
     elif name == 'javascript-contracts':
         ddn(evidence)
         command(['corepack', 'yarn', 'install', '--immutable'], cwd=ROOT / 'web',
@@ -392,7 +404,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -440,7 +452,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()
