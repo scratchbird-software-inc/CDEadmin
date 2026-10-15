@@ -12,6 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent))
 import native
 import native_assets
+import native_fixtures
 
 
 class NativeSetupTests(unittest.TestCase):
@@ -76,6 +77,22 @@ class NativeSetupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'SHA-256'):
                 native_assets.download('owned')
             fetch.assert_not_called()
+
+    def test_crash_cleanup_refuses_a_reused_foreign_pid(self):
+        import psutil
+        marker = self.root / 'owned-process.json'
+        marker.write_text(json.dumps({'pid': 12345,
+                          'executable': str(self.root / 'owned-server'),
+                          'argument': str(self.root / 'owned-data')}))
+        process = unittest.mock.Mock()
+        process.is_running.return_value = True
+        process.exe.return_value = str(self.root / 'another-program')
+        process.cmdline.return_value = [str(self.root / 'owned-data')]
+        with patch.object(psutil, 'Process', return_value=process):
+            with self.assertRaisesRegex(RuntimeError, 'outside the owned fixture'):
+                native_fixtures.cleanup_crashed_fixture(self.root)
+        process.kill.assert_not_called()
+        process.children.assert_not_called()
 
     def test_source_modules_resolve_unambiguously_on_case_insensitive_hosts(self):
         groups = {}

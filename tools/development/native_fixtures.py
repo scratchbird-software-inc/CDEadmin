@@ -1,5 +1,6 @@
 """Owned loopback native server fixtures; never touch installed server data."""
 import argparse
+import csv
 from contextlib import contextmanager
 import json
 import os
@@ -18,6 +19,40 @@ from native import ROOT, STATE, command
 from native_servers import binary
 
 
+def register_process(evidence, pid, executable, argument):
+    (evidence / 'owned-process.json').write_text(json.dumps({
+        'pid': pid, 'executable': str(Path(executable).resolve()),
+        'argument': str(argument)}), encoding='utf-8')
+
+
+def cleanup_crashed_fixture(evidence):
+    """A native driver crash cannot leave an owned database server running."""
+    import psutil
+    marker = evidence / 'owned-process.json'
+    if not marker.exists():
+        return
+    record = json.loads(marker.read_text(encoding='utf-8'))
+    try:
+        process = psutil.Process(record['pid'])
+        if not process.is_running():
+            return
+        expected = os.path.normcase(str(Path(record['executable']).resolve()))
+        actual = os.path.normcase(str(Path(process.exe()).resolve()))
+        argument = record['argument'].replace('\\', '/').casefold()
+        command_line = ' '.join(process.cmdline()).replace('\\', '/').casefold()
+        if expected != actual or argument not in command_line:
+            raise RuntimeError('Refusing to stop a process outside the owned fixture')
+        children = process.children(recursive=True)
+        for child in children:
+            child.kill()
+        process.kill()
+        _, alive = psutil.wait_procs([process, *children], timeout=15)
+        if alive:
+            raise RuntimeError('Owned fixture processes did not stop')
+    except psutil.NoSuchProcess:
+        return
+
+
 def port():
     with socket.socket() as listener:
         listener.bind(('127.0.0.1', 0))
@@ -31,6 +66,8 @@ def postgres_running(root, data, selected_port, env, evidence):
         command([control, '-D', data, '-w', '-t', '60', '-l', evidence / 'server.log',
                  '-o', '-h 127.0.0.1 -p ' + str(selected_port), 'start'], env=env,
                 log=evidence / 'start.log')
+        register_process(evidence, int((data / 'postmaster.pid').read_text().splitlines()[0]),
+                         binary(root, 'postgres'), data)
         yield
         command([control, '-D', data, 'status'], env=env, log=evidence / 'status.log')
     finally:
@@ -56,11 +93,12 @@ def postgres_running(root, data, selected_port, env, evidence):
 
 
 @contextmanager
-def running(args, selected_port, env, log):
+def running(args, selected_port, env, log, *, owner_argument):
     with log.open('w', encoding='utf-8') as output:
         process = subprocess.Popen([str(a) for a in args], env=env, stdout=output,
                                    stderr=subprocess.STDOUT,
                                    start_new_session=os.name != 'nt')
+        register_process(log.parent, process.pid, args[0], owner_argument)
         try:
             deadline = time.monotonic() + 90
             while time.monotonic() < deadline:
@@ -127,7 +165,7 @@ def sql_server(engine, directory, evidence, env):
         if os.name == 'nt':
             args.append('--console')
         route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'root'}
-        manager = running(args, selected_port, env, evidence / 'server.log')
+        manager = running(args, selected_port, env, evidence / 'server.log', owner_argument=data)
     # Empty passwords are confined to these disposable loopback fixtures.
     # Production profiles and external route authentication are untouched.
     with manager:
@@ -191,12 +229,45 @@ def firebird(directory, evidence, env):
     server = executable_root / ('firebird.exe' if os.name == 'nt' else 'firebird')
     args = [server, '-a' if os.name == 'nt' else '-d', '-p', selected_port,
             '-e', runtime, '-el', lock, '-em', runtime]
-    with running(args, selected_port, selected, evidence / 'server.log'):
+    with running(args, selected_port, selected, evidence / 'server.log', owner_argument=runtime):
         route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'SYSDBA',
                  'charset': 'UTF8', 'auth_plugin_list': 'Srp256,Srp', 'wire_crypt': 'Required'}
         yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD',
                'database_directory': str(directory),
                'path_style': 'windows' if os.name == 'nt' else 'posix'}, password
+
+
+def run_engine(engine, target):
+    result = {'engine': engine, 'status': 'failed', 'owned_state_removed': False}
+    try:
+        with tempfile.TemporaryDirectory(prefix='owned-', dir=target) as temporary:
+            directory = Path(temporary)
+            if os.name == 'nt':
+                # Python 3.14's private-directory ACL may grant an elevated
+                # owner group. PostgreSQL deliberately drops that group;
+                # explicitly grant only the current user SID on this fixture.
+                user = subprocess.check_output(['whoami.exe', '/user', '/fo', 'csv', '/nh'], text=True)
+                sid = next(csv.reader([user.strip()]))[1]
+                if not sid.startswith('S-1-'):
+                    raise RuntimeError('Cannot identify the owned fixture user SID')
+                command(['icacls.exe', directory, '/grant', '*' + sid + ':(OI)(CI)F'],
+                        log=target / 'fixture-acl.log')
+            fixture = firebird(directory, target, dict(os.environ)) if engine == 'firebird' else sql_server(engine, directory, target, dict(os.environ))
+            with fixture as (specification, password):
+                routes = target / 'route.json'
+                routes.write_text(json.dumps({engine: specification}), encoding='utf-8')
+                selected = dict(os.environ, CDEADMIN_OWNED_FIXTURE_PASSWORD=password)
+                command([sys.executable, ROOT / 'tools/development/native_network.py',
+                         '--routes', routes, '--evidence', target / 'proof', '--engine', engine],
+                        env=selected, log=target / 'qualification.log')
+                result['status'] = 'passed'
+        result['owned_state_removed'] = True
+    except Exception as error:
+        result.update(error_type=type(error).__name__, error=str(error))
+        result['owned_state_removed'] = not any(target.glob('owned-*'))
+    (target / 'fixture-receipt.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+    print(json.dumps(result, indent=2))
+    return 0 if result['status'] == 'passed' and result['owned_state_removed'] else 1
 
 
 def run(evidence):
@@ -207,21 +278,19 @@ def run(evidence):
         target.mkdir()
         result = {'engine': engine, 'status': 'failed', 'owned_state_removed': False}
         try:
-            with tempfile.TemporaryDirectory(prefix='owned-', dir=target) as temporary:
-                directory = Path(temporary)
-                fixture = firebird(directory, target, dict(os.environ)) if engine == 'firebird' else sql_server(engine, directory, target, dict(os.environ))
-                with fixture as (specification, password):
-                    routes = target / 'route.json'
-                    routes.write_text(json.dumps({engine: specification}), encoding='utf-8')
-                    selected = dict(os.environ, CDEADMIN_OWNED_FIXTURE_PASSWORD=password)
-                    command([sys.executable, ROOT / 'tools/development/native_network.py',
-                             '--routes', routes, '--evidence', target / 'proof', '--engine', engine],
-                            env=selected, log=target / 'qualification.log')
-                    result['status'] = 'passed'
-            result['owned_state_removed'] = True
+            command([sys.executable, '-X', 'faulthandler', __file__, '--evidence', target,
+                     '--engine', engine], env=dict(os.environ, PYTHONFAULTHANDLER='1'),
+                    log=target / 'orchestrator.log', timeout=1800)
+            result = json.loads((target / 'fixture-receipt.json').read_text(encoding='utf-8'))
         except Exception as error:
             result.update(error_type=type(error).__name__, error=str(error))
-            result['owned_state_removed'] = not any(target.glob('owned-*'))
+            try:
+                cleanup_crashed_fixture(target)
+                for directory in target.glob('owned-*'):
+                    shutil.rmtree(directory)
+                result['owned_state_removed'] = True
+            except Exception as cleanup:
+                result['cleanup_error'] = str(cleanup)
         results.append(result)
     receipt = {'engines': results, 'complete': all(r['status'] == 'passed' and
                r['owned_state_removed'] for r in results),
@@ -234,5 +303,7 @@ def run(evidence):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--engine', choices=('postgresql', 'mysql', 'mariadb', 'firebird'))
     args = parser.parse_args()
-    raise SystemExit(run(args.evidence.resolve()))
+    raise SystemExit(run_engine(args.engine, args.evidence.resolve()) if args.engine else
+                     run(args.evidence.resolve()))
