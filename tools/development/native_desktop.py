@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import socket
@@ -11,7 +12,23 @@ import sys
 import time
 import urllib.request
 
-from native import ROOT
+from native import ROOT, command
+
+RUNTIME = ROOT / 'runtime'
+
+
+def require_electron_version(evidence, env=None):
+    expected = json.loads((RUNTIME / 'package.json').read_text(encoding='utf-8'))['devDependencies']['electron']
+    if not re.fullmatch(r'\d+\.\d+\.\d+', expected):
+        raise RuntimeError('Pin an exact Electron release before native qualification')
+    log = evidence / 'electron-runtime.log'
+    command(['node', RUNTIME / 'node_modules/electron/cli.js', '-p', 'process.versions.electron'],
+            cwd=RUNTIME, env=dict(env or os.environ, ELECTRON_RUN_AS_NODE='1'), log=log, timeout=180)
+    versions = [line.strip() for line in log.read_text(encoding='utf-8').splitlines()
+                if re.fullmatch(r'\d+\.\d+\.\d+', line.strip())]
+    if versions != [expected]:
+        raise RuntimeError(f'Installed Electron differs from pinned {expected}: {versions}')
+    return expected
 
 
 def qualify(evidence):
@@ -47,10 +64,11 @@ def qualify(evidence):
     connection = None
     descendants = []
     try:
+        receipt['electron_version'] = require_electron_version(evidence, env)
         with (evidence / 'desktop.log').open('w', encoding='utf-8') as output:
-            process = subprocess.Popen(['node', str(ROOT / 'runtime/node_modules/electron/cli.js'), '.',
+            process = subprocess.Popen(['node', str(RUNTIME / 'node_modules/electron/cli.js'), '.',
                 '--remote-debugging-port=' + str(port), '--remote-allow-origins=' + origin],
-                cwd=ROOT / 'runtime', env=env, stdout=output, stderr=subprocess.STDOUT,
+                cwd=RUNTIME, env=env, stdout=output, stderr=subprocess.STDOUT,
                 start_new_session=os.name != 'nt')
             deadline = time.monotonic() + 180
             sequence = 0
@@ -137,7 +155,8 @@ def qualify(evidence):
         _, alive = psutil.wait_procs(descendants, timeout=15)
         if alive:
             receipt.update(complete=False, cleanup_error='Owned desktop processes did not stop')
-        desktop_log = (evidence / 'desktop.log').read_text(encoding='utf-8', errors='replace')
+        log_path = evidence / 'desktop.log'
+        desktop_log = log_path.read_text(encoding='utf-8', errors='replace') if log_path.exists() else ''
         main_errors = [line for line in desktop_log.splitlines()
                        if 'Error occurred in handler' in line or 'Uncaught Exception' in line]
         if main_errors:

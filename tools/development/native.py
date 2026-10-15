@@ -342,6 +342,8 @@ def stage(name, evidence):
         ddn(evidence)
         command(['corepack', 'yarn', 'install', '--immutable'], cwd=ROOT / 'runtime',
                 env=env, log=evidence / 'desktop-install.log')
+        from native_desktop import require_electron_version
+        require_electron_version(evidence, env)
         command(['corepack', 'yarn', 'run', 'linter'], cwd=ROOT / 'runtime',
                 env=env, log=evidence / 'desktop-lint.log')
         command(['node', '--test', ROOT / 'runtime/src/js/menuTemplate.test.js'],
@@ -352,6 +354,8 @@ def stage(name, evidence):
                  '--evidence', evidence / 'desktop-probe', '--runs', '3'], env=env,
                 log=evidence / 'desktop-probe.log', timeout=900)
     elif name == 'run-desktop':
+        from native_desktop import require_electron_version
+        require_electron_version(evidence, env)
         env.update(CDEADMIN_DESKTOP_PYTHON=str(PYTHON),
                    CDEADMIN_DESKTOP_LAUNCHER=str(ROOT / 'web/CDEadmin.py'),
                    CDEADMIN_DESKTOP_DATA_DIR=str(ROOT / '.devstate/desktop'))

@@ -292,3 +292,9 @@ startup checks into an installed profile.
 runtime without rebuilding Python clients or database servers. It supports
 qualification of test-only changes alongside existing native environment
 receipts; it does not label a partial setup as full environment acceptance.
+
+Electron is pinned to 43.7.11, including the upstream 43.x fix for sandbox
+bootstrap on documents without startup data (electron/electron#54176).
+Qualification and `run-desktop` observe the actual native executable version
+and reject a stale or overridden runtime. After updating the checkout, rerun
+the `desktop` setup stage to install the current lockfile before launching.
