@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / '.native'
 PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt'
                            else 'bin/python')
+SCRATCHBIRD_DRIVER = ('scratchbird @ git+https://github.com/scratchbird-software-inc/ScratchBird.git'
+                     '@54b029a498393de0fb6b765996cc4f7c57211049#subdirectory=project/drivers/driver/python')
 FULL_STAGES = ('prerequisites', 'doctor', 'clients', 'python', 'servers',
                'frontend', 'desktop', 'verify', 'fixtures')
 
@@ -99,7 +101,7 @@ def requirements(destination):
         '-r ' + (ROOT / 'requirements.txt').as_posix() + '\n' +
         '-r ' + (ROOT / 'tools/reference_engine_demos/requirements.txt').as_posix()
         + '\n-r ' + (ROOT / 'web/regression/requirements.txt').as_posix()
-        + '\npytest==8.4.2\n', encoding='utf-8')
+        + '\npytest==8.4.2\n' + SCRATCHBIRD_DRIVER + '\n', encoding='utf-8')
 
 
 def ddn(evidence):

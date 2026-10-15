@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / 'web'))
 
 def child(name, evidence, port):
     if name == 'imports':
-        packages = ('psycopg', 'firebird.driver', 'mysql.connector', 'mariadb',
+        packages = ('psycopg', 'firebird.driver', 'mysql.connector', 'mariadb', 'scratchbird',
                     'duckdb', 'sqlite3', 'pyarrow', 'gssapi', 'flask',
                     'pymongo', 'cassandra', 'pymilvus', 'neo4j', 'redis',
                     'pyignite', 'fdb', 'clickhouse_connect', 'influxdb_client_3',

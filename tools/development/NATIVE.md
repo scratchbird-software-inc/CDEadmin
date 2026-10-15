@@ -121,6 +121,13 @@ Application, demo and regression Python requirements are resolved together,
 followed by the patched MariaDB wheel and `pip check`. A source-build failure
 is a failure, not permission to downgrade an engine or remove a dependency.
 
+The native setup also installs the official ScratchBird Python wire-protocol
+driver from engine revision `54b029a498393de0fb6b765996cc4f7c57211049`.
+It uses host Python sockets/TLS and requires no Linux client library. This
+provides the client needed by persistent monitoring history; live archive
+acceptance still requires a compatible ScratchBird server and disposable
+history credentials. The driver revision is retained in `pip freeze` evidence.
+
 Verification collects dependency imports, exact runtime admission, the existing
 SQLite and DuckDB native provider gates, embedded Firebird editor/row/template/
 profiler checks, Python contracts, JavaScript contracts, product identity and

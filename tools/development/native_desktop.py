@@ -56,6 +56,7 @@ def qualify(evidence):
             def call(method, params=None):
                 nonlocal sequence
                 sequence += 1
+                receipt['last_command'] = method
                 connection.send(json.dumps({'id': sequence, 'method': method, 'params': params or {}}))
                 while True:
                     message = json.loads(connection.recv())
@@ -83,7 +84,7 @@ def qualify(evidence):
                         target = next((page for page in pages if page.get('type') == 'page'
                             and page.get('url', '').startswith('http://127.0.0.1:')), None)
                         if target:
-                            connection = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=10, origin=origin)
+                            connection = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=60, origin=origin)
                             call('Runtime.enable')
                     except OSError:
                         time.sleep(.5)
