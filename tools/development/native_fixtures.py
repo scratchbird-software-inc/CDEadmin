@@ -166,8 +166,7 @@ def sql_server(engine, directory, evidence, env):
             args.append('--console')
         route = {'host': '127.0.0.1', 'port': selected_port, 'user': 'root'}
         manager = running(args, selected_port, env, evidence / 'server.log', owner_argument=data)
-    # Empty passwords are confined to these disposable loopback fixtures.
-    # Production profiles and external route authentication are untouched.
+    password = secrets.token_urlsafe(32)
     with manager:
         # Read the server's own data directory before allowing any gate to
         # create objects. A port race must never dispatch writes to another DB.
@@ -178,6 +177,10 @@ def sql_server(engine, directory, evidence, env):
                 with connection.cursor() as cursor:
                     cursor.execute('SHOW data_directory')
                     observed = cursor.fetchone()[0]
+                    if os.path.normcase(os.path.realpath(observed)) != os.path.normcase(str(data.resolve())):
+                        raise RuntimeError('Native server data directory differs from the owned fixture')
+                    from psycopg import sql
+                    cursor.execute(sql.SQL('ALTER ROLE qa PASSWORD {}').format(sql.Literal(password)))
         else:
             if engine == 'mysql':
                 import mysql.connector
@@ -192,11 +195,16 @@ def sql_server(engine, directory, evidence, env):
                 with connection.cursor() as cursor:
                     cursor.execute('SELECT @@datadir')
                     observed = cursor.fetchone()[0]
+                    if os.path.normcase(os.path.realpath(observed)) != os.path.normcase(str(data.resolve())):
+                        raise RuntimeError('Native server data directory differs from the owned fixture')
+                    cursor.execute("ALTER USER CURRENT_USER() IDENTIFIED BY " +
+                                   ("%s" if engine == 'mysql' else "?"), (password,))
+                    connection.commit()
             finally:
                 connection.close()
         if os.path.normcase(os.path.realpath(observed)) != os.path.normcase(str(data.resolve())):
             raise RuntimeError('Native server data directory differs from the owned fixture')
-        yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD'}, ''
+        yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD'}, password
 
 
 @contextmanager
@@ -290,7 +298,8 @@ def run(evidence):
             try:
                 cleanup_crashed_fixture(target)
                 for directory in target.glob('owned-*'):
-                    shutil.rmtree(directory)
+                    if directory.is_dir():
+                        shutil.rmtree(directory)
                 result['owned_state_removed'] = True
             except Exception as cleanup:
                 result['cleanup_error'] = str(cleanup)
