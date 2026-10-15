@@ -12,7 +12,7 @@ describe('Firebird selected-row SQL', () => {
   const rows = [{values: {ID: '9007199254740993', 'Text"field': 'O\'Brien'}}];
   const args = {table: 'Odd"Table', columns, rows, keys: ['ID']};
   it('quotes native identifiers and preserves exact parameter values', () => {
-    expect(generateRowSql({...args, operation: 'insert'})).toEqual([{source: 'INSERT INTO "Odd""Table" ("ID", "Text""field") VALUES (?, ?);', parameters: ['9007199254740993', 'O\'Brien']}]);
+    expect(generateRowSql({...args, operation: 'insert'})).toEqual([{source: 'INSERT INTO "Odd""Table" ("ID", "Text""field") VALUES (?, ?);', parameters: ['9007199254740993', 'O\'Brien'], client_sql_dialect:3}]);
     const update = generateRowSql({...args, operation: 'update'})[0];
     expect(update.source).toContain('WHERE "ID" IS NOT DISTINCT FROM ?');
     expect(update.parameters).toEqual(['O\'Brien', '9007199254740993']);
@@ -46,4 +46,13 @@ describe('Firebird selected-row SQL', () => {
     fireEvent.click(screen.getByLabelText('Fetched row 1'));
     expect(screen.queryByText('Load statement into SQL editor')).toBeNull();
   });
+  it('binds dialect 1 names and refuses unsafe exact literal lowering', () => {
+    const simple={table:'T',columns:[{name:'ID',input_kind:'integer'}],rows:[{values:{ID:'7'}}],operation:'insert',dialect:1};
+    expect(generateRowSql(simple)[0]).toEqual({source:'INSERT INTO T (ID) VALUES (?);',parameters:['7'],client_sql_dialect:1});
+    expect(()=>generateRowSql({...simple,table:'Mixed'})).toThrow('Dialect 1');
+    expect(()=>generateRowSql({...simple,inline:true,rows:[{values:{ID:'9007199254740993'}}]})).toThrow('Exact numeric');
+    expect(()=>generateRowSql({...simple,rows:[{values:{ID:9007199254740992}}]})).toThrow('exact text');
+    expect(()=>generateRowSql({...simple,rows:[{values:{}}]})).toThrow('complete native values');
+  });
+
 });

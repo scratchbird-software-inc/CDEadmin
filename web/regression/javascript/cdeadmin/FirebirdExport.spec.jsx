@@ -43,6 +43,17 @@ describe('Firebird DDN metadata export', () => {
     }});
     expect(screen.queryByLabelText('Native metadata SQL')).toBeNull();
   });
+  it('previews every static data page using its own entry file', async () => {
+    const post = jest.fn().mockResolvedValue({contents:'data', table_count:1, row_count:205,
+      ddn:{snapshot:{format:'ddn-workspace@1',entry:'data.ddn',view:'data_1',files:{}},
+        views:[{id:'data_1',entry:'data.ddn',label:'First'}, {id:'data_2',entry:'data-2.ddn',label:'Second'}]}});
+    render(<Component post={post} generation="g" />);
+    fireEvent.click(screen.getByRole('button', {name:'Capture data archive'}));
+    await screen.findByRole('button', {name:'Download static data DDN'});
+    fireEvent.mouseDown(screen.getByRole('combobox', {name:'Static data page'}));
+    fireEvent.click(await screen.findByRole('option', {name:'Second'}));
+    expect(screen.getByTestId('ddn-preview')).toHaveAttribute('data-entry','data-2.ddn');
+  });
   it('captures only on request and displays coverage before downloading', async () => {
     const post = jest.fn(async () => ({snapshot: {view: 'inventory_1'}, views: [{id: 'inventory_1', label: 'Page 1'}], provenance: {objects: 2, coverage: 'partial',
       warnings: ['Security catalog unavailable'], observation: 'cached-catalog'}}));

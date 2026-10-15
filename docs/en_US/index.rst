@@ -77,6 +77,9 @@ upstream attribution.
    firebird_functional_completion
    firebird_form_parity
    firebird_dashboards
+   firebird_dashboard_collectors
+   firebird_catalog_completeness
+   monitoring_history
    ddn_database_roundtrip
    mysql_functional_completion
    mariadb_functional_completion

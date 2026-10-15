@@ -1976,7 +1976,7 @@ KeyValueDataGrid.propTypes = {
 };
 
 export function StructuredDataGrid({catalog, resources, post, setError,
-  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled}) {
+  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled, clientSqlDialect=3}) {
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
   const themeScale = theme.cdeadminPresentation?.scale ?? 100;
@@ -2479,7 +2479,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
       </Alert>
       {languageProfile?.startsWith('firebird-') && <Box component="details" sx={{my: 1}}>
         <Box component="summary" sx={{cursor: 'pointer'}}>{gettext('Generate SQL from fetched rows')}</Box>
-        <FirebirdRowSql page={page} table={target?.display_name || ''}
+        <FirebirdRowSql page={page} table={target?.display_name || ''} clientSqlDialect={clientSqlDialect}
           onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />
       </Box>}
       <ProviderDataGrid columns={gridColumns} rows={gridRows} paginate={false}
@@ -2502,6 +2502,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
 }
 
 StructuredDataGrid.propTypes = {
+  clientSqlDialect: PropTypes.number,
   catalog: PropTypes.object,
   resources: PropTypes.array,
   post: PropTypes.func.isRequired,
@@ -8327,9 +8328,10 @@ export default function ProviderWorkspaceContent({
       ) &&
         <StructuredDataGrid catalog={workspace.visual_admin}
           sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
-          onLoadSql={({source: generatedSource, parameters}) => {
+          clientSqlDialect={clientSqlDialect}
+          onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
             if (busy || occurrenceId || scriptLocked) return;
-            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(3); setTab('studio');
+            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(generatedDialect); setTab('studio');
           }}
           resources={resourcePage?.items || []}
           post={post} setError={setError}

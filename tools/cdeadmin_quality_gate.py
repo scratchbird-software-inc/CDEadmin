@@ -238,10 +238,12 @@ def startup_measurement(source: Path, policy):
         # post-exec process high-water mark where available so a test runner's
         # earlier allocations cannot inflate the application startup result.
         script = (
-            'import json, os, resource, sys, time; '
+            'import json, os, sys, time; '
             'start=time.perf_counter(); '
             'import config; from pgadmin import create_app; app=create_app(); '
-            'fallback=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss; '
+            'fallback=(__import__("psutil").Process().memory_info().peak_wset//1024 '
+            'if sys.platform=="win32" else '
+            '__import__("resource").getrusage(__import__("resource").RUSAGE_SELF).ru_maxrss); '
             'fallback=fallback//1024 if sys.platform=="darwin" else fallback; '
             'status_path="/proc/self/status"; '
             'status=(open(status_path,encoding="utf-8").read() '

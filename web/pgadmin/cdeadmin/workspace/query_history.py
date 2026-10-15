@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 DEFAULT_POLICY = {'capture_source': False, 'retention_days': 30, 'max_records': 500}
 SENSITIVE = re.compile(r'\b(?:PASSWORD|SECRET|TOKEN)\b', re.IGNORECASE)
+FIREBIRD_CREDENTIAL_SOURCE = re.compile(r'\b(?:CONNECT|CREATE\s+DATABASE|ALTER\s+USER|CREATE\s+USER)\b', re.IGNORECASE)
 POSTGRESQL_CREDENTIAL_URI = re.compile(r'\bpostgres(?:ql)?://[^\s/]*@', re.IGNORECASE)
 MYSQL_CREDENTIAL_URI = re.compile(r'\bmysql(?:x)?://[^\s/]*@', re.IGNORECASE)
 MARIADB_CREDENTIAL_URI = re.compile(r'\b(?:mariadb|mysql(?:x)?)://[^\s/]*@', re.IGNORECASE)
@@ -152,6 +153,7 @@ class QueryHistory:
             if not selected['capture_source']:
                 return {'recorded': False, 'reason': 'Source capture disabled'}
             if (sensitive or SENSITIVE.search(source) or
+                    (scope.engine == 'firebird' and FIREBIRD_CREDENTIAL_SOURCE.search(source)) or
                     (scope.engine == 'postgresql' and POSTGRESQL_CREDENTIAL_URI.search(source)) or
                     (scope.engine == 'mysql' and (
                         MYSQL_CREDENTIAL_URI.search(source) or MYSQL_AUTHENTICATION.search(source))) or

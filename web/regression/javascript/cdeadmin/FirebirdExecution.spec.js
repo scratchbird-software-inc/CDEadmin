@@ -45,3 +45,9 @@ describe('Firebird scoped execution framing', () => {
     expect(() => firebirdExecution('set term ^ ;', 'current', 0)).toThrow();
   });
 });
+
+
+it('selects the next statement at a delimiter boundary without replaying COMMIT', () => {
+  const source='COMMIT;SELECT 2 FROM RDB$DATABASE;';
+  expect(firebirdExecution(source,'current',7)).toEqual({source:'SELECT 2 FROM RDB$DATABASE',scriptMode:false});
+});

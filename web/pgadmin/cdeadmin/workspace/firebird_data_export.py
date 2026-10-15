@@ -106,7 +106,12 @@ def capture(service, server, model, *, contents='data'):
                 service.transaction_action(server, session, 'rollback', target)
             finally:
                 service.close_session(server, session, target)
-    return {'format': document['format'], 'filename': 'firebird-data.json',
+    from .firebird_data_ddn import build
+    try:
+        ddn = build(document)
+    except ValueError as error:
+        ddn = {'unavailable': True, 'reason': str(error)}
+    return {'ddn': ddn, 'format': document['format'], 'filename': 'firebird-data.json',
             'download_text': text, 'sha256': hashlib.sha256(text.encode()).hexdigest(),
             'row_count': document['row_count'], 'table_count': len(document['tables']),
             'provenance': document['provenance'], 'contents': contents,

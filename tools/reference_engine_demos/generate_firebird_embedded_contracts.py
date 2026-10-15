@@ -49,7 +49,8 @@ def generate(receipt, receipt_digest):
     shared = network.ADMINISTRATION
     if (type(shared) is not RelationalAdministration or
             set(vars(type(local))).difference({
-                '__module__', '__doc__', 'catalog'}) or
+                '__module__', '__doc__', '__firstlineno__',
+                '__static_attributes__', 'catalog'}) or
             local.dialect_task_ids() != shared.dialect_task_ids() or
             receipt.get('task_ids') != list(local.dialect_task_ids())):
         raise ValueError(
@@ -99,7 +100,7 @@ def generate(receipt, receipt_digest):
                 'source_bindings': copy.deepcopy(receipt['source_bindings'])},
             embedded_attachment_evidence={
                 'evidence_id': 'firebird-5.0.4-embedded-' + kind,
-                'artifact': 'firebird-embedded-contract-20261009/summary.json',
+                'artifact': 'firebird-embedded-contract-20261014/summary.json',
                 'sha256': receipt_digest,
                 'scope': ('Engine13 local attachment, provider-compiled table '
                           'creation, independent transaction visibility and '

@@ -2459,18 +2459,8 @@ class ProviderWorkspaceService:
                 'firebird-native', 'firebird-embedded'}:
             raise ProviderWorkspaceError('Firebird editor metadata requires a Firebird endpoint')
         snapshot = self.navigator_snapshot(server, database_target_id=database_target_id)
-        resources = []
-        total = 0
-        for item in snapshot['resources']:
-            if item['resource_kind'] not in {'table', 'view', 'column'}:
-                continue
-            total += 1
-            if len(resources) < 25000:
-                resources.append({key: item.get(key) for key in (
-                    'resource_id', 'resource_kind', 'display_name', 'display_path')})
-        return {'resources': resources, 'generation': snapshot['generation'],
-                'truncated': total > len(resources), 'visible_resource_count': total,
-                'coverage': 'Native visible table/view/column catalog; inaccessible metadata is not inferred'}
+        from .firebird_editor import metadata
+        return metadata(snapshot)
 
     def query_history_action(self, server, action, request):
         from .query_history import HistoryError

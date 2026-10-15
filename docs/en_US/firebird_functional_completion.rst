@@ -27,26 +27,23 @@ The retained source evidence is
 /home/dcalford/SandBox/progress_reports/scratchrobin-flamerobin-comparison-20261010.txt.
 
 
-Current-run scope correction, 2026-10-10
----------------------------------------
+Current completion scope correction, 2026-10-14
+--------------------------------------------
 
-The owner defers persistent monitoring history and the ScratchBird connection
-until a later run. Windows/macOS implementation qualification and QA belong to
-the separate platform teams. These items remain future/cross-team obligations;
-they are not blockers or acceptance requirements for this run, and must not be
-reported as unfinished work assigned to this run.
+The owner now includes persistent monitoring history and the ScratchBird
+connection in backend completion. Windows/macOS implementation qualification
+and QA remain with the separate platform teams; their evidence is required
+before cross-platform completion. Form validation belongs to the human team.
 
-Everything else remains in scope: published dashboard definitions and authorized
-live bindings, standard metrics, trends and drill-downs using available samples,
-metadata/data-to-DDN, DDN-to-native schema and semantic diff/apply, all remaining
-FlameRobin parity workflows, compact native forms and end-to-end qualification
-on the available local platform. A bounded volatile sample window must display
+Published dashboard definitions and authorized live bindings, standard metrics,
+trends and drill-downs, metadata/data-to-DDN, DDN-to-native schema and semantic
+diff/apply, all remaining FlameRobin parity workflows and end-to-end backend
+qualification remain in scope. A bounded volatile sample window must display
 its gaps and retention limits; it must not imply durable historical coverage.
 
-This deferral applies to monitoring observations, not to persistent searchable
-SQL history (FB-COMP-05), saved dashboard definitions, DDN design assets or saved
-test-data recipes. Those persistence requirements remain in this run. Completing
-a draft editor alone does not complete dashboard publication or FB-COMP-18.
+Persistent searchable SQL history (FB-COMP-05), saved dashboard definitions,
+DDN design assets and saved test-data recipes remain in scope. Completing a
+draft editor alone does not complete dashboard publication or FB-COMP-18.
 
 Required workflows
 ==================
@@ -776,3 +773,58 @@ bound paging. A local name/path/kind filter only filters the loaded choices and
 is labelled accordingly; it must not imply that unloaded objects do not exist.
 Selecting a branch uses its native resource identity. Paging or filtering never
 changes that selection or silently changes the export scope.
+
+
+Catalog completeness implementation
+===================================
+
+The Firebird 5.0.4 catalog now records explicit attachment-visible coverage and
+optional-security gaps, retains plugin-qualified account identities and account
+attributes, and includes complete publication membership observations. The native
+inventory gate independently reconciles all 25 supported catalog categories and
+walks system-package, relation, child and metric navigation. See
+:doc:`firebird_catalog_completeness` for scope, operation binding, embedded security
+limits and reproducible network/embedded qualification. Catalog qualification
+does not close the rest of this functional checklist or platform-team obligations.
+
+
+DDN exchange and migration implementation (FB-COMP-03/09)
+========================================================
+
+Native catalog DDN import now resolves bounded relative imports in an admitted
+multi-file workspace and validates every view. Graphical column datatype,
+nullability and description edits join explicit native definitions in the
+three-way review/apply workflow. Stored dialect 1 and 3 are independently bound
+to the observed database. Data capture adds exact typed static DDN views and
+imports them through the existing native archive validation/staging/decision
+path. See :doc:`ddn_database_roundtrip` for identity, specialized-type, import,
+size, authorization and finality contracts.
+
+The dedicated Linux 5.0.4 gate qualifies network and embedded graphical changes,
+native schema-family migration, typed DDN data replay and dependency-rich ISQL
+restoration into another database. Native commit reply loss retains a durable
+unknown outcome and prevents repeat dispatch. These backend changes do not
+qualify Windows/macOS or the human team's form review, and do not close other
+Firebird product checklist sections.
+
+
+Dashboards and collectors implementation (FB-COMP-18/19)
+=======================================================
+
+Published Firebird engine/server/database layouts now admit registered endpoint,
+database, aggregate and finding bindings alongside native metrics. Stable
+registration identities prevent rebinding after reordering or name collisions;
+missing identities become unavailable. Every view validates and remains reachable
+in the passive viewer. The separate DDN editor discovers authorized bindings but
+receives redacted values. Definitions, observations and collector policy retain
+their separate versioning, authorization and finality contracts.
+
+The host admits native network worker accounts/roles and file-authorized embedded
+collectors. Embedded policies have no password or Services API authentication.
+Native qualification covers independent monitoring snapshots, collection without
+viewers, wrong passwords, role visibility, stop/reconfigure/restart with confirmed
+release, expiry/revocation, reconnect epochs and preserved interactive work.
+See :doc:`firebird_dashboard_collectors` for limits and reproducible evidence.
+Native ScratchBird history acceptance, platform-team qualification and human
+form validation remain separate requirements; FB-COMP-18 is not fully closed
+while its historical destination cannot serve.

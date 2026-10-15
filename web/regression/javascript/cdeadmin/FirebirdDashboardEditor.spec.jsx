@@ -27,6 +27,7 @@ describe('separate Firebird dashboard draft editor', () => {
     notifier: {confirm: jest.fn(), alert: jest.fn()}};
     api = {get: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 0}, snapshot: null}}})),
       put: jest.fn(async () => ({data: {data: {assetRef: {assetVersion: 1}, state: 'draft'}}}))};
+    loadDDNLibraries.mockResolvedValue({viewer});
     getApiInstance.mockReturnValue(api);
   });
   it('loads scoped definitions, seeds no live telemetry, saves only through definition route', async () => {

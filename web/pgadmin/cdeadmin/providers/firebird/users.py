@@ -13,6 +13,14 @@ WARNING = (
     'Commit or roll back explicitly; existing connections are not reset.')
 
 
+def inspected_plugin(target, requested=None):
+    """Bind a selected account operation to its observed management plugin."""
+    observed = resource_native(target).get('plugin')
+    if observed and requested and observed != requested:
+        raise RelationalClientError('Cannot redirect the user plugin')
+    return observed or requested
+
+
 def compile_operation(operation, draft, target=None):
     if (not isinstance(operation, str) or operation not in OPERATIONS or
             not isinstance(draft, Mapping)):

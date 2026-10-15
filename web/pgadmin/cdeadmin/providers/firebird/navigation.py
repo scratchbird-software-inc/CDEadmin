@@ -33,7 +33,9 @@ def children(resources, prepared, state):
                 'display_path': item['_navigator_path'], 'resource': item['_source'],
                 'has_children': False if section else item['resource_kind'] in
                 {'table', 'view', 'column', 'package'} or any(
-                    p['_navigator_path'][:-1] == item['_navigator_path'] for p in prepared),
+                    p['_navigator_path'][:-1] == item['_navigator_path'] and
+                    resource_native(p['_source']).get('navigator_parent_resource_id') == item['resource_id']
+                    for p in prepared),
                 **({'section': section} if section else {})}
 
     def category(item):
@@ -60,7 +62,7 @@ def children(resources, prepared, state):
             return 'security'
         return 'system'
 
-    top = [p for p in prepared if len(p['_navigator_path']) == 1 and
+    top = [p for p in prepared if (len(p['_navigator_path']) == 1 or p['resource_kind'] == 'metric') and
            not resource_native(p['_source']).get('navigator_parent_resource_id')]
     scope, branch = state['scope'], state.get('virtual_branch')
     if scope == 'database':
@@ -75,12 +77,21 @@ def children(resources, prepared, state):
         if kind in {'table', 'view', 'column'}:
             kinds = ('column', 'index', 'trigger',
                      'constraint') if kind != 'column' else ()
+            if kind != 'column' and any(p['resource_kind'] == 'metric' and
+                    resource_native(p['_source']).get('navigator_parent_resource_id') == owner['resource_id']
+                    for p in prepared):
+                kinds += ('metric',)
             groups = [group({'column': 'columns', 'index': 'indexes',
-                            'trigger': 'triggers', 'constraint': 'constraints'}[k], k) for k in kinds]
+                            'trigger': 'triggers', 'constraint': 'constraints', 'metric': 'metrics'}[k], k) for k in kinds]
             sections = ('dependencies', 'comments', 'grants') if kind != 'column' else (
                 'constraints', 'calculations', 'comments', 'grants')
             return ordered(groups + [resource(owner, s) for s in sections])
-        return None  # Preserve native package and other child discovery.
+        if kind == 'package':
+            member_kinds = {p['resource_kind'] for p in prepared
+                            if p['_navigator_path'][:-1] == owner['_navigator_path'] and
+                            resource_native(p['_source']).get('navigator_parent_resource_id') == owner['resource_id']}
+            return ordered([group(kind_label(member), member) for member in member_kinds])
+        return None  # Preserve other native child discovery.
     if scope == 'kind' and state.get('resource_kind') == 'firebird-folder':
         if branch not in ROOTS:
             raise ProviderNavigatorError('Unknown Firebird virtual branch')

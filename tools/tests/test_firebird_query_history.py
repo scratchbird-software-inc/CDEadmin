@@ -143,3 +143,15 @@ def test_native_error_is_preserved_when_history_observation_also_fails():
         service._record_query_request(server, SCOPE.target, 3, 'select 1', False, 'statement', execute)
     assert raised.value is native_error
     execute.assert_called_once_with()
+
+
+
+@pytest.mark.parametrize('source',["CONNECT 'remote:db' USER 'name' PASS 'test-only-credential';", "CREATE DATABASE 'newdb' USER 'name' PASS 'test-only-credential';"])
+def test_connection_source_never_persists_abbreviated_credentials(history,source):
+    store,_=history
+    store.configure(SCOPE,POLICY)
+    store.record(SCOPE,source,kind='script-prepared')
+    assert store.read(SCOPE)['entries'][0]['source'] is None
+    from sqlalchemy.orm import Session
+    with Session(store.engine) as session:
+        assert b'test-only-credential' not in b''.join(row.query_info for row in session.query(QueryHistoryModel).all())

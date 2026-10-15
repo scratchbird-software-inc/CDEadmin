@@ -1,6 +1,6 @@
 import {Buffer} from 'node:buffer';
-// Parse documentary records only. Never resolve imports, render or execute SQL.
-import runtime from '../../../static/vendor/ddn/current/ddn.mjs';
+// Parse documentary records and admitted in-memory imports; never execute SQL.
+import {admitWorkspace} from './workspace_admission.mjs';
 function check(value) { if(!value) throw new Error('Invalid catalog document'); }
 process.stdin.setEncoding('utf8');
 let input = '';
@@ -14,11 +14,9 @@ try {
   const snapshot = JSON.parse(input);
   const rows = [], identities = new Set(), uids = new Set();
   let provenance;
-  for(const [filename, source] of Object.entries(snapshot.files)) {
-    const parsed = runtime.parse(source, filename);
-    check(parsed.module === `scratchrobin.${engine}.catalog` && parsed.imports.length === 0);
+  const documents = admitWorkspace(snapshot, `scratchrobin.${engine}.catalog`);
+  for(const [filename, parsed] of documents) {
     check(parsed.declarations.every((item) => ['data', 'view', 'format'].includes(item.type)));
-    if(filename === snapshot.entry) check(parsed.declarations.some((item) => item.type === 'view' && item.id === snapshot.view));
     const names = new Set();
     for(const block of parsed.declarations) {
       check(!names.has(block.id)); names.add(block.id);
@@ -51,7 +49,8 @@ try {
   }
   check(provenance);
   process.stdout.write(JSON.stringify({provenance: provenance.native_json, rows}));
-} catch {
+} catch(error) {
+  process.stdout.write(JSON.stringify({diagnostics:error.diagnostics || []}));
   process.stderr.write('Invalid or unsupported native catalog DDN document.');
   process.exitCode = 1;
 }

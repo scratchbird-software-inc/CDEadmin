@@ -44,7 +44,7 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
             result['graphical_operation_count'],
         )
         # Includes the activated Firebird embedded administration surface.
-        self.assertEqual(2180, result['graphical_operation_count'])
+        self.assertEqual(2280, result['graphical_operation_count'])
         self.assertEqual(0, result['activation_permission_failure_count'])
         self.assertEqual(0, result['provider_identity_failure_count'])
         self.assertEqual(0, result['shared_semantics_failure_count'])

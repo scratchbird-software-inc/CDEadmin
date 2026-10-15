@@ -6962,6 +6962,9 @@ class RelationalAdministration:
     def _compile_alter(self, request):
         kind = request['resource_kind']
         target = self._qualified(self._target_path(request['target_resource']))
+        if kind == 'trigger' and self.dialect.engine_id == 'firebird':
+            target = self._quote(
+                self._target_path(request['target_resource'])[-1])
         draft = request['draft']
         changes = draft.get('changes')
         if not isinstance(changes, Mapping):
@@ -7604,7 +7607,10 @@ class RelationalAdministration:
         if kind == 'user':
             name = request['target_resource'].get('display_name')
             return {
-                'source': f'DROP USER {self._account(name)}',
+                'source': (f'DROP USER {self._account(name)}' +
+                           (' USING PLUGIN ' + self._quote(firebird_users.inspected_plugin(request['target_resource']))
+                            if self.dialect.engine_id == 'firebird' and
+                            firebird_users.inspected_plugin(request['target_resource']) else '')),
                 'parameters': (),
             }
         if kind in {'column', 'constraint'}:
@@ -7654,9 +7660,15 @@ class RelationalAdministration:
             else:
                 source = f'DROP INDEX {self._qualified(path)}'
             return {'source': source, 'parameters': ()}
-        if kind == 'trigger' and self.dialect.sql_family == 'mysql':
+        if kind == 'trigger' and (
+                self.dialect.sql_family == 'mysql' or
+                self.dialect.engine_id == 'sqlite'):
             path = self._target_path(request['target_resource'])
             target = self._qualified((*path[:-2], path[-1]))
+            return {'source': f'DROP TRIGGER {target}', 'parameters': ()}
+        if kind == 'trigger' and self.dialect.engine_id == 'firebird':
+            target = self._quote(
+                self._target_path(request['target_resource'])[-1])
             return {'source': f'DROP TRIGGER {target}', 'parameters': ()}
         if kind == 'materialized-view' and (
                 self.dialect.engine_id == 'mysql'):
@@ -8447,6 +8459,8 @@ class RelationalAdministration:
                 f'ALTER USER {user} {" ".join(previews)}',
             )
         if engine == 'firebird':
+            plugin = firebird_users.inspected_plugin(target, changes.get('plugin'))
+            suffix = ' USING PLUGIN ' + self._quote(plugin) if plugin else ''
             clauses = []
             previews = []
             password = changes.get('password')
@@ -8472,8 +8486,8 @@ class RelationalAdministration:
             if not clauses:
                 raise RelationalClientError('user alteration has no changes')
             return (
-                f'ALTER USER {user} {" ".join(clauses)}',
-                f'ALTER USER {user} {" ".join(previews)}',
+                f'ALTER USER {user} {" ".join(clauses)}{suffix}',
+                f'ALTER USER {user} {" ".join(previews)}{suffix}',
             )
         raise RelationalClientError('user alteration is unavailable')
 

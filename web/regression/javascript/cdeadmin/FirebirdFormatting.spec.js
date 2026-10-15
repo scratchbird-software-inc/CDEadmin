@@ -48,3 +48,13 @@ describe('Firebird source formatting and completion', () => {
     expect(result?.options.map(option => option.apply)).toContain('"value"');
   });
 });
+
+
+it('completes public packages/routines and native type/sequence names', () => {
+  const config=firebirdSQLConfig('SELECT',3,[{resource_kind:'package',display_name:'P'},
+    {resource_kind:'function',display_name:'F',package_name:'P',parameters:[{name:'N'}]},
+    {resource_kind:'sequence',display_name:'S'},{resource_kind:'domain',display_name:'D'}]);
+  expect(config.schema.P.children[0]).toMatchObject({label:'F',apply:'"F"',type:'function'});
+  expect(config.schema.S.self.type).toBe('variable');
+  expect(config.schema.D.self.type).toBe('type');
+});

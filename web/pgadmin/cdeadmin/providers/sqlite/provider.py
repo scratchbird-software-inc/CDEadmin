@@ -643,6 +643,8 @@ def _resources(connection, request):
             row = cursor.fetchone()
             add('metric', ['Metrics'], metric['native_name'], {
                 **metric,
+                # Metrics is a visual folder, not an attached database.
+                'navigator_parent_resource_id': None,
                 'value': row[0] if row else None,
                 'observation_error': None if row else (
                     'scalar PRAGMA returned no row'

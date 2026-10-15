@@ -1,6 +1,7 @@
 import {Buffer} from 'node:buffer';
 // Public DDN parser only; imported source cannot resolve files or execute SQL.
 import runtime from '../../../static/vendor/ddn/current/ddn.mjs';
+import {admitWorkspace} from './workspace_admission.mjs';
 process.stdin.setEncoding('utf8');
 let input = '';
 try {
@@ -17,7 +18,7 @@ try {
         to_ref: node.to?.$ref ?? null, kind: node.props?.kind ?? null, enforcement: node.props?.enforcement ?? null,
         native_json: node.props?.x_record?.native_json ?? null});
     }
-    if (['postgresql', 'mysql', 'mariadb'].includes(engine) && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
+    if (['firebird', 'postgresql', 'mysql', 'mariadb'].includes(engine) && node.type === 'field' && typeof node.props?.uid !== 'string') throw new Error();
     if (node.type === 'field' && typeof node.props?.uid === 'string') {
       fields.push(node.props.uid);
       fieldRecords.push({uid: node.props.uid, parent_resource_id: parent, label: node.label,
@@ -41,9 +42,10 @@ try {
     }
     for (const child of node.children || []) visit(child, parent, namespace);
   };
-  for (const [name, source] of Object.entries(snapshot.files)) {
-    const parsed = runtime.parse(source, name);
-    if (parsed.module !== `scratchrobin.${engine}.relations` || parsed.imports.length) throw new Error();
+  const documents = engine === 'firebird' ? admitWorkspace(snapshot, 'scratchrobin.firebird.relations') :
+    new Map(Object.entries(snapshot.files).map(([name, source]) => [name, runtime.parse(source, name)]));
+  for (const [_name, parsed] of documents) {
+    if (engine !== 'firebird' && (parsed.module !== `scratchrobin.${engine}.relations` || parsed.imports.length)) throw new Error();
     for (const node of parsed.declarations) if (node.type === 'data') visit(node, null, node.id);
   }
   const resolve = (namespace, reference) => typeof reference === 'string' ?

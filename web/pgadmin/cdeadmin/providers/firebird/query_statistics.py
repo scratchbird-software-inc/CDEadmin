@@ -7,7 +7,9 @@ from .query_values import normalize_value
 COUNTERS = ('page_reads', 'page_writes', 'page_fetches', 'page_marks',
             'record_seq_reads', 'record_idx_reads', 'record_inserts',
             'record_updates', 'record_deletes', 'record_backouts',
-            'record_purges', 'record_expunges')
+            'record_purges', 'record_expunges', 'record_locks', 'record_waits',
+            'record_conflicts', 'backversion_reads', 'fragment_reads',
+            'record_rpt_reads', 'record_imgc')
 SOURCE = ('SELECT A.MON$ATTACHMENT_ID, ' + ', '.join(
     ('I.' if name.startswith('page_') else 'R.') + 'MON$' + name.upper()
     for name in COUNTERS) +

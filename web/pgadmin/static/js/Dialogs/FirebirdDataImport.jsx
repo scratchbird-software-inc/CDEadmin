@@ -95,7 +95,7 @@ export default function FirebirdDataImport({post, generation, databaseTargetId, 
     <FormReference formKey="firebird-data-import" />
     <Alert severity="warning">Import data into this selected database using a separate native transaction. Preview checks exact destination types; embedded metadata and SQL are not executed. Constraints and triggers remain active. Staged rows need explicit commit or rollback. Closing requests session release without claiming an outcome.</Alert>
     <Button component="label" disabled={disabled || busy || pending}>Read data archive
-      <input hidden type="file" accept=".json,application/json" aria-label="Firebird data archive file"
+      <input hidden type="file" accept=".ddn,.json,text/plain,application/json" aria-label="Firebird data archive file"
         disabled={disabled || busy || pending} onChange={load} />
     </Button>
     <span>{filename}</span>

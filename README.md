@@ -59,11 +59,12 @@ hosting action must be backed up and reviewed before it is performed.
 ## Current development status
 
 CDEadmin is currently version **0.1.0-dev** and is not approved for production
-release. The project contains **24 engine connector roots** and **26 provider
+release. The project contains **24 engine connector roots** and **27 provider
 profiles**. A connector root is the top-level explorer grouping for an engine;
 a provider profile is an exact protocol/dialect implementation. YugabyteDB
-YSQL/YCQL and OpenSearch native/SQL-PPL each have separate profiles under one
-engine root. These are inventory counts, not 24 or 26 completed release gates.
+YSQL/YCQL, OpenSearch native/SQL-PPL, and Firebird network/embedded each have
+separate profiles under one engine root. These are inventory counts, not 24 or
+27 completed release gates.
 
 The provider portfolio covers PostgreSQL, MySQL, MariaDB, Firebird, DuckDB,
 SQLite, MongoDB, Neo4j, Cassandra, Redis, XTDB, ClickHouse, InfluxDB, Milvus,

@@ -5,7 +5,7 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} fro
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {generateRowSql} from './firebirdRowSqlHelpers';
 
-export default function FirebirdRowSql({page, table, onLoad, disabled}) {
+export default function FirebirdRowSql({page, table, onLoad, disabled, clientSqlDialect=3}) {
   const [selected, setSelected] = useState([]);
   const [keys, setKeys] = useState([]);
   const [operation, setOperation] = useState('insert');
@@ -13,11 +13,11 @@ export default function FirebirdRowSql({page, table, onLoad, disabled}) {
   const [inColumn, setInColumn] = useState('');
   const [plans, setPlans] = useState([]);
   const [error, setError] = useState(null);
-  useEffect(() => {setSelected([]); setPlans([]); setError(null); setKeys(page.columns.filter(column => column.key === true || column.identity_key).map(column => column.name)); setInColumn(page.columns[0]?.name || '');}, [page, table]);
+  useEffect(() => {setSelected([]); setPlans([]); setError(null); setKeys(page.columns.filter(column => column.key === true || column.identity_key).map(column => column.name)); setInColumn(page.columns[0]?.name || '');}, [page, table, clientSqlDialect]);
   const change = (fn) => {setPlans([]); setError(null); fn();};
   const toggle = (values, value) => values.includes(value) ? values.filter(item => item !== value) : [...values, value];
   const generate = () => {
-    try {setPlans(generateRowSql({table, columns: page.columns, rows: page.rows.filter((_row, index) => selected.includes(index)), operation, keys, inColumn, inline})); setError(null);}
+    try {setPlans(generateRowSql({table, columns: page.columns, rows: page.rows.filter((_row, index) => selected.includes(index)), operation, keys, inColumn, inline, dialect:clientSqlDialect})); setError(null);}
     catch (failure) {setError(failure.message); setPlans([]);}
   };
   return <Box data-cde-compact-form sx={{my: 2, ...compactFormSx}}>
@@ -45,4 +45,4 @@ export default function FirebirdRowSql({page, table, onLoad, disabled}) {
     </Box>)}
   </Box>;
 }
-FirebirdRowSql.propTypes = {page: PropTypes.object.isRequired, table: PropTypes.string.isRequired, onLoad: PropTypes.func, disabled: PropTypes.bool};
+FirebirdRowSql.propTypes = {page: PropTypes.object.isRequired, table: PropTypes.string.isRequired, onLoad: PropTypes.func, disabled: PropTypes.bool, clientSqlDialect: PropTypes.number};

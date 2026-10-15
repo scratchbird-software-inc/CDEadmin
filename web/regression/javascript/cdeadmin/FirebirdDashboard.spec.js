@@ -1,6 +1,8 @@
 import viewer from '../../../pgadmin/static/vendor/ddn/current/ddn.mjs';
 import {firebirdDashboardFiles, firebirdFleetFiles} from 'sources/cdeadmin_ui/integrations/ddn/firebirdDashboard';
 
+import {validatePublication, bindPublication} from 'sources/cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
+
 describe('Firebird native dashboard DDN bindings', () => {
   beforeAll(() => viewer.setTextProvider((text, size) => ({
     width: String(text).length * size * 0.6, ascent: size * 0.8, descent: size * 0.2,
@@ -43,6 +45,32 @@ describe('Firebird native dashboard DDN bindings', () => {
       expect(rendered.svg).toContain('Unavailable');
       expect(rendered.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
     } finally { workspace.destroy(); }
+  });
+
+  it('keeps published endpoint/database bindings stable across reordering and removal', () => {
+    const database=(target_id,value)=>({target_id,name:'Same database name',status:'reachable',metrics:{allocated_bytes:value}});
+    const server=(server_id,value)=>({server_id,name:'Same server name',status:'reachable',databases:[database('target-'+server_id,value)]});
+    const original={registered_endpoints:2,servers:[server(7,'700'),server(8,'800')]};
+    const files=firebirdFleetFiles(original);
+    const clean=validatePublication(viewer,{format:'ddn-workspace@1',entry:'dashboard.ddn',view:'dashboard',files},'engine');
+    const rebound=bindPublication(viewer,clean,'engine',firebirdFleetFiles({...original,servers:[server(8,'801'),server(7,'701')]}));
+    const rows=value=>viewer.parse(value.files['dashboard.ddn']).declarations.find(node=>node.type==='data').children;
+    const values=new Map(rows(rebound).map(row=>[row.id,row.props.x_record.value]));
+    expect(values.get('fleetdb_7_7461726765742d37_3')).toBe('701');
+    expect(values.get('fleetdb_8_7461726765742d38_3')).toBe('801');
+    const removed=bindPublication(viewer,clean,'engine',firebirdFleetFiles({registered_endpoints:1,servers:[server(8,'802')]}));
+    expect(new Map(rows(removed).map(row=>[row.id,row.props.x_record.value])).get('fleetdb_7_7461726765742d37_3')).toBe('Unavailable');
+    expect(rows(clean).every(row=>row.props.x_record.value==='Unavailable')).toBe(true);
+  });
+  it('publishes registered database detail panels and validates every generated page', () => {
+    const snapshot={databases:Array.from({length:15},(_,index)=>({target_id:'db-'+index,name:'DB '+index,status:'unknown',metrics:{}}))};
+    const files=firebirdDashboardFiles(snapshot,'Registered databases','server');
+    expect(files['dashboard.ddn']).toContain('view dashboard_page_2');
+    const clean=validatePublication(viewer,{format:'ddn-workspace@1',entry:'dashboard.ddn',view:'dashboard',files},'server');
+    const ws=viewer.createWorkspace(clean.files);
+    try {
+      for(const entry of ws.entries()) for(const view of entry.views) expect(ws.validateDraft(entry.file,view.id).status).toBe('valid');
+    } finally {ws.destroy();}
   });
 
 });

@@ -1322,6 +1322,8 @@ def _resources(connection, request):
                 resource_id = _catalog_resource_id(kind, [], json.dumps(
                     native_identity, ensure_ascii=False,
                     separators=(',', ':')))
+            if resource_id in resources and kind not in {'metric', 'service-operation'}:
+                raise RelationalClientError('Duplicate Firebird catalog resource identity')
             resources[resource_id] = {
                 'resource_id': resource_id,
                 'resource_kind': kind,
@@ -1548,7 +1550,7 @@ def _resources(connection, request):
                     'catalog_authority': 'RDB$FILES',
                     'navigator_parent_resource_id': owner_id,
                 })
-        cursor.execute(
+        relation_rows = catalog_rows(
             'SELECT TRIM(TRAILING FROM RDB$RELATION_NAME), RDB$VIEW_BLR, '
             'RDB$VIEW_SOURCE, '
             'RDB$DESCRIPTION, RDB$RELATION_ID, '
@@ -1562,7 +1564,7 @@ def _resources(connection, request):
             "P.RDB$PUBLICATION_NAME = 'RDB$DEFAULT' AND "
             'P.RDB$TABLE_NAME = R.RDB$RELATION_NAME) THEN 1 ELSE 0 END '
             'FROM RDB$RELATIONS R '
-            'ORDER BY RDB$RELATION_NAME'
+            'ORDER BY RDB$RELATION_NAME', 'relation objects'
         )
         relation_types = {
             0: 'persistent',
@@ -1572,8 +1574,7 @@ def _resources(connection, request):
             4: 'global-temporary-preserve-rows',
             5: 'global-temporary-delete-rows',
         }
-        for row in [tuple(_materialize_catalog_value(value) for value in row)
-                    for row in cursor.fetchall()]:
+        for row in relation_rows:
             (
                 name, view_blr, view_source, description, relation_id,
                 system_flag, relation_type, security_class, external_file,
@@ -1795,10 +1796,12 @@ def _resources(connection, request):
              'WHERE CS.RDB$CHARACTER_SET_ID = C.RDB$CHARACTER_SET_ID) '
              'FROM RDB$COLLATIONS C ORDER BY 1'),
             ('user', 'SELECT TRIM(TRAILING FROM SEC$USER_NAME), '
-             'TRIM(TRAILING FROM SEC$PLUGIN) '
-             'FROM SEC$USERS ORDER BY 1'),
+             'TRIM(TRAILING FROM SEC$PLUGIN), SEC$FIRST_NAME, '
+             'SEC$MIDDLE_NAME, SEC$LAST_NAME, SEC$ACTIVE, SEC$ADMIN, SEC$DESCRIPTION '
+             'FROM SEC$USERS ORDER BY 1, 2'),
             ('publication', 'SELECT TRIM(TRAILING FROM RDB$PUBLICATION_NAME), '
-             'RDB$ACTIVE_FLAG FROM RDB$PUBLICATIONS ORDER BY 1'),
+             'RDB$ACTIVE_FLAG, RDB$AUTO_ENABLE, TRIM(TRAILING FROM RDB$OWNER_NAME), '
+             'RDB$SYSTEM_FLAG FROM RDB$PUBLICATIONS ORDER BY 1'),
         )
         simple_detail_names = {
             'domain': (
@@ -1847,8 +1850,8 @@ def _resources(connection, request):
                 'specific_attributes',
                 'system_flag', 'owner', 'description', 'character_set',
             ),
-            'user': ('plugin',),
-            'publication': ('active',),
+            'user': ('plugin', 'first_name', 'middle_name', 'last_name', 'active', 'administrator', 'description'),
+            'publication': ('active', 'auto_enable', 'owner', 'system_flag'),
         }
 
         def detail_value(field, detail):
@@ -1871,6 +1874,9 @@ def _resources(connection, request):
                     native['system_object'] = True
                 if kind == 'role':
                     native.update(_role_privileges(row[1]))
+                if kind == 'user':
+                    for field, value in zip(('active', 'administrator'), row[5:7]):
+                        native[field] = None if value is None else bool(value)
                 if kind == 'blob-filter':
                     try:
                         statements = blob_filters.compile_operation('create', {
@@ -1898,7 +1904,9 @@ def _resources(connection, request):
                         native['ddl_unavailable_reason'] = str(error)
                 package = native.get('package') if kind in {
                     'procedure', 'function', 'external-function'} else None
-                add(kind, [package] if package else [], row[0], native)
+                add(kind, [package] if package else [], row[0], native,
+                    native_identity=([str(row[0]).rstrip(' '), native.get('plugin')]
+                                     if kind == 'user' else None))
 
             # System objects are real catalog objects; "sys" is solely a
             # navigator folder. Keep identities and authority paths intact.
@@ -1921,6 +1929,17 @@ def _resources(connection, request):
                 package = native.get('package') if kind in {
                     'procedure', 'function', 'external-function'} else None
                 add(kind, [package] if package else [], row[0], native)
+
+        for publication_name, table_name in catalog_rows(
+                'SELECT TRIM(TRAILING FROM RDB$PUBLICATION_NAME), '
+                'TRIM(TRAILING FROM RDB$TABLE_NAME) FROM RDB$PUBLICATION_TABLES '
+                'ORDER BY 1, 2', 'publication memberships'):
+            publication = resources.get(_catalog_resource_id('publication', [], publication_name))
+            table = resources.get(_catalog_resource_id('table', [], table_name))
+            if publication is not None:
+                publication.setdefault('native', {}).setdefault('tables', []).append(table_name)
+            if table is not None:
+                table.setdefault('native', {}).setdefault('publications', []).append(publication_name)
 
         settings = catalog_rows(configuration.SQL, 'effective configuration',
                                 required=False)
@@ -3335,7 +3354,12 @@ def _resources(connection, request):
         for metric in _metric_records():
             if not str(metric['source']).startswith('MON$'):
                 continue
-            add('metric', [metric['scope']], metric['native_name'], metric)
+            metadata = dict(metric)
+            owner = resources.get(_catalog_resource_id('table', [], metric['scope']))
+            if owner is not None:
+                metadata['navigator_parent_resource_id'] = owner['resource_id']
+            metadata['definition_only'] = True
+            add('metric', [metric['scope']], metric['native_name'], metadata)
         for item in resources.values():
             native = item.get('native', {})
             if item['resource_kind'] == 'trigger' and native.get('relation'):
@@ -3387,8 +3411,17 @@ def _resources(connection, request):
                 native['catalog_observations'] = catalog_reader.observations
                 native['information_observations'] = information_observations
                 native['catalog_visibility'] = 'current_attachment'
+                from .catalog_coverage import coverage
+                native['catalog_coverage'] = coverage(
+                    list(resources.values()), catalog_reader.observations,
+                    mapping_catalog, creation_authority)
+                native['coverage_complete'] = native['catalog_coverage']['state'] == 'observed'
                 native.setdefault('catalog_warnings', []).extend(
                     catalog_reader.warnings)
+                native['catalog_warnings'].extend(
+                    'Firebird ' + section + ' catalog is unavailable; missing entries are unknown, not absent.'
+                    for section in native['catalog_coverage']['unavailable_sections']
+                    if section not in {row['section'] for row in catalog_reader.observations})
                 native['catalog_warnings'].extend(
                     f'Firebird driver information lookup for {name} failed.'
                     for name, observed in information_observations.items()
