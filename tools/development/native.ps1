@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Position=0)][ValidateSet('doctor','clients','servers','fixtures','python','ddn','frontend','desktop','run-desktop','configure','init','run','verify','network','host-contracts','mariadb-configure','desktop-probe','ci')]
+    [Parameter(Position=0)][ValidateSet('doctor','clients','servers','fixtures','python','ddn','frontend','desktop','run-desktop','configure','init','run','verify','network','host-contracts','mariadb-configure','desktop-probe','javascript-contracts','ci')]
     [string]$Stage = 'doctor',
     [string]$Python = 'python',
     [Parameter(Mandatory=$true)][string]$Evidence

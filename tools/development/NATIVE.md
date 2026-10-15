@@ -272,7 +272,7 @@ SDK capture retries up to three times only for recognized transient transport
 errors, preserving each attempt's log and the exact pinned revision. Authentication
 or unavailable-revision failures remain failures. A partially captured clean SDK
 checkout can be resumed; dirty source checkouts are preserved and rejected.
-Provider workspace contract tests use a bounded five-second asynchronous
+Provider workspace and dashboard-editor contract tests use a bounded five-second asynchronous
 readiness allowance on hosted renderers; their functional assertions are unchanged.
 
 Desktop qualification checks three launches with independent configuration
@@ -287,3 +287,8 @@ Qualification explicitly selects its owned SQLite configuration database and
 operation store after loading configuration. An existing developer or system
 configuration database URI and operation-store path cannot redirect these
 startup checks into an installed profile.
+
+`javascript-contracts` runs the complete JavaScript suite in the host Node
+runtime without rebuilding Python clients or database servers. It supports
+qualification of test-only changes alongside existing native environment
+receipts; it does not label a partial setup as full environment acceptance.
