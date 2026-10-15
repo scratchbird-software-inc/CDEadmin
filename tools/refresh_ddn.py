@@ -70,8 +70,14 @@ def refresh(source, work):
         if inventory(source) != before:
             raise RuntimeError('DDN changed during capture; retry intake')
         # Build tools consume pinned installed dependencies without modifying them.
-        (snapshot / 'node_modules').symlink_to(source / 'node_modules',
-                                             target_is_directory=True)
+        if os.name == 'nt':
+            # Ordinary Windows developer accounts may not create symlinks.
+            # DDN's dependency tree is small; copy it without requiring admin
+            # privileges or changing the host's Developer Mode/security policy.
+            shutil.copytree(source / 'node_modules', snapshot / 'node_modules')
+        else:
+            (snapshot / 'node_modules').symlink_to(source / 'node_modules',
+                                                 target_is_directory=True)
         env = {**os.environ, 'TMPDIR': str(work)}
         env.pop('DDN_SDK_OUT', None)
         env.pop('DDN_SDK_MANIFEST', None)
