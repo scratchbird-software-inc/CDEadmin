@@ -181,7 +181,10 @@ def sql_server(engine, directory, evidence, env):
         else:
             if engine == 'mysql':
                 import mysql.connector
-                connection = mysql.connector.connect(**route)
+                # Ownership is a read-only probe. Qualification below still
+                # exercises the route's actual default C connector, with no
+                # fallback when a native driver fails.
+                connection = mysql.connector.connect(**route, use_pure=True)
             else:
                 import mariadb
                 connection = mariadb.connect(**route)

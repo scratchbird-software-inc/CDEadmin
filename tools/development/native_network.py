@@ -15,6 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'web'))
+sys.path.insert(0, str(ROOT / 'tools'))
 
 
 def execute(engine, specification, evidence):
@@ -41,7 +42,19 @@ def execute(engine, specification, evidence):
                              password=password, path_style=specification.get('path_style', 'posix'))
     else:
         receipt = module.run(route, evidence, password=password)
-    print(json.dumps({'engine': engine, 'complete': receipt['complete']}))
+    print(json.dumps({'engine': engine, 'complete': receipt['complete'],
+                      'checks': receipt.get('checks', []),
+                      'failures': receipt.get('failures', [])}, indent=2))
+    for path in sorted(evidence.rglob('*.json')):
+        try:
+            nested = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if isinstance(nested, dict) and nested.get('failures'):
+            # Existing platform gates deliberately redact failures to their
+            # type, stage and source locations. Retain those diagnostics in CI.
+            print(json.dumps({'receipt': str(path.relative_to(evidence)),
+                              'failures': nested['failures']}, indent=2))
     return 0 if receipt['complete'] else 1
 
 
