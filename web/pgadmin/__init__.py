@@ -752,6 +752,7 @@ def create_app(app_name=None):
                             inst_key.Close()
                     except Exception:
                         pass
+            return
         else:
             # We use the postgres-winreg.ini file on non-Windows
             from configparser import ConfigParser
