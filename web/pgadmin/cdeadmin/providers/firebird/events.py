@@ -141,7 +141,8 @@ class EventSubscriptions:
             connection = connect()
             if item.stop.is_set():
                 return
-            collector = connection.event_collector(item.names)
+            from .event_abi import event_collector
+            collector = event_collector(connection, item.names)
             collector.begin()
             heartbeat(connection)
             next_probe = time.monotonic() + 10

@@ -54,7 +54,7 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
         if password is not None:
             raise ValueError('Embedded mode does not use a password')
         target['filesystem_root'] = str(parent)
-    else:
+    elif not route.get('trusted_auth'):
         target.update(credential_reference_id='owned-platform-secret',
                       principal_reference='owned-platform-principal')
     evidence = Path(evidence)

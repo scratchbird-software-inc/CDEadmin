@@ -35,12 +35,14 @@ PACKAGE = Path(__file__).resolve().parents[1] / (
 
 def source_bindings():
     root = Path(__file__).resolve().parents[1]
-    paths = [PACKAGE / 'firebird_dialect_5_0_4.json',
-             PACKAGE / 'firebird_metrics_5_0_4.json',
-             PACKAGE / 'embedded_provider.py', PACKAGE / 'provider.py',
-             PACKAGE / 'query_client.py', PACKAGE / 'profiling.py',
-             PACKAGE / 'query_statistics.py', PACKAGE / 'events.py',
-             PACKAGE.parent / 'relational_admin.py']
+    # Include the compiler's native helpers, including platform paths, event
+    # ABI and conversion profiles. Generated embedded contracts are excluded
+    # so their receipt can bind these inputs without a self-referential hash.
+    generated = {embedded.PROFILE.dialect_contract_file, embedded.PROFILE.metrics_contract_file}
+    paths = [path for path in sorted(PACKAGE.iterdir()) if path.is_file() and
+             path.suffix in {'.py', '.json'} and path.name not in generated]
+    paths += [PACKAGE.parent / 'relational_admin.py', Path(__file__),
+              root / 'tools/reference_engine_demos/generate_firebird_embedded_contracts.py']
     return {path.relative_to(root).as_posix(): hashlib.sha256(
         path.read_bytes()).hexdigest() for path in paths}
 

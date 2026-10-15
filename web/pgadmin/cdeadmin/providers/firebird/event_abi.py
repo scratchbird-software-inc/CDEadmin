@@ -11,11 +11,23 @@ import threading
 _LOCK = threading.Lock()
 
 
+def event_collector(connection, names):
+    from firebird.driver.core import Connection
+    if isinstance(connection, Connection):
+        from firebird.driver import get_api
+        install(get_api())
+    return connection.event_collector(names)
+
+
 def install(api):
     with _LOCK:
         if getattr(api, '_cdeadmin_variadic_events', False) is True:
             return
-        native = api.client_library.isc_event_block
+        # firebird-driver loads WinDLL for the fixed stdcall API. The event
+        # builder is explicitly cdecl/variadic, including on Windows. Reuse
+        # the admitted library's handle through a cdecl view of that library.
+        library = ctypes.CDLL(str(api.client_library_name), handle=api.client_library._handle)
+        native = library.isc_event_block
         native.restype = ctypes.c_int32
         native.argtypes = list(api.P_isc_event_block_args)
         if len(native.argtypes) != 3:

@@ -651,8 +651,6 @@ def _server_arguments(route, module):
 def _client_library_identity(module):
     """Return and enforce the Firebird client generation used by the driver."""
     api = module.get_api()
-    from .event_abi import install as install_event_abi
-    install_event_abi(api)
     function = api.client_library.isc_get_client_version
     function.argtypes = [ctypes.c_char_p]
     function.restype = None

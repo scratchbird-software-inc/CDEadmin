@@ -1,7 +1,7 @@
 """Variadic names must not become fixed ABI arguments on ARM64."""
 import ctypes
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import pytest
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION  # noqa
 from pgadmin.cdeadmin.providers.firebird.event_abi import install
@@ -10,9 +10,12 @@ from pgadmin.cdeadmin.providers.firebird.event_abi import install
 def test_fixed_event_signature_survives_different_collector_sizes():
     native = Mock(return_value=42)
     fixed = (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ushort)
-    api = SimpleNamespace(client_library=SimpleNamespace(isc_event_block=native),
+    api = SimpleNamespace(client_library=SimpleNamespace(_handle=51), client_library_name='/native/fbclient',
                           P_isc_event_block_args=fixed)
-    install(api)
+    with patch('pgadmin.cdeadmin.providers.firebird.event_abi.ctypes.CDLL',
+               return_value=SimpleNamespace(isc_event_block=native)) as library:
+        install(api)
+    library.assert_called_once_with('/native/fbclient', handle=51)
     assert api.isc_event_block(None, None, b'first') == 42
     assert api.isc_event_block(None, None, b'first', b'second') == 42
     assert native.argtypes == list(fixed)

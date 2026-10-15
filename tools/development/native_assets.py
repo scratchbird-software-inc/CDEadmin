@@ -141,24 +141,18 @@ def paths(env):
     return selected
 
 
-def clients(evidence, env):
+def firebird_kit(evidence):
+    """Acquire only the admitted native Firebird kit for focused ABI diagnosis."""
     if platform.system() not in ('Windows', 'Darwin'):
         raise RuntimeError('Native client provisioning supports Windows and macOS')
     STATE.mkdir(exist_ok=True)
-    (STATE / 'firebird-lock').mkdir(exist_ok=True)
-    env = msvc(env)
+    firebird = STATE / 'firebird'
+    if firebird.exists():
+        return firebird
     if platform.system() == 'Windows':
-        for asset, destination in [('postgres-windows', STATE / 'postgres'),
-                                    ('firebird-windows', STATE / 'firebird')]:
-            if not destination.exists():
-                destination.mkdir()
-                with zipfile.ZipFile(download(asset)) as archive:
-                    archive.extractall(destination)
-        kerberos = STATE / 'kerberos'
-        if not kerberos.exists():
-            command(['msiexec.exe', '/a', download('kerberos-windows'), '/qn',
-                     'TARGETDIR=' + str(kerberos)], env=env,
-                    log=evidence / 'kerberos-extract.log')
+        firebird.mkdir()
+        with zipfile.ZipFile(download('firebird-windows')) as archive:
+            archive.extractall(firebird)
     else:
         # Expand the vendor kit without executing installer scripts or
         # registering a system service. The SDK belongs to this checkout.
@@ -175,6 +169,28 @@ def clients(evidence, env):
                 if len(libraries) != 1:
                     raise RuntimeError('Expected one Firebird SDK resource root in vendor package')
                 shutil.copytree(libraries[0].parent.parent, firebird, symlinks=True)
+    return firebird
+
+
+def clients(evidence, env):
+    if platform.system() not in ('Windows', 'Darwin'):
+        raise RuntimeError('Native client provisioning supports Windows and macOS')
+    STATE.mkdir(exist_ok=True)
+    (STATE / 'firebird-lock').mkdir(exist_ok=True)
+    env = msvc(env)
+    if platform.system() == 'Windows':
+        destination = STATE / 'postgres'
+        if not destination.exists():
+            destination.mkdir()
+            with zipfile.ZipFile(download('postgres-windows')) as archive:
+                archive.extractall(destination)
+    firebird_kit(evidence)
+    if platform.system() == 'Windows':
+        kerberos = STATE / 'kerberos'
+        if not kerberos.exists():
+            command(['msiexec.exe', '/a', download('kerberos-windows'), '/qn',
+                     'TARGETDIR=' + str(kerberos)], env=env,
+                    log=evidence / 'kerberos-extract.log')
     source = STATE / 'connector-source'
     prefix = STATE / 'mariadb-c'
     if not (prefix / '.cdeadmin-complete').is_file():

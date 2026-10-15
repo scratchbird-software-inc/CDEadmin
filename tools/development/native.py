@@ -252,6 +252,18 @@ def stage(name, evidence):
         ddn(evidence)
         from native_servers import servers
         servers(evidence, env)
+    elif name == 'firebird-abi':
+        ddn(evidence)
+        from native_assets import firebird_kit
+        runtime = firebird_kit(evidence)
+        venv = evidence / 'owned-abi-env'
+        command([sys.executable, '-m', 'venv', venv], log=evidence / 'abi-env.log')
+        interpreter = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        command([interpreter, '-m', 'pip', 'install', 'firebird-driver==1.10.11'],
+                log=evidence / 'abi-dependencies.log')
+        command([interpreter, ROOT / 'tools/development/firebird_abi.py',
+                 '--runtime-root', runtime, '--evidence', evidence / 'firebird-abi'],
+                env=env, log=evidence / 'firebird-abi.log', timeout=300)
     elif name in {'firebird-platform', 'firebird-codecs'}:
         ddn(evidence)
         command([PYTHON, ROOT / 'tools/development/firebird_platform.py',
@@ -412,7 +424,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -460,7 +472,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()

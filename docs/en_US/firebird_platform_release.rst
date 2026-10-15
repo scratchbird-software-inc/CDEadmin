@@ -31,6 +31,9 @@ engine. ``--quick-codecs`` is diagnostic only and cannot qualify a release.
 The ``firebird-codecs`` development stage (``--driver-only`` on the platform
 runner) preserves exhaustive conversion differences and transport observations
 without workflows; it deliberately returns an incomplete release receipt.
+``firebird-abi`` provisions only the native Firebird kit and pinned Python
+driver for focused event calling-convention diagnosis. Its diagnostic receipt
+cannot qualify a backend release.
 Independent workflow fixtures cover editor execution, row SQL, templates,
 profiling/statistics, data export/import, test-data generation, metadata search,
 BLOB operations, DDN/native SQL replay, events, recreate-empty and registration
