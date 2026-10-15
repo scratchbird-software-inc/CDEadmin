@@ -63,6 +63,11 @@ def qualify(route, evidence, *, password=None, reply_loss=True):
         sql('CREATE TABLE pending (id INT)')
         failed = sql('INSERT INTO pending VALUES (1); '
                      'SELECT id FROM pending; SELECT * FROM absent_table')
+        proof['later_error_observation'] = {
+            'rows': rows(failed),
+            'result_sets': [page['payload'].get('result_set_index') for page in failed],
+            'error': failed[-1]['payload'].get('error'),
+        }
         assert rows(failed) == [(1,)]
         assert failed[-1]['payload']['error']['errno'] == 1146
         assert client.describe_transaction(handle)['in_transaction'] is True
