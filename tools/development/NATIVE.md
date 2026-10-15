@@ -244,3 +244,16 @@ has a separate 15-second bound; the requested renderer execution deadline
 starts after the worker is ready and is still enforced. The Windows Cassandra
 installation includes the official driver's documented asyncore backport.
 PDF regression checks use a portable Python parser.
+
+For fast diagnosis of native receipt locks, protected file permissions, atomic
+publication and Firebird server-path contracts, `host-contracts` runs those
+checks in an isolated minimal Python environment. It is an optional targeted
+stage and does not count as full environment acceptance. For example:
+
+```text
+gh workflow run native-development.yml --ref <branch> -f platforms='["windows-2025"]' -f stages=host-contracts
+```
+
+POSIX reference-estate shell launcher execution is qualified on POSIX hosts.
+Windows runs the separate native fixture lifecycle; it does not need Bash to
+run the application or native qualification commands.

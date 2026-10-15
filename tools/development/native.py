@@ -264,6 +264,20 @@ def stage(name, evidence):
                 log=evidence / 'pip-check.log')
         command([PYTHON, '-m', 'pip', 'freeze', '--all'], env=env,
                 log=evidence / 'packages.log')
+    elif name == 'host-contracts':
+        ddn(evidence)
+        directory = evidence / 'owned-host-contract-env'
+        command([sys.executable, '-m', 'venv', directory],
+                log=evidence / 'host-contract-env.log')
+        interpreter = directory / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        command([interpreter, '-m', 'pip', 'install', 'pytest==8.4.2'],
+                log=evidence / 'host-contract-dependencies.log')
+        command([interpreter, '-m', 'pytest',
+                 'tools/tests/test_native_fileio.py',
+                 'tools/tests/test_firebird_server_paths.py',
+                 'tools/tests/test_firebird_ui_retarget.py',
+                 '--junitxml=' + str(evidence / 'host-contracts.xml')],
+                log=evidence / 'host-contracts.log', timeout=300)
     elif name == 'ddn':
         ddn(evidence)
     elif name == 'frontend':
@@ -328,7 +342,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set(FULL_STAGES):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -376,7 +390,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()

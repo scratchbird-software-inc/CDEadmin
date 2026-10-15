@@ -14,6 +14,8 @@
   ],
   "inventory_excluded_directories": [
     ".git",
+    ".native",
+    ".devstate",
     ".yarn",
     "node_modules",
     "generated",

@@ -40,7 +40,7 @@ def _safe_root(value):
     if not path.is_absolute():
         raise ProviderToolError('tool workspace must be an absolute path')
     path = path.resolve(strict=False)
-    forbidden = {Path('/'), Path.home().resolve(strict=False)}
+    forbidden = {Path(path.anchor), Path.home().resolve(strict=False)}
     if path in forbidden:
         raise ProviderToolError('tool workspace grant is over-broad')
     return path

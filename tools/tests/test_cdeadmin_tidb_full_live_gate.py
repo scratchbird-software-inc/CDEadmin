@@ -42,9 +42,9 @@ def test_generated_single_node_configs_are_valid_toml(tmp_path):
 
     assert pd_config['replication']['max-replicas'] == 1
     assert tidb_config['split-table'] is False
-    assert tidb_config['log']['slow-query-file'] == str(
+    assert tidb_config['log']['slow-query-file'] == (
         tmp_path / 'logs' / 'tidb-slow.log'
-    )
+    ).as_posix()
     assert tikv_config['memory-usage-limit'] == '2GB'
     assert tikv_config['memory']['enable-heap-profiling'] is False
     assert tikv_config['readpool']['unified']['max-thread-count'] == 2

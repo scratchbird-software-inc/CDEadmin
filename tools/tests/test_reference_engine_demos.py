@@ -252,24 +252,29 @@ class ReferenceEngineDemoTestCase(unittest.TestCase):
         self.assertEqual(set(self.estate.ENGINE_ORDER), launchers)
         for engine in self.estate.ENGINE_ORDER:
             launcher = lifecycle / f"{engine}.sh"
-            self.assertTrue(launcher.stat().st_mode & 0o111, launcher)
-            syntax = subprocess.run(
-                ["bash", "-n", str(launcher)], capture_output=True,
-                text=True, check=False,
-            )
-            self.assertEqual(0, syntax.returncode, syntax.stderr)
+            if os.name != "nt":
+                self.assertTrue(launcher.stat().st_mode & 0o111, launcher)
+            if os.name != "nt":
+                syntax = subprocess.run(
+                    ["bash", "-n", str(launcher)], capture_output=True,
+                    text=True, check=False,
+                )
+                self.assertEqual(0, syntax.returncode, syntax.stderr)
             content = launcher.read_text(encoding="utf-8")
             self.assertIn(f" {engine} \"$@\"", content)
 
         helper = lifecycle / "_engine_lifecycle.sh"
         self.assertTrue(helper.is_file())
-        self.assertTrue(helper.stat().st_mode & 0o111)
-        syntax = subprocess.run(
-            ["bash", "-n", str(helper)], capture_output=True,
-            text=True, check=False,
-        )
-        self.assertEqual(0, syntax.returncode, syntax.stderr)
+        if os.name != "nt":
+            self.assertTrue(helper.stat().st_mode & 0o111)
+        if os.name != "nt":
+            syntax = subprocess.run(
+                ["bash", "-n", str(helper)], capture_output=True,
+                text=True, check=False,
+            )
+            self.assertEqual(0, syntax.returncode, syntax.stderr)
 
+    @unittest.skipIf(os.name == "nt", "POSIX reference-estate launcher execution; native Windows fixtures qualify separately")
     def test_every_launcher_dispatches_startup_and_shutdown(self):
         lifecycle = DEMO / "lifecycle"
         with tempfile.TemporaryDirectory() as temporary:

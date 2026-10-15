@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -52,17 +53,18 @@ def surface_for(path):
 
 def inventory_files(source, excluded_directories):
     excluded = set(excluded_directories)
-    for path in source.rglob('*'):
-        if not path.is_file() or any(part in excluded for part in path.parts):
-            continue
-        if path.suffix.casefold() not in TEXT_SUFFIXES:
-            continue
-        try:
-            if path.stat().st_size > 2 * 1024 * 1024:
+    for directory, children, files in os.walk(source):
+        children[:] = [name for name in children if name not in excluded]
+        for name in files:
+            path = Path(directory) / name
+            if path.suffix.casefold() not in TEXT_SUFFIXES:
                 continue
-        except OSError:
-            continue
-        yield path
+            try:
+                if path.stat().st_size > 2 * 1024 * 1024:
+                    continue
+            except OSError:
+                continue
+            yield path
 
 
 def branding_inventory(source, policy):

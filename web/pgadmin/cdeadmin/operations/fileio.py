@@ -91,10 +91,18 @@ def _windows_security():
     api.GetFileSecurityW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p,
                                    wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
     api.GetFileSecurityW.restype = wintypes.BOOL
-    api.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
-        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
-        ctypes.POINTER(wintypes.LPWSTR), ctypes.POINTER(wintypes.DWORD)]
-    api.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+    api.GetSecurityDescriptorDacl.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL),
+        ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.BOOL)]
+    api.GetSecurityDescriptorDacl.restype = wintypes.BOOL
+    api.GetSecurityDescriptorControl.argtypes = [ctypes.c_void_p,
+        ctypes.POINTER(wintypes.WORD), ctypes.POINTER(wintypes.DWORD)]
+    api.GetSecurityDescriptorControl.restype = wintypes.BOOL
+    api.GetAce.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p)]
+    api.GetAce.restype = wintypes.BOOL
+    api.ConvertStringSidToSidW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_void_p)]
+    api.ConvertStringSidToSidW.restype = wintypes.BOOL
+    api.EqualSid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    api.EqualSid.restype = wintypes.BOOL
     kernel.LocalFree.argtypes = [ctypes.c_void_p]
     kernel.LocalFree.restype = ctypes.c_void_p
     return api, kernel, sid
@@ -124,7 +132,6 @@ def has_private_file_permissions(path):
         return stat.S_IMODE(os.stat(path).st_mode) == 0o600
     import ctypes
     from ctypes import wintypes
-    import re
     api, kernel, sid = _windows_security()
     size = wintypes.DWORD()
     api.GetFileSecurityW(os.fspath(path), 4, None, 0, ctypes.byref(size))
@@ -133,12 +140,36 @@ def has_private_file_permissions(path):
     descriptor = ctypes.create_string_buffer(size.value)
     if not api.GetFileSecurityW(os.fspath(path), 4, descriptor, size.value, ctypes.byref(size)):
         raise ctypes.WinError(ctypes.get_last_error())
-    text = wintypes.LPWSTR()
-    if not api.ConvertSecurityDescriptorToStringSecurityDescriptorW(
-            descriptor, 1, 4, ctypes.byref(text), None):
+    control, revision = wintypes.WORD(), wintypes.DWORD()
+    if not api.GetSecurityDescriptorControl(descriptor, ctypes.byref(control), ctypes.byref(revision)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    present, defaulted, dacl = wintypes.BOOL(), wintypes.BOOL(), ctypes.c_void_p()
+    if not api.GetSecurityDescriptorDacl(descriptor, ctypes.byref(present), ctypes.byref(dacl), ctypes.byref(defaulted)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    if not control.value & 0x1000 or not present.value or not dacl.value:
+        return False
+
+    class Acl(ctypes.Structure):
+        _fields_ = [('revision', wintypes.BYTE), ('reserved', wintypes.BYTE),
+                    ('size', wintypes.WORD), ('count', wintypes.WORD), ('reserved2', wintypes.WORD)]
+
+    class AccessAllowedAce(ctypes.Structure):
+        _fields_ = [('type', wintypes.BYTE), ('flags', wintypes.BYTE),
+                    ('size', wintypes.WORD), ('mask', wintypes.DWORD)]
+
+    if ctypes.cast(dacl, ctypes.POINTER(Acl)).contents.count != 1:
+        return False
+    ace = ctypes.c_void_p()
+    if not api.GetAce(dacl, 0, ctypes.byref(ace)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    policy = ctypes.cast(ace, ctypes.POINTER(AccessAllowedAce)).contents
+    if policy.type != 0 or policy.flags != 0 or policy.mask != 0x1f01ff:
+        return False
+    user_sid = ctypes.c_void_p()
+    if not api.ConvertStringSidToSidW(sid, ctypes.byref(user_sid)):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
-        sddl = text.value
-        return 'P' in sddl.split('(', 1)[0] and re.findall(r'\(([^)]+)\)', sddl) == [f'A;;FA;;;{sid}']
+        # Compare binary SIDs: SDDL may render well-known users as aliases.
+        return bool(api.EqualSid(ace.value + ctypes.sizeof(AccessAllowedAce), user_sid))
     finally:
-        kernel.LocalFree(ctypes.cast(text, ctypes.c_void_p))
+        kernel.LocalFree(user_sid)

@@ -2,10 +2,20 @@
 import multiprocessing
 import os
 import queue
+import importlib.util
+from pathlib import Path
+import subprocess
 
-from pgadmin.cdeadmin.operations.fileio import (
-    durable_replace, exclusive_file_lock, has_private_file_permissions, private_file,
-)
+# The helper is stdlib-only; exercise actual host APIs without importing the app.
+_spec = importlib.util.spec_from_file_location('native_receipt_fileio',
+    Path(__file__).resolve().parents[2] / 'web/pgadmin/cdeadmin/operations/fileio.py')
+_fileio = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_fileio)
+durable_replace = _fileio.durable_replace
+exclusive_file_lock = _fileio.exclusive_file_lock
+has_private_file_permissions = _fileio.has_private_file_permissions
+private_file = _fileio.private_file
+
 
 
 def lock_worker(path, messages, release):
@@ -70,3 +80,18 @@ def test_private_receipt_survives_atomic_publication(tmp_path):
     assert target.read_bytes() == b'{"state":"unknown_outcome"}'
     assert has_private_file_permissions(target)
     assert not staging.exists()
+
+
+def test_private_policy_detects_additional_reader(tmp_path):
+    path = tmp_path / 'policy.json'
+    path.write_bytes(b'{}')
+    private_file(path)
+    assert has_private_file_permissions(path)
+    if os.name == 'nt':
+        executable = Path(os.environ['SystemRoot']) / 'System32/icacls.exe'
+        subprocess.run([str(executable), str(path), '/grant', '*S-1-1-0:R', '/Q'], check=True)
+    else:
+        path.chmod(0o644)
+    assert not has_private_file_permissions(path)
+    private_file(path)
+    assert has_private_file_permissions(path)
