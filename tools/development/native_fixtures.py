@@ -232,11 +232,17 @@ def sql_server(engine, directory, evidence, env):
                         raise RuntimeError('Native server data directory differs from the owned fixture')
                     cursor.execute("ALTER USER CURRENT_USER() IDENTIFIED BY " +
                                    ("%s" if engine == 'mysql' else "?"), (password,))
+                    # Use an explicit loopback account rather than the vendor
+                    # bootstrap root account's platform-specific host grants.
+                    cursor.execute("CREATE USER 'cdeadmin_qa'@'127.0.0.1' IDENTIFIED BY '" + password + "'")
+                    cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'cdeadmin_qa'@'127.0.0.1' WITH GRANT OPTION")
                     connection.commit()
             finally:
                 connection.close()
         if os.path.normcase(os.path.realpath(observed)) != os.path.normcase(str(data.resolve())):
             raise RuntimeError('Native server data directory differs from the owned fixture')
+        if engine != 'postgresql':
+            route['user'] = 'cdeadmin_qa'
         yield {'route': route, 'password_env': 'CDEADMIN_OWNED_FIXTURE_PASSWORD'}, password
 
 

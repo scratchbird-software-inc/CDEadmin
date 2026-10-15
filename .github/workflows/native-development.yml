@@ -96,3 +96,14 @@ jobs:
           $receipt = Join-Path '${{ runner.temp }}' 'cdeadmin-native-evidence/summary.md'
           if (Test-Path $receipt) { Get-Content $receipt | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY }
           else { 'Native environment did not reach qualification; inspect preceding setup logs.' | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY }
+      - name: Prepare the repository evidence uploader
+        if: always()
+        run: |
+          npm ci --ignore-scripts --prefix .github/actions/native-evidence
+          exit $LASTEXITCODE
+      - name: Preserve native evidence
+        if: always()
+        uses: ./.github/actions/native-evidence
+        with:
+          path: ${{ runner.temp }}/cdeadmin-native-evidence
+          name: native-${{ matrix.os }}-${{ github.sha }}-${{ github.run_attempt }}

@@ -271,6 +271,11 @@ def install_python_runtime_hook(python, env):
               'import ctypes, os\n'
               f'_directories = {directories!r}\n'
               '_handles = [os.add_dll_directory(p) for p in _directories if os.path.isdir(p)]\n'
+              # Connector/Python ships newer OpenSSL under the same DLL names
+              # as CPython. Load that compatible newer pair before _ssl can
+              # bind the older interpreter pair into this process.
+              f'_tls_paths = {[str(site / name) for name in ("libcrypto-3-x64.dll", "libssl-3-x64.dll")]!r}\n'
+              '_tls = [ctypes.WinDLL(p) for p in _tls_paths if os.path.isfile(p)]\n'
               f'_sqlite = ctypes.WinDLL({str(STATE / "sqlite/sqlite3.dll")!r})\n')
     target = site / '_cdeadmin_native_runtime.py'
     if target.exists() and not target.read_text(encoding='utf-8').startswith(
