@@ -1,0 +1,169 @@
+"""Owner-bound SQLite catalog exchange for the shared workspace."""
+
+from ..providers.sqlite.provider import SQLiteProvider
+from .firebird_catalog_export import build_export
+from .firebird_catalog_import import compare_catalogs, read_catalog
+
+
+def catalog(service, server, request, *, compare=False):
+    if isinstance(request, dict) and (not request or 'database_target_ids' in request):
+        if compare:
+            raise ValueError('SQLite endpoint DDN bundle comparison is file-scoped')
+        from .sqlite_server_catalog import serve
+        return serve(service, server, request)
+    if not isinstance(request, dict) or set(request) - {
+            'database_target_id', 'include_system', 'resource_id', 'source'}:
+        raise ValueError('Invalid SQLite catalog request')
+    target = request.get('database_target_id')
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered SQLite database file')
+    include_system = request.get('include_system', False)
+    if type(include_system) is not bool:
+        raise ValueError('Invalid system-object selection')
+    resource_id = request.get('resource_id')
+    if resource_id is not None and (not isinstance(resource_id, str) or
+                                    not resource_id):
+        raise ValueError('Invalid native object selection')
+    document = (read_catalog(request.get('source'), engine='sqlite')
+                if compare else None)
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(
+        context).instance
+    if (not isinstance(provider, SQLiteProvider) or
+            context.profile_id != 'sqlite-native'):
+        raise ValueError('Select a native SQLite endpoint')
+    if document and (
+            document['provenance']['endpoint_id'] != context.endpoint_id or
+            document['provenance']['database_target_id'] != target):
+        raise ValueError('Document belongs to another endpoint or database')
+    captured = provider.capture_catalog(endpoint['route'],
+                                        include_system=include_system)
+    result = build_export(
+        captured['resources'], endpoint_id=context.endpoint_id,
+        target_id=target, generation=captured['generation'],
+        resource_id=resource_id, include_system=include_system,
+        refreshed=True, engine='sqlite', native_model=compare)
+    if compare:
+        return compare_catalogs(document, result)
+    result['generation'] = captured['generation']
+    result['objects'] = [{
+        'resource_id': item['resource_id'], 'name': item['display_name'],
+        'kind': item['resource_kind'], 'path': item['display_path']}
+        for item in captured['resources']]
+    return result
+
+
+def data(service, server, request):
+    if not isinstance(request, dict) or set(request) != {
+            'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+        raise ValueError('Invalid SQLite data capture request')
+    target = request['database_target_id']
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered SQLite database file')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(
+        context).instance
+    if (not isinstance(provider, SQLiteProvider) or
+            context.profile_id != 'sqlite-native'):
+        raise ValueError('Select a native SQLite endpoint')
+    return provider.capture_data(
+        endpoint['route'], request['resource_id'],
+        endpoint_id=context.endpoint_id, target_id=target,
+        mode=request['mode'], row_limit=request['row_limit'])
+
+
+def data_script(service, server, request):
+    if not isinstance(request, dict) or set(request) != {'database_target_id', 'resource_id'}:
+        raise ValueError('Invalid SQLite SQL export request')
+    target = request['database_target_id']
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered SQLite file')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, SQLiteProvider) or context.profile_id != 'sqlite-native':
+        raise ValueError('Select a native SQLite endpoint')
+    return provider.export_data_script(endpoint['route'], request['resource_id'],
+        endpoint_id=str(context.endpoint_id), target_id=target)
+
+
+def test_data(service, server, request):
+    from .sqlite_test_data import generate, template
+    if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+        raise ValueError('Invalid SQLite test-data request')
+    target = request.get('database_target_id')
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered SQLite file')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, SQLiteProvider) or context.profile_id != 'sqlite-native':
+        raise ValueError('Select a native SQLite endpoint')
+    captured = provider.capture_catalog(endpoint['route'], include_system=False)
+    model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+        target_id=target, generation=captured['generation'], include_system=False,
+        refreshed=True, engine='sqlite', native_model=True)
+    return generate(model, request['recipe']) if 'recipe' in request else template(model)
+
+
+def schema_plan(service, server, request):
+    from .sqlite_schema_plan import plan
+    if (not isinstance(request, dict) or not {
+            'database_target_id', 'baseline', 'desired'} <= set(request) or
+            set(request) - {'database_target_id', 'baseline', 'desired', 'deletions', 'rebuilds',
+                            'column_renames'}):
+        raise ValueError('SQLite schema preview requires exact baseline and desired DDN')
+    target = request['database_target_id']
+    if not isinstance(target, str) or not target:
+        raise ValueError('Select a registered SQLite file')
+    baseline = read_catalog(request['baseline'], engine='sqlite')
+    desired = read_catalog(request['desired'], engine='sqlite')
+    context, endpoint, _root = service.endpoint_service.workspace(
+        server, database_target_id=target)
+    provider = service.endpoint_service.provider_registry.resolve(context).instance
+    if not isinstance(provider, SQLiteProvider) or context.profile_id != 'sqlite-native':
+        raise ValueError('Select a native SQLite endpoint')
+    if any(model['provenance']['endpoint_id'] != str(context.endpoint_id) or
+           model['provenance']['database_target_id'] != target
+           for model in (baseline, desired)):
+        raise ValueError('Design belongs to another endpoint or registered SQLite file')
+    if any(model['provenance'].get('include_system') is not False
+           for model in (baseline, desired)):
+        raise ValueError('Native SQLite migration requires user-object-only DDN capture')
+    from ..providers.embedded_route import contained_database
+    from .sqlite_schema_plan import _scope
+    import os
+    import stat
+    path = contained_database(endpoint['route'])
+    if path == ':memory:':
+        raise ValueError('Native schema preview requires a registered SQLite file')
+    file_info = os.stat(path)
+    if not stat.S_ISREG(file_info.st_mode):
+        raise ValueError('Native schema preview requires a regular SQLite file')
+    for model in (baseline, desired):
+        _scope(model)
+        root = next(row for row in model['rows'].values()
+                    if row['kind'] == 'database' and row['path'] == ['main'])
+        if root['native'].get('registered_file_identity') != [file_info.st_dev, file_info.st_ino]:
+            raise ValueError('Design file identity changed; capture a new SQLite baseline')
+    captured = provider.capture_catalog(endpoint['route'], include_system=False)
+    live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+        target_id=target, generation=captured['generation'], include_system=False,
+        refreshed=True, engine='sqlite', native_model=True)
+    connection = provider.client._connect({'route': endpoint['route']})
+    try:
+        before_info = os.stat(path)
+        if [before_info.st_dev, before_info.st_ino] != [file_info.st_dev, file_info.st_ino]:
+            raise ValueError('SQLite registered file changed before native grammar validation')
+        preview = plan(baseline, desired, live, connection,
+                       deletions=request.get('deletions', ()),
+                       rebuilds=request.get('rebuilds', ()),
+                       column_renames=request.get('column_renames', ()))
+        after_info = os.stat(path)
+        if [after_info.st_dev, after_info.st_ino] != [file_info.st_dev, file_info.st_ino]:
+            raise ValueError('SQLite registered file changed during native grammar validation')
+        return preview
+    finally:
+        provider.client._discard_failed_session(connection)

@@ -7,7 +7,9 @@ from .query_values import normalize_value
 COUNTERS = ('page_reads', 'page_writes', 'page_fetches', 'page_marks',
             'record_seq_reads', 'record_idx_reads', 'record_inserts',
             'record_updates', 'record_deletes', 'record_backouts',
-            'record_purges', 'record_expunges')
+            'record_purges', 'record_expunges', 'record_locks', 'record_waits',
+            'record_conflicts', 'backversion_reads', 'fragment_reads',
+            'record_rpt_reads', 'record_imgc')
 SOURCE = ('SELECT A.MON$ATTACHMENT_ID, ' + ', '.join(
     ('I.' if name.startswith('page_') else 'R.') + 'MON$' + name.upper()
     for name in COUNTERS) +
@@ -24,7 +26,8 @@ class QueryStatistics:
         self.receipt = {'scope': 'current attachment sampling window, including monitoring overhead',
                         'timing_scope': 'host native dispatch, execution, fetch and cursor release',
                         'elapsed_unit': 'nanoseconds', 'elapsed': None,
-                        'before': None, 'after': None, 'deltas': {}, 'errors': []}
+                        'before': None, 'after': None, 'deltas': {}, 'errors': [],
+                        'unavailable_reasons': [], 'reset_counters': []}
 
     def capture(self, stage):
         try:
@@ -48,10 +51,20 @@ class QueryStatistics:
         self.receipt['elapsed'] = time.perf_counter_ns() - self.started
         self.capture('after')
         before, after = self.receipt['before'], self.receipt['after']
+        reasons = self.receipt['unavailable_reasons']
+        for stage, sample in (('before', before), ('after', after)):
+            if sample is None:
+                reasons.append(stage + '-unavailable')
+        if before and after and before['attachment_id'] != after['attachment_id']:
+            reasons.append('attachment-changed')
         if before and after and before['attachment_id'] == after['attachment_id']:
             for name in COUNTERS:
                 delta = after['counters'][name] - before['counters'][name]
                 self.receipt['deltas'][name] = delta if delta >= 0 else None
+                if delta < 0:
+                    self.receipt['reset_counters'].append(name)
+            if self.receipt['reset_counters']:
+                reasons.append('counter-reset')
         self.receipt['complete'] = bool(before and after and before['attachment_id'] == after['attachment_id'] and
                                         not self.receipt['errors'] and
                                         all(value is not None for value in self.receipt['deltas'].values()))

@@ -5,7 +5,9 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
-export default function MySQLServerCatalog({post}) {
+export default function MySQLServerCatalog({post, engine='mysql'}) {
+  const engineName = engine === 'mariadb' ? 'MariaDB' : 'MySQL';
+  const identityKey = engine === 'mariadb' ? 'server_uid' : 'server_uuid';
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [system, setSystem] = useState(true), [targets, setTargets] = useState([]), [scope, setScope] = useState('server');
   const [view, setView] = useState('inventory_1');
@@ -13,27 +15,27 @@ export default function MySQLServerCatalog({post}) {
   useEffect(() => {
     serial.current++; setResult(null); setTargets([]); setScope('server'); setView('inventory_1'); setBusy(false); setError('');
     return () => {serial.current++;};
-  }, [post]);
+  }, [post, engine]);
   const capture = async (expand=false) => {
     const token = ++serial.current;
     setBusy(true); setError('');
     try {
-      const value = await post({action: 'mysql_server_catalog', request: {include_system: system, targets: expand ? targets : []}});
+      const value = await post({action: `${engine}_server_catalog`, request: {include_system: system, targets: expand ? targets : []}});
       if(token === serial.current) {setResult(value); setScope('server'); setView(value.snapshot.view);}
-    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL server capture failed');}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || `${engineName} server capture failed`);}
     finally {if(token === serial.current) setBusy(false);}
   };
   const shown = scope === 'server' ? result : result?.databases?.find(item => item.target_id === scope)?.capture;
   const download = () => {
-    const content = {format: 'scratchrobin.mysql.server-collection@1', server_uuid: result.server_uuid,
+    const content = {format: `scratchrobin.${engine}.server-collection@1`, [identityKey]: result[identityKey],
       server: result.snapshot, databases: result.databases.map(item => ({target_id: item.target_id,
         snapshot: item.capture.snapshot, diagram: item.capture.diagram}))};
     const url = URL.createObjectURL(new Blob([JSON.stringify(content)], {type: 'application/json'}));
-    const link = document.createElement('a'); link.href = url; link.download = 'mysql-server-ddn-collection.json'; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = `${engine}-server-ddn-collection.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
-    <FormReference formKey="mysql-server-catalog" />
+    <FormReference formKey={`${engine}-server-catalog`} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Credential-free native server metadata. Optional database captures are independent, explicitly selected registered targets. This is observational discovery; it does not create a consistent server backup or execute metadata.</Alert>
     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center'}}>
@@ -52,7 +54,7 @@ export default function MySQLServerCatalog({post}) {
           const selected = event.target.value; setScope(selected);
           setView(selected === 'server' ? result.snapshot.view : result.databases.find(item => item.target_id === selected).capture.snapshot.view);
         }}>
-        <MenuItem value="server">MySQL server</MenuItem>
+        <MenuItem value="server">{engineName} server</MenuItem>
         {(result?.databases || []).map(item => <MenuItem value={item.target_id} key={item.target_id}>
           {result.registered_targets.find(target => target.target_id === item.target_id)?.display_name || item.target_id}</MenuItem>)}
       </TextField>
@@ -68,4 +70,4 @@ export default function MySQLServerCatalog({post}) {
     </Box>}
   </Box>;
 }
-MySQLServerCatalog.propTypes = {post: PropTypes.func.isRequired};
+MySQLServerCatalog.propTypes = {post: PropTypes.func.isRequired, engine: PropTypes.oneOf(['mysql', 'mariadb'])};

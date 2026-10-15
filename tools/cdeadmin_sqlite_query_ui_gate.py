@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
 
@@ -122,6 +124,31 @@ def _engine_queries(engine):
 
 def _set_query(driver, wait, source):
     editor = wait.until(lambda value: _query_editor(value))
+    if editor.get_attribute('contenteditable') == 'true':
+        editor.click()
+        editor.send_keys(Keys.CONTROL, 'a')
+        remaining = source
+        actual = ''
+        for _attempt in range(4):
+            editor.send_keys(remaining)
+            actual = driver.execute_script('''
+                const editor = arguments[0];
+                const lines = [...editor.querySelectorAll('.cm-line')];
+                return lines.map(line => line.textContent).join(String.fromCharCode(10));
+            ''', _query_editor(driver))
+            if actual == source:
+                break
+            if not source.startswith(actual):
+                raise RuntimeError(
+                    'Query editor changed the requested source while typing'
+                )
+            remaining = source[len(actual):]
+        if actual != source:
+            raise RuntimeError(
+                f'Query editor input differs from requested source: '
+                f'expected {len(source)} characters, received {len(actual)}'
+            )
+        return
     driver.execute_script(
         """
         const editor = arguments[0];
@@ -146,14 +173,48 @@ def _capture(driver, options, state, screenshots, controls):
     controls[state] = _grid_control_evidence(driver)
 
 
-def _run_query(driver, wait, source, expected_text, engine):
+def _enabled_control(driver, name):
+    control = visible_named_control(driver, name)
+    return control if control is not None and control.is_enabled() else None
+
+
+def _run_query(driver, wait, source, expected_text, engine, diagnostic_root=None):
     _set_query(driver, wait, source)
-    _button(wait, 'Run').click()
-    wait.until(lambda value: _visible_text(value, expected_text) or any(
-        item.is_displayed() and 'did not complete the request' in
-        item.text.lower()
-        for item in value.find_elements(By.CSS_SELECTOR, '[role="alert"]')
-    ))
+    run = wait.until(lambda value: next((item for item in value.find_elements(
+        By.CSS_SELECTOR, 'button[title="Run"], button[aria-label="Run"]'
+    ) if item.is_displayed() and item.is_enabled()), None))
+    run.click()
+    grid = wait.until(lambda value: next((item for item in value.find_elements(
+        By.CSS_SELECTOR, '[role="grid"]'
+    ) if item.is_displayed()), None))
+    driver.execute_script('arguments[0].scrollIntoView({block: "center"});', grid)
+    try:
+        wait.until(lambda value: _visible_text(value, expected_text) or any(
+            item.is_displayed() and 'did not complete the request' in
+            item.text.lower()
+            for item in value.find_elements(By.CSS_SELECTOR, '[role="alert"]')
+        ))
+    except TimeoutException:
+        if diagnostic_root is not None:
+            driver.save_screenshot(str(diagnostic_root / 'query-result-timeout.png'))
+        alerts = [item.text.strip() for item in driver.find_elements(
+            By.CSS_SELECTOR, '[role="alert"]'
+        ) if item.is_displayed() and item.text.strip()]
+        grids = driver.execute_script('''
+            return [...document.querySelectorAll('[role="grid"]')].map(grid => ({
+              label: grid.getAttribute('aria-label'),
+              rows: grid.querySelectorAll('[role="row"]').length,
+              cells: grid.querySelectorAll('[role="gridcell"]').length,
+              height: grid.getBoundingClientRect().height,
+              text: grid.textContent.slice(-500),
+            }));
+        ''')
+        models = driver.execute_script('return window.__qaResultModels || []')
+        raise RuntimeError(
+            f'{engine} query result timed out; visible alerts: {alerts}; '
+            f'grids: {grids}; response models: {models}; session text: '
+            f'{driver.execute_script("return document.body.innerText.slice(-2500)")!r}'
+        ) from None
     if not _visible_text(driver, expected_text):
         alerts = [
             item.text.strip() for item in driver.find_elements(
@@ -191,7 +252,10 @@ def run(options):
         if old.is_file():
             old.unlink()
     driver = create_driver(options)
-    wait = WebDriverWait(driver, options.timeout)
+    wait = WebDriverWait(
+        driver, options.timeout,
+        ignored_exceptions=(StaleElementReferenceException,),
+    )
     screenshots = {}
     controls = {}
     try:
@@ -213,9 +277,42 @@ def run(options):
                 'plan action'
             )
         _capture(driver, options, 'initial', screenshots, controls)
+        driver.execute_script('''
+          window.__qaResultModels = [];
+          const originalSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.send = function(...args) {
+            this.addEventListener('load', () => {
+              try {
+                const root = JSON.parse(this.responseText);
+                const visit = (value, depth) => {
+                  if (!value || typeof value !== 'object' || depth > 6) return;
+                  if (value.view_model && Array.isArray(value.view_model.rows)) {
+                    const model = value.view_model;
+                    window.__qaResultModels.push({
+                      family: model.family,
+                      columns: (model.columns || []).map(column => ({
+                        name: column.name, key: column.key, type: column.type,
+                      })),
+                      rowCount: model.rows.length,
+                      pageOffset: value.page?.offset,
+                      pageSize: value.page?.page_size,
+                      firstRowArray: Array.isArray(model.rows[0]),
+                      firstRowKeys: model.rows[0] &&
+                        Object.keys(model.rows[0]).slice(0, 8),
+                    });
+                  }
+                  Object.values(value).forEach(child => visit(child, depth + 1));
+                };
+                visit(root, 0);
+              } catch (_ignored) {}
+            });
+            return originalSend.apply(this, args);
+          };
+        ''')
 
         _run_query(
-            driver, wait, small_query, 'Northwind Field Lab', options.engine
+            driver, wait, small_query, 'Northwind Field Lab', options.engine,
+            options.output_root,
         )
         _capture(driver, options, 'result-rendered', screenshots, controls)
         _button(wait, 'Export CSV').click()
@@ -229,7 +326,7 @@ def run(options):
 
         _run_query(
             driver, wait, comparison_query, 'Adventure Works Mining',
-            options.engine,
+            options.engine, options.output_root,
         )
         compare = _button(wait, 'Compare with previous result')
         if not compare.is_enabled():
@@ -259,7 +356,8 @@ def run(options):
         ))
         _capture(driver, options, 'native-query-plan', screenshots, controls)
 
-        _run_query(driver, wait, paged_query, 'row-001', options.engine)
+        _run_query(driver, wait, paged_query, 'row-001', options.engine,
+                   options.output_root)
         next_page = _button(wait, 'Next result page')
         if not next_page.is_enabled():
             raise RuntimeError(
@@ -267,12 +365,44 @@ def run(options):
             )
         _capture(driver, options, 'large-result-first-page', screenshots,
                  controls)
+        first_page = driver.execute_script('return window.__qaResultModels.at(-1)')
+        expected_second = (
+            (first_page.get('pageOffset') or 0) + first_page['pageSize'] + 1
+            if first_page and isinstance(first_page.get('pageSize'), int)
+            else 501
+        )
         next_page.click()
-        wait.until(lambda value: _visible_text(value, 'row-501'))
+        wait.until(lambda value: (
+            (previous := visible_named_control(value, 'Previous page'))
+            is not None and previous.is_enabled()
+        ))
+        grid = wait.until(lambda value: next((item for item in
+            value.find_elements(By.CSS_SELECTOR, '[role="grid"]')
+            if item.is_displayed()), None))
+        driver.execute_script('arguments[0].scrollTop = 0;', grid)
+        wait.until(lambda value: _visible_text(
+            value, f'row-{expected_second:03d}'
+        ))
         _capture(driver, options, 'large-result-second-page', screenshots,
                  controls)
 
-        _button(wait, 'Provider transaction state').click()
+        if options.engine == 'DuckDB':
+            next_page = wait.until(lambda value: _enabled_control(
+                value, 'Next result page'))
+            next_page.click()
+            grid = wait.until(lambda value: next((item for item in
+                value.find_elements(By.CSS_SELECTOR, '[role="grid"]')
+                if item.is_displayed()), None))
+            driver.execute_script('arguments[0].scrollTop = 0;', grid)
+            wait.until(lambda value: _visible_text(
+                value, f'row-{expected_second + first_page["pageSize"]:03d}'
+            ))
+            _capture(driver, options, 'large-result-final-page', screenshots,
+                     controls)
+
+        transaction_state = wait.until(lambda value: _enabled_control(
+            value, 'Provider transaction state'))
+        transaction_state.click()
         wait.until(lambda value: any(
             item.is_displayed() and 'driver_observation_only' in item.text
             for item in value.find_elements(By.TAG_NAME, 'pre')

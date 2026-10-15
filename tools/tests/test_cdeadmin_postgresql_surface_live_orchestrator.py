@@ -68,6 +68,12 @@ class PostgreSQLSurfaceLiveOrchestratorTests(unittest.TestCase):
             set(evidence['concepts']['relational']),
         )
         self.assertFalse(evidence['credential_values_exported'])
+        self.assertFalse(evidence['passed'])
+        self.assertEqual({}, evidence['passed_resource_operations'])
+        self.assertTrue(evidence['missing_resource_operations'])
+        self.assertTrue(evidence['raw_commands_used_for_provider_operations'])
+        self.assertTrue(all(concept['status'] == 'unqualified' and not concept['operations']
+                            for concept in evidence['concepts']['relational'].values()))
 
 
 if __name__ == '__main__':

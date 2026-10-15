@@ -3,7 +3,7 @@ import time
 import uuid
 
 
-def qualify(connection, client, route):
+def qualify(connection, client, route, *, disconnect=False):
     from pgadmin.cdeadmin.providers.firebird.events import EventSubscriptions
     events = EventSubscriptions()
     event = 'SR_EVENT_' + uuid.uuid4().hex[:12]
@@ -49,6 +49,23 @@ def qualify(connection, client, route):
         assert expired['state'] == 'expired' and expired['cleanup_confirmed']
     finally:
         events.action('owner', 'route', second, stop=True)
-    return {'passed': True, 'committed_event_count': '2', 'rollback_not_delivered': True,
+    failure = None
+    if disconnect:
+        third = events.start('owner', 'route', [event], connect, client.close_session)['subscription_id']
+        try:
+            await_state(third, lambda item: item['state'] == 'listening')
+            attachment_id = opened[-1].info.id
+            with connection.cursor() as cursor:
+                cursor.execute('DELETE FROM MON$ATTACHMENTS WHERE MON$ATTACHMENT_ID = ?', (attachment_id,))
+            connection.commit()
+            assert events.items[third].done.wait(20), 'Disconnected monitor did not finish'
+            failure = events.action('owner', 'route', third)
+            assert failure['delivery_gap'] and failure['state'] in {'failed', 'cleanup-unknown'}, failure
+            assert failure['counts'][event] == '0'
+        finally:
+            events.action('owner', 'route', third, stop=True)
+    events.close()
+    return {'passed': True,
+            'disconnect': failure, 'committed_event_count': '2', 'rollback_not_delivered': True,
             'reconnect_new_interval': True, 'idle_expiry_released': True,
             'no_retained_monitor_transaction': True, 'stop_released': True}

@@ -1,3 +1,6 @@
+import {Alert, Checkbox, FormControlLabel, TextField} from '@mui/material';
+import useExecutionPolicy from './useExecutionPolicy';
+import SourceValidation from './SourceValidation';
 /////////////////////////////////////////////////////////////
 //
 // CDEadmin - Multi-engine Database Administration
@@ -7,18 +10,13 @@
 //
 //////////////////////////////////////////////////////////////
 import React, {useContext, useCallback, useEffect, useState} from 'react';
-import { styled } from '@mui/material/styles';
-import { Box } from '@mui/material';
+import {QueryToolToolbar as StyledBox, QueryToolAction} from 'sources/cdeadmin_ui/editors/QueryToolControls';
 import { PgButtonGroup, PgIconButton } from '../../../../../../static/js/components/Buttons';
 import FolderRoundedIcon from '@mui/icons-material/FolderRounded';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
-import StopRoundedIcon from '@mui/icons-material/StopRounded';
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
-import { FilterIcon, CommitIcon, RollbackIcon, ExecuteQueryIcon } from '../../../../../../static/js/components/ExternalIcon';
+import { FilterIcon } from '../../../../../../static/js/components/ExternalIcon';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
-import ExplicitRoundedIcon from '@mui/icons-material/ExplicitRounded';
 import FormatListNumberedRoundedIcon from '@mui/icons-material/FormatListNumberedRounded';
 import HelpIcon from '@mui/icons-material/HelpRounded';
 import {QUERY_TOOL_EVENTS, CONNECTION_STATUS, MODAL_DIALOGS} from '../QueryToolConstants';
@@ -42,16 +40,6 @@ import {
   WorkspaceController as LayoutDocker,
 } from 'sources/cdeadmin_ui/workspace/Workspace';
 import CloseRunningDialog from '../dialogs/CloseRunningDialog';
-
-const StyledBox = styled(Box)(({theme}) => ({
-  padding: '2px 4px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-  backgroundColor: theme.otherVars.editorToolbarBg,
-  flexWrap: 'wrap',
-  ...theme.mixins.panelBorder.bottom,
-}));
 
 function changeQueryExecutionSettings(type, api, transId, value) {
   let url = url_for(`sqleditor.${type}`, {
@@ -92,11 +80,15 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
 
   const queryToolPref = queryToolCtx.preferences.sqleditor;
   const editorPref = queryToolCtx.preferences.editor;
+  const [fetchRows, setFetchRows] = useState(String(queryToolPref.data_result_rows_per_page || 1000));
+  const fetchRowsValid = /^[0-9]+$/.test(fetchRows) && Number(fetchRows) >= 1 && Number(fetchRows) <= 100000;
   const setDisableButton = useCallback((name, disable=true)=>{
     setButtonsDisabled((prev)=>({...prev, [name]: disable}));
   }, []);
 
+  const policyBlockedRef = React.useRef(false);
   const executeCursor = useCallback(()=>{
+    if(policyBlockedRef.current) return;
     if(!queryToolCtx.preferences.sqleditor.underline_query_cursor && queryToolCtx.preferences.sqleditor.underlined_query_execute_warning){
       eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTE_CURSOR_WARNING);
     } else {
@@ -104,6 +96,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
     }
   }, [queryToolCtx.preferences.sqleditor]);
   const executeScript = useCallback(()=>{
+    if(policyBlockedRef.current) return;
     eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION);
   }, []);
   const cancelQuery = useCallback(()=>{
@@ -111,6 +104,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
   }, []);
 
   const explain = useCallback((analyze=false)=>{
+    if(policyBlockedRef.current) return;
     eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION, {
       format: 'json',
       analyze: analyze,
@@ -132,36 +126,35 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
     explain(true);
   }, [explain]);
 
-  const checkMenuClick = useCallback((e)=>{
-    setCheckedMenuItems((prev)=>{
-      let newVal = !prev[e.value];
-      if (e.value === 'server_cursor') {
-        queryToolCtx.updateServerCursor({server_cursor: newVal});
-      }
-      if(e.value === 'auto_commit' || e.value === 'auto_rollback' || e.value === 'server_cursor') {
-        changeQueryExecutionSettings(e.value, queryToolCtx.api, queryToolCtx.params.trans_id, newVal)
-          .catch ((error)=>{
-            newVal = prev[e.value];
-            eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR, error, {
-              checkTransaction: true,
-            });
-          });
-      }
-
+  const executionPolicy = useExecutionPolicy({
+    scope: queryToolCtx.params.trans_id,
+    request: (name, value) => changeQueryExecutionSettings(name, queryToolCtx.api, queryToolCtx.params.trans_id, value),
+    onAccepted: (name, value) => {
+      setCheckedMenuItems(previous => ({...previous, [name]: value}));
+      if(name === 'server_cursor') queryToolCtx.updateServerCursor({server_cursor: value});
+    },
+    onError: error => eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR, error, {checkTransaction: true}),
+  });
+  const policyBlocked = executionPolicy.pending || executionPolicy.uncertain;
+  policyBlockedRef.current = policyBlocked;
+  const applyFetchRows = () => {
+    if(fetchRowsValid && (Number(fetchRows) !== checkedMenuItems.result_page_size || executionPolicy.uncertain)) {
+      executionPolicy.change('result_page_size', Number(fetchRows));
+    }
+  };
+  const checkMenuClick = (e) => {
+    if(['auto_commit', 'auto_rollback', 'server_cursor'].includes(e.value)) {
+      executionPolicy.change(e.value, !checkedMenuItems[e.value]);
+      return;
+    }
+    setCheckedMenuItems(prev => {
+      const newVal = !prev[e.value];
       let otherVars = {};
-      if (e.value === 'explain_serialize_binary' && newVal) {
-        otherVars = { 'explain_serialize_text': false };
-      } else if (e.value === 'explain_serialize_text' && newVal) {
-        otherVars = { 'explain_serialize_binary': false };
-      }
-
-      return {
-        ...prev,
-        [e.value]: newVal,
-        ...otherVars,
-      };
+      if(e.value === 'explain_serialize_binary' && newVal) otherVars = {explain_serialize_text: false};
+      else if(e.value === 'explain_serialize_text' && newVal) otherVars = {explain_serialize_binary: false};
+      return {...prev, [e.value]: newVal, ...otherVars};
     });
-  }, []);
+  };
 
   const openFile = useCallback(()=>{
     confirmDiscard(()=>{
@@ -309,9 +302,11 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
   }, [queryToolConnCtx.connectionStatus]);
 
   const onCommitClick=()=>{
+    if(policyBlockedRef.current) return;
     eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'COMMIT;', {external: true});
   };
   const onRollbackClick=()=>{
+    if(policyBlockedRef.current) return;
     eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'ROLLBACK;', {external: true});
   };
   const executeMacro = (m)=>{
@@ -357,6 +352,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
     if(queryToolPref) {
       /* Get the prefs first time */
       if(_.isUndefined(checkedMenuItems.auto_commit)) {
+        setFetchRows(String(queryToolPref.data_result_rows_per_page || 1000));
         setCheckedMenuItems({
           auto_commit: queryToolPref.auto_commit,
           auto_rollback: queryToolPref.auto_rollback,
@@ -371,6 +367,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
           explain_memory: queryToolPref.explain_memory,
           open_in_new_tab: queryToolPref.open_in_new_tab,
           server_cursor: queryToolPref.server_cursor,
+          result_page_size: queryToolPref.data_result_rows_per_page || 1000,
         });
       }
     }
@@ -453,13 +450,13 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
     {
       shortcut: queryToolPref.commit_transaction,
       options: {
-        callback: ()=>{onCommitClick();}
+        callback: ()=>{if(!checkedMenuItems.auto_commit && !buttonsDisabled.commit) onCommitClick();}
       }
     },
     {
       shortcut: queryToolPref.rollback_transaction,
       options: {
-        callback: ()=>{onRollbackClick();}
+        callback: ()=>{if(!checkedMenuItems.auto_commit && !buttonsDisabled.rollback) onRollbackClick();}
       }
     },
     {
@@ -525,6 +522,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
 
   return (
     (<>
+      {executionPolicy.uncertain && <Alert severity="error">Execution policy acknowledgement was lost. Execution is blocked. Explicitly select the required policy again before continuing.</Alert>}
       <StyledBox>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Open File')} icon={<FolderRoundedIcon />} disabled={!queryToolCtx.params.is_query_tool}
@@ -561,30 +559,42 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
           {label: gettext('100 rows'), value: '100'},
         ]} value={limit} onChange={onLimitChange} disabled={buttonsDisabled['limit'] || queryToolCtx.params.is_query_tool} />
         <PgButtonGroup size="small">
-          <PgIconButton title={gettext('Cancel query')} icon={<StopRoundedIcon style={{height: 'unset'}} />}
+          <QueryToolAction action="cancel" title={gettext('Cancel query')}
             onClick={cancelQuery} disabled={buttonsDisabled['cancel']} shortcut={queryToolPref.btn_cancel_query} />
-          <PgIconButton title={gettext('Execute script')} icon={<PlayArrowRoundedIcon style={{height: 'unset'}} />}
-            onClick={executeScript} disabled={buttonsDisabled['execute']} shortcut={queryToolPref.execute_script}/>
-          <PgIconButton title={gettext('Execute query')} icon={<ExecuteQueryIcon style={{padding: '2px 5px'}} />}
-            onClick={executeCursor} disabled={buttonsDisabled['execute'] || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.execute_cursor}/>
+          <QueryToolAction action="script" title={gettext('Execute script')}
+            onClick={executeScript} disabled={buttonsDisabled['execute'] || policyBlocked} shortcut={queryToolPref.execute_script}/>
+          <QueryToolAction action="execute" title={gettext('Execute query')}
+            onClick={executeCursor} disabled={buttonsDisabled['execute'] || policyBlocked || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.execute_cursor}/>
           <PgIconButton title={gettext('Execute options')} icon={<KeyboardArrowDownIcon />} splitButton
             name="menu-autocommit" ref={autoCommitMenuRef} shortcut={queryToolPref.btn_execute_options}
             onClick={toggleMenu} disabled={buttonsDisabled['execute-options']}/>
         </PgButtonGroup>
         <PgButtonGroup size="small">
-          <PgIconButton title={gettext('Explain')} icon={<ExplicitRoundedIcon />}
-            onClick={()=>{explain();}} disabled={buttonsDisabled['explain'] || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.explain_query}/>
-          <PgIconButton title={gettext('Explain Analyze')} icon={<AssessmentRoundedIcon />}
-            onClick={()=>{explainAnalyse();}} disabled={buttonsDisabled['explain_analyse'] || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.explain_analyze_query}/>
+          <QueryToolAction action="explain" title={gettext('Explain')}
+            onClick={()=>{explain();}} disabled={buttonsDisabled['explain'] || policyBlocked || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.explain_query}/>
+          <QueryToolAction action="analyze" title={gettext('Explain Analyze')}
+            onClick={()=>{explainAnalyse();}} disabled={buttonsDisabled['explain_analyse'] || policyBlocked || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.explain_analyze_query}/>
           <PgIconButton title={gettext('Explain Settings')} icon={<KeyboardArrowDownIcon />} splitButton
             disabled={!queryToolCtx.params.is_query_tool}
             name="menu-explain" ref={explainMenuRef} onClick={toggleMenu} />
         </PgButtonGroup>
+        <SourceValidation api={queryToolCtx.api} eventBus={eventBus} transId={queryToolCtx.params.trans_id}
+          disabled={!buttonsDisabled.cancel || !queryToolCtx.params.is_query_tool || policyBlocked} />
+        <TextField size="small" type="number" label={gettext('Rows per fetch')} value={fetchRows}
+          sx={{width: '10rem'}} error={!fetchRowsValid}
+          inputProps={{min: 1, max: 100000, step: 1}}
+          disabled={executionPolicy.pending || !buttonsDisabled.cancel}
+          onChange={event => setFetchRows(event.target.value)} onBlur={applyFetchRows}
+          onKeyDown={event => { if(event.key === 'Enter') { event.preventDefault(); applyFetchRows(); } }} />
+        <FormControlLabel sx={{m: 0}} label={gettext('Autocommit')} control={<Checkbox size="small"
+          checked={Boolean(checkedMenuItems.auto_commit)}
+          disabled={executionPolicy.pending || buttonsDisabled['execute-options'] || !queryToolCtx.params.is_query_tool}
+          onChange={() => checkMenuClick({value: 'auto_commit'})} />} />
         <PgButtonGroup size="small">
-          <PgIconButton title={gettext('Commit')} icon={<CommitIcon />}
-            onClick={onCommitClick} disabled={buttonsDisabled['commit']} shortcut={queryToolPref.commit_transaction}/>
-          <PgIconButton title={gettext('Rollback')} icon={<RollbackIcon />}
-            onClick={onRollbackClick} disabled={buttonsDisabled['rollback']} shortcut={queryToolPref.rollback_transaction}/>
+          <QueryToolAction action="commit" title={gettext('Commit')}
+            onClick={onCommitClick} disabled={buttonsDisabled['commit'] || policyBlocked || Boolean(checkedMenuItems.auto_commit)} shortcut={queryToolPref.commit_transaction}/>
+          <QueryToolAction action="rollback" title={gettext('Rollback')}
+            onClick={onRollbackClick} disabled={buttonsDisabled['rollback'] || policyBlocked || Boolean(checkedMenuItems.auto_commit)} shortcut={queryToolPref.rollback_transaction}/>
         </PgButtonGroup>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Macros')} icon={
@@ -654,8 +664,6 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddT
         onClose={onMenuClose}
         label={gettext('Execute Options Menu')}
       >
-        <PgMenuItem hasCheck value="auto_commit" checked={checkedMenuItems['auto_commit']}
-          onClick={checkMenuClick}>{gettext('Auto commit?')}</PgMenuItem>
         <PgMenuItem hasCheck value="auto_rollback" checked={checkedMenuItems['auto_rollback']}
           onClick={checkMenuClick}>{gettext('Auto rollback on error?')}</PgMenuItem>
         <PgMenuItem hasCheck value="server_cursor" checked={checkedMenuItems['server_cursor']}

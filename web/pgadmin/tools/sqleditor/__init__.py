@@ -136,6 +136,7 @@ class SqlEditorModule(PgAdminModule):
             'sqleditor.cancel_transaction',
             'sqleditor.get_object_name',
             'sqleditor.auto_commit',
+            'sqleditor.result_page_size',
             'sqleditor.auto_rollback',
             'sqleditor.autocomplete',
             'sqleditor.query_tool_download',
@@ -633,6 +634,8 @@ def _init_sqleditor(trans_id, connect, sgid, sid, did, dbname=None, **kwargs):
     command_obj.set_auto_commit(kwargs['auto_commit'])
     command_obj.set_auto_rollback(kwargs['auto_rollback'])
     command_obj.set_server_cursor(kwargs['server_cursor'])
+    if kwargs.get('result_page_size') is not None:
+        command_obj.result_page_size = kwargs['result_page_size']
 
     # Set the value of database name, that will be used later
     command_obj.dbname = dbname if dbname else None
@@ -687,6 +690,7 @@ def update_sqleditor_connection(trans_id, sgid, sid, did):
             'password': data['password'] if 'password' in data else None,
             'auto_commit': getattr(trans_obj, 'auto_commit', None),
             'auto_rollback': getattr(trans_obj, 'auto_rollback', None),
+            'result_page_size': getattr(trans_obj, 'result_page_size', None),
         }
 
         is_error, errmsg, conn_id, version = _init_sqleditor(
@@ -1098,6 +1102,8 @@ def poll(trans_id):
     # Check the transaction and connection status
     status, error_msg, conn, trans_obj, session_obj = \
         check_transaction_status(trans_id)
+
+    data_result_rows_per_page = getattr(trans_obj, 'result_page_size', data_result_rows_per_page)
 
     if type(error_msg) is Response:
         return error_msg
@@ -2019,6 +2025,55 @@ def set_pref_options(trans_id, operation):
         res = error_msg
 
     return make_json_response(data={'status': status, 'result': res})
+
+
+@blueprint.route('/validate_source/<int:trans_id>', methods=['POST'],
+                 endpoint='validate_source')
+@pga_login_required
+def validate_query_source(trans_id):
+    from pgadmin.cdeadmin.providers.postgresql.language import analyze
+    from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
+    payload = request.get_json(silent=True)
+    if (not isinstance(payload, dict) or set(payload) != {'source'}
+            or request.args.get('connect') == '1'):
+        return make_json_response(success=0, errormsg='Provide SQL source on an existing session', status=400)
+    status, error, conn, trans_obj, session_obj = check_transaction_status(trans_id)
+    if type(error) is Response:
+        return error
+    if (not status or conn is None or not conn.connected() or
+            trans_obj is None or session_obj is None or conn.transaction_status() == 1):
+        return make_json_response(success=0, errormsg='An idle connected query session is required', status=409)
+    if conn.conn.info.server_version != 180003:
+        return make_json_response(success=0, errormsg='Offline grammar is qualified for the PostgreSQL 18.3 profile', status=409)
+    try:
+        result = analyze(payload['source'], standard_strings=conn.conn.info.parameter_status('standard_conforming_strings'))
+    except LanguageToolError as exc:
+        return make_json_response(success=0, errormsg=str(exc), status=400)
+    result['server_version'] = conn.conn.info.server_version
+    return make_json_response(data=result)
+
+
+@blueprint.route('/result_page_size/<int:trans_id>', methods=['POST'],
+                 endpoint='result_page_size')
+@pga_login_required
+def set_result_page_size(trans_id):
+    value = request.get_json(silent=True)
+    if type(value) is not int or not 1 <= value <= 100000:
+        return make_json_response(success=0, errormsg='Rows per fetch must be an integer from 1 to 100000', status=400)
+    status, error_msg, conn, trans_obj, session_obj = check_transaction_status(trans_id)
+    if type(error_msg) is Response:
+        return error_msg
+    if (not status or conn is None or not conn.connected() or
+            trans_obj is None or session_obj is None):
+        return make_json_response(data={'status': False}, success=0,
+                                  errormsg='Query session is unavailable', status=409)
+    if conn.transaction_status() == 1:  # Native PostgreSQL ACTIVE status.
+        return make_json_response(data={'status': False}, success=0,
+                                  errormsg='Wait for the active statement before changing rows per fetch', status=409)
+    trans_obj.result_page_size = value
+    session_obj['command_obj'] = pickle.dumps(trans_obj, -1)
+    update_session_grid_transaction(trans_id, session_obj)
+    return make_json_response(data={'status': True, 'result': value})
 
 
 @blueprint.route(

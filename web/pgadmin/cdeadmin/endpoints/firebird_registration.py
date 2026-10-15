@@ -45,9 +45,11 @@ def catalog(service, server, target_id):
         if other is not None and other.profile_id == profile['profile_id']:
             destinations.append({'server_id': candidate.id,
                                  'name': candidate.name,
-                                 'endpoint_id': other.id})
+                                 'endpoint_id': other.id,
+                                 'generation': other.profile_generation})
     return {'source': service._database_target_value(target),
             'source_server_id': server.id,
+            'source_generation': endpoint.profile_generation,
             'destinations': sorted(destinations,
                                    key=lambda row: (row['name'], row['server_id']))}
 
@@ -58,7 +60,8 @@ def transfer(service, server, request):
 
     if not isinstance(request, dict) or set(request) != {
             'target_id', 'destination_server_id', 'operation',
-            'display_name', 'credentials', 'confirmed'}:
+            'display_name', 'credentials', 'confirmed',
+            'source_generation', 'destination_generation'}:
         raise EndpointRegistrationError('Invalid registration transfer fields')
     if request['confirmed'] is not True or request['operation'] not in {'clone', 'move'}:
         raise EndpointRegistrationError('Confirm the registration clone or move')
@@ -78,6 +81,11 @@ def transfer(service, server, request):
     moving = request['operation'] == 'move'
     if moving and dest_endpoint.id == source_endpoint.id:
         raise EndpointRegistrationError('Move requires a different server')
+    for key, endpoint in (('source_generation', source_endpoint),
+                          ('destination_generation', dest_endpoint)):
+        if (not isinstance(request[key], str) or not request[key] or
+                request[key] != endpoint.profile_generation):
+            raise EndpointRegistrationError('Registration configuration changed; refresh before transferring')
     target = service._owned_database_target(source_endpoint, request['target_id'])
     _, display_name = service._database_target_input({
         'database': target.database, 'display_name': request['display_name']})
@@ -92,7 +100,9 @@ def transfer(service, server, request):
                     generation = str(uuid.uuid4())
                     changed = db.session.query(EndpointProfile).filter(
                         EndpointProfile.id == endpoint_id,
-                        EndpointProfile.profile_generation == endpoint.profile_generation,
+                        EndpointProfile.profile_generation == request[
+                            'source_generation' if endpoint_id == source_endpoint.id
+                            else 'destination_generation'],
                     ).update({'profile_generation': generation}, synchronize_session=False)
                     if changed != 1:
                         raise EndpointRegistrationError('Registration configuration changed; refresh before transferring')
@@ -117,6 +127,11 @@ def transfer(service, server, request):
                     for key in ('role', 'charset'):
                         if key not in configuration and key in source_route:
                             configuration[key] = source_route[key]
+                else:
+                    # Inherited credentials follow the destination's effective
+                    # identity, including its role and character set.
+                    configuration.pop('role', None)
+                    configuration.pop('charset', None)
                 old_secret = secret_model(target)
                 result = target if moving else EndpointDatabaseTarget(
                     id=str(uuid.uuid4()), database=target.database)

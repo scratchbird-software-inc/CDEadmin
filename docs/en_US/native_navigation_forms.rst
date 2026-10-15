@@ -23,6 +23,14 @@ operation forms) display their shared reference. Missing native forms retain
 their designated reference when the UX team implements them. Scoped creation and
 metadata extraction each have their own reusable placeholder reference.
 
+Native PostgreSQL property inspectors and create/edit dialogs display the same
+registered reference for the reusable object form. Reuse its canonical native
+design reference across parent locations (for example, a rule under a table or
+view); do not allocate an ID from an object OID, caption, action or render order.
+Native backup, restore, maintenance and import/export utility forms have their
+own stable references, shared across their applicable object locations. Reference
+labels must not displace scrolling content or the dialog's action bar.
+
 The native tree supplements the existing live browser/discovery tree. Its
 unbound branches describe the design; they do not claim those objects exist on
 the connected server. Discovery completeness and live engine/version capability

@@ -6,4 +6,4 @@ if [[ -f "$dev_root/.venv/bin/activate" ]]; then
     source "$dev_root/.venv/bin/activate"
 fi
 source "$dev_root/tools/reference_engine_demos/environment.sh"
-exec python3 "$dev_root/tools/development/manage.py" "$@"
+exec "${SCRATCHROBIN_PYTHON:-python3}" "$dev_root/tools/development/manage.py" "$@"

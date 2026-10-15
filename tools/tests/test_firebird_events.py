@@ -74,3 +74,17 @@ def test_authentication_occurs_in_calling_context_before_worker_handoff():
     assert observed == [caller]
     assert worker.call_args.args[1]() is connection
     registry.items[response['subscription_id']].done.set()
+
+
+def test_thread_and_cleanup_failure_retains_pollable_receipt():
+    registry = EventSubscriptions()
+    connection = Mock()
+    with patch('threading.Thread') as thread:
+        thread.return_value.start.side_effect = RuntimeError('private startup failure')
+        value = registry.start('owner', 'route', ['EV'], lambda: connection,
+                               Mock(side_effect=OSError('private cleanup failure')))
+    assert value['state'] == 'cleanup-unknown' and not value['cleanup_confirmed']
+    assert value['delivery_gap'] and value['error_type'] == 'OSError'
+    assert 'private' not in str(value)
+    assert registry.action('owner', 'route', value['subscription_id']) == value
+    assert not registry.close()

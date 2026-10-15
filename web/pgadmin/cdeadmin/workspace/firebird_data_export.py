@@ -51,6 +51,13 @@ def capture(service, server, model, *, contents='data'):
     session = service.open_session(server, 'firebird-sql', target,
                                    session_purpose='firebird-data-export')['session_id']
     continuation = None
+
+    def within_limits():
+        if time.monotonic() - started > MAX_SECONDS:
+            raise ValueError('Data capture exceeded its time limit; no partial download is available')
+        if size > MAX_BYTES:
+            raise ValueError('Data export exceeds the 8 MiB limit; select a smaller scope')
+
     try:
         for table in persistent:
             resource = {'resource_id': table['resource_id'], 'resource_kind': 'table',
@@ -60,17 +67,19 @@ def capture(service, server, model, *, contents='data'):
                         'native_columns': table['native'].get('columns', []),
                         'columns': None, 'rows': []}
             size += len(encoded(captured).encode('utf-8'))
+            within_limits()
             while True:
-                if time.monotonic() - started > MAX_SECONDS:
-                    raise ValueError('Data capture exceeded its time limit; no partial download is available')
+                within_limits()
                 page = service.read_visual_admin_rows(server, {
                     'target_resource': resource, 'session_id': session,
                     'database_target_id': target, 'limit': 200,
                     'continuation': continuation})
                 continuation = page.get('continuation')
+                within_limits()
                 if captured['columns'] is None:
                     captured['columns'] = page['columns']
                     size += len(encoded(page['columns']).encode('utf-8'))
+                    within_limits()
                     expected = [column['name'] for column in captured['native_columns']]
                     actual = [column['name'] for column in page['columns']]
                     if expected != actual:
@@ -106,7 +115,12 @@ def capture(service, server, model, *, contents='data'):
                 service.transaction_action(server, session, 'rollback', target)
             finally:
                 service.close_session(server, session, target)
-    return {'format': document['format'], 'filename': 'firebird-data.json',
+    from .firebird_data_ddn import build
+    try:
+        ddn = build(document)
+    except ValueError as error:
+        ddn = {'unavailable': True, 'reason': str(error)}
+    return {'ddn': ddn, 'format': document['format'], 'filename': 'firebird-data.json',
             'download_text': text, 'sha256': hashlib.sha256(text.encode()).hexdigest(),
             'row_count': document['row_count'], 'table_count': len(document['tables']),
             'provenance': document['provenance'], 'contents': contents,

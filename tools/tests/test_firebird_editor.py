@@ -28,3 +28,17 @@ def test_metadata_completion_preserves_target_and_omits_source_and_credentials()
     server.endpoint_profile.profile_id = 'mysql'
     with pytest.raises(ProviderWorkspaceError):
         service.firebird_editor_metadata(server, 'target')
+
+
+
+def test_completion_includes_public_native_families_without_source_text():
+    from pgadmin.cdeadmin.workspace.firebird_editor import metadata
+    entries=[]
+    for kind in ('procedure','function','external-function','package','sequence','domain','exception','collation','character-set'):
+        entries.append({'resource_kind':kind,'resource_id':kind,'display_name':kind,'display_path':[kind],
+            'native':{'metadata_source':'private source','parameters':[{'name':'ARG','mode':'input','position':0,'default_source':"secret"}]}})
+    entries.append({'resource_kind':'function','resource_id':'private','display_name':'HIDDEN','native':{'package':'PKG','private_flag':1}})
+    value=metadata({'generation':'g','resources':entries})
+    assert len(value['resources'])==9
+    assert 'private source' not in str(value) and 'default_source' not in str(value)
+    assert value['resources'][0]['parameters']==[{'name':'ARG','mode':'input','position':0}]

@@ -1,5 +1,5 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import {generatorTable, materializeTestData, parseRecipe, stageTestData} from 'sources/Dialogs/firebirdTestData';
+import {generatorTable, materializeTestData, parseRecipe, parseRecipeJSON, stageTestData} from 'sources/Dialogs/firebirdTestDataHelpers';
 import FirebirdTestData from 'sources/Dialogs/FirebirdTestData';
 import {withTheme} from '../fake_theme';
 
@@ -36,12 +36,37 @@ describe('Firebird test data materialization', () => {
       expect(JSON.stringify(input)).toBe(before);
     }
   });
+  it('uses an explicitly NULL composite-FK segment to break native dependencies', () => {
+    const catalogs = {T: catalog('T', [{table: 'T', columns: ['ID', 'REF']}])};
+    const input = recipe([{table: 'T', count: 2, columns: {ID: sequence, REF: {kind: 'constant', value: null}}}]);
+    expect(materializeTestData(input, catalogs).operations.map(row => row.values.REF)).toEqual([null, null]);
+    input.tables[0].columns.REF = {kind: 'default', nullPercent: 100};
+    expect(() => materializeTestData(input, catalogs)).toThrow(/Cyclic/);
+  });
   it('rejects cycles before dispatch and accepts an explicit NULL break', () => {
     const catalogs = {T: catalog('T', [{table: 'T', columns: ['REF']}])};
     const input = recipe([{table: 'T', count: 1, columns: {ID: sequence, REF: {kind: 'constant', value: '1'}}}]);
     expect(() => materializeTestData(input, catalogs)).toThrow(/Cyclic/);
     input.tables[0].columns.REF.value = null;
     expect(materializeTestData(input, catalogs).operations).toHaveLength(1);
+  });
+  it.each(['1.00000000000000001', '9007199254740991.1', '1e-1000', '-0'])('refuses raw JSON values before numeric rounding: %s', literal => {
+    expect(() => parseRecipeJSON('[' + literal + ']')).toThrow(/exact/);
+    const source = JSON.stringify(recipe([{table: 'T', count: 1, columns: {ID: {kind: 'constant', value: 'TOKEN'}}}])).replace('"TOKEN"', literal);
+    expect(() => parseRecipe(source)).toThrow(/exact/);
+  });
+  it('preserves exact native object keys during lossless numeric checking', () => {
+    const columns = JSON.parse('{"__proto__":{"kind":"constant","value":"exact"}}');
+    const value = parseRecipe(JSON.stringify(recipe([{table: 'T', count: 1, columns}])));
+    expect(Object.prototype.hasOwnProperty.call(value.tables[0].columns, '__proto__')).toBe(true);
+    const catalogs = {T: {...catalog('T'), columns: [{name: '__proto__', insertable: true}]}};
+    expect(materializeTestData(value, catalogs).operations[0].values['__proto__']).toBe('exact');
+    expect(() => parseRecipeJSON('{"__proto__":1.00000000000000001}')).toThrow(/exact/);
+  });
+  it('preserves fractional NULL rates while requiring exact text for fractional data', () => {
+    const source = JSON.stringify(recipe([{table: 'T', count: 1, columns: {ID: {kind: 'constant', value: '1.00000000000000001', nullPercent: 0.5}}}]));
+    expect(parseRecipe(source).tables[0].columns.ID.nullPercent).toBe(0.5);
+    expect(materializeTestData(parseRecipe(source), {T: catalog('T')}).operations[0].values.ID).toBe('1.00000000000000001');
   });
   it('rejects unavailable sources, noninsertable columns and excessive row counts', () => {
     for (const input of [recipe([{table: 'T', count: 1001, columns: {}}]),
@@ -83,7 +108,7 @@ describe('Firebird generator dispatch and native transaction controls', () => {
     const post = jest.fn(async request => {
       if (request.action === 'open_session') return {session_id: 'generator'};
       if (request.action === 'visual_admin_rows') return {...catalog('T'), row_operations: ['insert'], complete: true};
-      if (request.action === 'transaction_action') return {provider_payload: {state: 'inactive'}};
+      if (request.action === 'transaction_action') return {provider_payload: {state: 'idle', in_transaction: false, attachment_live: true}};
       return admitted(request);
     });
     const Component = withTheme(FirebirdTestData);
@@ -103,4 +128,22 @@ describe('Firebird generator dispatch and native transaction controls', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Rollback generated rows'}));
     await waitFor(() => expect(screen.getByRole('button', {name: 'Rollback generated rows'})).toBeDisabled());
   });
+  it('does not retry or release a sample transaction whose rollback observation is unknown', async () => {
+    const post = jest.fn(async request => {
+      if(request.action === 'open_session') return {session_id: 'owned-sample'};
+      if(request.action === 'visual_admin_rows') return {...catalog('T'), row_operations: ['insert'], complete: true};
+      if(request.action === 'transaction_action') return {provider_payload: {state: 'unknown', attachment_live: true}};
+      return {};
+    });
+    const Component = withTheme(FirebirdTestData);
+    render(<Component resources={[resource('T')]} post={post} databaseTargetId="db" languageProfile="firebird-sql" />);
+    fireEvent.click(screen.getByLabelText('T'));
+    fireEvent.click(screen.getByRole('button', {name: 'Load table columns and existing samples'}));
+    expect(await screen.findByText(/Sample transaction cleanup was not confirmed/)).toBeVisible();
+    expect(post.mock.calls.filter(([request]) => request.action === 'transaction_action')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'Load table columns and existing samples'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Rollback generated rows'})).not.toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Preview generated rows'})).toBeDisabled();
+  });
+
 });

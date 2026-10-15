@@ -21,7 +21,7 @@ GAUGES = {'Uptime', 'Uptime_since_flush_status', 'Threads_connected', 'Threads_r
           'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_dirty'}
 
 
-def counter_rates(previous, current, elapsed):
+def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
     """Exact native global counter differences; missing fields remain gaps."""
     unavailable = {'status': 'unavailable', 'reason': 'baseline-unavailable', 'per_second': {}}
     def counters(sample):
@@ -36,7 +36,7 @@ def counter_rates(previous, current, elapsed):
         return values
     before, after = counters(previous or {}), counters(current)
     if (before is None or after is None or previous.get('source_epoch') != current.get('source_epoch') or
-            previous.get('identity', {}).get('server_uuid') != current.get('identity', {}).get('server_uuid') or
+            previous.get('identity', {}).get(identity_key) != current.get('identity', {}).get(identity_key) or
             not isinstance(elapsed, (int, float)) or not 0 < elapsed <= 3600):
         return unavailable
     if any(name not in before or name not in after for name in ('Uptime', 'Uptime_since_flush_status')):
@@ -62,9 +62,30 @@ def counter_rates(previous, current, elapsed):
 
 
 class MySQLMonitor:
+    engine = 'mysql'
+    native_version = '9.7.0'
+    identity_key = 'server_uuid'
+    identity_source = ('SELECT DATABASE() AS database_name, VERSION() AS version, '
+        '@@server_uuid AS server_uuid, CONNECTION_ID() AS collector_id, CURRENT_USER() AS account')
+    status_table = 'performance_schema.global_status'
+    settings_source = ('SELECT @@max_connections AS max_connections, @@innodb_page_size AS innodb_page_size, '
+        '@@innodb_buffer_pool_size AS innodb_buffer_pool_size, @@read_only AS read_only, '
+        '@@super_read_only AS super_read_only, @@event_scheduler AS event_scheduler')
+    replication_source = ('SELECT CHANNEL_NAME, SERVICE_STATE, LAST_ERROR_NUMBER '
+        'FROM performance_schema.replication_connection_status ORDER BY CHANNEL_NAME LIMIT 101')
+
+    def _activity_source(self):
+        condition = ' AND PROCESSLIST_DB=DATABASE()' if self.scope == 'database' else ''
+        return ('SELECT PROCESSLIST_ID, PROCESSLIST_USER, PROCESSLIST_DB, PROCESSLIST_COMMAND, '
+            'PROCESSLIST_TIME, PROCESSLIST_STATE FROM performance_schema.threads '
+            "WHERE TYPE='FOREGROUND'" + condition + ' ORDER BY PROCESSLIST_ID LIMIT 101')
+
+    def _transaction_active(self):
+        return self._connection.in_transaction
+
     def __init__(self, permissions, route, *, scope='database', metadata_interval_seconds=60):
         if scope not in {'database', 'server'} or (scope == 'database' and not route.get('database')):
-            raise ValueError('MySQL monitoring requires an explicit native scope')
+            raise ValueError(f'{self.engine} monitoring requires an explicit native scope')
         if type(metadata_interval_seconds) is not int or not 60 <= metadata_interval_seconds <= 3600:
             raise ValueError('Invalid monitoring metadata interval')
         self.permissions, self.route, self.scope = permissions, copy.deepcopy(route), scope
@@ -137,28 +158,25 @@ class MySQLMonitor:
     def sample(self):
         with self._lock:
             if self._closed:
-                raise ValueError('MySQL monitoring source is closed')
+                raise ValueError(f'{self.engine} monitoring source is closed')
             start = time.monotonic()
             probe = 'transaction_refresh' if self.scope == 'database' else 'service_probe'
-            result = {'schema': 'mysql-monitoring-sample@1', 'sample_id': str(uuid.uuid4()),
+            result = {'schema': self.engine + '-monitoring-sample@1', 'sample_id': str(uuid.uuid4()),
                 'scope': self.scope, 'status': 'available', 'history': 'volatile', 'groups': {},
                 'started_at': datetime.now(timezone.utc).isoformat(),
                 'transaction_completed': False, probe: {'status': 'not-completed'}}
             try:
                 if self._connection is None:
                     self._open()
-                identity = self._read('SELECT DATABASE() AS database_name, VERSION() AS version, '
-                    '@@server_uuid AS server_uuid, CONNECTION_ID() AS collector_id, CURRENT_USER() AS account')[0]
-                if identity['version'].split('-')[0] != '9.7.0' or identity['database_name'] != self.route.get('database'):
+                identity = self._read(self.identity_source)[0]
+                if identity['version'].split('-')[0] != self.native_version or identity['database_name'] != self.route.get('database'):
                     raise ValueError('Monitoring native identity changed')
                 result.update(identity=identity, source_epoch=self._epoch)
                 markers = ','.join(['%s'] * len(STATUS_NAMES))
-                self._group(result, 'status', 'SELECT VARIABLE_NAME, VARIABLE_VALUE FROM performance_schema.global_status '
+                self._group(result, 'status', 'SELECT VARIABLE_NAME, VARIABLE_VALUE FROM ' + self.status_table + ' '
                     'WHERE VARIABLE_NAME IN (' + markers + ') ORDER BY VARIABLE_NAME LIMIT 101', STATUS_NAMES, scope='server')
                 if self._metadata_clock is None or start - self._metadata_clock >= self._metadata_interval:
-                    self._group(result, 'settings', 'SELECT @@max_connections AS max_connections, @@innodb_page_size AS innodb_page_size, '
-                        '@@innodb_buffer_pool_size AS innodb_buffer_pool_size, @@read_only AS read_only, '
-                        '@@super_read_only AS super_read_only, @@event_scheduler AS event_scheduler', scope='server')
+                    self._group(result, 'settings', self.settings_source, scope='server')
                     if self.scope == 'database':
                         self._group(result, 'storage', 'SELECT ENGINE, COUNT(*) AS tables_count, '
                             'SUM(TABLE_ROWS) AS estimated_rows, SUM(DATA_LENGTH) AS data_bytes, SUM(INDEX_LENGTH) AS index_bytes '
@@ -169,19 +187,15 @@ class MySQLMonitor:
                     for name, group in self._metadata_cache.items():
                         result['groups'][name] = {**copy.deepcopy(group),
                             'observation_age_seconds': round(start - self._metadata_clock, 3)}
-                condition = ' AND PROCESSLIST_DB=DATABASE()' if self.scope == 'database' else ''
-                self._group(result, 'activity', 'SELECT PROCESSLIST_ID, PROCESSLIST_USER, PROCESSLIST_DB, PROCESSLIST_COMMAND, '
-                    'PROCESSLIST_TIME, PROCESSLIST_STATE FROM performance_schema.threads '
-                    "WHERE TYPE='FOREGROUND'" + condition + ' ORDER BY PROCESSLIST_ID LIMIT 101')
-                self._group(result, 'replication', 'SELECT CHANNEL_NAME, SERVICE_STATE, LAST_ERROR_NUMBER '
-                    'FROM performance_schema.replication_connection_status ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
-                if self._connection.in_transaction:
+                self._group(result, 'activity', self._activity_source())
+                self._group(result, 'replication', self.replication_source, scope='server')
+                if self._transaction_active():
                     raise ValueError('Monitoring probe retained a transaction')
                 result.update(status='partial', transaction_completed=True)
                 # Visible empty groups do not establish complete server coverage.
                 result[probe] = {'status': 'completed', 'evidence': 'owned-autocommit-read-probes'}
                 result['rates'] = counter_rates(self._previous, result,
-                    None if self._previous_clock is None else start - self._previous_clock)
+                    None if self._previous_clock is None else start - self._previous_clock, identity_key=self.identity_key)
                 self._previous, self._previous_clock = copy.deepcopy(result), start
                 self._last_success = datetime.now(timezone.utc).isoformat()
             except Exception as error:

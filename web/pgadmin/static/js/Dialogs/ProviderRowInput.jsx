@@ -71,7 +71,7 @@ export function rowInputValue(draft, kind, spec) {
   return draft.text;
 }
 
-export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec, firebirdBlob}) {
+export default function ProviderRowInput({kind, draft, label, disabled, onChange, spec, firebirdBlob, blobIdentity}) {
   const [blobOpen, setBlobOpen] = useState(false);
   if (kind === 'array') return <ProviderArrayInput {...{draft, label, disabled, onChange, spec}} />;
   return <Box sx={{display: 'flex', gap: 0.5, minWidth: '18rem'}}>
@@ -97,7 +97,7 @@ export default function ProviderRowInput({kind, draft, label, disabled, onChange
         disabled={disabled || draft.isNull} inputProps={{'aria-label': label}}
         onChange={(event) => onChange({...draft, text: event.target.value})} />}
     {firebirdBlob && <Button onClick={() => setBlobOpen(true)}>BLOB editor</Button>}
-    {firebirdBlob && blobOpen && <FirebirdBlobEditor value={draft} kind={kind} label={label} readOnly={disabled}
+    {firebirdBlob && blobOpen && <FirebirdBlobEditor key={blobIdentity} value={draft} kind={kind} label={label} readOnly={disabled}
       onApply={onChange} onClose={() => setBlobOpen(false)} />}
   </Box>;
 }
@@ -106,6 +106,7 @@ ProviderRowInput.propTypes = {
   kind: PropTypes.oneOf(['text', 'integer', 'decimal', 'decfloat', 'float32', 'float64', 'boolean', 'binary', 'array', 'firebird-time-tz', 'firebird-timestamp-tz']).isRequired,
   spec: PropTypes.object,
   firebirdBlob: PropTypes.bool,
+  blobIdentity: PropTypes.string,
   draft: PropTypes.shape({text: PropTypes.string, isNull: PropTypes.bool}).isRequired,
   label: PropTypes.string.isRequired,
   disabled: PropTypes.bool,

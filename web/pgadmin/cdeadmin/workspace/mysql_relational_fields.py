@@ -1,0 +1,231 @@
+"""Preserve native column clauses while translating explicit graphical edits."""
+from copy import deepcopy
+import json
+import re
+from .mysql_schema_plan import parts
+from ..providers.mysql_family.mysql_catalog import identifier
+
+TYPES = set('tinyint smallint mediumint int integer bigint decimal numeric float double real bit bool boolean date datetime timestamp time year char varchar binary varbinary tinyblob blob mediumblob longblob tinytext text mediumtext longtext enum set json geometry point linestring polygon multipoint multilinestring multipolygon geometrycollection vector'.split())
+
+
+def tokens(source, mode):
+    no_escape = 'NO_BACKSLASH_ESCAPES' in mode.split(',')
+    ansi = 'ANSI_QUOTES' in mode.split(',')
+    result = []
+    i = 0
+    while i < len(source):
+        if source[i].isspace():
+            i += 1
+            continue
+        start = i
+        if source.startswith('/*', i):
+            end = source.find('*/', i + 2)
+            if end < 0: raise ValueError('Unclosed native column comment')
+            i = end + 2
+            kind = 'comment'
+        elif source[i] in "'\"`":
+            quote = source[i]
+            kind = 'quoted'
+            i += 1
+            while i < len(source):
+                if source[i] == '\\' and quote != '`' and not (quote == '"' and ansi) and not no_escape:
+                    i += 2
+                    continue
+                if source[i] == quote:
+                    if i + 1 < len(source) and source[i+1] == quote:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            else: raise ValueError('Unclosed native column literal')
+        elif source[i] == '(':
+            # Reuse the quote-aware balanced table-list scanner for a single
+            # argument/expression group; nested expressions remain opaque.
+            from .mysql_table_clauses import table_layout
+            layout = table_layout(source[i:], mode)
+            i = len(source) - len(layout['suffix'])
+            kind = 'group'
+        else:
+            match = re.match(r'[A-Za-z_][A-Za-z_0-9]*', source[i:])
+            i += len(match.group()) if match else 1
+            kind = 'word' if match else 'symbol'
+        result.append((kind, source[start:i], start, i))
+    return result
+
+
+def datatype(value, mode, *, engine='mysql'):
+    if not isinstance(value, str) or not value or len(value.encode('utf8')) > 16384 or '\x00' in value:
+        raise ValueError('Graphical datatype requires bounded native type text')
+    parsed = tokens(value, mode)
+    if not parsed or parsed[0][0] != 'word' or parsed[0][1].lower() not in (TYPES | ({'uuid','inet4','inet6','varchar2','nvarchar2','number','raw','clob','nclob'} if engine=='mariadb' else set())):
+        raise ValueError('Unsupported graphical native datatype')
+    index = 1
+    if index < len(parsed) and parsed[index][0] == 'group': index += 1
+    if parsed[0][1].lower() == 'double' and index < len(parsed) and parsed[index][1].upper() == 'PRECISION': index += 1
+    for token in parsed[index:]:
+        if token[0] != 'word' or token[1].upper() not in {'UNSIGNED', 'ZEROFILL'}:
+            raise ValueError('Graphical datatype cannot contain column attributes or statements')
+    return value.strip()
+
+
+def literal(value, mode):
+    if not isinstance(value, str) or '\x00' in value or len(value.encode('utf8')) > 1024:
+        raise ValueError('Graphical column comment requires bounded text without NUL')
+    if 'NO_BACKSLASH_ESCAPES' not in mode.split(','):
+        value = value.replace('\\', '\\\\')
+    return "'" + value.replace("'", "''") + "'"
+
+
+def edit_clause(clause, changes, mode, *, engine='mysql'):
+    parsed = tokens(clause, mode)
+    if len(parsed) < 2 or parsed[0][0] != 'quoted' or parsed[1][0] != 'word':
+        raise ValueError('Exact native quoted column definition is required')
+    if 'datatype' in changes:
+        end = 2
+        if end < len(parsed) and parsed[end][0] == 'group': end += 1
+        while end < len(parsed) and parsed[end][0] == 'word' and parsed[end][1].upper() in {'UNSIGNED', 'ZEROFILL', 'PRECISION'}: end += 1
+        clause = clause[:parsed[1][2]] + datatype(changes['datatype'], mode, engine=engine) + clause[parsed[end-1][3]:]
+    if 'nullable' in changes:
+        if type(changes['nullable']) is not bool: raise ValueError('Graphical nullable must be boolean')
+        parsed = tokens(clause, mode)
+        match = next((i for i, token in enumerate(parsed) if token[0] == 'word' and token[1].upper() == 'NULL' and
+                      not (i and parsed[i-1][1].upper() == 'DEFAULT')), None)
+        desired = 'NULL' if changes['nullable'] else 'NOT NULL'
+        if match is None: clause += ' ' + desired
+        else:
+            start = parsed[match-1][2] if match and parsed[match-1][1].upper() == 'NOT' else parsed[match][2]
+            clause = clause[:start] + desired + clause[parsed[match][3]:]
+    if 'description' in changes:
+        parsed = tokens(clause, mode)
+        match = next((i for i, token in enumerate(parsed) if token[0] == 'word' and token[1].upper() == 'COMMENT'), None)
+        value = literal(changes['description'], mode)
+        if match is None: clause += ' COMMENT ' + value
+        else:
+            if match + 1 >= len(parsed) or parsed[match+1][0] != 'quoted': raise ValueError('Ambiguous native column comment')
+            clause = clause[:parsed[match+1][2]] + value + clause[parsed[match+1][3]:]
+    return clause
+
+
+def _rename_group(source, renames, mode):
+    parsed=tokens(source,mode);edits=[]
+    for index,(kind,value,start,end) in enumerate(parsed):
+        if kind=='group':
+            replacement='('+_rename_group(value[1:-1],renames,mode)+')'
+        elif kind=='quoted' and (value.startswith('`') or
+                value.startswith('"') and 'ANSI_QUOTES' in mode.split(',')):
+            name=value[1:-1].replace(value[0]*2,value[0])
+            # A quoted routine name before an argument list is not a column.
+            if name not in renames or (index+1<len(parsed) and parsed[index+1][0]=='group' and
+                    not re.fullmatch(r'\(\s*[0-9]+\s*\)',parsed[index+1][1])):continue
+            replacement=identifier(renames[name])
+        else:continue
+        if replacement!=value:edits.append((start,end,replacement))
+    for start,end,replacement in reversed(edits):source=source[:start]+replacement+source[end:]
+    return source
+
+
+def rename_definition(before,native,renames,mode, *, engine='mysql'):
+    parse=parts
+    if engine=='mariadb':
+        from .mariadb_schema_plan import parts as parse
+    layout,clauses,_order=parse({'name':before['name'],'native':native},mode)
+    changed=[]
+    for (kind,name),clause in clauses.items():
+        parsed=tokens(clause,mode);edits=[];groups=[part for part in parsed if part[0]=='group']
+        selected=groups
+        if kind=='foreign-key':
+            selected=groups[:1]
+            reference=next((i for i,part in enumerate(parsed) if part[1].upper()=='REFERENCES'),None)
+            if reference is None:raise ValueError('Native foreign key lacks exact referenced table')
+            target=[]
+            for part in parsed[reference+1:]:
+                if part[0]=='group':break
+                if part[0]=='quoted':target.append(part[1][1:-1].replace(part[1][0]*2,part[1][0]))
+            if target in ([before['name']],[native['database'],before['name']]):selected=groups
+        for _kind,value,start,end in selected:
+            replacement='('+_rename_group(value[1:-1],renames,mode)+')'
+            if replacement!=value:edits.append((start,end,replacement))
+        if kind=='column' and name in renames:edits.append((parsed[0][2],parsed[0][3],identifier(renames[name])))
+        for start,end,replacement in sorted(edits,reverse=True):clause=clause[:start]+replacement+clause[end:]
+        changed.append(clause)
+    native['definition']=layout['prefix']+'('+','.join(changed)+')'+layout['suffix']
+    intent=native.setdefault('mariadb_change' if engine=='mariadb' else 'mysql_change',{})
+    if not isinstance(intent,dict) or ('rename_columns' in intent and intent['rename_columns']!=renames):
+        raise ValueError('Graphical and native column rename intent disagree')
+    intent['rename_columns']=renames
+    return native
+
+
+def merge_fields(before, desired, mode, *, allow_new_columns=False, allow_column_renames=False, engine='mysql'):
+    if type(allow_new_columns) is not bool: raise ValueError('New-column admission must be boolean')
+    if type(allow_column_renames) is not bool:raise ValueError('Column-rename admission must be boolean')
+    native = deepcopy(desired['native'])
+    old_fields, new_fields = before.get('fields', {}), desired.get('fields', {})
+    changes, additions, renames = {}, [], {}
+    labels = [field.get('_label') for field in new_fields.values()]
+    if any(not isinstance(label, str) for label in labels) or len(set(labels)) != len(labels):
+        raise ValueError('Graphical field names must be unique')
+    for uid, fields in new_fields.items():
+        old = old_fields.get(uid)
+        if set(fields.get('_property_names', [])) - {'uid', 'datatype', 'nullable', 'description'}:
+            raise ValueError('Unsupported graphical field property')
+        if old is None:
+            if not allow_new_columns:
+                raise ValueError('New or renamed graphical fields require explicit native reconciliation')
+            if not isinstance(uid, str) or not uid or len(uid) > 4096:
+                raise ValueError('New graphical field requires a bounded unique UID')
+            if not 1 <= len(fields['_label']) <= 64: raise ValueError('Native column name requires 1 to 64 characters')
+            column = identifier(fields['_label']) + ' ' + datatype(fields.get('datatype'), mode, engine=engine)
+            column = edit_clause(column, {'nullable': fields.get('nullable', True),
+                **({'description': fields['description']} if 'description' in fields else {})}, mode, engine=engine)
+            additions.append((fields['_label'], column))
+            if len(additions) > 128: raise ValueError('At most 128 new graphical columns per table')
+            continue
+        if fields.get('_label') != old.get('_label'):
+            if not allow_column_renames:raise ValueError('New or renamed graphical fields require explicit native reconciliation')
+            expected=before['uid']+':'+json.dumps(old['_label'],ensure_ascii=False,separators=(',',':'))
+            label=fields['_label']
+            if uid!=expected or not 1<=len(label)<=64 or '\x00' in label or label in {field['_label'] for field in old_fields.values()}:
+                raise ValueError('Graphical rename requires its stable native field UID and a distinct new name')
+            renames[old['_label']]=label
+            if len(renames)>128:raise ValueError('At most 128 graphical column renames per table')
+        changed = {key: fields[key] for key in ('datatype', 'nullable', 'description') if key in fields and fields[key] != old.get(key)}
+        if changed:
+            expected = before['uid'] + ':' + json.dumps(old['_label'], ensure_ascii=False, separators=(',', ':'))
+            if uid != expected: raise ValueError('Graphical field identity does not match its native column')
+            changes[old['_label']] = changed
+    if not changes and not additions and not renames: return native
+    if renames and native.get('definition')!=before['native'].get('definition'):
+        raise ValueError('Graphical renames require unchanged native source; reconcile simultaneous native edits separately')
+    if before.get('kind') != 'table': raise ValueError('Graphical column changes require a native table')
+    old_row = {'name': before['name'], 'native': before['native']}
+    new_row = {'name': desired['name'], 'native': native}
+    parse=parts
+    if engine=='mariadb':
+        from .mariadb_schema_plan import parts as parse
+    _layout, old_clauses, _order = parse(old_row, mode)
+    layout, new_clauses, _order = parse(new_row, mode)
+    replacements = {}
+    for name, values in changes.items():
+        key = ('column', name)
+        if key not in old_clauses or key not in new_clauses:
+            raise ValueError('Graphical column requires exact native clause identity')
+        changed = edit_clause(old_clauses[key], values, mode, engine=engine)
+        if new_clauses[key] not in {old_clauses[key], changed}:
+            raise ValueError('Graphical and native column edits disagree')
+        replacements[new_clauses[key]] = changed
+    appended = []
+    for name, clause in additions:
+        key = ('column', name)
+        if key in old_clauses:
+            raise ValueError('New graphical UID cannot rebind an existing native column')
+        if key in new_clauses:
+            if new_clauses[key] != clause:
+                raise ValueError('Graphical and native new-column definitions disagree')
+        else:
+            appended.append(clause)
+    native['definition'] = layout['prefix'] + '(' + ','.join([
+        *(replacements.get(clause.strip(), clause) for clause in layout['clauses']),
+        *appended]) + ')' + layout['suffix']
+    return rename_definition(before,native,renames,mode,engine=engine) if renames else native

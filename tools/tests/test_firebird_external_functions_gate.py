@@ -36,7 +36,8 @@ def test_private_credentials_cleanup_and_all_scale_failure_collection(
     def execute(command, **kwargs):
         assert password not in ' '.join(command)
         profile = tmp_path / 'private-browser-profile.json'
-        assert stat.S_IMODE(profile.stat().st_mode) == 0o600
+        from pgadmin.cdeadmin.operations.fileio import has_private_file_permissions
+        assert has_private_file_permissions(profile)
         document = json.loads(profile.read_text())
         assert document['profiles'][0]['password'] == password
         assert document['profiles'][0]['owned_container_id'] == 'a' * 64

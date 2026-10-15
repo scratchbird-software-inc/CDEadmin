@@ -2,7 +2,8 @@
 
 Hosts supply authorization and source factories, including any delegated secret
 resolution. This module neither impersonates a browser user nor stores secrets.
-It is process-local, not a durable scheduler or the ScratchBird history writer.
+The scheduler is process-local. An optional host-owned writer archives samples
+on a separate ScratchBird connection.
 """
 
 import copy
@@ -22,6 +23,7 @@ class MonitoringPolicy:
     interval_seconds: int = 5
     retain_samples: int = 120
     lease_seconds: int = 3600
+    history_enabled: bool = False
     heartbeat_enabled: bool = False
     heartbeat_timeout_seconds: int | None = None
     metadata_interval_seconds: int = 60
@@ -48,6 +50,8 @@ class MonitoringPolicy:
             value = getattr(self, name)
             if type(value) is not int or not lower <= value <= upper:
                 raise ValueError('Invalid monitoring policy ' + name)
+        if type(self.history_enabled) is not bool:
+            raise ValueError("History admission must be boolean")
         if not isinstance(self.heartbeat_enabled, bool):
             raise ValueError('Heartbeat admission must be a boolean')
         if type(self.require_wire_encryption) is not bool:
@@ -92,7 +96,7 @@ class MonitoringRuntime:
         self._lock = threading.RLock()
         self._closed = False
 
-    def enable(self, policy, source_factory, authorize):
+    def enable(self, policy, source_factory, authorize, *, history_writer=None):
         # Invocation is itself an explicit policy change, never a viewer GET.
         if authorize(policy, 'configure') is not True:
             raise PermissionError('Monitoring policy is not authorized')
@@ -106,7 +110,9 @@ class MonitoringRuntime:
                 return previous.revision
             if len(self._jobs) >= self._capacity:
                 raise ValueError('Monitoring policy capacity reached')
-            job = _Job(policy, source_factory, authorize, self._clock)
+            if policy.history_enabled and history_writer is None:
+                raise ValueError("ScratchBird history is not configured")
+            job = _Job(policy, source_factory, authorize, self._clock, history_writer)
             self._jobs[policy.key] = job
             job.thread.start()
             return job.revision
@@ -238,8 +244,11 @@ class MonitoringRuntime:
 
 
 class _Job:
-    def __init__(self, policy, factory, authorize, clock):
+    def __init__(self, policy, factory, authorize, clock, history_writer=None):
         self.policy = policy
+        self.history_writer = history_writer
+        self.history_gap = 0
+        self.history_status = {"enabled": policy.history_enabled, "status": "pending" if policy.history_enabled else "disabled", "failures": 0}
         self.revision = str(uuid.uuid4())
         self.factory = factory
         self.authorize = authorize
@@ -265,6 +274,7 @@ class _Job:
             return copy.deepcopy({
                 'revision': self.revision, 'state': self.state,
                 'error_type': self.error_type, 'history': 'volatile',
+                'history_storage': dict(self.history_status),
                 'retention_evictions': self.evicted,
                 'interval_seconds': self.policy.interval_seconds,
                 'samples': list(self.samples),
@@ -375,6 +385,24 @@ class _Job:
                             sample.get(evidence_key, {}).get('status') == 'completed'):
                         self.last_heartbeat = self.clock()
                         self.last_heartbeat_at = datetime.now(timezone.utc).isoformat()
+                if self.policy.history_enabled:
+                    try:
+                        if (self.stop.is_set() or self.clock() >= self.deadline or
+                                self.authorize(self.policy, 'collect') is not True):
+                            raise PermissionError('History grant ended')
+                        archived = copy.deepcopy(sample)
+                        if self.history_gap:
+                            archived['history_ingestion_gap'] = {'unconfirmed_observations': self.history_gap}
+                        self.history_writer(self.policy, self.revision, archived)
+                        self.history_gap = 0
+                        with self.lock:
+                            self.history_status.update(status='confirmed', sample_id=sample['sample_id'], phase=None)
+                    except Exception as error:
+                        with self.lock:
+                            self.history_status.update(status='unconfirmed', sample_id=sample['sample_id'],
+                                phase=getattr(error, 'phase', 'admission'))
+                            self.history_status['failures'] += 1
+                            self.history_gap += 1
                 failures = failures + 1 if sample['status'] == 'unavailable' else 0
                 # Delay from completion: no overlap or catch-up storm, bounded
                 # exponential failure backoff, and expiration wakes promptly.

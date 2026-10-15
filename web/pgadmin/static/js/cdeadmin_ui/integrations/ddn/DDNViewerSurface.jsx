@@ -28,7 +28,7 @@ function firstView(workspace, requestedEntry, requestedView) {
 }
 
 export function DDNViewerSurface({files, snapshot, entry, view,
-  presentation=false, executeCommand, onExport, onReady, onError, onSelectionChange}) {
+  presentation=false, viewSelection=false, executeCommand, onExport, onReady, onError, onSelectionChange}) {
   const selectionCallback = useRef(onSelectionChange);
   selectionCallback.current = onSelectionChange;
   const hostRef = useRef(null);
@@ -38,6 +38,7 @@ export function DDNViewerSurface({files, snapshot, entry, view,
   const [libraries, setLibraries] = useState(null);
   const [selection, setSelection] = useState({entry: entry ?? '', view: view ?? ''});
   const [entries, setEntries] = useState([]);
+  const retainedSelection = useRef(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -69,11 +70,16 @@ export function DDNViewerSurface({files, snapshot, entry, view,
     const requested = snapshot ? validateDDNSnapshot(snapshot) : {entry, view};
     let chosen;
     try {
-      chosen = firstView(workspace, requested.entry, requested.view);
+      const retained = retainedSelection.current;
+      const retain = viewSelection && retained && workspace.entries().some((item) =>
+        item.file === retained.entry && item.views.some((itemView) => itemView.id === retained.view));
+      const preferred = retain ? retained : requested;
+      chosen = firstView(workspace, preferred.entry, preferred.view);
+      retainedSelection.current = chosen;
       setEntries(workspace.entries());
       setSelection(chosen);
       const rendered = workspace.renderSync({...chosen,
-        overrides: snapshot?.overrides, layoutState: snapshot?.layoutState});
+        overrides: snapshot?.overrides, layoutState: snapshot?.layoutState?.view === chosen.view ? snapshot.layoutState : undefined});
       const img = document.createElement('img');
       img.alt = 'DDN diagram';
       img.style.maxWidth = '100%';
@@ -97,17 +103,20 @@ export function DDNViewerSurface({files, snapshot, entry, view,
       workspaceRef.current = null;
       if(hostRef.current) hostRef.current.replaceChildren();
     };
-  }, [libraries, sourceFiles, entry, view, snapshot, onReady, onError]);
+  }, [libraries, sourceFiles, entry, view, snapshot, onReady, onError, viewSelection]);
 
   const chooseView = async (value) => {
     const [nextEntry, nextView] = value.split('\u0000');
-    setSelection({entry: nextEntry, view: nextView});
+    retainedSelection.current = {entry: nextEntry, view: nextView};
+    setSelection(retainedSelection.current);
     setLoading(true);
     setError(null);
     try {
       mountedRef.current?.destroy();
       hostRef.current?.replaceChildren();
-      const rendered = workspaceRef.current.renderSync({entry: nextEntry, view: nextView});
+      const rendered = workspaceRef.current.renderSync({entry: nextEntry, view: nextView,
+        overrides: snapshot?.overrides,
+        layoutState: snapshot?.layoutState?.view === nextView ? snapshot.layoutState : undefined});
       const img = document.createElement('img');
       img.alt = 'DDN diagram';
       img.style.maxWidth = '100%';
@@ -155,6 +164,10 @@ export function DDNViewerSurface({files, snapshot, entry, view,
       minHeight: 0, bgcolor: 'background.default', color: 'text.primary'}}
   >
     <FormReference formKey="ddn-viewer" />
+    {presentation && viewSelection && options.length > 1 && <Select
+      label="Dashboard view" size="small"
+      value={selection.entry ? `${selection.entry}\u0000${selection.view}` : ''}
+      options={options} onChange={chooseView} />}
     {!presentation && <Box component="header" sx={{height: 'var(--cde-toolbar-height, 34px)',
       display: 'flex', alignItems: 'center', gap: 1, px: 1,
       borderBottom: '1px solid', borderColor: 'divider'}}>
@@ -193,6 +206,7 @@ DDNViewerSurface.propTypes = {
   entry: PropTypes.string,
   view: PropTypes.string,
   presentation: PropTypes.bool,
+  viewSelection: PropTypes.bool,
   executeCommand: PropTypes.func,
   onExport: PropTypes.func,
   onReady: PropTypes.func,

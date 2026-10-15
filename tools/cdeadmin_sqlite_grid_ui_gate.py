@@ -209,6 +209,21 @@ def _open_grid_workspace(driver, wait, options):
     _choose_table(driver, wait, 'CUSTOMERS')
 
 
+def _enable_edit_mode(driver, wait):
+    """Exercise the explicit View/Edit control after native rows arrive."""
+    mode = wait.until(lambda value: next((
+        item for item in value.find_elements(By.CSS_SELECTOR, '[role="combobox"]')
+        if item.is_displayed() and item.accessible_name.startswith('Grid mode')
+        and item.is_enabled() and item.get_attribute('aria-disabled') != 'true'
+    ), None))
+    if mode.text.strip() != 'Edit':
+        mode.click()
+        wait.until(lambda value: next((
+            item for item in value.find_elements(By.CSS_SELECTOR, '[role="option"]')
+            if item.is_displayed() and item.text.strip() == 'Edit'
+        ), None)).click()
+
+
 def _close_data_session(driver, wait):
     close_session = _button(wait, 'Close data session')
     close_session.click()
@@ -225,6 +240,7 @@ def _reopen_duckdb_grid(driver, wait, options):
     close_workspace(driver, wait)
     _open_grid_workspace(driver, wait, options)
     _button(wait, 'Load rows').click()
+    _enable_edit_mode(driver, wait)
     wait.until(lambda value: bool(_visible_inputs(value, 'name value')))
 
 
@@ -234,7 +250,8 @@ def run(options):
     )
     marker_name = f'CDEadmin {options.engine} browser row'
     driver = create_driver(options)
-    wait = WebDriverWait(driver, options.timeout)
+    wait = WebDriverWait(driver, options.timeout,
+                         ignored_exceptions=(StaleElementReferenceException,))
     screenshots = {}
     controls = {}
 
@@ -248,19 +265,8 @@ def run(options):
 
         load_button = _button(wait, 'Load rows')
         load_button.click()
-        wait.until(lambda _value: load_button.is_enabled())
-        if not _visible_inputs(driver, 'name value'):
-            alerts = [
-                item.text.strip() for item in driver.find_elements(
-                    By.CSS_SELECTOR, '[role="alert"]'
-                ) if item.is_displayed() and item.text.strip()
-            ]
-            capture('load-response-error')
-            raise RuntimeError(
-                f'{options.engine} row controls were not rendered after '
-                'Load rows; '
-                f'visible alerts: {alerts or ["none"]}'
-            )
+        _enable_edit_mode(driver, wait)
+        wait.until(lambda value: bool(_visible_inputs(value, 'name value')))
         capture('loaded')
 
         name = _visible_inputs(driver, 'name value')[0]
@@ -349,7 +355,12 @@ def run(options):
             marker_row, 'Confirm delete'
         ) is not None)
         capture('safe-delete-confirmation')
-        _row_button(marker_row, 'Confirm delete').click()
+        confirm = _row_button(marker_row, 'Confirm delete')
+        if options.engine == 'DuckDB':
+            # Preserve the confirmed button target through grid focus/scroll.
+            driver.execute_script('arguments[0].click()', confirm)
+        else:
+            confirm.click()
         wait.until(expected.visibility_of_element_located((
             By.CSS_SELECTOR, '[aria-label="Staged provider grid changes"]',
         )))
@@ -379,7 +390,7 @@ def run(options):
 
         _choose_table(driver, wait, 'PAGINATION_PROBE')
         _button(wait, 'Load rows').click()
-        next_page = _button(wait, 'Next row page')
+        next_page = _button(wait, 'Next page')
         cancel_cursor = _button(wait, 'Cancel row cursor')
         if not next_page.is_enabled() or not cancel_cursor.is_enabled():
             raise RuntimeError(
@@ -393,9 +404,13 @@ def run(options):
         capture('pagination-cursor-cancelled')
 
         _button(wait, 'Load rows').click()
-        _button(wait, 'Next row page').click()
-        wait.until(lambda value: _has_input_value(
-            value, 'id value', '201'
+        _button(wait, 'Next page').click()
+        expected_page_value = ('page-row-201' if options.engine == 'DuckDB'
+                               else 'row-201')
+        wait.until(lambda value: any(
+            item.is_displayed() and item.text.strip() == expected_page_value
+            for item in value.find_elements(
+                By.CSS_SELECTOR, '[role="gridcell"]')
         ))
         capture('pagination-second-page')
 
@@ -421,6 +436,10 @@ def run(options):
             'screenshots': screenshots, 'controls': controls,
             'passed': True,
         }
+    except Exception:
+        capture('failure')
+        (options.output_root / 'failure.html').write_text(driver.page_source)
+        raise
     finally:
         try:
             if options.engine in {'SQLite', 'MySQL', 'MariaDB'}:

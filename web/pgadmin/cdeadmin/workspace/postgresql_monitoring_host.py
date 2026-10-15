@@ -1,5 +1,6 @@
 """PostgreSQL collection with persisted-owner checks and sealed worker grants."""
 import atexit
+import base64
 import copy
 from types import SimpleNamespace
 
@@ -22,12 +23,26 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         self._admissions = {}
         self._issuing_permissions = {}
 
+    @staticmethod
+    def _native_registration(server):
+        from pgadmin.cdeadmin.providers.postgresql.provider import (
+            PROVIDER_ID, PROVIDER_VERSION, PROFILE_ID, PROFILE_VERSION)
+        endpoint = getattr(server, 'endpoint_profile', None)
+        if endpoint is None or endpoint.provider_id != PROVIDER_ID:
+            return False
+        # Preserved registrations predate provider revisions. Managed native
+        # registrations must match the installed, qualified adapter exactly.
+        return endpoint.provider_version is None or (
+            endpoint.provider_version == PROVIDER_VERSION and
+            endpoint.profile_id == PROFILE_ID and
+            endpoint.profile_version == PROFILE_VERSION)
+
     def _owned_server(self, owner, sid):
         from pgadmin.model import Server, User
         server = Server.query.filter_by(id=sid, user_id=owner).first()
         if (server is None or User.query.filter_by(id=owner, active=True).first() is None or
                 server.endpoint_profile is None or
-                not self.endpoints._is_preserved_postgresql(server)):
+                not self._native_registration(server)):
             raise PermissionError('PostgreSQL monitoring endpoint is unavailable')
         return server
 
@@ -38,6 +53,9 @@ class PostgreSQLMonitoringHost(MonitoringHost):
             'host', 'port', 'username', 'role', 'maintenance_db', 'service',
             'use_ssh_tunnel', 'kerberos_conn', 'connection_params', 'passexec_cmd')}
         values['credential_revision'] = str(server.password)
+        values['ssh_configuration'] = {name: getattr(server, name, None) for name in (
+            'tunnel_host', 'tunnel_port', 'tunnel_username', 'tunnel_authentication',
+            'tunnel_identity_file', 'tunnel_keep_alive', 'tunnel_password')}
         return route_fingerprint(values)
 
     def _scope(self, owner, sid, target):
@@ -57,8 +75,8 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         from pgadmin.utils.master_password import get_crypt_key
         from pgadmin.utils.crypto import decrypt
         server = self._owned_server(owner, sid)
-        if server.use_ssh_tunnel or server.service or server.kerberos_conn:
-            raise ValueError('This collector requires a direct password-authenticated registration')
+        if server.kerberos_conn and not dedicated:
+            raise ValueError('Independent Kerberos monitoring is not yet admitted')
         oid = database_oid(target)
         manager = DriverRegistry.get('psycopg3').connection_manager(sid)
         connection = manager.connection(did=oid) if oid is not None else manager.connection()
@@ -70,20 +88,136 @@ class PostgreSQLMonitoringHost(MonitoringHost):
                  'database': connection.db, 'user': manager.user, 'role': server.role or '',
                  'connection_params': dict(server.connection_params or {}),
                  'principal_reference': f'user:{owner}', 'credential_reference_id': 'current-connection'}
+        transport_secrets = {}
+        if server.service:
+            route.update(self._resolved_service(connection, secrets=transport_secrets))
+        else:
+            route['connection_params'] = self._direct_options(route['connection_params'])
+        if server.kerberos_conn:
+            route['connection_params'].update(gssencmode='disable',
+                require_auth='password,md5,scram-sha-256')
+        tls_password = route['connection_params'].pop('sslpassword', None)
+        if tls_password:
+            transport_secrets['tls_private_key_password'] = tls_password
         if oid is not None:
             route['database_oid'] = oid
         permission = None
         if not dedicated:
             encrypted = connection.password or manager.password
             present, crypt_key = get_crypt_key()
-            if not present or not encrypted:
+            if present and encrypted:
+                # Closure exists only during synchronous grant issue, never in a worker.
+                permission = SimpleNamespace(acquire_secret=lambda *_:
+                    SecretLease(decrypt(encrypted, crypt_key)))
+            elif server.service:
+                current_password = connection.conn.info.password
+                if not isinstance(current_password, str) or not current_password:
+                    raise ValueError('Current connection password is unavailable; use a dedicated account')
+                permission = SimpleNamespace(acquire_secret=lambda *_: SecretLease(current_password))
+            else:
                 raise ValueError('Current connection password is unavailable; use a dedicated account')
-            # Closure exists only during synchronous grant issue, never in a worker.
-            permission = SimpleNamespace(acquire_secret=lambda *_:
-                SecretLease(decrypt(encrypted, crypt_key)))
+        if server.use_ssh_tunnel:
+            ssh, secrets = self._ssh_admission(server, manager)
+            route.update(ssh=ssh, port=ssh['remote_port'], transport_source='dedicated-ssh')
+            transport_secrets.update(secrets)
+        if transport_secrets:
+            secrets = transport_secrets
+            references = {kind: 'registration-' + kind for kind in secrets}
+            route['credential_references'] = references
+            database_permission = permission
+            def acquire(reference, principal, purpose, kind):
+                if principal != route['principal_reference'] or purpose != 'connect':
+                    raise PermissionError('Monitoring credential scope changed')
+                if kind in secrets and reference == references[kind]:
+                    return SecretLease(secrets[kind])
+                if kind == 'database_password' and database_permission is not None:
+                    return database_permission.acquire_secret(reference, principal, purpose, kind)
+                raise PermissionError('Monitoring credential is unavailable')
+            permission = SimpleNamespace(acquire_secret=acquire)
         return {'endpoint_id': server.endpoint_profile.id,
                 'generation': server.endpoint_profile.profile_generation or server.endpoint_profile.cache_namespace,
                 'configuration': self._configuration(server), 'route': route}, permission
+
+    @staticmethod
+    def _ssh_admission(server, manager):
+        from pgadmin.cdeadmin.providers.postgresql.monitoring_ssh import validate_ssh_route
+        from pgadmin.utils import get_complete_file_path
+        from pgadmin.utils.crypto import decrypt
+        from pgadmin.utils.master_password import get_crypt_key
+        tunnel = manager.tunnel_object
+        if (tunnel is None or not tunnel.is_active or not tunnel._transport.is_authenticated() or
+                len(tunnel._remote_binds) != 1 or
+                server.tunnel_host != manager.tunnel_host or
+                (server.tunnel_port or 22) != manager.tunnel_port or
+                server.tunnel_username != manager.tunnel_username or
+                (server.tunnel_authentication or 0) != manager.tunnel_authentication or
+                (manager.tunnel_authentication == 1 and
+                 server.tunnel_identity_file != manager.tunnel_identity_file) or
+                (server.host, server.port) != tunnel._remote_binds[0]):
+            raise ValueError('Reconnect the selected SSH registration before configuring monitoring')
+        key = tunnel._transport.get_remote_server_key()
+        ssh = {'host': manager.tunnel_host, 'port': int(manager.tunnel_port),
+               'username': manager.tunnel_username, 'remote_host': tunnel._remote_binds[0][0],
+               'remote_port': tunnel._remote_binds[0][1], 'host_key_type': key.get_name(),
+               'host_key': base64.b64encode(key.asbytes()).decode('ascii'),
+               'authentication': 'private_key' if manager.tunnel_authentication == 1 else 'password',
+               'keep_alive': int(manager.tunnel_keep_alive)}
+        validate_ssh_route(ssh)
+        encrypted = manager.tunnel_password or getattr(server, 'tunnel_password', None)
+        password = None
+        if encrypted:
+            present, crypt_key = get_crypt_key()
+            if not present:
+                raise ValueError('SSH credential authority is unavailable')
+            password = decrypt(encrypted, crypt_key)
+        if ssh['authentication'] == 'password':
+            if not password:
+                raise ValueError('The connected SSH password is unavailable')
+            return ssh, {'ssh_password': password}
+        path = get_complete_file_path(manager.tunnel_identity_file)
+        with open(path, 'rb') as source:
+            private_key = source.read(1024 * 1024 + 1)
+        if not private_key or len(private_key) > 1024 * 1024:
+            raise ValueError('The monitoring SSH key exceeds its admission limit')
+        secrets = {'ssh_private_key': private_key}
+        if password:
+            secrets['ssh_private_key_password'] = password
+        return ssh, secrets
+
+    @staticmethod
+    def _direct_options(parameters):
+        """Resolve user storage paths while the admitting request owns access."""
+        from pgadmin.utils import get_complete_file_path
+        options = dict(parameters)
+        for key in ('sslcert', 'sslkey', 'sslcrl', 'sslcrldir', 'sslrootcert'):
+            if key in options and not (key == 'sslrootcert' and options[key] == 'system'):
+                options[key] = get_complete_file_path(options[key])
+        return options
+
+    @staticmethod
+    def _resolved_service(connection, *, secrets=None):
+        """Freeze the selected native peer; collectors never re-resolve an alias."""
+        from ..providers.postgresql.monitoring import CONNECTION_OPTIONS
+        info = connection.conn.info
+        parameters = dict(info.get_parameters())
+        if 'sslpassword' in parameters and secrets is not None:
+            password = parameters.pop('sslpassword')
+            if password:
+                secrets['tls_private_key_password'] = password
+        replaced = {'service', 'host', 'port', 'dbname', 'user', 'application_name',
+                    'fallback_application_name', 'client_encoding', 'passfile'}
+        if set(parameters) - CONNECTION_OPTIONS - replaced - {'connect_timeout'}:
+            raise ValueError('The service uses connection options not yet admitted for monitoring')
+        host, database, user, port = info.host, info.dbname, info.user, info.port
+        if (any(not isinstance(value, str) or not value or '\x00' in value for value in (host, database, user))
+                or type(port) is not int or not 1 <= port <= 65535 or database != connection.db):
+            raise ValueError('The service did not resolve a valid selected database endpoint')
+        options = {key: value for key, value in parameters.items()
+                   if key in CONNECTION_OPTIONS | {'connect_timeout'}}
+        if info.hostaddr:
+            options['hostaddr'] = info.hostaddr
+        return {'host': host, 'port': port, 'database': database, 'user': user,
+                'connection_params': options, 'transport_source': 'resolved-libpq-service'}
 
     def enable(self, owner, sid, target, body):
         database_oid(target)
@@ -133,7 +267,7 @@ class PostgreSQLMonitoringHost(MonitoringHost):
             return sorted([{'server_id': server.id, 'name': server.name}
                 for server in Server.query.filter_by(user_id=owner).all()
                 if server.endpoint_profile is not None and
-                self.endpoints._is_preserved_postgresql(server)],
+                self._native_registration(server)],
                 key=lambda row: (row['name'].casefold(), row['server_id']))
 
     def fleet(self, owner):
@@ -168,6 +302,26 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         return {'registered_endpoints': len(servers), 'servers': servers,
                 'history': 'volatile', 'inventory': 'owner-registrations-and-configured-collectors'}
 
+    def definition_scope(self, owner, sid, target):
+        oid = database_oid(target)
+        if sid is None:
+            if target is not None:
+                raise ValueError('Engine scope cannot include a database')
+            self._registrations(owner)
+            return {'engine': 'postgresql', 'kind': 'engine', 'owner': owner}
+        server = self._owned_server(owner, sid)
+        scope = {'engine': 'postgresql', 'kind': 'database' if oid else 'server',
+                 'owner': owner, 'server_id': sid,
+                 'endpoint_id': server.endpoint_profile.id,
+                 'generation': server.endpoint_profile.profile_generation or server.endpoint_profile.cache_namespace}
+        if oid is not None:
+            from pgadmin.utils.driver.registry import DriverRegistry
+            connection = DriverRegistry.get('psycopg3').connection_manager(sid).connection(did=oid)
+            if not connection.connected() or not connection.db:
+                raise PermissionError('Connect the selected database before editing its dashboard')
+            scope.update(target_id=target, database=connection.db)
+        return scope
+
     def close(self):
         with self._lock:
             for grant in self._grants.values():
@@ -187,6 +341,45 @@ def init_app(app, shared_host):
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint('cdeadmin_postgresql_monitoring', __name__)
+
+    @api.route('/cdeadmin/api/monitoring/postgresql/definition', methods=['GET', 'PUT', 'POST'])
+    @pga_login_required
+    def definition():
+        from .assets import (service_for_app, ProjectAssetError,
+                             ProjectAssetConflict, ProjectAssetForbidden)
+        from .dashboard_definitions import DashboardDefinitions
+        try:
+            sid_text = request.args.get('sid')
+            sid = int(sid_text) if sid_text is not None else None
+            target = request.args.get('target_id')
+            if target == '' or (target is not None and len(target) > 255):
+                raise ValueError('Invalid target')
+            from .dashboard_validation import validate_dashboard
+            definitions = DashboardDefinitions(service_for_app(app), host.definition_scope,
+                lambda snapshot, scope: validate_dashboard(snapshot, scope,
+                    app.config.get('CDEADMIN_DDN_NODE', 'node'), engine='postgresql'))
+            if request.method == 'GET':
+                data = (definitions.published(current_user.id, sid, target)
+                        if request.args.get('published') == '1' else
+                        definitions.read(current_user.id, sid, target))
+            elif request.method == 'POST':
+                data = definitions.publish(current_user.id, sid, target,
+                                           request.get_json(silent=True))
+            else:
+                data = definitions.save(current_user.id, sid, target,
+                                        request.get_json(silent=True))
+            response = jsonify(success=1, data=data)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except (PermissionError, ProjectAssetForbidden):
+            return jsonify(success=0, errormsg='Dashboard scope is not authorized'), 403
+        except ProjectAssetConflict:
+            return jsonify(success=0, code='asset_conflict',
+                           errormsg='Dashboard draft changed; reopen before saving.'), 409
+        except (ProjectAssetError, ValueError, TypeError):
+            return jsonify(success=0, errormsg='Invalid dashboard draft'), 400
+        except Exception:
+            return jsonify(success=0, errormsg='Dashboard draft request failed'), 503
 
     @api.route('/cdeadmin/api/monitoring/postgresql', methods=['GET'])
     @pga_login_required

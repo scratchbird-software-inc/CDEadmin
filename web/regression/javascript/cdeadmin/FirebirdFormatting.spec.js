@@ -6,17 +6,17 @@ import {schemaCompletionSource, sql} from '@codemirror/lang-sql';
 
 describe('Firebird source formatting and completion', () => {
   it.each([
-    "select q'{line 1\n'quoted'; -- literal}' from rdb$database",
+    'select q\'{line 1\n\'quoted\'; -- literal}\' from rdb$database',
     'select "END""name", 1e+2, .5, x\'ABCD\' from "TABLE" where x != 1',
-    "execute block returns (v varchar(40)) as begin v = ' a  b '; suspend; end",
+    'execute block returns (v varchar(40)) as begin v = \' a  b \'; suspend; end',
     'select 1 -- preserve  comment\nfrom rdb$database /* preserve\ncomment */',
-    "set term ^ ; execute block as begin exit; end ^ set term ; ^",
+    'set term ^ ; execute block as begin exit; end ^ set term ; ^',
   ])('preserves all native tokens for %s', source => {
     const signature = text => firebirdTokens(text).map(({kind, text: token}) => [kind, token]);
     expect(signature(formatFirebird(source))).toEqual(signature(source));
     expect(formatFirebird(formatFirebird(source))).toBe(formatFirebird(source));
   });
-  it.each(["select 'unterminated", 'select "unterminated', 'select /* missing', "select q'{unclosed'"])(
+  it.each(['select \'unterminated', 'select "unterminated', 'select /* missing', 'select q\'{unclosed\''])(
     'refuses malformed lexical source %s', source => expect(() => formatFirebird(source)).toThrow());
   it('uses native names and does not invent missing columns', () => {
     const config = firebirdSQLConfig('SELECT FROM', 3, [
@@ -47,4 +47,14 @@ describe('Firebird source formatting and completion', () => {
     const result = schemaCompletionSource(config)(new CompletionContext(state, state.doc.length, true));
     expect(result?.options.map(option => option.apply)).toContain('"value"');
   });
+});
+
+
+it('completes public packages/routines and native type/sequence names', () => {
+  const config=firebirdSQLConfig('SELECT',3,[{resource_kind:'package',display_name:'P'},
+    {resource_kind:'function',display_name:'F',package_name:'P',parameters:[{name:'N'}]},
+    {resource_kind:'sequence',display_name:'S'},{resource_kind:'domain',display_name:'D'}]);
+  expect(config.schema.P.children[0]).toMatchObject({label:'F',apply:'"F"',type:'function'});
+  expect(config.schema.S.self.type).toBe('variable');
+  expect(config.schema.D.self.type).toBe('type');
 });

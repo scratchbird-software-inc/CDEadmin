@@ -1,5 +1,5 @@
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
@@ -12,19 +12,26 @@ export default function FirebirdBlobEditor({value, kind, label, readOnly, onAppl
   const [endings, setEndings] = useState('preserve');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current++; setDraft({...value}); setOriginal(value.text); setChanged(false);
+    setEndings('preserve'); setError(null); setBusy(false);
+    return () => {generation.current++;};
+  }, [value.text, value.isNull, kind, label, readOnly]);
   let oversized = false;
   try { oversized = blobBytes(original, kind).length > BLOB_EDIT_LIMIT; } catch { /* Validation is shown on apply/export. */ }
   const resolved = () => blobDraft(original, draft, kind, endings, changed);
   const act = (callback) => {setError(null); try {callback();} catch (failure) {setError(failure.message);} };
   const importFile = async (event) => {
     const file = event.target.files?.[0]; event.target.value = '';
-    if (!file) return;
+    if (!file || readOnly) return;
+    const serial = ++generation.current;
     setBusy(true); setError(null);
     try {
       if (file.size > BLOB_EDIT_LIMIT) throw new Error('File exceeds the 1 MiB editor limit. Use chunked transfer.');
       const text = blobImport(new Uint8Array(await file.arrayBuffer()), kind);
-      setDraft({text, isNull: false}); setOriginal(text); setChanged(false); setEndings('preserve');
-    } catch (failure) {setError(failure.message);} finally {setBusy(false);}
+      if (serial === generation.current) {setDraft({text, isNull: false}); setOriginal(text); setChanged(false); setEndings('preserve');}
+    } catch (failure) {if (serial === generation.current) setError(failure.message);} finally {if (serial === generation.current) setBusy(false);}
   };
   const download = () => {
     const current = resolved();

@@ -163,30 +163,41 @@ export function showFirebirdDashboardEditor(serverId, targetId) {
   return panelId;
 }
 
-export function showMySQLDashboardEditor(serverId, targetId) {
-  const panelId = `id-mysql-dashboard-editor-${++providerWorkspaceSequence}`;
-  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL dashboard draft'),
+export function showPostgresqlDashboardEditor(serverId, targetId) {
+  const workspace = pgAdmin.Browser.docker.default_workspace;
+  const panelId = `id-postgresql-dashboard-editor-${++providerWorkspaceSequence}`;
+  workspace.openTab({id: panelId, title: gettext('PostgreSQL dashboard draft'),
     closable: true, manualClose: true, floatable: true,
-    content: <ErrorBoundary><FirebirdDashboardEditor engine="mysql" serverId={serverId}
+    content: <ErrorBoundary><FirebirdDashboardEditor engine="postgresql" serverId={serverId}
       targetId={targetId} panelId={panelId} /></ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
 }
 
-export function showMySQLMonitor(serverId, targetId, name='MySQL') {
-  const panelId = `id-mysql-monitor-${serverId}-${targetId || 'server'}`;
-  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: `${name} — dashboard`,
-    closable: true, floatable: true,
-    content: <ErrorBoundary><MySQLMonitoring serverId={Number(serverId)} targetId={targetId} /></ErrorBoundary>,
+export function showMySQLDashboardEditor(serverId, targetId, engine='mysql') {
+  const panelId = `id-${engine}-dashboard-editor-${++providerWorkspaceSequence}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB dashboard draft') : engine === 'duckdb' ? gettext('DuckDB dashboard draft') : engine === 'sqlite' ? gettext('SQLite dashboard draft') : gettext('MySQL dashboard draft'),
+    closable: true, manualClose: true, floatable: true,
+    content: <ErrorBoundary><FirebirdDashboardEditor engine={engine} serverId={serverId}
+      targetId={targetId} panelId={panelId} /></ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
 }
 
-export function showMySQLFleet() {
-  const panelId = 'id-mysql-fleet';
-  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: gettext('MySQL engine dashboard'),
+export function showMySQLMonitor(serverId, targetId, name='MySQL', engine='mysql') {
+  const panelId = `id-${engine}-monitor-${serverId}-${targetId || 'server'}`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: `${name} — dashboard`,
     closable: true, floatable: true,
-    content: <ErrorBoundary><MySQLMonitoring engineMode onNavigate={showMySQLMonitor} /></ErrorBoundary>,
+    content: <ErrorBoundary><MySQLMonitoring engine={engine} serverId={Number(serverId)} targetId={targetId} /></ErrorBoundary>,
+  }, BROWSER_PANELS.MAIN, 'middle');
+  return panelId;
+}
+
+export function showMySQLFleet(engine='mysql') {
+  const panelId = `id-${engine}-fleet`;
+  pgAdmin.Browser.docker.default_workspace.openTab({id: panelId, title: engine === 'mariadb' ? gettext('MariaDB engine dashboard') : engine === 'duckdb' ? gettext('DuckDB engine dashboard') : engine === 'sqlite' ? gettext('SQLite engine dashboard') : gettext('MySQL engine dashboard'),
+    closable: true, floatable: true,
+    content: <ErrorBoundary><MySQLMonitoring engine={engine} engineMode onNavigate={(sid, target, name) => showMySQLMonitor(sid, target, name, engine)} /></ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return panelId;
 }
@@ -264,6 +275,8 @@ export function showProviderWorkspace(
     `${generatedUrl}${generatedUrl.includes('?') ? '&' : '?'}${parameters}` :
     generatedUrl;
   const connection = {id: endpointUrl, serverId: nodeData._id, databaseTargetId,
+    engine: endpointProfiles.get(nodeData.cde_profile_id)?.display_name ||
+      nodeData.cde_engine_id || nodeData.engine_id || (nodeData.cde_endpoint ? 'Unknown engine' : 'PostgreSQL'),
     label: `${nodeData.label || nodeData._label || title} / ${initialContext.display_name || databaseTargetId || 'server'}`};
   if (registerOnly) {
     registerSQLConnection({...connection, open: () => showProviderWorkspace(
@@ -288,7 +301,7 @@ export function showProviderWorkspace(
           const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
           node?.callbacks?.refresh?.call(node, null, connector);
         }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
-        (nodeData.cde_profile_id === 'mysql-native' ? <MySQLMonitoring serverId={Number(nodeData._id ?? nodeData.id)}
+        (['mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : nodeData.cde_profile_id === 'sqlite-native' ? 'sqlite' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
           targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
           <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
             targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent

@@ -52,9 +52,15 @@ def harness(sets):
     identity.fetchone.return_value = ('server-one', 7)
     connection = SimpleNamespace(
         cursor=lambda **kw: native if kw else identity,
-        python_charset='utf8', ping=Mock())
-    client = SimpleNamespace(_uncertain_sessions=set(),
-                             _require_usable_session=Mock())
+        python_charset='utf8', ping=Mock(), server_host='winning-endpoint',
+        server_port=3306, unix_socket=None)
+    control = Mock()
+    control.cursor.return_value.fetchone.return_value = ('server-one',)
+    client = SimpleNamespace(
+        _uncertain_sessions=set(), _require_usable_session=Mock(),
+        module=SimpleNamespace(connect=Mock()),
+        _invoke_connector=Mock(return_value=control),
+        _safe_close=lambda obj: obj.close() if obj is not None else None)
     return Executions(client), connection, native
 
 
@@ -143,6 +149,34 @@ def test_late_error_keeps_earlier_result_and_protocol_failure_quarantines():
     connection.ping.assert_not_called()
 
 
+def test_c_driver_ok_then_rows_keeps_raw_values_and_later_server_error():
+    from mysql.connector.errors import ProgrammingError
+    owner, connection, native = harness([[], [1]])
+    mode = {'raw': False}  # The preceding identity/catalog cursor used typed rows.
+    connection._cmysql = SimpleNamespace(raw=lambda enabled: mode.update(raw=enabled))
+    fetch = native.fetchone
+    advance = native.nextset
+
+    def fetchone():
+        row = fetch()
+        # The C connector's initial OK response leaves its previous conversion
+        # mode intact, even though this query cursor was requested raw=True.
+        return row if mode['raw'] or row is None else (int(row[0]),)
+
+    def nextset():
+        if native.index == 1:
+            raise ProgrammingError(msg='Owned later statement failed', errno=1146, sqlstate='42S02')
+        return advance()
+
+    native.fetchone = fetchone
+    native.nextset = nextset
+    token = owner.execute(connection, {'source': 'INSERT; SELECT; failing SELECT'}, {})
+    pages = drain(owner, token)
+    assert [row for page in pages for row in page['payload']['rows']] == [(1,)]
+    assert pages[-1]['payload']['error']['errno'] == 1146
+    assert pages[-1]['payload']['session_reuse_blocked'] is False
+
+
 def test_cancel_verifies_winning_endpoint_before_native_kill():
     owner, connection, native = harness([list(range(4096))])
     connection.server_host = 'winning-host'
@@ -228,3 +262,23 @@ def test_native_error_text_excludes_local_connector_exceptions():
     local = Executions._error(InterfaceError(msg='private credential material', errno=2003))
     assert 'message_primary' not in local
     assert 'private' not in str(local)
+
+
+def test_failed_native_dispatch_retains_timing_and_diagnostic_without_replay():
+    from mysql.connector.errors import ProgrammingError
+    owner, connection, native = harness([[1]])
+    native.execute = Mock(side_effect=ProgrammingError(
+        msg='Unknown column', errno=1054, sqlstate='42S22'))
+    token = owner.execute(connection, {'source': 'SELECT missing_column'}, {})
+    pages = drain(owner, token)
+    payload = pages[-1]['payload']
+    assert not any(p['payload']['has_page'] for p in pages)
+    assert payload['error']['errno'] == 1054
+    assert payload['error']['sqlstate'] == '42S22'
+    assert payload['error']['message_primary'] == 'Unknown column'
+    metrics = payload['statement_metrics']
+    assert metrics['dispatch_ms'] >= 0
+    assert metrics['prepare_ms'] is metrics['execute_ms'] is metrics['plan'] is None
+    native.execute.assert_called_once()
+    connection.ping.assert_called_once_with(reconnect=False)
+    assert native.closed and not owner.client._uncertain_sessions

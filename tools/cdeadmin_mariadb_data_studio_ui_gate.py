@@ -16,6 +16,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ from pathlib import Path
 import mariadb
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as expected
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -115,27 +117,31 @@ def _sleep_query_present(options):
         connection.close()
 
 
+def _source_editor(driver):
+    return next((
+        item for item in driver.find_elements(By.CSS_SELECTOR, '.cm-content')
+        if item.is_displayed()
+    ), None)
+
+
 def _set_query_source(driver, wait, source):
-    control = wait.until(
-        lambda value: visible_named_control(value, 'Query source')
-    )
-    driver.execute_script(
-        """
-        const control = arguments[0];
-        const source = arguments[1];
-        const prototype = control.tagName === 'TEXTAREA' ?
-          window.HTMLTextAreaElement.prototype :
-          window.HTMLInputElement.prototype;
-        const setter = Object.getOwnPropertyDescriptor(
-          prototype, 'value'
-        ).set;
-        setter.call(control, source);
-        control.dispatchEvent(new Event('input', {bubbles: true}));
-        control.dispatchEvent(new Event('change', {bubbles: true}));
-        """,
-        control, source,
-    )
-    wait.until(lambda _value: control.get_attribute('value') == source)
+    # A native final result can arrive before its terminal receipt. Finish
+    # the current bounded stream through its real navigation control first.
+    def ready_editor(value):
+        editor = _source_editor(value)
+        if editor is not None and editor.get_attribute('contenteditable') == 'true':
+            return editor
+        next_page = next((item for item in value.find_elements(
+            By.CSS_SELECTOR, 'button[aria-label="Next result page"]'
+        ) if item.is_displayed() and item.is_enabled()), None)
+        if next_page is not None:
+            next_page.click()
+        return False
+    control = wait.until(ready_editor)
+    control.click()
+    control.send_keys(Keys.CONTROL, 'a')
+    control.send_keys(source)
+    wait.until(lambda value: _source_editor(value).text == source)
 
 
 def _visible_result_actions(driver):
@@ -162,9 +168,7 @@ def _alerts(driver):
 def _run_source(driver, wait, source, button='Run'):
     previous = _visible_result_actions(driver)
     _set_query_source(driver, wait, source)
-    observed_source = visible_named_control(
-        driver, 'Query source'
-    ).get_attribute('value')
+    observed_source = _source_editor(driver).text
     if observed_source != source:
         raise RuntimeError(
             'MariaDB SQL editor did not retain the exact requested source'
@@ -259,9 +263,7 @@ def run(options):
         if 'mariadb-sql' not in language_value and (
                 'MariaDB SQL' not in language_text):
             raise RuntimeError('MariaDB SQL language profile was not selected')
-        if 'SELECT id, value, event_date' not in (
-                visible_named_control(driver, 'Query source')
-                .get_attribute('value')):
+        if 'SELECT id, value, event_date' not in wait.until(_source_editor).text:
             raise RuntimeError('MariaDB native starter source was not loaded')
         if _button(wait, 'Explain / query plan') is None:
             raise RuntimeError('MariaDB JSON query plan action is unavailable')
@@ -305,17 +307,44 @@ def run(options):
         next_page = _button(wait, 'Next result page')
         if not next_page.is_enabled():
             raise RuntimeError('MariaDB result paging is disabled')
+        first_buffer = wait.until(lambda value: re.search(
+            r'Buffered rows: (\d+)', value.find_element(
+                By.CSS_SELECTOR, '[aria-label="Statement metrics"]'
+            ).text))
+        next_row = int(first_buffer.group(1)) + 1
         capture('result-page-one')
         next_page.click()
-        wait.until(lambda value: 'row-501' in value.page_source)
+        wait.until(lambda value: f'row-{next_row}' in value.page_source)
         capture('result-page-two')
+        # Native fetch batches and browser buffers have separate limits.
+        # Drain the remaining qualified rows before authoring another query.
+        for _ in range(10):
+            if _source_editor(driver).get_attribute('contenteditable') == 'true':
+                break
+            next_page = _button(wait, 'Next result page')
+            if next_page.is_enabled():
+                next_page.click()
+            wait.until(lambda value: (
+                _source_editor(value).get_attribute('contenteditable') == 'true'
+                or _button(wait, 'Next result page').is_enabled()))
+        wait.until(lambda value: _source_editor(value).get_attribute(
+            'contenteditable') == 'true')
 
-        _run_source(driver, wait, 'SELECT SLEEP(30) AS cancellation_probe')
+        _set_query_source(driver, wait, 'SELECT SLEEP(30) AS cancellation_probe')
+        _button(wait, 'Run').click()
         wait.until(lambda _value: _sleep_query_present(options))
-        cancel = _button(wait, 'Cancel request')
-        if not cancel.is_enabled():
-            raise RuntimeError('MariaDB active query cancellation is disabled')
-        cancel.click()
+        def cancel_running_query(value):
+            try:
+                control = next((item for item in value.find_elements(
+                    By.CSS_SELECTOR, 'button[aria-label="Cancel request"]'
+                ) if item.is_displayed()), None)
+                if control is None or not control.is_enabled():
+                    return False
+                control.click()
+                return True
+            except StaleElementReferenceException:
+                return False
+        wait.until(cancel_running_query)
         wait.until(lambda _value: not _sleep_query_present(options))
         wait.until(lambda _value: not _button(
             wait, 'Cancel request'
@@ -383,7 +412,9 @@ def run(options):
         if not close_session.is_enabled():
             raise RuntimeError('MariaDB query session is not open')
         close_session.click()
-        wait.until(lambda _value: not close_session.is_enabled())
+        wait.until(lambda value: not value.find_element(
+            By.CSS_SELECTOR, 'button[aria-label="Close query session"]'
+        ).is_enabled())
         capture('session-closed')
 
         return {
@@ -414,6 +445,10 @@ def run(options):
             'screenshots': screenshots, 'controls': controls,
             'passed': True,
         }
+    except Exception:
+        capture('failure')
+        (options.output_root / 'failure.html').write_text(driver.page_source)
+        raise
     finally:
         try:
             connection = _observer(options)

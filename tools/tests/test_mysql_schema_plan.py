@@ -62,3 +62,20 @@ def test_native_validation_prepares_and_deallocates_without_executing_changes():
     assert 'DEALLOCATE PREPARE sr_native_preview' in sources
     assert not any(source.startswith(('ALTER TABLE','EXECUTE ')) for source in sources)
     cursor.close.assert_called_once()
+
+
+def test_database_root_changes_are_blocked_instead_of_silently_skipped():
+    before=captured();desired=deepcopy(before)
+    root=next(row for row in desired['rows'].values() if row['kind']=='database')
+    root['native']['definition'] += ' DEFAULT CHARACTER SET latin1'
+    result=plan(before,desired,before)
+    assert not result['ready_for_review'] and any('Database-root changes' in row['reason'] for row in result['blockers'])
+
+
+def test_same_name_foreign_key_replacement_is_not_treated_as_atomic_native_change():
+    before=model([('table','child','CREATE TABLE `child` (`id` int, CONSTRAINT `fk` FOREIGN KEY (`id`) REFERENCES `parent` (`id`))',{})])
+    desired=deepcopy(before)
+    row=next(row for row in desired['rows'].values() if row['kind']=='table')
+    row['native']['definition']=row['native']['definition'].replace('`parent`','`other`')
+    result=plan(before,desired,before)
+    assert not result['ready_for_review'] and 'separately reviewed DROP and ADD' in result['blockers'][0]['reason']

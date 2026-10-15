@@ -438,6 +438,39 @@ class ProviderNavigatorTests(unittest.TestCase):
             [item['label'] for item in children],
         )
 
+    def test_collapsed_embedded_database_keeps_native_owned_resources(self):
+        database = resource(
+            'database:main', 'database', 'main', ['main'])
+        database['native'] = {
+            'database_name': '/srv/data/example.sqlite'}
+        table = resource('table:main:t', 'table', 't', ['main', 't'])
+        table['native'] = {
+            'navigator_parent_resource_id': 'database:main'}
+        column = resource('column:main:t:id', 'column', 'id',
+                          ['main', 't', 'id'])
+        column['native'] = {
+            'navigator_parent_resource_id': 'table:main:t'}
+        other_database = resource(
+            'database:other', 'database', 'other', ['other'])
+        other_table = resource(
+            'table:other:t', 'table', 't', ['other', 't'])
+        other_table['native'] = {
+            'navigator_parent_resource_id': 'database:other'}
+        resources = [database, table, column, other_database, other_table]
+        base = {'scope': 'database', 'database': '/srv/data/example.sqlite',
+                'display_name': 'example.sqlite', 'parent_path': []}
+        self.assertEqual(['Tables'], [item['label'] for item in
+                         resource_children(resources, base)])
+        tables = resource_children(resources, {
+            **base, 'scope': 'kind', 'resource_kind': 'table'})
+        self.assertEqual(['table:main:t'], [item['resource_id']
+                                           for item in tables])
+        self.assertEqual(['Columns'], [item['label'] for item in
+                         resource_children(resources, {
+                             **base, 'scope': 'resource',
+                             'resource_id': 'table:main:t',
+                             'parent_path': ['t']})])
+
     def test_embedded_database_retains_declared_attached_database_branch(self):
         database = resource(
             'database:main', 'database', 'main', ['main']

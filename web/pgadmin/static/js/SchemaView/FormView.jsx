@@ -82,13 +82,18 @@ export default function FormView({
   // Set focus on the first focusable element.
   useEffect(() => {
     if (!focusOnFirstInput) return;
-    setTimeout(() => {
+    const initialFocus = document.activeElement;
+    const focusTimer = setTimeout(() => {
       const formEle = formRef.current;
       if (!formEle) return;
       const activeTabElement = formEle.querySelector(
         '[data-test="tabpanel"]:not([hidden])'
       );
       if (!activeTabElement) return;
+      // A user may already be editing before the delayed initial focus runs.
+      // Never redirect their next keystroke to another field.
+      if (activeTabElement.contains(document.activeElement) ||
+          document.activeElement !== initialFocus) return;
 
       // Find the first focusable input, which is either:
       // * An editable Input element.
@@ -96,18 +101,19 @@ export default function FormView({
       // * An href element.
       // * Any element with 'tabindex', but - tabindex is not set to '-1'.
       const firstFocussableElement = activeTabElement.querySelector([
-        'button:not([role="tab"])',
+        'button:not([role="tab"]):not([disabled])',
         '[href]',
-        'input:not(disabled)',
-        'select:not(disabled)',
-        'textarea',
-        '[tabindex]:not([tabindex="-1"]):not([data-test="tabpanel"])',
+        'input:not([disabled]):not([readonly])',
+        'select:not([disabled])',
+        'textarea:not([disabled]):not([readonly])',
+        '[tabindex]:not([tabindex="-1"]):not([disabled]):not([readonly]):not([data-test="tabpanel"])',
         'div[class="cm-content"]:not([aria-readonly="true"])',
       ].join(', '));
 
       if (firstFocussableElement) firstFocussableElement.focus();
     }, 200);
-  }, [tabValue]);
+    return () => clearTimeout(focusTimer);
+  }, [tabValue, focusOnFirstInput]);
 
   useEffect(() => {
     // Refresh on message changes.

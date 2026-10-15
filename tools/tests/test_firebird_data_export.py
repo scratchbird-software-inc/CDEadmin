@@ -77,3 +77,36 @@ def test_export_session_cannot_inherit_user_autocommit_or_write_mode():
     assert route['transaction_access'] == 'READ' and route['transaction_auto_commit'] is False
     assert route['transaction_isolation'] == 'SNAPSHOT'
     assert endpoint['route']['transaction_access'] == 'WRITE'
+
+
+@pytest.mark.parametrize('metadata_at', ['table', 'page'])
+def test_empty_table_metadata_limit_stops_before_reading_more_tables(monkeypatch, metadata_at):
+    document = model()
+    document['rows']['table:U'] = {**document['rows']['table:T'], 'resource_id': 'table:U', 'name': 'U'}
+    empty = {'columns': [{'name': 'A', 'input_kind': 'integer'}], 'rows': [], 'complete': True}
+    if metadata_at == 'table':
+        document['rows']['table:T']['native']['columns'][0]['type_sql'] = 'X' * 4096
+    else:
+        empty['columns'][0]['type_sql'] = 'X' * 4096
+    value = owner([empty, empty])
+    monkeypatch.setattr(export, 'MAX_BYTES', 2048)
+    with pytest.raises(ValueError, match='8 MiB limit'):
+        export.capture(value, 'server', document)
+    assert value.read_visual_admin_rows.call_count == (0 if metadata_at == 'table' else 1)
+    value.transaction_action.assert_called_once()
+    value.close_session.assert_called_once()
+
+
+def test_slow_final_page_cannot_publish_after_the_capture_deadline(monkeypatch):
+    clock = [0]
+    monkeypatch.setattr(export.time, 'monotonic', lambda: clock[0])
+    value = owner([])
+    def finish_page(*_):
+        clock[0] = export.MAX_SECONDS + 1
+        return page(42)
+    value.read_visual_admin_rows.side_effect = finish_page
+    with pytest.raises(ValueError, match='time limit'):
+        export.capture(value, 'server', model())
+    value.read_visual_admin_rows.assert_called_once()
+    value.transaction_action.assert_called_once()
+    value.close_session.assert_called_once()

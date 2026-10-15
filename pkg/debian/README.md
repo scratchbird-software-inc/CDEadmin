@@ -3,10 +3,16 @@
 CDEadmin is an independent hard fork of pgAdmin 4 9.17. See the repository
 `NOTICE` and `LICENSE` files for upstream attribution and licence terms.
 
+Python 3.14 or newer is now required. The listed distribution targets are
+inherited build targets, not packages qualified against this new runtime.
+Packagers must provide a matching interpreter and native-extension ABI and
+record a complete package test before publishing. See
+`docs/en_US/python_runtime_policy.rst`.
+
 This directory contains the build runner script for creating .DEB packages for
 Debian and Ubuntu. 
 
-## Supported platforms
+## Inherited build targets (pending Python 3.14 qualification)
 
 * Debian 11, 12 & 13
 * Ubuntu 22.04, 24.04 & 25.04

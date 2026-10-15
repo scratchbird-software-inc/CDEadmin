@@ -442,6 +442,9 @@ def export_portable(metadata, records, export_format):
 
 
 def export_tabular(metadata, records, export_format):
+    if export_format == 'ddn':
+        from .ddn_export import export_workspace
+        return export_workspace(metadata, records)
     if export_format == 'xlsx':
         return export_xlsx(metadata, records)
     if export_format == 'svg':
@@ -465,7 +468,7 @@ def builtin_renderers():
             'SchemaView/DataGridView',
             render_tabular,
             export_tabular,
-            frozenset({'csv', 'json', 'xlsx', 'svg', 'pdf'}),
+            frozenset({'csv', 'json', 'xlsx', 'svg', 'pdf', 'ddn'}),
             fixture_safe=True,
             worker_required=False,
         ),

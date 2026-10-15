@@ -1,5 +1,6 @@
 """Native PREPARE-only validation for server-compiled MySQL metadata previews."""
 import time
+from .mysql_statement_encoding import statement_context
 
 
 def validate(connection,plan):
@@ -18,23 +19,38 @@ def validate(connection,plan):
         for index,operation in enumerate(plan['operations']):
             if time.monotonic()-started>30:raise ValueError('Native validation exceeds 30 seconds')
             context=operation['context']
-            if context['character_set_client'] not in {'utf8mb4','utf8mb3','utf8'}:
-                raise ValueError('Native validation needs an admitted UTF-8 encoding context')
             connection.sql_mode=context['sql_mode']
-            connection.set_charset_collation(charset=context['character_set_client'],collation=context['collation_connection'])
+            if 'time_zone' in context:connection.time_zone=context['time_zone']
             prepared=False
             try:
-                cursor.execute('SET @sr_native_preview = %s',(operation['source'],))
-                cursor.execute('PREPARE sr_native_preview FROM @sr_native_preview');prepared=True
-                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':True})
+                with statement_context(connection, cursor, operation['source'], context) as encoded:
+                    cursor.execute('SET @sr_native_preview = %s',(encoded,))
+                    cursor.execute('PREPARE sr_native_preview FROM @sr_native_preview');prepared=True
+                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':True,
+                    'preparation_supported':True,'validation_stage':'prepared'})
             except Exception as error:
                 code=getattr(error,'errno',None)
                 if code is None or code in {2006,2013,2055}:raise
-                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':False,
+                # MySQL 9.7 parses the whole ALTER VIEW before its explicit
+                # unsupported-preparation branch. Admit only this qualified path;
+                # routine commands have the same post-parse refusal. Other 1295 errors fail.
+                parsed_view=(code==1295 and operation.get('kind') in {'view','materialized-view'} and
+                    operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER '))
+                parsed_routine=(code==1295 and operation.get('kind') in {'procedure','function'} and
+                    operation.get('operation') in {'create','alter','drop'} and
+                    operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
+                parsed_trigger=(code==1295 and operation.get('kind')=='trigger' and
+                    operation.get('operation') in {'create','drop'} and
+                    operation['source'].lstrip().startswith(operation['operation'].upper()+' '))
+                parsed_database=(code==1295 and operation.get('kind')=='database' and
+                    operation.get('operation')=='alter' and operation['source'].lstrip().startswith('ALTER DATABASE '))
+                parsed=parsed_view or parsed_routine or parsed_trigger or parsed_database
+                results.append({'resource_id':operation['resource_id'],'index':index,'accepted':parsed,
+                    'preparation_supported':False,'validation_stage':'parse-only' if parsed else 'rejected',
                     'error_code':code,'sqlstate':getattr(error,'sqlstate',None),'error_type':type(error).__name__})
             finally:
                 if prepared:cursor.execute('DEALLOCATE PREPARE sr_native_preview')
                 cursor.execute('SET @sr_native_preview = NULL')
     finally:cursor.close()
     return {'native_grammar_validated':all(row['accepted'] for row in results),'native_validation':results,
-        'validation_mode':'native-PREPARE-without-EXECUTE','executed':False,'application_supported':False}
+        'validation_mode':'native-PREPARE-without-EXECUTE;admitted-view-routine-trigger-1295-parse-only','executed':False,'application_supported':False}

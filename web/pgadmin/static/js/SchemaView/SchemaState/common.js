@@ -301,7 +301,7 @@ export function validateSchema(
     // A field which is not available for the current form state must not
     // participate in validation. Provider manifests use conditional required
     // fields for mutually exclusive authentication methods.
-    if (evalFunc(null, field.visible, sessData) === false) {
+    if (evalFunc(schema, field.visible, sessData) === false) {
       continue;
     }
     // If the field is has nested schema, then validate the child schema.

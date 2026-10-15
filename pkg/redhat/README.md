@@ -5,10 +5,16 @@ CDEadmin is an independent hard fork of pgAdmin 4 9.17. See the repository
 Repository publication uses CDEadmin-owned variables, paths and signing keys;
 the upstream pgAdmin repository and package key must never be reused.
 
+Python 3.14 or newer is now required. The listed distribution targets are
+inherited build targets, not packages qualified against this new runtime.
+Packagers must provide a matching interpreter and native-extension ABI and
+record a complete package test before publishing. See
+`docs/en_US/python_runtime_policy.rst`.
+
 This directory contains the build runner script for creating .RPM packages for
 Redhat distributions. 
 
-## Supported platforms
+## Inherited build targets (pending Python 3.14 qualification)
 
 * Fedora 40 & 41
 * RHEL 8

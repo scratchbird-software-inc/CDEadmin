@@ -3,6 +3,7 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock
 from pgadmin.cdeadmin.workspace.firebird_templates import context, render, DEFAULTS
+from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService, ProviderWorkspaceError
 
 
@@ -61,3 +62,22 @@ def test_host_generation_and_engine_fences():
     server.endpoint_profile.profile_id = 'mysql-native'
     with pytest.raises(ProviderWorkspaceError):
         service.firebird_object_templates(server, request)
+
+
+
+def test_stored_dialect_one_is_bound_to_exact_native_names():
+    value=snapshot()
+    for row in value['resources']:
+        row['display_name']='PLAIN' if row['resource_kind']=='table' else row['display_name']
+    value['resources'].append({'resource_kind':'database','resource_id':'db','native':{'sql_dialect':1}})
+    selected=context(value,'t')
+    assert selected['database_sql_dialect']==1
+    assert render(selected,DEFAULTS['select'])['source']=='SELECT ID, V, C FROM PLAIN;'
+    with pytest.raises(RelationalClientError):
+        render(selected,DEFAULTS['procedure'],'Mixed')
+
+
+def test_unknown_system_classification_does_not_advertise_mutations():
+    value=snapshot()
+    value['resources'][0]['native'].pop('system_object')
+    assert not {'insert','update','delete','trigger'}.intersection(context(value,'t')['templates'])

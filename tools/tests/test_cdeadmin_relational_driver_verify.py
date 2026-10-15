@@ -56,7 +56,10 @@ class RelationalDriverVerificationTests(unittest.TestCase):
             fake = Path(directory) / 'sqlite3'
             fake.write_text('#!/bin/sh\necho 3.45.1\n', encoding='utf-8')
             fake.chmod(0o700)
-            result = verify_sqlite_cross_version(fake)
+            with patch('tools.cdeadmin_relational_driver_verify.subprocess.run',
+                       return_value=__import__('subprocess').CompletedProcess(
+                           [str(fake), '--version'], 0, stdout='3.45.1\n', stderr='')):
+                result = verify_sqlite_cross_version(fake)
         self.assertEqual('failed', result['status'])
         self.assertEqual('3.45.1', result['target_runtime'])
         self.assertEqual(

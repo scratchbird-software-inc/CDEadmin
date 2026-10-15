@@ -55,7 +55,12 @@ class ScriptCoordinator:
                 getattr(binding.instance, 'script_statement_outcome', None)):
             raise DataStudioAccessError(
                 'Provider has no script outcome adapter')
-        checked = analyze(source, session.language_profile, script=True)
+        validator = getattr(binding.instance, 'validate_source_without_execution', None)
+        checked = validator({
+            'session_id': session.provider_session['session_id'],
+            'language_profile': session.language_profile,
+            'source': source, 'script': True,
+        }) if callable(validator) else analyze(source, session.language_profile, script=True)
         if not checked['script_ready']:
             return {'state': 'invalid', 'validation': checked}
         with self.lock:
@@ -123,6 +128,18 @@ class ScriptCoordinator:
                         occurrence.operation or {}).get('terminal'):
                     raise DataStudioAccessError(
                         'Session has an unresolved execution')
+            validator = getattr(binding.instance, 'validate_source_without_execution', None)
+            if callable(validator):
+                session, _ = self.studio._operational_session(context, plan['session_id'])
+                checked = validator({
+                    'session_id': session.provider_session['session_id'],
+                    'language_profile': session.language_profile, 'script': True,
+                    'source': plan['statements'][plan['next_statement']]['source'],
+                })
+                if not checked['script_ready']:
+                    plan.update(state='stopped', stop_reason='source-validation-changed',
+                                validation=checked, revision=plan['revision'] + 1)
+                    return copy.deepcopy(plan)
             plan['started'] = True
             plan['state'] = 'submitting'
             plan['revision'] += 1

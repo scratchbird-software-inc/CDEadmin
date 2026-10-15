@@ -20,7 +20,7 @@ def parse(value, code):
     native_class = {12: date, 13: time, 35: datetime}[code]
     if isinstance(value, str):
         day = r'\d{4}-\d{2}-\d{2}'
-        clock = r'\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?'
+        clock = r'(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?'
         pattern = day if code == 12 else clock if code == 13 else (
             day + '[ T]' + clock)
         if not re.fullmatch(pattern, value, re.ASCII):

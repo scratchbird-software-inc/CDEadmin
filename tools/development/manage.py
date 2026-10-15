@@ -24,7 +24,7 @@ def doctor():
     """Collect prerequisite failures without modifying the environment."""
     failures = []
     checks = [
-        ('Python 3.12+', sys.version_info >= (3, 12)),
+        ('Python 3.14+', sys.version_info >= (3, 14)),
         ('Linux x86_64 runtime', platform.system() == 'Linux' and
          platform.machine() in ('x86_64', 'amd64')),
     ]
@@ -90,6 +90,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.action == 'doctor':
         return doctor()
+    if sys.version_info < (3, 14):
+        parser.error('Python 3.14 or later is required; set '
+                     'SCRATCHROBIN_PYTHON to a supported interpreter.')
+    if PYTHON.exists():
+        environment_version = subprocess.run(
+            [PYTHON, '-c', 'import sys; print(sys.version_info[0], '
+             'sys.version_info[1])'],
+            capture_output=True, text=True, check=True).stdout.strip()
+        selected_version = f'{sys.version_info.major} {sys.version_info.minor}'
+        if environment_version != selected_version:
+            parser.error('Existing .venv uses a different Python version; '
+                         'recreate it with the selected interpreter.')
     if (platform.system() != 'Linux' or
             platform.machine() not in ('x86_64', 'amd64')):
         parser.error('Use x86_64 Linux (WSL2/VM/remote). See README.md.')

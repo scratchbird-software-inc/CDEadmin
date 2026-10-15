@@ -137,7 +137,8 @@ def _reveal_grid_column(driver, wait, index):
 def _row_button(row, name):
     return next((
         item for item in row.find_elements(By.TAG_NAME, 'button')
-        if item.is_displayed() and item.text.strip() == name
+        if item.is_displayed() and (item.text.strip() == name or
+                                    item.get_attribute('aria-label') == name)
     ), None)
 
 

@@ -33,7 +33,7 @@ def _decode(value):
 
 
 def read_catalog(source, node='node', *, engine='firebird'):
-    if engine not in {'firebird', 'mysql'}:
+    if engine not in {'firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite'}:
         raise ValueError('Unsupported native catalog engine')
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Catalog document must be nonempty UTF-8 text within 8 MiB')
@@ -50,7 +50,10 @@ def read_catalog(source, node='node', *, engine='firebird'):
             not isinstance(snapshot['view'], str)):
         raise ValueError('Invalid catalog workspace envelope')
     for name, content in snapshot['files'].items():
-        if not re.fullmatch(r'catalog(?:-[1-9][0-9]*)?\.ddn', name) or not isinstance(content, str) or not content:
+        if (not isinstance(name, str) or not name.endswith('.ddn') or len(name) > 255 or
+                name.startswith('/') or ':' in name or '\\' in name or '\0' in name or
+                any(part in {'', '.', '..'} for part in name.split('/')) or
+                not isinstance(content, str) or not content):
             raise ValueError('Invalid catalog workspace file')
         if len(content.encode('utf-16-le')) // 2 > MAX_DDN_UNITS:
             raise ValueError('Catalog document exceeds the paired DDN per-file limit of 2,000,000 UTF-16 units')
@@ -62,7 +65,22 @@ def read_catalog(source, node='node', *, engine='firebird'):
                                 input=json.dumps(snapshot, ensure_ascii=False), text=True, encoding='utf-8',
                                 capture_output=True, timeout=15, env=env, check=False)
         if result.returncode:
-            raise ValueError('Invalid or unsupported native catalog DDN document')
+            message = 'Invalid or unsupported native catalog DDN document'
+            # Admit codes and source offsets only; never parser messages/source.
+            try:
+                diagnostics = json.loads(result.stdout)['diagnostics']
+                details = []
+                for item in diagnostics[:16]:
+                    if (isinstance(item, dict) and set(item) == {'code', 'source', 'offset'} and
+                            isinstance(item['code'], str) and len(item['code']) <= 128 and
+                            item['source'] in snapshot['files'] and type(item['offset']) is int and
+                            0 <= item['offset'] <= len(snapshot['files'][item['source']].encode('utf-16-le')) // 2):
+                        details.append(item)
+                if details:
+                    message += ': ' + json.dumps(details, ensure_ascii=True)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                pass
+            raise ValueError(message)
         parsed = json.loads(result.stdout)
         provenance = _decode(parsed['provenance'])
         if (not isinstance(provenance, dict) or

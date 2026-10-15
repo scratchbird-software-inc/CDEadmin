@@ -9,22 +9,26 @@ import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function MySQLCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [error, setError] = useState('');
-  const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
+  const [requestBusy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
   const [baseline, setBaseline] = useState(''), [schemaPlan, setSchemaPlan] = useState(null);
+  const [review, setReview] = useState(null), [confirmed, setConfirmed] = useState(false), [receiptId, setReceiptId] = useState('');
   const [metadata, setMetadata] = useState(null), [dataCapture, setDataCapture] = useState(null);
   const [relation, setRelation] = useState(''), [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
+  const [relationalReviewBusy, setRelationalReviewBusy] = useState(false);
+  const busy = requestBusy || relationalReviewBusy;
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setDataCapture(null); setRelation(''); setMetadata(null); setResult(null); setSource(''); setComparison(null); setError(''); setBusy(false);
-    setBaseline(''); setSchemaPlan(null);
+    setBaseline(''); setSchemaPlan(null); setReview(null); setConfirmed(false); setReceiptId('');
     setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
   const run = async (compare=false) => {
     const token = ++serial.current;
     setBusy(true); setError('');
+    if(!compare) {setReview(null); setConfirmed(false);}
     try {
       const response = await post({action: compare ? 'mysql_catalog_compare' : 'mysql_catalog_export',
         request: {database_target_id: databaseTargetId, include_system: includeSystem, ...(compare ? {source} : {})}});
@@ -47,18 +51,34 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     finally {if(token === serial.current) setBusy(false);}
   };
   const downloadSQL = () => {
-    const url = URL.createObjectURL(new Blob([metadata.script], {type: 'text/plain;charset=utf-8'}));
+    const payload = metadata.encoded_script ? Uint8Array.from(atob(metadata.encoded_script.data_base64), value => value.charCodeAt(0)) : metadata.script;
+    const url = URL.createObjectURL(new Blob([payload], {type: metadata.encoded_script ? 'application/octet-stream' : 'text/plain;charset=utf-8'}));
     const link = document.createElement('a'); link.href = url; link.download = 'mysql-native-metadata.sql'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const previewChanges = async (validate=false) => {
     const token = ++serial.current;
-    setBusy(true); setError(''); setSchemaPlan(null);
+    setBusy(true); setError(''); setSchemaPlan(null); setReview(null); setConfirmed(false);
     try {
       const response = await post({action: validate ? 'mysql_schema_validate' : 'mysql_schema_plan', request: {database_target_id: databaseTargetId,
         baseline, source: source || JSON.stringify(result.snapshot)}});
       if(token === serial.current) setSchemaPlan(response);
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL native change preview failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
+  const schemaApplication = async action => {
+    const token = ++serial.current;
+    setBusy(true); setError('');
+    try {
+      const request = {database_target_id: databaseTargetId};
+      if(action === 'mysql_schema_review') Object.assign(request, {
+        baseline, source: source || JSON.stringify(result.snapshot), execution_sha256: schemaPlan.execution_sha256});
+      else if(action === 'mysql_schema_apply') Object.assign(request, {
+        review_id: review.review_id, review_digest: review.review_digest, confirmed});
+      else request.review_id = receiptId;
+      const response = await post({action, request});
+      if(token === serial.current) {setReview(response); setReceiptId(response.review_id); setConfirmed(false);}
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'MySQL schema receipt request failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
   const captureData = async () => {
@@ -86,24 +106,26 @@ export default function MySQLCatalog({post, databaseTargetId}) {
         onChange={event => setIncludeSystem(event.target.checked)} />} />
       <Button disabled={busy || !databaseTargetId} onClick={() => run()}>Capture metadata</Button>
       <Button disabled={busy || !shown?.snapshot} onClick={download}>Download DDN</Button>
-      <Button component="label" disabled={busy}>Read DDN<input hidden type="file" accept=".ddn,.json" aria-label="MySQL catalog DDN file"
+      <Button component="label" disabled={busy}>Read DDN<input hidden disabled={busy} type="file" accept=".ddn,.json" aria-label="MySQL catalog DDN file"
         onChange={async event => {
-          const file = event.target.files?.[0], token = serial.current;
+          const file = event.target.files?.[0], token = ++serial.current;
           event.target.value = '';
           if(!file) return;
+          setReview(null); setConfirmed(false); setSchemaPlan(null);
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {const text = await file.text(); if(token === serial.current) {setSource(text); setMetadata(null); setComparison(null); setSchemaPlan(null);}}
+          try {const text = await file.text(); if(token === serial.current) {setSource(text); setMetadata(null); setComparison(null); setSchemaPlan(null); setReview(null); setConfirmed(false);}}
           catch {if(token === serial.current) setError('Unable to read catalog file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => run(true)}>Compare with live catalog</Button>
       <Button disabled={busy || !(source || result?.snapshot) || !databaseTargetId} onClick={generate}>Generate native SQL</Button>
       <Button disabled={busy || !metadata?.script_available} onClick={downloadSQL}>Download native SQL</Button>
-      <Button component="label" disabled={busy}>Read baseline DDN<input hidden type="file" accept=".ddn,.json" aria-label="MySQL baseline DDN file"
+      <Button component="label" disabled={busy}>Read baseline DDN<input hidden disabled={busy} type="file" accept=".ddn,.json" aria-label="MySQL baseline DDN file"
         onChange={async event => {
-          const file = event.target.files?.[0], token = serial.current; event.target.value = '';
+          const file = event.target.files?.[0], token = ++serial.current; event.target.value = '';
           if(!file) return;
+          setReview(null); setConfirmed(false); setSchemaPlan(null);
           if(file.size > 8 * 1024 * 1024) {setError('Baseline exceeds 8 MiB'); return;}
-          try {const text = await file.text(); if(token === serial.current) {setBaseline(text); setSchemaPlan(null);}}
+          try {const text = await file.text(); if(token === serial.current) {setBaseline(text); setSchemaPlan(null); setReview(null); setConfirmed(false);}}
           catch {if(token === serial.current) setError('Unable to read baseline');}
         }} /></Button>
       <Button disabled={busy || !baseline || !(source || result?.snapshot)} onClick={() => previewChanges()}>Preview native changes</Button>
@@ -142,8 +164,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       <Alert severity="info">Native SQL export only. Imported definitions have not been validated against the live server and this does not execute a migration.</Alert>
       {metadata.warnings?.map(warning => <Alert severity="warning" key={warning}>{warning}</Alert>)}
       {metadata.blockers?.map(item => <Alert severity="error" key={item.resource_id + item.reason}>{item.name}: {item.reason}</Alert>)}
-      {metadata.script && <TextField label="Native MySQL metadata script" multiline minRows={6} maxRows={16}
-        value={metadata.script} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
+      {metadata.encoded_script && <Alert severity="info">Mixed native encodings: download the original bytes and run with mysql --binary-mode --default-character-set=utf8mb4 in a fresh session. This UTF-8 display is a preview.</Alert>}
+      {(metadata.script || metadata.script_preview) && <TextField label="Native MySQL metadata script" multiline minRows={6} maxRows={16}
+        value={metadata.script || metadata.script_preview} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
       {!!metadata.prerequisites?.length && <Box sx={{height: 220, overflow: 'auto'}}>
         <PagedDataGrid readOnly gridId="mysql/native-prerequisites" aria-label="MySQL native prerequisites"
           rows={metadata.prerequisites.map((item, index) => ({...item, id: index}))} rowKeyGetter={row => row.id}
@@ -161,9 +184,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
     {schemaPlan && <Box>
       <FormReference formKey="mysql-native-schema-preview" />
-      <Alert severity="info">Native semantic preview only. Native grammar validation, a prepared review receipt, locked revalidation and rediscovery are required before application.</Alert>
+      <Alert severity="info">Review the displayed native CREATE/ALTER/DROP statements in order. Earlier committed statements remain committed if a later step stops. MySQL DDL commits implicitly. Existing tables use native table locks; views, libraries, events, routines and triggers use cooperating advisory locks. Baselines are revalidated before dispatch; unknown outcomes are never automatically retried.</Alert>
       {schemaPlan.native_validation && <Alert severity={schemaPlan.native_grammar_validated ? 'success' : 'error'}>
-        {schemaPlan.native_grammar_validated ? 'Native PREPARE accepted the change statements; none were executed.' : 'Native PREPARE rejected one or more change statements.'}
+        {schemaPlan.native_grammar_validated ? (schemaPlan.native_validation.some(item => item.validation_stage === 'parse-only') ? 'Native grammar accepted; some statements cannot be prepared. Semantic and privilege checks occur on execution. None were executed.' : 'Native PREPARE accepted the change statements; none were executed.') : 'Native PREPARE rejected one or more change statements.'}
       </Alert>}
       {schemaPlan.native_validation?.filter(item => !item.accepted).map(item => <Alert severity="error" key={item.index}>MySQL error {item.error_code}, SQLSTATE {item.sqlstate}</Alert>)}
       {schemaPlan.blockers?.map(item => <Alert severity="error" key={item.resource_id + item.reason}>{item.name}: {item.reason}</Alert>)}
@@ -172,8 +195,45 @@ export default function MySQLCatalog({post, databaseTargetId}) {
       {!!schemaPlan.operations?.length && <TextField label="Native MySQL change preview" multiline minRows={4} maxRows={16}
         value={schemaPlan.operations.map(item => item.source + ';').join('\n\n')} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
     </Box>}
+    <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
+      <Button disabled={busy || !schemaPlan?.ready_for_review || !schemaPlan.native_grammar_validated ||
+        !schemaPlan.operations?.length || schemaPlan.operations.length > 32 || schemaPlan.operations.some(op => !['table','view','library','event','procedure','function','trigger','database','materialized-view'].includes(op.kind) || !['create', 'alter', 'drop'].includes(op.operation))}
+      onClick={() => schemaApplication('mysql_schema_review')}>Prepare reviewed change</Button>
+      <FormControlLabel label="Confirm reviewed native DDL and implicit commit" control={<Checkbox checked={confirmed}
+        disabled={busy || review?.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />
+      <Button disabled={busy || review?.state !== 'reviewed' || !confirmed}
+        onClick={() => schemaApplication('mysql_schema_apply')}>Apply reviewed change</Button>
+      <TextField size="small" label="Schema receipt ID" value={receiptId} disabled={busy} sx={{width: 340}}
+        onChange={event => {setReceiptId(event.target.value); setReview(null); setConfirmed(false);}} />
+      <Button disabled={busy || !receiptId || !databaseTargetId}
+        onClick={() => schemaApplication('mysql_schema_receipt')}>Read receipt</Button>
+    </Box>
+    {schemaPlan?.warnings?.map((warning,index) => <Alert key={index} severity="warning">{warning}</Alert>)}
+    {review && <Box>
+      <Alert severity={review.state === 'committed' ? 'success' : review.state === 'reviewed' ? 'info' : 'warning'}>
+        Schema receipt {review.review_id}: {review.state}. Automatic retry is disabled.
+        {review.outcome && ` Rediscovery: ${review.outcome.rediscovery_verified ? 'observed' : 'unverified'}.`}
+      </Alert>
+      {review.statement_outcomes && <Box sx={{height: 240}}>
+        <PagedDataGrid readOnly gridId="mysql/schema-statement-outcomes" aria-label="MySQL migration statement outcomes"
+          rows={review.statement_outcomes} rowKeyGetter={row => row.index} columns={[
+            {key: 'index', name: 'Order', width: 80}, {key: 'resource_id', name: 'Native object', minWidth: 220},
+            {key: 'state', name: 'Observed outcome', minWidth: 180},
+          ]} />
+      </Box>}
+      {review.outcome?.concurrency_warning && <Alert severity="warning">{review.outcome.concurrency_warning}</Alert>}
+      {review.outcome?.rejection_reason && <Alert severity="warning">{review.outcome.rejection_reason}</Alert>}
+      {review.outcome?.desired_definition_exact_match === false && <Alert severity="warning">
+        Native SHOW CREATE differs from the desired text. Review the rediscovered definition before further changes.
+      </Alert>}
+      {review.outcome?.native_definition && <TextField label="Rediscovered native definition" multiline minRows={3} maxRows={12}
+        value={review.outcome.native_definition} slotProps={{input: {readOnly: true}}} sx={{width: '100%'}} />}
+    </Box>}
     {result?.diagram?.snapshot && <Box sx={{display: display === 'relations' ? 'block' : 'none'}}>
-      <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId} />
+      <FirebirdERD engine="mysql" diagram={result.diagram} post={post} databaseTargetId={databaseTargetId}
+        onReviewBusyChange={setRelationalReviewBusy}
+        onReview={handoff => {serial.current++; setBaseline(handoff.baseline); setSource(handoff.desired);
+          setSchemaPlan(null); setReview(null); setConfirmed(false); setDisplay('inventory'); setView(result.snapshot.view);}} />
     </Box>}
     {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,

@@ -4516,10 +4516,10 @@
               {
                 "id": "7cbc86ea06367914a117",
                 "label": "Loadable functions",
-                "kind": "external-function",
+                "kind": "loadable-function",
                 "condition": "",
                 "note": "",
-                "form_key": "native:mariadb:endpoint:external-function",
+                "form_key": "native:mariadb:endpoint:loadable-function",
                 "form_reference": "SR-F-000246",
                 "section": null,
                 "children": []

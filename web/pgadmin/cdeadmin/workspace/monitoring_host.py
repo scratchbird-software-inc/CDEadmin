@@ -68,6 +68,13 @@ class MonitoringHost:
         self.app = app
         self.endpoints = endpoint_service
         self.runtime = MonitoringRuntime()
+        self.history = None
+        if self.engine == 'firebird':
+            from .monitoring_history import configured_history
+            if 'cdeadmin_monitoring_history' not in app.extensions:
+                app.extensions['cdeadmin_monitoring_history'] = configured_history(app)
+            self.history = app.extensions['cdeadmin_monitoring_history']
+            self.policy_fields = self.policy_fields | {'history_enabled'}
         self.keys = WorkerKeyRing(
             app.config.get('CDEADMIN_MONITORING_WORKER_KEYS', {}),
             app.config.get('CDEADMIN_MONITORING_WORKER_ACTIVE_KEY_ID'))
@@ -87,7 +94,7 @@ class MonitoringHost:
         user = User.query.filter_by(id=owner, active=True).first()
         if server is None or user is None or server.endpoint_profile is None:
             raise PermissionError('Monitoring endpoint is unavailable')
-        if server.endpoint_profile.profile_id != 'firebird-native':
+        if server.endpoint_profile.profile_id not in {'firebird-native', 'firebird-embedded'}:
             raise PermissionError('This monitoring source requires native Firebird')
         return server
 
@@ -109,22 +116,39 @@ class MonitoringHost:
             if policy.owner_id != owner or policy.target_id != target:
                 return False
             scope = self._scope(owner, sid, target)
+            if scope['route'].get('attachment_mode') == 'embedded':
+                from ..providers.firebird.embedded import embedded_route
+                embedded_route(scope['route'], scope['permissions'])
             return (scope['endpoint_id'] == policy.endpoint_id and
                     scope['generation'] == generation and
                     route_fingerprint(scope['route']) == digest)
         return authorize
+
+    def _grant_snapshot(self, grant):
+        result = {**self.runtime.snapshot(grant.policy, grant.require),
+            'authentication': dict(grant.authentication),
+            'policy': {field: getattr(grant.policy, field) for field in self.policy_fields}}
+        if self.engine == 'firebird':
+            result['attachment_mode'] = ('embedded' if grant.authentication['mode'] == 'local-file' else 'network')
+            result['collection_available'] = True
+        return result
 
     def enable(self, owner, sid, target, body):
         if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
             raise ValueError('Unsupported monitoring policy fields')
         if 'credentials' in body and not isinstance(body['credentials'], dict):
             raise ValueError('Invalid monitoring credentials')
-        if not self.available:
+        if not self.admitted or self.ownership is None:
             raise MonitoringHostUnavailable(
                 'Monitoring requires single-process admission, a worker key '
                 'authority and a lock path')
         with self._lock:
             scope = self._scope(owner, sid, target)
+            embedded = scope['route'].get('attachment_mode') == 'embedded'
+            if embedded and (target is None or 'credentials' in body):
+                raise ValueError('Embedded collection uses file authorization on a registered database, without password authentication')
+            if not embedded and not self.keys.available:
+                raise MonitoringHostUnavailable('Network monitoring requires worker keys')
             policy = MonitoringPolicy(
                 owner, scope['endpoint_id'], target,
                 **{'interval_seconds': 15 if target is None else 5,
@@ -135,22 +159,58 @@ class MonitoringHost:
                 if 'credentials' in body:
                     raise ValueError('Stop collection before replacing credentials')
                 previous.require(policy, 'configure')
-                self.runtime.enable(policy, previous.open_source, previous.require)
-                return {**self.runtime.snapshot(policy, previous.require),
-                        'authentication': dict(previous.authentication)}
+                self.runtime.enable(policy, previous.open_source, previous.require,
+                    history_writer=self._history_writer(previous))
+                return self._grant_snapshot(previous)
             self.ownership.acquire()
-            grant = MonitoringGrant.issue(
-                policy, scope['route'], scope['generation'], scope['permissions'],
-                self.keys, self._authorizer(owner, sid, target),
-                credentials=body.get('credentials'), engine=self.engine)
+            if embedded:
+                from .firebird_embedded_monitoring import EmbeddedMonitoringGrant
+                grant = EmbeddedMonitoringGrant(policy, scope['route'], scope['generation'],
+                    scope['permissions'], self._authorizer(owner, sid, target))
+            else:
+                grant = MonitoringGrant.issue(
+                    policy, scope['route'], scope['generation'], scope['permissions'],
+                    self.keys, self._authorizer(owner, sid, target),
+                    credentials=body.get('credentials'), engine=self.engine)
             try:
-                self.runtime.enable(policy, grant.open_source, grant.require)
+                self.runtime.enable(policy, grant.open_source, grant.require,
+                    history_writer=self._history_writer(grant))
             except BaseException:
                 grant.revoke()
                 raise
             self._grants[key] = grant
-            return {**self.runtime.snapshot(policy, grant.require),
-                    'authentication': dict(grant.authentication)}
+            return self._grant_snapshot(grant)
+
+    def _history_writer(self, grant):
+        if self.history is None:
+            return None
+        def write(policy, revision, sample):
+            if grant.require(policy, 'collect') is not True:
+                raise PermissionError('History write is not authorized')
+            self.history.write(policy, self.engine, revision,
+                route_fingerprint({'generation': grant.generation, 'digest': grant.route_digest}), sample)
+        return write
+
+    def historical(self, owner, sid, target, arguments):
+        scope = self._scope(owner, sid, target)
+        # Provider authorization has the same admission as the current view.
+        self.definition_scope(owner, sid, target)
+        if self.history is None:
+            raise MonitoringHostUnavailable('ScratchBird history is not configured')
+        policy = MonitoringPolicy(owner, scope['endpoint_id'], target,
+                                  interval_seconds=15 if target is None else 5)
+        if set(arguments) - {'start', 'end', 'tier', 'limit', 'after', 'target_id'}:
+            raise ValueError('Unsupported history query')
+        result = self.history.query(policy, self.engine, start=arguments['start'],
+            end=arguments['end'], tier=arguments.get('tier', 'raw'),
+            limit=int(arguments.get('limit', 120)), after=arguments.get('after'))
+        current = self._scope(owner, sid, target)
+        self.definition_scope(owner, sid, target)
+        if (current['endpoint_id'] != scope['endpoint_id'] or
+                current['generation'] != scope['generation'] or
+                route_fingerprint(current['route']) != route_fingerprint(scope['route'])):
+            raise PermissionError('History scope changed')
+        return result
 
     def snapshot(self, owner, sid, target):
         with self.app.app_context():
@@ -161,7 +221,10 @@ class MonitoringHost:
             ], key=lambda item: (item['name'].casefold(), item['target_id']))
             if target is not None and not any(row['target_id'] == target for row in targets):
                 raise PermissionError('Monitoring target is unavailable')
+            embedded = getattr(server.endpoint_profile, 'profile_id', '') == 'firebird-embedded'
             navigation = {'server_id': sid, 'name': server.name, 'databases': targets}
+            transport = {'attachment_mode':'embedded' if embedded else 'network',
+                'collection_available': (self.admitted and self.ownership is not None and target is not None) if embedded else self.available}
         with self._lock:
             grant = self._grants.get((owner, sid, target))
             if grant is None:
@@ -173,7 +236,12 @@ class MonitoringHost:
                 result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                     current(policy, purpose, grant.generation, grant.route_digest))
                 result = {**result, 'navigation': navigation,
-                          'authentication': dict(grant.authentication)}
+                          'authentication': dict(grant.authentication),
+                          'policy': {field: getattr(grant.policy, field) for field in self.policy_fields}}
+        if self.engine == 'firebird':
+            result.update(transport)
+        if embedded and target is None:
+            result['scope_note'] = 'Registered local files; no network server Services API observation'
         if target is None:
             from .monitoring_fleet import aggregate, observation
             databases = []
@@ -242,7 +310,7 @@ class MonitoringHost:
             registrations = []
             for server in Server.query.filter_by(user_id=owner).all():
                 profile = server.endpoint_profile
-                if profile is None or profile.profile_id != 'firebird-native':
+                if profile is None or profile.profile_id not in {'firebird-native', 'firebird-embedded'}:
                     continue
                 registrations.append({
                     'server_id': server.id, 'name': server.name,
@@ -274,18 +342,20 @@ class MonitoringHost:
     def disable(self, owner, sid, target):
         # Ownership permits cleanup even after verification/route changes.
         with self.app.app_context():
-            self._owned_server(owner, sid)
+            server = self._owned_server(owner, sid)
+            embedded = getattr(server.endpoint_profile, 'profile_id', '') == 'firebird-embedded'
+        transport = {'attachment_mode': 'embedded' if embedded else 'network'} if self.engine == 'firebird' else {}
         with self._lock:
             key = owner, sid, target
             grant = self._grants.get(key)
             if grant is None:
-                return {'state': 'disabled', 'released': True}
+                return {**transport, 'state': 'disabled', 'released': True}
             grant.revoke()
             released = self.runtime.disable(
                 grant.policy, lambda policy, purpose: policy.owner_id == owner)
             if released:
                 del self._grants[key]
-            return {'state': 'disabled' if released else 'release-unconfirmed',
+            return {**transport, 'state': 'disabled' if released else 'release-unconfirmed',
                     'released': released}
 
     def close(self):
@@ -294,10 +364,16 @@ class MonitoringHost:
             postgres_released = postgres.close() if postgres is not None else True
             mysql = self.app.extensions.get('cdeadmin_mysql_monitoring_host')
             mysql_released = mysql.close() if mysql is not None else True
+            maria = self.app.extensions.get('cdeadmin_mariadb_monitoring_host')
+            maria_released = maria.close() if maria is not None else True
+            duckdb = self.app.extensions.get('cdeadmin_duckdb_monitoring_host')
+            duckdb_released = duckdb.close() if duckdb is not None else True
+            sqlite = self.app.extensions.get('cdeadmin_sqlite_monitoring_host')
+            sqlite_released = sqlite.close() if sqlite is not None else True
             for grant in self._grants.values():
                 grant.revoke()
             released = self.runtime.close()
-            released = released and postgres_released and mysql_released
+            released = released and postgres_released and mysql_released and maria_released and duckdb_released and sqlite_released
             if released and self.ownership is not None:
                 self.ownership.close()
             return released
@@ -314,6 +390,11 @@ def init_app(app, endpoint_service):
     from pgadmin.user_login_check import pga_login_required
 
     api = Blueprint('cdeadmin_monitoring', __name__)
+
+    @api.after_request
+    def no_cached_observations(response):
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     @api.route('/cdeadmin/api/monitoring/firebird/definition', methods=['GET', 'PUT', 'POST'])
     @pga_login_required
@@ -388,6 +469,21 @@ def init_app(app, endpoint_service):
             # Native/credential diagnostics must not be exposed through HTTP.
             return jsonify(success=0, errormsg='Monitoring request failed'), 503
 
+    @api.route('/cdeadmin/api/monitoring/firebird/<int:sid>/history', methods=['GET'])
+    @pga_login_required
+    def history(sid):
+        try:
+            data = host.historical(current_user.id, sid, request.args.get('target_id'), dict(request.args))
+            response = jsonify(success=1, data=data)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except PermissionError:
+            return jsonify(success=0, errormsg='Monitoring scope is not authorized'), 403
+        except (ValueError, TypeError, KeyError):
+            return jsonify(success=0, errormsg='Invalid history query'), 400
+        except Exception:
+            return jsonify(success=0, errormsg='Monitoring history is unavailable'), 503
+
     @api.route('/cdeadmin/api/monitoring/firebird/<int:sid>/statement', methods=['POST'])
     @pga_login_required
     def statement(sid):
@@ -429,4 +525,10 @@ def init_app(app, endpoint_service):
     init_postgresql(app, host)
     from .mysql_monitoring_host import init_app as init_mysql
     init_mysql(app, host)
+    from .mariadb_monitoring_host import init_app as init_mariadb
+    init_mariadb(app, host)
+    from .duckdb_monitoring_host import init_app as init_duckdb
+    init_duckdb(app, host)
+    from .sqlite_monitoring_host import init_app as init_sqlite
+    init_sqlite(app, host)
     return host

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import io
 
 import sqlite3
@@ -997,7 +998,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.route = {
-            'database': str(Path(self.temporary.name) / 'admin.sqlite'),
+            'database': str(Path(self.temporary.name).resolve() / 'admin.sqlite'),
             'filesystem_root': self.temporary.name,
             'route_id': 'local-test',
         }
@@ -1045,6 +1046,41 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         self.assertFalse(page['editable'])
         self.assertEqual('visible', page['rows'][0]['values']['name'])
         self.assertIsNone(page['rows'][0]['identity_token'])
+
+    def test_sqlite_nullable_primary_key_does_not_issue_ambiguous_row_identity(self):
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
+            connection.execute('CREATE TABLE widgets(id TEXT PRIMARY KEY, name TEXT)')
+            connection.executemany('INSERT INTO widgets VALUES (?, ?)',
+                                   [(None, 'one'), (None, 'two'), ('named', 'three')])
+        page = self.admin.read_rows(self.client, {
+            '_provider_route': self.route, 'target_resource': self.target,
+            'limit': 50})
+        by_name = {row['values']['name']: row for row in page['rows']}
+        self.assertIsNone(by_name['one']['identity_token'])
+        self.assertIsNone(by_name['two']['identity_token'])
+        self.assertIsInstance(by_name['three']['identity_token'], str)
+
+    def test_sqlite_without_rowid_composite_key_edits_exact_native_row(self):
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
+            connection.execute('CREATE TABLE widgets(a TEXT, b INTEGER, name TEXT, '
+                               'PRIMARY KEY(a,b)) WITHOUT ROWID')
+            connection.executemany('INSERT INTO widgets VALUES (?, ?, ?)',
+                                   [('one', 1, 'before'), ('one', 2, 'untouched')])
+        page = self.admin.read_rows(self.client, {
+            '_provider_route': self.route, 'target_resource': self.target,
+            'limit': 50})
+        self.assertTrue(page['editable'])
+        row = next(item for item in page['rows'] if item['values']['b'] == 1)
+        token = row['identity_token']
+        self.assertIsInstance(token, str)
+        planned = self.admin.plan(request(self.route, 'update', {
+            'selector': {'identity_token': token}, 'concurrency_token': token,
+            'changes': {'name': 'after'}}, self.target))
+        self.apply(planned)
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
+            self.assertEqual(connection.execute(
+                'SELECT b,name FROM widgets ORDER BY b').fetchall(),
+                [(1, 'after'), (2, 'untouched')])
 
     def test_row_identity_is_bound_to_issuing_provider_session(self):
         connection = sqlite3.connect(self.route['database'])
@@ -1266,7 +1302,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             self.client._forget_and_close(writer)
 
     def test_row_pages_use_opaque_provider_continuations_and_cancel(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 'CREATE TABLE widgets(id INTEGER PRIMARY KEY, name TEXT)'
             )
@@ -1329,7 +1365,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         )
 
     def test_sqlite_native_backup_restore_and_maintenance_execute(self):
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 'CREATE TABLE restore_probe('
                 'id INTEGER PRIMARY KEY, value TEXT)'
@@ -1355,7 +1391,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             self.assertEqual([], self.admin.validate(request_value)['errors'])
             return self.admin.plan(request_value)
 
-        backup = Path(self.temporary.name) / 'admin-backup.sqlite'
+        backup = Path(self.temporary.name).resolve() / 'admin-backup.sqlite'
         backed_up = self.apply(plan('backup', {
             'backup_path': str(backup), 'overwrite': False,
         }))
@@ -1363,7 +1399,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'sqlite-online-backup',
             backed_up['driver_observation']['operation'],
         )
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             connection.execute(
                 "UPDATE restore_probe SET value = 'after-backup' WHERE id = 1"
             )
@@ -1375,7 +1411,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'sqlite-online-restore',
             restored['driver_observation']['operation'],
         )
-        with sqlite3.connect(self.route['database']) as connection:
+        with closing(sqlite3.connect(self.route['database'])) as connection, connection:
             value = connection.execute(
                 'SELECT value FROM restore_probe WHERE id = 1'
             ).fetchone()[0]
@@ -1451,11 +1487,11 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
         ))
         result = self.apply(created)
         self.assertEqual(
-            str(Path(self.temporary.name) / 'created.sqlite'),
+            str(Path(self.temporary.name).resolve() / 'created.sqlite'),
             result['endpoint_database_target']['database'],
         )
         self.assertTrue(
-            (Path(self.temporary.name) / 'created.sqlite').exists()
+            (Path(self.temporary.name).resolve() / 'created.sqlite').exists()
         )
         with self.assertRaisesRegex(
             RelationalClientError, 'safe unqualified file name'
@@ -1488,11 +1524,11 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             '_provider_route': route,
         })
         created_result = self.apply(created)
-        database = Path(self.temporary.name) / 'configured.sqlite'
+        database = Path(self.temporary.name).resolve() / 'configured.sqlite'
         self.assertEqual(database, Path(
             created_result['endpoint_database_target']['database']
         ))
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             self.assertEqual(8192, connection.execute(
                 'PRAGMA page_size'
             ).fetchone()[0])
@@ -1536,7 +1572,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
             'provider_payload'
         ]['compiled']['statements']])
         self.apply(altered)
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             self.assertEqual(8, connection.execute(
                 'PRAGMA user_version'
             ).fetchone()[0])
@@ -3190,7 +3226,7 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
         validate = ProviderVisualAdministration._validate_field
         form = DUCKDB_ADMINISTRATION._form('type', 'create')
         with tempfile.TemporaryDirectory() as temporary:
-            route = {'database': str(Path(temporary) / 'types.duckdb'),
+            route = {'database': str(Path(temporary).resolve() / 'types.duckdb'),
                      'filesystem_root': temporary, 'route_id': 'type-test'}
             client = duckdb_client()
             try:
@@ -3270,7 +3306,7 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
 
     def test_duckdb_file_deletion_rejects_foreign_files_and_live_wal(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             foreign = root / 'foreign.duckdb'
             foreign.write_text('not DuckDB', encoding='utf-8')
             route = {
@@ -3301,7 +3337,7 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest('DuckDB driver is not installed')
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             database = root / 'lifecycle.duckdb'
             route = {
                 'database': str(database), 'filesystem_root': temporary,
@@ -3417,7 +3453,7 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest('DuckDB driver is not installed')
         with tempfile.TemporaryDirectory() as temporary:
-            database = Path(temporary) / 'transactions.duckdb'
+            database = Path(temporary).resolve() / 'transactions.duckdb'
             with duckdb.connect(str(database)) as connection:
                 connection.execute(
                     "CREATE TABLE state(id INTEGER PRIMARY KEY, value VARCHAR)"
@@ -3474,7 +3510,7 @@ class DuckDBVisualAdministrationTests(unittest.TestCase):
         self,
     ):
         with tempfile.TemporaryDirectory() as temporary:
-            database = Path(temporary) / 'exact.duckdb'
+            database = Path(temporary).resolve() / 'exact.duckdb'
             route = {
                 'database': str(database), 'filesystem_root': temporary,
                 'route_id': 'duckdb-test',

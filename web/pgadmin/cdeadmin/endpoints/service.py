@@ -636,9 +636,7 @@ class EndpointService:
         a derived cache namespace so native identifiers cannot collide.
         """
         endpoint = getattr(server, 'endpoint_profile', None)
-        if endpoint is not None and endpoint.provider_version is None and (
-            endpoint.provider_id == 'org.pgadmin.postgresql'
-        ):
+        if self._is_preserved_postgresql(server):
             return self._postgresql_workspace(server, endpoint, database_target_id)
         if endpoint is None or endpoint.provider_version is None:
             raise EndpointRegistrationError(
@@ -999,7 +997,7 @@ class EndpointService:
                         remaining,
                         key=lambda item: (item.display_name, item.id),
                     ).active = True
-                endpoint.profile_generation = str(uuid.uuid4())
+            endpoint.profile_generation = str(uuid.uuid4())
         return self.database_catalog(server)
 
     @staticmethod
@@ -1021,22 +1019,29 @@ class EndpointService:
         targeting = profile.get('database_targeting', {})
         if not targeting.get('create_and_activate'):
             return None
-        return self._retain_database_target(server, target)
+        return self._retain_database_target(
+            server, target, new_identity=profile.get('engine_id') == 'firebird')
 
     def retain_registered_database(self, server, target):
         """Make a registration database a first-class endpoint child."""
         return self._retain_database_target(server, target)
 
     @_connection_change
-    def _retain_database_target(self, server, target):
+    def _retain_database_target(self, server, target, *, new_identity=False):
         from pgadmin.model import EndpointDatabaseTarget, db
 
         endpoint, _profile = self._managed_endpoint(server)
         database, display_name = self._database_target_input(target)
         with self._database_catalog_transaction():
+            if new_identity and any(item.display_name == display_name
+                                    for item in endpoint.database_targets):
+                raise EndpointRegistrationError(
+                    'Created database registration name already exists; '
+                    'inspect local registrations without repeating native creation')
+            model = (None if new_identity else
+                     self._unambiguous_database_target(endpoint, database))
             for item in endpoint.database_targets:
                 item.active = False
-            model = self._unambiguous_database_target(endpoint, database)
             if model is None:
                 model = EndpointDatabaseTarget(
                     id=str(uuid.uuid4()), endpoint_id=endpoint.id,
@@ -1266,8 +1271,13 @@ class EndpointService:
     @staticmethod
     def _is_preserved_postgresql(server):
         endpoint = getattr(server, 'endpoint_profile', None)
-        return (endpoint is not None and endpoint.provider_version is None and
-                endpoint.provider_id == 'org.pgadmin.postgresql')
+        from pgadmin.cdeadmin.providers.postgresql.provider import (
+            PROVIDER_ID, PROVIDER_VERSION, PROFILE_ID, PROFILE_VERSION)
+        return (endpoint is not None and getattr(endpoint, 'provider_id', None) == PROVIDER_ID and
+                (endpoint.provider_version is None or (
+                    endpoint.provider_version == PROVIDER_VERSION and
+                    endpoint.profile_id == PROFILE_ID and
+                    endpoint.profile_version == PROFILE_VERSION)))
 
     @staticmethod
     def _managed_endpoint(server):

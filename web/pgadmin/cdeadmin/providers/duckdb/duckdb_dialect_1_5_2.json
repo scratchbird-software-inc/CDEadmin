@@ -28,7 +28,7 @@
       "session_settings": 157,
       "statements": 42
     },
-    "authoritative_task_count": 33,
+    "authoritative_task_count": 35,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -61,10 +61,12 @@
       "visual_admin.table.update",
       "visual_admin.type.create",
       "visual_admin.type.drop",
+      "visual_admin.view.alter",
       "visual_admin.view.create",
-      "visual_admin.view.drop"
+      "visual_admin.view.drop",
+      "visual_admin.view.rename"
     ],
-    "implemented_task_count": 33,
+    "implemented_task_count": 35,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -74751,22 +74753,22 @@
       "sha256": "e7e95e2ec0aa58b10b7ce4be599bf50a646d5995df99dfd173f946ac6004027f"
     },
     {
-      "artifact": "duckdb-dialect-qualification-gate.json",
+      "artifact": "duckdb-dialect-qualification-gate-20261013-4.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a032f6ed673bb3823a2c179f6ea553185633942ce9885ae3833e6fe805c6530f"
+      "sha256": "4fa8acce9bdabf59bc26357f1b8e8aff7c884527f3ef6803f070ca82ae21f291"
     },
     {
-      "artifact": "duckdb-dialect-qualification-gate.json",
+      "artifact": "duckdb-dialect-qualification-gate-20261013-4.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a032f6ed673bb3823a2c179f6ea553185633942ce9885ae3833e6fe805c6530f"
+      "sha256": "4fa8acce9bdabf59bc26357f1b8e8aff7c884527f3ef6803f070ca82ae21f291"
     },
     {
       "artifact": "_duckdb.cpython-312-x86_64-linux-gnu.so",
@@ -74903,10 +74905,10 @@
         "duckdb-1.5.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "EXPORT DATABASE '/tmp/cdeadmin-duckdb-live-ht_ahp9k/qualification-logical-export' (FORMAT PARQUET)",
+      "source": "EXPORT DATABASE '/home/dcalford/SandBox/temp-workarea/cdeadmin-duckdb-live-rlgvs0t7/qualification-logical-export' (FORMAT PARQUET)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "EXPORT DATABASE '/tmp/cdeadmin-duckdb-live-ht_ahp9k/qualification-logical-export' (FORMAT PARQUET)"
+        "EXPORT DATABASE '/home/dcalford/SandBox/temp-workarea/cdeadmin-duckdb-live-rlgvs0t7/qualification-logical-export' (FORMAT PARQUET)"
       ],
       "task_id": "visual_admin.database.export_database"
     },
@@ -74931,10 +74933,10 @@
         "duckdb-1.5.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "IMPORT DATABASE '/tmp/cdeadmin-duckdb-live-ht_ahp9k/qualification-logical-export'",
+      "source": "IMPORT DATABASE '/home/dcalford/SandBox/temp-workarea/cdeadmin-duckdb-live-rlgvs0t7/qualification-logical-export'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "IMPORT DATABASE '/tmp/cdeadmin-duckdb-live-ht_ahp9k/qualification-logical-export'"
+        "IMPORT DATABASE '/home/dcalford/SandBox/temp-workarea/cdeadmin-duckdb-live-rlgvs0t7/qualification-logical-export'"
       ],
       "task_id": "visual_admin.database.import_database"
     },
@@ -75277,6 +75279,20 @@
         "duckdb-1.5.2-task-live-execution"
       ],
       "required_bindings": [],
+      "source": "CREATE OR REPLACE VIEW \"qualification\".\"main\".\"cde_editor_view\" AS SELECT id FROM qualification",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE OR REPLACE VIEW \"qualification\".\"main\".\"cde_editor_view\" AS SELECT id FROM qualification"
+      ],
+      "task_id": "visual_admin.view.alter"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-task-parser-acceptance",
+        "duckdb-1.5.2-task-live-execution"
+      ],
+      "required_bindings": [],
       "source": "CREATE VIEW \"main\".\"cde_editor_view\" AS SELECT id, value FROM qualification",
       "source_format": "ordered_native_statements",
       "statements": [
@@ -75291,12 +75307,26 @@
         "duckdb-1.5.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP VIEW \"qualification\".\"main\".\"cde_editor_view\"",
+      "source": "DROP VIEW \"qualification\".\"main\".\"cde_editor_view_renamed\"",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP VIEW \"qualification\".\"main\".\"cde_editor_view\""
+        "DROP VIEW \"qualification\".\"main\".\"cde_editor_view_renamed\""
       ],
       "task_id": "visual_admin.view.drop"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-task-parser-acceptance",
+        "duckdb-1.5.2-task-live-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER VIEW \"qualification\".\"main\".\"cde_editor_view\" RENAME TO \"cde_editor_view_renamed\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER VIEW \"qualification\".\"main\".\"cde_editor_view\" RENAME TO \"cde_editor_view_renamed\""
+      ],
+      "task_id": "visual_admin.view.rename"
     }
   ]
 }

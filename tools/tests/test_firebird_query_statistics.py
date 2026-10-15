@@ -21,6 +21,8 @@ def test_samples_use_fresh_transactions_and_identify_counter_resets():
     assert sample.receipt['deltas']['page_reads'] is None
     assert sample.receipt['deltas']['record_inserts'] == 2
     assert not sample.receipt['complete']
+    assert sample.receipt['reset_counters'] == ['page_reads']
+    assert sample.receipt['unavailable_reasons'] == ['counter-reset']
     assert sample.receipt['elapsed'] >= 0
 
 
@@ -33,6 +35,7 @@ def test_unavailable_statistics_are_not_zero_measurements():
     assert sample.receipt['deltas'] == {}
     assert not sample.receipt['complete']
     assert not sample.cleanup_failed
+    assert sample.receipt['unavailable_reasons'] == ['before-unavailable', 'after-unavailable']
 
 
 def test_attachment_change_is_not_a_valid_delta_and_large_counts_remain_exact():
@@ -48,4 +51,5 @@ def test_attachment_change_is_not_a_valid_delta_and_large_counts_remain_exact():
         sample.finish()
     assert not sample.receipt['complete']
     assert sample.receipt['deltas'] == {}
+    assert sample.receipt['unavailable_reasons'] == ['attachment-changed']
     assert sample.receipt['before']['counters']['page_reads'] == str(counter)

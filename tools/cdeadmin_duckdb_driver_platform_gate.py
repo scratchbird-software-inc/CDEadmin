@@ -120,13 +120,19 @@ def run(evidence):
         query('DROP TABLE returned')
         receipt['checks'].append('union-null-validity-and-single-execution')
         pages = observe(provider.execute(dict(
-            session, source="SELECT ';'; SELECT i FROM range(777) t(i)")))
+            session, source='SELECT i FROM range(777) t(i)')))
         payloads = [p['extensions']['duckdb']['payload'] for p in pages]
-        assert sum(len(p['rows']) for p in payloads) == 778
+        assert sum(len(p['rows']) for p in payloads) == 777
         assert max(len(p['rows']) for p in payloads) <= 256
         assert {p['result_set_index']
-                for p in payloads if p.get('has_page')} == {0, 1}
-        receipt['checks'].append('ordered-bounded-native-script-results')
+                for p in payloads if p.get('has_page')} == {0}
+        rejected = observe(provider.execute(dict(session,
+            source='CREATE TABLE forbidden(i INT); SELECT 1')))
+        assert rejected[-1]['extensions']['duckdb']['payload']['error'][
+            'type'] == 'StatementCountError'
+        assert query("SELECT count(*) FROM duckdb_tables() "
+                     "WHERE table_name='forbidden'") == [[0]]
+        receipt['checks'].append('bounded-single-statement-results-and-no-prefix-dispatch')
         query('CREATE TABLE owned(id INTEGER PRIMARY KEY, value VARCHAR)')
         resources = provider.client.list_resources(dict(
             route=route, _provider_session_handle=handle))

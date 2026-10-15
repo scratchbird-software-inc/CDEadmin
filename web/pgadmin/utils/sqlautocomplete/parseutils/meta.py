@@ -27,30 +27,24 @@ TableMetadata = namedtuple("TableMetadata", "name columns")
 
 
 def parse_defaults(defaults_string):
-    """Yields default values for a function, given the string provided by
-    pg_get_expr(pg_catalog.pg_proc.proargdefaults, 0)"""
+    """Split native default expressions with PostgreSQL's grammar, not commas."""
     if not defaults_string:
         return
-    current = ""
-    in_quote = None
-    for char in defaults_string:
-        if current == "" and char == " ":
-            # Skip space after comma separating default expressions
-            continue
-        if char == '"' or char == "'":
-            if in_quote and char == in_quote:
-                # End quote
-                in_quote = None
-            elif not in_quote:
-                # Begin quote
-                in_quote = char
-        elif char == "," and not in_quote:
-            # End of expression
-            yield current
-            current = ""
-            continue
-        current += char
-    yield current
+    if not isinstance(defaults_string, str) or len(defaults_string.encode('utf8')) > 1024 * 1024:
+        raise ValueError('Native routine defaults exceed the completion limit')
+    from pglast import parse_sql, ast
+    from pglast.stream import RawStream
+    parsed = parse_sql('SELECT ' + defaults_string)
+    if len(parsed) != 1 or not isinstance(parsed[0].stmt, ast.SelectStmt):
+        raise ValueError('Invalid native routine defaults')
+    statement = parsed[0].stmt
+    if any(getattr(statement, field) not in (None, False, 0, ())
+           for field in statement if field != 'targetList'):
+        raise ValueError('Invalid native routine default expressions')
+    for target in statement.targetList or ():
+        if target.name:
+            raise ValueError('Invalid native routine default expression alias')
+        yield RawStream()(target.val)
 
 
 class FunctionMetadata:

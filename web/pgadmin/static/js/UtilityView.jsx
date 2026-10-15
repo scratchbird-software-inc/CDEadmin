@@ -19,6 +19,8 @@ import { generateNodeUrl } from '../../browser/static/js/node_ajax';
 import usePreferences from '../../preferences/static/js/store';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
+import {Box} from '@mui/material';
+import FormReference from './cdeadmin_ui/navigation/FormReference';
 
 export default function UtilityView({dockerObj}) {
   const pgAdmin = usePgAdmin();
@@ -75,7 +77,7 @@ UtilityView.propTypes = {
 
 /* The entry point for rendering React based view in properties, called in node.js */
 function UtilityViewContent({schema, treeNodeInfo, actionType, formType, onClose,
-  onSave, extraData, saveBtnName, urlBase, sqlHelpUrl, helpUrl, isTabView=true}) {
+  onSave, extraData, saveBtnName, urlBase, sqlHelpUrl, helpUrl, isTabView=true, formKey}) {
 
   const pgAdmin = usePgAdmin();
   const serverInfo = treeNodeInfo && ('server' in treeNodeInfo) && pgAdmin.Browser.serverInfo?.[treeNodeInfo.server._id];
@@ -190,29 +192,35 @@ function UtilityViewContent({schema, treeNodeInfo, actionType, formType, onClose
   /* Fire at will, mount the DOM */
   return (
     <ErrorBoundary>
-      <SchemaView
-        formType={formType}
-        getInitData={initData}
-        schema={_schema}
-        viewHelperProps={viewHelperProps}
-        customSaveBtnName={saveBtnName}
-        customSaveBtnIconType={saveBtnIcon}
-        onSave={onSaveClick}
-        onClose={onClose}
-        onHelp={onHelp}
-        onDataChange={()=>{/*This is intentional (SonarQube)*/}}
-        confirmOnCloseReset={confirmOnReset}
-        hasSQL={nodeObj?.hasSQL && (actionType === 'create' || actionType === 'edit')}
-        getSQLValue={getSQLValue}
-        isTabView={isTabView}
-        disableSqlHelp={sqlHelpUrl == undefined || sqlHelpUrl == ''}
-        disableDialogHelp={helpUrl == undefined || helpUrl == ''}
-      />
+      <FormReference formKey={formKey || 'native-utility'}
+        sx={{height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0}}>
+        <Box sx={{flex: 1, minHeight: 0}}>
+          <SchemaView
+            formType={formType}
+            getInitData={initData}
+            schema={_schema}
+            viewHelperProps={viewHelperProps}
+            customSaveBtnName={saveBtnName}
+            customSaveBtnIconType={saveBtnIcon}
+            onSave={onSaveClick}
+            onClose={onClose}
+            onHelp={onHelp}
+            onDataChange={()=>{/*This is intentional (SonarQube)*/}}
+            confirmOnCloseReset={confirmOnReset}
+            hasSQL={nodeObj?.hasSQL && (actionType === 'create' || actionType === 'edit')}
+            getSQLValue={getSQLValue}
+            isTabView={isTabView}
+            disableSqlHelp={sqlHelpUrl == undefined || sqlHelpUrl == ''}
+            disableDialogHelp={helpUrl == undefined || helpUrl == ''}
+          />
+        </Box>
+      </FormReference>
     </ErrorBoundary>
   );
 }
 
 UtilityViewContent.propTypes = {
+  formKey: PropTypes.string,
   schema: PropTypes.object,
   treeNodeInfo: PropTypes.object,
   actionType: PropTypes.string,

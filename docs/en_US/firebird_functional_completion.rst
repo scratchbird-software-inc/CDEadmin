@@ -27,26 +27,23 @@ The retained source evidence is
 /home/dcalford/SandBox/progress_reports/scratchrobin-flamerobin-comparison-20261010.txt.
 
 
-Current-run scope correction, 2026-10-10
----------------------------------------
+Current completion scope correction, 2026-10-14
+--------------------------------------------
 
-The owner defers persistent monitoring history and the ScratchBird connection
-until a later run. Windows/macOS implementation qualification and QA belong to
-the separate platform teams. These items remain future/cross-team obligations;
-they are not blockers or acceptance requirements for this run, and must not be
-reported as unfinished work assigned to this run.
+The owner now includes persistent monitoring history and the ScratchBird
+connection in backend completion. Windows/macOS implementation qualification
+and QA remain with the separate platform teams; their evidence is required
+before cross-platform completion. Form validation belongs to the human team.
 
-Everything else remains in scope: published dashboard definitions and authorized
-live bindings, standard metrics, trends and drill-downs using available samples,
-metadata/data-to-DDN, DDN-to-native schema and semantic diff/apply, all remaining
-FlameRobin parity workflows, compact native forms and end-to-end qualification
-on the available local platform. A bounded volatile sample window must display
+Published dashboard definitions and authorized live bindings, standard metrics,
+trends and drill-downs, metadata/data-to-DDN, DDN-to-native schema and semantic
+diff/apply, all remaining FlameRobin parity workflows and end-to-end backend
+qualification remain in scope. A bounded volatile sample window must display
 its gaps and retention limits; it must not imply durable historical coverage.
 
-This deferral applies to monitoring observations, not to persistent searchable
-SQL history (FB-COMP-05), saved dashboard definitions, DDN design assets or saved
-test-data recipes. Those persistence requirements remain in this run. Completing
-a draft editor alone does not complete dashboard publication or FB-COMP-18.
+Persistent searchable SQL history (FB-COMP-05), saved dashboard definitions,
+DDN design assets and saved test-data recipes remain in scope. Completing a
+draft editor alone does not complete dashboard publication or FB-COMP-18.
 
 Required workflows
 ==================
@@ -119,8 +116,12 @@ Required workflows
   rather than merged. Existing target IDs and files survive configuration upgrades.
   Both endpoint configuration guards must admit a cross-server move before any
   metadata changes; pending sessions are never committed, rolled back or rerouted.
-  Configuration-generation comparisons serialize concurrent transfer writes;
-  a changed generation refuses the transfer and requires a refreshed selection.
+  The catalog supplies source and destination configuration generations; both
+  reviewed values are required on transfer. Conditional generation comparisons
+  serialize concurrent writes. A changed generation refuses transfer and requires
+  a refreshed selection. Switching registrations invalidates old reviews and
+  responses. Destination credentials inherit its role and character set as well
+  as its username/password policy.
 
   The form explicitly chooses source registration credentials or destination
   endpoint credentials. Source credentials copy the saved encrypted password,
@@ -153,6 +154,8 @@ Required workflows
   the server's approved filesystem scope.
   Successful registration changes request a refresh of the owning server's
   navigator branch; the replacement registration receives its own new identity.
+  Existing aliases of the filename survive and are not reused for the replacement.
+  A display-name collision reports local follow-up failure without native replay.
 * FB-COMP-17: Native event monitor. Subscribe/unsubscribe, show event counts,
   manage disconnect/reconnect and cleanup using the supported native driver.
   FlameRobin's residual IBPP path is not current fb-cpp qualification evidence.
@@ -314,8 +317,9 @@ identities. Display counts, nanosecond units, profile identity and per-section
 limits. Do not substitute invented timings for unavailable native measurements.
 A start failure prevents user SQL dispatch. A finish/read failure preserves the
 original SQL outcome, reports partial profiling, and never retries user SQL.
-An uncertain profiler start/finish blocks reuse of that attachment until it is
-closed. Connection loss does not confirm rollback or erase already flushed
+An uncertain profiler start/finish or failed diagnostic transaction cleanup
+during package admission blocks reuse of that attachment until it is closed.
+Admission failures are reported separately from start/finish failures. Connection loss does not confirm rollback or erase already flushed
 native profiling data. Existing externally-issued profiler commands may affect
 the same attachment; results identify the observed profile, not exclusive
 ownership outside this application.
@@ -331,7 +335,9 @@ attachment-window measurements including monitoring overhead, not isolated
 per-statement engine counters. Native database-info I/O counters are database-
 instance statistics and must not be mislabeled as attachment counters.
 
-Show both samples, nonnegative deltas and measured host elapsed nanoseconds.
+Show both samples with their actual attachment identities, nonnegative deltas
+and measured host elapsed nanoseconds. Identify missing before/after observations,
+attachment changes and individual reset counters explicitly.
 Host elapsed spans native dispatch, execution, fetch and result cleanup; it is
 not server CPU time. Missing observations, reset counters and read failures
 remain explicit. Diagnostic failures do not suppress or repeat user SQL. These
@@ -382,7 +388,8 @@ preceding SQL and transaction commands are never replayed. Script delimiters may
 be normalized to a collision-free delimiter without changing SQL fragments.
 A final explicit Run prepared source action uses the same pending-operation,
 unknown-outcome, stop and transaction rules as existing execution. Editing the
-original source invalidates its prepared execution preview.
+original source, endpoint or client SQL dialect invalidates its prepared
+execution preview.
 
 Materialized grid BLOB editor contract
 -------------------------------------
@@ -400,7 +407,9 @@ contains CR characters: the user must explicitly choose LF or CRLF.
 This form bounds editable/imported values to 1 MiB. Larger values continue to
 use the existing chunked query-transfer workflow; the form must state this
 limit and never silently truncate. Read-only columns permit viewing/export,
-but not staging or importing changes. Custom BLOB subtypes without an admitted
+but not staging or importing changes. File imports that finish after a row,
+value or access-mode change cannot replace the current draft. The dialog is bound
+to the native database/table/row/column identity, including equal-valued rows. Custom BLOB subtypes without an admitted
 typed codec are not treated as text or binary editors.
 
 The existing bounded BLOB stream reader also offers hexadecimal/ASCII and
@@ -431,7 +440,10 @@ Catalog visibility is that of the registered attachment credentials. Report
 native catalog observations and missing-DDL counts; absence of a match is never
 proof of absence outside that visibility. Bound each database result to 500
 matches and each matching snippet to 240 characters; explicitly mark truncation.
-Names and resource identity are never inferred from text snippets. Failures
+Names and resource identity are never inferred from text snippets. Partial
+native catalog coverage and warnings remain visible with each database result.
+Changing endpoint or registration scope invalidates in-flight results and prevents
+requests for the remaining databases from the old search. Failures
 expose their type, not raw native messages that could reveal connection secrets.
 
 Selected-row SQL preview contract
@@ -570,7 +582,12 @@ state. Native transaction controls and their receipts decide the actual outcome.
 Closing the form requests session release; it never claims confirmed rollback
 from a browser close. Recipes may contain sensitive sampled/file values; saving
 is explicit and produces a user-controlled local JSON file, not monitoring
-history. Preview is invalidated by recipe edits or database-scope changes.
+history. Preview is invalidated by recipe edits or database-scope changes. Delayed
+session-open, sample, file and row responses remain bound to the original endpoint
+and database context. A close that meets an in-flight native request is reconciled
+with a session-release attempt after that request settles; rows are never replayed.
+A successful HTTP response with an unknown or active native transaction observation
+does not clear pending work or permit a fresh batch.
 
 Generator sessions use the admitted ``firebird-test-data`` session purpose.
 The host preserves the selected route, credential and database identity but
@@ -580,9 +597,13 @@ and interactive sessions are unchanged. Other engines and arbitrary purposes
 are refused. This prevents a registered auto-commit TPB from committing generated
 rows before the explicit finalization control.
 
-Recipe constant/choice/file values reject fractional or unsafe JavaScript
-numbers; exact decimal strings and admitted typed envelopes preserve native
-values. Typed-value nesting is bounded to 32 levels. Materialization checks
+Recipe and value-file numeric tokens are checked before JavaScript conversion,
+so fractions that would round to an integer, underflow, unsafe integers and raw
+signed zero cannot silently change data. Exact decimal strings and admitted typed
+envelopes preserve native values. Fractional NULL percentages remain supported.
+Any explicitly NULL segment removes a composite foreign-key dependency, matching
+Firebird's native constraint semantics; an omitted default is not evidence of NULL.
+Dependencies needed to obtain generated source values remain enforced. Typed-value nesting is bounded to 32 levels. Materialization checks
 output size as each row is generated, before accumulating an oversized batch.
 
 Linux desktop Docker provisioning contract (FB-COMP-13)
@@ -681,7 +702,10 @@ It cannot reuse, refresh, commit or roll back an interactive user's transaction.
 All admitted table pages in one capture share that snapshot. Success, cancellation
 and failure release the cursor and end the owned snapshot; no idle export
 transaction remains after preparing a download. A bounded export must fail with
-an explicit limit instead of silently publishing a truncated database export.
+an explicit limit instead of silently publishing a truncated database export. The limit applies to table/column
+metadata even when no rows exist, and the deadline is checked after each page,
+including a slow final page. Catalog/data requests bind the explicitly selected
+database target and discard late responses from a changed context.
 
 Lossless transport retains exact numeric text, temporal precision, native time
 zones, array bounds, binary envelopes, NULL and empty values. Computed outputs
@@ -763,7 +787,8 @@ SEQUENCE. The system does not infer a safe next value from a snapshot maximum or
 reset a generator automatically. The operator must coordinate concurrent writers
 and other generator consumers, choose the next value, review native SQL and
 confirm the separate operation. An unresolved import transaction cannot open this
-handoff. Leaving the import form after a resolved decision releases its dedicated
+handoff. A successful HTTP response alone is insufficient: active or unavailable
+native observations retain the pending state and withhold allocation controls. Leaving the import form after a resolved decision releases its dedicated
 session without repeating imported rows or the transaction decision.
 
 
@@ -776,3 +801,86 @@ bound paging. A local name/path/kind filter only filters the loaded choices and
 is labelled accordingly; it must not imply that unloaded objects do not exist.
 Selecting a branch uses its native resource identity. Paging or filtering never
 changes that selection or silently changes the export scope.
+
+
+Catalog completeness implementation
+===================================
+
+The Firebird 5.0.4 catalog now records explicit attachment-visible coverage and
+optional-security gaps, retains plugin-qualified account identities and account
+attributes, and includes complete publication membership observations. The native
+inventory gate independently reconciles all 25 supported catalog categories and
+walks system-package, relation, child and metric navigation. See
+:doc:`firebird_catalog_completeness` for scope, operation binding, embedded security
+limits and reproducible network/embedded qualification. Catalog qualification
+does not close the rest of this functional checklist or platform-team obligations.
+
+
+DDN exchange and migration implementation (FB-COMP-03/09)
+========================================================
+
+Native catalog DDN import now resolves bounded relative imports in an admitted
+multi-file workspace and validates every view. Graphical column datatype,
+nullability and description edits join explicit native definitions in the
+three-way review/apply workflow. Stored dialect 1 and 3 are independently bound
+to the observed database. Data capture adds exact typed static DDN views and
+imports them through the existing native archive validation/staging/decision
+path. See :doc:`ddn_database_roundtrip` for identity, specialized-type, import,
+size, authorization and finality contracts.
+
+The dedicated Linux 5.0.4 gate qualifies network and embedded graphical changes,
+native schema-family migration, typed DDN data replay and dependency-rich ISQL
+restoration into another database. Native commit reply loss retains a durable
+unknown outcome and prevents repeat dispatch. These backend changes do not
+qualify Windows/macOS or the human team's form review, and do not close other
+Firebird product checklist sections.
+
+
+Dashboards and collectors implementation (FB-COMP-18/19)
+=======================================================
+
+Published Firebird engine/server/database layouts now admit registered endpoint,
+database, aggregate and finding bindings alongside native metrics. Stable
+registration identities prevent rebinding after reordering or name collisions;
+missing identities become unavailable. Every view validates and remains reachable
+in the passive viewer. The separate DDN editor discovers authorized bindings but
+receives redacted values. Definitions, observations and collector policy retain
+their separate versioning, authorization and finality contracts.
+
+The host admits native network worker accounts/roles and file-authorized embedded
+collectors. Embedded policies have no password or Services API authentication.
+Native qualification covers independent monitoring snapshots, collection without
+viewers, wrong passwords, role visibility, stop/reconfigure/restart with confirmed
+release, expiry/revocation, reconnect epochs and preserved interactive work.
+See :doc:`firebird_dashboard_collectors` for limits and reproducible evidence.
+Native ScratchBird history acceptance, platform-team qualification and human
+form validation remain separate requirements; FB-COMP-18 is not fully closed
+while its historical destination cannot serve.
+
+Desktop and lifecycle qualification, 2026-10-15
+---------------------------------------------
+
+FB-COMP-13–17 have Linux native qualification. Docker uses the actual selected
+daemon, immutable Firebird 5.0.4 image, named-volume and empty-directory storage,
+published SQL and auxiliary event ports, and persistent nonreplayable receipts.
+A real local ISQL terminal proves independent transactions and detach. Registration
+transfers require reviewed source/destination generations, preserve credential
+isolation and distinguish metadata changes from native database movement.
+Recreate-empty handoff requires native success for the exact target, a completed
+local cleanup receipt and an observed registration-free catalog. Event subscriptions
+retain their original scope through late responses and failed startup cleanup.
+See :doc:`firebird_desktop_lifecycle` for implementation, native proofs and limits.
+Human form validation and Windows/macOS feature qualification remain separately
+owned; native development setup does not qualify these desktop features there.
+
+Platform and release evidence
+----------------------------
+
+Use :doc:`firebird_platform_release` and the native ``firebird-platform`` stage
+to qualify current source on Linux x64, Windows x64, Intel Mac and Apple Silicon
+Mac. Network and embedded modes require actual native driver, exhaustive charset
+and portable workflow receipts with owned cleanup. Windows also requires native
+XNET and Win_Sspi observations. Release aggregation checks artifact integrity,
+source bindings and complete inventories; it never infers platform success from
+Linux or top-level status flags. Form/UX signoff, signed-package lifecycle and
+ScratchBird history acceptance remain explicit separate release requirements.

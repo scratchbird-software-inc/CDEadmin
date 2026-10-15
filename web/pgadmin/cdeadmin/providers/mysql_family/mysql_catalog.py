@@ -106,7 +106,7 @@ def capture(connection, database, *, include_system=False):
     identity = list(read('SELECT DATABASE() AS database_name, VERSION() AS version, '
                          '@@server_uuid AS server_uuid, @@lower_case_table_names AS lower_case_table_names, '
                          '@@sql_mode AS sql_mode, @@character_set_client AS character_set_client, '
-                         '@@collation_connection AS collation_connection'))
+                         '@@collation_connection AS collation_connection, @@time_zone AS time_zone'))
     if len(identity) != 1 or identity[0]['database_name'] != database:
         raise ValueError('Selected MySQL database identity changed')
     if identity[0]['version'].split('-')[0] != '9.7.0':
@@ -133,13 +133,16 @@ def capture(connection, database, *, include_system=False):
         # Native materialized views may be catalogued as VIEW. Use the server's
         # own DDL header, not a substring in comments/defaults/query literals.
         if isinstance(ddl, str):
-            import re
-            if re.match(r'^CREATE\s+(?:(?:ALGORITHM=\S+|DEFINER=\S+|SQL SECURITY \w+)\s+)*MATERIALIZED\s+VIEW\b', ddl, re.I):
-                kind = 'materialized-view'
+            from ..mysql_view_identity import HEADER as view_header
+            matched=view_header.match(ddl)
+            if matched and matched['materialized']:kind='materialized-view'
         item = add(kind, name, row, root['resource_id'])
         item['native']['definition'] = ddl
+        if kind=='materialized-view':
+            item['native'].update(materialization_requested=True,
+                materialization_engine=matched['engine'],physical_materialization_verified=False)
         item['native']['definition_context'] = {key: value for key, value in (values[0].items() if values else ())
-            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
+            if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
         item['native']['definition_available'] = bool(ddl)
         relations[name] = item
 
@@ -157,11 +160,12 @@ def capture(connection, database, *, include_system=False):
 
     specs = (('ROUTINES', 'ROUTINE_SCHEMA', 'routine_name'),
              ('TRIGGERS', 'TRIGGER_SCHEMA', 'trigger_name'),
-             ('EVENTS', 'EVENT_SCHEMA', 'event_name'))
+             ('EVENTS', 'EVENT_SCHEMA', 'event_name'),
+             ('LIBRARIES', 'LIBRARY_SCHEMA', 'library_name'))
     for catalog, schema_column, name_column in specs:
         values = section(catalog, 'SELECT * FROM information_schema.' + catalog + ' WHERE ' + schema_column + '=%s', (database,))
         for row in values:
-            kind = row['routine_type'].lower() if catalog == 'ROUTINES' else 'trigger' if catalog == 'TRIGGERS' else 'event'
+            kind = row['routine_type'].lower() if catalog == 'ROUTINES' else 'trigger' if catalog == 'TRIGGERS' else 'library' if catalog == 'LIBRARIES' else 'event'
             name = row[name_column]
             owner = relations.get(row.get('event_object_table'))
             item = add(kind, name, row, (owner or root)['resource_id'])
@@ -171,11 +175,30 @@ def capture(connection, database, *, include_system=False):
                         if key.startswith('create ') or key == 'sql original statement'), None)
             item['native']['definition'] = ddl
             item['native']['definition_context'] = {key: value for key, value in (definitions[0].items() if definitions else ())
-                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation'}}
+                if key in {'sql_mode', 'character_set_client', 'collation_connection', 'database collation', 'time_zone'}}
+            if kind == 'trigger':
+                item['native']['trigger_identity']={'database':row.get('event_object_schema'),
+                    'table':row.get('event_object_table'),'timing':row.get('action_timing'),
+                    'event':row.get('event_manipulation'),'action_order':row.get('action_order')}
+            if kind == 'library':
+                # SHOW CREATE LIBRARY exposes SQL mode, but not the stored
+                # client charset/collation. Its decoded Unicode text is exported
+                # under explicit UTF8mb4; binary bodies remain native hex text.
+                item['native']['definition_context'].update(
+                    character_set_client='utf8mb4', collation_connection='utf8mb4_bin')
+                item['native']['definition_context_origin'] = (
+                    'Decoded native SHOW CREATE normalized to UTF8mb4; original library character context is not exposed')
             item['native']['definition_available'] = bool(ddl)
             if ddl is None:
                 observations.append({'section': kind + ':' + name, 'available': False,
                                      'reason': 'Native definition withheld or unavailable'})
+    library_dependencies = section('ROUTINE_LIBRARIES',
+        'SELECT * FROM information_schema.ROUTINE_LIBRARIES WHERE ROUTINE_SCHEMA=%s', (database,))
+    for item in resources:
+        if item['resource_kind'] in {'procedure', 'function'}:
+            item['native']['library_dependencies'] = [row for row in library_dependencies
+                if row['routine_name'] == item['display_name'] and
+                   row['routine_type'].lower() == item['resource_kind']]
     for catalog in ('SCHEMA_PRIVILEGES', 'TABLE_PRIVILEGES', 'COLUMN_PRIVILEGES'):
         column = 'TABLE_SCHEMA'
         values = section(catalog, 'SELECT * FROM information_schema.' + catalog + ' WHERE ' + column + '=%s', (database,))

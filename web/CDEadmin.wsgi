@@ -14,8 +14,8 @@ import os
 import sys
 
 
-if sys.version_info < (3, 9):
-    raise Exception('CDEadmin must be run under Python 3.9 or later.')
+if sys.version_info < (3, 14):
+    raise Exception('CDEadmin must be run under Python 3.14 or later.')
 
 root = os.path.dirname(os.path.realpath(__file__))
 if sys.path[0] != root:

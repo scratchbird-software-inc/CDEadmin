@@ -100,15 +100,19 @@ class Executions:
                 return  # Shutdown before dispatch is not a native SQL outcome.
             cursor = Cursor(token.connection)
             started = time.perf_counter()
-            if bound:
-                cursor.execute(source, bound)
-            else:
-                cursor.execute(source)
-            token.statement_metrics = {
-                'dispatch_ms': round((time.perf_counter() - started) * 1000, 3),
-                'scope': 'client-execute-through-first-response-excluding-fetch',
-                'prepare_ms': None, 'execute_ms': None, 'plan': None,
-            }
+            try:
+                if bound:
+                    cursor.execute(source, bound)
+                else:
+                    cursor.execute(source)
+            finally:
+                # A failed native response still has a client dispatch duration.
+                # This is not server preparation or execution instrumentation.
+                token.statement_metrics = {
+                    'dispatch_ms': round((time.perf_counter() - started) * 1000, 3),
+                    'scope': 'client-execute-through-first-response-excluding-fetch',
+                    'prepare_ms': None, 'execute_ms': None, 'plan': None,
+                }
             index = 0
             while True:
                 schema = columns(cursor)

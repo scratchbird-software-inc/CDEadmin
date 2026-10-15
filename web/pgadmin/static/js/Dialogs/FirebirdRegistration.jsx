@@ -1,5 +1,5 @@
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
@@ -9,24 +9,33 @@ export default function FirebirdRegistration({post, targetId, operation='clone',
   const [destination, setDestination] = useState(''), [name, setName] = useState('');
   const [credentials, setCredentials] = useState('source'), [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false), [attempted, setAttempted] = useState(false), [result, setResult] = useState(null);
+  const generation = useRef(0), applying = useRef(null);
   useEffect(() => {
-    let live = true;
+    const serial = ++generation.current;
+    setCatalog(null); setError(''); setDestination(''); setName('');
+    setCredentials('source'); setConfirmed(false); setBusy(false);
+    setAttempted(false); setResult(null);
     post({action: 'database_target_transfer_catalog', request: {target_id: targetId}}).then(value => {
-      if (!live) return;
+      if (serial !== generation.current) return;
       setCatalog(value); setName(value.source.display_name + (operation === 'clone' ? ' clone' : ''));
       setDestination(operation === 'clone' ? value.source_server_id : '');
-    }).catch(failure => {if (live) setError(failure.message || 'Registration catalog is unavailable.');});
-    return () => {live = false;};
+    }).catch(failure => {if (serial === generation.current) setError(failure.message || 'Registration catalog is unavailable.');});
+    return () => {generation.current++;};
   }, [post, targetId, operation]);
   const apply = async () => {
+    const serial = generation.current;
+    if (!catalog || applying.current === serial) return;
+    applying.current = serial;
     setBusy(true); setAttempted(true); setError('');
     try {
       const value = await post({action: 'database_target_transfer', request: {target_id: targetId,
-        destination_server_id: Number(destination), operation, display_name: name, credentials, confirmed}});
-      setResult(value); onChanged?.(value);
-    } catch (failure) {setError((failure.message || 'Registration change was not confirmed.') +
+        destination_server_id: Number(destination), operation, display_name: name, credentials, confirmed,
+        source_generation: catalog.source_generation,
+        destination_generation: catalog.destinations.find(item => item.server_id === Number(destination))?.generation}});
+      if (serial === generation.current) {setResult(value); onChanged?.(value);}
+    } catch (failure) {if (serial === generation.current) setError((failure.message || 'Registration change was not confirmed.') +
       ' Inspect and refresh both server registrations before trying again. No native database operation was requested.');}
-    finally {setBusy(false);}
+    finally {if (serial === generation.current) setBusy(false);}
   };
   return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-registration" />

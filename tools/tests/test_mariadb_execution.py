@@ -12,6 +12,20 @@ from pgadmin.cdeadmin.sdk import RelationalClientError
 from mariadb.constants import FIELD_TYPE as FieldType
 
 
+def test_only_native_server_errors_include_bounded_diagnostic_text():
+    import mariadb
+    native = mariadb.ProgrammingError('Unknown column ' + 'x' * 20000)
+    native.errno, native.sqlstate = 1054, '42S22'
+    result = Executions._error(native)
+    assert result['message_primary'].startswith('Unknown column')
+    assert len(result['message_primary']) == 16384
+    native.errno = 2003
+    assert 'message_primary' not in Executions._error(native)
+    arbitrary = RuntimeError('route password must not escape')
+    arbitrary.errno, arbitrary.sqlstate = 1054, '42S22'
+    assert 'message_primary' not in Executions._error(arbitrary)
+
+
 def harness(sets):
     class Cursor:
         cdeadmin_exact_temporals = False
@@ -166,3 +180,27 @@ def test_shutdown_keeps_live_worker_ownership_and_blocks_new_work():
     assert unfinished in owner.tokens
     with pytest.raises(RelationalClientError, match='closing'):
         owner.execute(connection, {'source': 'SELECT 1'}, {})
+
+
+def test_dispatch_timing_does_not_claim_native_prepare_or_execution_time():
+    owner, connection, native = harness([[1, 2]])
+    token = owner.execute(connection, {'source': 'SELECT native_values'}, {})
+    pages = drain(owner, token)
+    metrics = pages[-1]['payload']['statement_metrics']
+    assert metrics['dispatch_ms'] >= 0
+    assert metrics['scope'] == 'client-execute-through-first-response-excluding-fetch'
+    assert metrics['prepare_ms'] is metrics['execute_ms'] is metrics['plan'] is None
+    assert [row for page in pages for row in page['payload']['rows']] == [(1,), (2,)]
+
+
+def test_failed_dispatch_retains_timing_and_never_replays():
+    owner, connection, native = harness([[1]])
+    native.execute = Mock(side_effect=OSError('private source or parameters'))
+    token = owner.execute(connection, {'source': 'SELECT private_values'}, {})
+    pages = drain(owner, token)
+    payload = pages[-1]['payload']
+    assert payload['statement_metrics']['dispatch_ms'] >= 0
+    assert payload['statement_metrics']['prepare_ms'] is None
+    assert payload['error'] == {'type': 'OSError'}
+    assert payload['session_reuse_blocked'] is True
+    native.execute.assert_called_once()

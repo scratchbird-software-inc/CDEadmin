@@ -70,7 +70,7 @@ export function firebirdExecution(source, mode, from, to = from) {
     entries = firebirdFragments(source.slice(from, to));
   } else {
     const all = firebirdFragments(source);
-    let index = all.findIndex(entry => from >= entry.start && from <= entry.end);
+    let index = all.findIndex(entry => from >= entry.start && from < entry.end);
     if(index < 0 && from === source.length) index = all.length - 1;
     if(index < 0) throw new Error('No statement at this cursor');
     const settings = new Map();

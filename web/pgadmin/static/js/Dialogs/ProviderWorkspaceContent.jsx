@@ -1,3 +1,7 @@
+import {requestedAdministrationResource} from '../cdeadmin_ui/navigation/postgresqlAdministration';
+import PostgresqlTestData from './PostgresqlTestData';
+import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
+import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
 /////////////////////////////////////////////////////////////
 //
@@ -23,14 +27,24 @@ import FirebirdTestData from './FirebirdTestData';
 import FirebirdMetadataSearch from './FirebirdMetadataSearch';
 import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
+import PostgresqlCatalog from './PostgresqlCatalog';
 import MySQLCatalog from './MySQLCatalog';
+import MariaDBCatalog from './MariaDBCatalog';
+import DuckDBCatalog from './DuckDBCatalog';
+import SQLiteCatalog from './SQLiteCatalog';
+import DuckDBServerCatalog from './DuckDBServerCatalog';
+import DuckDBTestData from './DuckDBTestData';
+import DuckDBCopy from './DuckDBCopy';
+import DuckDBAttachment from './DuckDBAttachment';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
+import PostgresqlServerCatalog from './PostgresqlServerCatalog';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
 import {labelSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
@@ -66,10 +80,13 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
+  'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
+  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
-  'resource_page', 'resource_refresh', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',
+  'resource_page', 'resource_refresh', 'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt', 'postgresql_test_data', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',
   'visual_admin_validate', 'visual_admin_plan', 'visual_admin_apply',
   'visual_admin_bulk_plan', 'visual_admin_bulk_apply',
   'visual_admin_operation_list', 'visual_admin_operation_get',
@@ -1087,7 +1104,7 @@ export function administrationOutcomeValue(outcome, context) {
 }
 
 export function VisualAdministration({catalog, resources, selectedResource, post,
-  setError, resourceGeneration, initialOperationId, initialResourceKind,
+  setError, resourceGeneration, initialOperationId, initialResourceKind, initialSchema,
   onMutationApplied, onOpenDefinitionOwner, focused=false, objectEditor=false, initialSection, selectedMember}) {
   const objects = useMemo(() => (catalog?.objects || []).map((item) => ({
     ...item,
@@ -1097,6 +1114,9 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   })).filter((item) => item.operations.length > 0 && (!objectEditor ||
     item.resource_kind === selectedResource?.resource_kind)),
   [catalog, objectEditor, selectedResource?.resource_kind]);
+  const initializedKind = useRef();
+  const initializedOperation = useRef();
+  const initializedSelection = useRef();
   const [resourceKind, setResourceKind] = useState(
     initialResourceKind || objects[0]?.resource_kind || ''
   );
@@ -1145,6 +1165,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   const allFields = operation?.form?.fields || [];
   const compactFirebird = catalog?.engine_id === 'firebird' ||
     /^firebird[._]/.test(operation?.form_id || '');
+  const compactNativeForms = compactFirebird || catalog?.engine_id === 'mariadb';
   const fields = allFields.filter((field) => fieldVisible(field, draft)).map(
     (field) => visibleFieldOptions(field, draft, inspectedResource));
   const targetKinds = operation?.target_resource_kinds || [resourceKind];
@@ -1235,8 +1256,10 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   }, [catalog, objects]);
 
   useEffect(() => {
-    if (initialResourceKind && objects.some((item) =>
+    if (!initialResourceKind) initializedKind.current = undefined;
+    if (initialResourceKind && initializedKind.current !== initialResourceKind && objects.some((item) =>
       item.resource_kind === initialResourceKind)) {
+      initializedKind.current = initialResourceKind;
       setResourceKind(initialResourceKind);
     }
   }, [initialResourceKind, objects]);
@@ -1248,9 +1271,11 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   }, [objectDescriptor, objects]);
 
   useEffect(() => {
-    if (!selectedResource) return;
-    if (!initialResourceKind && objects.some((item) =>
+    if (!selectedResource) { initializedSelection.current = undefined; return; }
+    const selection = JSON.stringify([selectedResource.resource_kind, selectedResource.resource_id]);
+    if (!initialResourceKind && initializedSelection.current !== selection && objects.some((item) =>
       item.resource_kind === selectedResource.resource_kind)) {
+      initializedSelection.current = selection;
       setResourceKind(selectedResource.resource_kind);
     }
   }, [objects, selectedResource, initialResourceKind]);
@@ -1295,20 +1320,27 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   }, [operationId, operations]);
 
   useEffect(() => {
-    if (initialOperationId && operations.some((item) =>
+    const initial = JSON.stringify([initialResourceKind, initialOperationId]);
+    if (!initialOperationId) initializedOperation.current = undefined;
+    if (initialOperationId && initializedOperation.current !== initial && operations.some((item) =>
       item.operation_id === initialOperationId)) {
+      initializedOperation.current = initial;
       setOperationId(initialOperationId);
     }
-  }, [initialOperationId, operations]);
+  }, [initialOperationId, initialResourceKind, operations]);
 
   useEffect(() => {
     const values = initialObjectDraft(allFields, inspectedResource);
+    if (operationId === 'create' && resourceKind === initialResourceKind &&
+        typeof initialSchema === 'string' && Object.hasOwn(values, 'schema')) {
+      values.schema = initialSchema;
+    }
     setDraft(values);
     setBaselineDraft(values);
     setPlan(null);
     setValidation(null);
     setConfirmed(false);
-  }, [operationId, resourceKind, inspectedResource]);
+  }, [operationId, resourceKind, inspectedResource, initialSchema, initialResourceKind]);
 
   useEffect(() => {
     setOutcome((current) => current?.operationId === 'drop' &&
@@ -1559,7 +1591,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
             label={gettext('Target resource')} value={targetResource?.resource_id || ''}
             onChange={(event) => setTargetId(event.target.value)}>
             {matchingResources.map((item) => <MenuItem key={item.resource_id}
-              value={item.resource_id}>{item.display_name}</MenuItem>)}
+              value={item.resource_id}>{administrationResourceLabel(item)}</MenuItem>)}
           </TextField>}
           {operation?.target_required && matchingResources.length === 0 &&
       <Alert severity="warning" sx={{mt: 2}}>{gettext('No discovered resource of this type is available. Refresh provider metadata or choose Create.')}</Alert>}
@@ -1570,8 +1602,8 @@ export function VisualAdministration({catalog, resources, selectedResource, post
           <Box component="fieldset" disabled={working || inspecting}
             sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 2,
               p: 0, border: 0, minWidth: 0}}>
-            <FormReference formKey={'operation:' + operation?.form_id} />
-            {compactFirebird ? <FirebirdFormLayout fields={fields} draft={draft}
+            <FormReference formKey={operation?.form?.form_key || 'operation:' + operation?.form_id} />
+            {compactNativeForms ? <FirebirdFormLayout fields={fields} draft={draft}
               key={resourceKind + ':' + operationId + ':' + (targetResource?.resource_id || '')}
               onValidityChange={setNativeFormValid}
               disabled={working || inspecting}
@@ -1622,13 +1654,13 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       label={gettext('I confirm this provider-planned operation.')} />}
           <Box sx={{display: 'flex', gap: 1, mt: 2}}>
             <Button variant="contained" disabled={working || inspecting || !operation ||
-        (compactFirebird && !nativeFormValid) ||
+        (compactNativeForms && !nativeFormValid) ||
         operation.graphical_ready === false ||
         targetUnavailable} onClick={preview}>
               {gettext('Validate and preview')}
             </Button>
             <Button color="warning" disabled={working || inspecting || targetUnavailable || plan?.state !== 'ready' ||
-        (compactFirebird && !nativeFormValid) ||
+        (compactNativeForms && !nativeFormValid) ||
         !plan?.execution_available || (operation?.confirmation_required && !confirmed)}
             onClick={apply}>{gettext('Apply provider plan')}</Button>
             {working && <CircularProgress size={24} />}
@@ -1679,6 +1711,7 @@ VisualAdministration.propTypes = {
   onOpenDefinitionOwner: PropTypes.func,
   initialOperationId: PropTypes.string,
   initialResourceKind: PropTypes.string,
+  initialSchema: PropTypes.string,
   focused: PropTypes.bool,
   objectEditor: PropTypes.bool,
 };
@@ -1943,7 +1976,7 @@ KeyValueDataGrid.propTypes = {
 };
 
 export function StructuredDataGrid({catalog, resources, post, setError,
-  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled}) {
+  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled, clientSqlDialect=3}) {
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
   const themeScale = theme.cdeadminPresentation?.scale ?? 100;
@@ -2296,6 +2329,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
     editable: false,
     renderCell: ({row}) => !editMode ? <span title={editorValue(row[column.name])}>{row[column.name] === null ? 'NULL' : editorValue(row[column.name])}</span> : <Box sx={{display: 'flex', alignItems: 'center'}}>
       {column.input_kind ? <ProviderRowInput kind={column.input_kind}
+        blobIdentity={JSON.stringify([selectedDatabaseTargetId, targetId, row.__identityToken, column.name])}
         spec={column.array_spec}
         firebirdBlob={languageProfile?.startsWith('firebird-') && column.native_type === 'BLOB' && ['text', 'binary'].includes(column.input_kind)}
         label={`${column.name} ${row.__insert ? gettext('new value') : gettext('value')}`}
@@ -2446,7 +2480,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
       </Alert>
       {languageProfile?.startsWith('firebird-') && <Box component="details" sx={{my: 1}}>
         <Box component="summary" sx={{cursor: 'pointer'}}>{gettext('Generate SQL from fetched rows')}</Box>
-        <FirebirdRowSql page={page} table={target?.display_name || ''}
+        <FirebirdRowSql page={page} table={target?.display_name || ''} clientSqlDialect={clientSqlDialect}
           onLoad={onLoadSql} disabled={working || sqlLoadDisabled} />
       </Box>}
       <ProviderDataGrid columns={gridColumns} rows={gridRows} paginate={false}
@@ -2469,6 +2503,7 @@ export function StructuredDataGrid({catalog, resources, post, setError,
 }
 
 StructuredDataGrid.propTypes = {
+  clientSqlDialect: PropTypes.number,
   catalog: PropTypes.object,
   resources: PropTypes.array,
   post: PropTypes.func.isRequired,
@@ -2658,8 +2693,14 @@ function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   useEffect(() => {setLocalPage(0);}, [gridId]);
   const pageCount = Math.ceil(rows.length / rowsPerPage);
   const selectedPage = Math.min(localPage, Math.max(0, pageCount - 1));
-  const gridRows = rows.map((row) => row && typeof row === 'object' &&
-    !Array.isArray(row) ? row : {value: row});
+  const gridRows = rows.map((row) => {
+    if (Array.isArray(row) && columns.length) {
+      return Object.fromEntries(row.map((value, index) => [
+        String(columns[index]?.key ?? columns[index]?.name ?? index), value,
+      ]));
+    }
+    return row && typeof row === 'object' && !Array.isArray(row) ? row : {value: row};
+  });
   const inferredColumns = columns.length || !gridRows.length ? columns :
     Object.keys(gridRows[0]).map((name) => ({
       key: name, name,
@@ -6379,8 +6420,12 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         maxHeight: 240, bgcolor: 'background.default'}}>
         {JSON.stringify(plan, null, 2)}
       </Box>}
-      {result && <Alert severity="success" sx={{mt: 2}}>
-        {gettext('The provider completed the native database operation. Refreshing the navigator will show provider-observed state.')}
+      {result && <Alert severity={recreateEmpty &&
+        result?.provider_result?.driver_observation?.driver_returned !== true ? 'warning' : 'success'} sx={{mt: 2}}>
+        {recreateEmpty ? (result?.provider_result?.driver_observation?.driver_returned === true ?
+          gettext('The native drop completed. The original database is absent. Creation requires a separate review and confirmation.') :
+          gettext('Native drop completion is unconfirmed. Inspect the operation receipt and server state; creation and automatic retry are disabled.')) :
+          gettext('The provider completed the native database operation. Refreshing the navigator will show provider-observed state.')}
       </Alert>}
       {(result?.workspace_follow_up || []).filter((item) =>
         item.state === 'failed').map((item) => <Alert severity="warning"
@@ -6392,7 +6437,11 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         {gettext('The drop outcome requires review. Inspect the operation receipt and server state before opening another workflow; creation and automatic retry are disabled.')}
       </Alert>}
       {recreateEmpty && result?.provider_result?.driver_observation?.driver_returned === true &&
-        result?.provider_result?.dropped_endpoint_database_target && droppedPath &&
+        result?.provider_result?.dropped_endpoint_database_target?.target_id === initialTargetId && droppedPath &&
+        Array.isArray(result.database_targets?.targets) &&
+        !result.database_targets.targets.some(target => target.target_id === initialTargetId) &&
+        (result.workspace_follow_up || []).some(item =>
+          item.action === 'remove_dropped_database_registration' && item.state === 'complete') &&
         !(result.workspace_follow_up || []).some(item => item.state === 'failed') &&
         onRecreateEmpty && <Button sx={{mt: 2}} variant="contained"
         onClick={() => onRecreateEmpty(droppedPath)}>
@@ -6524,10 +6573,10 @@ PropertyGroup.propTypes = {
   value: PropTypes.object,
 };
 
-function selectedProperties(source, fields) {
+function selectedProperties(source, fields, includeEmpty = false) {
   return Object.fromEntries(fields.flatMap(([field, label, convert]) => {
     const value = source?.[field];
-    if (value === undefined || value === null || value === '') return [];
+    if (value === undefined || value === null || (!includeEmpty && value === '')) return [];
     return [[label, convert ? convert(value, source) : value]];
   }));
 }
@@ -6717,7 +6766,7 @@ function MariaDBDatabaseProperties({endpoint, target, server, database}) {
           ['default_character_set', gettext('Default character set')],
           ['default_collation', gettext('Default collation')],
           ['schema_comment', gettext('Database comment')],
-        ])} />
+        ], true)}/>
       <PropertyGroup title={gettext('MariaDB server identity')}
         value={selectedProperties(serverNative, [
           ['version', gettext('Server version')],
@@ -6938,7 +6987,7 @@ function DataMovementWorkspace({catalog, resources, post, setError}) {
       label={gettext('Target resource')} value={targetId}
       onChange={(event) => {setTargetId(event.target.value); setPlan(null);}}>
       {targets.map((item) => <MenuItem key={item.resource_id}
-        value={item.resource_id}>{item.display_name}</MenuItem>)}
+        value={item.resource_id}>{administrationResourceLabel(item)}</MenuItem>)}
     </TextField>}
     <TextField fullWidth multiline minRows={8} maxRows={20} sx={{mt: 2}}
       label={gettext('Import records / provider form drafts')} value={source}
@@ -7003,11 +7052,12 @@ export default function ProviderWorkspaceContent({
   const [scriptEditorGeneration, setScriptEditorGeneration] = useState(0);
   const workspaceContext = useMemo(() => ({api, endpointUrl, initialTab,
     resourceId: initialContext.resource_id,
+    nativeObjectId: initialContext.native_object_id,
     parentId: initialContext.parent_resource_id,
     resourceKind: initialContext.resource_kind,
     operationId: initialContext.operation_id,
     queryDatabaseTargetId, onCredentialRequired, workspaceLoadGeneration}),
-  [api, endpointUrl, initialTab, initialContext.resource_id,
+  [api, endpointUrl, initialTab, initialContext.resource_id, initialContext.native_object_id,
     initialContext.parent_resource_id, initialContext.resource_kind,
     initialContext.operation_id, queryDatabaseTargetId, onCredentialRequired,
     workspaceLoadGeneration]);
@@ -7040,6 +7090,7 @@ export default function ProviderWorkspaceContent({
   const [scriptResult, setScriptResult] = useState(null);
   const [firebirdPlan, setFirebirdPlan] = useState(null);
   const [nativePage, setNativePage] = useState(null);
+  const [requestedPlan, setRequestedPlan] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
   const [rendered, setRendered] = useState(null);
@@ -7048,6 +7099,18 @@ export default function ProviderWorkspaceContent({
   const [queryPollingPaused, setQueryPollingPaused] = useState(false);
   const [querySessionBlocked, setQuerySessionBlocked] = useState(false);
   const [transaction, setTransaction] = useState(null);
+  const [sessionAutocommit, setSessionAutocommit] = useState(null);
+  const managedAutocommit = languageProfile === 'postgresql-sql' ||
+    (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && workspace?.languages?.find(
+      item => item.language_profile === languageProfile)?.transaction_actions?.includes('autocommit_on'));
+  const sessionPolicyUnknown = managedAutocommit &&
+    Boolean(sessionId) && sessionAutocommit === null;
+  const observeTransaction = (observation) => {
+    setTransaction(observation);
+    const policy = observation.provider_payload?.autocommit;
+    setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+    if (observation.provider_payload?.session_reuse_blocked) setQuerySessionBlocked(true);
+  };
   const [selectedResource, setSelectedResource] = useState(null);
   // A verified object can be outside the visible page after a mutation.
   // Bind that observation to the cache generation, not page membership.
@@ -7063,11 +7126,13 @@ export default function ProviderWorkspaceContent({
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
   const querySessionIdRef = useRef(null);
+  const querySessionOpeningRef = useRef(null);
   useModalCloseGuard(async () => {
-    if (occurrenceId || (busy && sessionId)) {
+    if (occurrenceId || (busy && (sessionId || querySessionOpeningRef.current))) {
       setError(gettext('Wait for the current query request to finish, or cancel the running query before closing this workspace.'));
       return false;
     }
+    if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
     const closingSession = querySessionIdRef.current;
     if (!closingSession) return true;
     setBusy(true);
@@ -7076,6 +7141,7 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId});
       querySessionIdRef.current = null;
       setSessionId(null);
+      setSessionAutocommit(null);
       setTransaction(null);
       return true;
     } catch (requestError) {
@@ -7097,6 +7163,7 @@ export default function ProviderWorkspaceContent({
     setHistoryNotice('');
     setFirebirdPlan(null);
     setNativePage(null);
+    setRequestedPlan(false);
     setResourcePage(null);
     setLoadingMore(false);
     setSelectedResource(null);
@@ -7106,6 +7173,7 @@ export default function ProviderWorkspaceContent({
     setSelectedResourceKind(initialContext.resource_kind || '');
     const requestedIdentity = initialContext.resource_id ||
       initialContext.parent_resource_id;
+    const requestedObject = requestedIdentity || initialContext.native_object_id;
     const localProfile = isProviderRegistrationWorkspace(initialTab, initialContext);
     const load = localProfile ? api.post(endpointUrl, {
       action: 'endpoint_profile_read',
@@ -7119,12 +7187,24 @@ export default function ProviderWorkspaceContent({
         return;
       }
       let page = workspaceValue?.resource_page || null;
+      // Native Explorer discovery has a separate cache. Resolve its OID against
+      // a fresh authorized snapshot, never a prior workspace's dropped objects.
+      if (initialContext.native_object_id !== undefined) {
+        const refreshed = await api.post(endpointUrl, {
+          action: 'resource_refresh', request: {
+            generation: page?.generation,
+            database_target_id: queryDatabaseTargetId,
+          },
+        });
+        if (!active) return;
+        page = refreshed.data.data;
+      }
       let resources = [...(page?.items || [])];
       let requestedResource = resources.find(
-        (item) => item.resource_id === requestedIdentity
+        (item) => requestedAdministrationResource(item, initialContext)
       );
       while (!requestedResource && page?.next_cursor &&
-             requestedIdentity) {
+             requestedObject) {
         const nextResponse = await api.post(endpointUrl, {
           action: 'resource_page', request: {
             continuation: page.next_cursor,
@@ -7144,7 +7224,7 @@ export default function ProviderWorkspaceContent({
         resources = [...resources, ...(next.items || [])];
         page = {...next, items: resources};
         requestedResource = resources.find(
-          (item) => item.resource_id === requestedIdentity
+          (item) => requestedAdministrationResource(item, initialContext)
         );
       }
       const registeredDatabaseTarget = (!initialContext.resource_kind ||
@@ -7165,7 +7245,7 @@ export default function ProviderWorkspaceContent({
       // Connection properties/query workspaces can address a registered
       // database without requesting a native catalog object. That authority
       // comes from the retained-target catalog, never another object kind.
-      if (requestedIdentity && !requestedResource &&
+      if (requestedObject && !requestedResource &&
           !(registeredDatabaseTarget && !initialContext.resource_kind)) {
         throw new Error(gettext('The requested provider object is unavailable. Refresh the navigator and select it again.'));
       }
@@ -7368,17 +7448,33 @@ export default function ProviderWorkspaceContent({
   };
 
   const ensureSession = useCallback(async () => {
-    if (sessionId) return sessionId;
-    const language = languageProfile;
-    if (!language) throw new Error(gettext('No query language is available.'));
-    const opened = await post({
-      action: 'open_session', language_profile: language,
-      database_target_id: queryDatabaseTargetId,
-    });
-    querySessionIdRef.current = opened.session_id;
-    setSessionId(opened.session_id);
-    return opened.session_id;
-  }, [languageProfile, post, queryDatabaseTargetId, sessionId]);
+    if (querySessionOpeningRef.current) return querySessionOpeningRef.current;
+    if (querySessionIdRef.current) return querySessionIdRef.current;
+    const opening = (async () => {
+      const language = languageProfile;
+      if (!language) throw new Error(gettext('No query language is available.'));
+      const opened = await post({
+        action: 'open_session', language_profile: language,
+        database_target_id: queryDatabaseTargetId,
+      });
+      querySessionIdRef.current = opened.session_id;
+      setSessionId(opened.session_id);
+      if (language === 'postgresql-sql' || (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit)) {
+        const observed = await post({action: 'transaction', session_id: opened.session_id,
+          database_target_id: queryDatabaseTargetId});
+        setTransaction(observed);
+        const policy = observed.provider_payload?.autocommit;
+        setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+        if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
+          throw new Error(gettext('Refresh the native transaction state before executing.'));
+        }
+      }
+      return opened.session_id;
+    })();
+    querySessionOpeningRef.current = opening;
+    try { return await opening; }
+    finally { if (querySessionOpeningRef.current === opening) querySessionOpeningRef.current = null; }
+  }, [languageProfile, managedAutocommit, post, queryDatabaseTargetId]);
 
   const poll = useCallback(async (id) => {
     setBusy(true);
@@ -7415,6 +7511,11 @@ export default function ProviderWorkspaceContent({
       const mysql = response.occurrence?.result?.extensions?.mysql?.payload
         || response.occurrence?.result?.extensions?.mariadb?.payload || postgres || sqlite || duck || cockroach || ysql || ycql || tidb || vitess || dolt || xtdb || immudb || ignite || cassandra || foundation || tikv || redis || mongodb || clickhouse || influxdb || neo4j || milvus || opensearch || searchsql;
       if (mysql?.has_page) setNativePage(mysql);
+      else if ((postgres || (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && mysql)) && (mysql?.statement_metrics || mysql?.error)) {
+        setNativePage(previous => ({...previous,
+          statement_metrics: mysql.statement_metrics || previous?.statement_metrics,
+          error: mysql.error}));
+      }
       if (cassandra?.local_delivery_stopped) {
         setError(gettext('Cassandra result delivery stopped locally. This does not confirm server cancellation or rollback; dispatched mutations may have completed.'));
       }
@@ -7457,6 +7558,18 @@ export default function ProviderWorkspaceContent({
           setError(gettext('This Firebird query session cannot be reused. Close it and explicitly reconnect.'));
         }
       }
+      if (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && managedAutocommit && response.occurrence?.operation?.terminal) {
+        setSessionAutocommit(null);
+        try {
+          const observed = await post({action: 'transaction', session_id: querySessionIdRef.current,
+            database_target_id: queryDatabaseTargetId});
+          setTransaction(observed);
+          const policy = observed.provider_payload?.autocommit;
+          setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+        } catch {
+          setTransaction(null);
+        }
+      }
       setQueryPollingPaused(Boolean(mysql?.has_page));
       setOccurrenceId(response.occurrence?.operation?.terminal ? null : id);
     } catch (requestError) {
@@ -7465,7 +7578,7 @@ export default function ProviderWorkspaceContent({
     } finally {
       setBusy(false);
     }
-  }, [acceptRendered, bufferRows, languageProfile, post, queryDatabaseTargetId]);
+  }, [acceptRendered, bufferRows, languageProfile, managedAutocommit, post, queryDatabaseTargetId]);
 
   useEffect(() => {
     if (!workspace?.languages?.some(item => item.language_profile === languageProfile) ||
@@ -7487,7 +7600,9 @@ export default function ProviderWorkspaceContent({
     setScriptResult(null);
     setFirebirdPlan(null);
     setNativePage(null);
+    setRequestedPlan(false);
     setResultPresentation(presentation);
+    setRequestedPlan(presentation === 'plan');
     setProfileReport(null);
     setQueryStatistics(null);
     try {
@@ -7498,7 +7613,7 @@ export default function ProviderWorkspaceContent({
         }
         rowPolicy = {max_rows: Number(maximumRows) || null};
       }
-      const parameters = sessionCommand || planMode ? [] : JSON.parse(
+      const parameters = sessionCommand || (planMode && languageProfile === 'firebird-sql') ? [] : JSON.parse(
         parameterSource || defaultParameterSource(activeLanguage));
       const expectsArray = sessionCommand || activeLanguage?.parameter_shape === 'array';
       const permitsEither = !sessionCommand && activeLanguage?.parameter_shape === 'object-or-array';
@@ -7522,8 +7637,8 @@ export default function ProviderWorkspaceContent({
         ...rowPolicy,
         ...(languageProfile === 'firebird-sql' ? {
           client_sql_dialect: sessionCommand ? 3 : clientSqlDialect,
-          history_sensitive: historySensitive,
         } : {}),
+        ...(['firebird-sql', 'postgresql-sql', 'mysql-sql', 'mariadb-sql', 'duckdb-sql', 'sqlite-sql'].includes(languageProfile) ? {history_sensitive: historySensitive} : {}),
         database_target_id: queryDatabaseTargetId,
       });
       setHistoryNotice(occurrence.sql_history?.warning || '');
@@ -7552,9 +7667,10 @@ export default function ProviderWorkspaceContent({
 
   const refreshTransaction = async () => {
     setBusy(true);
+    if (managedAutocommit) setSessionAutocommit(null);
     try {
       const activeSession = await ensureSession();
-      setTransaction(await post({
+      observeTransaction(await post({
         action: 'transaction', session_id: activeSession,
         database_target_id: queryDatabaseTargetId,
       }));
@@ -7574,26 +7690,27 @@ export default function ProviderWorkspaceContent({
         transaction_action: action,
         database_target_id: queryDatabaseTargetId,
       });
-      setTransaction(observation);
-      if (observation.provider_payload?.session_reuse_blocked) {
-        setQuerySessionBlocked(true);
-      }
+      observeTransaction(observation);
     } catch (requestError) {
+      if (managedAutocommit) setSessionAutocommit(null);
       setError(errorMessage(requestError));
     } finally { setBusy(false); }
   };
 
   const releaseQuerySession = async () => {
-    if (!sessionId) return;
+    if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
+    const closingSession = querySessionIdRef.current;
+    if (!closingSession) return;
     setBusy(true);
     setError(null);
     try {
       await post({
-        action: 'close_session', session_id: sessionId,
+        action: 'close_session', session_id: closingSession,
         database_target_id: queryDatabaseTargetId,
       });
       querySessionIdRef.current = null;
       setSessionId(null);
+      setSessionAutocommit(null);
       setScriptLocked(false);
       setScriptEditorGeneration(value => value + 1);
       setQuerySessionBlocked(false);
@@ -7609,6 +7726,7 @@ export default function ProviderWorkspaceContent({
     setBusy(true);
     setError(null);
     try {
+      if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
       if (querySessionIdRef.current) {
         await post({
           action: 'close_session', session_id: querySessionIdRef.current,
@@ -7617,11 +7735,13 @@ export default function ProviderWorkspaceContent({
         querySessionIdRef.current = null;
       }
       setLanguageProfile(profile);
+      setResultPresentation('native');
       const language = workspace?.languages?.find((item) =>
         item.language_profile === profile);
       setSource(defaultSource(language));
       setParameterSource(defaultParameterSource(language));
       setSessionId(null);
+      setSessionAutocommit(null);
       setQuerySessionBlocked(false);
       setOccurrenceId(null);
       setRendered(null);
@@ -7629,6 +7749,7 @@ export default function ProviderWorkspaceContent({
       setScriptResult(null);
       setFirebirdPlan(null);
       setNativePage(null);
+      setRequestedPlan(false);
       setTransaction(null);
     } catch (requestError) {
       // The existing language and session remain owned until native release.
@@ -7681,7 +7802,8 @@ export default function ProviderWorkspaceContent({
   const queryTarget = workspace?.database_targets?.targets?.find(target => target.target_id === queryDatabaseTargetId);
   useEffect(() => {
     if (workspace?.endpoint) labelSQLConnection(endpointUrl,
-      `${workspace.endpoint.display_name || workspace.endpoint.endpoint_id} / ${queryTarget?.display_name || queryDatabaseTargetId || 'server'} — ${workspace.endpoint.verified_runtime_family || workspace.endpoint.profile_id}`);
+      `${workspace.endpoint.display_name || workspace.endpoint.endpoint_id} / ${queryTarget?.display_name || queryDatabaseTargetId || 'server'}`,
+      workspace.endpoint.verified_runtime_family || workspace.endpoint.profile_id);
   }, [endpointUrl, workspace?.endpoint, queryTarget, queryDatabaseTargetId]);
   const bufferValid = Number.isInteger(bufferRows) && bufferRows >= 1 && bufferRows <= 500;
 
@@ -7766,7 +7888,12 @@ export default function ProviderWorkspaceContent({
           'firebird-events': gettext('Native Events'),
           'firebird-templates': gettext('Native Code Templates'),
           'firebird-test-data': gettext('Generate Test Data'),
+          'postgresql-test-data': gettext('PostgreSQL Test Data'),
           'mysql-test-data': gettext('MySQL Test Data'),
+          'mariadb-test-data': gettext('MariaDB Test Data'),
+          'duckdb-test-data': gettext('DuckDB Test Data'),
+          'duckdb-copy': gettext('DuckDB Native COPY'),
+          'duckdb-attachment': gettext('DuckDB Attachment'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -7808,6 +7935,7 @@ export default function ProviderWorkspaceContent({
       {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) && tab === 'firebird-test-data' && <FirebirdTestData
         key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
         languageProfile={languageProfile} resources={resourcePage?.items || []} />}
+      {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'firebird-isql' && <FirebirdIsql post={post}
         databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'metadata-search' && <FirebirdMetadataSearch
@@ -7860,12 +7988,36 @@ export default function ProviderWorkspaceContent({
           {queryDatabaseTargetId && <> · {gettext('Database')}: {queryDatabaseTargetId}</>}
         </Box>
       </Box>}
-      {workspace && <Box role="region"
+      {workspace && <QueryToolFrame role="region"
         aria-label={gettext('Provider query workspace')}
-        sx={{p: 2, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
-          minHeight: 0, minWidth: 0, overflow: 'hidden'}}>
-        <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
-          <TextField select size="small" sx={{mb: 1, maxWidth: 360}}
+        sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
+          minHeight: 0, minWidth: 0, overflow: 'auto'}}>
+        <QueryToolToolbar aria-label="SQL execution toolbar">
+          <QueryToolAction action="execute" title={gettext('Run')} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
+            onClick={() => execute()} />
+          {languageProfile === 'firebird-sql' && <QueryToolAction action="explain" title={gettext('Explain / query plan')}
+            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
+            onClick={() => execute(source, 'plan', false, false, true)} />}
+          {activePlanTemplates.map((template, index) =>
+            <QueryToolAction action={index === 0 ? 'explain' : 'analyze'} title={languageProfile === 'mysql-sql' ? template.label : index === 0 ? gettext('Explain / query plan') : template.label} key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
+              onClick={() => execute(
+                template.source_template.replace('{source}', source), 'plan', false, false, languageProfile === 'postgresql-sql'
+              )} />)}
+          <QueryToolAction action="refresh" title={gettext('Poll')} disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)} />
+          <QueryToolAction action="cancel" title={gettext('Cancel request')} disabled={busy || !occurrenceId} onClick={cancel} />
+          <QueryToolAction action="refresh" title={gettext('Provider transaction state')} disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction} />
+          {managedAutocommit && <FormControlLabel
+            control={<Checkbox checked={sessionAutocommit === true}
+              indeterminate={sessionAutocommit === null}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId}
+              onChange={(_event, checked) => controlTransaction(checked ? 'autocommit_on' : 'autocommit_off')} />}
+            label={gettext('Autocommit')} />}
+          {(activeLanguage?.transaction_actions || []).filter(action => !action.startsWith('autocommit_')).map((action) =>
+            <QueryToolAction action={action} title={gettext(action)} key={action} color={action === 'rollback' ? 'warning' : 'primary'}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || (managedAutocommit && sessionAutocommit !== false)} onClick={() => controlTransaction(action)} />)}
+          <QueryToolAction action="close" title={gettext('Close query session')} disabled={busy || !!occurrenceId || !sessionId}
+            onClick={releaseQuerySession} />
+          <TextField select size="small" sx={{width: 200, ml: 1}}
             label={gettext('Provider language')} value={languageProfile}
             disabled={busy || queryStreamActive || !!occurrenceId || scriptLocked}
             onChange={(event) => selectLanguage(event.target.value)}>
@@ -7877,182 +8029,185 @@ export default function ProviderWorkspaceContent({
           <TextField type="number" size="small" label={gettext('Maximum rows per fetch')}
             value={bufferRows} disabled={busy || queryStreamActive || !!occurrenceId || Boolean(rendered) || scriptLocked}
             error={!bufferValid} inputProps={{min: 1, max: 500, step: 1}}
-            sx={{mb: 1, maxWidth: '16rem'}} onChange={event => setBufferRows(Number(event.target.value))}
+            sx={{width: 155}} onChange={event => setBufferRows(Number(event.target.value))}
             title={gettext('Rows per browser buffer (1–500). Native fetch limits are separate. Close the query session to change this after a result.')} />
-        </Box>
-        <Box sx={{display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap'}}
-          aria-label={gettext('Provider language examples')}>
-          {sourcePresets(activeLanguage).map(([label, example]) =>
-            <Button size="small" key={label} disabled={scriptLocked} onClick={() => setSource(example)}>
-              {label}</Button>)}
-        </Box>
+          {busy && <CircularProgress size={24} />}
+        </QueryToolToolbar>
         {sourcePresets(activeLanguage).length === 0 &&
           !defaultSource(activeLanguage).trim() && !source.trim() &&
           <Alert severity="info" sx={{mb: 1}}>
             {gettext('This provider has not supplied an evidence-bound query template. The editor is intentionally empty.')}
           </Alert>}
-        <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
-          <Button variant="contained" disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute()}>{gettext('Run')}</Button>
-          {languageProfile === 'firebird-sql' && <Button
-            disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-            onClick={() => execute(source, 'native', false, false, true)}>
-            {gettext('Explain / query plan')}</Button>}
-          {activePlanTemplates.map((template, index) =>
-            <Button key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || !source.trim()}
-              onClick={() => execute(
-                template.source_template.replace('{source}', source), 'plan'
-              )}>
-              {index === 0 ? gettext('Explain / query plan') : template.label}
-            </Button>)}
-          <Button disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)}>{gettext('Poll')}</Button>
-          <Button disabled={busy || !occurrenceId} onClick={cancel}>{gettext('Cancel request')}</Button>
-          <Button disabled={busy || querySessionBlocked || !!occurrenceId} onClick={refreshTransaction}>{gettext('Provider transaction state')}</Button>
-          {(activeLanguage?.transaction_actions || []).map((action) =>
-            <Button key={action} color={action === 'rollback' ? 'warning' : 'primary'}
-              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId} onClick={() => controlTransaction(action)}>
-              {gettext(action)}</Button>)}
-          <Button disabled={busy || !!occurrenceId || !sessionId}
-            onClick={releaseQuerySession}>
-            {gettext('Close query session')}</Button>
-          {busy && <CircularProgress size={24} />}
-        </Box>
         <LanguageSourceEditor key={languageProfile + ':' + queryDatabaseTargetId + ':' + scriptEditorGeneration}
           language={activeLanguage} source={source} onChange={setSource}
           resources={resourcePage?.items}
           onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
-          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId}
-          disabled={busy || Boolean(occurrenceId) || querySessionBlocked}
+          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource}
+          disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
-          <Box component="details" sx={{my: 0.5}}><summary>Execution options, scripts and diagnostics</summary>
-            {languageProfile === 'firebird-sql' && <>
-              <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
-                checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-                onChange={(event) => setHistorySensitive(event.target.checked)} />} />
-              <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId} dialect={clientSqlDialect}
-                onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
-              <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
-                control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-                  onChange={event => setProfileConfirmed(event.target.checked)} />} />
-              <Button disabled={!profileConfirmed || busy || scriptLocked || querySessionBlocked || Boolean(occurrenceId)}
-                onClick={() => {setProfileConfirmed(false); execute(source, 'native', false, false, false, true);}}>
-                {gettext('Run with native profiling')}</Button>
-              <FormControlLabel label={gettext('Collect fresh attachment query statistics')} control={<Checkbox
-                checked={statisticsEnabled} disabled={busy || scriptLocked || Boolean(occurrenceId)}
-                onChange={event => setStatisticsEnabled(event.target.checked)} />} />
-              <FirebirdProfiler report={profileReport} statistics={queryStatistics} />
-            </>}
-            {languageProfile === 'firebird-sql' && <FirebirdParameters source={source} dialect={clientSqlDialect}
-              plan={firebirdPlan} parameters={parameterSource} onChange={setParameterSource}
-              onPrepare={() => execute(source, 'native', false, false, true)}
-              disabled={busy || querySessionBlocked || scriptLocked || Boolean(occurrenceId)} />}
-            <TextField multiline minRows={2} maxRows={6} value={parameterSource}
-              sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
-                gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
-                  gettext('Query parameters (JSON object or array)') : gettext('Query parameters (JSON)')}
-              helperText={activeLanguage?.parameter_hint ||
-            gettext('Use a JSON object of parameter names and values.')}
-              onChange={(event) => setParameterSource(event.target.value)} />
-            {languageProfile === 'firebird-sql' && <TextField select
-              size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
-              value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
-              onChange={(event) => setClientSqlDialect(Number(event.target.value))}
-              helperText={gettext('Applies to the next user-written statement only. Does not change the database dialect, attachment default, or pending transaction. Generated administration SQL keeps its own dialect.')}>
-              <MenuItem value={3}>{gettext('3 — modern SQL')}</MenuItem>
-              <MenuItem value={1}>{gettext('1 — legacy SQL')}</MenuItem>
-              <MenuItem value={2}>{gettext('2 — transition diagnostics')}</MenuItem>
-            </TextField>}
-            {languageProfile === 'firebird-sql' && <TextField
-              type="number" size="small" sx={{mt: 1}}
-              label={gettext('Maximum fetched rows')} value={maximumRows}
-              disabled={busy || !!occurrenceId || scriptLocked}
-              inputProps={{min: 0, max: 1000000, step: 1}}
-              onChange={(event) => setMaximumRows(event.target.value)}
-              helperText={gettext('0 removes the row-count limit; ordinary results still have a memory budget. Use Run streaming for large results. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
-            {languageProfile === 'firebird-sql' && <FirebirdResultStream
-              key={`${queryDatabaseTargetId}:${scriptEditorGeneration}`} bufferRows={bufferRows} onActiveChange={setQueryStreamActive}
-              post={post} ensureSession={ensureSession} downloadUrl={endpointUrl}
-              databaseTargetId={queryDatabaseTargetId} source={source}
-              parameters={parameterSource} dialect={clientSqlDialect}
-              disabled={busy || querySessionBlocked || !!occurrenceId} />}
-            {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
-              {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}
-            </Alert>}
-            {languageProfile === 'vitess-sql' && <Alert severity="info" sx={{mt: 1}}>
-              {gettext('Cancelling a Vitess query aborts this connection. Its outcome may be unknown; close the session and verify the result before retrying.')}
-            </Alert>}
-            {['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql', 'cockroachdb-sql', 'ysql', 'ycql', 'tidb-sql', 'vitess-sql', 'dolt-sql', 'xtdb-sql-2.1', 'immudb-sql', 'ignite-sql-keyvalue', 'cql-3', 'foundationdb-keyvalue-json', 'tikv-keyvalue-json', 'redis-resp3-command', 'mongodb-query-api-json', 'clickhouse-sql', 'influxdb3-sql-influxql', 'cypher', 'milvus-query-search-api', 'opensearch-query-dsl', 'opensearch-sql-ppl', 'opensearch-sql', 'opensearch-ppl', 'influxdb3-sql', 'influxdb3-influxql'].includes(languageProfile) && nativePage && <Alert severity="info"
-              sx={{mt: 1}} aria-label={languageProfile === 'opensearch-sql-ppl' ? gettext('OpenSearch SQL/PPL result page') : languageProfile === 'opensearch-query-dsl' ? gettext('OpenSearch result page') : languageProfile === 'milvus-query-search-api' ? gettext('Milvus result page') : languageProfile === 'cypher' ? gettext('Neo4j result page') : languageProfile === 'influxdb3-sql-influxql' ? gettext('InfluxDB result page') : languageProfile === 'clickhouse-sql' ? gettext('ClickHouse result page') : languageProfile === 'mongodb-query-api-json' ? gettext('MongoDB result page') : languageProfile === 'redis-resp3-command' ? gettext('Redis result page') : languageProfile === 'tikv-keyvalue-json' ? gettext('TiKV result page') : languageProfile === 'foundationdb-keyvalue-json' ? gettext('FoundationDB result page') : languageProfile === 'cql-3' ? gettext('Cassandra result page') : languageProfile === 'ignite-sql-keyvalue' ? gettext('Ignite result page') : languageProfile === 'immudb-sql' ? gettext('immudb result page') : languageProfile === 'xtdb-sql-2.1' ? gettext('XTDB result page') : languageProfile === 'dolt-sql' ? gettext('Dolt result page') : languageProfile === 'vitess-sql' ? gettext('Vitess result page') : languageProfile === 'tidb-sql' ? gettext('TiDB result page') : languageProfile === 'ycql' ? gettext('YugabyteDB YCQL result page') : languageProfile === 'ysql' ? gettext('YugabyteDB YSQL result page') : languageProfile === 'cockroachdb-sql' ? gettext('CockroachDB result page') : languageProfile === 'duckdb-sql' ? gettext('DuckDB result page') : languageProfile === 'sqlite-sql' ? gettext('SQLite result page') : languageProfile === 'postgresql-sql' ? gettext('PostgreSQL result page') : languageProfile === 'mariadb-sql' ? gettext('MariaDB result page') : gettext('MySQL result page')}>
-              {gettext('Result set:')} {(nativePage.result_set_index ?? 0) + 1}
-              {' '}{gettext('Row offset:')} {nativePage.row_offset}
-              {' '}{gettext('Rows on this page:')} {nativePage.buffered_row_count ?? (nativePage.rows || nativePage.entries || nativePage.documents || nativePage.points || nativePage.graphs || nativePage.matches || nativePage.hits || []).length}
-              {nativePage.result_set_end && ' ' + gettext('End of result set.')}
-            </Alert>}
-            {nativePage?.native?.server_limit_applies && <Alert severity="info">
-              {gettext('Native server result limits apply. Cursor exhaustion does not establish that every matching record was returned.')}
-            </Alert>}
-            {nativePage?.native?.partial && <Alert severity="warning">
-              {gettext('OpenSearch returned a partial result. Review shard failures and timeout status before using it.')}
-            </Alert>}
-            {nativePage?.native?.bulk_errors && <Alert severity="warning">
-              {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
-            </Alert>}
-            {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
-              sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
-              {fetchObservation.limit_reached ?
-                gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback. Driver prefetch may execute more procedure work than the displayed rows.') :
-                gettext('The end of this result cursor was observed. No commit or rollback was requested.')}
-              {' '}{gettext('Rows returned:')} {fetchObservation.rows_returned}
-            </Alert>}
-            {languageProfile === 'firebird-sql' && <FirebirdScript
-              key={'script:' + queryDatabaseTargetId}
-              source={source} result={scriptResult} onSourceChange={setSource}
-              disabled={busy || querySessionBlocked || !!occurrenceId}
-              onPreview={async (scriptSource) => {
-                setBusy(true);
-                try { return await post({action: 'script_preview',
-                  session_id: await ensureSession(), source: scriptSource,
-                  database_target_id: queryDatabaseTargetId}); }
-                finally { setBusy(false); }
-              }}
-              onRun={(scriptSource) => execute(scriptSource, 'native', false, true)} />}
-            {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
-              key={sessionId || 'no-session'} sessionId={sessionId}
-              disabled={busy || querySessionBlocked || !!occurrenceId}
-              onExecute={(command) => execute(command, 'native', true)} />}
+          <Tabs value={resultPresentation} onChange={(_, value) => setResultPresentation(value)}
+            variant="scrollable" aria-label="SQL result panels">
+            <Tab value="native" label={gettext('Data Output')} />
+            {(languageProfile === 'firebird-sql' || activePlanTemplates.length > 0) && <Tab value="plan" label={gettext('Explain')} />}
+            <Tab value="messages" label={gettext('Messages')} />
+            <Tab value="options" label={gettext('Engine options')} />
+          </Tabs>
+          <Box role="tabpanel" aria-label="Engine options" hidden={resultPresentation !== 'options'} sx={{p: 1}}><Box component="details" open><summary>Execution options, scripts and diagnostics</summary>        <Box sx={{display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap'}}
+            aria-label={gettext('Provider language examples')}>
+            {sourcePresets(activeLanguage).map(([label, example]) =>
+              <Button size="small" key={label} disabled={scriptLocked} onClick={() => setSource(example)}>
+                {label}</Button>)}
           </Box>
-          {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
-            {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
+
+          {['mysql-sql', 'mariadb-sql'].includes(languageProfile) && <MySQLQueryOptions engine={languageProfile === 'mariadb-sql' ? 'mariadb' : 'mysql'} transaction={transaction} />}
+          {['firebird-sql', 'postgresql-sql', 'mysql-sql', 'mariadb-sql', 'duckdb-sql', 'sqlite-sql'].includes(languageProfile) && <>
+            <FormControlLabel label={gettext('Omit this sensitive source from SQL history')} control={<Checkbox
+              checked={historySensitive} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+              onChange={(event) => setHistorySensitive(event.target.checked)} />} />
+            <FirebirdQueryHistory post={post} databaseTargetId={queryDatabaseTargetId}
+              engine={languageProfile === 'firebird-sql' ? 'firebird' : languageProfile === 'mysql-sql' ? 'mysql' : languageProfile === 'mariadb-sql' ? 'mariadb' : languageProfile === 'duckdb-sql' ? 'duckdb' : languageProfile === 'sqlite-sql' ? 'sqlite' : 'postgresql'} dialect={languageProfile === 'firebird-sql' ? clientSqlDialect : undefined}
+              onLoad={setSource} notice={historyNotice} disabled={busy || scriptLocked || Boolean(occurrenceId)} />
+          </>}
+          {languageProfile === 'firebird-sql' && <>
+            <FormControlLabel label={gettext('Allow native profiler storage and replacement of any active profile on this attachment')}
+              control={<Checkbox checked={profileConfirmed} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+                onChange={event => setProfileConfirmed(event.target.checked)} />} />
+            <Button disabled={!profileConfirmed || busy || scriptLocked || querySessionBlocked || Boolean(occurrenceId)}
+              onClick={() => {setProfileConfirmed(false); execute(source, 'native', false, false, false, true);}}>
+              {gettext('Run with native profiling')}</Button>
+            <FormControlLabel label={gettext('Collect fresh attachment query statistics')} control={<Checkbox
+              checked={statisticsEnabled} disabled={busy || scriptLocked || Boolean(occurrenceId)}
+              onChange={event => setStatisticsEnabled(event.target.checked)} />} />
+            <FirebirdProfiler report={profileReport} statistics={queryStatistics} />
+          </>}
+          {languageProfile === 'firebird-sql' && <FirebirdParameters source={source} dialect={clientSqlDialect}
+            plan={firebirdPlan} parameters={parameterSource} onChange={setParameterSource}
+            onPrepare={() => execute(source, 'native', false, false, true)}
+            disabled={busy || querySessionBlocked || scriptLocked || Boolean(occurrenceId)} />}
+          <TextField multiline minRows={2} maxRows={6} value={parameterSource}
+            disabled={busy || scriptLocked || Boolean(occurrenceId)}
+            sx={{mt: 1}} label={activeLanguage?.parameter_shape === 'array' ?
+              gettext('Query parameters (JSON array)') : activeLanguage?.parameter_shape === 'object-or-array' ?
+                gettext('Query parameters (JSON object or array)') : gettext('Query parameters (JSON)')}
+            helperText={activeLanguage?.parameter_hint ||
+            gettext('Use a JSON object of parameter names and values.')}
+            onChange={(event) => setParameterSource(event.target.value)} />
+          {languageProfile === 'firebird-sql' && <TextField select
+            size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
+            value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}
+            onChange={(event) => setClientSqlDialect(Number(event.target.value))}
+            helperText={gettext('Applies to the next user-written statement only. Does not change the database dialect, attachment default, or pending transaction. Generated administration SQL keeps its own dialect.')}>
+            <MenuItem value={3}>{gettext('3 — modern SQL')}</MenuItem>
+            <MenuItem value={1}>{gettext('1 — legacy SQL')}</MenuItem>
+            <MenuItem value={2}>{gettext('2 — transition diagnostics')}</MenuItem>
+          </TextField>}
+          {languageProfile === 'firebird-sql' && <TextField
+            type="number" size="small" sx={{mt: 1}}
+            label={gettext('Maximum fetched rows')} value={maximumRows}
+            disabled={busy || !!occurrenceId || scriptLocked}
+            inputProps={{min: 0, max: 1000000, step: 1}}
+            onChange={(event) => setMaximumRows(event.target.value)}
+            helperText={gettext('0 removes the row-count limit; ordinary results still have a memory budget. Use Run streaming for large results. Otherwise fetching stops and the cursor closes at this application limit. This does not limit modified rows or commit/roll back. A selectable procedure may not run to completion. Driver prefetch may execute more procedure work than the displayed rows.')} />}
+          {languageProfile === 'firebird-sql' && <FirebirdResultStream
+            key={`${queryDatabaseTargetId}:${scriptEditorGeneration}`} bufferRows={bufferRows} onActiveChange={setQueryStreamActive}
+            post={post} ensureSession={ensureSession} downloadUrl={endpointUrl}
+            databaseTargetId={queryDatabaseTargetId} source={source}
+            parameters={parameterSource} dialect={clientSqlDialect}
+            disabled={busy || querySessionBlocked || !!occurrenceId} />}
+          {languageProfile === 'firebird-sql' && <FirebirdScript
+            key={'script:' + queryDatabaseTargetId}
+            source={source} result={scriptResult} onSourceChange={setSource}
+            disabled={busy || querySessionBlocked || !!occurrenceId}
+            onPreview={async (scriptSource) => {
+              setBusy(true);
+              try { return await post({action: 'script_preview',
+                session_id: await ensureSession(), source: scriptSource,
+                database_target_id: queryDatabaseTargetId}); }
+              finally { setBusy(false); }
+            }}
+            onRun={(scriptSource) => execute(scriptSource, 'native', false, true)} />}
+          {languageProfile === 'firebird-sql' && <FirebirdSessionTraps
+            key={sessionId || 'no-session'} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId}
+            onExecute={(command) => execute(command, 'native', true)} />}
+          </Box></Box>
+          {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
+            {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}
           </Alert>}
-          {transaction && <ProviderTransactionObservation transaction={transaction}
-            label={gettext('Provider query transaction state')} />}
-          {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
-          {rendered && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
-          Buffered rows: {rendered.page?.page_size ?? 0} · Server-retained rows: {rendered.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+          {languageProfile === 'vitess-sql' && <Alert severity="info" sx={{mt: 1}}>
+            {gettext('Cancelling a Vitess query aborts this connection. Its outcome may be unknown; close the session and verify the result before retrying.')}
+          </Alert>}
+          {['mysql-sql', 'mariadb-sql', 'postgresql-sql', 'sqlite-sql', 'duckdb-sql', 'cockroachdb-sql', 'ysql', 'ycql', 'tidb-sql', 'vitess-sql', 'dolt-sql', 'xtdb-sql-2.1', 'immudb-sql', 'ignite-sql-keyvalue', 'cql-3', 'foundationdb-keyvalue-json', 'tikv-keyvalue-json', 'redis-resp3-command', 'mongodb-query-api-json', 'clickhouse-sql', 'influxdb3-sql-influxql', 'cypher', 'milvus-query-search-api', 'opensearch-query-dsl', 'opensearch-sql-ppl', 'opensearch-sql', 'opensearch-ppl', 'influxdb3-sql', 'influxdb3-influxql'].includes(languageProfile) && nativePage && <Alert severity="info"
+            sx={{mt: 1}} aria-label={languageProfile === 'opensearch-sql-ppl' ? gettext('OpenSearch SQL/PPL result page') : languageProfile === 'opensearch-query-dsl' ? gettext('OpenSearch result page') : languageProfile === 'milvus-query-search-api' ? gettext('Milvus result page') : languageProfile === 'cypher' ? gettext('Neo4j result page') : languageProfile === 'influxdb3-sql-influxql' ? gettext('InfluxDB result page') : languageProfile === 'clickhouse-sql' ? gettext('ClickHouse result page') : languageProfile === 'mongodb-query-api-json' ? gettext('MongoDB result page') : languageProfile === 'redis-resp3-command' ? gettext('Redis result page') : languageProfile === 'tikv-keyvalue-json' ? gettext('TiKV result page') : languageProfile === 'foundationdb-keyvalue-json' ? gettext('FoundationDB result page') : languageProfile === 'cql-3' ? gettext('Cassandra result page') : languageProfile === 'ignite-sql-keyvalue' ? gettext('Ignite result page') : languageProfile === 'immudb-sql' ? gettext('immudb result page') : languageProfile === 'xtdb-sql-2.1' ? gettext('XTDB result page') : languageProfile === 'dolt-sql' ? gettext('Dolt result page') : languageProfile === 'vitess-sql' ? gettext('Vitess result page') : languageProfile === 'tidb-sql' ? gettext('TiDB result page') : languageProfile === 'ycql' ? gettext('YugabyteDB YCQL result page') : languageProfile === 'ysql' ? gettext('YugabyteDB YSQL result page') : languageProfile === 'cockroachdb-sql' ? gettext('CockroachDB result page') : languageProfile === 'duckdb-sql' ? gettext('DuckDB result page') : languageProfile === 'sqlite-sql' ? gettext('SQLite result page') : languageProfile === 'postgresql-sql' ? gettext('PostgreSQL result page') : languageProfile === 'mariadb-sql' ? gettext('MariaDB result page') : gettext('MySQL result page')}>
+            {gettext('Result set:')} {(nativePage.result_set_index ?? 0) + 1}
+            {' '}{gettext('Row offset:')} {nativePage.row_offset}
+            {' '}{gettext('Rows on this page:')} {nativePage.buffered_row_count ?? (nativePage.rows || nativePage.entries || nativePage.documents || nativePage.points || nativePage.graphs || nativePage.matches || nativePage.hits || []).length}
+            {nativePage.result_set_end && ' ' + gettext('End of result set.')}
+          </Alert>}
+          {nativePage?.native?.server_limit_applies && <Alert severity="info">
+            {gettext('Native server result limits apply. Cursor exhaustion does not establish that every matching record was returned.')}
+          </Alert>}
+          {nativePage?.native?.partial && <Alert severity="warning">
+            {gettext('OpenSearch returned a partial result. Review shard failures and timeout status before using it.')}
+          </Alert>}
+          {nativePage?.native?.bulk_errors && <Alert severity="warning">
+            {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
+          </Alert>}
+          {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
+            sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
+            {fetchObservation.limit_reached ?
+              gettext('Fetch limit reached. Further rows may exist; the total was not counted. The cursor has been closed, without commit or rollback. Driver prefetch may execute more procedure work than the displayed rows.') :
+              gettext('The end of this result cursor was observed. No commit or rollback was requested.')}
+            {' '}{gettext('Rows returned:')} {fetchObservation.rows_returned}
+          </Alert>}
+          <Box role="tabpanel" aria-label="Messages" hidden={resultPresentation !== 'messages'}>
+            {['postgresql-sql', 'mysql-sql', 'mariadb-sql'].includes(languageProfile) && nativePage?.error && <Box component="pre"
+              aria-label={languageProfile === 'mysql-sql' ? 'MySQL diagnostic' : languageProfile === 'mariadb-sql' ? 'MariaDB diagnostic' : 'PostgreSQL diagnostic'} sx={{whiteSpace: 'pre-wrap'}}>
+              {['severity_nonlocalized', 'sqlstate', 'errno', 'message_primary', 'message_detail',
+                'message_hint', 'statement_position'].filter(key => nativePage.error[key])
+                .map(key => `${key}: ${nativePage.error[key]}`).join('\n')}
+            </Box>}
+            {occurrenceId && <Alert severity="info" sx={{mt: 1}} role="status">
+              {gettext('Waiting for provider query completion. A cancellation request does not confirm commit or rollback.')}
+            </Alert>}
+            {transaction && <ProviderTransactionObservation transaction={transaction}
+              label={gettext('Provider query transaction state')} />}
+          </Box>
+          <Box role="tabpanel" aria-label="Explain" hidden={resultPresentation !== 'plan'}>
+            {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
+            {rendered && requestedPlan && activePlanTemplates.length > 0 && <QueryPlanView rendered={rendered} />}
+            {!requestedPlan && languageProfile !== 'firebird-sql' && <Alert severity="info">
+              {gettext('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')}
+            </Alert>}
+          </Box>
+          {(rendered || nativePage) && <Box role="status" aria-label="Statement metrics" sx={{py: 0.5}}>
+          Rows on displayed page: {rendered?.page?.page_size ?? 0} · Server-retained rows: {rendered?.page?.sampled_count ?? 'Unavailable'} · Preparation: {nativePage?.statement_metrics?.prepare_ms ?? 'Unavailable'} ms · Execution: {nativePage?.statement_metrics?.execute_ms ?? 'Unavailable'} ms
+            {languageProfile === 'duckdb-sql' && nativePage?.statement_metrics && <Box>
+              Buffered rows: {nativePage.statement_metrics.rows_buffered ?? 'Unavailable'} · Native dispatch and reader setup: {nativePage.statement_metrics.dispatch_ms ?? 'Unavailable'} ms · Local fetch and encoding: {nativePage.statement_metrics.fetch_ms ?? 'Unavailable'} ms.
+              {' '}{nativePage.statement_metrics.measurement_scope}
+            </Box>}
+            {languageProfile === 'sqlite-sql' && nativePage?.statement_metrics && <Box>
+              Buffered rows: {nativePage.statement_metrics.rows_buffered ?? 'Unavailable'} · Native dispatch: {nativePage.statement_metrics.dispatch_ms ?? 'Unavailable'} ms · Local fetch and encoding: {nativePage.statement_metrics.fetch_ms ?? 'Unavailable'} ms.
+              {' '}{nativePage.statement_metrics.measurement_scope}
+            </Box>}
+            {['postgresql-sql', 'mysql-sql', 'mariadb-sql'].includes(languageProfile) && <Box>
+              {['mysql-sql', 'mariadb-sql'].includes(languageProfile) ? gettext('Client dispatch (first response; excludes result fetching):') : gettext('Client dispatch (includes transfer and native buffering):')} {nativePage?.statement_metrics?.dispatch_ms ?? gettext('Unavailable')} ms
+            </Box>}
             <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>Plan used: {nativePage?.statement_metrics?.plan || 'Unavailable'}</Box>
           </Box>}
-          {rendered && <ResultControls rendered={rendered} history={resultHistory}
-            post={post} onRendered={acceptRendered} setError={setError}
-            bufferRows={bufferRows} setBusy={setBusy}
-            onProviderContinuation={() => poll(occurrenceId)} />}
-          {rendered && <Box sx={{display: 'flex', gap: 1, mt: 1}}>
-            <Button variant={resultPresentation === 'native' ? 'contained' : 'text'}
-              onClick={() => setResultPresentation('native')}>
-              {gettext('Native result view')}</Button>
-            {activePlanTemplates.length > 0 &&
-            <Button variant={resultPresentation === 'plan' ? 'contained' : 'text'}
-              onClick={() => setResultPresentation('plan')}>
-              {gettext('Explain / query plan view')}</Button>}
-          </Box>}
-          {rendered && resultPresentation === 'native' &&
+          <Box role="tabpanel" aria-label="Data Output" hidden={resultPresentation !== 'native'}>
+            {rendered && <ResultControls rendered={rendered} history={resultHistory}
+              post={post} onRendered={acceptRendered} setError={setError}
+              bufferRows={bufferRows} setBusy={setBusy}
+              onProviderContinuation={() => poll(occurrenceId)} />}
+            {rendered &&
           <ServerPagedResultContext.Provider value={true}>
             <ResultView rendered={rendered} />
           </ServerPagedResultContext.Provider>}
-          {rendered && resultPresentation === 'plan' &&
-          <QueryPlanView rendered={rendered} />}
+          </Box>
         </Box>
-      </Box>}
+      </QueryToolFrame>}
       {workspace && tab === 'object' &&
         workspace.visual_admin?.objects?.find((item) =>
           item.resource_kind === selectedResource?.resource_kind
@@ -8069,6 +8224,7 @@ export default function ProviderWorkspaceContent({
           onOpenDefinitionOwner={openDefinitionOwner}
           initialOperationId={selectedOperationId}
           initialResourceKind={selectedResourceKind}
+          initialSchema={initialContext.schema_name}
           initialSection={inspectorTarget.section} selectedMember={inspectorTarget.member}
           objectEditor={tab === 'object'}
           focused={Boolean(initialContext.operation_id &&
@@ -8086,8 +8242,31 @@ export default function ProviderWorkspaceContent({
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
           post={post} setError={setError} />}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'postgresql-native' &&
+        (initialContext.server_catalog || !queryDatabaseTargetId ? <PostgresqlServerCatalog post={post} /> :
+          <PostgresqlCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}
+      {workspace && tab === 'mariadb-test-data' && workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
+        <MySQLTestData engine="mariadb" post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'mysql-test-data' && workspace.endpoint?.profile_id === 'mysql-native' && queryDatabaseTargetId &&
         <MySQLTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'duckdb-test-data' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <DuckDBTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'sqlite-test-data' && workspace.endpoint?.profile_id === 'sqlite-native' && queryDatabaseTargetId &&
+        <DuckDBTestData engine="sqlite" key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'duckdb-copy' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <DuckDBCopy key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} resourceId={initialContext.resource_id} />}
+      {workspace && tab === 'duckdb-attachment' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
+        (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
+          <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'sqlite-native' &&
+        (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog engine="sqlite" post={post} /> :
+          <SQLiteCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            resourceId={initialContext.resource_id} />)}
+      {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' &&
+        (!initialContext.server_catalog && queryDatabaseTargetId ? <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
+          <MySQLServerCatalog engine="mariadb" post={post} />)}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
           <MySQLServerCatalog post={post} />)}
@@ -8158,9 +8337,10 @@ export default function ProviderWorkspaceContent({
       ) &&
         <StructuredDataGrid catalog={workspace.visual_admin}
           sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
-          onLoadSql={({source: generatedSource, parameters}) => {
+          clientSqlDialect={clientSqlDialect}
+          onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
             if (busy || occurrenceId || scriptLocked) return;
-            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(3); setTab('studio');
+            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(generatedDialect); setTab('studio');
           }}
           resources={resourcePage?.items || []}
           post={post} setError={setError}
@@ -8185,7 +8365,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'mysql-test-data',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,

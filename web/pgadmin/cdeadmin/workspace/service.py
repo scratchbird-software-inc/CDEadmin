@@ -593,6 +593,126 @@ class ProviderWorkspaceService:
             provider_route=endpoint['route'],
         ).to_dict()
 
+    def mariadb_server_catalog(self, server, request):
+        from ..providers.mysql_family.provider import MariaDBPilotProvider
+        from .firebird_catalog_export import build_export, MAX_BYTES
+        if not isinstance(request, dict) or set(request) - {'targets', 'include_system'}:
+            raise ProviderWorkspaceError('Invalid MariaDB server catalog request')
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native':
+            raise ProviderWorkspaceError('Select an owned native MariaDB server')
+        targets, include_system = request.get('targets', []), request.get('include_system', True)
+        if (not isinstance(targets, list) or len(targets) > 32 or any(not isinstance(value, str) or not value for value in targets) or
+                len(targets) != len(set(targets)) or type(include_system) is not bool):
+            raise ProviderWorkspaceError('Select at most 32 distinct registered database targets')
+        registered = self.endpoint_service.database_catalog(server)['targets']
+        if not set(targets) <= {item['target_id'] for item in registered}:
+            raise ProviderWorkspaceError('Database expansion requires owned registered targets')
+        context, endpoint, _root = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mariadb-native' or not isinstance(provider, MariaDBPilotProvider):
+            raise ProviderWorkspaceError('Select a native MariaDB endpoint')
+        try:
+            captured = provider.capture_server_catalog(endpoint['route'])
+            result = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + captured['server_uid'], generation=captured['generation'],
+                include_system=include_system, refreshed=True, engine='mariadb')
+            result.update(server_uid=captured['server_uid'], registered_targets=[{key: item.get(key)
+                for key in ('target_id', 'database', 'display_name')} for item in registered], databases=[])
+            for target in targets:
+                database = self.mariadb_catalog(server, {'database_target_id': target, 'include_system': include_system})
+                if database['server_uid'] != captured['server_uid']:
+                    raise ValueError('Database capture reported another native server UID')
+                result['databases'].append({'target_id': target, 'capture': database})
+                if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                    raise ValueError('Server/database DDN collection exceeds 8 MiB; select a smaller batch')
+            if len(json.dumps(result, ensure_ascii=False).encode('utf8')) > MAX_BYTES:
+                raise ValueError('Server DDN collection exceeds 8 MiB')
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def _mariadb_catalog_context(self, server, target):
+        from ..providers.mysql_family.provider import MariaDBPilotProvider
+        self._principal_id(server)
+        if (getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native' or
+                not isinstance(target, str) or not target):
+            raise ProviderWorkspaceError('Select an owned native MariaDB database target')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        matches = [item for item in self.endpoint_service.database_catalog(server)['targets']
+                   if item['target_id'] == target]
+        if (context.profile_id != 'mariadb-native' or len(matches) != 1 or not matches[0].get('database') or
+                matches[0]['database'] != endpoint['route'].get('database')):
+            raise ProviderWorkspaceError('Registered MariaDB database identity changed')
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, MariaDBPilotProvider):
+            raise ProviderWorkspaceError('Select a native MariaDB endpoint')
+        return context, endpoint, provider
+
+    def mariadb_data_capture(self, server, request):
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit', 'expected_server_uid'}:
+            raise ProviderWorkspaceError('Invalid MariaDB relation data request')
+        context, endpoint, provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        try:
+            return provider.capture_data(endpoint['route'], request.get('resource_id'),
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'], expected_server_uid=request.get('expected_server_uid'),
+                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_native_metadata(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .mariadb_sql_export import build_metadata
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'source'}:
+            raise ProviderWorkspaceError('Invalid native MariaDB metadata export request')
+        try:
+            target = request['database_target_id']
+            context, endpoint, provider = self._mariadb_catalog_context(server, target)
+            document = read_catalog(request['source'], engine='mariadb')
+            if (document['provenance']['endpoint_id'] != context.endpoint_id or
+                    document['provenance']['database_target_id'] != target):
+                raise ValueError('Document belongs to another endpoint or database')
+            metadata = build_metadata(document)
+            if metadata['database'] != endpoint['route'].get('database'):
+                raise ValueError('Native metadata names another registered database')
+            if metadata.get('native_encoding_required'):
+                metadata = provider.encode_native_metadata(endpoint['route'], metadata)
+            return metadata
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_catalog(self, server, request, *, compare=False):
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog, compare_catalogs
+        if not isinstance(request, dict) or set(request) - {
+                'database_target_id', 'include_system', 'resource_id', 'source'}:
+            raise ProviderWorkspaceError('Invalid MariaDB catalog request')
+        try:
+            target = request.get('database_target_id')
+            context, endpoint, provider = self._mariadb_catalog_context(server, target)
+            include_system = request.get('include_system', False)
+            if type(include_system) is not bool:
+                raise ValueError('Invalid system-object selection')
+            resource_id = request.get('resource_id')
+            if resource_id is not None and (not isinstance(resource_id, str) or not resource_id):
+                raise ValueError('Invalid native object selection')
+            document = read_catalog(request.get('source'), engine='mariadb') if compare else None
+            if document and (document['provenance']['endpoint_id'] != context.endpoint_id or
+                             document['provenance']['database_target_id'] != target):
+                raise ValueError('Document belongs to another endpoint or database')
+            captured = provider.capture_catalog(endpoint['route'], include_system=include_system)
+            result = build_export(captured['resources'], endpoint_id=context.endpoint_id,
+                target_id=target, generation=captured['generation'], resource_id=resource_id,
+                include_system=include_system, refreshed=True, engine='mariadb', native_model=compare)
+            if compare:
+                return compare_catalogs(document, result)
+            result['server_uid'] = captured['resources'][0]['native']['catalog_row']['server_uid']
+            result['objects'] = [{'resource_id': item['resource_id'], 'name': item['display_name'],
+                'kind': item['resource_kind'], 'path': item['display_path']} for item in captured['resources']]
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def _mysql_catalog_context(self, server, target):
         from ..providers.mysql_family.provider import MySQLPilotProvider
         self._principal_id(server)
@@ -674,6 +794,189 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if (not isinstance(request, dict) or not {'database_target_id', 'original', 'snapshot'} <= set(request) or
+                set(request) - {'database_target_id', 'original', 'snapshot', 'allow_new_columns', 'allow_column_renames', 'allow_foreign_keys'} or
+                type(request.get('allow_new_columns', False)) is not bool or
+                type(request.get('allow_column_renames', False)) is not bool or
+                type(request.get('allow_foreign_keys', False)) is not bool):
+            raise ProviderWorkspaceError('Original and edited MySQL relational designs and boolean column admission are required')
+        catalog = self.mysql_catalog(server, {'database_target_id': request['database_target_id']})
+        try:
+            return handoff(catalog['snapshot'], request['original'], request['snapshot'], engine='mysql',
+                           allow_new_columns=request.get('allow_new_columns', False),
+                           allow_column_renames=request.get('allow_column_renames', False),
+                           allow_foreign_keys=request.get('allow_foreign_keys', False))
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mysql_schema_apply import MySQLSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MySQL application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mysql_catalog_context(server, target)
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        applications = MySQLSchemaApplications(str(store.path) + '.mysql-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'mysql_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                    raise ValueError('Invalid MySQL schema review request')
+                preview = self.mysql_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, validate=True)
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mysql'),
+                    read_catalog(request['source'], engine='mysql'), owner, binding, target)
+            if action == 'mysql_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid MySQL schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'mysql_schema_apply':
+                raise ValueError('Unknown MySQL schema application action')
+            def execute(record):
+                result = provider.apply_schema_review(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        result['explorer_invalidated'] = True
+                    except Exception as error:
+                        result.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return result
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_schema_plan(self, server, request, *, validate=False):
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog
+        from .mariadb_schema_plan import plan
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'source'}:
+            raise ProviderWorkspaceError('Native MariaDB preview requires baseline and desired DDN')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        try:
+            baseline = read_catalog(request['baseline'], engine='mariadb')
+            desired = read_catalog(request['source'], engine='mariadb')
+            for document in (baseline, desired):
+                if (document['provenance']['endpoint_id'] != str(context.endpoint_id) or
+                        document['provenance']['database_target_id'] != target):
+                    raise ValueError('Document belongs to another endpoint or registered database')
+            captured = provider.capture_catalog(endpoint['route'])
+            live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mariadb', native_model=True)
+            result = plan(baseline, desired, live)
+            if validate:
+                result.update(provider.validate_schema_plan(endpoint['route'], result))
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_schema_apply import MariaDBSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MariaDB application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        applications = MariaDBSchemaApplications(str(store.path) + '.mariadb-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'mariadb_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id'}:
+                    raise ValueError('Invalid MariaDB schema review request')
+                preview = self.mariadb_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, validate=True)
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mariadb'),
+                    read_catalog(request['source'], engine='mariadb'), owner, binding, target)
+            if action == 'mariadb_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid MariaDB schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'mariadb_schema_apply':
+                raise ValueError('Unknown MariaDB schema application action')
+            def execute(record):
+                result = provider.apply_schema_review(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        result['explorer_invalidated'] = True
+                    except Exception as error:
+                        result.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return result
+            if request.get('maintenance_window_confirmed') is not True:
+                raise ValueError('Confirm an exclusive DDL maintenance window before applying')
+            return applications.apply({key: value for key, value in request.items()
+                if key not in {'database_target_id', 'maintenance_window_confirmed'}}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if (not isinstance(request, dict) or not {'database_target_id', 'original', 'snapshot'} <= set(request) or
+                set(request) - {'database_target_id', 'original', 'snapshot', 'allow_new_columns', 'allow_column_renames', 'allow_foreign_keys', 'allow_temporal_history'} or
+                type(request.get('allow_new_columns', False)) is not bool or
+                type(request.get('allow_column_renames', False)) is not bool or
+                type(request.get('allow_foreign_keys', False)) is not bool or
+                type(request.get('allow_temporal_history', False)) is not bool):
+            raise ProviderWorkspaceError('Original and edited MariaDB relational designs and boolean column admission are required')
+        catalog = self.mariadb_catalog(server, {'database_target_id': request['database_target_id']})
+        try:
+            return handoff(catalog['snapshot'], request['original'], request['snapshot'], engine='mariadb',
+                           allow_new_columns=request.get('allow_new_columns', False),
+                           allow_column_renames=request.get('allow_column_renames', False),
+                           allow_foreign_keys=request.get('allow_foreign_keys', False),
+                allow_temporal_history=request.get('allow_temporal_history', False))
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_test_data(self, server, request):
+        from .firebird_catalog_export import build_export
+        from .mariadb_test_data import generate, template
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+            raise ProviderWorkspaceError('Invalid MariaDB test-data request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        try:
+            captured = provider.capture_catalog(endpoint['route'])
+            model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=captured['generation'], refreshed=True, engine='mariadb', native_model=True)
+            return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mysql_data_capture(self, server, request):
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+            raise ProviderWorkspaceError('Invalid MariaDB relation data request')
+        context, endpoint, provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        try:
+            return provider.capture_data(endpoint['route'], request.get('resource_id'),
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'],
+                mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_test_data(self, server, request):
         from .firebird_catalog_export import build_export
         from .mysql_test_data import generate, template
@@ -699,6 +1002,25 @@ class ProviderWorkspaceService:
                 mode=request.get('mode', 'sample'), row_limit=request.get('row_limit', 100))
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MariaDB design request')
+        context, _endpoint, _provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='mariadb').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id),
+                'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
 
     def mysql_design_asset(self, server, action, request):
         from .assets import ProjectAssetError
@@ -726,12 +1048,15 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('Invalid native MySQL metadata export request')
         try:
             target = request['database_target_id']
-            context, _endpoint, _provider = self._mysql_catalog_context(server, target)
+            context, endpoint, provider = self._mysql_catalog_context(server, target)
             document = read_catalog(request['source'], engine='mysql')
             if (document['provenance']['endpoint_id'] != context.endpoint_id or
                     document['provenance']['database_target_id'] != target):
                 raise ValueError('Document belongs to another endpoint or database')
-            return build_metadata(document)
+            metadata = build_metadata(document)
+            if metadata.get('native_encoding_required'):
+                metadata = provider.encode_native_metadata(endpoint['route'], metadata)
+            return metadata
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
@@ -765,6 +1090,466 @@ class ProviderWorkspaceService:
                 'kind': item['resource_kind'], 'path': item['display_path']} for item in captured['resources']]
             return result
         except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_catalog(self, server, request, *, compare=False, plan=False):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from .firebird_catalog_export import build_export
+        from .firebird_catalog_import import read_catalog, compare_catalogs
+        if not isinstance(request, dict) or set(request) - {
+                'database_target_id', 'include_system', 'resource_id', 'source', 'baseline'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL catalog request')
+        try:
+            target = request.get('database_target_id')
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            include_system = request.get('include_system', False)
+            if type(include_system) is not bool:
+                raise ValueError('Invalid system-object selection')
+            resource_id = request.get('resource_id')
+            if resource_id is not None and (not isinstance(resource_id, str) or not resource_id):
+                raise ValueError('Invalid native object selection')
+            document = read_catalog(request.get('source'), engine='postgresql') if compare or plan else None
+            baseline = read_catalog(request.get('baseline'), engine='postgresql') if plan else None
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            for imported in (document, baseline):
+                if imported and (imported['provenance']['endpoint_id'] != context.endpoint_id or
+                                 imported['provenance']['database_target_id'] != target):
+                    raise ValueError('Document belongs to another endpoint or database')
+            captured = provider.capture_catalog(endpoint['route'], include_system=include_system)
+            result = build_export(captured['resources'], endpoint_id=context.endpoint_id,
+                target_id=target, generation=captured['generation'], resource_id=None if plan else resource_id,
+                include_system=include_system, refreshed=True, engine='postgresql', native_model=compare or plan)
+            if plan:
+                from .postgresql_schema_plan import build_plan
+                return build_plan(baseline, document, result)
+            if compare:
+                return compare_catalogs(document, result)
+            result['objects'] = [{'resource_id': item['resource_id'], 'name': item['display_name'],
+                                  'kind': item['resource_kind'], 'path': item['display_path']}
+                                 for item in captured['resources']]
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_test_data(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from .firebird_catalog_export import build_export
+        from .postgresql_test_data import generate, template
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'recipe'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL test-data request')
+        try:
+            target = request.get('database_target_id')
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            captured = provider.capture_catalog(endpoint['route'])
+            model = build_export(captured['resources'], endpoint_id=context.endpoint_id,
+                target_id=target, generation=captured['generation'], engine='postgresql', native_model=True)
+            return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except (ValueError, TypeError, KeyError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_data_capture(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.connection_target import database_oid
+        from ..providers.postgresql.data_capture import capture
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'resource_id', 'mode', 'row_limit'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL data capture request')
+        try:
+            target = request['database_target_id']
+            if database_oid(target) is None:
+                raise ValueError('Select an explicit PostgreSQL database')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, PostgreSQLProvider):
+                raise ValueError('Select a native PostgreSQL endpoint')
+            return capture(provider, endpoint['route'], context.endpoint_id, request['resource_id'],
+                           mode=request['mode'], row_limit=request['row_limit'])
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_server_catalog(self, server, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.server_catalog import inventory, bundle
+        if not isinstance(request, dict) or set(request) - {'database_ids', 'include_system'}:
+            raise ProviderWorkspaceError('Invalid PostgreSQL server catalog request')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=None)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, PostgreSQLProvider):
+            raise ProviderWorkspaceError('Select a native PostgreSQL server')
+        try:
+            if 'database_ids' not in request:
+                return inventory(provider, endpoint['route'])
+            return bundle(provider, endpoint['route'], context.endpoint_id, request['database_ids'],
+                          include_system=request.get('include_system', False))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        from .postgresql_schema_apply import PostgreSQLSchemaApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.postgresql.schema_application import apply_review
+        from ..providers.postgresql.connection_target import database_oid
+        if not isinstance(request, dict) or database_oid(request.get('database_target_id')) is None:
+            raise ProviderWorkspaceError('Select an explicit PostgreSQL database target')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, PostgreSQLProvider):
+            raise ProviderWorkspaceError('Native schema application requires PostgreSQL')
+        provider.permissions.require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable operation storage')
+        applications = PostgreSQLSchemaApplications(str(store.path) + '.postgresql-schema-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'postgresql_schema_review':
+                if set(request) != {'baseline', 'source', 'execution_sha256', 'database_target_id', 'include_system'}:
+                    raise ValueError('Invalid PostgreSQL schema review request')
+                plan = self.postgresql_catalog(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'}, plan=True)
+                if plan['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('The displayed plan changed; preview native changes again')
+                return applications.review(plan, read_catalog(request['baseline'], engine='postgresql'),
+                    read_catalog(request['source'], engine='postgresql'), owner, binding, target)
+            if action == 'postgresql_schema_receipt':
+                if set(request) != {'review_id', 'database_target_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid PostgreSQL schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'postgresql_schema_apply':
+                raise ValueError('Unknown PostgreSQL schema application action')
+            def execute(record):
+                result = apply_review(provider, endpoint['route'], record)
+                try:
+                    self.resource_service.invalidate(context)
+                    result['explorer_invalidated'] = True
+                except Exception as error:
+                    result['explorer_invalidated'] = False
+                    result['refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (ValueError, RecursionError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_relational_review(self, server, request):
+        from .firebird_relational_review import handoff
+        if not isinstance(request, dict) or not {'original', 'snapshot'} <= request.keys():
+            raise ProviderWorkspaceError('Original and edited relational designs are required')
+        options = dict(request)
+        original, snapshot = options.pop('original'), options.pop('snapshot')
+        catalog = self.postgresql_catalog(server, options)
+        try:
+            return handoff(catalog['snapshot'], original, snapshot, engine='postgresql')
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_catalog(self, server, request, *, compare=False):
+        from .duckdb_catalog_service import catalog
+        try:
+            return catalog(self, server, request, compare=compare)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_catalog(self, server, request, *, compare=False):
+        from .sqlite_catalog_service import catalog
+        try:
+            return catalog(self, server, request, compare=compare)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_data_capture(self, server, request):
+        from .sqlite_catalog_service import data
+        try:
+            return data(self, server, request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_data_script(self, server, request):
+        from .sqlite_catalog_service import data_script
+        try:
+            return data_script(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_test_data(self, server, request):
+        from .sqlite_catalog_service import test_data
+        try:
+            return test_data(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_plan(self, server, request):
+        from .sqlite_catalog_service import schema_plan
+        try:
+            return schema_plan(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def sqlite_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        import os
+        import stat
+        from .sqlite_schema_apply import SQLiteSchemaApplications, apply_review
+        from .firebird_catalog_import import read_catalog
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        from ..providers.sqlite.provider import SQLiteProvider
+        from ..providers.embedded_route import contained_database
+        if (not isinstance(request, dict) or
+                not isinstance(request.get('database_target_id'), str) or
+                not request['database_target_id']):
+            raise ProviderWorkspaceError('Select an exact SQLite registered file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, SQLiteProvider) or context.profile_id != 'sqlite-native':
+            raise ProviderWorkspaceError('Native schema application requires SQLite')
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        try:
+            path = contained_database(endpoint['route'])
+            if path == ':memory:':
+                raise ValueError('Native application requires an existing writable SQLite file')
+            info = os.stat(path)
+            if not stat.S_ISREG(info.st_mode) or endpoint['route'].get('read_only') is True:
+                raise ValueError('Native application requires an existing writable SQLite file')
+            applications = SQLiteSchemaApplications(
+                str(store.path) + '.sqlite-schema-applications.json')
+            owner = self._principal_id(server)
+            binding = digest({'context': asdict(context), 'route': endpoint['route'],
+                'target': target, 'file_identity': [info.st_dev, info.st_ino]})
+            if action == 'sqlite_schema_review':
+                if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames'}):
+                    raise ValueError('Invalid SQLite schema review request')
+                preview = self.sqlite_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed SQLite plan changed; preview again')
+                return applications.review(preview,
+                    read_catalog(request['baseline'], engine='sqlite'),
+                    read_catalog(request['desired'], engine='sqlite'),
+                    owner, binding, target,
+                    file_identity=[info.st_dev, info.st_ino])
+            if action == 'sqlite_schema_receipt':
+                if set(request) != {'database_target_id', 'review_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid SQLite schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'sqlite_schema_apply' or set(request) != {
+                    'database_target_id', 'review_id', 'review_digest', 'confirmed'}:
+                raise ValueError('Invalid SQLite schema application request')
+            def execute(record):
+                outcome = apply_review(provider, endpoint['route'], record)
+                if outcome['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        outcome['explorer_invalidated'] = True
+                    except Exception as error:
+                        outcome.update(explorer_invalidated=False,
+                                       refresh_error_type=type(error).__name__)
+                return outcome
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_data_capture(self, server, request):
+        from .duckdb_catalog_service import data
+        try:
+            return data(self, server, request)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_test_data(self, server, request):
+        from .duckdb_catalog_service import test_data
+        try:
+            return test_data(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_copy_plan(self, server, request):
+        from .duckdb_catalog_service import copy_plan
+        try:
+            return copy_plan(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_attachment_plan(self, server, request):
+        from .duckdb_attachment import plan
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+            raise ProviderWorkspaceError('Select a native DuckDB endpoint')
+        provider._require('execute', 'resource')
+        try:
+            return plan(endpoint['route'], {key: value for key, value in request.items()
+                if key != 'database_target_id'})
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=request['database_target_id'])
+        if context.profile_id != 'duckdb-native' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise ProviderWorkspaceError('Select a native DuckDB endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='duckdb').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id),
+                'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Design storage changed concurrently; reload before saving') from None
+
+    def sqlite_design_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .firebird_design_assets import NativeDesignAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if (not isinstance(request, dict) or
+                not isinstance(request.get('database_target_id'), str) or
+                not request['database_target_id']):
+            raise ProviderWorkspaceError('Select a registered SQLite database file')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=request['database_target_id'])
+        if (context.profile_id != 'sqlite-native' or
+                context.provider_id != 'org.cdeadmin.sqlite'):
+            raise ProviderWorkspaceError('Select a native SQLite endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            return NativeDesignAssets(assets, engine='sqlite').apply(
+                self._principal_id(server), {
+                    'endpoint_id': str(context.endpoint_id),
+                    'database_target_id': request['database_target_id']},
+                action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError(
+                'Design storage changed concurrently; reload before saving') from None
+
+    def duckdb_schema_plan(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_catalog_export import build_export
+        from .duckdb_schema_plan import plan
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'desired'}:
+            raise ProviderWorkspaceError('DuckDB schema preview requires exact baseline and desired DDN')
+        target = request['database_target_id']
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select a registered DuckDB database file')
+        try:
+            baseline = read_catalog(request['baseline'], engine='duckdb')
+            desired = read_catalog(request['desired'], engine='duckdb')
+            context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+            provider = self.endpoint_service.provider_registry.resolve(context).instance
+            if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+                raise ValueError('Select a native DuckDB endpoint')
+            if any(model['provenance']['endpoint_id'] != str(context.endpoint_id) or
+                   model['provenance']['database_target_id'] != target for model in (baseline, desired)):
+                raise ValueError('Design belongs to another endpoint or registered DuckDB file')
+            captured = provider.capture_catalog(endpoint['route'], include_system=False)
+            live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
+                target_id=target, generation=captured['generation'], include_system=False,
+                refreshed=True, engine='duckdb', native_model=True)
+            return plan(baseline, desired, live)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def duckdb_schema_application(self, server, action, request):
+        from dataclasses import asdict
+        import os
+        import stat
+        from .duckdb_schema_apply import DuckDBSchemaApplications
+        from .firebird_catalog_import import read_catalog
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.duckdb.schema_application import apply_review
+        from ..providers.embedded_route import contained_database
+        if not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select an exact DuckDB registered file')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+            raise ProviderWorkspaceError('Native application requires DuckDB')
+        provider._require('administer', 'resource')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native application requires durable receipt storage')
+        try:
+            path = contained_database(endpoint['route'])
+            if path == ':memory:':
+                raise ValueError('Native application requires an existing writable registered file')
+            info = os.stat(path)
+            if not stat.S_ISREG(info.st_mode) or endpoint['route'].get('read_only') is True:
+                raise ValueError('Native application requires an existing writable registered file')
+            applications = DuckDBSchemaApplications(str(store.path) + '.duckdb-schema-applications.json')
+            owner = self._principal_id(server)
+            binding = digest({'context': asdict(context), 'route': endpoint['route'],
+                'target': target, 'file_identity': [info.st_dev, info.st_ino]})
+            if action == 'duckdb_schema_review':
+                if set(request) != {'database_target_id', 'baseline', 'desired', 'execution_sha256'}:
+                    raise ValueError('Invalid native schema review request')
+                preview = self.duckdb_schema_plan(server, {key: value for key, value in request.items()
+                    if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed plan changed; preview native changes again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='duckdb'),
+                    read_catalog(request['desired'], engine='duckdb'), owner, binding, target,
+                    file_identity=[info.st_dev, info.st_ino])
+            if action == 'duckdb_schema_receipt':
+                if set(request) != {'database_target_id', 'review_id'} or not isinstance(request['review_id'], str):
+                    raise ValueError('Invalid native schema receipt request')
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'duckdb_schema_apply' or set(request) != {
+                    'database_target_id', 'review_id', 'review_digest', 'confirmed'}:
+                raise ValueError('Invalid native schema application request')
+            def execute(record):
+                outcome = apply_review(provider, endpoint['route'], record)
+                if outcome['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                        outcome['explorer_invalidated'] = True
+                    except Exception as error:
+                        outcome.update(explorer_invalidated=False, refresh_error_type=type(error).__name__)
+                return outcome
+            return applications.apply({key: value for key, value in request.items()
+                if key != 'database_target_id'}, owner, binding, execute)
+        except (OSError, ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
     def export_firebird_catalog(self, server, request, *, _native_model=False):
@@ -1298,6 +2083,9 @@ class ProviderWorkspaceService:
         """Keep native execution and local registration outcomes distinct."""
         try:
             result['database_targets'] = callback()
+            result.setdefault('workspace_follow_up', []).append({
+                'action': action, 'state': 'complete',
+            })
         except Exception as error:
             # The native operation already returned. Do not hide that receipt,
             # suggest replay, or compensate by dropping/recreating a database.
@@ -1519,10 +2307,51 @@ class ProviderWorkspaceService:
 
     def _history_context(self, server, target, dialect):
         from .query_history import HistoryScope
-        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) not in {
-                'firebird-native', 'firebird-embedded'}:
-            raise ProviderWorkspaceError('This SQL history workflow requires Firebird')
+        profile = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
+        if profile not in {None, 'postgresql-native', 'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'}:
+            raise ProviderWorkspaceError('SQL history is not admitted for this engine')
         context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        if profile in {None, 'postgresql-native'}:
+            from ..providers.postgresql.connection_target import database_oid
+            try:
+                oid = database_oid(target)
+            except ValueError:
+                raise ProviderWorkspaceError('Select an explicit native PostgreSQL database for history') from None
+            if context.profile_id != 'postgresql-native' or oid is None or dialect is not None:
+                raise ProviderWorkspaceError('PostgreSQL history requires its native database target and language')
+            return HistoryScope(self._principal_id(server), server.id, target, 'postgresql-sql', engine='postgresql')
+        if profile == 'duckdb-native':
+            if context.profile_id != profile or dialect is not None:
+                raise ProviderWorkspaceError('DuckDB history requires its native database target and language')
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item for item in targets if item['target_id'] == target]
+            if (not isinstance(target, str) or not target or len(matches) != 1 or
+                    not matches[0].get('database') or
+                    matches[0]['database'] != endpoint['route'].get('database')):
+                raise ProviderWorkspaceError('Select an explicit registered DuckDB file for history')
+            return HistoryScope(self._principal_id(server), server.id, target, 'duckdb-sql', engine='duckdb')
+        if profile == 'sqlite-native':
+            if context.profile_id != profile or dialect is not None:
+                raise ProviderWorkspaceError('SQLite history requires its native file target and language')
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item for item in targets if item['target_id'] == target]
+            if (not isinstance(target, str) or not target or len(matches) != 1 or
+                    not matches[0].get('database') or
+                    matches[0]['database'] != endpoint['route'].get('database')):
+                raise ProviderWorkspaceError('Select an explicit registered SQLite file for history')
+            return HistoryScope(self._principal_id(server), server.id, target, 'sqlite-sql', engine='sqlite')
+        if profile in {'mysql-native', 'mariadb-native'}:
+            engine = 'mariadb' if profile == 'mariadb-native' else 'mysql'
+            label = 'MariaDB' if engine == 'mariadb' else 'MySQL'
+            if context.profile_id != profile or dialect is not None:
+                raise ProviderWorkspaceError(f'{label} history requires its native database target and language')
+            targets = self.endpoint_service.database_catalog(server)['targets']
+            matches = [item for item in targets if item['target_id'] == target]
+            if (not isinstance(target, str) or not target or len(matches) != 1 or
+                    not matches[0].get('database') or
+                    matches[0]['database'] != endpoint['route'].get('database')):
+                raise ProviderWorkspaceError(f'Select an explicit registered {label} database for history')
+            return HistoryScope(self._principal_id(server), server.id, target, engine + '-sql', engine=engine)
         if not isinstance(target, str) or not target:
             matches = [item['target_id'] for item in self.endpoint_service.database_catalog(server)['targets']
                        if item['database'] == endpoint['route']['database']]
@@ -1633,18 +2462,8 @@ class ProviderWorkspaceService:
                 'firebird-native', 'firebird-embedded'}:
             raise ProviderWorkspaceError('Firebird editor metadata requires a Firebird endpoint')
         snapshot = self.navigator_snapshot(server, database_target_id=database_target_id)
-        resources = []
-        total = 0
-        for item in snapshot['resources']:
-            if item['resource_kind'] not in {'table', 'view', 'column'}:
-                continue
-            total += 1
-            if len(resources) < 25000:
-                resources.append({key: item.get(key) for key in (
-                    'resource_id', 'resource_kind', 'display_name', 'display_path')})
-        return {'resources': resources, 'generation': snapshot['generation'],
-                'truncated': total > len(resources), 'visible_resource_count': total,
-                'coverage': 'Native visible table/view/column catalog; inaccessible metadata is not inferred'}
+        from .firebird_editor import metadata
+        return metadata(snapshot)
 
     def query_history_action(self, server, action, request):
         from .query_history import HistoryError
@@ -1669,9 +2488,9 @@ class ProviderWorkspaceService:
 
     def _record_query_request(self, server, target, dialect, source, sensitive, kind, execute):
         factory = getattr(self, 'query_history_factory', None)
-        firebird = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
-            'firebird-native', 'firebird-embedded'}
-        if factory is None or not firebird:
+        admitted = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) in {
+            None, 'postgresql-native', 'firebird-native', 'firebird-embedded', 'mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'}
+        if factory is None or not admitted:
             return execute()
         history = scope = entry = None
         notice = None
@@ -1766,10 +2585,12 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError('plan mode must be boolean')
         if plan_mode:
             if (script_mode or context.provider_id not in {
-                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}):
+                    'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded',
+                    'org.pgadmin.postgresql'}):
                 raise ProviderWorkspaceError(
-                    'Select a single Firebird statement for plan preparation')
-            policy['firebird_plan'] = True
+                    'Provider has not admitted single-statement plans')
+            policy['postgresql_plan' if context.provider_id ==
+                   'org.pgadmin.postgresql' else 'firebird_plan'] = True
         if client_sql_dialect is not None:
             if context.provider_id not in {
                     'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'}:
@@ -1805,9 +2626,18 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'source_complete':
+                source, prefix = data.get('source'), data.get('source_before_cursor')
+                if (not isinstance(source, str) or not isinstance(prefix, str) or
+                        len(source.encode('utf8')) > 1024 * 1024 or not source.startswith(prefix)):
+                    raise ProviderWorkspaceError('Completion requires bounded source and its exact cursor prefix')
+                return self.studio_service.complete(context, data.get('session_id'), source, prefix)
             if action == 'source_validate':
                 return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
             if action == 'native_script_prepare':
+                parameters = data.get('parameters', {})
+                if not isinstance(parameters, (dict, list)) or parameters:
+                    raise ProviderWorkspaceError('Retained scripts require empty parameter bindings')
                 return self._record_query_request(server, data.get('database_target_id'), data.get('client_sql_dialect'),
                     data.get('source'), data.get('history_sensitive', False), 'script-prepared',
                     lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source')))
@@ -1970,13 +2800,13 @@ class ProviderWorkspaceService:
             **exported,
             'content_base64': base64.b64encode(content).decode('ascii'),
             'media_type': self._export_media_type(export_format),
-            'filename': f'cdeadmin-result-{result_id}.{export_format}',
+            'filename': f'cdeadmin-result-{result_id}.' + ('ddn-workspace.json' if export_format == 'ddn' else export_format),
         }
 
     @staticmethod
     def _export_media_type(export_format):
         media_types = {
-            'csv': 'text/csv', 'json': 'application/json',
+            'csv': 'text/csv', 'json': 'application/json', 'ddn': 'application/json',
             'jsonl': 'application/x-ndjson',
             'xlsx': ('application/vnd.openxmlformats-officedocument.'
                      'spreadsheetml.sheet'),

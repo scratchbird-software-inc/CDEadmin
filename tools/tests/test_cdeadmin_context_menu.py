@@ -112,12 +112,19 @@ class ContextMenuTests(unittest.TestCase):
         server_actions = endpoint_context_actions(embedded, 'verified')
         self.assertNotIn('endpoint.firebird.activate_shadow', {
             item['command_id'] for item in server_actions})
+        commands = {item['command_id'] for item in server_actions}
+        self.assertIn('endpoint.firebird.monitoring', commands)
+        self.assertIn('endpoint.firebird.dashboard_editor', commands)
+        self.assertNotIn('endpoint.firebird.monitoring_policy', commands)
         actions = database_target_context_actions(embedded, {
             'target_id': 'owned', 'database': '/owned/example.fdb',
             'display_name': 'owned',
         })
         operations = {item['arguments'].get('operation_id') for item in actions}
         self.assertFalse(operations & _FIREBIRD_SERVICE_OPERATIONS)
+        commands = {item['command_id'] for item in actions}
+        for name in ('monitoring', 'monitoring_policy', 'dashboard_editor'):
+            self.assertIn('database.firebird.' + name, commands)
         self.assertIn('add_files', operations)
         self.assertIn('inspect_limbo', operations)
 
@@ -407,6 +414,19 @@ class ContextMenuTests(unittest.TestCase):
         )
         self.assertEqual([], actions)
 
+    def test_mysql_database_has_one_verified_connect_and_explicit_server_disconnect(self):
+        actions = database_target_context_actions(profile('mysql', multiple=True), {
+            'target_id': 'mysql-one', 'display_name': 'demo', 'database': 'demo',
+        })
+        ids = [item['command_id'] for item in actions]
+        self.assertEqual(len(ids), len(set(ids)))
+        connect = next(item for item in actions if item['command_id'] == 'database.mysql.connect')
+        self.assertEqual(connect['handler'], 'verify_endpoint')
+        self.assertEqual(connect['arguments']['database_target_id'], 'mysql-one')
+        disconnect = next(item for item in actions if item['command_id'] == 'database.mysql.disconnect')
+        self.assertEqual(disconnect['handler'], 'disconnect_endpoint')
+        self.assertIn('all databases', disconnect['label'])
+
     def test_database_target_actions_open_exact_provider_forms(self):
         actions = database_target_context_actions(
             profile('firebird'), {
@@ -567,10 +587,19 @@ class ContextMenuTests(unittest.TestCase):
 
     def test_duckdb_database_actions_expose_native_file_operations(self):
         duckdb = profile('duckdb', route_kind='embedded_file', multiple=True)
+        server_actions = {item['command_id']: item for item in
+            endpoint_context_actions(duckdb, 'verified')}
+        server_catalog = server_actions['endpoint.duckdb.catalog_ddn']
+        self.assertEqual({'tab': 'export', 'server_catalog': True},
+                         server_catalog['arguments'])
+        self.assertTrue(server_catalog['enabled'])
         actions = database_target_context_actions(duckdb, {
             'target_id': 'duckdb-one', 'display_name': 'example.duckdb',
         })
         by_id = {item['command_id']: item for item in actions}
+        catalog = by_id['database.duckdb.catalog_ddn']
+        self.assertEqual('export', catalog['arguments']['tab'])
+        self.assertEqual('duckdb-one', catalog['arguments']['database_target_id'])
         expected = {
             'checkpoint': ('Checkpoint database...', 'maintenance'),
             'force_checkpoint': ('Force checkpoint...', 'maintenance'),

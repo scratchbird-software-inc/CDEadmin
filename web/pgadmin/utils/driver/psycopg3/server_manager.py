@@ -567,6 +567,7 @@ WHERE db.oid = {0}""".format(did))
         SSHTunnelForwarder class.
         :return: True if tunnel is successfully created else error message.
         """
+        retained_tunnel_password = tunnel_password
         # Interactive callers are bound to current_user. A delegated manager
         # is already bound to the exact server owner by Driver.
         user = (
@@ -627,6 +628,11 @@ WHERE db.oid = {0}""".format(did))
             self.tunnel_object.daemon_forward_servers = True
             self.tunnel_object.start()
             self.tunnel_created = True
+            # Keep the encrypted session credential after successful auth. This
+            # supports reconnect and independently admitted collectors without
+            # forcing the user to persist a password in the registration.
+            if self.session_backed and retained_tunnel_password is not None:
+                self.tunnel_password = retained_tunnel_password
         except BaseSSHTunnelForwarderError as e:
             current_app.logger.exception(e)
             return False, gettext(
@@ -713,8 +719,8 @@ WHERE db.oid = {0}""".format(did))
                     value = 1 if value else 0
 
                 dsn_args[key] = value
-                display_dsn_args[key] = orig_value if with_complete_path else \
-                    value
+                display_dsn_args[key] = ('xxxxxxx' if key in ('password', 'sslpassword')
+                                         else orig_value if with_complete_path else value)
 
         # Enable TCP keepalive so that stale/half-open connections are
         # detected by the OS within a reasonable time instead of hanging

@@ -3,8 +3,10 @@ import copy
 import json
 import os
 import queue
+import re
 import sqlite3
 import threading
+import time
 import uuid
 
 from pgadmin.cdeadmin.sdk import RelationalClientError, RelationalDBAPIClient
@@ -44,6 +46,7 @@ class Execution:
         self.error = None
         self.uncertain = False
         self.final = None
+        self.metrics = None
         self.worker = threading.Thread(target=self._run, daemon=True,
                                        name='cdeadmin-sqlite-query')
 
@@ -57,11 +60,15 @@ class Execution:
 
     def _run(self):
         cursor = None
+        started = time.perf_counter()
+        dispatched = None
+        buffered = 0
         try:
             if self.stop.is_set():
                 return
             cursor = self.connection.cursor()
             cursor.execute(self.source, self.bound)
+            dispatched = time.perf_counter()
             columns = [{'name': item[0], 'key': str(i), 'ordinal': i,
                         'native_type': 'dynamic'}
                        for i, item in enumerate(cursor.description or ())]
@@ -78,11 +85,27 @@ class Execution:
                     rows, size = [], 0
                 rows.append(row)
                 size += length
+                buffered += 1
             self._put(self._page(columns, rows, offset, True, cursor.rowcount))
         except Exception as exc:
             self.error = error_identity(exc)
             self.uncertain = uncertain_error(exc)
         finally:
+            ended = time.perf_counter()
+            self.metrics = {
+                'prepare_ms': None,
+                'dispatch_ms': round((dispatched - started) * 1000, 3)
+                    if dispatched is not None else None,
+                'fetch_ms': round((ended - dispatched) * 1000, 3)
+                    if dispatched is not None else None,
+                'execute_ms': round((ended - started) * 1000, 3),
+                'rows_buffered': buffered,
+                'plan': None,
+                'measurement_scope': (
+                    'Client dispatch through final local row fetch and encoding; '
+                    'may include consumer backpressure. Preparation is not '
+                    'separately measured. No plan is inferred.'),
+            }
             if cursor is not None:
                 try:
                     cursor.close()
@@ -127,7 +150,8 @@ class Execution:
             page['payload']['cancel_requested'] = self.stop.is_set()
             if complete:
                 page['payload'].update(error=self.error,
-                                       session_reuse_blocked=self.uncertain)
+                                       session_reuse_blocked=self.uncertain,
+                                       statement_metrics=self.metrics)
                 self.final = copy.deepcopy(page)
             return page
 
@@ -147,6 +171,11 @@ class SQLiteClient(RelationalDBAPIClient):
         with self._lock:
             if self._closing:
                 raise RelationalClientError('SQLite client is closed')
+            observed = getattr(self.module, 'sqlite_version', None)
+            if observed != self.config.profile.exact_version:
+                raise RelationalClientError(
+                    'SQLite native runtime does not match the admitted '
+                    f'{self.config.profile.exact_version} profile')
             return super()._connect(request)
 
     def _require_idle(self, handle):
@@ -164,6 +193,41 @@ class SQLiteClient(RelationalDBAPIClient):
         if id(handle) in self._uncertain:
             raise RelationalClientError(
                 'SQLite session state is unknown; close it')
+
+    def validate_parse_only(self, handle, source):
+        """Compile on the retained SQLite schema without executing the VM."""
+        if not isinstance(source, str) or not source.strip():
+            raise RelationalClientError('SQLite source is required')
+        with self._lock:
+            self._require_idle(handle)
+            self._busy.add(id(handle))
+        try:
+            statement = source.strip()
+            if not re.match(r'^EXPLAIN\b', statement, re.I):
+                statement = 'EXPLAIN ' + statement
+            cursor = handle.cursor()
+            try:
+                cursor.execute(statement)
+                cursor.fetchone()
+                return {'grammar_valid': True, 'scope': 'SQLite native EXPLAIN compilation; no submitted statement VM was executed.'}
+            except sqlite3.ProgrammingError as error:
+                if 'binding' in str(error).lower():
+                    return {'grammar_valid': None,
+                        'scope': 'SQLite parsed a parameterized statement; bindings are required for full native validation.'}
+                raise
+            except sqlite3.Error as error:
+                message = str(error)
+                syntax = any(marker in message.lower() for marker in (
+                    'syntax error', 'incomplete input', 'unrecognized token'))
+                return {'grammar_valid': False if syntax else None,
+                    'scope': 'SQLite native compilation; submitted SQL was not executed.',
+                    'diagnostic': {'code': 'SQLITE_NATIVE_SYNTAX' if syntax else 'SQLITE_NATIVE_CONTEXT',
+                        'message': message[:400], 'severity': 'error' if syntax else 'warning'}}
+            finally:
+                cursor.close()
+        finally:
+            with self._lock:
+                self._busy.discard(id(handle))
 
     def execute(self, handle, request):
         source = request.get('source')

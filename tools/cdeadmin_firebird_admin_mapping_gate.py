@@ -136,13 +136,34 @@ def run(profiles, browser_options=None):
         assert state()['present'] is False
         connection.commit()
         result['checks'].append('drop-commit-removes-mapping')
+        with connection.cursor() as cursor:
+            cursor.execute('CREATE TABLE MAPPING_PENDING (ID INTEGER)')
+        connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute('INSERT INTO MAPPING_PENDING VALUES (1)')
         try:
             apply('DROP')
         except RelationalClientError as error:
             assert 'DatabaseError' in str(error), error
-            assert not connection.main_transaction.is_active()
+            assert connection.main_transaction.is_active()
         else:
             raise AssertionError('DROP of absent native mapping succeeded')
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT ID FROM MAPPING_PENDING')
+            assert cursor.fetchall() == [(1,)]
+        observer = driver.connect(password=route['password'],
+                                  **_route_arguments(route, driver))
+        try:
+            with observer.cursor() as cursor:
+                cursor.execute('SELECT ID FROM MAPPING_PENDING')
+                assert cursor.fetchall() == []
+        finally:
+            observer.close()
+        connection.rollback()
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT ID FROM MAPPING_PENDING')
+            assert cursor.fetchall() == []
+        result['failed_task_preserved_pending_work'] = True
         assert state()['present'] is False
         connection.commit()
         result['checks'].append('absent-drop-native-error-no-state-change')

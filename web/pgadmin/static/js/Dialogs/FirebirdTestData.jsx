@@ -1,9 +1,10 @@
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
-import {generatorTable, materializeTestData, parseRecipe, stageTestData, tableForeignKeys} from './firebirdTestData';
+import useFirebirdDataSession from './firebirdDataSession';
+import {generatorTable, materializeTestData, parseRecipe, parseRecipeJSON, stageTestData, tableForeignKeys, firebirdTransactionIdle} from './firebirdTestDataHelpers';
 
 const save = (value, filename) => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'}));
@@ -21,61 +22,64 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
   const [receipt, setReceipt] = useState(null), [confirmed, setConfirmed] = useState(false);
   const [progress, setProgress] = useState(0), [transaction, setTransaction] = useState(null);
   const [fileTable, setFileTable] = useState(''), [fileColumn, setFileColumn] = useState('');
-  const session = useRef(null), stop = useRef(false), mounted = useRef(true);
+  const scope = useFirebirdDataSession({post, databaseTargetId, languageProfile, purpose: 'firebird-test-data'});
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false; stop.current = true;
-      if (session.current) post({action: 'close_session', session_id: session.current, database_target_id: databaseTargetId}).catch(() => {});
-    };
-  }, [post, databaseTargetId]);
-  const ensureSession = async () => {
-    if (!session.current) {
-      const opened = await post({action: 'open_session', language_profile: languageProfile, database_target_id: databaseTargetId, session_purpose: 'firebird-test-data'});
-      session.current = opened.session_id;
-      if (!mounted.current) {
-        await post({action: 'close_session', session_id: opened.session_id, database_target_id: databaseTargetId});
-        session.current = null; throw new Error('Form closed.');
-      }
-    }
-    return session.current;
-  };
-  const change = value => {setSource(value); setPreview(null); setConfirmed(false);};
+    setSelected([]); setCatalogs(null); setSource(''); setPreview(null); setBusy(false);
+    setError(''); setAttempted(false); setPending(false); setReceipt(null); setConfirmed(false);
+    setProgress(0); setTransaction(null); setFileTable(''); setFileColumn('');
+  }, [scope]);
+  const change = value => {scope.fileRevision++; setSource(value); setPreview(null); setConfirmed(false);};
   const load = async () => {
     setBusy(true); setError(''); setCatalogs(null); setPreview(null); setReceipt(null); setAttempted(false);
+    let id, cleanupRequested = false, cleanupObserved = false;
     try {
-      const id = await ensureSession(), next = Object.create(null), entries = [];
+      id = await scope.ensure();
+      const next = Object.create(null), entries = [];
       for (const table of tables.filter(item => selected.includes(item.resource_id))) {
-        if (!mounted.current) return;
+        if (!scope.active) return;
         if (Object.prototype.hasOwnProperty.call(next, table.display_name)) throw new Error('Ambiguous table names.');
         const page = await post({action: 'visual_admin_rows', request: {target_resource: table,
           session_id: id, database_target_id: databaseTargetId, limit: 200}});
-        if (page.continuation) await post({action: 'visual_admin_rows_cancel', request: {continuation: page.continuation}});
+        if (page.continuation) await post({action: 'visual_admin_rows_cancel', request: {
+          continuation: page.continuation, session_id: id, database_target_id: databaseTargetId}});
+        if (!scope.active) return;
         if (!page.row_operations?.includes('insert')) throw new Error('Native insertion was not admitted for ' + table.display_name);
         next[table.display_name] = {resource: table, columns: page.columns, rows: page.rows,
           sampleLimited: !!page.continuation || page.complete === false, foreignKeys: tableForeignKeys(table)};
         entries.push({table: table.display_name, count: 10, columns: Object.fromEntries(page.columns
           .filter(column => column.insertable !== false).map(column => [column.name, {kind: 'default'}]))});
       }
-      // Sampling never leaves an idle MGA snapshot open while editing a recipe.
-      await post({action: 'transaction_action', session_id: id, transaction_action: 'rollback', database_target_id: databaseTargetId});
-      if (mounted.current) {setCatalogs(next); change(JSON.stringify({format: 'scratchrobin.firebird.test-data@1', seed: 1, tables: entries}, null, 2));}
+      cleanupRequested = true;
+      cleanupObserved = firebirdTransactionIdle(await post({action: 'transaction_action', session_id: id,
+        transaction_action: 'rollback', database_target_id: databaseTargetId}));
+      if (!cleanupObserved) throw new Error('Sample transaction cleanup was not confirmed.');
+      if (scope.active) {setCatalogs(next); change(JSON.stringify({format: 'scratchrobin.firebird.test-data@1', seed: 1, tables: entries}, null, 2));}
     } catch (failure) {
-      if (mounted.current) setError(failure.message || 'Sample loading failed.');
-      if (session.current && mounted.current) {
-        try {await post({action: 'transaction_action', session_id: session.current, transaction_action: 'rollback', database_target_id: databaseTargetId});}
-        catch {setPending(true); setError('Sample transaction cleanup was not confirmed. Inspect or explicitly roll back before continuing.');}
+      if (scope.active) {
+        setError(failure.message || 'Sample loading failed.');
+        if (id && !cleanupRequested) {
+          cleanupRequested = true;
+          try {cleanupObserved = firebirdTransactionIdle(await post({action: 'transaction_action', session_id: id,
+            transaction_action: 'rollback', database_target_id: databaseTargetId}));} catch { /* Require explicit reconciliation. */ }
+        }
+        if (id && !cleanupObserved) {
+          setPending(true); setError('Sample transaction cleanup was not confirmed. Inspect or explicitly roll back before continuing.');
+        }
       }
+    } finally {
+      if (scope.active) setBusy(false);
+      else await scope.releaseAfterWork().catch(() => {});
     }
-    finally {if (mounted.current) setBusy(false);}
   };
   const importRecipe = async event => {
     const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+    const revision = ++scope.fileRevision;
     try {
       if (file.size > 1024 * 1024) throw new Error('Recipe exceeds 1 MiB.');
       const text = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
-      parseRecipe(text); change(text); setError('');
-    } catch (failure) {setError(failure.message);}
+      parseRecipe(text);
+      if (scope.active && revision === scope.fileRevision) {change(text); setError('');}
+    } catch (failure) {if (scope.active && revision === scope.fileRevision) setError(failure.message);}
   };
   const previewRecipe = () => {
     try {setPreview(materializeTestData(parseRecipe(source), catalogs)); setError(''); setConfirmed(false);}
@@ -83,36 +87,44 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
   };
   const importValues = async event => {
     const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+    const revision = ++scope.fileRevision;
     try {
       if (file.size > 1024 * 1024) throw new Error('Value file exceeds 1 MiB.');
-      const values = JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer()));
+      const values = parseRecipeJSON(new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer()));
       if (!Array.isArray(values) || !values.length || values.length > 1000) throw new Error('Value file requires 1–1000 typed JSON values.');
       const recipe = parseRecipe(source), entry = recipe.tables.find(table => table.table === fileTable);
       if (!entry || !Object.prototype.hasOwnProperty.call(entry.columns, fileColumn)) throw new Error('Choose an exact recipe table and column.');
       entry.columns[fileColumn] = {kind: 'file', values};
-      change(JSON.stringify(recipe, null, 2)); setError('');
-    } catch (failure) {setError(failure.message);}
+      if (scope.active && revision === scope.fileRevision) {change(JSON.stringify(recipe, null, 2)); setError('');}
+    } catch (failure) {if (scope.active && revision === scope.fileRevision) setError(failure.message);}
   };
   const run = async () => {
-    stop.current = false; setBusy(true); setAttempted(true); setPending(true); setError(''); setProgress(0);
+    scope.stopped = false; setBusy(true); setAttempted(true); setPending(true); setError(''); setProgress(0);
     try {
-      const id = await ensureSession();
+      const id = await scope.ensure();
       const result = await stageTestData({preview, catalogs, post, sessionId: id, databaseTargetId,
-        stopped: () => stop.current || !mounted.current, onProgress: count => {if (mounted.current) setProgress(count);}});
-      if (mounted.current) setReceipt(result);
-    } catch {if (mounted.current) setError('Execution stopped. Inspect the dedicated transaction; do not retry this preview.');}
-    finally {if (mounted.current) setBusy(false);}
+        stopped: () => scope.stopped || !scope.active, onProgress: count => {if (scope.active) setProgress(count);}});
+      if (scope.active) setReceipt(result);
+    } catch {if (scope.active) setError('Execution stopped. Inspect the dedicated transaction; do not retry this preview.');}
+    finally {
+      if (scope.active) setBusy(false);
+      else await scope.releaseAfterWork().catch(() => {});
+    }
   };
   const control = async action => {
     setBusy(true); setError('');
     try {
       const result = await post({action: action === 'state' ? 'transaction' : 'transaction_action',
-        session_id: session.current, ...(action === 'state' ? {} : {transaction_action: action}), database_target_id: databaseTargetId});
+        session_id: scope.sessionId, ...(action === 'state' ? {} : {transaction_action: action}), database_target_id: databaseTargetId});
+      if (!scope.active) return;
       setTransaction(result);
-      // Require a fresh sample/preview after every explicit finalization attempt.
-      if (action !== 'state') {setPending(false); setPreview(null); setCatalogs(null); setConfirmed(false);}
-    } catch {setError('Native transaction outcome was not received. Keep this session open and inspect its state before further work.');}
-    finally {setBusy(false);}
+      if (action !== 'state') {
+        setPreview(null); setConfirmed(false);
+        if (firebirdTransactionIdle(result)) {setPending(false); setCatalogs(null);}
+        else {setPending(true); setError('Native transaction remains active or unavailable. Inspect this session before further work.');}
+      }
+    } catch {if (scope.active) setError('Native transaction outcome was not received. Keep this session open and inspect its state before further work.');}
+    finally {if (scope.active) setBusy(false); else await scope.releaseAfterWork().catch(() => {});}
   };
   return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-test-data" />
@@ -129,8 +141,8 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
       disabled={busy || pending} onChange={event => change(event.target.value)} />
     <Button component="label" disabled={busy || pending}>Read saved recipe<input hidden type="file" accept=".json,application/json" aria-label="Test-data recipe file" disabled={busy || pending} onChange={importRecipe} /></Button>
     <Box>
-      <TextField size="small" label="File source table" value={fileTable} disabled={busy || pending} onChange={event => setFileTable(event.target.value)} />
-      <TextField size="small" label="File source column" value={fileColumn} disabled={busy || pending} onChange={event => setFileColumn(event.target.value)} />
+      <TextField size="small" label="File source table" value={fileTable} disabled={busy || pending} onChange={event => {scope.fileRevision++; setFileTable(event.target.value);}} />
+      <TextField size="small" label="File source column" value={fileColumn} disabled={busy || pending} onChange={event => {scope.fileRevision++; setFileColumn(event.target.value);}} />
       <Button component="label" disabled={busy || pending || !source || !fileTable || !fileColumn}>Read column values file
         <input hidden type="file" accept=".json,application/json" aria-label="Test-data column values file" disabled={busy || pending || !source || !fileTable || !fileColumn} onChange={importValues} /></Button>
     </Box>
@@ -144,10 +156,10 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
       <FormControlLabel label="I authorize staging these generated rows in this database" control={<Checkbox checked={confirmed} disabled={busy || attempted} onChange={event => setConfirmed(event.target.checked)} />} />
       <Button disabled={!confirmed || busy || attempted} onClick={run}>Stage generated rows</Button>
     </>}
-    <Button disabled={!busy || !pending} onClick={() => {stop.current = true;}}>Stop before next row</Button>
+    <Button disabled={!busy || !pending} onClick={() => {scope.stopped = true;}}>Stop before next row</Button>
     {attempted && <Alert severity="warning">{progress} rows confirmed staged. Stop is not rollback. Do not rerun this preview.</Alert>}
     {receipt && <Box component="pre">{JSON.stringify(receipt, null, 2)}</Box>}
-    <Button disabled={busy || !session.current} onClick={() => control('state')}>Inspect generator transaction</Button>
+    <Button disabled={busy || !scope.sessionId} onClick={() => control('state')}>Inspect generator transaction</Button>
     <Button disabled={busy || !pending} onClick={() => control('commit')}>Commit generated rows</Button>
     <Button disabled={busy || !pending} onClick={() => control('rollback')}>Rollback generated rows</Button>
     {transaction && <Box component="pre">{JSON.stringify(transaction, null, 2)}</Box>}

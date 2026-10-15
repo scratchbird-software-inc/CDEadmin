@@ -6,8 +6,8 @@ import re
 from ..providers.mysql_family.mysql_catalog import identifier, SYSTEM
 from .firebird_schema_plan import digest
 
-KINDS = {'database', 'table', 'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event'}
-CONTEXTUAL = {'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event'}
+KINDS = {'database', 'table', 'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event', 'library'}
+CONTEXTUAL = {'view', 'materialized-view', 'procedure', 'function', 'trigger', 'event', 'library'}
 
 
 def _literal(value):
@@ -16,7 +16,9 @@ def _literal(value):
     return "CONVERT(X'" + value.encode('utf8').hex() + "' USING utf8mb4)"
 
 
-def _script(blocks, database):
+def _script(blocks, database, *, engine="mysql"):
+    if engine not in {"mysql", "mariadb"}:
+        raise ValueError("Unsupported native metadata engine")
     joined = '\n'.join(block['statement'] for block in blocks)
     if len(joined.encode('utf8')) > 8 * 1024 * 1024:
         raise ValueError('Native SQL export exceeds 8 MiB')
@@ -29,12 +31,12 @@ def _script(blocks, database):
             break
         nonce += 1
     prefix = '@sr_' + suffix + '_'
-    lines = ['-- Native MySQL metadata export; not a migration or execution authorization.',
+    lines = [f'-- Native {"MariaDB" if engine == "mariadb" else "MySQL"} metadata export; not a migration or execution authorization.',
              '-- DDL commits implicitly. Definers, privileges and external prerequisites are retained.',
              'DELIMITER ' + delimiter]
     def append(value):
         lines.append(value + '\n' + delimiter)
-    for setting in ('sql_mode', 'character_set_client', 'collation_connection'):
+    for setting in ('sql_mode', 'character_set_client', 'collation_connection', 'time_zone'):
         append('SET ' + prefix + setting + ' = @@SESSION.' + setting)
     selected = False
     for block in blocks:
@@ -45,7 +47,7 @@ def _script(blocks, database):
             selected = True
         lines.append('-- ' + block['kind'])
         append(block['statement'])
-    for setting in ('sql_mode', 'character_set_client', 'collation_connection'):
+    for setting in ('sql_mode', 'character_set_client', 'collation_connection', 'time_zone'):
         append('SET SESSION ' + setting + ' = ' + prefix + setting)
         append('SET ' + prefix + setting + ' = NULL')
     lines.append('DELIMITER ;')
@@ -78,7 +80,7 @@ def build_metadata(document):
     unavailable = {item.get('section') for item in observations if item.get('available') is not True}
     blocks, dependencies, blockers, prerequisites = {}, {}, [], []
     deferred_foreign_keys = []
-    names = {}
+    names, library_names = {}, {}
     def problem(row, reason):
         blockers.append({'resource_id': row['resource_id'], 'kind': row['kind'], 'name': row['name'], 'reason': reason})
     for identity, row in sorted(rows.items()):
@@ -93,6 +95,8 @@ def build_metadata(document):
             problem(row, 'Exact native SHOW CREATE definition is unavailable')
             continue
         context = {**default_context, **{key: value for key, value in native.get('definition_context', {}).items() if key in default_context}}
+        if kind == 'event':
+            context['time_zone'] = native.get('definition_context', {}).get('time_zone')
         try:
             for value in context.values(): _literal(value)
             charset = context['character_set_client']
@@ -102,9 +106,7 @@ def build_metadata(document):
             if kind in CONTEXTUAL and any(native.get('definition_context', {}).get(key) is None
                     for key in ('character_set_client', 'collation_connection')):
                 raise ValueError('Stored definition character context is unavailable')
-            if charset not in {'utf8mb4', 'utf8mb3', 'utf8'}:
-                raise ValueError('A UTF-8 script cannot preserve this stored client encoding; use a native encoding adapter')
-            if charset != 'utf8mb4' and any(ord(char) > 0xffff for char in statement):
+            if charset in {'utf8mb3', 'utf8'} and any(ord(char) > 0xffff for char in statement):
                 raise ValueError('Definition does not fit its native utf8mb3 creation context')
         except (ValueError, TypeError) as error:
             problem(row, str(error)); continue
@@ -116,8 +118,13 @@ def build_metadata(document):
             if key in names:
                 problem(row, 'Ambiguous native relation name')
             names[key] = identity
+        if kind == 'library':
+            key = (database, name)
+            if key in library_names:
+                problem(row, 'Ambiguous native library name')
+            library_names[key] = identity
     def require(row, schema, name, kind):
-        target = names.get((schema, name))
+        target = (library_names if kind == 'library' else names).get((schema, name))
         if target is None:
             prerequisites.append({'resource_id': row['resource_id'], 'database': schema, 'name': name, 'kind': kind})
         elif target != row['resource_id']:
@@ -155,11 +162,39 @@ def build_metadata(document):
                 require(row, target.get('table_schema'), target.get('table_name'), 'relation')
         if kind == 'trigger':
             require(row, native.get('catalog_row', {}).get('event_object_schema'), native.get('catalog_row', {}).get('event_object_table'), 'table')
+        if kind in {'procedure', 'function'}:
+            if ('ROUTINE_LIBRARIES' in unavailable or not any(
+                    item.get('section') == 'ROUTINE_LIBRARIES' for item in observations)):
+                problem(row, 'Native routine/library dependency observations are unavailable')
+            for target in native.get('library_dependencies', []):
+                require(row, target.get('library_schema'), target.get('library_name'), 'library')
+        if kind == 'library':
+            prerequisites.append({'resource_id': identity, 'kind': 'native-library-runtime-and-owner',
+                'name': block['name'], 'database': database})
         # Routine bodies are preserved whole. Their dynamic/external references
         # cannot be inferred from lexical matches in SQL text.
         if kind in CONTEXTUAL:
             prerequisites.append({'resource_id': identity, 'kind': 'native-body-and-definer',
                 'name': block['name'], 'database': database})
+    trigger_groups={}
+    for identity,block in blocks.items():
+        if block['kind']!='trigger':continue
+        facts=rows[identity]['native'].get('catalog_row',{})
+        group=tuple(facts.get(key) for key in ('event_object_schema','event_object_table','action_timing','event_manipulation'))
+        trigger_groups.setdefault(group,[]).append((facts.get('action_order'),identity))
+    for group,members in trigger_groups.items():
+        valid=all(isinstance(order,int) and not isinstance(order,bool) and order>0 for order,_ in members)
+        if len(members)>1 and (not all(isinstance(value,str) and value for value in group) or
+                not valid or len({order for order,_ in members})!=len(members)):
+            for _order,identity in members:problem(rows[identity],'Native multi-trigger execution order is unavailable or ambiguous')
+            continue
+        if valid:
+            members.sort()
+            for (_prior_order,prior),(_order,current) in zip(members,members[1:]):dependencies[current].add(prior)
+            if [order for order,_ in members]!=list(range(1,len(members)+1)):
+                prerequisites.append({'kind':'unselected-trigger-order','database':database,
+                    'table':group[1],'timing':group[2],'event':group[3],
+                    'reason':'Visible selection omits sibling trigger order positions; review existing target triggers'})
     ordered, pending = [], {key: value.copy() for key, value in dependencies.items()}
     while pending:
         ready = sorted(key for key, needs in pending.items() if not needs)
@@ -176,11 +211,13 @@ def build_metadata(document):
             block for block in ordered if block['kind'] not in {'database', 'table'}]
     # Deterministically deduplicate composite-FK prerequisite observations.
     prerequisites = list({json.dumps(item, sort_keys=True): item for item in prerequisites}.values())
-    script = _script(ordered, database) if ordered and not blockers else None
+    encoding_required = any(block['context']['character_set_client'] not in {'utf8mb4','utf8mb3','utf8'} for block in ordered)
+    script = _script(ordered, database) if ordered and not blockers and not encoding_required else None
     return {'format': 'scratchrobin.mysql.native-metadata@1', 'engine_id': 'mysql',
         'mode': 'export-only', 'executed': False, 'deployment_authorized': False,
         'source_sha256': document.get('sha256'), 'database': database, 'server_uuid': root_facts['server_uuid'],
         'statements': ordered, 'statements_sha256': digest(ordered), 'script': script,
+        'native_encoding_required': encoding_required and not blockers,
         'script_sha256': hashlib.sha256(script.encode('utf8')).hexdigest() if script else None,
         'blockers': blockers, 'prerequisites': prerequisites, 'script_available': script is not None,
         'warnings': ['Imported definitions are user input; native grammar and live state have not been validated.',

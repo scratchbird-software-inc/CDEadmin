@@ -14,11 +14,8 @@ pgAdmin 4 base. New launchers should use :mod:`CDEadmin`.
 """
 
 import sys
-if sys.version_info <= (3, 9):
-    import select
-
-if sys.version_info < (3, 9):
-    raise RuntimeError('This application must be run under Python 3.9 '
+if sys.version_info < (3, 14):
+    raise RuntimeError('This application must be run under Python 3.14 '
                        'or later.')
 import builtins
 import os

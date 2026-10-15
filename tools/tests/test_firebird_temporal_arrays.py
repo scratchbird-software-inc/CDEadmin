@@ -35,7 +35,8 @@ def test_temporal_exact_text(code, text, expected):
     (12, '0000-01-01'), (12, '2023-02-29'), (12, '20000101'),
     (12, datetime(2000, 1, 1)), (13, '24:00:00'), (13, '23:59:60'),
     (13, '12:00:00.12345'), (13, '12:00:00Z'), (13, time(0, microsecond=1)),
-    (35, '2000-01-01'), (35, '2000-01-01 00:00:00+01:00'),
+    (35, '2000-01-01'), (35, '2000-01-01 24:00:00'),
+    (35, '2000-01-01 00:00:00+01:00'),
     (35, datetime(2000, 1, 1, tzinfo=timezone.utc)), (12, None), (13, True),
 ])
 def test_invalid_type_range_calendar_zone_and_precision(code, value):

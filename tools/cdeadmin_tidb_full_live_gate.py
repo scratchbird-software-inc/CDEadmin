@@ -238,7 +238,7 @@ def _write_tidb_config(root):
     config.write_text(
         'split-table = false\n\n'
         '[log]\n'
-        f'slow-query-file = "{root / "logs" / "tidb-slow.log"}"\n',
+        f'slow-query-file = "{(root / "logs" / "tidb-slow.log").as_posix()}"\n',
         encoding='utf-8',
     )
     return config
@@ -288,9 +288,9 @@ def _write_tiflash_config(root, ports):
     config = root / 'tiflash.toml'
     config.write_text(
         'listen_host = "127.0.0.1"\n'
-        f'tmp_path = "{root / "tiflash-tmp"}"\n\n'
+        f'tmp_path = "{(root / "tiflash-tmp").as_posix()}"\n\n'
         '[storage]\n[storage.main]\n'
-        f'dir = ["{root / "tiflash-data"}"]\n\n'
+        f'dir = ["{(root / "tiflash-data").as_posix()}"]\n\n'
         '[flash]\n'
         f'service_addr = "127.0.0.1:{ports["flash_service"]}"\n\n'
         '[flash.proxy]\n'
@@ -299,13 +299,13 @@ def _write_tiflash_config(root, ports):
         f'status-addr = "127.0.0.1:{ports["flash_status"]}"\n'
         f'advertise-status-addr = "127.0.0.1:{ports["flash_status"]}"\n'
         f'engine-addr = "127.0.0.1:{ports["flash_service"]}"\n'
-        f'data-dir = "{root / "tiflash-proxy"}"\n'
-        f'config = "{learner}"\n'
-        f'log-file = "{root / "logs" / "tiflash-proxy-native.log"}"\n'
+        f'data-dir = "{(root / "tiflash-proxy").as_posix()}"\n'
+        f'config = "{learner.as_posix()}"\n'
+        f'log-file = "{(root / "logs" / "tiflash-proxy-native.log").as_posix()}"\n'
         'log-level = "info"\n\n'
         '[logger]\nlevel = "info"\n'
-        f'log = "{root / "logs" / "tiflash-native.log"}"\n'
-        f'errorlog = "{root / "logs" / "tiflash-error.log"}"\n'
+        f'log = "{(root / "logs" / "tiflash-native.log").as_posix()}"\n'
+        f'errorlog = "{(root / "logs" / "tiflash-error.log").as_posix()}"\n'
         'size = "10M"\ncount = 3\n\n'
         '[raft]\n'
         f'pd_addr = "127.0.0.1:{ports["pd_client"]}"\n\n'
@@ -330,7 +330,7 @@ def _start_cluster(root, toolchain, processes):
     processes.start('pd', [
         str(binaries / 'pd-server'), '--name=pd',
         f'--config={pd_config}',
-        f'--data-dir={root / "pd"}',
+        f'--data-dir={(root / "pd").as_posix()}',
         f'--client-urls=http://127.0.0.1:{ports["pd_client"]}',
         f'--advertise-client-urls=http://127.0.0.1:{ports["pd_client"]}',
         f'--peer-urls=http://127.0.0.1:{ports["pd_peer"]}',
@@ -350,7 +350,7 @@ def _start_cluster(root, toolchain, processes):
         f'--status-addr=127.0.0.1:{ports["tikv_status"]}',
         f'--advertise-status-addr=127.0.0.1:{ports["tikv_status"]}',
         f'--pd=127.0.0.1:{ports["pd_client"]}',
-        f'--data-dir={root / "tikv"}',
+        f'--data-dir={(root / "tikv").as_posix()}',
     ])
     _wait_store(ports['pd_client'], 'tikv', processes)
     _wait_http(
@@ -363,7 +363,7 @@ def _start_cluster(root, toolchain, processes):
         f'--config={tidb_config}',
         '--status', str(ports['tidb_status']), '--store=tikv',
         f'--path=127.0.0.1:{ports["pd_client"]}', '--host=127.0.0.1',
-        f'--temp-dir={root / "tidb-tmp"}',
+        f'--temp-dir={(root / "tidb-tmp").as_posix()}',
     ])
     _wait_sql(ports['tidb'], processes)
     _sql(
@@ -387,7 +387,7 @@ def _start_cluster(root, toolchain, processes):
         f'--pd=http://127.0.0.1:{ports["pd_client"]}',
         f'--addr=127.0.0.1:{ports["cdc"]}',
         f'--advertise-addr=http://127.0.0.1:{ports["cdc"]}',
-        f'--data-dir={root / "cdc"}',
+        f'--data-dir={(root / "cdc").as_posix()}',
     ])
     _wait_http(f'http://127.0.0.1:{ports["cdc"]}/status', processes)
     return ports

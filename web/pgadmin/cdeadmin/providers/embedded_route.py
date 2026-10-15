@@ -16,6 +16,7 @@ import math
 import sqlite3
 import re
 import urllib.parse
+from pathlib import Path
 from collections.abc import Mapping
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
@@ -147,7 +148,7 @@ def sqlite_arguments(route):
             raise RelationalClientError('SQLite VFS name is invalid')
         query['vfs'] = vfs
     if query:
-        result['database'] = 'file:' + urllib.parse.quote(database, safe='/')
+        result['database'] = Path(database).as_uri()
         result['database'] += '?' + urllib.parse.urlencode(query)
         result['uri'] = True
     else:

@@ -51,8 +51,10 @@ for a cleanup retry. Shutdown must not silently forget live connections.
 Running the portable gate
 -------------------------
 
-Use an explicitly selected PostgreSQL 18.3 test server and an account permitted
-to create temporary tables. Store a route JSON outside the source repository::
+Use an explicitly selected PostgreSQL 18.3 test server and an isolated qualification account. The current gate also
+creates uniquely named operator classes/families and index/table access methods,
+so its native administration section requires PostgreSQL superuser privileges.
+Use a disposable qualification instance for that section. Store a route JSON outside the source repository::
 
     {
       "host": "localhost",

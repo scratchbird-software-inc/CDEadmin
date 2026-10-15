@@ -1,5 +1,9 @@
 # New-machine development setup: ScratchRobin CDE Administrator
 
+For native Windows, Intel macOS and Apple Silicon macOS development, use
+[Native development setup and GitHub qualification](NATIVE.md). The guide below
+describes the existing Linux-hosted reference estate and its WSL/remote wrappers.
+
 This is the setup guide for a developer with a fresh checkout, not a production
 deployment guide. It includes the Python application, built browser UI, native
 client tools, and reference-engine Docker samples. Native ScratchBird is excluded.
@@ -52,7 +56,9 @@ Install Docker Engine and Compose v2 following the
 Allow your developer account to use Docker according to local security policy;
 Docker access is highly privileged. Do not run the application with sudo.
 
-Install the native build prerequisites in Ubuntu:
+Install the native build prerequisites in Ubuntu. Ubuntu 24.04's system Python
+is older than ScratchRobin's Python 3.14 minimum; use a separate CPython 3.14
+installation for the application. Keep the system Python for Ubuntu tools.
 
 ```bash
 sudo apt update
@@ -160,11 +166,25 @@ In the Linux execution environment:
 ```bash
 mkdir -p ~/src
 cd ~/src
-git clone https://github.com/DaltonCalford/CDEadmin.git
+git clone https://github.com/scratchbird-software-inc/CDEadmin.git
 cd CDEadmin
 git rev-parse HEAD
+export SCRATCHROBIN_PYTHON=/absolute/path/to/python3.14
 bash tools/development/dev.sh doctor
 ```
+
+Set `SCRATCHROBIN_PYTHON` to a standard CPython 3.14 interpreter installed
+from Python.org, a distribution package or a managed Python installation.
+For example, with [uv](https://docs.astral.sh/uv/guides/install-python/) on
+Linux, run `uv python install 3.14` and set the variable to the output of
+`uv python find 3.14`. The launcher uses that interpreter to create its
+virtual environment. Preserve the variable for later `dev.sh` commands.
+The separate `python3.14t` build is still an unqualified full-product
+target; see the [Python runtime policy](../../docs/en_US/python_runtime_policy.rst).
+For SQLite, confirm that the selected interpreter reports exactly SQLite
+3.53.0 before running its provider tests. A managed Python build can embed a
+different SQLite version; see the
+[SQLite driver contract](../../docs/en_US/sqlite_driver_development.rst).
 
 Use the team's release/branch/commit if different. Record the commit for QA.
 `doctor` checks tools, versions, CPU/OS and Docker access without installing

@@ -90,10 +90,10 @@ describe('Firebird monitoring destinations', () => {
     const {unmount} = render(<Component serverId={7} policyMode />);
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(screen.queryByTestId('read-only-ddn')).toBeNull();
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Use completed refreshes as availability heartbeats'}));
     fireEvent.click(screen.getByRole('button', {name: 'Start collection'}));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/monitoring/7', {
-      interval_seconds: 15, retain_samples: 120, lease_seconds: 3600,
+      interval_seconds: 15, retain_samples: 120, lease_seconds: 3600, history_enabled: false,
       metadata_interval_seconds: 60,
       max_transaction_age_seconds: 0, max_backup_state_seconds: 0,
       require_wire_encryption: false, expected_encryption_state: null,

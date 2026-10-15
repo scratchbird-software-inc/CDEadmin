@@ -175,7 +175,8 @@ def test_parameter_comments_are_exported_after_routine(
                 rows = [('P', package, source_body, member_comment, 2, 1,
                          False, None,
                          None, private_flag)]
-            if kind == 'function' and 'FROM RDB$FUNCTIONS WHERE ' in source:
+            if (kind == 'function' and 'FROM RDB$FUNCTIONS WHERE ' in source
+                    and 'RDB$MODULE_NAME IS NULL' in source):
                 rows = [('P', package, source_body, member_comment, 0, 1,
                          False, None,
                          None, 0, 0, 0, private_flag)]

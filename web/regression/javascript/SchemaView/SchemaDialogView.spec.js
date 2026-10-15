@@ -87,6 +87,38 @@ describe('SchemaView', ()=>{
         });
       };
 
+    describe('delayed focus', () => {
+      beforeEach(() => jest.useFakeTimers());
+      afterEach(() => jest.useRealTimers());
+
+      it('preserves a field selected before initial autofocus', async () => {
+        await ctrlMount({getInitData: () => Promise.resolve({})});
+        const chosen = ctrl.container.querySelector('[name="field2"]');
+        act(() => chosen.focus());
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(document.activeElement).toBe(chosen);
+      });
+
+      it('does not steal focus after the user leaves the form', async () => {
+        const outside = document.createElement('button');
+        document.body.appendChild(outside);
+        try {
+          await ctrlMount({getInitData: () => Promise.resolve({})});
+          act(() => outside.focus());
+          await act(async () => { jest.advanceTimersByTime(250); });
+          expect(document.activeElement).toBe(outside);
+        } finally {
+          outside.remove();
+        }
+      });
+
+      it('still focuses the first field when no field was selected', async () => {
+        await ctrlMount({getInitData: () => Promise.resolve({})});
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(document.activeElement).toBe(ctrl.container.querySelector('[name="field1"]'));
+      });
+    });
+
     describe('form fields', ()=>{
       beforeEach(async ()=>{
         await ctrlMount({

@@ -453,6 +453,12 @@ class ServerModule(sg.ServerGroupPluginModule):
         # flushed back to the owner's Server row.
         sess = object_session(server)
         if sess is not None:
+            # Navigation still needs the engine identity after this object is
+            # detached. Load only presentation metadata, not owner credentials
+            # or routes; cascade expunge also detaches the endpoint itself.
+            endpoint = getattr(server, 'endpoint_profile', None)
+            if endpoint is not None:
+                _ = endpoint.runtime_identity
             sess.expunge(server)
 
         server.bgcolor = sharedserver.bgcolor
@@ -2641,7 +2647,12 @@ class ServerNode(PGChildNodeView):
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate',
+                        'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
+                        'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
+                        'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
+                        'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
+                        'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
                         'firebird_schema_apply', 'firebird_schema_receipt',
@@ -2744,7 +2755,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'source_validate', 'native_script_prepare',
+                elif action in {'source_validate', 'source_complete', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)
@@ -2813,8 +2824,20 @@ class ServerNode(PGChildNodeView):
                     payload = service.resource_page(
                         server, data.get('request') or {}
                     )
+                elif action == 'mariadb_relational_review':
+                    payload = service.mariadb_relational_review(server, data.get('request'))
+                elif action in {'mariadb_schema_plan', 'mariadb_schema_validate'}:
+                    payload = service.mariadb_schema_plan(server, data.get('request'), validate=action == 'mariadb_schema_validate')
+                elif action in {'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt'}:
+                    payload = service.mariadb_schema_application(server, action, data.get('request'))
+                elif action == 'mariadb_server_catalog':
+                    payload = service.mariadb_server_catalog(server, data.get('request'))
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
+                elif action == 'mysql_relational_review':
+                    payload = service.mysql_relational_review(server, data.get('request'))
+                elif action in {'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt'}:
+                    payload = service.mysql_schema_application(server, action, data.get('request'))
                 elif action in {'mysql_schema_plan', 'mysql_schema_validate'}:
                     payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
                 elif action == 'mysql_test_data':
@@ -2825,9 +2848,65 @@ class ServerNode(PGChildNodeView):
                     payload = service.mysql_design_asset(server, action.removeprefix('mysql_design_'), data.get('request'))
                 elif action == 'mysql_sql_export':
                     payload = service.mysql_native_metadata(server, data.get('request'))
+                elif action == 'mariadb_data_capture':
+                    payload = service.mariadb_data_capture(server, data.get('request'))
+                elif action in {'mariadb_design_read', 'mariadb_design_save'}:
+                    payload = service.mariadb_design_asset(server, action.rsplit('_', 1)[1], data.get('request'))
+                elif action == 'mariadb_test_data':
+                    payload = service.mariadb_test_data(server, data.get('request'))
+                elif action == 'mariadb_native_metadata':
+                    payload = service.mariadb_native_metadata(server, data.get('request'))
+                elif action == 'duckdb_data_capture':
+                    payload = service.duckdb_data_capture(server, data.get('request'))
+                elif action == 'duckdb_test_data':
+                    payload = service.duckdb_test_data(server, data.get('request'))
+                elif action == 'duckdb_copy_plan':
+                    payload = service.duckdb_copy_plan(server, data.get('request'))
+                elif action == 'duckdb_attachment_plan':
+                    payload = service.duckdb_attachment_plan(server, data.get('request'))
+                elif action in {'duckdb_design_read', 'duckdb_design_save'}:
+                    payload = service.duckdb_design_asset(server, action.rsplit('_', 1)[1], data.get('request'))
+                elif action == 'duckdb_schema_plan':
+                    payload = service.duckdb_schema_plan(server, data.get('request'))
+                elif action in {'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt'}:
+                    payload = service.duckdb_schema_application(server, action, data.get('request'))
+                elif action in {'duckdb_catalog_export', 'duckdb_catalog_compare'}:
+                    payload = service.duckdb_catalog(server, data.get('request'),
+                        compare=action == 'duckdb_catalog_compare')
+                elif action in {'sqlite_catalog_export', 'sqlite_catalog_compare'}:
+                    payload = service.sqlite_catalog(server, data.get('request'),
+                        compare=action == 'sqlite_catalog_compare')
+                elif action == 'sqlite_data_capture':
+                    payload = service.sqlite_data_capture(server, data.get('request'))
+                elif action == 'sqlite_data_script':
+                    payload = service.sqlite_data_script(server, data.get('request'))
+                elif action == 'sqlite_test_data':
+                    payload = service.sqlite_test_data(server, data.get('request'))
+                elif action == 'sqlite_schema_plan':
+                    payload = service.sqlite_schema_plan(server, data.get('request'))
+                elif action in {'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt'}:
+                    payload = service.sqlite_schema_application(server, action, data.get('request'))
+                elif action in {'sqlite_design_read', 'sqlite_design_save'}:
+                    payload = service.sqlite_design_asset(server, action.rsplit('_', 1)[1], data.get('request'))
+                elif action in {'mariadb_catalog_export', 'mariadb_catalog_compare'}:
+                    payload = service.mariadb_catalog(server, data.get('request'),
+                        compare=action == 'mariadb_catalog_compare')
                 elif action in {'mysql_catalog_export', 'mysql_catalog_compare'}:
                     payload = service.mysql_catalog(server, data.get('request'),
                         compare=action == 'mysql_catalog_compare')
+                elif action in {'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan'}:
+                    payload = service.postgresql_catalog(server, data.get('request'),
+                        compare=action == 'postgresql_catalog_compare', plan=action == 'postgresql_schema_plan')
+                elif action == 'postgresql_test_data':
+                    payload = service.postgresql_test_data(server, data.get('request'))
+                elif action == 'postgresql_data_capture':
+                    payload = service.postgresql_data_capture(server, data.get('request'))
+                elif action == 'postgresql_server_catalog':
+                    payload = service.postgresql_server_catalog(server, data.get('request'))
+                elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
+                    payload = service.postgresql_schema_application(server, action, data.get('request'))
+                elif action == 'postgresql_relational_review':
+                    payload = service.postgresql_relational_review(server, data.get('request'))
                 elif action == 'firebird_catalog_export':
                     payload = service.export_firebird_catalog(server, data.get('request'))
                 elif action == 'firebird_registered_catalog':

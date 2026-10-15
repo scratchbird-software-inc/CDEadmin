@@ -75,3 +75,23 @@ def test_foreign_identity_and_edited_adapter_fields_block_handoff():
     {'format': 'ddn-workspace@1', 'files': {'../bad.ddn': ''}, 'entry': '../bad.ddn', 'view': 'v'}])
 def test_invalid_source_envelopes_never_reach_native_processing(snapshot):
     with pytest.raises(ValueError): read_relations(snapshot)
+
+
+def test_graphical_type_nullable_and_comment_edits_prepare_native_review():
+    current = capture(); original = current['diagram']['snapshot']
+    desired = deepcopy(original)
+    desired['files']['relations.ddn'] = desired['files']['relations.ddn'].replace('datatype: "BIGINT";', 'datatype: "INT128";', 1).replace('nullable: false;', 'nullable: true; description: "Graphical comment";', 1)
+    result = handoff(current['snapshot'], original, desired)
+    facts = read_catalog(result['desired'])['rows']['column:Child:Exact"A']['native']
+    assert facts['field_type'] == 26 and facts['not_null'] is None
+    assert facts['description'] == 'Graphical comment'
+    assert result['changed_resource_ids'] == ['column:Child:Exact"A']
+    assert result['executed'] is False
+
+
+def test_graphical_and_native_conflicts_block_the_handoff():
+    current = capture(); original = current['diagram']['snapshot']
+    desired = edit(original, 'column:Child:Exact"A', field_type=8)
+    desired['files']['relations.ddn'] = desired['files']['relations.ddn'].replace('datatype: "BIGINT";', 'datatype: "INT128";', 1)
+    with pytest.raises(ValueError, match='disagree'):
+        handoff(current['snapshot'], original, desired)

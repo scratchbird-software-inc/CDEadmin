@@ -192,6 +192,8 @@ class EndpointPersistenceModelTests(unittest.TestCase):
     def tearDown(self):
         self.model.db.session.remove()
         self.model.db.drop_all()
+        for engine in self.model.db.engines.values():
+            engine.dispose()
         self.context.pop()
         self.temporary.cleanup()
 

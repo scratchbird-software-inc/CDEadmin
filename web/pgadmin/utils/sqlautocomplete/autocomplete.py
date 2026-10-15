@@ -86,6 +86,19 @@ def generate_alias(tbl):
     )
 
 
+def _native_argument_array(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    # Legacy query connections return arrays as native text; provider-owned
+    # connections can return decoded lists. PostgreSQL quoting is not CSV.
+    from psycopg.types.array import ArrayLoader
+    class TextArguments(ArrayLoader):
+        base_oid = 25
+    return TextArguments(1009).load(value.encode('utf8'))
+
+
 class SQLAutoComplete():
     """
     class SQLAutoComplete
@@ -115,7 +128,9 @@ class SQLAutoComplete():
             {"tables": {}, "views": {}, "functions": {}, "datatypes": {}}
         self.text_before_cursor = None
 
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(self.sid)
+        manager = kwargs.get('manager')
+        if manager is None:
+            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(self.sid)
 
         # we will set template path for sql scripts
         self.sql_path = 'sqlautocomplete/sql/#{0}#'.format(manager.version)
@@ -130,8 +145,10 @@ class SQLAutoComplete():
             self._fetch_schema_name(schema_names)
 
             pref = Preferences.module('sqleditor')
-            keywords_in_uppercase = \
-                pref.preference('keywords_in_uppercase').get()
+            preference = pref.preference('keywords_in_uppercase') if pref else None
+            # Provider-owned sessions can run before the legacy Query Tool
+            # registers UI preferences. Preserve its default keyword casing.
+            keywords_in_uppercase = preference.get() if preference else True
 
             # Fetch the keywords
             query = render_template("/".join([self.sql_path, 'keywords.sql']))
@@ -195,17 +212,18 @@ class SQLAutoComplete():
             (name.upper() in self.reserved_words) or
             (name.upper() in self.functions)
         ):
-            name = '"%s"' % name
+            name = '"%s"' % name.replace('"', '""')
 
         return name
 
     def escape_schema(self, name):
-        return "'{}'".format(self.unescape_name(name))
+        from psycopg import sql
+        return sql.Literal(self.unescape_name(name)).as_string()
 
     def unescape_name(self, name):
         """ Unquote a string."""
         if name and name[0] == '"' and name[-1] == '"':
-            name = name[1:-1]
+            name = name[1:-1].replace('""', '"')
 
         return name
 
@@ -371,7 +389,7 @@ class SQLAutoComplete():
             self.all_completions.add(type_name)
 
     def set_search_path(self, search_path):
-        self.search_path = self.escaped_names(search_path)
+        self.search_path = list(search_path)
 
     def reset_completions(self):
         self.databases = []
@@ -1081,10 +1099,11 @@ class SQLAutoComplete():
         if schema:
             schema = self.escape_name(schema)
             return [schema] if schema in metadata else []
-        return self.search_path if self.search_path_filter else metadata.keys()
+        return ([name for name in self.escaped_names(self.search_path)
+                 if name in metadata] if self.search_path_filter else metadata.keys())
 
     def _maybe_schema(self, schema, parent):
-        return None if parent or schema in self.search_path else schema
+        return None if parent or schema in self.escaped_names(self.search_path) else schema
 
     def populate_schema_objects(self, schema, obj_type):
         """Returns a list of SchemaObjects representing tables or views.
@@ -1131,6 +1150,11 @@ class SQLAutoComplete():
             if filter_func(meta)
         ]
 
+    def _schema_literals(self, schema):
+        from psycopg import sql
+        names = [schema] if schema else self.search_path
+        return ','.join(sql.Literal(name).as_string() for name in names) or 'NULL'
+
     def _get_schema_obj_query(self, schema, obj_type):
         """
         Get query according object type like tables, views, etc...
@@ -1139,17 +1163,8 @@ class SQLAutoComplete():
         :return: query according to object type and in_clause
         if schema flag in true.
         """
-        in_clause = ''
+        in_clause = self._schema_literals(schema)
         query = ''
-
-        if schema:
-            in_clause = '\'' + schema.replace("'", "''") + '\''
-        else:
-            for r in self.search_path:
-                in_clause += '\'' + r + '\','
-            # Remove extra comma
-            if len(in_clause) > 0:
-                in_clause = in_clause[:-1]
 
         if obj_type == 'tables':
             query = render_template("/".join([self.sql_path, 'tableview.sql']),
@@ -1199,15 +1214,7 @@ class SQLAutoComplete():
         :param schema: include schema flag.
         :return: sql query for functions, and in_clause value.
         """
-        in_clause = ''
-        if schema:
-            in_clause = '\'' + schema + '\''
-        else:
-            for r in self.search_path:
-                in_clause += '\'' + r + '\','
-            # Remove extra comma
-            if len(in_clause) > 0:
-                in_clause = in_clause[:-1]
+        in_clause = self._schema_literals(schema)
 
         query = render_template("/".join([self.sql_path, 'functions.sql']),
                                 schema_names=in_clause)
@@ -1219,23 +1226,15 @@ class SQLAutoComplete():
             data.append(FunctionMetadata(
                 row['schema_name'],
                 row['func_name'],
-                row['arg_names'].strip('{}').split(',')
-                if row['arg_names'] is not None
-                else row['arg_names'],
-                row['arg_types'].strip('{}').split(',')
-                if row['arg_types'] is not None
-                else row['arg_types'],
-                row['arg_modes'].strip('{}').split(',')
-                if row['arg_modes'] is not None
-                else row['arg_modes'],
+                _native_argument_array(row['arg_names']),
+                _native_argument_array(row['arg_types']),
+                _native_argument_array(row['arg_modes']),
                 row['return_type'],
                 row['is_aggregate'],
                 row['is_window'],
                 row['is_set_returning'],
                 row['is_extension'],
-                row['arg_defaults'].strip('{}').split(',')
-                if row['arg_defaults'] is not None
-                else row['arg_defaults']
+                row['arg_defaults']
             ))
 
     def fetch_functions(self, schema):

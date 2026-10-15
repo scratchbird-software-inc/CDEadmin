@@ -9,8 +9,11 @@
 
 """Relational live-verifier result classification tests."""
 
+import pytest
+
 from tools.cdeadmin_relational_provider_live_verify import (
     GRAPHICAL_OBJECT_CATEGORIES,
+    _live_result,
     graphical_object_activation_ready,
 )
 
@@ -59,3 +62,25 @@ def test_graphical_activation_rejects_run_level_errors():
             'raw_commands_used': False,
         }, 'RuntimeError'
     )
+
+
+@pytest.mark.parametrize('engine', ['sqlite', 'firebird'])
+def test_async_live_verifier_waits_for_final_native_error(engine):
+    class DelayedError:
+        def __init__(self):
+            self.calls = 0
+
+        def describe_result(self, _operation):
+            self.calls += 1
+            return {
+                'complete': self.calls > 1,
+                'extensions': {engine: {'payload': {
+                    'rows': [],
+                    'error': {'errno': 1} if self.calls > 1 else None,
+                }}},
+            }
+
+    provider = DelayedError()
+    with pytest.raises(RuntimeError, match='Native live query failed'):
+        _live_result(provider, object(), engine)
+    assert provider.calls == 2

@@ -52,6 +52,7 @@ from .execution import (
 from .native_admin import (
     PostgreSQLNativeAdminError, compile_native_admin,
 )
+from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .preserved_surface import (
     SURFACE_ID, adapt_catalog, concept_declarations, preserved_operations,
 )
@@ -64,7 +65,8 @@ PROFILE_VERSION = '18.3'
 LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
-CATALOG_KINDS = frozenset({'database', 'schema', 'table'})
+CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
+                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'})
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -191,9 +193,57 @@ class PostgreSQLCatalogSource:
             return self._databases(manager, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
+        if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'}:
+            return self._advanced(connection, catalog_kind, route, object_id)
         if catalog_kind == 'schema':
             return self._schemas(manager, connection, route, object_id)
         return self._tables(manager, connection, route, object_id)
+
+    def _advanced(self, connection, kind, route, object_id):
+        if not connection.connected():
+            raise PostgreSQLProviderError('Connect to the selected database before browsing objects')
+        queries = {
+            'aggregate': ('SELECT c.oid, c.proname AS name, n.nspname AS schema, '
+                'pg_catalog.pg_get_function_identity_arguments(c.oid) AS identity_arguments '
+                ', (pg_catalog.pg_identify_object(\'pg_catalog.pg_proc\'::regclass,c.oid,0)).identity AS sql_identity '
+                'FROM pg_catalog.pg_proc c JOIN pg_catalog.pg_aggregate a ON a.aggfnoid=c.oid '
+                'JOIN pg_catalog.pg_namespace n ON n.oid=c.pronamespace', 'n.oid'),
+            'operator': ('SELECT c.oid, c.oprname AS name, n.nspname AS schema, '
+                'CASE WHEN c.oprleft=0 THEN NULL ELSE (pg_catalog.pg_identify_object(\'pg_catalog.pg_type\'::regclass,c.oprleft,0)).identity END AS left_type, '
+                '(pg_catalog.pg_identify_object(\'pg_catalog.pg_type\'::regclass,c.oprright,0)).identity AS right_type '
+                'FROM pg_catalog.pg_operator c JOIN pg_catalog.pg_namespace n ON n.oid=c.oprnamespace', 'n.oid'),
+            'access-method': ('SELECT c.oid, c.amname AS name, c.amtype AS method_type, '
+                'c.amhandler::pg_catalog.regproc::text AS handler FROM pg_catalog.pg_am c', None),
+            'transform': ("SELECT c.oid, pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(t.typname) || ' / ' || l.lanname AS name, "
+                "pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(t.typname) AS data_type, l.lanname AS language "
+                'FROM pg_catalog.pg_transform c JOIN pg_catalog.pg_language l ON l.oid=c.trflang '
+                'JOIN pg_catalog.pg_type t ON t.oid=c.trftype '
+                'JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace', None),
+            'conversion': ('SELECT c.oid, c.conname AS name, n.nspname AS schema '
+                'FROM pg_catalog.pg_conversion c JOIN pg_catalog.pg_namespace n ON n.oid=c.connamespace', 'n.oid'),
+            'operator-class': ('SELECT c.oid, c.opcname AS name, n.nspname AS schema, a.amname AS index_method '
+                'FROM pg_catalog.pg_opclass c JOIN pg_catalog.pg_namespace n ON n.oid=c.opcnamespace '
+                'JOIN pg_catalog.pg_am a ON a.oid=c.opcmethod', 'n.oid'),
+            'operator-family': ('SELECT c.oid, c.opfname AS name, n.nspname AS schema, a.amname AS index_method '
+                'FROM pg_catalog.pg_opfamily c JOIN pg_catalog.pg_namespace n ON n.oid=c.opfnamespace '
+                'JOIN pg_catalog.pg_am a ON a.oid=c.opfmethod', 'n.oid'),
+        }
+        statement, schema_column = queries[kind]
+        clauses, parameters = [], []
+        if schema_column:
+            clauses.append(schema_column + '=%s')
+            parameters.append(_required_int(route, 'schema_id'))
+        if object_id is not None:
+            clauses.append('c.oid=%s')
+            parameters.append(object_id)
+        if clauses:
+            statement += ' WHERE ' + ' AND '.join(clauses)
+        statement += ' ORDER BY name, c.oid LIMIT 1001'
+        status, result = connection.execute_dict(statement, parameters)
+        rows = self._rows(status, result)
+        if len(rows) > 1000:
+            raise PostgreSQLProviderError('Advanced-object catalog exceeds 1000 objects; narrow the scope')
+        return rows
 
     def _databases(self, manager, object_id):
         connection = manager.connection()
@@ -324,33 +374,71 @@ class PostgreSQLProvider:
             },
         }
 
+    @_provider_serialized
     def apply_admin_operation(self, request):
         payload = request.get('provider_payload') or {}
         if not isinstance(payload, Mapping):
             raise PostgreSQLProviderError('provider plan is invalid')
         route = payload.get('route') or {}
-        manager = self._driver.connection_manager(
-            _required_int(route, 'server_id')
-        )
-        if manager is None:
-            raise PostgreSQLProviderError('PostgreSQL server is unavailable')
-        connection = manager.connection(
-            did=_required_int(route, 'database_id')
-        )
         statement = _required_text(payload.get('statement'), 'statement')
-        if payload.get('read_only'):
-            status, result = connection.execute_dict(statement)
-        else:
-            status, result = connection.execute_void(statement)
-        if not status:
-            raise PostgreSQLProviderError(str(result))
-        return {
-            'provider_owned': True,
-            'native_outcome': 'observed',
-            'result': copy.deepcopy(result),
-            'automatic_retry_performed': False,
-            'common_finality_inference': False,
-        }
+        compiled = self._compile_native_admin(payload)
+        if compiled != {'statement': statement, 'read_only': payload.get('read_only')}:
+            raise PostgreSQLProviderError('Retained administrative statement changed')
+        self.permissions.require('data_read' if compiled['read_only'] else 'administer')
+        self.permissions.require('execute')
+        database_id = _required_int(route, 'database_id')
+        session = self.open_session({'route': route})
+        state = self._sessions[session['session_id']]
+        response = None
+        committing = False
+        try:
+            self._ensure_native_connection(state)
+            connection = state.connection
+            if connection.transaction_status() != 0:
+                raise PostgreSQLProviderError('Administrative connection must be idle')
+            status, _ = native_control(connection.conn,
+                'BEGIN READ ONLY' if compiled['read_only'] else 'BEGIN')
+            if not status:
+                raise PostgreSQLProviderError('Administrative transaction could not start')
+            status, _ = native_control(connection.conn, 'SET LOCAL standard_conforming_strings = on')
+            if not status:
+                raise PostgreSQLProviderError('Administrative literal policy could not be established')
+            status, identity = connection.execute_dict(
+                'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
+            if not status or identity.get('rows') != [{'oid': database_id}]:
+                raise PostgreSQLProviderError('Selected administrative database identity changed')
+            status, result = (connection.execute_dict(statement) if compiled['read_only']
+                              else connection.execute_void(statement))
+            if not status:
+                raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+            committing = True
+            status, command = native_control(connection.conn, 'COMMIT')
+            if not status or command != 'COMMIT':
+                raise PostgreSQLProviderError('Administrative commit was not confirmed')
+            response = {
+                'provider_owned': True, 'native_outcome': 'observed',
+                'transaction_outcome': 'committed', 'independent_attachment': True,
+                'result': copy.deepcopy(result), 'automatic_retry_performed': False,
+                'common_finality_inference': False,
+            }
+        except Exception:
+            if committing:
+                state.uncertain = True
+                raise PostgreSQLProviderError(
+                    'PostgreSQL administrative commit outcome is unknown; do not replay') from None
+            raise
+        finally:
+            try:
+                self.close_session(session)
+            except Exception:
+                if response is None:
+                    raise PostgreSQLProviderError('Administrative connection release remains unconfirmed') from None
+                response.update(release_status='unconfirmed',
+                                release_pending_session_id=session['session_id'])
+            else:
+                if response is not None:
+                    response['release_status'] = 'confirmed'
+        return response
 
     def visual_admin_descriptor(self):
         """Describe PostgreSQL objects for the common administration UI."""
@@ -499,7 +587,8 @@ class PostgreSQLProvider:
     @classmethod
     def resource_contributions(cls):
         """Describe PostgreSQL explorer behavior without common branching."""
-        resource_kinds = frozenset({'database', 'schema', 'table'})
+        resource_kinds = (frozenset(POSTGRESQL_ADMIN_OPERATIONS)
+                          | CATALOG_KINDS | CAPTURE_RESOURCE_KINDS)
         return {
             'inspectors': (
                 ResourceInspectorContribution(
@@ -567,6 +656,17 @@ class PostgreSQLProvider:
                     'text/x-pgsql',
                     frozenset({'relational'}),
                     parameter_shape='object-or-array',
+                    dialect_contract_id='postgresql.shared-explain.18.3.v1',
+                    dialect_evidence=(
+                        'postgresql-18.3-explain-sgml-43bc7ee2b009',
+                        'shared-editor-native-plan-estimate-analyze-bindings',
+                    ),
+                    query_plan_templates=(
+                        ('PostgreSQL estimated plan',
+                         'EXPLAIN (FORMAT JSON) {source}'),
+                        ('Explain Analyze (executes statement)',
+                         'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {source}'),
+                    ),
                 ),
             ),
             'completions': (
@@ -582,7 +682,8 @@ class PostgreSQLProvider:
                     profiles,
                     cls._studio_open_session,
                     cls._studio_describe_transaction,
-                    frozenset({'commit', 'rollback'}),
+                    frozenset({'commit', 'rollback',
+                               'autocommit_on', 'autocommit_off'}),
                     cls._studio_control_transaction,
                     cls._studio_close_session,
                 ),
@@ -623,7 +724,7 @@ class PostgreSQLProvider:
             )},
             'export_policy': {
                 'enabled': True,
-                'formats': ['csv', 'json', 'xlsx', 'svg', 'pdf'],
+                'formats': ['csv', 'json', 'xlsx', 'svg', 'pdf', 'ddn'],
                 'max_records': 10000,
                 'max_bytes': 8 * 1024 * 1024,
                 'redact_keys': [],
@@ -731,6 +832,9 @@ class PostgreSQLProvider:
         self.permissions.require('data_read', 'resource')
         payload = _mapping(request)
         extension = _extension(payload)
+        route = payload.get('route') or {}
+        if payload.get('resource_kind') == 'server' and route.get('database_id') is not None:
+            return self._captured_resources(payload, route)
         catalog_kind = extension.get('child_kind')
         rows = self._catalog.read(catalog_kind, extension)
         return [
@@ -742,6 +846,15 @@ class PostgreSQLProvider:
         self.permissions.require('data_read', 'resource')
         payload = _mapping(request)
         extension = _extension(payload)
+        if extension.get('capture_identity'):
+            route = {key: extension[key] for key in ('server_id', 'database_id')}
+            parent = {'resource_id': payload.get('parent_resource_id'),
+                      'authority_path': payload.get('authority_path', [])[:-2]}
+            rows = [row for row in self._captured_resources(parent, route)
+                    if row['resource_id'] == payload['resource_id']]
+            if len(rows) != 1:
+                raise PostgreSQLProviderError('Selected native catalog object no longer exists')
+            return rows[0]
         catalog_kind = extension.get('catalog_kind')
         object_id = _required_int(extension, 'object_id')
         rows = self._catalog.read(catalog_kind, extension, object_id)
@@ -750,6 +863,39 @@ class PostgreSQLProvider:
                 'PostgreSQL resource identity did not resolve exactly once'
             )
         return self._resource(payload, extension, catalog_kind, rows[0])
+
+    def _captured_resources(self, parent, route):
+        capture = self.capture_catalog(route, include_system=False)
+        result = []
+        for item in capture['resources']:
+            native = copy.deepcopy(item['native'])
+            native['name'] = item['display_name']
+            raw = native.get('catalog_row', {})
+            if item['resource_kind'] == 'aggregate':
+                native['identity_arguments'] = raw['identity_arguments']
+            if item['resource_kind'] == 'operator':
+                native.update(left_type=raw['left_type_identity'], right_type=raw['right_type_identity'])
+            if item['resource_kind'] in {'operator-class', 'operator-family'}:
+                native['index_method'] = raw['index_method_name']
+            if item['resource_kind'] == 'transform':
+                native.update(data_type=raw['data_type_identity'], language=raw['language_name'],
+                              name=raw['data_type_identity'] + ' / ' + raw['language_name'])
+            result.append({
+                'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
+                'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
+                'resource_kind': {'policy': 'row-policy'}.get(
+                    item['resource_kind'], item['resource_kind']),
+                'model_family': 'relational',
+                'display_name': item['display_name'], 'display_path': item['display_path'],
+                'parent_resource_id': parent.get('resource_id'),
+                'authority_path': list(parent.get('authority_path', [])) + [native['catalog'], str(native['oid'])],
+                'is_virtual': False, 'generation': parent.get('generation', self.context.cache_namespace),
+                'capability_ids': ['postgresql.catalog.read'],
+                'extensions': {'postgresql': {
+                    'server_id': route['server_id'], 'database_id': route['database_id'],
+                    'catalog_kind': item['resource_kind'], 'object_id': native['oid'],
+                    'capture_identity': True, 'native': normalize_resource_properties(native)}}})
+        return result
 
     def _resource(self, parent, route, catalog_kind, row):
         id_field = 'did' if catalog_kind == 'database' else 'oid'
@@ -774,6 +920,7 @@ class PostgreSQLProvider:
             'object_id': object_id,
             'legacy_metadata': dict(row),
             'native': normalize_resource_properties({
+                **{key: row[key] for key in ('schema', 'name', 'index_method', 'data_type', 'language', 'left_type', 'right_type', 'identity_arguments', 'sql_identity', 'oid') if key in row},
                 'catalog_metadata': dict(row),
             }),
         })
@@ -797,7 +944,7 @@ class PostgreSQLProvider:
         }
 
     @_provider_serialized
-    def open_session(self, request):
+    def open_session(self, request, *, _resolved_database=None):
         self.permissions.require('network')
         if self._closed:
             raise PostgreSQLProviderError('PostgreSQL provider is closed')
@@ -807,6 +954,8 @@ class PostgreSQLProvider:
         database_id = route.get('database_id')
         if database_id is not None:
             database_id = _required_int(route, 'database_id')
+            if not 1 <= database_id <= 4294967295:
+                raise PostgreSQLProviderError('Selected database OID is invalid')
         principal = route.get('principal_reference', '')
         if principal.startswith('worker:'):
             owner_id = _required_int(route, 'owner_id')
@@ -817,9 +966,16 @@ class PostgreSQLProvider:
         else:
             manager = self._driver.connection_manager(server_id)
         connection_id = str(uuid.uuid4())
+        selected_database = {}
+        if _resolved_database is not None:
+            if not isinstance(_resolved_database, str) or not _resolved_database or '\x00' in _resolved_database or database_id is None:
+                raise PostgreSQLProviderError('Exact resolved database name and OID are required')
+            selected_database['database'] = _resolved_database
+        elif principal.startswith('worker:') and database_id is not None:
+            selected_database['database'] = self._resolve_delegated_database(route, database_id)
         connection = manager.connection(
             did=database_id, conn_id=connection_id, auto_reconnect=False,
-            async_=False
+            async_=False, **selected_database
         )
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = _SessionState(
@@ -828,6 +984,13 @@ class PostgreSQLProvider:
         try:
             self._connect_delegated_route(connection, manager, route)
             self._sessions[session_id].attached = connection.connected()
+            if selected_database:
+                self._ensure_native_connection(self._sessions[session_id])
+                status, result = connection.execute_dict(
+                    'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
+                if (not status or len(result.get('rows', [])) != 1 or
+                        result['rows'][0]['oid'] != database_id):
+                    raise PostgreSQLProviderError('Selected database identity changed')
         except Exception:
             self._sessions[session_id].uncertain = True
             manager.release(conn_id=connection_id)
@@ -853,6 +1016,37 @@ class PostgreSQLProvider:
             'limits': {},
             'extensions': {'postgresql': {'provider_owned': True}},
         }
+
+    def capture_catalog(self, route, *, include_system=False):
+        """Read native metadata on a private, transaction-bounded attachment."""
+        from .catalog_capture import capture
+        self.permissions.require('data_read', 'resource')
+        opened = self.open_session({'route': route})
+        try:
+            state = self._sessions[opened['session_id']]
+            with state.lock:
+                self._ensure_native_connection(state)
+                return capture(state.connection.conn, route.get('database_id'),
+                               include_system=include_system)
+        finally:
+            self.close_session(opened)
+
+    def _resolve_delegated_database(self, route, database_id):
+        # A fresh delegated manager has no interactive db_info cache. Resolve
+        # through its own authenticated attachment, never a guessed DB name.
+        bootstrap = self.open_session({'route': {
+            key: value for key, value in route.items() if key != 'database_id'}})
+        try:
+            connection = self._sessions[bootstrap['session_id']].connection
+            status, result = connection.execute_dict(
+                'SELECT datname FROM pg_catalog.pg_database '
+                'WHERE oid = %s AND datallowconn', (database_id,))
+            rows = result.get('rows', []) if status else []
+            if len(rows) != 1 or not isinstance(rows[0].get('datname'), str):
+                raise PostgreSQLProviderError('Selected database is unavailable')
+            return rows[0]['datname']
+        finally:
+            self.close_session(bootstrap)
 
     def _connect_delegated_route(self, connection, manager, route):
         """Connect a worker route without synthesizing an interactive user."""
@@ -896,6 +1090,21 @@ class PostgreSQLProvider:
                 'PostgreSQL delegated connection failed'
             )
 
+    @_session_serialized
+    def validate_source_without_execution(self, request):
+        from .language import analyze
+        payload = _mapping(request)
+        if payload.get('language_profile') != 'postgresql-sql':
+            raise PostgreSQLProviderError('PostgreSQL SQL language binding required')
+        state = self._require_idle_session(payload.get('session_id'))
+        self._ensure_native_connection(state)
+        connection = state.connection.conn
+        result = analyze(payload.get('source'), script=payload.get('script', False),
+                         standard_strings=connection.info.parameter_status(
+                             'standard_conforming_strings'))
+        result['server_version'] = connection.info.server_version
+        return result
+
     def _require_idle_session(self, session_id):
         state = self._sessions.get(session_id)
         if state is None:
@@ -932,6 +1141,8 @@ class PostgreSQLProvider:
         state = self._sessions.get(session_id)
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
+        if not state.uncertain:
+            self._ensure_native_connection(state)
         return {
             'identity': self._identity(),
             'session_id': session_id,
@@ -939,6 +1150,8 @@ class PostgreSQLProvider:
             'provider_payload': {
                 'transaction_status': (None if state.uncertain else
                                        state.connection.transaction_status()),
+                'autocommit': (None if state.uncertain else
+                               getattr(state.connection.conn, 'autocommit', None)),
                 'session_reuse_blocked': state.uncertain,
                 'interpretation': 'PostgreSQL provider-owned opaque value',
             },
@@ -955,7 +1168,8 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
         action = payload.get('action')
         statements = {'commit': 'COMMIT;', 'rollback': 'ROLLBACK;'}
-        if action not in statements:
+        policies = {'autocommit_on': True, 'autocommit_off': False}
+        if action not in statements and action not in policies:
             raise PostgreSQLProviderError(
                 'PostgreSQL transaction action is unavailable'
             )
@@ -963,6 +1177,27 @@ class PostgreSQLProvider:
         with state.lock:
             self._require_idle_session(payload.get('session_id'))
             self._ensure_native_connection(state)
+            if action in policies:
+                native = state.connection.conn
+                desired = policies[action]
+                current = getattr(native, 'autocommit', None)
+                if not isinstance(current, bool):
+                    raise PostgreSQLProviderError(
+                        'PostgreSQL autocommit policy is unavailable')
+                if desired != current:
+                    if state.connection.transaction_status() != 0:
+                        raise PostgreSQLProviderError(
+                            'Commit or roll back the pending transaction '
+                            'before changing autocommit')
+                    try:
+                        native.autocommit = desired
+                    except Exception:
+                        if not state.connection.connected():
+                            state.uncertain = True
+                        raise PostgreSQLProviderError(
+                            'PostgreSQL autocommit change was not acknowledged; '
+                            'refresh transaction state before executing') from None
+                return self.describe_transaction(payload)
             try:
                 status, _detail = native_control(
                     state.connection.conn, statements[action])
@@ -1060,6 +1295,7 @@ class PostgreSQLProvider:
                 sid=state.server_id,
                 did=state.database_id,
                 conn=state.connection,
+                manager=state.manager,
             )
             self._completion_adapters[session_id] = adapter
         return adapter.get_completions(
@@ -1083,6 +1319,9 @@ class PostgreSQLProvider:
         with state.lock:
             self._require_idle_session(session_id)
             self._ensure_native_connection(state)
+            if payload.get('output_policy', {}).get('postgresql_plan'):
+                from .execution import validate_plan
+                validate_plan(state.connection.conn, source, bound)
             execution = Execution(state.connection.conn, source, bound)
             return self._start_execution(payload, session_id, state, execution)
 

@@ -1,6 +1,9 @@
 MariaDB driver development and platform handoff
 ===============================================
 
+Full engine acceptance is governed by ``mariadb_functional_completion.rst``.
+Driver qualification alone does not close that checklist.
+
 Scope and native dependencies
 -----------------------------
 

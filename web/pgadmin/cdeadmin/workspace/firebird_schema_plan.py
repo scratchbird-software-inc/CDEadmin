@@ -163,6 +163,19 @@ def _statements(kind, before, after):
 
 
 def build_plan(baseline, desired, current):
+    from ..providers.firebird.ddl_dialect import generated_dialect
+    databases = [row['native'] for row in current['rows'].values() if row['kind'] == 'database']
+    if len(databases) != 1 or str(databases[0].get('sql_dialect')) not in {'1', '3'}:
+        raise ValueError('Structured planning requires an observed Firebird database dialect')
+    for document in (baseline, desired):
+        roots = [row['native'] for row in document['rows'].values() if row['kind'] == 'database']
+        if roots and (len(roots) != 1 or str(roots[0].get('sql_dialect')) != str(databases[0]['sql_dialect'])):
+            raise ValueError('Database dialect changed since the design baseline; capture and review again')
+    with generated_dialect(int(databases[0]['sql_dialect'])):
+        return _build_plan(baseline, desired, current)
+
+
+def _build_plan(baseline, desired, current):
     """Return an inspectable plan, including blockers, without touching a DB."""
     for document in (baseline, desired):
         for key in ('endpoint_id', 'database_target_id'):
@@ -172,8 +185,8 @@ def build_plan(baseline, desired, current):
     databases = [row['native'] for row in current['rows'].values() if row['kind'] == 'database']
     if (len(servers) != 1 or len(databases) != 1 or
             not str(servers[0].get('version', '')).startswith('5.') or
-            str(databases[0].get('sql_dialect')) != '3'):
-        raise ValueError('Structured planning requires a Firebird 5 dialect 3 catalog')
+            str(databases[0].get('sql_dialect')) not in {'1', '3'}):
+        raise ValueError('Structured planning requires a Firebird 5 dialect 1 or 3 catalog')
     blockers, operations = [], []
     stats = {'unchanged': 0, 'converged': 0, 'preserved_live_changes': 0}
     projected = creation_graph.projected_catalog(baseline, desired, current)
@@ -413,13 +426,13 @@ def build_plan(baseline, desired, current):
     except ValueError as error:
         block('creation-graph', str(error))
     status = 'blocked' if blockers else 'review-ready' if operations else 'no-op'
-    script = None if blockers else ('-- Firebird 5 dialect 3 schema review artifact.\n'
+    script = None if blockers else (f"-- Firebird 5 dialect {databases[0]['sql_dialect']} schema review artifact.\n"
         '-- Revalidate target metadata immediately before any execution.\n' +
         native_script([statement for phase in ('statements', 'deferred_statements')
                 for operation in operations for statement in operation.get(phase, [])]))
     result = {'format': 'scratchrobin.firebird.schema-plan@1', 'status': status,
               'target': {key: current['provenance'][key] for key in ('endpoint_id', 'database_target_id', 'generation')},
-              'engine_version': str(servers[0]['version']), 'sql_dialect': 3,
+              'engine_version': str(servers[0]['version']), 'sql_dialect': int(databases[0]['sql_dialect']),
               'database_identity': {key: databases[0].get(key) for key in ('guid', 'file_id')},
               'observation': current['provenance'].get('observation', 'unknown'),
               'catalog_coverage': current['provenance'].get('coverage', 'unknown'),

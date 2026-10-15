@@ -31,7 +31,8 @@ from typing import Any, Mapping, Sequence
 from ..sdk.relational import RelationalClientError
 from ..visual_admin.requirements import EXPERIENCE_REQUIREMENTS
 from .firebird_expressions import index_expression
-from . import mysql_roles
+from . import mariadb_packages, mariadb_partitions, mariadb_server_objects
+from . import mysql_events, mysql_program_objects, mysql_group_replication, mysql_components, mysql_constraints, mysql_views, mysql_object_changes, mysql_roles, mysql_resource_groups, mysql_server_operations, mysql_tablespaces, mysql_partitions, mysql_replication
 from .firebird import mappings as firebird_mappings
 from .firebird import columns as firebird_columns
 from .firebird import column_order as firebird_column_order
@@ -270,6 +271,96 @@ class RelationalAdministration:
         value = copy.deepcopy(dict(catalog))
         for resource in value.get('objects', []):
             kind = resource['resource_kind']
+            if self.dialect.engine_id == 'mariadb' and kind in mariadb_server_objects.OPERATIONS:
+                resource['operations'] = [{
+                    'operation_id': 'inspect', 'title': 'Inspect native object',
+                    'mutation_class': 'read', 'target_required': True,
+                    'confirmation_required': False,
+                }] + [{
+                    'operation_id': operation,
+                    'title': mariadb_server_objects.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'destructive' if operation == 'drop' else 'admin',
+                    'target_required': operation != 'create',
+                    'confirmation_required': operation != 'create',
+                } for operation in sorted(mariadb_server_objects.OPERATIONS[kind])]
+            if self.dialect.engine_id == 'mariadb' and kind == 'package':
+                resource['operations'] = resource.get('operations', []) + [{
+                    'operation_id': operation, 'title': mariadb_packages.form(operation, self._field)['title'],
+                    'mutation_class': 'destructive' if operation == 'drop_body' else 'admin',
+                    'target_required': operation != 'create_specification',
+                    'confirmation_required': operation != 'create_specification',
+                } for operation in sorted(mariadb_packages.OPERATIONS)]
+            if self.dialect.engine_id=='mysql' and kind=='event':
+                resource['operations']=[{'operation_id':'inspect','title':'Inspect native event','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
+                    'operation_id':operation,'title':mysql_events.form(operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
+                } for operation in sorted(mysql_events.OPERATIONS)]
+            if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
+                resource['operations']=[{'operation_id':'inspect','title':'Inspect native object','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
+                    'operation_id':operation,'title':mysql_program_objects.form(kind,operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
+                } for operation in sorted(mysql_program_objects.OPERATIONS[kind])]
+            if self.dialect.engine_id == 'mysql' and kind=='group-replication':
+                resource['operations']=[{'operation_id':'inspect','title':'Inspect native group','mutation_class':'read','target_required':True,'confirmation_required':False}]+[{
+                    'operation_id':operation,'title':mysql_group_replication.form(operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':True,'confirmation_required':True,
+                } for operation in sorted(mysql_group_replication.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind == 'component':
+                resource['operations'] = [{'operation_id':'inspect','title':'Inspect native component','mutation_class':'read','target_required':True,'confirmation_required':False}] + [{
+                    'operation_id':operation,'title':mysql_components.form(operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':operation!='create','confirmation_required':operation!='create',
+                } for operation in sorted(mysql_components.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind == 'constraint':
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_constraints.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_constraints.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(mysql_constraints.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind == 'view':
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_views.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_views.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
+                } for operation in sorted(mysql_views.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind in mysql_object_changes.OPERATIONS:
+                additions = mysql_object_changes.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mysql_object_changes.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
+            if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_replication.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_replication.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
+                } for operation in sorted(mysql_replication.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind in mysql_partitions.OPERATIONS:
+                additions = mysql_partitions.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mysql_partitions.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
+            if self.dialect.engine_id == 'mariadb' and kind in mariadb_partitions.OPERATIONS:
+                additions = mariadb_partitions.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mariadb_partitions.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
+            if self.dialect.engine_id == 'mysql' and kind == 'tablespace':
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in mysql_tablespaces.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_tablespaces.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': operation != 'create', 'confirmation_required': operation != 'create',
+                } for operation in sorted(mysql_tablespaces.OPERATIONS)]
+            if self.dialect.engine_id == 'mysql' and kind in mysql_server_operations.OPERATIONS:
+                additions = mysql_server_operations.OPERATIONS[kind]
+                resource['operations'] = [item for item in resource.get('operations', []) if item['operation_id'] not in additions] + [{
+                    'operation_id': operation, 'title': mysql_server_operations.form(kind, operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                } for operation in sorted(additions)]
+            if self.dialect.engine_id == 'mysql' and kind == 'resource-group':
+                resource['operations'] = [item for item in resource.get('operations', [])
+                    if item['operation_id'] not in mysql_resource_groups.OPERATIONS] + [{
+                    'operation_id': operation, 'title': mysql_resource_groups.form(operation, self._field)['title'],
+                    'mutation_class': 'admin', 'target_required': operation != 'create',
+                    'confirmation_required': operation != 'create',
+                } for operation in sorted(mysql_resource_groups.OPERATIONS)]
             if self.dialect.engine_id == 'mysql' and kind == 'role':
                 resource['operations'] = [item for item in resource.get('operations', [])
                     if item['operation_id'] not in mysql_roles.OPERATIONS] + [{
@@ -624,6 +715,91 @@ class RelationalAdministration:
             })
             return {'errors': errors}
         draft = request.get('draft', {})
+        if self.dialect.engine_id == 'mariadb' and operation_id in mariadb_server_objects.OPERATIONS.get(resource_kind, ()):
+            try:
+                mariadb_server_objects.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mariadb_server_object', 'message': str(error)})
+            return {'errors': errors}
+        if self.dialect.engine_id == 'mariadb' and resource_kind == 'package' and operation_id in mariadb_packages.OPERATIONS:
+            try:
+                mariadb_packages.compile_operation(operation_id, draft, request.get('target_resource'), self._safe_definition)
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mariadb_package', 'message': str(error)})
+            return {'errors': errors}
+        if self.dialect.engine_id=='mysql' and resource_kind=='event' and operation_id in mysql_events.OPERATIONS:
+            try:mysql_events.compile_operation(operation_id,draft,request.get('target_resource'),self._safe_definition)
+            except RelationalClientError as error:errors.append({'field_id':None,'code':'invalid_mysql_event','message':str(error)})
+            return {'errors':errors}
+        if self.dialect.engine_id=='mysql' and operation_id in mysql_program_objects.OPERATIONS.get(resource_kind,()):
+            try: mysql_program_objects.compile_operation(resource_kind,operation_id,draft,request.get('target_resource'))
+            except RelationalClientError as error: errors.append({'field_id':None,'code':'invalid_mysql_program_object','message':str(error)})
+            return {'errors':errors}
+        if self.dialect.engine_id=='mysql' and resource_kind=='group-replication' and operation_id in mysql_group_replication.OPERATIONS:
+            try: mysql_group_replication.compile_operation(operation_id,draft,request.get('target_resource'))
+            except RelationalClientError as error: errors.append({'field_id':None,'code':'invalid_mysql_group_replication','message':str(error)})
+            return {'errors':errors}
+        if self.dialect.engine_id == 'mysql' and resource_kind == 'component' and operation_id in mysql_components.OPERATIONS:
+            try:
+                mysql_components.compile_operation(operation_id,draft,request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id':None,'code':'invalid_mysql_component','message':str(error)})
+            return {'errors':errors}
+        if self.dialect.engine_id == 'mysql' and resource_kind == 'constraint' and operation_id in mysql_constraints.OPERATIONS:
+            try:
+                mysql_constraints.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_check_enforcement', 'message': str(error)})
+            return {'errors': errors}
+        if self.dialect.engine_id == 'mysql' and resource_kind == 'view' and operation_id in mysql_views.OPERATIONS:
+            try:
+                mysql_views.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_view', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and operation_id in mysql_object_changes.OPERATIONS.get(resource_kind, ())):
+            try:
+                mysql_object_changes.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_object_change', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and resource_kind == 'replication-channel' and operation_id in mysql_replication.OPERATIONS):
+            try:
+                mysql_replication.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_replication', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and operation_id in mysql_partitions.OPERATIONS.get(resource_kind, ())):
+            try:
+                mysql_partitions.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_partition', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mariadb' and operation_id in mariadb_partitions.OPERATIONS.get(resource_kind, ())):
+            try:
+                mariadb_partitions.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mariadb_partition', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and resource_kind == 'tablespace' and operation_id in mysql_tablespaces.OPERATIONS):
+            try:
+                mysql_tablespaces.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_tablespace', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and operation_id in mysql_server_operations.OPERATIONS.get(resource_kind, ())):
+            try:
+                mysql_server_operations.compile_operation(resource_kind, operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_server_operation', 'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'mysql' and resource_kind == 'resource-group' and
+                operation_id in mysql_resource_groups.OPERATIONS):
+            try:
+                mysql_resource_groups.compile_operation(operation_id, draft, request.get('target_resource'))
+            except RelationalClientError as error:
+                errors.append({'field_id': None, 'code': 'invalid_mysql_resource_group', 'message': str(error)})
+            return {'errors': errors}
         if (self.dialect.engine_id == 'mysql' and resource_kind == 'role' and
                 operation_id in mysql_roles.OPERATIONS):
             try:
@@ -3013,6 +3189,17 @@ class RelationalAdministration:
                 'transaction_finality_interpreted_by_common_code': False,
             }
         owns_connection = connection is None
+        if self.dialect.engine_id=='mysql' and compiled.get('mysql_owned_event_scope') and not owns_connection:
+            raise RelationalClientError('Native event administration requires an independently owned connection')
+        global_function_scope = (
+            self.dialect.engine_id == 'mysql' and compiled.get('mysql_global_function_scope')
+            or self.dialect.engine_id == 'mariadb' and compiled.get('mariadb_global_function_scope'))
+        if global_function_scope:
+            if not owns_connection:
+                raise RelationalClientError('Server loadable functions require an owned connection without a default database')
+            # DROP FUNCTION otherwise falls back to a same-name stored routine
+            # after a concurrent UDF removal. Never dispatch in database scope.
+            route = {**route, 'database': None}
         borrowed_firebird = (not owns_connection and
                              self.dialect.engine_id == 'firebird')
         connection = connection or client._connect({'route': route})
@@ -3044,6 +3231,10 @@ class RelationalAdministration:
                 if self.dialect.engine_id == 'firebird'
                 else connection.cursor()
             )
+            if global_function_scope:
+                cursor.execute('SELECT DATABASE()')
+                if cursor.fetchone() != (None,):
+                    raise RelationalClientError('Loadable-function connection unexpectedly selected a database; dispatch refused')
             if borrowed_firebird:
                 task_savepoint = NativeTaskSavepoint(cursor)
                 task_savepoint.begin()
@@ -3376,7 +3567,9 @@ class RelationalAdministration:
                               for name, value in values.items()}
                 identity_token = None
                 if row_identity_available and all(
-                        key in values for key in key_columns):
+                        key in values for key in key_columns) and not (
+                        self.dialect.engine_id == 'sqlite' and
+                        any(values[key] is None for key in key_columns)):
                     array_columns = tuple(
                         name for name, native in zip(columns, native_types)
                         if self.dialect.engine_id == 'firebird' and
@@ -3584,6 +3777,68 @@ class RelationalAdministration:
             raise RelationalClientError('This trigger is maintained by constraint ' + str(owner) +
                                         '; use the constraint lifecycle.')
         operation = request['operation_id']
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(request['resource_kind'], ()):
+            return {'statements': [mariadb_server_objects.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'mariadb_global_function_scope': request['resource_kind'] == 'loadable-function',
+                    'warnings': ['Native server registration has independent commits and server-global effects.',
+                                 'Remote connectivity, native library availability, privileges and dependencies are not qualified by registration.']}
+        if (self.dialect.engine_id == 'mariadb' and request['resource_kind'] == 'package' and
+                operation in mariadb_packages.OPERATIONS):
+            return {'statements': mariadb_packages.compile_operation(operation, request['draft'], request.get('target_resource'), self._safe_definition),
+                'warnings': ['Native MariaDB package DDL commits independently; replacing a declaration can invalidate its body and callers. A body drop retains its declaration. SQL-mode setup and DDL are not an atomic transaction.']}
+        if self.dialect.engine_id=='mysql' and request['resource_kind']=='event' and operation in mysql_events.OPERATIONS:
+            statement=mysql_events.compile_operation(operation,request['draft'],request.get('target_resource'),self._safe_definition)
+            zone=statement.pop('mysql_event_time_zone',None)
+            statements=([{'source':'SET SESSION time_zone=%s','parameters':(zone,)}] if zone is not None else [])+[statement]
+            return {'statements':statements,'mysql_owned_event_scope':True,
+                'warnings':['Native events commit independently and may execute or expire under the server scheduler. Native ALTER without an explicit DEFINER uses MySQL definer rules; omitted schedule/completion/status/body remain unchanged.']}
+        if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(request['resource_kind'],()):
+            return {'statements':[mysql_program_objects.compile_operation(request['resource_kind'],operation,request['draft'],request.get('target_resource'))],
+                'mysql_global_function_scope': request['resource_kind']=='loadable-function',
+                'warnings':['Native library/function registration commits independently. Runtime services and native dependency/privilege checks remain authoritative.']}
+        if self.dialect.engine_id=='mysql' and request['resource_kind']=='group-replication' and operation in mysql_group_replication.OPERATIONS:
+            return {'statements':[mysql_group_replication.compile_operation(operation,request['draft'],request.get('target_resource'))],
+                'warnings':['Native Group Replication changes have distributed effects and are not rollbackable user transactions. Starting never implicitly bootstraps or reconfigures membership.']}
+        if self.dialect.engine_id == 'mysql' and request['resource_kind']=='component' and operation in mysql_components.OPERATIONS:
+            return {'statements':[mysql_components.compile_operation(operation,request['draft'],request.get('target_resource'))],
+                'warnings':['Native component lifecycle has independent commits and service side effects. Native libraries, privileges and dependencies are authoritative.']}
+        if self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return {'statements': [mysql_constraints.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native CHECK enforcement changes use implicit-commit ALTER TABLE.',
+                                 'Enabling enforcement validates existing rows; native refusal does not establish a changed constraint.']}
+        if self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'view' and operation in mysql_views.OPERATIONS:
+            return {'statements': [mysql_views.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native view DDL commits independently of interactive transactions.',
+                                 'ALTER supplies the complete desired definition. Omitted clauses use native defaults; native updatability, privileges and algorithm warnings remain authoritative.']}
+        if (self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mysql_object_changes.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native object DDL commits independently of interactive transactions.',
+                                 'Routine ALTER changes characteristics, not the body, signature or determinism. Native index constraints remain authoritative.']}
+        if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'replication-channel' and operation in mysql_replication.OPERATIONS):
+            return {'statements': [mysql_replication.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native channel configuration, receiver and applier actions do not roll back with interactive transactions.',
+                                 'A native START acknowledgement is not proof of applied data or a connected receiver.']}
+        if (self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mysql_partitions.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native partition DDL commits independently and can delete or exchange data.',
+                                 'Native engine, method, privileges and row-placement validation remain authoritative.']}
+        if (self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mariadb_partitions.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native partition DDL commits independently and can delete or exchange data.',
+                                 'Native engine, method, privileges and row-placement validation remain authoritative.']}
+        if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'tablespace' and operation in mysql_tablespaces.OPERATIONS):
+            return {'statements': [mysql_tablespaces.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Tablespace DDL commits independently; DROP can remove native datafiles.',
+                                 'Native FILE privileges, engine/keyring support and undo cleanup state remain authoritative.']}
+        if (self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(request['resource_kind'], ())):
+            return {'statements': [mysql_server_operations.compile_operation(request['resource_kind'], operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Native server configuration and session control are independent of interactive transaction rollback.',
+                                 'Persistent variable changes can affect subsequent server restarts.']}
+        if (self.dialect.engine_id == 'mysql' and request['resource_kind'] == 'resource-group' and
+                operation in mysql_resource_groups.OPERATIONS):
+            return {'statements': [mysql_resource_groups.compile_operation(operation, request['draft'], request.get('target_resource'))],
+                    'warnings': ['Resource groups operate on native server threads independently of the interactive transaction.',
+                                 'FORCE can move assigned threads to the native default group. Native platform and scheduling privileges apply.']}
         if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
@@ -4732,8 +4987,8 @@ class RelationalAdministration:
                     from .firebird.connection_strings import target_path
                     server_path = target_path(
                         current, route.get('host'), route.get('port'))
-                    if server_path.startswith('/'):
-                        root = posixpath.dirname(server_path)
+                    from .firebird.creation_paths import parent_path
+                    root = parent_path(server_path)
         if not isinstance(root, str) or not root:
             raise RelationalClientError(
                 'endpoint has no approved database creation root'
@@ -4755,23 +5010,9 @@ class RelationalAdministration:
             from .firebird.creation_options import creation_sweep_interval
             creation_stored_pages(request['draft'])
             creation_sweep_interval(request['draft'])
-            root_path = posixpath.normpath(root)
-            if not posixpath.isabs(root_path):
-                raise RelationalClientError(
-                    'Firebird database creation root must be absolute'
-                )
             requested = requested_path.strip() if requested_path else filename
-            database_path = posixpath.normpath(
-                requested if posixpath.isabs(requested)
-                else posixpath.join(root_path, requested)
-            )
-            if not (
-                database_path == root_path or
-                database_path.startswith(root_path.rstrip('/') + '/')
-            ):
-                raise RelationalClientError(
-                    'database file escapes the approved creation root'
-                )
+            from .firebird.creation_paths import resolve
+            database_path = resolve(root, requested)
             from .firebird.connection_strings import database_dsn
             protocol = route.get('protocol')
             database = database_dsn(
@@ -4830,6 +5071,32 @@ class RelationalAdministration:
         if not isinstance(draft, Mapping):
             raise RelationalClientError('administration draft is invalid')
         value = copy.deepcopy(dict(draft))
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
+            return value
+        if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:
+            return value
+        if self.dialect.engine_id=='mysql' and kind=='event':
+            return value
+        if self.dialect.engine_id=='mysql' and kind in mysql_program_objects.OPERATIONS:
+            return value
+        if self.dialect.engine_id=='mysql' and kind=='group-replication':
+            return value
+        if self.dialect.engine_id == 'mysql' and kind=='component':
+            return value
+        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return value
+        if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
+            return value
+        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
+            return value
+        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel':
+            return value
+        if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
+            return value
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
+            return value
+        if self.dialect.engine_id == 'mysql' and kind in {'resource-group', 'system-variable', 'session', 'tablespace'}:
+            return value
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in firebird_limbo.ATTACHMENT_OPERATIONS):
             return value
@@ -5078,6 +5345,36 @@ class RelationalAdministration:
         return value
 
     def _form(self, kind, operation):
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_server_objects.OPERATIONS.get(kind, ()):
+            return mariadb_server_objects.form(kind, operation, self._field)
+        if self.dialect.engine_id=='mysql' and kind=='event' and operation in mysql_events.OPERATIONS:
+            return mysql_events.form(operation,self._field)
+        if self.dialect.engine_id == 'mariadb' and kind == 'package' and operation in mariadb_packages.OPERATIONS:
+            return mariadb_packages.form(operation, self._field)
+        if self.dialect.engine_id=='mysql' and operation in mysql_program_objects.OPERATIONS.get(kind,()):
+            return mysql_program_objects.form(kind,operation,self._field)
+        if self.dialect.engine_id=='mysql' and kind=='group-replication' and operation in mysql_group_replication.OPERATIONS:
+            return mysql_group_replication.form(operation,self._field)
+        if self.dialect.engine_id == 'mysql' and kind=='component' and operation in mysql_components.OPERATIONS:
+            return mysql_components.form(operation,self._field)
+        if self.dialect.engine_id == 'mysql' and kind == 'constraint' and operation in mysql_constraints.OPERATIONS:
+            return mysql_constraints.form(operation, self._field)
+        if self.dialect.engine_id == 'mysql' and kind == 'view' and operation in mysql_views.OPERATIONS:
+            return mysql_views.form(operation, self._field)
+        if self.dialect.engine_id == 'mysql' and operation in mysql_object_changes.OPERATIONS.get(kind, ()):
+            return mysql_object_changes.form(kind, operation, self._field)
+        if self.dialect.engine_id == 'mysql' and kind == 'replication-channel' and operation in mysql_replication.OPERATIONS:
+            return mysql_replication.form(operation, self._field)
+        if self.dialect.engine_id == 'mysql' and operation in mysql_partitions.OPERATIONS.get(kind, ()):
+            return mysql_partitions.form(kind, operation, self._field)
+        if self.dialect.engine_id == 'mariadb' and operation in mariadb_partitions.OPERATIONS.get(kind, ()):
+            return mariadb_partitions.form(kind, operation, self._field)
+        if self.dialect.engine_id == 'mysql' and kind == 'tablespace' and operation in mysql_tablespaces.OPERATIONS:
+            return mysql_tablespaces.form(operation, self._field)
+        if self.dialect.engine_id == 'mysql' and operation in mysql_server_operations.OPERATIONS.get(kind, ()):
+            return mysql_server_operations.form(kind, operation, self._field)
+        if self.dialect.engine_id == 'mysql' and kind == 'resource-group' and operation in mysql_resource_groups.OPERATIONS:
+            return mysql_resource_groups.form(operation, self._field)
         if self.dialect.engine_id == 'mysql' and kind == 'role' and operation in mysql_roles.OPERATIONS:
             return mysql_roles.form(operation, self._field)
         title = operation.replace('_', ' ').title()
@@ -6651,6 +6948,9 @@ class RelationalAdministration:
     def _compile_alter(self, request):
         kind = request['resource_kind']
         target = self._qualified(self._target_path(request['target_resource']))
+        if kind == 'trigger' and self.dialect.engine_id == 'firebird':
+            target = self._quote(
+                self._target_path(request['target_resource'])[-1])
         draft = request['draft']
         changes = draft.get('changes')
         if not isinstance(changes, Mapping):
@@ -7293,7 +7593,10 @@ class RelationalAdministration:
         if kind == 'user':
             name = request['target_resource'].get('display_name')
             return {
-                'source': f'DROP USER {self._account(name)}',
+                'source': (f'DROP USER {self._account(name)}' +
+                           (' USING PLUGIN ' + self._quote(firebird_users.inspected_plugin(request['target_resource']))
+                            if self.dialect.engine_id == 'firebird' and
+                            firebird_users.inspected_plugin(request['target_resource']) else '')),
                 'parameters': (),
             }
         if kind in {'column', 'constraint'}:
@@ -7343,9 +7646,15 @@ class RelationalAdministration:
             else:
                 source = f'DROP INDEX {self._qualified(path)}'
             return {'source': source, 'parameters': ()}
-        if kind == 'trigger' and self.dialect.sql_family == 'mysql':
+        if kind == 'trigger' and (
+                self.dialect.sql_family == 'mysql' or
+                self.dialect.engine_id == 'sqlite'):
             path = self._target_path(request['target_resource'])
             target = self._qualified((*path[:-2], path[-1]))
+            return {'source': f'DROP TRIGGER {target}', 'parameters': ()}
+        if kind == 'trigger' and self.dialect.engine_id == 'firebird':
+            target = self._quote(
+                self._target_path(request['target_resource'])[-1])
             return {'source': f'DROP TRIGGER {target}', 'parameters': ()}
         if kind == 'materialized-view' and (
                 self.dialect.engine_id == 'mysql'):
@@ -8136,6 +8445,8 @@ class RelationalAdministration:
                 f'ALTER USER {user} {" ".join(previews)}',
             )
         if engine == 'firebird':
+            plugin = firebird_users.inspected_plugin(target, changes.get('plugin'))
+            suffix = ' USING PLUGIN ' + self._quote(plugin) if plugin else ''
             clauses = []
             previews = []
             password = changes.get('password')
@@ -8161,8 +8472,8 @@ class RelationalAdministration:
             if not clauses:
                 raise RelationalClientError('user alteration has no changes')
             return (
-                f'ALTER USER {user} {" ".join(clauses)}',
-                f'ALTER USER {user} {" ".join(previews)}',
+                f'ALTER USER {user} {" ".join(clauses)}{suffix}',
+                f'ALTER USER {user} {" ".join(previews)}{suffix}',
             )
         raise RelationalClientError('user alteration is unavailable')
 

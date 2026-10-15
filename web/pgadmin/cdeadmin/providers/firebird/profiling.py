@@ -51,10 +51,16 @@ class ProfileRun:
                                        'native_status_codes': list(status_codes(error))})
 
     def start(self):
-        with transaction(self.connection) as cursor:
-            cursor.execute("SELECT 1 FROM RDB$PACKAGES WHERE RDB$PACKAGE_NAME = 'RDB$PROFILER'")
-            if cursor.fetchone() is None:
-                raise RelationalClientError('Native Firebird profiler package is unavailable')
+        try:
+            with transaction(self.connection) as cursor:
+                cursor.execute("SELECT 1 FROM RDB$PACKAGES WHERE RDB$PACKAGE_NAME = 'RDB$PROFILER'")
+                if cursor.fetchone() is None:
+                    raise RelationalClientError('Native Firebird profiler package is unavailable')
+        except BaseException as error:
+            self.uncertain = bool(getattr(error, 'diagnostic_cleanup_failed', False))
+            self.receipt['state'] = 'admission-unknown' if self.uncertain else 'admission-failed'
+            self._error('admission', error)
+            raise
         self.uncertain = True
         self.receipt['state'] = 'start-unknown'
         try:

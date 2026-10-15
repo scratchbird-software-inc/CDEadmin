@@ -100,7 +100,10 @@ export function ConnectionBar({connected, connecting, connectionStatus, connecti
     },
   ], containerRef);
 
-  const connTitle = React.useMemo(()=>_.find(connectionList, (c)=>c.is_selected)?.conn_title, [connectionList]);
+  const connTitle = React.useMemo(()=> {
+    const title = _.find(connectionList, (c)=>c.is_selected)?.conn_title;
+    return title ? `PostgreSQL — ${title}` : title;
+  }, [connectionList]);
   return (
     (<Root>
       <Box className='ConnectionBar-root'>
@@ -137,7 +140,7 @@ export function ConnectionBar({connected, connecting, connectionStatus, connecti
         {(connectionList||[]).map((conn, i)=>{
           return (
             <PgMenuItem key={i+conn.conn_title} hasCheck checked={conn.is_selected} value={conn}
-              onClick={onConnItemClick}>{conn.conn_title}</PgMenuItem>
+              onClick={onConnItemClick}>{`PostgreSQL — ${conn.conn_title}`}</PgMenuItem>
           );
         })}
         <PgMenuItem onClick={onNewConnClick}>{`< ${gettext('New Connection...')} >`}</PgMenuItem>

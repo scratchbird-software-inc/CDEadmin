@@ -38,7 +38,7 @@ class MonitoringGrant:
     def issue(cls, policy, route, generation, permissions, key_ring,
               authorize, *, clock=time.monotonic, credentials=None,
               engine='firebird'):
-        if engine not in ('firebird', 'postgresql', 'mysql'):
+        if engine not in ('firebird', 'postgresql', 'mysql', 'mariadb'):
             raise MonitoringGrantError('Unsupported monitoring engine')
         if not key_ring.available:
             raise MonitoringGrantError('Monitoring worker key authority is unavailable')
@@ -82,8 +82,17 @@ class MonitoringGrant:
             references[kind] = primary
         if credentials is not None:
             references['database_password'] = 'dedicated'
-        required = {'database_password'}
-        optional = {'database_password_2', 'database_password_3'} if engine == 'mysql' else set()
+        required, optional = {'database_password'}, set()
+        if engine == 'mysql':
+            optional.update({'database_password_2', 'database_password_3'})
+        if original.get('ssh') is not None:
+            if engine != 'postgresql':
+                raise MonitoringGrantError('SSH delegation is not admitted for this engine')
+            from pgadmin.cdeadmin.providers.postgresql.monitoring_ssh import ssh_secret_kinds
+            ssh_required, optional = ssh_secret_kinds(original)
+            required |= ssh_required
+        if engine == 'postgresql':
+            optional.add('tls_private_key_password')
         if not required <= set(references) or set(references) - required - optional:
             raise MonitoringGrantError('A database password reference is required')
         principal = original.get('principal_reference')
@@ -194,6 +203,9 @@ class MonitoringGrant:
                 elif self.engine == 'mysql':
                     from pgadmin.cdeadmin.providers.mysql_family.mysql_monitoring import MySQLMonitor
                     source_factory = MySQLMonitor
+                elif self.engine == 'mariadb':
+                    from pgadmin.cdeadmin.providers.mysql_family.mariadb_monitoring import MariaDBMonitor
+                    source_factory = MariaDBMonitor
                 elif self.engine == 'firebird':
                     from pgadmin.cdeadmin.providers.firebird.monitoring import FirebirdMonitor
                     source_factory = FirebirdMonitor

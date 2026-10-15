@@ -1,13 +1,13 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Dialog} from '@mui/material';
+import {Alert, Box, Button, Checkbox, Dialog, FormControlLabel} from '@mui/material';
 import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import {refreshDesign} from '../cdeadmin_ui/integrations/ddn/designMerge';
 
-export default function FirebirdERD({diagram, post, databaseTargetId, generation, onReview, engine='firebird'}) {
+export default function FirebirdERD({diagram, post, databaseTargetId, generation, onReview, onReviewBusyChange, engine='firebird'}) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(diagram.snapshot);
@@ -16,15 +16,20 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
   const baseline = useRef(diagram.snapshot);
   const [merging, setMerging] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [allowNewColumns, setAllowNewColumns] = useState(false);
+  const [allowColumnRenames, setAllowColumnRenames] = useState(false);
+  const [allowForeignKeys, setAllowForeignKeys] = useState(false);
+  const [allowTemporalHistory, setAllowTemporalHistory] = useState(false);
   const editor = useRef(null);
   const fileToken = useRef(0);
   useEffect(() => {fileToken.current++; setMerging(false); setReviewing(false);}, [diagram.snapshot]);
   useEffect(() => {
-    fileToken.current++; setEditing(false); setError(null); setDraft(diagram.snapshot);
+    fileToken.current++; setAllowTemporalHistory(false); setAllowForeignKeys(false); setAllowColumnRenames(false); setAllowNewColumns(false); setEditing(false); setError(null); setDraft(diagram.snapshot);
     selected.current = {entry: diagram.snapshot?.entry, view: diagram.snapshot?.view};
     seed.current = baseline.current = diagram.snapshot; editor.current = null;
   }, [engine, databaseTargetId]);
   useEffect(() => () => {fileToken.current++;}, []);
+  useEffect(() => () => onReviewBusyChange?.(false), [onReviewBusyChange]);
   const snapshot = () => ({...draft, ...selected.current});
   const download = (content, name, type) => {
     const url = URL.createObjectURL(new Blob([content], {type}));
@@ -68,16 +73,28 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       capture={() => ({snapshot: snapshot(), baseline: baseline.current})}
       onLoad={value => {setDraft(value.snapshot); baseline.current = value.baseline;
         selected.current = {entry: value.snapshot.entry, view: value.snapshot.view}; setError(null);}} />
-    {post && onReview && <Button disabled={editing || merging || reviewing || !generation} onClick={async () => {
-      const serial = ++fileToken.current; setReviewing(true); setError(null);
+    {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include new graphical columns"
+      control={<Checkbox checked={allowNewColumns} disabled={editing || merging || reviewing}
+        onChange={event => setAllowNewColumns(event.target.checked)} />} />}
+    {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include graphical column renames"
+      control={<Checkbox checked={allowColumnRenames} disabled={editing || merging || reviewing}
+        onChange={event => setAllowColumnRenames(event.target.checked)} />} />}
+    {['mysql', 'mariadb'].includes(engine) && post && onReview && <FormControlLabel label="Include foreign key design changes"
+      control={<Checkbox checked={allowForeignKeys} disabled={editing || merging || reviewing}
+        onChange={event => setAllowForeignKeys(event.target.checked)} />} />}
+    {engine === 'mariadb' && post && onReview && <FormControlLabel label="Accept native KEEP-history semantics for temporal schema changes"
+      control={<Checkbox checked={allowTemporalHistory} disabled={editing || merging || reviewing}
+        onChange={event => setAllowTemporalHistory(event.target.checked)} />} />}
+    {post && onReview && <Button disabled={editing || merging || reviewing || (!generation && !['mysql', 'mariadb'].includes(engine))} onClick={async () => {
+      const serial = ++fileToken.current; setReviewing(true); onReviewBusyChange?.(true); setError(null);
       const document = value => ({format: value.format, entry: value.entry, view: value.view, files: value.files});
       try {
-        const result = await post({action: `${engine}_relational_review`, request: {generation,
+        const result = await post({action: `${engine}_relational_review`, request: {...(['mysql', 'mariadb'].includes(engine) ? {database_target_id: databaseTargetId, ...(allowNewColumns ? {allow_new_columns: true} : {}), ...(allowColumnRenames ? {allow_column_renames: true} : {}), ...(allowForeignKeys ? {allow_foreign_keys: true} : {}), ...(engine === 'mariadb' && allowTemporalHistory ? {allow_temporal_history: true} : {})} : {generation}),
           original: document(baseline.current), snapshot: document(snapshot())}});
         if (serial !== fileToken.current) return;
         await onReview(result);
       } catch (failure) {if (serial === fileToken.current) setError(failure.response?.data?.errormsg || failure.message || 'Unable to prepare relational review.');}
-      finally {if (serial === fileToken.current) setReviewing(false);}
+      finally {if (serial === fileToken.current) {setReviewing(false); onReviewBusyChange?.(false);}}
     }}>Review relational metadata changes</Button>}
     {JSON.stringify(baseline.current) !== JSON.stringify(diagram.snapshot) &&
       <Alert severity="warning">The native relational capture has changed. Your design and its original baseline are retained.</Alert>}
@@ -90,12 +107,13 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
       } catch (failure) {if (serial === fileToken.current) setError(failure.message);}
       finally {if (serial === fileToken.current) setMerging(false);}
     }}>Merge latest native relations into design</Button>
+    {engine === 'firebird' && <Alert severity="info">Field datatype, nullable and description edits can prepare native review for existing columns. Domains, arrays, computed values, identities and explicit lifecycle changes retain their native definitions. Labels, layout and hidden fields never imply rename or deletion.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}
     {!editing && <DDNViewerSurface snapshot={draft} onSelectionChange={value => {selected.current = value;}} />}
     <Dialog fullScreen open={editing} onClose={closeEditor}>
       <Box sx={{display: 'flex', alignItems: 'center', gap: 2, p: 1}}>
         <FormReference formKey={`${engine}-relational-diagram`} />
-        <Box sx={{flex: 1}}>Relational design — changes affect the diagram only.</Box>
+        <Box sx={{flex: 1}}>Relational design — database changes require separate native review and explicit application.</Box>
         <Button onClick={() => download(JSON.stringify(captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json')}>Download edited design</Button>
         <Button onClick={closeEditor}>Return to diagram viewer</Button>
       </Box>
@@ -108,5 +126,5 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     </Dialog>
   </Box>;
 }
-FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
-  generation: PropTypes.string, onReview: PropTypes.func};
+FirebirdERD.propTypes = {engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb']), diagram: PropTypes.object.isRequired, post: PropTypes.func, databaseTargetId: PropTypes.string,
+  generation: PropTypes.string, onReview: PropTypes.func, onReviewBusyChange: PropTypes.func};

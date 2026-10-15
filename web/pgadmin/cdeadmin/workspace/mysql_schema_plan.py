@@ -27,7 +27,7 @@ def root(model):
 
 
 def schema(row):
-    return {key:deepcopy(row['native'].get(key)) for key in ('definition','definition_context')}
+    return {key:deepcopy(row['native'].get(key)) for key in (('definition','definition_context','trigger_identity') if row['kind']=='trigger' else ('definition','definition_context'))}
 
 
 def parts(row,sql_mode):
@@ -59,6 +59,16 @@ def parts(row,sql_mode):
 def address(row,database):
     native=row['native'];identity='mysql:'+json.dumps([database,row['kind'],native.get('navigator_parent_resource_id'),row['name']],ensure_ascii=False,separators=(',',':'))
     parent='mysql:'+json.dumps([database,'database',None,database],ensure_ascii=False,separators=(',',':'))
+    if row['kind']=='database':
+        if (row['name']!=database or row['resource_id']!=parent or row.get('path')!=[database] or
+                native.get('database')!=database or native.get('navigator_parent_resource_id') is not None or row.get('system')!='false'):
+            raise ValueError('Native database root identity is inconsistent')
+        return
+    if row['kind']=='trigger':
+        facts=native.get('trigger_identity',{})
+        if facts.get('database')!=database or not isinstance(facts.get('table'),str):
+            raise ValueError('Native trigger owner identity is unavailable')
+        parent='mysql:'+json.dumps([database,'table',parent,facts['table']],ensure_ascii=False,separators=(',',':'))
     if native.get('navigator_parent_resource_id')!=parent or row['resource_id']!=identity or row.get('path')!=[database,row['name']] or native.get('database')!=database or row.get('system')!='false':
         raise ValueError('Native object identity or user-table scope is inconsistent')
 
@@ -66,17 +76,37 @@ def address(row,database):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mysql_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns'}:raise ValueError('Unknown table alteration intent')
-    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column'}
+    if not isinstance(intent,dict) or set(intent)-{'drop_columns','rename_columns'}:raise ValueError('Unknown table alteration intent')
+    renames=intent.get('rename_columns',{})
+    if (not isinstance(renames,dict) or len(renames)>128 or
+            any(not isinstance(value,str) or not 1<=len(value)<=64 or '\x00' in value
+                for pair in renames.items() for value in pair) or
+            len(set(renames.values()))!=len(renames) or any(
+                ('column',old) not in columns or ('column',old) in desired or
+                ('column',new) in columns or ('column',new) not in desired
+                for old,new in renames.items())):
+        raise ValueError('Column rename requires distinct exact baseline and desired native names')
+    inverse={new:old for old,new in renames.items()}
+    removals={key[1] for key in columns.keys()-desired.keys() if key[0]=='column' and key[1] not in renames}
     declared=intent.get('drop_columns',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=removals:
         raise ValueError('Column removal requires exact explicit mysql_change.drop_columns intent')
+    automatic_references=set()
+    if renames:
+        from .mysql_relational_fields import rename_definition
+        remapped=rename_definition(before,deepcopy(before['native']),renames,sql_mode)
+        _layout,renamed_clauses,_order=parts({'name':before['name'],'native':remapped},sql_mode)
+        automatic_references={key for key in columns if key[0] in {'foreign-key','index','primary'} and
+            key in desired and renamed_clauses.get(key)==desired[key]}
+    for key in columns.keys() & desired.keys():
+        if key[0]=='foreign-key' and columns[key]!=desired[key] and key not in automatic_references:
+            raise ValueError('Same-name foreign-key replacement requires separately reviewed DROP and ADD or an explicit new constraint name; foreign-key checks are never disabled')
     drops=[];mutations=[];additions=[]
     for key in sorted(columns):
-        if key in desired and columns[key]==desired[key]:continue
+        if key in automatic_references or key in desired and columns[key]==desired[key]:continue
         kind,value=key
         if kind=='column':
-            if key not in desired:drops.append('DROP COLUMN '+identifier(value))
+            if key not in desired and value not in renames:drops.append('DROP COLUMN '+identifier(value))
         elif kind=='primary':drops.insert(0,'DROP PRIMARY KEY')
         elif kind=='index':drops.insert(0,'DROP INDEX '+identifier(value))
         elif kind=='foreign-key':drops.insert(0,'DROP FOREIGN KEY '+identifier(value))
@@ -84,18 +114,26 @@ def alteration(before,after,sql_mode):
     for index,value in enumerate(new_order):
         key=('column',value)
         previous=new_order[index-1] if index else None
-        old_previous=old_order[old_order.index(value)-1] if value in old_order and old_order.index(value)>0 else None
-        if key not in columns or columns[key]!=desired[key] or previous!=old_previous:
+        original=inverse.get(value,value)
+        old_previous=old_order[old_order.index(original)-1] if original in old_order and old_order.index(original)>0 else None
+        old_previous=renames.get(old_previous,old_previous)
+        if value in inverse or key not in columns or columns[key]!=desired[key] or previous!=old_previous:
             placement=' AFTER '+identifier(previous) if previous is not None else ' FIRST'
-            mutations.append(('ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
+            mutations.append(('CHANGE COLUMN '+identifier(inverse[value])+' ' if value in inverse else
+                'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
-        if key[0]!='column' and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
+        if key[0]!='column' and key not in automatic_references and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
     if old['suffix'].strip()!=new['suffix'].strip():
         if not new['suffix'].strip():raise ValueError('Removing native table options requires an explicit option adapter')
         additions.append(new['suffix'].strip())
     result=drops+mutations+additions
     if not result:raise ValueError('Definition changes do not produce an unambiguous native alteration')
     return 'ALTER TABLE '+identifier(before['native']['database'])+'.'+identifier(before['name'])+' '+', '.join(result)
+
+
+def creation(row,sql_mode,database):
+    layout,_clauses,_order=parts(row,sql_mode)
+    return 'CREATE TABLE '+identifier(database)+'.'+identifier(row['name'])+' ('+','.join(layout['clauses'])+')'+layout['suffix']
 
 
 def plan(baseline,desired,live):
@@ -107,7 +145,6 @@ def plan(baseline,desired,live):
             raise ValueError('DDN review belongs to another endpoint, database or native server')
     operations=[];blockers=[];ignored=[];conflicts=[]
     for key,after in sorted(desired['rows'].items()):
-        if after['kind']=='database':continue
         before,current=baseline['rows'].get(key),live['rows'].get(key)
         intent=after['native'].get('mysql_change')
         if before is not None and _equal(schema(before),schema(after)) and not intent:continue
@@ -118,22 +155,56 @@ def plan(baseline,desired,live):
                 if current is not None:address(current,database)
                 if before['kind']!=after['kind'] or (current is not None and current['kind']!=after['kind']):
                     raise ValueError('Native object kind changed across the review')
-            if after['kind']!='table':raise ValueError('Native adapter for this object kind is not yet admitted')
+            if after['kind'] not in {'table','view','library','event','procedure','function','trigger','database','materialized-view'}:raise ValueError('Native adapter for this object kind is not yet admitted')
             if before is not None and (current is None or not _equal(schema(before),schema(current))):
                 conflicts.append({'resource_id':key,'reason':'Live native definition changed since baseline'});continue
             if before is None:
-                if current is not None:raise ValueError('New native table target already exists')
+                if current is not None:raise ValueError('New native target already exists')
                 if intent:raise ValueError('Creation does not accept alteration/removal intent')
-                layout,_clauses,_order=parts(after,identity['sql_mode'])
-                source='CREATE TABLE '+identifier(database)+'.'+identifier(after['name'])+' ('+','.join(layout['clauses'])+')'+layout['suffix'];operation='create'
+                operation='create'
             elif isinstance(intent,dict) and intent.get('action')=='drop':
                 if set(intent)!={'action','confirmation'} or intent['confirmation']!=before['name']:
-                    raise ValueError('Table removal requires exact native name confirmation')
-                source='DROP TABLE '+identifier(database)+'.'+identifier(before['name']);operation='drop'
+                    raise ValueError('Removal requires exact native name confirmation')
+                operation='drop'
+            else:operation='alter'
+            if after['kind']=='database':
+                from .mysql_database_plan import compile_database
+                source=compile_database(after,operation,database,before)
+                context={name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')}
+            elif after['kind']=='trigger':
+                from .mysql_trigger_plan import compile_trigger
+                source=compile_trigger(after,operation,database)
+                context={name:after['native'].get('definition_context',{}).get(name,identity[name])
+                    for name in ('sql_mode','character_set_client','collation_connection')}
+            elif after['kind'] in {'procedure','function'}:
+                from .mysql_routine_plan import compile_routine
+                source=compile_routine(after,operation,database,before)
+                context={name:after['native'].get('definition_context',{}).get(name,identity[name])
+                    for name in ('sql_mode','character_set_client','collation_connection')}
+            elif after['kind']=='event':
+                from .mysql_event_plan import compile_event
+                source=compile_event(after,operation,database)
+                context={name:after['native'].get('definition_context',{}).get(name)
+                    for name in ('sql_mode','character_set_client','collation_connection','time_zone')}
+                if any(not isinstance(value,str) or '\x00' in value for value in context.values()):
+                    raise ValueError('Native event SQL/character/time-zone context is required')
+            elif after['kind']=='library':
+                from .mysql_library_plan import compile_library
+                source=compile_library(after,operation,database,before)
+                context={name:after['native'].get('definition_context',{}).get(name,identity[name])
+                    for name in ('sql_mode','character_set_client','collation_connection')}
+            elif after['kind'] in {'view','materialized-view'}:
+                from .mysql_view_plan import compile_view
+                source=compile_view(after,operation,database)
+                context={name:after['native'].get('definition_context',{}).get(name,identity[name])
+                    for name in ('sql_mode','character_set_client','collation_connection')}
             else:
-                source=alteration(before,after,identity['sql_mode']);operation='alter'
-            operations.append({'resource_id':key,'kind':'table','name':after['name'],'database':database,'operation':operation,
-                'source':source,'context':{name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')},
+                source=(creation(after,identity['sql_mode'],database) if operation=='create' else
+                    'DROP TABLE '+identifier(database)+'.'+identifier(before['name']) if operation=='drop' else
+                    alteration(before,after,identity['sql_mode']))
+                context={name:identity[name] for name in ('sql_mode','character_set_client','collation_connection')}
+            operations.append({'resource_id':key,'kind':after['kind'],'name':after['name'],'database':database,'operation':operation,
+                'source':source,'context':context,
                 'baseline_schema_sha256':digest(schema(before)) if before else None,'desired_schema_sha256':digest(schema(after))})
         except (ValueError,KeyError,TypeError) as error:
             blockers.append({'resource_id':key,'name':after['name'],'reason':str(error)})
@@ -145,4 +216,6 @@ def plan(baseline,desired,live):
         'native_grammar_validated':False,'application_supported':False,'executed':False,
         'warnings':['Native clause separation is not grammar validation. This preview grants no execution.',
             'MySQL DDL commits implicitly; rollback cannot provide multi-statement atomicity.',
-            'Locked revalidation, durable reviewed admission and rediscovery are required before application.']}
+            'Native baseline/absence revalidation, durable reviewed admission and rediscovery are required before application.'] +
+            (['View/library/event/routine/trigger updates/removals recheck observed baselines with a cooperating advisory lock only. External DDL is not fenced; use an exclusive DDL maintenance window to prevent replacement races.']
+             if any(op['kind'] in {'view','library','event','procedure','function','trigger','database','materialized-view'} and op['operation']!='create' for op in operations) else [])}

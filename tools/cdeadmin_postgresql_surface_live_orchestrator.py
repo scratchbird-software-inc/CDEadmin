@@ -8,7 +8,10 @@
 #
 ##########################################################################
 
-"""Qualify the preserved PostgreSQL UI against an exact isolated runtime."""
+"""Inventory preserved PostgreSQL assets and smoke-test an isolated runtime.
+
+Asset presence and direct SQL do not qualify the host's native forms.
+"""
 
 from __future__ import annotations
 
@@ -359,7 +362,8 @@ def _runtime_smoke(port, password, container, token):
                     {'strategy': 5, 'operator': '>'},
                 ],
                 'functions': [
-                    {'support': 1, 'function': 'btint4cmp'},
+                    {'support': 1, 'function': 'btint4cmp',
+                     'argument_types': ['integer', 'integer']},
                 ],
             }),
             _compile_native(
@@ -531,23 +535,25 @@ def _runtime_smoke(port, password, container, token):
 
 def _object_evidence(surface, runtime, run_id):
     concepts = {'relational': {}}
-    passed_operations = {}
+    missing_operations = {}
     for concept_id, result in surface['concepts'].items():
         if result['status'] != 'passed':
             continue
         concepts['relational'][concept_id] = {
-            'status': 'passed',
-            'operations': result['operations'],
+            'status': 'unqualified',
+            'operations': {},
+            'inventory_operations': result['operations'],
+            'reason': 'Asset inventory and direct SQL do not exercise native UI operations',
         }
         for kind, operations in result['operations'].items():
-            passed_operations.setdefault(kind, set()).update(operations)
+            missing_operations.setdefault(kind, set()).update(operations)
     return {
         'schema': LIVE_EVIDENCE_SCHEMA,
         'engine_id': 'postgresql',
         'exact_profile': PROFILE,
         'run_id': run_id,
         'evidence_scope': (
-            'exact-runtime-and-preserved-native-administration-surface'
+            'exact-runtime-smoke-and-preserved-asset-inventory-only'
         ),
         'surface_id': SURFACE_ID,
         'surface_sha256': surface['surface_sha256'],
@@ -558,17 +564,17 @@ def _object_evidence(surface, runtime, run_id):
             'driver_version': runtime['driver_version'],
         },
         'concepts': concepts,
-        'passed_resource_operations': {
+        'passed_resource_operations': {},
+        'missing_resource_operations': {
             kind: sorted(operations)
-            for kind, operations in passed_operations.items()
+            for kind, operations in missing_operations.items()
         },
-        'missing_resource_operations': {},
         'operation_failures': {},
-        'raw_commands_used_for_provider_operations': False,
+        'raw_commands_used_for_provider_operations': True,
         'automatic_mutation_retry': False,
         'common_transaction_finality_interpreted': False,
         'credential_values_exported': False,
-        'passed': True,
+        'passed': False,
     }
 
 
@@ -606,7 +612,9 @@ def run(image, server_log, startup_timeout=300):
             ),
             'engine_id': 'postgresql',
             'exact_profile': PROFILE,
-            'activation_ready': True,
+            'activation_ready': False,
+            'runtime_smoke_passed': True,
+            'native_ui_qualification_required': True,
             'runtime_image': identity,
             'runtime_verification': runtime,
             'preserved_surface_audit': surface,

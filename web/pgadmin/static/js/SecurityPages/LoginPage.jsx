@@ -1,13 +1,16 @@
-import { Box, Icon } from '@mui/material';
-import { useState } from 'react';
+import { Box, Checkbox, FormControlLabel, Icon } from '@mui/material';
+import { useRef, useState } from 'react';
 import { InputSelectNonSearch, InputText, MESSAGE_TYPE, NotifierMessage } from '../components/FormComponents';
 import BasePage, { SecurityButton } from './BasePage';
+import LoginIllustration from './LoginIllustration';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
 import {QAVisualIdentityToggle} from 'sources/cdeadmin_ui/qa';
 
 export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csrfToken, loginUrl, authSources, authSourcesEnum, oauth2Config, loginBanner, ...props}) {
   const [form, setForm] = useState(({email: '', password: '', language: userLanguage}));
+  const [showPassword, setShowPassword] = useState(false);
+  const formRef = useRef(null);
 
   // Hide login form if auth source is only oauth2 and/or kerberos. #5386
   const showLoginForm = !((authSources?.includes('oauth2') || authSources?.includes('kerberos')) && authSources?.length == 1 || (authSources?.includes('oauth2')
@@ -28,8 +31,8 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
         marginRight: 'auto',
         marginLeft: 'auto'
       }} textCenter />}
-      <BasePage title={gettext('Login')} {...props}>
-        <form data-cdeadmin-qa-key="security.login.form"
+      <BasePage title={gettext('Login')} pageImage={<LoginIllustration />} {...props}>
+        <form ref={formRef} data-cdeadmin-qa-key="security.login.form"
           style={{display:'flex', gap:'15px', flexDirection:'column'}}
           action={loginUrl} method="POST">
           <Box data-cdeadmin-qa-key="security.login.product-identity"
@@ -45,9 +48,19 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
           <>
             <input name="csrf_token" defaultValue={csrfToken} hidden/>
             <InputText name="email" value={form.email} onChange={(v)=>onTextChange('email', v)} placeholder={gettext('Email Address / Username')} autoFocus
-              controlProps={{autoComplete: null}} />
-            <InputText name="password" value={form.password} onChange={(v)=>onTextChange('password', v)} type="password" placeholder={gettext('Password')}
-              controlProps={{autoComplete: null}} />
+              required controlProps={{autoComplete: 'username'}} />
+            <InputText name="password" value={form.password} onChange={(v)=>onTextChange('password', v)} type={showPassword ? 'text' : 'password'} placeholder={gettext('Password')}
+              required controlProps={{autoComplete: 'current-password'}} />
+            <FormControlLabel label={gettext('Show password')} control={<Checkbox size="small" checked={showPassword}
+              onChange={(event) => {
+                // Autofill may update native inputs without a React change event.
+                // Preserve those values before changing the password input type.
+                const inputs = formRef.current.elements;
+                setForm((previous) => ({...previous,
+                  email: inputs.namedItem('email').value,
+                  password: inputs.namedItem('password').value}));
+                setShowPassword(event.target.checked);
+              }} />} />
             <Box textAlign="right" marginTop="-10px">
               <a style={{color: 'inherit'}} href={forgotPassUrl}>{gettext('Forgotten your password?')}</a>
             </Box>
@@ -56,7 +69,7 @@ export default function LoginPage({userLanguage, langOptions, forgotPassUrl, csr
           }
           <QAVisualIdentityToggle />
           {showLoginForm &&
-            <SecurityButton name="internal_button" value="Login" disabled={!(form.email && form.password)}>{gettext('Login')}</SecurityButton>
+            <SecurityButton name="internal_button" value="Login">{gettext('Login')}</SecurityButton>
           }
           {authSources?.includes?.(authSourcesEnum.OAUTH2) &&
           oauth2Config.map((oauth)=>{

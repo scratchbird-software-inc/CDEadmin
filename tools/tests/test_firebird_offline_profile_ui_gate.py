@@ -1,6 +1,7 @@
 """Fixture isolation for the offline Firebird browser qualification gate."""
 
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -13,7 +14,7 @@ class OfflineProfileFixtureTests(unittest.TestCase):
     def test_only_selected_profile_is_retargeted(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'fixture.db'
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.executescript('''
                     CREATE TABLE user (id INTEGER, email TEXT);
                     CREATE TABLE server (id INTEGER, user_id INTEGER,
@@ -51,7 +52,7 @@ class OfflineProfileFixtureTests(unittest.TestCase):
                                (number, 'verified', 'firebird', '5.0.4'))
             self.assertEqual(prepare_copy(path, 'qa@example.test', 39999),
                              (1, 1))
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 self.assertEqual(db.execute('SELECT host, password, '
                                             'save_password FROM server '
                                             'WHERE id = 1').fetchone(),

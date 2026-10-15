@@ -31,4 +31,30 @@ describe('Firebird multi-database search', () => {
     expect(await screen.findByText('Search stopped. Completed database results remain visible.')).toBeVisible();
     expect(post).toHaveBeenCalledTimes(1);
   });
+  it('drops a late old-endpoint result and stops the remaining catalog requests', async () => {
+    let finish;
+    const post = jest.fn(() => new Promise(resolve => {finish = resolve;}));
+    const nextPost = jest.fn();
+    const {rerender} = render(<Component targets={targets} post={post} />);
+    fireEvent.click(screen.getByLabelText('First')); fireEvent.click(screen.getByLabelText('Second'));
+    fireEvent.change(screen.getByLabelText('Metadata search text'), {target: {value: 'OLD'}});
+    fireEvent.click(screen.getByText('Search metadata'));
+    rerender(<Component targets={targets} post={nextPost} />);
+    finish({target_id: 'a', matches: [{resource_id: 'old', display_name: 'OLD'}], match_count: 1});
+    await waitFor(() => expect(screen.getByText('Search metadata')).toBeDisabled());
+    expect(screen.queryByText('OLD')).toBeNull();
+    expect(post).toHaveBeenCalledTimes(1); expect(nextPost).not.toHaveBeenCalled();
+  });
+  it('displays native catalog coverage gaps and warnings alongside matches', async () => {
+    const post = jest.fn().mockResolvedValue({target_id: 'a', matches: [], match_count: 0,
+      catalog_coverage: [{state: 'partial', unavailable_sections: ['database creation authority']}],
+      catalog_warnings: ['Role administration is not visible to this attachment.']});
+    render(<Component targets={targets} post={post} />);
+    fireEvent.click(screen.getByLabelText('First'));
+    fireEvent.change(screen.getByLabelText('Metadata search text'), {target: {value: 'name'}});
+    fireEvent.click(screen.getByText('Search metadata'));
+    expect(await screen.findByText(/Partial native catalog.*database creation authority/)).toBeVisible();
+    expect(screen.getByText('Role administration is not visible to this attachment.')).toBeVisible();
+  });
+
 });

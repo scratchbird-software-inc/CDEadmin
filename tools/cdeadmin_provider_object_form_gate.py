@@ -36,6 +36,7 @@ from pathlib import Path
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.actions.action_builder import ActionBuilder
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -356,7 +357,8 @@ def _workspace_probe(driver, resource_kinds=None,
         const done = arguments[arguments.length - 1];
         const selectedKinds = new Set(arguments[0] || []);
         const containers = new Set(['database', 'schema', 'namespace',
-          'system', 'system-objects', 'catalog']);
+          'system', 'system-objects', 'catalog', 'table', 'view',
+          'materialized-view']);
         const app = window.pgAdmin;
         const tree = app?.Browser?.tree;
         const databaseItem = window.__cdeadminQaDatabaseItem ||
@@ -794,6 +796,8 @@ def _preview_values(kind, operation, target, engine_id):
             })
         if kind == 'binary-log' and operation_id == 'purge_before':
             return rendered({'confirmation': str(name)})
+
+
     if operation_id == 'create':
         object_name = f'cdeadmin_ui_{kind.replace("-", "_")}_probe'
         values = {
@@ -924,6 +928,18 @@ def _preview_values(kind, operation, target, engine_id):
                 values['library'] = 'cdeadmin_ui_preview.so'
         return rendered(values)
     if operation_id == 'alter':
+        if engine_id == 'duckdb' and kind in {'view', 'macro'}:
+            values = {'complete_definition_confirmed': True,
+                      'metadata_reset_acknowledged': True}
+            if kind == 'view':
+                values['query'] = 'SELECT id, value FROM qualification'
+            else:
+                path = target.get('display_path') or []
+                if len(path) != 3:
+                    raise RuntimeError('DuckDB macro preview lacks native catalog path')
+                quoted = '.'.join('"' + str(part).replace('"', '""') + '"' for part in path)
+                values['source'] = f'CREATE OR REPLACE MACRO {quoted}(x) AS x + 2'
+            return rendered(values)
         if kind == 'table':
             return rendered({
                 'add_columns': '[{"name":"ui_note","type":"TEXT"}]',
@@ -980,6 +996,43 @@ def _preview_values(kind, operation, target, engine_id):
             values['confirmation'] = 'cdeadmin_qa_user@%'
         return rendered(values)
     return {}
+
+
+def _fill_duckdb_preview(wait, operation, values):
+    """Enter native array records through the visible compact record editor."""
+    by_label = {field['label']: field for field in operation.get('form', {}).get('fields', [])}
+    arrays = {label: value for label, value in values.items()
+              if by_label.get(label, {}).get('array_editor')}
+    fill_fields(wait, [f'{label}={value}' for label, value in values.items()
+                       if label not in arrays])
+    for label, raw in arrays.items():
+        records = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(records, list):
+            raise RuntimeError('Native record preview requires an array')
+        schema = by_label[label]['array_editor']
+
+        def group(driver):
+            return next((item for item in driver.find_elements(By.CSS_SELECTOR, '[role="group"]')
+                         if item.is_displayed() and item.get_attribute('aria-label') == label), None)
+
+        for index, record in enumerate(records, 1):
+            parent = wait.until(group)
+            button = visible_named_control(parent, f'Add {label} item')
+            if button is None:
+                raise RuntimeError('Native record editor lacks Add item control: ' + label)
+            button.click()
+            if schema['item_kind'] == 'string':
+                fill_fields(wait, [f'{label} {index}={record}'], control_root=group)
+            else:
+                for child in schema['fields']:
+                    value = record.get(child['field_id'])
+                    if value is None or value == '':
+                        continue
+                    if isinstance(value, bool):
+                        value = str(value).lower()
+                    elif isinstance(value, (dict, list)):
+                        value = json.dumps(value, ensure_ascii=False)
+                    fill_fields(wait, [f'{child["label"]}={value}'], control_root=group)
 
 
 def _enumerate_operations(catalog, resource_kinds=None, operation_ids=None):
@@ -1231,9 +1284,12 @@ def run(options):
                     values = _preview_values(
                         kind, operation, target, options.engine_id
                     )
-                    fill_fields(wait, [
-                        f'{label}={value}' for label, value in values.items()
-                    ])
+                    if options.engine_id == 'duckdb':
+                        _fill_duckdb_preview(wait, operation, values)
+                    else:
+                        fill_fields(wait, [
+                            f'{label}={value}' for label, value in values.items()
+                        ])
                     button = wait.until(lambda value: visible_named_control(
                         value, 'Validate and preview'
                     ))

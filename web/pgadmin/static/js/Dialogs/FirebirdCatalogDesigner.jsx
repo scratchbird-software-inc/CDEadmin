@@ -13,7 +13,7 @@ export function nativeCatalogSnapshot(value) {
   return {format, entry, view, files};
 }
 
-export default function FirebirdCatalogDesigner({baseline, disabled, onReview, post, databaseTargetId}) {
+export default function FirebirdCatalogDesigner({baseline, disabled, onReview, post, databaseTargetId, engine='firebird'}) {
   const [open, setOpen] = useState(false), [error, setError] = useState('');
   const [draft, setDraft] = useState(null), [ready, setReady] = useState(false);
   const editor = useRef(null), seed = useRef(null);
@@ -58,13 +58,13 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
       finally {if (serial === epoch.current) setMerging(false);}
     }}>Merge latest native catalog into design</Button>
     {!open && error && <Alert severity="error">{error}</Alert>}
-    <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="catalog" disabled={disabled || merging || open || !initial}
+    <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="catalog" engine={engine} disabled={disabled || merging || open || !initial}
       capture={() => ({snapshot: draft || initial, baseline: original.current})}
       onLoad={value => {setDraft(value.snapshot); original.current = value.baseline; setError('');
         setChanged(JSON.stringify(value.baseline) !== JSON.stringify(initial));}} />
     <Dialog fullScreen open={open} onClose={() => {if (ready && !disabled) capture(false);}}>
       <Box sx={{display: 'flex', alignItems: 'center', gap: 1, p: 1}}>
-        <FormReference formKey="firebird-catalog-designer" />
+        <FormReference formKey={`${engine}-catalog-designer`} />
         <Box sx={{flex: 1}}>Catalog design — native changes require separate review and confirmation.</Box>
         <Button disabled={!ready || disabled} onClick={() => capture(true)}>Use design for native review</Button>
         <Button disabled={!ready || disabled} onClick={() => capture(false)}>Keep draft and return</Button>
@@ -81,4 +81,5 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
   </Box>;
 }
 FirebirdCatalogDesigner.propTypes = {baseline: PropTypes.string, disabled: PropTypes.bool, onReview: PropTypes.func.isRequired,
-  post: PropTypes.func, databaseTargetId: PropTypes.string};
+  post: PropTypes.func, databaseTargetId: PropTypes.string,
+  engine: PropTypes.oneOf(['firebird', 'duckdb', 'sqlite'])};

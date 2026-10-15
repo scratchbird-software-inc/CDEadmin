@@ -6,6 +6,7 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
+import {QueryToolFrame} from 'sources/cdeadmin_ui/editors/QueryToolControls';
 import React, {useCallback, useRef, useMemo, useState, useEffect} from 'react';
 import _ from 'lodash';
 import {
@@ -24,7 +25,6 @@ import getApiInstance, {callFetch, parseApiError} from '../../../../../static/js
 import url_for from 'sources/url_for';
 import { PANELS, QUERY_TOOL_EVENTS, CONNECTION_STATUS, MAX_QUERY_LENGTH, OS_EOL } from './QueryToolConstants';
 import { useBeforeUnload, useInterval } from '../../../../../static/js/custom_hooks';
-import { Box } from '@mui/material';
 import { getDatabaseLabel, getTitle, setQueryToolDockerTitle } from '../sqleditor_title';
 import gettext from 'sources/gettext';
 import NewConnectionDialog from './dialogs/NewConnectionDialog';
@@ -989,7 +989,7 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
     <QueryToolContext.Provider value={queryToolContextValue}>
       <QueryToolConnectionContext.Provider value={queryToolConnContextValue}>
         <QueryToolEventsContext.Provider value={eventBus.current}>
-          <Box width="100%" height="100%" display="flex" flexDirection="column" flexGrow="1" tabIndex="0" ref={containerRef}>
+          <QueryToolFrame tabIndex="0" ref={containerRef}>
             <ConnectionBar
               connected={qtState.connected}
               connecting={qtState.obtaining_conn}
@@ -1018,7 +1018,7 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
               resetToTabPanel={PANELS.MESSAGES}
             />
             <StatusBar eol={qtState.eol} handleEndOfLineChange={handleEndOfLineChange}/>
-          </Box>
+          </QueryToolFrame>
         </QueryToolEventsContext.Provider>
       </QueryToolConnectionContext.Provider>
     </QueryToolContext.Provider>

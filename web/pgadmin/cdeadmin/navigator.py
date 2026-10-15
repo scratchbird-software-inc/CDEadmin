@@ -42,6 +42,11 @@ _KIND_LABELS = {
     'package': 'Packages',
     'partition': 'Partitions',
     'plugin': 'Extensions and plugins',
+    'component': 'Server components',
+    'library': 'Stored libraries',
+    'loadable-function': 'Server loadable functions',
+    'group-replication': 'Group Replication',
+    'group-replication-member': 'Group members',
     'privilege': 'Roles and grants',
     'procedure': 'Procedures',
     'publication': 'Replication objects',
@@ -205,6 +210,17 @@ def resource_children(resources, state, visual_catalog=None):
             return result
     scope = state['scope']
     parent_path = tuple(state.get('parent_path') or ())
+    collapsed_database_owners = (
+        _collapsed_database_owner_ids(resources, state)
+        if scope in {'database', 'kind'} and not parent_path else set()
+    )
+
+    def belongs_to_parent(item):
+        owner = resource_native(item['_source']).get(
+            'navigator_parent_resource_id')
+        return (not owner or owner == state.get('resource_id') or
+                owner in collapsed_database_owners)
+
     paths = {tuple(item['_navigator_path']) for item in prepared}
     system_paths = [
         tuple(item['_navigator_path']) for item in prepared
@@ -240,11 +256,7 @@ def resource_children(resources, state, visual_catalog=None):
             item['resource_kind'] for item in prepared
             if len(item['_navigator_path']) == len(parent_path) + 1 and
             tuple(item['_navigator_path'][:len(parent_path)]) == parent_path
-            and (not resource_native(item['_source']).get(
-                'navigator_parent_resource_id') or
-                resource_native(item['_source'])[
-                    'navigator_parent_resource_id'] ==
-                state.get('resource_id'))
+            and belongs_to_parent(item)
         }
         kinds.update(_empty_group_kinds(resources, state, visual_catalog))
         kinds = sorted(kinds, key=lambda value: kind_label(value).casefold())
@@ -262,9 +274,7 @@ def resource_children(resources, state, visual_catalog=None):
     values = []
     for item in prepared:
         path = tuple(item['_navigator_path'])
-        owner = resource_native(item['_source']).get(
-            'navigator_parent_resource_id')
-        if owner and owner != state.get('resource_id'):
+        if not belongs_to_parent(item):
             continue
         if item['resource_kind'] != kind or len(path) != len(
             parent_path
@@ -457,6 +467,24 @@ def _database_prefix(resources, state):
     return prefix
 
 
+def _collapsed_database_owner_ids(resources, state):
+    """Admit native children of the database hidden by database scope."""
+    values = [{
+        'resource_kind': item.get('resource_kind'),
+        'display_name': item.get('display_name'),
+        'display_path': item.get('display_path'),
+        '_source': item,
+    } for item in resources]
+    prefix = _database_prefix(values, state)
+    if not prefix:
+        return set()
+    return {
+        item['resource_id'] for item in resources
+        if item.get('resource_kind') == 'database' and
+        item.get('display_path') == prefix
+    }
+
+
 def _native_database_identity(item):
     """Return provider-declared database names used only for path ownership.
 
@@ -480,10 +508,11 @@ def _native_database_identity(item):
                 payloads.append(native)
     values = set()
     for payload in payloads:
-        path = payload.get('path')
-        if isinstance(path, str) and path:
-            values.add(path)
-            values.add(PurePath(path).name)
+        for key in ('path', 'database_name'):
+            path = payload.get(key)
+            if isinstance(path, str) and path:
+                values.add(path)
+                values.add(PurePath(path).name)
     return values
 
 

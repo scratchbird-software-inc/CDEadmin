@@ -4,30 +4,30 @@ import {Alert, Box, Button, MenuItem, TextField, Table, TableBody, TableCell, Ta
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
-const initial = () => JSON.stringify({format: 'scratchrobin.mysql.test-data@1', scope: null, seed: 1, tables: []}, null, 2);
+const initial = (engine='mysql') => JSON.stringify({format: `scratchrobin.${engine}.test-data@1`, scope: null, seed: 1, tables: []}, null, 2);
 const save = (source, filename, type) => {
   const url = URL.createObjectURL(new Blob([source], {type}));
   const link = document.createElement('a'); link.href = url; link.download = filename;
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-export default function MySQLTestData({post, databaseTargetId}) {
+export default function MySQLTestData({post, databaseTargetId, engine='mysql'}) {
   const formId = useId();
   const editorSx = {display: 'block', boxSizing: 'border-box', width: '100%', minHeight: 150, height: 210, maxHeight: 380, overflow: 'auto', resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem', p: 1, color: 'text.primary', bgcolor: 'background.paper', border: 1, borderColor: 'divider'};
   const [tables, setTables] = useState([]), [selected, setSelected] = useState('');
-  const [count, setCount] = useState(10), [source, setSource] = useState(initial);
+  const [count, setCount] = useState(10), [source, setSource] = useState(() => initial(engine));
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
   const columns = tables.find(table => table.resource_id === selected)?.columns || [];
   useEffect(() => {setPage(0);}, [selected]);
   const serial = useRef(0), scope = useRef(null);
-  useEffect(() => {serial.current++; scope.current = null; setTables([]); setSelected(''); setSource(initial()); setResult(null); setError(''); setBusy(false);
-    return () => {serial.current++;};}, [post, databaseTargetId]);
+  useEffect(() => {serial.current++; scope.current = null; setTables([]); setSelected(''); setSource(initial(engine)); setResult(null); setError(''); setBusy(false);
+    return () => {serial.current++;};}, [post, databaseTargetId, engine]);
   const change = value => {setSource(value); setResult(null);};
   const run = async generate => {
     const token = ++serial.current; setBusy(true); setError(''); setResult(null);
     try {
-      const response = await post({action: 'mysql_test_data', request: {database_target_id: databaseTargetId,
+      const response = await post({action: `${engine}_test_data`, request: {database_target_id: databaseTargetId,
         ...(generate ? {recipe: JSON.parse(source)} : {})}});
       if(token !== serial.current) return;
       if(generate) setResult(response); else {scope.current = response.scope; setTables(response.tables); setSelected(response.tables[0]?.resource_id || '');}
@@ -56,7 +56,7 @@ export default function MySQLTestData({post, databaseTargetId}) {
     } catch(failure) {if(token === serial.current) setError(failure.message);}
   };
   return <Box sx={{...compactFormSx, gridAutoRows: 'max-content', p: 1, overflow: 'auto'}}>
-    <FormReference formKey="mysql-test-data" />
+    <FormReference formKey={`${engine}-test-data`} />
     <Alert severity="info">Generate and review SQL, then open the saved script in the shared Query Tool on this database. Generation executes no SQL writes. The Query Tool owns autocommit, commit and rollback.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', my: 1}}>
@@ -78,18 +78,18 @@ export default function MySQLTestData({post, databaseTargetId}) {
     </Box>
     <Box sx={{display: 'flex', gap: 1, my: 1, flexWrap: 'wrap'}}>
       <Button disabled={busy} onClick={() => run(true)}>Generate SQL preview</Button>
-      <Button component="label" disabled={busy}>Read recipe<input hidden type="file" accept=".json,application/json" aria-label="MySQL recipe file" disabled={busy} onChange={load} /></Button>
-      <Button disabled={busy} onClick={() => save(source, 'mysql-test-data-recipe.json', 'application/json')}>Save recipe</Button>
-      <Button disabled={busy || !result} onClick={() => save(result.source, 'mysql-test-data.sql', 'text/plain')}>Save SQL script</Button>
+      <Button component="label" disabled={busy}>Read recipe<input hidden type="file" accept=".json,application/json" aria-label={`${engine === 'mariadb' ? 'MariaDB' : 'MySQL'} recipe file`} disabled={busy} onChange={load} /></Button>
+      <Button disabled={busy} onClick={() => save(source, `${engine}-test-data-recipe.json`, 'application/json')}>Save recipe</Button>
+      <Button disabled={busy || !result} onClick={() => save(result.source, `${engine}-test-data.sql`, 'text/plain')}>Save SQL script</Button>
     </Box>
     <Box component="details"><summary>Recipe sources and limits</summary>
       Use constant (value), default, sequential (start/step as exact strings), random-integer (min/max as exact strings), choice/file (values), generated (table resource ID and column), returned (native parent AUTO_INCREMENT allocation), or existing (table resource ID, column and order_by column names). Existing sources read up to 200 rows per table only when the script runs; choose a unique ordering key for repeatable row selection. Empty existing selections supply NULL; default-only AUTO_INCREMENT parents use LAST_INSERT_ID. Maximum 32 tables, 5000 requested rows, 4 MiB recipe and 1 MiB SQL file. Recipes and scripts may contain data. Native privileges, triggers and constraints apply on execution; AUTO_INCREMENT allocation and nontransactional storage may survive rollback. Trigger-supplied IDs without a native allocation produce NULL returned references.
     </Box>
     {result && <><Alert severity="success">{result.rows} rows in {result.tables} tables generated; not executed.</Alert>
       <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.5}}>
-        <Box component="label" htmlFor={formId + '-sql'}>Generated MySQL SQL</Box>
+        <Box component="label" htmlFor={formId + '-sql'}>Generated {engine === 'mariadb' ? 'MariaDB' : 'MySQL'} SQL</Box>
         <Box component="textarea" id={formId + '-sql'} value={result.source} readOnly sx={editorSx} />
       </Box></>}
   </Box>;
 }
-MySQLTestData.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string.isRequired};
+MySQLTestData.propTypes = {engine: PropTypes.oneOf(['mysql', 'mariadb']), post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string.isRequired};

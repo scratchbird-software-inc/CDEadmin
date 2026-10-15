@@ -50,6 +50,39 @@ def qualify(route, evidence, *, password=None, reply_loss=True):
         def rows(pages):
             return [row for page in pages for row in page['payload']['rows']]
 
+        assert client.describe_transaction(handle)['autocommit'] is False
+        assert client.control_transaction(handle, 'autocommit_on')['autocommit'] is True
+        assert client.control_transaction(handle, 'autocommit_off')['autocommit'] is False
+        sql('CREATE TABLE policy_pending (id INT) ENGINE=InnoDB')
+        assert not sql('INSERT INTO policy_pending VALUES (1)')[-1]['payload']['error']
+        try:
+            client.control_transaction(handle, 'autocommit_on')
+        except RelationalClientError:
+            pass
+        else:
+            raise AssertionError('Autocommit implicitly committed pending work')
+        assert client.describe_transaction(handle)['in_transaction'] is True
+        observer = native.connect(**route, database=schema, autocommit=True,
+            **({'password': password} if password is not None else {}))
+        try:
+            with observer.cursor() as independent:
+                independent.execute('SELECT COUNT(*) FROM policy_pending')
+                assert independent.fetchone()[0] == 0
+        finally:
+            observer.close()
+        client.control_transaction(handle, 'rollback')
+        assert rows(sql('SELECT COUNT(*) FROM policy_pending')) == [(0,)]
+        client.control_transaction(handle, 'rollback')
+        assert client.control_transaction(handle, 'autocommit_on')['autocommit'] is True
+        assert not sql('SET autocommit = 0')[-1]['payload']['error']
+        assert client.describe_transaction(handle)['autocommit'] is False
+        proof['checks'].append('native_autocommit_pending_work_and_sql_policy_observation')
+        timed = sql('SELECT 123')
+        metrics = timed[-1]['payload']['statement_metrics']
+        assert metrics['dispatch_ms'] >= 0
+        assert metrics['prepare_ms'] is metrics['execute_ms'] is metrics['plan'] is None
+        proof['checks'].append('honestly_scoped_dispatch_timing')
+
         sql('CREATE PROCEDURE batch_results() BEGIN '
             'SELECT 11 AS one; SELECT 22 AS two; END')
         batch = sql('CALL batch_results()')

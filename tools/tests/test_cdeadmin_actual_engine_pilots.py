@@ -16,7 +16,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +36,9 @@ from pgadmin.cdeadmin.core import EndpointContext  # noqa: E402
 from pgadmin.cdeadmin.sdk import (  # noqa: E402
     PilotProviderError,
     RuntimeIdentityError,
+)
+from pgadmin.cdeadmin.sdk.actual_engine import (  # noqa: E402
+    ActualEnginePilotProvider,
 )
 from pgadmin.cdeadmin.semantic_models import (  # noqa: E402
     SemanticCompilationUnavailable,
@@ -309,6 +312,20 @@ def provider(provider_type, profile):
 
 
 class ActualEnginePilotContractTests(unittest.TestCase):
+
+    def test_positional_results_bind_to_native_column_keys(self):
+        binding = SimpleNamespace(instance=SimpleNamespace(
+            profile=DUCKDB, result_render_capability='duckdb.result.render'))
+        result = {
+            'schema': {'columns': [
+                {'name': 'same', 'key': '0'},
+                {'name': 'same', 'key': '1'},
+            ]},
+            'extensions': {'duckdb': {'payload': {'rows': [[1, 2]]}}},
+        }
+        descriptor = ActualEnginePilotProvider._describe_provider_result(
+            binding, result)
+        self.assertEqual([{'0': 1, '1': 2}], descriptor['records'])
 
     def test_builtins_contain_preserved_and_explicit_engine_interfaces(self):
         class Registry:

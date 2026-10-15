@@ -143,10 +143,13 @@ def _decode_nested(values, encoding):
             value.decode(encoding) for value in values]
 
 
-def _text_length(raw, charset):
+def _text_length(raw, charset, connection=None):
     name = native_name(charset)
     encoding = (codec_name(name) if name in PRIVATE_CHARSETS
                 else TEXT_CHARSETS[charset][0])
+    if name == 'GB18030' and connection is not None:
+        from .gb18030_profile import encoding as native_encoding
+        encoding = native_encoding(connection)
     return len(raw.decode(encoding))
 
 
@@ -177,7 +180,7 @@ def _read_text(cursor, array_id, bounds, dimensions, characters, charset):
             if depth < len(dimensions) - 1:
                 result.append(decode(item, depth + 1))
                 continue
-            length = _text_length(item, charset)
+            length = _text_length(item, charset, cursor._connection)
             value = raw[position:position+capacity].decode(cursor._encoding)
             position += capacity
             if len(value) < length or value[length:].strip(' '):

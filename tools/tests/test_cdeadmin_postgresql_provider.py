@@ -262,6 +262,37 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             endpoint(), self.permissions, self.driver, self.catalog
         )
 
+    def test_autocommit_policy_preserves_pending_work(self):
+        session = self.provider.open_session({
+            'route': {'server_id': 7, 'database_id': 10},
+        })
+        connection = self.provider._sessions[session['session_id']].connection
+        connection.autocommit = True
+        connection.transaction_status = lambda: 0
+        observed = self.provider.control_transaction({
+            **session, 'action': 'autocommit_off'})
+        self.assertIs(False, observed['provider_payload']['autocommit'])
+        connection.transaction_status = lambda: 2
+        with self.assertRaisesRegex(Exception, 'pending transaction'):
+            self.provider.control_transaction({
+                **session, 'action': 'autocommit_on'})
+        self.assertIs(False, connection.autocommit)
+        self.assertEqual([], connection.executions)
+        observed = self.provider.control_transaction({
+            **session, 'action': 'autocommit_off'})
+        self.assertIs(False, observed['provider_payload']['autocommit'])
+        connection.transaction_status = lambda: 0
+        self.provider.control_transaction({
+            **session, 'action': 'autocommit_on'})
+        self.assertIs(True, connection.autocommit)
+        state = self.provider._sessions[session['session_id']]
+        state.uncertain = True
+        self.assertIsNone(self.provider.describe_transaction(session)[
+            'provider_payload']['autocommit'])
+        with self.assertRaises(Exception):
+            self.provider.control_transaction({
+                **session, 'action': 'autocommit_off'})
+
     def test_production_manifest_matches_structural_provider(self):
         manifest = json.loads(MANIFEST_PATH.read_text(encoding='utf-8'))
         schema = json.loads((
@@ -354,6 +385,25 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             [('data_read', 'resource')] * 3, self.permissions.calls
         )
 
+    def test_database_bound_workspace_uses_own_catalog_and_native_identity(self):
+        capture = {'resources': [{'resource_id': 'postgresql:pg_opfamily:91',
+            'resource_kind': 'operator-family', 'display_name': 'family',
+            'display_path': ['appdb', 'public', 'family'], 'native': {
+                'catalog': 'pg_opfamily', 'oid': 91, 'schema': 'public',
+                'catalog_row': {'index_method_name': 'btree'}}}]}
+        self.provider.capture_catalog = Mock(return_value=capture)
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        resource = self.provider.list_resources(parent)[0]
+        self.assertEqual(resource['resource_id'], 'postgresql:pg_opfamily:91')
+        self.assertEqual(resource['extensions']['postgresql']['native']['index_method'], 'btree')
+        self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=False)
+        inspected = self.provider.inspect_resource(resource)
+        self.assertEqual(inspected['resource_id'], resource['resource_id'])
+        self.provider.capture_catalog.return_value = {'resources': []}
+        with self.assertRaisesRegex(PostgreSQLProviderError, 'no longer exists'):
+            self.provider.inspect_resource(resource)
+
     def test_resource_contributions_are_postgresql_owned_and_read_only(self):
         contributions = self.provider.resource_contributions()
         inspector = contributions['inspectors'][0]
@@ -365,6 +415,36 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual('postgresql.catalog.read', command.capability_id)
         self.assertEqual('read', command.mutation_class)
         self.assertEqual('data_read', command.required_permission)
+
+    def test_every_captured_kind_has_read_only_inspection(self):
+        from pgadmin.cdeadmin.providers.postgresql.catalog_capture import (
+            CAPTURE_RESOURCE_KINDS,
+        )
+        contributions = self.provider.resource_contributions()
+        for contribution in (*contributions['inspectors'], *contributions['commands']):
+            self.assertTrue(CAPTURE_RESOURCE_KINDS <= contribution.resource_kinds)
+            self.assertIn('row-policy', contribution.resource_kinds)
+        # Inspection does not invent mutation support for documentary kinds.
+        self.assertFalse(self.provider.supports_admin_operation('composite-relation', 'drop'))
+
+    def test_captured_policy_matches_form_without_rewriting_native_identity(self):
+        item = {'resource_id': 'postgresql:pg_policy:92',
+            'resource_kind': 'policy', 'display_name': 'visible rows',
+            'display_path': ['appdb', 'public', 'visible rows'],
+            'native': {'catalog': 'pg_policy', 'oid': 92, 'schema': 'public',
+                       'catalog_row': {'polrelid': 81}}}
+        self.provider.capture_catalog = Mock(return_value={'resources': [item]})
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        resource = self.provider.list_resources(parent)[0]
+        self.assertEqual(resource['resource_kind'], 'row-policy')
+        self.assertEqual(resource['resource_id'], item['resource_id'])
+        extension = resource['extensions']['postgresql']
+        self.assertEqual(extension['catalog_kind'], 'policy')
+        self.assertEqual(extension['object_id'], 92)
+        self.assertEqual(extension['native']['catalog_row']['polrelid'], 81)
+        self.assertEqual(self.provider.inspect_resource(resource)['resource_kind'], 'row-policy')
+        self.assertEqual(item['resource_kind'], 'policy')
 
     def test_session_execution_result_operation_and_diagnostic_adapters(self):
         session = self.provider.open_session({
@@ -685,11 +765,16 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         }
         validation = provider.validate_visual_admin(request)
         plan = provider.plan_visual_admin(request)
-        result = provider.apply_visual_admin({
-            'plan_id': plan['plan_id'],
-            'plan_digest': plan['plan_digest'],
-            'confirmed': True,
-        })
+        self.driver.manager._connection.transaction_status = Mock(return_value=0)
+        self.driver.manager._connection.execute_dict = Mock(return_value=(True, {'rows': [{'oid': 10}]}))
+        with patch('pgadmin.cdeadmin.providers.postgresql.provider.native_control',
+                   side_effect=lambda _conn, command: (True, command.strip(';'))) as control:
+            result = provider.apply_visual_admin({
+                'plan_id': plan['plan_id'],
+                'plan_digest': plan['plan_digest'],
+                'confirmed': True,
+            })
+        self.assertTrue(any(call.args[1] == 'SET LOCAL standard_conforming_strings = on' for call in control.call_args_list))
         self.assertTrue(validation['valid'])
         self.assertEqual('ready', plan['state'])
         self.assertEqual(
@@ -699,6 +784,21 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'CREATE OPERATOR FAMILY',
             self.driver.manager._connection.executions[-1][0],
         )
+
+    def test_native_admin_literal_policy_failure_never_dispatches_ddl(self):
+        permissions = FakePermissions({'network', 'data_read', 'data_write', 'administer', 'execute'})
+        provider = PostgreSQLProvider(endpoint(), permissions, self.driver, self.catalog)
+        connection = self.driver.manager._connection
+        connection.transaction_status = Mock(return_value=0)
+        connection.execute_void = Mock(return_value=(True, ''))
+        plan = provider.plan_admin_operation({'resource_kind':'operator-family', 'operation_id':'create',
+            'draft':{'schema':'public','name':'unexecuted','index_method':'btree'},
+            '_provider_route':{'server_id':7,'database_id':10}})
+        with patch('pgadmin.cdeadmin.providers.postgresql.provider.native_control',
+                   side_effect=lambda _conn, command: (not command.startswith('SET LOCAL'), command)):
+            with self.assertRaisesRegex(PostgreSQLProviderError, 'literal policy'):
+                provider.apply_admin_operation({'provider_payload':plan['provider_payload']})
+        connection.execute_void.assert_not_called()
 
 
 class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
@@ -733,6 +833,35 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
             WEB / 'pgadmin/browser/server_groups/servers/databases'
         )
         self.assertTrue(any(preserved.rglob('nodes.sql')))
+
+    def test_advanced_catalog_binds_native_scope_and_retains_identity(self):
+        manager = FakeManager()
+        source = PostgreSQLCatalogSource(FakeDriver(manager), Mock())
+        connection = manager._connection
+        connection.connected = Mock(return_value=True)
+        connection.execute_dict = Mock(return_value=(True, {'rows': [
+            {'oid': 42, 'name': 'family', 'schema': 'public', 'index_method': 'hash'}]}))
+        rows = source.read('operator-family', {'server_id': 7, 'database_id': 10, 'schema_id': 20}, 42)
+        self.assertEqual(rows[0]['index_method'], 'hash')
+        statement, parameters = connection.execute_dict.call_args.args
+        self.assertIn('n.oid=%s AND c.oid=%s', statement)
+        self.assertEqual(parameters, [20, 42])
+        connection.connected.return_value = False
+        with self.assertRaisesRegex(PostgreSQLProviderError, 'Connect to the selected'):
+            source.read('access-method', {'server_id': 7, 'database_id': 10})
+
+    def test_operator_and_aggregate_direct_catalogs_preserve_qualified_identity(self):
+        manager = FakeManager()
+        source = PostgreSQLCatalogSource(FakeDriver(manager), Mock())
+        connection = manager._connection
+        connection.connected = Mock(return_value=True)
+        connection.execute_dict = Mock(return_value=(True, {'rows': []}))
+        for kind in ('operator', 'aggregate'):
+            self.assertEqual([], source.read(kind, {'server_id':7,'database_id':10,'schema_id':20},42))
+            statement, parameters = connection.execute_dict.call_args.args
+            self.assertIn('pg_catalog.pg_identify_object', statement)
+            self.assertIn('n.oid=%s AND c.oid=%s', statement)
+            self.assertEqual(parameters,[20,42])
 
     def test_unknown_resource_family_is_refused(self):
         source = PostgreSQLCatalogSource(FakeDriver(), Mock())

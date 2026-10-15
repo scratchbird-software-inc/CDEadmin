@@ -534,14 +534,14 @@ class DataStudioService:
     def validate_source(self, context, session_id, source):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)
-        result = analyze(source, session.language_profile)
         # Providers may supply an explicitly non-executing native validator.
         validator = getattr(binding.instance, 'validate_source_without_execution', None)
         if callable(validator):
-            result['native_validation'] = validator({
-                'session_id': session_id, 'language_profile': session.language_profile,
+            return validator({
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile,
                 'source': source})
-        return result
+        return analyze(source, session.language_profile)
 
     def preview_script(self, context, session_id, source):
         session, binding = self._operational_session(context, session_id)

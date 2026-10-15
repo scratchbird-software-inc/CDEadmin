@@ -199,3 +199,33 @@ def test_automatic_reconnect_is_refused_before_connect():
     with pytest.raises(RelationalClientError, match='automatic reconnect'):
         Connector(module)(reconnect=True)
     module.connect.assert_not_called()
+
+
+def test_autocommit_requires_explicit_resolution_and_native_acknowledgement():
+    client = make_client()
+    handle = client.open_session({'route': {'host': 'one'}})
+    handle.autocommit, handle.server_status = False, 1
+    with pytest.raises(RelationalClientError, match='Commit or roll back'):
+        client.control_transaction(handle, 'autocommit_on')
+    assert handle.autocommit is False
+    handle.commit.assert_not_called()
+    handle.rollback.assert_not_called()
+    assert client.control_transaction(handle, 'autocommit_off')['autocommit'] is False
+    handle.server_status = 0
+    assert client.control_transaction(handle, 'autocommit_on')['autocommit'] is True
+    assert client.control_transaction(handle, 'autocommit_off')['autocommit'] is False
+    client.close()
+
+
+def test_lost_autocommit_acknowledgement_quarantines_without_reconnect():
+    client = make_client()
+    handle = client.open_session({'route': {'host': 'one'}})
+    handle.autocommit, handle.server_status = False, 0
+    handle.ping.side_effect = [None, OSError('lost acknowledgement')]
+    with pytest.raises(RelationalClientError, match='acknowledgement'):
+        client.control_transaction(handle, 'autocommit_on')
+    assert client.describe_transaction(handle)['state'] == 'unknown'
+    with pytest.raises(RelationalClientError, match='unknown'):
+        client.control_transaction(handle, 'autocommit_on')
+    assert all(call.kwargs == {} for call in handle.ping.call_args_list)
+    client.close()

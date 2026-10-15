@@ -6,16 +6,16 @@ describe('Firebird scoped execution framing', () => {
   beforeEach(() => {encoder = global.TextEncoder; global.TextEncoder = TextEncoder;});
   afterEach(() => {global.TextEncoder = encoder;});
   it('selects a whole PSQL block from an internal cursor', () => {
-    const source = "select 1; execute block returns (v integer) as begin v=case when 1=1 then 2 else 3 end; suspend; end; select 4;";
+    const source = 'select 1; execute block returns (v integer) as begin v=case when 1=1 then 2 else 3 end; suspend; end; select 4;';
     const prepared = firebirdExecution(source, 'current', source.indexOf('suspend'));
     expect(prepared.scriptMode).toBe(false);
     expect(prepared.source).toBe('execute block returns (v integer) as begin v=case when 1=1 then 2 else 3 end; suspend; end');
   });
   it('preserves literal/comment delimiters and native terminator changes', () => {
-    const source = "SET TERM ^^ ; execute block returns (v varchar(20)) as begin v=q'{;^^}'; /* ^^ */ suspend; end ^^ SET TERM ; ^^ select 4;";
+    const source = 'SET TERM ^^ ; execute block returns (v varchar(20)) as begin v=q\'{;^^}\'; /* ^^ */ suspend; end ^^ SET TERM ; ^^ select 4;';
     const entries = firebirdFragments(source);
     expect(entries.map(item => item.kind)).toEqual(['terminator', 'sql', 'terminator', 'sql']);
-    expect(firebirdExecution(source, 'current', source.indexOf('suspend')).source).toContain("v=q'{;^^}'");
+    expect(firebirdExecution(source, 'current', source.indexOf('suspend')).source).toContain('v=q\'{;^^}\'');
   });
   it('inherits only client settings without replaying prior SQL or transactions', () => {
     const source = 'SET SQL DIALECT 3; SET AUTO OFF; SET BAIL ON; UPDATE BEFORE_T SET X=1; COMMIT; SELECT 2; SELECT 3;';
@@ -37,11 +37,17 @@ describe('Firebird scoped execution framing', () => {
     const source = 'SET TERM xyz ; SELECT 1xyzSELECT 2xyz';
     expect(firebirdFragments(source).map(item => item.source)).toEqual(['SET TERM xyz', 'SELECT 1', 'SELECT 2']);
   });
-  it.each(["select 'unclosed", 'execute block as begin suspend;', 'select 1 /* unclosed'])('refuses partial source %s', source => {
+  it.each(['select \'unclosed', 'execute block as begin suspend;', 'select 1 /* unclosed'])('refuses partial source %s', source => {
     expect(() => firebirdExecution(source, 'current', 0)).toThrow();
   });
   it('does not prepare an empty selection or a standalone client directive', () => {
     expect(() => firebirdExecution('select 1', 'selection', 0, 0)).toThrow();
     expect(() => firebirdExecution('set term ^ ;', 'current', 0)).toThrow();
   });
+});
+
+
+it('selects the next statement at a delimiter boundary without replaying COMMIT', () => {
+  const source='COMMIT;SELECT 2 FROM RDB$DATABASE;';
+  expect(firebirdExecution(source,'current',7)).toEqual({source:'SELECT 2 FROM RDB$DATABASE',scriptMode:false});
 });

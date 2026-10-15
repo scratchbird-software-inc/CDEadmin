@@ -11,10 +11,19 @@ pgAdmin Development Team. The upstream copyright, PostgreSQL Licence, source
 history, and applicable notices are retained. See [NOTICE](NOTICE),
 [LICENSE](LICENSE), and [Hard-fork status](docs/en_US/cdeadmin_hard_fork.rst).
 
+**Project links:** [implementation and qualification status](docs/en_US/implementation_status.rst)
+· [open-source site source](website/index.html) · [wiki source](wiki/Home.md)
+· [development setup](tools/development/README.md) ·
+[commercial ScratchRobin page](https://scratchbird.ca/robin).
+The site and wiki source are versioned here; their GitHub publishing endpoints
+are separate from the application release gate.
+
 ## Developer setup
 
 For a fresh development machine, see the
 [Windows/macOS/Linux development and demo setup guide](tools/development/README.md).
+
+[Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
 It covers dependencies, frontend builds, account setup, Docker fixtures, sample
 credentials, and per-engine start/stop/verification commands.
 
@@ -50,9 +59,12 @@ hosting action must be backed up and reviewed before it is performed.
 ## Current development status
 
 CDEadmin is currently version **0.1.0-dev** and is not approved for production
-release. The current implementation checkpoint provides 24 connector roots and
-26 independently activated provider profiles; YugabyteDB YSQL/YCQL and
-OpenSearch native/SQL-PPL have separate protocol profiles.
+release. The project contains **24 engine connector roots** and **27 provider
+profiles**. A connector root is the top-level explorer grouping for an engine;
+a provider profile is an exact protocol/dialect implementation. YugabyteDB
+YSQL/YCQL, OpenSearch native/SQL-PPL, and Firebird network/embedded each have
+separate profiles under one engine root. These are inventory counts, not 24 or
+27 completed release gates.
 
 The provider portfolio covers PostgreSQL, MySQL, MariaDB, Firebird, DuckDB,
 SQLite, MongoDB, Neo4j, Cassandra, Redis, XTDB, ClickHouse, InfluxDB, Milvus,
@@ -61,11 +73,10 @@ Vitess, and YugabyteDB. Native ScratchBird is intentionally deferred until the
 reference-engine browser audit is complete.
 
 The structural and live-operation gates are implementation checkpoints, not a
-claim of release readiness. Remaining qualification includes exhaustive
-provider-by-provider browser review, every form and material state, accessibility
-variants, connection/security mode matrices, large-result behavior, and final
-packaging, legal, security, and release-engineering approval. See
-[Implementation status](docs/en_US/implementation_status.rst).
+claim of release readiness. The [dated status matrix](docs/en_US/implementation_status.rst)
+separates source implementation, local verification, GitHub CI and release
+approval for each profile. It also distinguishes the pushed baseline from
+uncommitted development work.
 
 The current implementation contains provider and administration work for
 multiple engine families. Feature availability is governed by provider
@@ -125,10 +136,13 @@ artwork is held in the canonical
 `web/pgadmin/static/assets/cdeadmin` catalog; new code uses semantic icon
 identities instead of physical asset paths.
 
-The bundled
-DDN Viewer and DDN Designer are consumed as versioned third-party libraries
-through their documented public APIs; editable DDN source remains the single
-diagram authority and is stored as an authenticated, versioned project asset.
+The bundled DDN runtime and unified Designer are consumed as a versioned
+third-party workspace through their documented public APIs. ScratchRobin
+discovers authorized native metadata and selected data, stores versioned design
+assets, and reviews/applies engine-specific schema changes. DDN owns diagram
+rendering and visual editing; editable DDN/DDNA/DDNN source remains the diagram
+authority. [The roundtrip contract](docs/en_US/ddn_database_roundtrip.rst)
+describes the boundary and the rules for native schema review.
 The first-party Schema Comparison, Data Lineage, Data Quality, Data Contract
 Manager, ETL Designer, CDC Designer, Replication Topology and Distributed
 Tracing modules use those same registries,
@@ -193,21 +207,32 @@ described above.
 
 ## Prerequisites
 
-- Python 3.9 or later
+For native Windows x64, Intel macOS and Apple Silicon setup, follow the
+[native development guide](tools/development/NATIVE.md). It provisions the
+required native clients, builds the frontend and runs the platform checks
+without WSL, Docker or Linux libraries. The GitHub **Native development
+environments** workflow tests each host separately.
+
+- Python 3.14 or later (the standard 3.14 build is the current installation baseline)
 - Node.js 20 or later
 - Yarn through Corepack
 - The Python and native drivers required by the providers being exercised
 - Live reference engines only for the relevant integration/activation tests
 
+The separate free-threaded Python build (`python3.14t` or newer) is a
+qualification target, not a supported full-product runtime yet. See the
+[Python runtime policy](docs/en_US/python_runtime_policy.rst) for the dependency
+and no-GIL gates. Python 3.15 has been released but needs its own qualification.
+
 Enable Yarn and create a Python environment:
 
 ```bash
 corepack enable
-python3 -m venv venv
+python3.14 -m venv venv
 source venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
-python3 -m pip install -r web/regression/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r web/regression/requirements.txt
 ```
 
 Provider-specific drivers and reference-engine versions are documented by
@@ -221,7 +246,8 @@ make install-node
 make bundle
 ```
 
-On Windows, run `yarn install` and `yarn run bundle` from `web/`.
+On Windows and macOS, use the native guide's `frontend` stage to build with
+the required host tools and memory settings.
 
 ## Development configuration and startup
 
@@ -258,6 +284,12 @@ changed in this repository. ScratchBird source and private specifications are
 read-only inputs and must never be modified by CDEadmin work.
 
 ## Documentation
+
+The [wiki source](wiki/Home.md) is a task-oriented entry point for setup,
+engine workflows, schema review, dashboards, SQL history and troubleshooting.
+The [open-source website source](website/index.html) is a static GitHub Pages
+entry point. Both link to the detailed Sphinx and provider documentation;
+neither is a production-readiness claim.
 
 Build the documentation with:
 

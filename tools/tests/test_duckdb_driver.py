@@ -87,18 +87,50 @@ def test_exact_arrow_types_and_bindings(client, tmp_path):
     assert rows(execute(client, h, 'SELECT ?', [42])) == [[42]]
 
 
-def test_scripts_order_pages_and_first_error(client, tmp_path):
+def test_ordinary_run_refuses_multiple_statements_before_effects(client, tmp_path):
     h, _ = open_database(client, tmp_path)
-    pages = execute(
-        client, h, "SELECT ';' AS text; SELECT i FROM range(777) t(i)")
-    assert len(rows(pages)) == 778
-    assert max(len(p['payload']['rows']) for p in pages) <= 256
-    assert [p['payload']['result_set_index'] for p in pages
-            if p['payload'].get('has_page')] == [0, 1, 1, 1, 1]
-    pages = execute(client, h, 'SELECT 1; SELECT missing; SELECT 3')
-    assert pages[-1]['payload']['error']['type'] == 'BinderException'
-    assert [r for p in pages for r in p['payload']['rows']] == [[1]]
+    pages = execute(client, h, 'CREATE TABLE forbidden(i INT); SELECT 3')
+    assert pages[-1]['payload']['error']['type'] == 'StatementCountError'
+    assert h.execute("SELECT count(*) FROM duckdb_tables() "
+                     "WHERE table_name='forbidden'").fetchone() == (0,)
+    pages = execute(client, h, 'EXPLAIN SELECT 1; CREATE TABLE forbidden(i INT)')
+    assert pages[-1]['payload']['error']['type'] == 'StatementCountError'
+    assert h.execute("SELECT count(*) FROM duckdb_tables() "
+                     "WHERE table_name='forbidden'").fetchone() == (0,)
+    assert execute(client, h, '-- comment only')[-1]['payload']['error'][
+        'type'] == 'StatementCountError'
+    assert rows(execute(client, h, "SELECT 'é;😀';")) == [['é;😀']]
+    assert rows(execute(client, h, 'SELECT 5;;')) == [[5]]
     assert rows(execute(client, h, 'SELECT 4')) == [[4]]
+
+
+def test_one_import_command_may_expand_into_native_internal_statements(client, tmp_path):
+    duckdb = native()
+    source = tmp_path / 'export-source.duckdb'
+    export = tmp_path / 'export-directory'
+    quoted_export = str(export).replace("'", "''")
+    owner = duckdb.connect(str(source))
+    owner.execute('CREATE TABLE imported(i INTEGER)')
+    owner.execute('INSERT INTO imported VALUES (7)')
+    owner.execute(f"EXPORT DATABASE '{quoted_export}'")
+    owner.close()
+    handle, _ = open_database(client, tmp_path)
+    pages = execute(client, handle, f"IMPORT DATABASE '{quoted_export}'")
+    assert not pages[-1]['payload'].get('error'), pages[-1]
+    assert rows(execute(client, handle, 'SELECT * FROM imported')) == [[7]]
+
+
+def test_native_statement_metrics_identify_their_measured_scope(client, tmp_path):
+    handle, _ = open_database(client, tmp_path)
+    pages = execute(client, handle, 'SELECT i FROM range(600) t(i)')
+    metrics = pages[-1]['payload']['statement_metrics']
+    assert metrics['rows_buffered'] == 600
+    assert metrics['prepare_ms'] is not None and metrics['prepare_ms'] >= 0
+    assert metrics['dispatch_ms'] is not None and metrics['dispatch_ms'] >= 0
+    assert metrics['fetch_ms'] is not None and metrics['fetch_ms'] >= 0
+    assert metrics['execute_ms'] >= metrics['dispatch_ms']
+    assert metrics['plan'] is None
+    assert 'consumer backpressure' in metrics['measurement_scope']
 
 
 def test_unsafe_parameters_refused_before_effects(client, tmp_path):
@@ -317,3 +349,66 @@ def test_returning_union_never_replays_dml(client, tmp_path):
     updated = execute(client, h, 'UPDATE effects SET i=i+1 RETURNING i,u')
     assert rows(updated) == [[2, dict(tag='y', type_code=1, value=None)]]
     assert rows(execute(client, h, 'SELECT i FROM effects')) == [[2]]
+
+
+def test_native_catalog_preserves_all_function_and_macro_overloads(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE MACRO owned_overloads(x,y) AS x+y, (x) AS x+1')
+    handle.execute('CREATE TABLE pending_catalog(id INTEGER)')
+    handle.execute('INSERT INTO pending_catalog VALUES (7)')
+    expected = handle.execute('SELECT COUNT(*) FROM duckdb_functions()').fetchone()[0]
+    resources = _resources(handle, {})
+    functions = [item for item in resources if item['resource_kind'] in ('function', 'macro')]
+    assert sum(item['native']['overload_count'] for item in functions) == expected
+    group = next(item for item in functions if item['display_name'] == 'owned_overloads')
+    native = group['native']
+    assert native['overload_count'] == 2
+    assert {tuple(p['name'] for p in item['parameters']) for item in native['overloads']} == {('x',), ('x', 'y')}
+    assert [tuple(p['name'] for p in item['parameters']) for item in native['overloads']] == [('x',), ('x', 'y')]
+    assert {item['definition'] for item in native['overloads']} == {'(x + 1)', '(x + y)'}
+    assert 'definition' not in native and 'parameters' not in native
+    assert native['catalog_metadata']['function_type'] == 'macro'
+    assert handle.execute('SELECT * FROM pending_catalog').fetchall() == [(7,)]
+    client.control_transaction(handle, 'rollback')
+    assert not handle.execute("SELECT * FROM duckdb_tables() WHERE table_name='pending_catalog'").fetchall()
+
+
+def test_single_macro_keeps_its_unambiguous_definition(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE MACRO owned_single(x) AS x+1')
+    native = next(item['native'] for item in _resources(handle, {}) if item['display_name'] == 'owned_single')
+    assert native['overload_count'] == 1
+    assert native['definition'] == '(x + 1)'
+    assert native['parameters'] == [{'name': 'x', 'data_type': None}]
+    assert native['overloads'][0]['definition'] == native['definition']
+
+
+def test_native_type_catalog_resolves_struct_union_and_alias_details(client, tmp_path):
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE TYPE "detail type" AS STRUCT("field one" INTEGER, flag BOOL)')
+    handle.execute('CREATE TYPE payload AS UNION(number INTEGER, text VARCHAR)')
+    handle.execute('CREATE TYPE alias_number AS DECIMAL(11, 3)')
+    types = {item['display_name']: item['native']['catalog_metadata']['resolved_type']
+             for item in _resources(handle, {}) if item['resource_kind'] == 'type'}
+    assert types['detail type'] == 'STRUCT("field one" INTEGER, flag BOOLEAN)'
+    assert types['payload'] == 'UNION(number INTEGER, "text" VARCHAR)'
+    assert types['alias_number'] == 'DECIMAL(11,3)'
+
+
+def test_native_type_resolution_keeps_attached_catalog_identity(client, tmp_path):
+    import duckdb
+    from pgadmin.cdeadmin.providers.duckdb.provider import _resources
+    attached = tmp_path/'typed-attachment.duckdb'
+    owner = duckdb.connect(str(attached))
+    owner.execute('CREATE TYPE details AS STRUCT(x INT, y VARCHAR)')
+    owner.close()
+    handle, _ = open_database(client, tmp_path)
+    handle.execute(f"ATTACH '{attached}' AS other_catalog")
+    resource = next(item for item in _resources(handle, {})
+        if item['resource_kind'] == 'type' and
+        item['display_path'] == ['other_catalog', 'main', 'details'])
+    assert resource['native']['catalog_metadata']['resolved_type'] == (
+        'STRUCT(x INTEGER, y VARCHAR)')

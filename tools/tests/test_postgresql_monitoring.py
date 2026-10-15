@@ -41,6 +41,27 @@ def test_missing_group_breaks_counter_baseline():
     assert last['groups']['database']['rows'][0]['rates_per_second'] is None
 
 
+def test_rates_accept_pgadmin_global_bigint_text_loaders_without_float_loss():
+    monitor = source()
+    monitor._rates(sample(str(2**60)), 10**9, 'start')
+    after = sample(str(2**60 + 3))
+    monitor._rates(after, 3 * 10**9, 'start')
+    assert after['groups']['database']['rows'][0]['rates_per_second']['xact_commit'] == Decimal('1.5')
+    assert after['groups']['database']['rows'][0]['xact_commit'] == str(2**60 + 3)
+
+
+@pytest.mark.parametrize('value', [True, 1.0, '1.0', '-1', '01', '', None, '9223372036854775808'])
+def test_ambiguous_counters_break_the_baseline(value):
+    monitor = source()
+    monitor._rates(sample(1), 10**9, 'start')
+    invalid = sample(value)
+    monitor._rates(invalid, 2 * 10**9, 'start')
+    assert invalid['groups']['database']['rows'][0]['rates_per_second'] is None
+    after = sample(3)
+    monitor._rates(after, 3 * 10**9, 'start')
+    assert after['groups']['database']['rows'][0]['rates_per_second'] is None
+
+
 def test_failed_close_remains_owned_until_retry():
     monitor=source();connection=Mock()
     connection.close.side_effect=[OSError('private'), None]
@@ -84,3 +105,28 @@ def test_interruption_clears_rate_baseline_and_releases_connection():
         monitor.sample()
     connection.close.assert_called_once()
     assert monitor._previous == {} and monitor._connection is None
+
+
+@pytest.mark.parametrize('scope,key', [('database', 'transaction_refresh'), ('server', 'service_probe')])
+@pytest.mark.parametrize('commit_fails', [False, True])
+def test_scoped_heartbeat_evidence_requires_owned_transaction_commit(scope, key, commit_fails):
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+    monitor = module.PostgreSQLMonitor(Mock(), {'database': 'qa'}, scope=scope)
+    connection = MagicMock()
+    connection.execute.return_value.fetchone.return_value = (
+        'qa', datetime.now(timezone.utc), 42, 'collector', False, True, 7)
+    if commit_fails:
+        connection.transaction.return_value.__exit__.side_effect = OSError('commit reply unavailable')
+    monitor._connection = connection
+    monitor._epoch = 'owned-proof'
+    def group(result, name, *args, **kwargs):
+        result['groups'][name] = {'status': 'available', 'rows': []}
+    monitor._group = group
+    result = monitor.sample()
+    assert result['transaction_completed'] is (not commit_fails)
+    assert (result[key]['status'] == 'completed') is (not commit_fails)
+    assert ('service_probe' if key == 'transaction_refresh' else 'transaction_refresh') not in result
+    if commit_fails:
+        assert result['status'] == 'unavailable' and result['last_success_at'] is None
+    monitor.close()

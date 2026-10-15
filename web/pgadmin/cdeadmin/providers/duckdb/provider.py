@@ -1,6 +1,7 @@
 """DuckDB embedded-helper semantic provider pilot."""
 
 import os
+import json
 import re
 import stat
 from collections.abc import Mapping
@@ -126,7 +127,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
             'inspect', 'create', 'alter', 'rename', 'drop',
             'insert', 'update', 'delete',
         }),
-        'view': frozenset({'inspect', 'create', 'drop'}),
+        'view': frozenset({'inspect', 'create', 'alter', 'rename', 'drop'}),
         'column': frozenset({'inspect', 'create', 'rename', 'drop'}),
         'constraint': frozenset({'inspect'}),
         'index': frozenset({'inspect', 'create', 'drop'}),
@@ -148,9 +149,59 @@ class DuckDBPilotProvider(ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def script_statement_outcome(self, occurrence):
+        from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
+        result = occurrence.get('result') or {}
+        payload = (result.get('extensions', {}).get('duckdb') or {}).get('payload')
+        if isinstance(payload, dict) and payload.get('session_reuse_blocked'):
+            # A native I/O or internal failure can leave the dispatch outcome
+            # unknown even when the driver also reports an error type.
+            return 'unknown'
+        return retained_outcome(occurrence, 'duckdb')
+
+    def validate_source_without_execution(self, request):
+        from .language import analyze
+        if not isinstance(request, dict) or request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('DuckDB SQL language binding required')
+        session = self._sessions.get(request.get('session_id'))
+        if session is None:
+            raise RelationalClientError('DuckDB session is unavailable')
+        self.client._require_idle(session.handle)
+        return analyze(request.get('source'), script=request.get('script', False))
+
+    def capture_catalog(self, route, *, include_system=False,
+                        include_macro_source=False):
+        from .catalog import capture
+        self._require('data_read', 'resource')
+        path = contained_database(route)
+        if path == ':memory:':
+            raise RelationalClientError('An independent in-memory connection is a different DuckDB database')
+        if not os.path.isfile(path):
+            raise RelationalClientError('DuckDB catalog capture requires an existing registered database file')
+        connection = self.client._connect({'route': route})
+        try:
+            return capture(connection, include_system=include_system,
+                include_macro_source=include_macro_source)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id,
+                     mode='sample', row_limit=100):
+        from .data_capture import capture
+        return capture(self, route, resource_id, endpoint_id=endpoint_id,
+                       target_id=target_id, mode=mode, row_limit=row_limit)
+
+
 
 def _route_arguments(route):
     return duckdb_arguments(route)
+
+
+def _resource_id(kind, path, name, discriminator=None):
+    identity = [kind, *[str(part) for part in path], str(name)]
+    if discriminator is not None:
+        identity.append({'native_index': discriminator})
+    return 'duckdb:' + json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
 
 
 def _resources(connection, request):
@@ -158,10 +209,13 @@ def _resources(connection, request):
     generation = str(request.get('capability_generation') or 'current')
     resources = {}
 
-    def add(kind, path, name, native=None):
+    def qualified(parts):
+        return '.'.join('"' + str(part).replace('"', '""') + '"' for part in parts)
+
+    def add(kind, path, name, native=None, *, discriminator=None):
         path = [str(item) for item in path]
         name = str(name)
-        resource_id = ':'.join([kind, *path, name])
+        resource_id = _resource_id(kind, path, name, discriminator)
         resources[resource_id] = {
             'resource_id': resource_id,
             'resource_kind': kind,
@@ -211,14 +265,16 @@ def _resources(connection, request):
         )
         native = {
             'database_name': database,
-            'path': path, 'database_oid': database_oid,
+            'database_oid': database_oid,
             'comment': comment, 'tags': tags,
             'database_type': database_type,
             'read_only': bool(read_only), 'encrypted': bool(encrypted),
-            'cipher': cipher, 'options': options,
+            'cipher': cipher,
             'runtime_version': runtime_version, 'platform': platform,
             **sizes.get(database, {}),
         }
+        from .catalog import database_location
+        native.update(database_location(path, database_type, options))
         if isinstance(path, str) and os.path.isfile(path):
             native['file_bytes'] = os.path.getsize(path)
         add(kind, [], database, native)
@@ -308,14 +364,11 @@ def _resources(connection, request):
             ), values)),
         }
         column = add('column', [database, schema, parent], name, native)
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id not in resources:
-            parent_id = ':'.join([
-                'view', str(database), str(schema), str(parent),
-            ])
+            parent_id = _resource_id('view', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             resources[parent_id]['native']['columns'].append({
                 'resource_id': column['resource_id'],
                 'name': str(name),
@@ -339,10 +392,9 @@ def _resources(connection, request):
             'ddl': sql,
         }
         index = add('index', [database, schema, parent], name, native)
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             resources[parent_id]['native']['indexes'].append({
                 'resource_id': index['resource_id'],
                 'name': str(name),
@@ -375,12 +427,11 @@ def _resources(connection, request):
                 'referenced_columns': values[7],
             }]
         constraint = add(
-            'constraint', [database, schema, parent], name, native
+            'constraint', [database, schema, parent], name, native, discriminator=values[0]
         )
-        parent_id = ':'.join([
-            'table', str(database), str(schema), str(parent),
-        ])
+        parent_id = _resource_id('table', [database, schema], parent)
         if parent_id in resources:
+            native['navigator_parent_resource_id'] = parent_id
             summary = {
                 'resource_id': constraint['resource_id'],
                 'name': str(name),
@@ -416,6 +467,17 @@ def _resources(connection, request):
             'ddl': sql,
         })
 
+    sequence_oids = {}
+    for resource in resources.values():
+        if resource['resource_kind'] == 'sequence':
+            oid = resource['native']['catalog_metadata'].get('oid')
+            if oid is not None:
+                sequence_oids.setdefault(oid, []).append(resource)
+    cursor.execute("SELECT objid FROM duckdb_dependencies() WHERE deptype = 'a'")
+    for (oid,) in cursor.fetchall():
+        for sequence in sequence_oids.get(oid, []):
+            sequence['native']['catalog_metadata']['automatic_dependency_observed'] = True
+
     cursor.execute(
         'SELECT database_name, schema_name, type_name, type_oid, '
         'type_size, logical_type, type_category, comment, tags, labels '
@@ -423,11 +485,13 @@ def _resources(connection, request):
     )
     for row in cursor.fetchall():
         database, schema, name, *values = row
+        cursor.execute('SELECT typeof(NULL::' + qualified((database, schema, name)) + ')')
+        resolved_type = cursor.fetchone()[0]
         add('type', [database, schema], name, {
             'catalog_metadata': dict(zip((
                 'oid', 'size_bytes', 'logical_type', 'category',
                 'comment', 'tags', 'labels',
-            ), values)),
+            ), values)) | {'resolved_type': resolved_type},
         })
     cursor.execute(
         'SELECT database_name, schema_name, function_name, '
@@ -446,7 +510,7 @@ def _resources(connection, request):
             has_side_effects, internal, oid, examples, stability,
             categories,
         ) = values
-        add(kind, [database, schema], name, {
+        overload = {
             'catalog_metadata': {
                 'function_type': function_type,
                 'alias_of': alias_of, 'description': description,
@@ -464,7 +528,36 @@ def _resources(connection, request):
                 )
             ],
             **({'definition': definition} if definition else {}),
-        })
+        }
+        resource_id = _resource_id(kind, [database, schema], name)
+        group = resources.get(resource_id)
+        if group is None:
+            group = add(kind, [database, schema], name, {
+                **overload, 'overloads': [],
+            })
+        native = group['native']
+        native['overloads'].append(overload)
+        native['overload_count'] = len(native['overloads'])
+        if native['overload_count'] > 1:
+            # A group is not an arbitrary last overload. Keep only common
+            # convenience fields; the complete native facts remain below.
+            native['catalog_metadata'] = {
+                key: value for key, value in native['catalog_metadata'].items()
+                if key in overload['catalog_metadata'] and
+                value == overload['catalog_metadata'][key]
+            }
+            for key in ('parameters', 'definition'):
+                if native.get(key) != overload.get(key):
+                    native.pop(key, None)
+    for group in resources.values():
+        native = group['native']
+        if group['resource_kind'] in {'macro', 'function'} and native.get('overload_count', 0) > 1:
+            native['overloads'].sort(key=lambda item: (len(item['parameters']), json.dumps({
+                'function_type': item['catalog_metadata'].get('function_type'),
+                'parameters': item['parameters'],
+                'varargs': item['catalog_metadata'].get('varargs'),
+                'definition': item.get('definition'),
+            }, sort_keys=True, default=str)))
     cursor.execute(
         'SELECT extension_name, loaded, installed, extension_version '
         'FROM duckdb_extensions() ORDER BY extension_name'
@@ -485,6 +578,21 @@ def _resources(connection, request):
             'persistent': persistent, 'storage': storage,
             'scope': scope,
         })
+    for resource in resources.values():
+        path = resource['display_path']
+        if resource['resource_kind'] == 'schema':
+            # The registered file node is supplied by the host navigator, not
+            # by a resource-node state. Its first child request has no
+            # resource_id, so primary schemas must be direct children there.
+            if path[0] == current_database:
+                continue
+            parent = _resource_id('attached-database', [], path[0])
+        elif len(path) == 3:
+            parent = _resource_id('schema', [path[0]], path[1])
+        else:
+            continue
+        if parent in resources:
+            resource.setdefault('native', {})['navigator_parent_resource_id'] = parent
     return list(resources.values())
 
 

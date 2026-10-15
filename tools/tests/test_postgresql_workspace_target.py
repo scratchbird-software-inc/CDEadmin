@@ -74,3 +74,22 @@ def test_native_descriptors_do_not_offer_generic_registration_mutation(workspace
     assert catalog['target_management'] is False
     assert catalog['active_target_id'] == 'postgresql-database:42'
     assert catalog['targets'][0]['database'] == 'selected_database'
+
+
+def test_current_managed_native_registration_uses_connected_oid(workspace):
+    service, server, manager, _ = workspace
+    server.endpoint_profile.provider_version = '9.17.0'
+    server.endpoint_profile.profile_version = '18.3'
+    _, endpoint, _ = service.workspace(server, database_target_id='postgresql-database:42')
+    assert endpoint['route']['database_id'] == 42
+    manager.connection.assert_called_once_with(did=42)
+
+
+def test_unqualified_provider_revision_is_not_preserved_native(workspace):
+    service, server, _, _ = workspace
+    server.endpoint_profile.provider_version = 'unqualified'
+    server.endpoint_profile.profile_version = '18.3'
+    assert not service._is_preserved_postgresql(server)
+    server.endpoint_profile.provider_version = '9.17.0'
+    server.endpoint_profile.profile_id = 'another-wire-engine'
+    assert not service._is_preserved_postgresql(server)

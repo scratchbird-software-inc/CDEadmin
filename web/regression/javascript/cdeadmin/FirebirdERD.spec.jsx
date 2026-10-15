@@ -10,6 +10,19 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   </div>,
 }));
 
+it('binds MariaDB graphical edits and temporal acceptance to its own target', async () => {
+  const Component = withTheme(FirebirdERD);
+  const snapshot = {format:'ddn-workspace@1', entry:'relations.ddn', view:'relations_1', files:{'relations.ddn':'native design'}};
+  const post = jest.fn().mockResolvedValue({baseline:'before', desired:'after'}), onReview = jest.fn();
+  render(<Component diagram={{snapshot, views:[]}} engine="mariadb" databaseTargetId="maria-target" post={post} onReview={onReview} />);
+  fireEvent.click(screen.getByLabelText('Include graphical column renames'));
+  fireEvent.click(screen.getByLabelText('Accept native KEEP-history semantics for temporal schema changes'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before', desired:'after'}));
+  expect(post).toHaveBeenCalledWith({action:'mariadb_relational_review', request:{database_target_id:'maria-target',
+    original:snapshot, snapshot, allow_column_renames:true, allow_temporal_history:true}});
+});
+
 describe('Native relational DDN handoff', () => {
   const Component = withTheme(FirebirdERD);
   const diagram = {snapshot: {format: 'ddn-workspace@1', entry: 'relations.ddn', view: 'relations_1', files: {'relations.ddn': 'native design'}},
@@ -64,4 +77,53 @@ describe('Native relational DDN handoff', () => {
     expect(screen.queryByText('Review relational metadata changes')).toBeNull();
   });
 
+});
+
+it('binds MySQL relational review to the registered database target without Firebird generation admission', async () => {
+  const Component = withTheme(FirebirdERD);
+  const diagram = {snapshot: {format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalledWith({baseline:'before',desired:'after'}));
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',original:diagram.snapshot,snapshot:diagram.snapshot}});
+});
+
+
+it('admits new MySQL graphical columns only through the explicit review checkbox', async () => {
+  const Component = withTheme(FirebirdERD);
+  const diagram = {snapshot: {format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  expect(screen.getByLabelText('Include new graphical columns')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Include new graphical columns'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalled());
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_new_columns:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
+});
+
+
+it('admits MySQL graphical renames only through its separate explicit checkbox', async () => {
+  const Component=withTheme(FirebirdERD);
+  const diagram={snapshot:{format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  expect(screen.getByLabelText('Include graphical column renames')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Include graphical column renames'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalled());
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_column_renames:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
+});
+
+
+it('binds explicit foreign-key design admission to the selected MySQL database', async () => {
+  const Component=withTheme(FirebirdERD);
+  const diagram={snapshot:{format:'ddn-workspace@1',entry:'relations.ddn',view:'relations_1',files:{'relations.ddn':'native design'}},views:[]};
+  const post=jest.fn().mockResolvedValue({baseline:'before',desired:'after'}),onReview=jest.fn();
+  render(<Component diagram={diagram} engine="mysql" databaseTargetId="mysql-target" post={post} onReview={onReview} />);
+  expect(screen.getByLabelText('Include foreign key design changes')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Include foreign key design changes'));
+  fireEvent.click(screen.getByText('Review relational metadata changes'));
+  await waitFor(() => expect(onReview).toHaveBeenCalled());
+  expect(post).toHaveBeenCalledWith({action:'mysql_relational_review',request:{database_target_id:'mysql-target',allow_foreign_keys:true,original:diagram.snapshot,snapshot:diagram.snapshot}});
 });

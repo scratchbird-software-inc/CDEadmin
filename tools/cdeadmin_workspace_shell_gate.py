@@ -246,7 +246,7 @@ def evaluate(source: Path) -> dict:
         errors.append('workspace inventory is not the exact required set')
     expected_story = {
         'schema': 'cdeadmin.workspace-shell-story-manifest.v1',
-        'catalog': str(CATALOG),
+        'catalog': CATALOG.as_posix(),
         'persistent_label': catalog.get('fixture_policy', {}).get(
             'persistent_label'
         ),

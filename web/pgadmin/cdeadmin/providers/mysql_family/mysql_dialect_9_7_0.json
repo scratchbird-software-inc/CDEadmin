@@ -30,13 +30,16 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 49,
+    "authoritative_task_count": 105,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
       "visual_admin.column.rename",
+      "visual_admin.component.create",
+      "visual_admin.component.drop",
       "visual_admin.constraint.create",
       "visual_admin.constraint.drop",
+      "visual_admin.constraint.enforcement",
       "visual_admin.database.alter",
       "visual_admin.database.analyze_tables",
       "visual_admin.database.check_tables",
@@ -48,41 +51,94 @@
       "visual_admin.event.alter",
       "visual_admin.event.create",
       "visual_admin.event.drop",
+      "visual_admin.event.rename",
+      "visual_admin.function.alter",
       "visual_admin.function.create",
       "visual_admin.function.drop",
+      "visual_admin.group-replication.disable_member_action",
+      "visual_admin.group-replication.enable_member_action",
+      "visual_admin.group-replication.multi_primary",
+      "visual_admin.group-replication.reset_member_actions",
+      "visual_admin.group-replication.set_primary",
+      "visual_admin.group-replication.set_protocol",
+      "visual_admin.group-replication.set_write_concurrency",
+      "visual_admin.group-replication.single_primary",
+      "visual_admin.group-replication.start",
+      "visual_admin.group-replication.stop",
       "visual_admin.index.create",
       "visual_admin.index.drop",
+      "visual_admin.index.rename",
+      "visual_admin.index.visibility",
+      "visual_admin.library.alter",
+      "visual_admin.library.create",
+      "visual_admin.library.drop",
+      "visual_admin.loadable-function.create",
+      "visual_admin.loadable-function.drop",
       "visual_admin.materialized-view.alter",
       "visual_admin.materialized-view.create",
       "visual_admin.materialized-view.drop",
+      "visual_admin.partition.analyze",
+      "visual_admin.partition.check",
+      "visual_admin.partition.drop",
+      "visual_admin.partition.exchange",
+      "visual_admin.partition.optimize",
+      "visual_admin.partition.rebuild",
+      "visual_admin.partition.reorganize",
+      "visual_admin.partition.truncate",
       "visual_admin.plugin.create",
       "visual_admin.plugin.drop",
       "visual_admin.privilege.grant",
       "visual_admin.privilege.revoke",
+      "visual_admin.procedure.alter",
       "visual_admin.procedure.create",
       "visual_admin.procedure.drop",
+      "visual_admin.replication-channel.alter",
+      "visual_admin.replication-channel.create",
+      "visual_admin.replication-channel.filter",
+      "visual_admin.replication-channel.reset",
+      "visual_admin.replication-channel.start",
+      "visual_admin.replication-channel.stop",
+      "visual_admin.resource-group.alter",
+      "visual_admin.resource-group.assign",
+      "visual_admin.resource-group.create",
+      "visual_admin.resource-group.drop",
       "visual_admin.role.create",
       "visual_admin.role.drop",
       "visual_admin.role.grant",
       "visual_admin.role.revoke",
       "visual_admin.role.set_default",
+      "visual_admin.session.terminate_connection",
+      "visual_admin.session.terminate_query",
+      "visual_admin.system-variable.reset_persist",
+      "visual_admin.system-variable.set_global",
+      "visual_admin.system-variable.set_persist",
+      "visual_admin.system-variable.set_persist_only",
+      "visual_admin.table.add_partitions",
       "visual_admin.table.alter",
+      "visual_admin.table.coalesce_partitions",
       "visual_admin.table.create",
       "visual_admin.table.delete",
       "visual_admin.table.drop",
       "visual_admin.table.insert",
+      "visual_admin.table.partition_by",
+      "visual_admin.table.remove_partitioning",
       "visual_admin.table.rename",
       "visual_admin.table.update",
+      "visual_admin.tablespace.alter",
+      "visual_admin.tablespace.create",
+      "visual_admin.tablespace.drop",
+      "visual_admin.tablespace.rename",
       "visual_admin.trigger.create",
       "visual_admin.trigger.drop",
       "visual_admin.user.alter",
       "visual_admin.user.create",
       "visual_admin.user.drop",
       "visual_admin.user.rename",
+      "visual_admin.view.alter",
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 49,
+    "implemented_task_count": 105,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44411,7 +44467,13 @@
   ],
   "live_evidence_ids": [
     "mysql-9.7.0-task-live-execution",
-    "mysql-9.7.0-role-membership-native-20261012"
+    "mysql-9.7.0-role-membership-native-20261012",
+    "mysql-9.7.0-tablespaces-native-20261012",
+    "mysql-9.7.0-partitions-native-20261012",
+    "mysql-9.7.0-replication-native-20261012",
+    "mysql-9.7.0-object-changes-native-20261012",
+    "mysql-9.7.0-views-native-20261012",
+    "mysql-9.7.0-checks-native-20261012"
   ],
   "profile_id": "mysql-native",
   "proof_records": [
@@ -44477,6 +44539,222 @@
       "format": "scratchrobin.native-role-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "5f0bffb4ce8d3816933c773aa59d25bdcee0c5322a9619668882a72285e0d2f0"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-resource-groups-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_resource_group_qualification.py",
+      "format": "scratchrobin.native-resource-group-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "f11049a9e35efb8bf05a4adfeecf939877c6094b5217a8ec935f00df8a3bd71c"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-resource-groups-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_resource_group_qualification.py",
+      "format": "scratchrobin.native-resource-group-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "f11049a9e35efb8bf05a4adfeecf939877c6094b5217a8ec935f00df8a3bd71c"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-server-operations-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_server_operations_qualification.py",
+      "format": "scratchrobin.native-server-operations-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "c0f0738059ecaf8eee5ca3919f4adee985f58f7e9440e18f42c98f4f24bee822"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-server-operations-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_server_operations_qualification.py",
+      "format": "scratchrobin.native-server-operations-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "c0f0738059ecaf8eee5ca3919f4adee985f58f7e9440e18f42c98f4f24bee822"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-tablespaces-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_tablespace_qualification.py",
+      "format": "scratchrobin.native-tablespace-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "35f352601ca9c7b0c997ac1a3d4edfb624bea3f52af1916d5207a95df8567bd8"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-tablespaces-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_tablespace_qualification.py",
+      "format": "scratchrobin.native-tablespace-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "35f352601ca9c7b0c997ac1a3d4edfb624bea3f52af1916d5207a95df8567bd8"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-partitions-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_partition_qualification.py",
+      "format": "scratchrobin.native-partition-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "88d9075dab241641e984c95d19b64df4affd4c49905753d5ed45b18b8c273d98"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-partitions-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_partition_qualification.py",
+      "format": "scratchrobin.native-partition-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "88d9075dab241641e984c95d19b64df4affd4c49905753d5ed45b18b8c273d98"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-replication-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Two native MySQL 9.7.0 servers",
+      "artifact": "tools/cdeadmin_mysql_replication_qualification.py",
+      "format": "scratchrobin.native-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "6c08da8a5379bdeb1f2b4b86dfe568e88142eb4b76f3f4fb81c94ec65e601821"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-replication-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Two native MySQL 9.7.0 servers",
+      "artifact": "tools/cdeadmin_mysql_replication_qualification.py",
+      "format": "scratchrobin.native-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "6c08da8a5379bdeb1f2b4b86dfe568e88142eb4b76f3f4fb81c94ec65e601821"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-object-changes-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_object_changes_qualification.py",
+      "format": "scratchrobin.native-object-changes-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "33652c16682f8f8d6eb7e0c2fbb3f4b059eca02c768c4fab1db81c8e94fd7adf"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-object-changes-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_object_changes_qualification.py",
+      "format": "scratchrobin.native-object-changes-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "33652c16682f8f8d6eb7e0c2fbb3f4b059eca02c768c4fab1db81c8e94fd7adf"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-views-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_views_qualification.py",
+      "format": "scratchrobin.native-views-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "3e813aca997492c04001f282996d538cb05d6a7d48cf2debdb539e309582e207"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-views-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_views_qualification.py",
+      "format": "scratchrobin.native-views-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "3e813aca997492c04001f282996d538cb05d6a7d48cf2debdb539e309582e207"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-checks-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_constraints_qualification.py",
+      "format": "scratchrobin.native-checks-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "ddce0c1b0328324a53860ff743e3c8584371cdd30849826e8b8ea1469efea371"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-checks-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_constraints_qualification.py",
+      "format": "scratchrobin.native-checks-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "ddce0c1b0328324a53860ff743e3c8584371cdd30849826e8b8ea1469efea371"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-components-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_components_qualification.py",
+      "format": "scratchrobin.native-components-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "69f8c7c869f3bd81f6b1e27ac42e332a92bee46bf89467d3e6031dfa953ae418"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-components-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_components_qualification.py",
+      "format": "scratchrobin.native-components-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "69f8c7c869f3bd81f6b1e27ac42e332a92bee46bf89467d3e6031dfa953ae418"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-group-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 three-member group",
+      "artifact": "tools/cdeadmin_mysql_group_replication_qualification.py",
+      "format": "scratchrobin.native-group-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "e142a2c648f533af02f0f06a7d55eb01f753e24cbebcf55ca7ed453a2c3d9054"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-group-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 three-member group",
+      "artifact": "tools/cdeadmin_mysql_group_replication_qualification.py",
+      "format": "scratchrobin.native-group-replication-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "e142a2c648f533af02f0f06a7d55eb01f753e24cbebcf55ca7ed453a2c3d9054"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-programs-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_program_objects_qualification.py",
+      "format": "scratchrobin.native-program-objects-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "9445c1ebc456a7cff8dcc8592d578b0c4cacdcc2e97e6fe72cc08ec749814bf2"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-programs-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_program_objects_qualification.py",
+      "format": "scratchrobin.native-program-objects-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "9445c1ebc456a7cff8dcc8592d578b0c4cacdcc2e97e6fe72cc08ec749814bf2"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-events-native-20261012",
+      "evidence_kind": "live_execution",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_events_qualification.py",
+      "format": "scratchrobin.native-events-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "8ae072d1ea8134c3c4b835b767f6a22f060c9b229e117d21d5628181ceff6dc3"
+    },
+    {
+      "evidence_id": "mysql-9.7.0-events-native-20261012-parser",
+      "evidence_kind": "parser_acceptance",
+      "authority": "Native MySQL 9.7.0 server",
+      "artifact": "tools/cdeadmin_mysql_events_qualification.py",
+      "format": "scratchrobin.native-events-qualification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "8ae072d1ea8134c3c4b835b767f6a22f060c9b229e117d21d5628181ceff6dc3"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -44570,6 +44848,40 @@
       "task_id": "visual_admin.column.rename"
     },
     {
+      "task_id": "visual_admin.component.create",
+      "proof_ids": [
+        "mysql-9.7.0-components-native-20261012",
+        "mysql-9.7.0-components-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3"
+      ],
+      "source": "INSTALL COMPONENT %s SET GLOBAL validate_password.length=%s,PERSIST validate_password.mixed_case_count=%s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "INSTALL COMPONENT %s SET GLOBAL validate_password.length=%s,PERSIST validate_password.mixed_case_count=%s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.component.drop",
+      "proof_ids": [
+        "mysql-9.7.0-components-native-20261012",
+        "mysql-9.7.0-components-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "UNINSTALL COMPONENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "UNINSTALL COMPONENT %s"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -44596,6 +44908,20 @@
         "ALTER TABLE `cde_live_f95bb4ef1e8e`.`qualification` DROP CONSTRAINT `cde_editor_unique`"
       ],
       "task_id": "visual_admin.constraint.drop"
+    },
+    {
+      "task_id": "visual_admin.constraint.enforcement",
+      "proof_ids": [
+        "mysql-9.7.0-checks-native-20261012",
+        "mysql-9.7.0-checks-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_checks`.`t``é` ALTER CHECK `c``é` ENFORCED",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_checks`.`t``é` ALTER CHECK `c``é` ENFORCED"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -44752,6 +45078,36 @@
       "task_id": "visual_admin.event.drop"
     },
     {
+      "task_id": "visual_admin.event.rename",
+      "proof_ids": [
+        "mysql-9.7.0-events-native-20261012",
+        "mysql-9.7.0-events-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER EVENT `sr_events`.`e``é` RENAME TO `sr_events_destination`.`renamed``é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER EVENT `sr_events`.`e``é` RENAME TO `sr_events_destination`.`renamed``é`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.function.alter",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER FUNCTION `sr_objects`.`f``é` SQL SECURITY INVOKER NO SQL COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER FUNCTION `sr_objects`.`f``é` SQL SECURITY INVOKER NO SQL COMMENT %s"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -44780,6 +45136,165 @@
       "task_id": "visual_admin.function.drop"
     },
     {
+      "task_id": "visual_admin.group-replication.disable_member_action",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "SELECT group_replication_disable_member_action(%s,%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_disable_member_action(%s,%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.enable_member_action",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "SELECT group_replication_enable_member_action(%s,%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_enable_member_action(%s,%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.multi_primary",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "SELECT group_replication_switch_to_multi_primary_mode()",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_switch_to_multi_primary_mode()"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.reset_member_actions",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "SELECT group_replication_reset_member_actions()",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_reset_member_actions()"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.set_primary",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "SELECT group_replication_set_as_primary(%s,%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_set_as_primary(%s,%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.set_protocol",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "SELECT group_replication_set_communication_protocol(%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_set_communication_protocol(%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.set_write_concurrency",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "SELECT group_replication_set_write_concurrency(%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_set_write_concurrency(%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.single_primary",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "SELECT group_replication_switch_to_single_primary_mode(%s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SELECT group_replication_switch_to_single_primary_mode(%s)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.start",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3"
+      ],
+      "source": "START GROUP_REPLICATION USER=%s,PASSWORD=%s,DEFAULT_AUTH=%s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "START GROUP_REPLICATION USER=%s,PASSWORD=%s,DEFAULT_AUTH=%s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.group-replication.stop",
+      "proof_ids": [
+        "mysql-9.7.0-group-native-20261012",
+        "mysql-9.7.0-group-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "STOP GROUP_REPLICATION",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "STOP GROUP_REPLICATION"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -44806,6 +45321,111 @@
         "DROP INDEX `cde_editor_index` ON `cde_live_f95bb4ef1e8e`.`qualification`"
       ],
       "task_id": "visual_admin.index.drop"
+    },
+    {
+      "task_id": "visual_admin.index.rename",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_objects`.`t``é` RENAME INDEX `i``é` TO `renamed``é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_objects`.`t``é` RENAME INDEX `i``é` TO `renamed``é`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.index.visibility",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_objects`.`t``é` ALTER INDEX `renamed``é` INVISIBLE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_objects`.`t``é` ALTER INDEX `renamed``é` INVISIBLE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.alter",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER LIBRARY `sr_programs`.`text``é` COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER LIBRARY `sr_programs`.`text``é` COMMENT %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.create",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "CREATE LIBRARY `sr_programs`.`text``é` LANGUAGE JAVASCRIPT COMMENT %s AS %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE LIBRARY `sr_programs`.`text``é` LANGUAGE JAVASCRIPT COMMENT %s AS %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.library.drop",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP LIBRARY `sr_programs`.`text``é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP LIBRARY `sr_programs`.`text``é`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.loadable-function.create",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "CREATE FUNCTION `keyring_key_type_fetch` RETURNS STRING SONAME %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE FUNCTION `keyring_key_type_fetch` RETURNS STRING SONAME %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.loadable-function.drop",
+      "proof_ids": [
+        "mysql-9.7.0-programs-native-20261012",
+        "mysql-9.7.0-programs-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP FUNCTION `keyring_key_type_fetch`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP FUNCTION `keyring_key_type_fetch`"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -44848,6 +45468,118 @@
         "DROP VIEW `cde_live_f95bb4ef1e8e`.`cde_editor_materialized_view`"
       ],
       "task_id": "visual_admin.materialized-view.drop"
+    },
+    {
+      "task_id": "visual_admin.partition.analyze",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` ANALYZE PARTITION `p0`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` ANALYZE PARTITION `p0`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.check",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` CHECK PARTITION `p0`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` CHECK PARTITION `p0`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.drop",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` DROP PARTITION `p2`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` DROP PARTITION `p2`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.exchange",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` EXCHANGE PARTITION `p0` WITH TABLE `sr_partition_ed8e9ffed359`.`x``é` WITH VALIDATION",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` EXCHANGE PARTITION `p0` WITH TABLE `sr_partition_ed8e9ffed359`.`x``é` WITH VALIDATION"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.optimize",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` OPTIMIZE PARTITION `p0`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` OPTIMIZE PARTITION `p0`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.rebuild",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REBUILD PARTITION `p0`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REBUILD PARTITION `p0`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.reorganize",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REORGANIZE PARTITION `p1` INTO (PARTITION pa VALUES LESS THAN (15), PARTITION pb VALUES LESS THAN (20))",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REORGANIZE PARTITION `p1` INTO (PARTITION pa VALUES LESS THAN (15), PARTITION pb VALUES LESS THAN (20))"
+      ]
+    },
+    {
+      "task_id": "visual_admin.partition.truncate",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` TRUNCATE PARTITION `p0`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` TRUNCATE PARTITION `p0`"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -44906,6 +45638,22 @@
       "task_id": "visual_admin.privilege.revoke"
     },
     {
+      "task_id": "visual_admin.procedure.alter",
+      "proof_ids": [
+        "mysql-9.7.0-object-changes-native-20261012",
+        "mysql-9.7.0-object-changes-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER PROCEDURE `sr_objects`.`p``é` SQL SECURITY INVOKER NO SQL COMMENT %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER PROCEDURE `sr_objects`.`p``é` SQL SECURITY INVOKER NO SQL COMMENT %s"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -44932,6 +45680,162 @@
         "DROP PROCEDURE `cde_live_f95bb4ef1e8e`.`cde_editor_procedure`"
       ],
       "task_id": "visual_admin.procedure.drop"
+    },
+    {
+      "task_id": "visual_admin.replication-channel.alter",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "CHANGE REPLICATION SOURCE TO SOURCE_CONNECT_RETRY=3, SOURCE_HEARTBEAT_PERIOD=0.5 FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION SOURCE TO SOURCE_CONNECT_RETRY=3, SOURCE_HEARTBEAT_PERIOD=0.5 FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.create",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4"
+      ],
+      "source": "CHANGE REPLICATION SOURCE TO SOURCE_HOST=%s, SOURCE_PORT=3306, SOURCE_USER=%s, SOURCE_AUTO_POSITION=1, SOURCE_SSL=1, SOURCE_CONNECT_RETRY=1, SOURCE_PASSWORD=%s FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION SOURCE TO SOURCE_HOST=%s, SOURCE_PORT=3306, SOURCE_USER=%s, SOURCE_AUTO_POSITION=1, SOURCE_SSL=1, SOURCE_CONNECT_RETRY=1, SOURCE_PASSWORD=%s FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.filter",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "CHANGE REPLICATION FILTER REPLICATE_DO_DB=(`sr_repl_79a12bc4b3a9`), REPLICATE_IGNORE_DB=(), REPLICATE_DO_TABLE=(), REPLICATE_IGNORE_TABLE=(), REPLICATE_WILD_DO_TABLE=(), REPLICATE_WILD_IGNORE_TABLE=(%s), REPLICATE_REWRITE_DB=((`sr_unused_source`,`sr_unused_target`)) FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CHANGE REPLICATION FILTER REPLICATE_DO_DB=(`sr_repl_79a12bc4b3a9`), REPLICATE_IGNORE_DB=(), REPLICATE_DO_TABLE=(), REPLICATE_IGNORE_TABLE=(), REPLICATE_WILD_DO_TABLE=(), REPLICATE_WILD_IGNORE_TABLE=(%s), REPLICATE_REWRITE_DB=((`sr_unused_source`,`sr_unused_target`)) FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.reset",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "RESET REPLICA FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "RESET REPLICA FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.start",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "START REPLICA FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "START REPLICA FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.replication-channel.stop",
+      "proof_ids": [
+        "mysql-9.7.0-replication-native-20261012",
+        "mysql-9.7.0-replication-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "STOP REPLICA SQL_THREAD FOR CHANNEL %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "STOP REPLICA SQL_THREAD FOR CHANNEL %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.alter",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER RESOURCE GROUP `sr_group_787456a3c7ee``é` DISABLE FORCE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER RESOURCE GROUP `sr_group_787456a3c7ee``é` DISABLE FORCE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.assign",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "SET RESOURCE GROUP `sr_group_787456a3c7ee``é` FOR 241",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SET RESOURCE GROUP `sr_group_787456a3c7ee``é` FOR 241"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.create",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "CREATE RESOURCE GROUP `sr_group_787456a3c7ee``é` TYPE=USER THREAD_PRIORITY=0 ENABLE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE RESOURCE GROUP `sr_group_787456a3c7ee``é` TYPE=USER THREAD_PRIORITY=0 ENABLE"
+      ]
+    },
+    {
+      "task_id": "visual_admin.resource-group.drop",
+      "proof_ids": [
+        "mysql-9.7.0-resource-groups-native-20261012",
+        "mysql-9.7.0-resource-groups-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP RESOURCE GROUP `sr_group_787456a3c7ee``é` FORCE",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP RESOURCE GROUP `sr_group_787456a3c7ee``é` FORCE"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -45005,6 +45909,110 @@
       "task_id": "visual_admin.role.set_default"
     },
     {
+      "task_id": "visual_admin.session.terminate_connection",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "KILL CONNECTION 185",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "KILL CONNECTION 185"
+      ]
+    },
+    {
+      "task_id": "visual_admin.session.terminate_query",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "KILL QUERY 185",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "KILL QUERY 185"
+      ]
+    },
+    {
+      "task_id": "visual_admin.system-variable.reset_persist",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "RESET PERSIST `max_execution_time`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "RESET PERSIST `max_execution_time`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.system-variable.set_global",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "value"
+      ],
+      "source": "SET GLOBAL `long_query_time` = CAST(%s AS DECIMAL(65,30))",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SET GLOBAL `long_query_time` = CAST(%s AS DECIMAL(65,30))"
+      ]
+    },
+    {
+      "task_id": "visual_admin.system-variable.set_persist",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "value"
+      ],
+      "source": "SET PERSIST `max_execution_time` = %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SET PERSIST `max_execution_time` = %s"
+      ]
+    },
+    {
+      "task_id": "visual_admin.system-variable.set_persist_only",
+      "proof_ids": [
+        "mysql-9.7.0-server-operations-native-20261012",
+        "mysql-9.7.0-server-operations-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "value"
+      ],
+      "source": "SET PERSIST_ONLY `max_execution_time` = CAST(%s AS UNSIGNED)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "SET PERSIST_ONLY `max_execution_time` = CAST(%s AS UNSIGNED)"
+      ]
+    },
+    {
+      "task_id": "visual_admin.table.add_partitions",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -45017,6 +46025,20 @@
         "ALTER TABLE `cde_live_f95bb4ef1e8e`.`cde_editor_probe` ADD `note` INTEGER"
       ],
       "task_id": "visual_admin.table.alter"
+    },
+    {
+      "task_id": "visual_admin.table.coalesce_partitions",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` COALESCE PARTITION 2",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` COALESCE PARTITION 2"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -45081,6 +46103,34 @@
       "task_id": "visual_admin.table.insert"
     },
     {
+      "task_id": "visual_admin.table.partition_by",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` PARTITION BY HASH(id) PARTITIONS 4",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` PARTITION BY HASH(id) PARTITIONS 4"
+      ]
+    },
+    {
+      "task_id": "visual_admin.table.remove_partitioning",
+      "proof_ids": [
+        "mysql-9.7.0-partitions-native-20261012",
+        "mysql-9.7.0-partitions-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REMOVE PARTITIONING",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `sr_partition_ed8e9ffed359`.`t``é` REMOVE PARTITIONING"
+      ]
+    },
+    {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
@@ -45111,6 +46161,65 @@
         "UPDATE `cde_live_f95bb4ef1e8e`.`qualification` SET `value` = %s WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL"
       ],
       "task_id": "visual_admin.table.update"
+    },
+    {
+      "task_id": "visual_admin.tablespace.alter",
+      "proof_ids": [
+        "mysql-9.7.0-tablespaces-native-20261012",
+        "mysql-9.7.0-tablespaces-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLESPACE `sr_space_254dc6f3c1ff``é` AUTOEXTEND_SIZE=8388608",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLESPACE `sr_space_254dc6f3c1ff``é` AUTOEXTEND_SIZE=8388608"
+      ]
+    },
+    {
+      "task_id": "visual_admin.tablespace.create",
+      "proof_ids": [
+        "mysql-9.7.0-tablespaces-native-20261012",
+        "mysql-9.7.0-tablespaces-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2"
+      ],
+      "source": "CREATE TABLESPACE `sr_space_254dc6f3c1ff``é` ADD DATAFILE %s FILE_BLOCK_SIZE=16384 AUTOEXTEND_SIZE=4194304 ENCRYPTION='N' ENGINE_ATTRIBUTE=%s ENGINE=InnoDB",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE TABLESPACE `sr_space_254dc6f3c1ff``é` ADD DATAFILE %s FILE_BLOCK_SIZE=16384 AUTOEXTEND_SIZE=4194304 ENCRYPTION='N' ENGINE_ATTRIBUTE=%s ENGINE=InnoDB"
+      ]
+    },
+    {
+      "task_id": "visual_admin.tablespace.drop",
+      "proof_ids": [
+        "mysql-9.7.0-tablespaces-native-20261012",
+        "mysql-9.7.0-tablespaces-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "DROP TABLESPACE `sr_space_254dc6f3c1ff``é_renamed`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP TABLESPACE `sr_space_254dc6f3c1ff``é_renamed`"
+      ]
+    },
+    {
+      "task_id": "visual_admin.tablespace.rename",
+      "proof_ids": [
+        "mysql-9.7.0-tablespaces-native-20261012",
+        "mysql-9.7.0-tablespaces-native-20261012-parser"
+      ],
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "ALTER TABLESPACE `sr_space_254dc6f3c1ff``é` RENAME TO `sr_space_254dc6f3c1ff``é_renamed`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLESPACE `sr_space_254dc6f3c1ff``é` RENAME TO `sr_space_254dc6f3c1ff``é_renamed`"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",
@@ -45197,18 +46306,32 @@
       "task_id": "visual_admin.user.rename"
     },
     {
-      "binding_style": "pyformat_percent_s",
+      "task_id": "visual_admin.view.alter",
       "proof_ids": [
-        "mysql-9.7.0-task-parser-acceptance",
-        "mysql-9.7.0-task-live-execution"
+        "mysql-9.7.0-views-native-20261012",
+        "mysql-9.7.0-views-native-20261012-parser"
       ],
+      "binding_style": "pyformat_percent_s",
       "required_bindings": [],
-      "source": "CREATE VIEW `cde_live_f95bb4ef1e8e`.`cde_editor_view` AS SELECT id, value FROM qualification",
+      "source": "ALTER ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `sr_views`.`v``é` (`i``d`, `note`) AS SELECT id,note FROM `sr_views`.`t``é` WHERE id > 0\nWITH LOCAL CHECK OPTION",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE VIEW `cde_live_f95bb4ef1e8e`.`cde_editor_view` AS SELECT id, value FROM qualification"
+        "ALTER ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `sr_views`.`v``é` (`i``d`, `note`) AS SELECT id,note FROM `sr_views`.`t``é` WHERE id > 0\nWITH LOCAL CHECK OPTION"
+      ]
+    },
+    {
+      "task_id": "visual_admin.view.create",
+      "proof_ids": [
+        "mysql-9.7.0-views-native-20261012",
+        "mysql-9.7.0-views-native-20261012-parser"
       ],
-      "task_id": "visual_admin.view.create"
+      "binding_style": "pyformat_percent_s",
+      "required_bindings": [],
+      "source": "CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `sr_views`.`v``é` (`i``d`, `note`) AS SELECT id,note FROM `sr_views`.`t``é` WHERE id > 0\nWITH LOCAL CHECK OPTION",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `sr_views`.`v``é` (`i``d`, `note`) AS SELECT id,note FROM `sr_views`.`t``é` WHERE id > 0\nWITH LOCAL CHECK OPTION"
+      ]
     },
     {
       "binding_style": "pyformat_percent_s",

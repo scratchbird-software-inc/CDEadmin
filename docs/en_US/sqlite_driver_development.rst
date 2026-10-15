@@ -15,7 +15,12 @@ Check the interpreter which will run ScratchRobin::
     python -c "import sqlite3; print(sqlite3.sqlite_version, sqlite3.threadsafety)"
 
 On Linux, an isolated library directory can be selected with
-``LD_LIBRARY_PATH`` before starting Python. Windows and macOS teams should use
+``LD_LIBRARY_PATH`` before starting Python **only when** its ``_sqlite3``
+extension dynamically loads that library. Some managed Python builds embed
+SQLite statically; changing the library path cannot change their reported
+SQLite version. Build or choose an interpreter linked to the exact 3.53.0
+library and verify ``sqlite3.sqlite_version`` in that process. Windows and
+macOS teams should use
 their application's packaged interpreter/library arrangement. A library change
 inside an already running process is not an admitted runtime switch. The
 portable gate records the actual SQLite source ID and compile options.

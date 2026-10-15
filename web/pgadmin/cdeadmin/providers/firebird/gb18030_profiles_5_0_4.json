@@ -1,0 +1,18 @@
+{
+  "GB18030_LEGACY": {
+    "base_codec": "gb18030",
+    "decode": {
+      "a8bc": 7743,
+      "8135f437": 59335
+    },
+    "encode": {
+      "7743": "a8bc",
+      "59335": "8135f437"
+    },
+    "oracle_sha256": "93fe8aa127497013fca6ba1e760ab57067dc9d7c2c56f3d1638dd96746b5dc63",
+    "encoded_sha256": "158c8f05df091ea13bed9add7f5274b08bcc01552392625b8fa0c2d2f0cc2a36",
+    "decoded_sha256": "9e748b2b63efb71f17098eaaca2123cba24d5ff6bc3c6e9d021f9ec3eca050a9",
+    "encoded_count": 1112064,
+    "decoded_count": 1128448
+  }
+}

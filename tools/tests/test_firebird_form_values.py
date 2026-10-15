@@ -114,6 +114,6 @@ def test_initial_defaults_match_visible_scalar_controls(
 
     monkeypatch.setattr(gate, '_draft_field_visible', visibility)
     monkeypatch.setattr(gate, 'visible_named_control', Mock(return_value=None))
-    gate.assert_form_controls(Mock(_driver=Mock()), [{
+    gate.assert_form_controls(Mock(_driver=Mock(find_elements=Mock(return_value=[]))), [{
         'field_id': 'controller', 'label': 'Controller', 'control': control}])
     assert seen == [default]

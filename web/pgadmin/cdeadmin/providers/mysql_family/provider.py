@@ -36,8 +36,8 @@ MYSQL_PROFILE = PilotProfile(
     'mysql-session-autocommit', 'tabular',
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
-     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin',
-     'replication-channel', 'resource-group', 'metric'),
+     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
+     'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
         'contract_complete': True,
@@ -81,7 +81,7 @@ MARIADB_PROFILE = PilotProfile(
     ('server', 'database', 'table', 'column', 'view', 'index', 'constraint',
      'sequence', 'trigger', 'event', 'procedure', 'function', 'package',
      'partition', 'tablespace', 'user', 'role', 'privilege',
-     'plugin', 'replication-channel', 'server-link', 'metric', 'session',
+     'plugin', 'replication-channel', 'server-link', 'loadable-function', 'metric', 'session',
      'system-variable', 'lock', 'lock-wait', 'table-storage', 'binary-log',
      'binary-log-event', 'binary-log-status', 'log-configuration',
      'general-log-entry', 'slow-query', 'tls-configuration'),
@@ -180,6 +180,28 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from ..mysql_events import OPERATIONS as event_operations
+        common['event']=event_operations | frozenset({'inspect'})
+        from ..mysql_program_objects import OPERATIONS as program_operations
+        for kind,operations in program_operations.items():common[kind]=operations | frozenset({'inspect'})
+        from ..mysql_group_replication import OPERATIONS as group_operations
+        common['group-replication']=group_operations | frozenset({'inspect'})
+        common['group-replication-member']=frozenset({'inspect'})
+        common['component'] = frozenset({'inspect','create','drop'})
+        common['constraint'] = common['constraint'] | frozenset({'enforcement'})
+        common['view'] = common['view'] | frozenset({'alter'})
+        from ..mysql_object_changes import OPERATIONS as object_changes
+        for kind, operations in object_changes.items():
+            common[kind] = common[kind] | operations
+        from ..mysql_replication import OPERATIONS as replication_operations
+        common['replication-channel'] = common['replication-channel'] | replication_operations
+        from ..mysql_partitions import OPERATIONS as partition_operations
+        for kind, operations in partition_operations.items():
+            common[kind] = common[kind] | operations
+        common['tablespace'] = frozenset({'inspect', 'create', 'alter', 'rename', 'drop'})
+        common['system-variable'] = frozenset({'inspect', 'set_global', 'set_persist', 'set_persist_only', 'reset_persist'})
+        common['session'] = frozenset({'inspect', 'terminate_query', 'terminate_connection'})
+        common['resource-group'] = frozenset({'inspect', 'create', 'alter', 'assign', 'drop'})
         common['role'] = common['role'] | frozenset({'grant', 'revoke', 'set_default'})
         common.pop('sequence')
         common['database'] = common['database'] | frozenset({
@@ -213,9 +235,14 @@ def _administration(profile):
             'repair_objects', 'checksum_tables', 'backup_logical',
             'restore_logical',
         })
-        common['package'] = frozenset({
-            'inspect', 'create', 'alter', 'drop',
-        })
+        from ..mariadb_server_objects import OPERATIONS as server_operations
+        for kind, operations in server_operations.items():
+            common[kind] = frozenset({'inspect'}) | operations
+        from ..mariadb_packages import OPERATIONS as package_operations
+        common['package'] = frozenset({'inspect', 'create', 'alter', 'drop'}) | package_operations
+        from ..mariadb_partitions import OPERATIONS as partition_operations
+        for kind, operations in partition_operations.items():
+            common[kind] = common[kind] | operations
     return RelationalAdministration(RelationalAdminDialect(
         engine_id=profile.engine_id,
         quote_open='`',
@@ -263,6 +290,9 @@ def _metric_records(profile):
 
 class MariaDBDBAPIClient(RelationalDBAPIClient):
     """Native MariaDB sessions with private pools and ordered result streams."""
+
+    transaction_actions = ('commit', 'rollback', 'autocommit_on',
+                           'autocommit_off')
 
     def __init__(self, config, pool_namespace, module=None, tool_runner=None):
         super().__init__(config, module)
@@ -358,6 +388,28 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._require_usable_session(handle)
         if action not in self.transaction_actions:
             return super().control_transaction(handle, action)
+        if action in {'autocommit_on', 'autocommit_off'}:
+            observation = self._describe_idle_transaction(handle)
+            if not observation.get('connection_usable'):
+                raise RelationalClientError('MariaDB session outcome is unknown')
+            enabled = action == 'autocommit_on'
+            if observation['autocommit'] == enabled:
+                return observation
+            if observation['in_transaction']:
+                raise RelationalClientError(
+                    'Commit or roll back the MariaDB transaction before '
+                    'changing autocommit')
+            try:
+                handle.autocommit = enabled
+                observed = self._describe_idle_transaction(handle)
+                if (not observed.get('connection_usable') or
+                        observed.get('autocommit') != enabled):
+                    raise RelationalClientError(
+                        'MariaDB autocommit acknowledgement is unknown')
+                return observed
+            except BaseException:
+                self._uncertain_sessions.add(id(handle))
+                raise
         try:
             return super().control_transaction(handle, action)
         except BaseException:
@@ -1444,6 +1496,30 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def apply_schema_review(self, route, record):
+        from ..mysql_schema_application import apply_review
+        self._require('administer', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL application client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return apply_review(connection, record)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def encode_native_metadata(self, route, metadata):
+        from ..mysql_native_encoding import encode_metadata
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MySQLDBAPIClient):
+            raise RelationalClientError('Native MySQL encoding client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            return encode_metadata(connection, metadata)
+        finally:
+            self.client._discard_failed_session(connection)
+
     def validate_schema_plan(self, route, plan):
         from ..mysql_schema_validation import validate
         self._require('data_read', 'resource')
@@ -1498,6 +1574,75 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
 class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
+
+    def validate_schema_plan(self, route, plan):
+        from ..mariadb_schema_validation import validate
+        self._require('administer', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB validation client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return validate(connection, plan)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def apply_schema_review(self, route, record):
+        from ..mariadb_schema_application import apply_review
+        self._require('administer', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB application client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return apply_review(connection, record)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def encode_native_metadata(self, route, metadata):
+        from .mariadb_native_encoding import encode_metadata
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB encoding client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return encode_metadata(connection, metadata)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def capture_server_catalog(self, route):
+        from .mariadb_server_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB server catalog client is unavailable')
+        connection = self.client._connect({'route': {**route, 'database': None, 'autocommit': True}})
+        try:
+            return capture(connection)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def capture_data(self, route, resource_id, *, endpoint_id, target_id, expected_server_uid, mode='sample', row_limit=100):
+        from .mariadb_data_capture import capture
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB data client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True, 'reconnect': False}})
+        try:
+            return capture(connection, route.get('database'), resource_id, endpoint_id=endpoint_id,
+                target_id=target_id, expected_server_uid=expected_server_uid, mode=mode, row_limit=row_limit)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def capture_catalog(self, route, *, include_system=False):
+        """Observe native MariaDB metadata on an independently owned lease."""
+        from .mariadb_catalog import capture
+        self._require('data_read', 'resource')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB catalog client is unavailable')
+        connection = self.client._connect({'route': {**route, 'autocommit': True}})
+        try:
+            return capture(connection, route.get('database'), include_system=include_system)
+        finally:
+            self.client._discard_failed_session(connection)
 
 
 def _route_arguments(route, profile):
@@ -1590,6 +1735,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         resources = {}
         catalog_failures = []
+        catalog_unavailable = []
         system_databases = {'information_schema', 'mysql',
                             'performance_schema', 'sys'}
 
@@ -1599,12 +1745,19 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             # Keep endpoint scans bounded, but never exclude the system
             # database the user explicitly selected in the navigator.
             return re.sub(
-                r"(?:WHERE|AND) (?:TABLE|TRIGGER|ROUTINE|EVENT)_SCHEMA "
+                r"(?:WHERE|AND) (?:TABLE|TRIGGER|ROUTINE|EVENT|LIBRARY)_SCHEMA "
                 r"NOT IN \('information_schema', 'mysql', "
                 r"'performance_schema', 'sys'\) ", '', source)
 
         def record_failure(source, error):
             code = getattr(error, 'errno', None)
+            server_native = resources.get('server:' + profile.engine_name, {}).get('native', {})
+            if (profile is MARIADB_PROFILE and source == 'SHOW BINARY LOGS' and
+                    code == 1381 and server_native.get('log_bin') in (0, False, '0', 'OFF')):
+                catalog_unavailable.append({'feature': 'binary-log',
+                    'state': 'disabled', 'native_error_code': 1381,
+                    'sqlstate': getattr(error, 'sqlstate', None)})
+                return
             catalog_failures.append({
                 'query_sha256': hashlib.sha256(source.encode()).hexdigest(),
                 'error_code': None if code is None else str(code),
@@ -1613,10 +1766,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                              else 'query_failed'),
             })
 
-        def add(kind, path, name, native=None):
+        def add(kind, path, name, native=None, *, identity=None):
             path = [str(item) for item in path]
             name = str(name)
-            resource_id = ':'.join([kind, *path, name])
+            resource_id = identity or ':'.join([kind, *path, name])
             resource = resources.setdefault(resource_id, {
                 'resource_id': resource_id,
                 'resource_kind': kind,
@@ -1631,9 +1784,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     kind == 'database' and name in system_databases):
                 resource.setdefault('native', {})['system_object'] = True
 
-        def optional(source):
+        def optional(source, parameters=()):
             try:
-                cursor.execute(catalog_source(source))
+                if parameters:
+                    cursor.execute(catalog_source(source), parameters)
+                else:
+                    cursor.execute(catalog_source(source))
                 return cursor.fetchall()
             except Exception as error:
                 record_failure(source, error)
@@ -1777,6 +1933,25 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             native = {'table_type': object_type}
             if create_source:
                 native['ddl'] = create_source
+            if kind == 'view' and profile is MYSQL_PROFILE:
+                facts = optional('SELECT VIEW_DEFINITION,CHECK_OPTION,DEFINER,SECURITY_TYPE,IS_UPDATABLE '
+                                 'FROM information_schema.VIEWS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',
+                                 (schema_name, object_name))
+                if facts:
+                    row = facts[0]
+                    native.update(view_definition=row[0], check_option=row[1],
+                                  definer=row[2], sql_security=row[3], is_updatable=row[4])
+                    user, separator, host = str(row[2]).rpartition('@')
+                    if separator:
+                        native.update(definer_user=user, definer_host=host)
+                algorithm = re.match(r'CREATE\s+ALGORITHM\s*=\s*(UNDEFINED|MERGE|TEMPTABLE)\b', create_source, re.I)
+                if algorithm:
+                    native['algorithm'] = algorithm.group(1).upper()
+                output_columns = optional('SELECT COLUMN_NAME FROM information_schema.COLUMNS '
+                                          'WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s ORDER BY ORDINAL_POSITION',
+                                          (schema_name, object_name))
+                if output_columns:
+                    native['view_columns'] = [str(row[0]) for row in output_columns]
             add(kind, [schema_name], object_name, native)
         queries = (
             ('column', 'SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, '
@@ -1815,6 +1990,57 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         for item in detail
                     ],
                 })
+        if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, INDEX_TYPE, IS_VISIBLE, INDEX_COMMENT '
+                'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2,3"
+            ):
+                native = {key: value for key, value in record.items() if key not in {'table_schema', 'table_name', 'index_name'}}
+                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if record['index_name'].upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
+                add('index', [record['table_schema'], record['table_name']], record['index_name'], native)
+            for record in optional_records(
+                'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, SECURITY_TYPE, SQL_DATA_ACCESS, ROUTINE_COMMENT, IS_DETERMINISTIC '
+                'FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN '
+                "('information_schema','mysql','performance_schema','sys') ORDER BY 1,2"
+            ):
+                add(record['routine_type'].lower(), [record['routine_schema']], record['routine_name'], {
+                    key: value for key, value in record.items() if key not in {'routine_schema', 'routine_name', 'routine_type'}})
+            for record in optional_records(
+                'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED '
+                'FROM information_schema.TABLE_CONSTRAINTS '
+                "WHERE TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
+                'ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME'
+            ):
+                native = {**record, 'enforcement': 'ENFORCED' if record['enforced'] == 'YES' else 'NOT ENFORCED', 'administration': {'allowed_operations':
+                    ['inspect', 'create', 'drop'] + (['enforcement'] if record['constraint_type'] == 'CHECK' else [])}}
+                add('constraint', [record['table_schema'], record['table_name']], record['constraint_name'], native)
+            for record in optional_records(
+                'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '
+                'p.PARTITION_ORDINAL_POSITION, p.PARTITION_DESCRIPTION, p.TABLE_ROWS, p.DATA_LENGTH, p.INDEX_LENGTH, '
+                't.ENGINE, p.TABLESPACE_NAME, p.SUBPARTITION_NAME, p.SUBPARTITION_METHOD, p.SUBPARTITION_EXPRESSION '
+                'FROM information_schema.PARTITIONS p JOIN information_schema.TABLES t '
+                'ON t.TABLE_SCHEMA=p.TABLE_SCHEMA AND t.TABLE_NAME=p.TABLE_NAME WHERE p.PARTITION_NAME IS NOT NULL '
+                "AND p.TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
+                'ORDER BY p.TABLE_SCHEMA,p.TABLE_NAME,p.PARTITION_ORDINAL_POSITION,p.SUBPARTITION_ORDINAL_POSITION'
+            ):
+                add('partition', [record['table_schema'], record['table_name']], record['partition_name'], {
+                    key: value for key, value in record.items() if not key.startswith('subpartition_')})
+                if record.get('subpartition_name'):
+                    partition = resources[':'.join(['partition',record['table_schema'],record['table_name'],record['partition_name']])]
+                    partition['native'].setdefault('subpartitions', []).append({key:value for key,value in record.items() if key.startswith('subpartition_')})
+            for resource in resources.values():
+                if resource['resource_kind'] != 'partition':
+                    continue
+                native = resource['native']
+                allowed = ['inspect']
+                if native.get('engine') == 'InnoDB':
+                    allowed += ['analyze', 'check', 'optimize', 'rebuild', 'truncate']
+                    if native.get('partition_method') in {'RANGE', 'RANGE COLUMNS', 'LIST', 'LIST COLUMNS'}:
+                        allowed += ['drop', 'reorganize']
+                    if not native.get('subpartitions'):
+                        allowed += ['exchange']
+                native['administration'] = {'allowed_operations': allowed}
         for schema_name, name, routine_type, data_type in optional(
             'SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, DATA_TYPE '
             "FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA NOT IN "
@@ -1825,10 +2051,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             if kind in {'package', 'package body'} and (
                 profile is MARIADB_PROFILE
             ):
-                add('package', [schema_name], name, {
-                    'routine_type': str(routine_type).upper(),
-                    'data_type': data_type,
-                })
+                from .mariadb_catalog import identifier as quote_package
+                part = 'package_body' if kind == 'package body' else 'package_specification'
+                native = {'routine_type': 'PACKAGE', part: {
+                    'routine_type': str(routine_type).upper(), 'data_type': data_type,
+                    'show_create': optional_records('SHOW CREATE ' + str(routine_type).upper() + ' ' +
+                        quote_package(schema_name) + '.' + quote_package(name))}}
+                add('package', [schema_name], name, native)
                 continue
             if kind not in {'procedure', 'function'}:
                 continue
@@ -1842,6 +2071,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('event', [schema_name], name, {
                 'status': status, 'event_type': event_type,
             })
+        if profile is MYSQL_PROFILE:
+            from .mysql_catalog import identifier as quote_event_identifier
+            for record in optional_records("SELECT * FROM information_schema.EVENTS WHERE EVENT_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY EVENT_SCHEMA,EVENT_NAME"):
+                record['show_create']=optional_records('SHOW CREATE EVENT '+quote_event_identifier(record['event_schema'])+'.'+quote_event_identifier(record['event_name']))
+                add('event',[record['event_schema']],record['event_name'],record)
         roles = set()
         if profile is MYSQL_PROFILE:
             # MySQL stores role membership with the role on the FROM side.
@@ -1927,15 +2161,74 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         )
         for name, engine in optional(tablespace_source):
             add('tablespace', [], name, {'engine': engine})
-        for name, status, plugin_type, library, license_name in optional(
-            'SHOW PLUGINS'
-        ):
+        plugin_rows = optional('SHOW PLUGINS')
+        if profile is MYSQL_PROFILE:
+            keyring_status = optional_records('SELECT STATUS_KEY, STATUS_VALUE FROM performance_schema.keyring_component_status')
+            keyring_active = any(row.get('status_key') == 'Component_status' and row.get('status_value') == 'Active' for row in keyring_status) or any(
+                str(row[0]).startswith('keyring_') and str(row[1]).upper() == 'ACTIVE' for row in plugin_rows)
+            for record in optional_records(
+                'SELECT s.NAME, s.SPACE_TYPE, s.STATE, s.ENCRYPTION, s.AUTOEXTEND_SIZE, '
+                's.FILE_SIZE, s.ALLOCATED_SIZE, s.PAGE_SIZE, s.ZIP_PAGE_SIZE, '
+                'e.ENGINE_ATTRIBUTE FROM information_schema.INNODB_TABLESPACES s '
+                'LEFT JOIN information_schema.TABLESPACES_EXTENSIONS e ON e.TABLESPACE_NAME=s.NAME '
+                'ORDER BY s.NAME'
+            ):
+                space_type = record['space_type']
+                allowed = ['inspect']
+                changes = []
+                if space_type == 'General':
+                    allowed += ['alter', 'rename', 'drop']
+                    changes = ['AUTOEXTEND_SIZE', 'ENGINE_ATTRIBUTE'] + (['ENCRYPTION'] if keyring_active else [])
+                elif space_type == 'Undo' and str(record['name']).lower() not in {'innodb_undo_001', 'innodb_undo_002'}:
+                    allowed += ['alter', 'drop']
+                    changes = ['ACTIVE', 'INACTIVE']
+                add('tablespace', [], record['name'], {**record, 'engine': 'InnoDB',
+                    'available_tablespace_changes': changes, 'keyring_observed_active': keyring_active,
+                    'administration': {'allowed_operations': allowed}})
+        if profile is MYSQL_PROFILE:
+            for record in optional_records('SELECT component_id,component_group_id,component_urn FROM mysql.component ORDER BY component_id'):
+                add('component',[],record['component_urn'],record)
+        for name, status, plugin_type, library, license_name in plugin_rows:
+            # MariaDB's uuid is both a DATA TYPE and a FUNCTION plugin.
+            # Preserve native names for operations and distinct catalog IDs.
+            identity = ('mariadb:plugin:' + json.dumps([name, plugin_type],
+                ensure_ascii=False, separators=(',', ':'))) if profile is MARIADB_PROFILE else None
             add('plugin', [], name, {
+                **({'plugin_name': name} if profile is MARIADB_PROFILE else {}),
                 'status': status,
                 'plugin_type': plugin_type,
                 'library': library,
                 'license': license_name,
-            })
+            }, identity=identity)
+        if profile is MYSQL_PROFILE:
+            for record in optional_records("SELECT * FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY LIBRARY_SCHEMA,LIBRARY_NAME"):
+                from .mysql_catalog import identifier as quote_library_identifier
+                record['show_create']=optional_records('SHOW CREATE LIBRARY '+quote_library_identifier(record['library_schema'])+'.'+quote_library_identifier(record['library_name']))
+                add('library',[record['library_schema']],record['library_name'],record)
+            functions={}
+            for record in optional_records('SELECT name,ret,dl,type FROM mysql.func ORDER BY name'):
+                name=record['name'];functions[name]={**record,'registration_origin':'mysql.func'}
+            for record in optional_records('SELECT * FROM performance_schema.user_defined_functions ORDER BY UDF_NAME'):
+                name=record['udf_name'];functions.setdefault(name,{'registration_origin':'runtime-service'}).update(record)
+            for name,record in functions.items():
+                record['administration']={'allowed_operations':['inspect','drop'] if record['registration_origin']=='mysql.func' else ['inspect']}
+                add('loadable-function',[],name,record)
+        if profile is MARIADB_PROFILE:
+            for record in optional_records('SELECT name,ret,dl,type FROM mysql.func ORDER BY name'):
+                record.update(registration_origin='mysql.func',
+                              administration={'allowed_operations': ['inspect', 'drop']})
+                add('loadable-function', [], record['name'], record)
+        if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
+            members=optional_records('SELECT * FROM performance_schema.replication_group_members')
+            stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')
+            group={'group_replication_plugin_status':'ACTIVE','members':members,'member_statistics':stats}
+            for field,source in [('configuration','SELECT @@GLOBAL.group_replication_group_name AS group_name, @@GLOBAL.group_replication_single_primary_mode AS single_primary_mode'),
+                *([('communication_protocol','SELECT group_replication_get_communication_protocol() AS value'),
+                   ('write_concurrency','SELECT group_replication_get_write_concurrency() AS value')] if any(str(row.get('member_state')).upper()=='ONLINE' for row in members) else [])]:
+                group[field]=optional_records(source)
+            add('group-replication',[],'Group Replication',group)
+            for member in members:
+                if member.get('member_id'):add('group-replication-member',['Group Replication'],str(member['member_id']),member)
         replication_source = (
             'SELECT CHANNEL_NAME, HOST, PORT FROM performance_schema.'
             'replication_connection_configuration ORDER BY CHANNEL_NAME'
@@ -1952,7 +2245,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         for row in optional(replication_source):
             if profile is MYSQL_PROFILE:
                 name, host, port = row
-                native = {'host': host, 'port': port}
+                native = {'channel_name': name, 'host': host, 'port': port,
+                          'replication_password_returned': False,
+                          **({'administration': {'allowed_operations': ['inspect']}}
+                             if str(name).lower().startswith('group_replication_') else {})}
             else:
                 name, host, user, port, *detail = row
                 native = {
@@ -1974,7 +2270,40 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         value, (str, int, float, bool)) else value)
                     for key, value in native.items()
                 }
+            if profile is MYSQL_PROFILE:
+                from ..mysql_replication import channel_label
+                name = channel_label(name)
             add('replication-channel', [], name, native)
+        if profile is MYSQL_PROFILE:
+            for query, observation in [
+                ('SELECT CHANNEL_NAME, SERVICE_STATE, SOURCE_UUID, RECEIVED_TRANSACTION_SET, LAST_ERROR_NUMBER, LAST_ERROR_TIMESTAMP FROM performance_schema.replication_connection_status', 'receiver'),
+                ('SELECT CHANNEL_NAME, SERVICE_STATE, REMAINING_DELAY, COUNT_TRANSACTIONS_RETRIES FROM performance_schema.replication_applier_status', 'applier'),
+            ]:
+                for record in optional_records(query):
+                    name = record['channel_name']
+                    key = ':'.join(['replication-channel', channel_label(name)])
+                    if key in resources:
+                        resources[key]['native'][observation] = record
+        if profile is MYSQL_PROFILE:
+            for record in optional_records(
+                'SELECT t.THREAD_ID, t.PROCESSLIST_ID, t.PROCESSLIST_USER, t.PROCESSLIST_HOST, '
+                't.PROCESSLIST_DB, t.PROCESSLIST_COMMAND, t.PROCESSLIST_TIME, t.PROCESSLIST_STATE, '
+                't.RESOURCE_GROUP FROM performance_schema.threads t '
+                'WHERE t.PROCESSLIST_ID IS NOT NULL ORDER BY t.PROCESSLIST_ID'
+            ):
+                record['processlist_id'] = str(record['processlist_id'])
+                record['thread_id'] = str(record['thread_id'])
+                add('session', ['Sessions'], record['processlist_id'], record)
+            for record in optional_records(
+                'SELECT g.VARIABLE_NAME, g.VARIABLE_VALUE AS GLOBAL_VALUE, '
+                'v.VARIABLE_SOURCE, v.VARIABLE_PATH, v.MIN_VALUE, v.MAX_VALUE, '
+                'v.SET_TIME, v.SET_USER, v.SET_HOST, p.VARIABLE_VALUE AS PERSISTED_VALUE '
+                'FROM performance_schema.global_variables g '
+                'LEFT JOIN performance_schema.variables_info v ON v.VARIABLE_NAME=g.VARIABLE_NAME '
+                'LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME '
+                'ORDER BY g.VARIABLE_NAME'
+            ):
+                add('system-variable', ['Configuration'], record['variable_name'], record)
         if profile is MYSQL_PROFILE:
             for name, resource_type, enabled in optional(
                 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, '
@@ -1986,13 +2315,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     'resource_type': resource_type, 'enabled': enabled,
                 })
         else:
-            for name, host, database in optional(
-                'SELECT Server_name, Host, Db FROM mysql.servers '
-                'ORDER BY Server_name'
+            for record in optional_records(
+                'SELECT Server_name, Host, Db, Username, Port, Socket, Wrapper, Owner '
+                'FROM mysql.servers ORDER BY Server_name'
             ):
-                add('server-link', [], name, {
-                    'host': host, 'database': database,
-                })
+                add('server-link', [], record['server_name'],
+                    {**record, 'database': record['db']})
             for record in optional_records(
                 'SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO, '
                 'TIME_MS, STAGE, MAX_STAGE, PROGRESS, MEMORY_USED, '
@@ -2142,11 +2470,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
-            'plugin', 'resource-group', 'server-link', 'system-variable',
+            'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {
-            'server', 'replication-channel', 'session', 'lock', 'lock-wait',
+            'server', 'replication-channel', 'group-replication', 'group-replication-member', 'session', 'lock', 'lock-wait',
             'binary-log-status',
         }
         data_kinds = {
@@ -2178,6 +2506,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'complete_native_inventory': False,
             'failed_query_count': len(catalog_failures),
             'failures': catalog_failures,
+            **({'unavailable': catalog_unavailable} if catalog_unavailable else {}),
         }
         for resource in resources.values():
             if resource['resource_kind'] in {'server', 'database'}:

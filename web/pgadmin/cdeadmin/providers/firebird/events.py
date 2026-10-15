@@ -98,6 +98,10 @@ class EventSubscriptions:
                 close(connection)
                 item.cleanup_confirmed = True
                 item.state = 'failed'
+            except Exception as cleanup_error:
+                # Preserve the subscription receipt even when thread startup
+                # and attachment release both fail.
+                item.error_type = type(cleanup_error).__name__
             finally:
                 item.done.set()
         return item.snapshot()
@@ -137,7 +141,8 @@ class EventSubscriptions:
             connection = connect()
             if item.stop.is_set():
                 return
-            collector = connection.event_collector(item.names)
+            from .event_abi import event_collector
+            collector = event_collector(connection, item.names)
             collector.begin()
             heartbeat(connection)
             next_probe = time.monotonic() + 10

@@ -22,6 +22,9 @@ import {
 import usePreferences from '../../preferences/static/js/store';
 import PropTypes from 'prop-types';
 import _ from 'lodash';
+import {Box} from '@mui/material';
+import FormReference from '../../static/js/cdeadmin_ui/navigation/FormReference';
+import {nativePropertyFormKey} from '../../static/js/cdeadmin_ui/navigation/nativePropertyReferences';
 
 export default function ObjectNodeProperties({panelId, node, treeNodeInfo, nodeData, initialData, actionType, formType, onEdit, onSave, onClose,
   isActive, setIsStale, isStale}) {
@@ -252,26 +255,31 @@ export default function ObjectNodeProperties({panelId, node, treeNodeInfo, nodeD
 
   /* Fire at will, mount the DOM */
   return (
-    <SchemaView
-      key={key}
-      formType={formType}
-      getInitData={initData}
-      updatedData={updatedData}
-      schema={schema}
-      viewHelperProps={viewHelperProps}
-      onSave={onSaveClick}
-      onClose={()=>onClose()}
-      onHelp={onHelp}
-      onEdit={onEdit}
-      onDataChange={(dataChanged)=>{
-        isDirty.current = dataChanged;
-      }}
-      confirmOnCloseReset={confirmOnCloseReset}
-      hasSQL={node.hasSQL && (actionType === 'create' || actionType === 'edit')}
-      getSQLValue={getSQLValue}
-      disableSqlHelp={node.sqlAlterHelp == '' && node.sqlCreateHelp == '' && !node.epasHelp}
-      disableDialogHelp={node.dialogHelp == undefined || node.dialogHelp == ''}
-    />
+    <FormReference formKey={nativePropertyFormKey(nodeType)}
+      sx={{height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0}}>
+      <Box sx={{flex: 1, minHeight: 0}}>
+        <SchemaView
+          key={key}
+          formType={formType}
+          getInitData={initData}
+          updatedData={updatedData}
+          schema={schema}
+          viewHelperProps={viewHelperProps}
+          onSave={onSaveClick}
+          onClose={()=>onClose()}
+          onHelp={onHelp}
+          onEdit={onEdit}
+          onDataChange={(dataChanged)=>{
+            isDirty.current = dataChanged;
+          }}
+          confirmOnCloseReset={confirmOnCloseReset}
+          hasSQL={node.hasSQL && (actionType === 'create' || actionType === 'edit')}
+          getSQLValue={getSQLValue}
+          disableSqlHelp={node.sqlAlterHelp == '' && node.sqlCreateHelp == '' && !node.epasHelp}
+          disableDialogHelp={node.dialogHelp == undefined || node.dialogHelp == ''}
+        />
+      </Box>
+    </FormReference>
   );
 }
 

@@ -336,7 +336,7 @@ def test_duckdb_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, DUCKDB, DUCKDB_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 33
+    assert checked['coverage']['authoritative_task_count'] == 35
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 489,
         'statements': 42,
@@ -380,7 +380,7 @@ def test_mysql_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, MYSQL_PROFILE, MYSQL_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 49
+    assert checked['coverage']['authoritative_task_count'] == 105
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 760,
         'statements': 143,
@@ -444,7 +444,7 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         document, MARIADB_PROFILE,
         MARIADB_ADMINISTRATION.dialect_task_ids(),
     )
-    assert checked['coverage']['authoritative_task_count'] == 63
+    assert checked['coverage']['authoritative_task_count'] == 88
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 693,
         'statements': 59,
@@ -545,7 +545,11 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
         document = json.loads(path.read_text(encoding='utf-8'))
         gate = (document.get('provenance') or {}).get('activation_gate', '')
         if str(gate).startswith('passed'):
-            activated.append(str(path.relative_to(WEB)))
+            activated.append(path.relative_to(WEB).as_posix())
+        elif document['identity']['profile_id'] == 'postgresql-native':
+            assert document['support_state'] == 'implemented'
+            assert gate == 'pending_exact_dialect_metrics_and_full_native_form_qualification'
+            incomplete.append(path.relative_to(WEB).as_posix())
         elif document['identity']['profile_id'] == 'firebird-embedded':
             assert document['support_state'] == 'experimental'
             assert gate == (
@@ -556,7 +560,8 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
             assert set(provenance['platform_test_notes']) == {'windows', 'macos'}
             experimental.append(document['identity']['profile_id'])
         else:
-            incomplete.append(str(path.relative_to(WEB)))
-    assert incomplete == []
-    assert len(activated) == 26
+            incomplete.append(path.relative_to(WEB).as_posix())
+    assert incomplete == [
+        'pgadmin/cdeadmin/providers/postgresql/provider_manifest.json']
+    assert len(activated) == 25
     assert experimental == ['firebird-embedded']

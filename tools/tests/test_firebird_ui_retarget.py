@@ -1,11 +1,13 @@
 """Owned UI copies preserve defaults unless explicitly retargeted."""
 
 import ast
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
 
 import pytest
+from tools.firebird_server_paths import server_path
 
 
 @pytest.mark.parametrize('endpoint_user', [None, 'OWNED_RECOVERY_OPERATOR'])
@@ -15,11 +17,12 @@ def test_retarget_scopes_user_to_one_endpoint(tmp_path, endpoint_user):
     function = next(node for node in ast.walk(ast.parse(source.read_text()))
                     if isinstance(node, ast.FunctionDef)
                     and node.name == '_retarget_config')
-    namespace = {'sqlite3': sqlite3, 'json': json, 'Path': Path}
+    namespace = {'sqlite3': sqlite3, 'json': json, 'Path': Path,
+                 'closing': closing, 'server_path': server_path}
     exec(compile(ast.Module(body=[function], type_ignores=[]),
                  str(source), 'exec'), namespace)
     database = tmp_path / 'owned.db'
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.executescript('''
             CREATE TABLE user (id INTEGER, email TEXT);
             CREATE TABLE server (id INTEGER, user_id INTEGER, name TEXT,
@@ -59,7 +62,7 @@ def test_retarget_scopes_user_to_one_endpoint(tmp_path, endpoint_user):
     namespace['_retarget_config'](
         database, 'owned@example.test', '/owned/new.fdb', 'new', 53051,
         endpoint_user=endpoint_user)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         assert connection.execute(
             'SELECT username, host, port FROM server WHERE id = 1'
         ).fetchone() == (endpoint_user or 'ORIGINAL', '127.0.0.1', 53051)
