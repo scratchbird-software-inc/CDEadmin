@@ -23,7 +23,7 @@ Python and native x64 libraries; Windows ARM is not qualified by the matrix.
 On macOS install Xcode command-line tools and Homebrew, then:
 
 ```bash
-brew install libpq openssl@3 krb5 pkg-config cmake bison icu4c libxml2 lz4 zstd readline
+brew install libpq openssl@3 krb5 pkg-config cmake bison icu4c libxml2 lz4 zstd readline zlib
 ```
 
 The clients stage builds an owned CPython 3.14.8 interpreter on macOS against

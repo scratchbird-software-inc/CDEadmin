@@ -109,7 +109,9 @@ def mariadb(evidence, env):
             archive.extractall(source, filter='data')
     build = STATE / 'mariadb-build'
     bison = brew_prefix('bison')
-    selected = dict(env, PATH=bison + '/bin' + os.pathsep + env['PATH'])
+    zlib = brew_prefix('zlib')
+    selected = dict(env, PATH=bison + '/bin' + os.pathsep + env['PATH'],
+                    PKG_CONFIG_PATH=zlib + '/lib/pkgconfig' + os.pathsep + env.get('PKG_CONFIG_PATH', ''))
     sdk = subprocess.check_output(['xcrun', '--show-sdk-path'], text=True).strip()
     cc = subprocess.check_output(['xcrun', '--find', 'clang'], text=True).strip()
     cxx = subprocess.check_output(['xcrun', '--find', 'clang++'], text=True).strip()
@@ -119,6 +121,8 @@ def mariadb(evidence, env):
     command(['cmake', '-S', tree, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
              '-DCMAKE_OSX_SYSROOT=' + sdk, '-DCMAKE_C_COMPILER=' + cc,
              '-DCMAKE_CXX_COMPILER=' + cxx,
+             '-DZLIB_INCLUDE_DIR=' + zlib + '/include',
+             '-DZLIB_LIBRARY=' + zlib + '/lib/libz.dylib',
              '-DCMAKE_INSTALL_PREFIX=' + str(root), '-DWITH_UNIT_TESTS=OFF',
              '-DWITH_SSL=system', '-DOPENSSL_ROOT_DIR=' + brew_prefix('openssl@3'),
              '-DDEFAULT_CHARSET=utf8mb4', '-DDEFAULT_COLLATION=utf8mb4_general_ci'],

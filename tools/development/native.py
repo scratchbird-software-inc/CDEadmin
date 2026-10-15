@@ -131,7 +131,7 @@ def stage(name, evidence):
                     log=evidence / 'corepack-install.log')
         if platform.system() == 'Darwin':
             command(['brew', 'install', 'libpq', 'openssl@3', 'krb5', 'pkg-config',
-                     'cmake', 'bison', 'icu4c', 'libxml2', 'lz4', 'zstd', 'readline'],
+                     'cmake', 'bison', 'icu4c', 'libxml2', 'lz4', 'zstd', 'readline', 'zlib'],
                     env=env, log=evidence / 'host-prerequisites.log')
     elif name == 'doctor':
         checks = {'standard Python 3.14': sys.version_info[:2] == (3, 14)
