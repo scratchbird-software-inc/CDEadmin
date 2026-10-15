@@ -72,7 +72,7 @@ def run(route, directory, evidence, *, password=None, path_style='posix',
         'fixture_name': identity,
         'runner_sha256': hashlib.sha256(
             Path(__file__).read_bytes()).hexdigest(),
-        'source_sha256': {str(p.relative_to(source)): hashlib.sha256(
+        'source_sha256': {p.relative_to(source).as_posix(): hashlib.sha256(
             p.read_bytes()).hexdigest() for p in sorted(package.iterdir())
             if p.suffix in {'.py', '.json'}},
     }
