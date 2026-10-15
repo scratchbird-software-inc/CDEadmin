@@ -70,7 +70,11 @@ def command(args, *, cwd=ROOT, env=None, log=None, timeout=3600):
         finally:
             # Preserve diagnostics even when the child exceeds its deadline.
             if Path(log).is_file():
-                print(Path(log).read_text(encoding='utf-8', errors='replace'), flush=True)
+                # Huge parametrized payload/error lines can stall hosted log
+                # ingestion. Preserve the complete file in evidence/artifacts.
+                lines = Path(log).read_text(encoding='utf-8', errors='replace').splitlines()
+                print('\n'.join(line if len(line) <= 8192 else line[:8192] +
+                    ' ... [long line retained in evidence log]' for line in lines), flush=True)
     else:
         subprocess.run(args, cwd=cwd, env=env, check=True, timeout=timeout)
 

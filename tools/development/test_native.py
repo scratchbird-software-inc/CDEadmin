@@ -58,6 +58,18 @@ class NativeSetupTests(unittest.TestCase):
         self.assertEqual([s['stage'] for s in receipt['steps'] if s['status'] == 'failed'],
                          ['python', 'verify'])
 
+    def test_large_console_lines_preserve_complete_evidence(self):
+        output = io.StringIO()
+        log = self.root / 'large.log'
+        with contextlib.redirect_stdout(output):
+            native.command([sys.executable, '-c',
+                            "print('x' * 20000);print('finished')"],
+                           cwd=self.root, log=log)
+        self.assertEqual(log.read_text(), 'x' * 20000 + '\nfinished\n')
+        self.assertIn('long line retained in evidence log', output.getvalue())
+        self.assertIn('finished', output.getvalue())
+        self.assertLess(len(output.getvalue()), 9000)
+
     def test_configuration_is_preserved(self):
         (self.root / 'web').mkdir()
         target = self.root / 'web/config_local.py'
@@ -99,6 +111,23 @@ class NativeSetupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'SHA-256'):
                 native_assets.download('owned')
             fetch.assert_not_called()
+
+    def test_kerberos_runtime_rejects_wrong_architecture_dlls(self):
+        def dll(directory, filename, machine):
+            path = self.root / 'kerberos' / directory / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            header = bytearray(70)
+            header[:2] = b'MZ'
+            header[60:64] = (64).to_bytes(4, 'little')
+            header[64:70] = b'PE\x00\x00' + machine.to_bytes(2, 'little')
+            path.write_bytes(header)
+            return path
+        dll('x86', 'msvcr100.dll', 0x14c)
+        cxx = dll('x64', 'msvcp100.dll', 0x8664)
+        crt = dll('x64', 'msvcr100.dll', 0x8664)
+        gss = dll('bin', 'gssapi64.dll', 0x8664)
+        with patch.object(native_assets, 'STATE', self.root):
+            self.assertEqual(native_assets.kerberos_libraries(), [crt, cxx, gss])
 
     def test_crash_cleanup_refuses_a_reused_foreign_pid(self):
         import psutil
