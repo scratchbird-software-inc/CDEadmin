@@ -1,6 +1,9 @@
 # Auto detect text files and normalize end of lines to LF (\n)
 * text=auto eol=lf
 
+# Unified-diff context preserves upstream blank lines and tab indentation.
+tools/driver_patches/pglast-8.5-native-options.patch whitespace=-blank-at-eol,-space-before-tab
+
 # Preserve the approved DDN release bytes. Upstream distributions contain a
 # deliberate space-only separator line and are verified by SHA-256 manifest.
 web/pgadmin/static/vendor/ddn/**/*.js whitespace=-blank-at-eol
