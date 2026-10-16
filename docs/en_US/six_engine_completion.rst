@@ -428,6 +428,14 @@ transformation, recovery, operations and platform requirements remain open.
   identity/redaction/rollup mappings and historical viewers are wired to the
   shared ScratchBird client boundary. **No history qualification is claimed**;
   PRODUCT-GAP-07 is owner-deferred.
+* Native utility execution supplies OS-specific process settings, isolates
+  configuration and credentials, preserves virtual-environment launchers and
+  records the application execution host separately from the database endpoint.
+  Output capture is bounded while both streams drain; long-running tools expose
+  numeric progress and explicit cancellation/timeout observations. Failed
+  supervision retains its local process observation. Local exit and cleanup do
+  not assert remote database finality. These facilities support continuity
+  adapters; they do not close the outstanding recovery workspaces and drills.
 
 PRODUCT-GAP-09 still includes remaining native schema transformations beyond the
 typed imports. PRODUCT-GAP-11 still requires dedicated physical/incremental/PITR
