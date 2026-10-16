@@ -884,3 +884,6 @@ XNET and Win_Sspi observations. Release aggregation checks artifact integrity,
 source bindings and complete inventories; it never infers platform success from
 Linux or top-level status flags. Form/UX signoff, signed-package lifecycle and
 ScratchBird history acceptance remain explicit separate release requirements.
+The release-candidate collector captures the three GitHub native hosts and the
+actual Linux run into one external evidence directory, binds the clean candidate
+and DDN dependency to the exact run/attempt, and retains failures across hosts.

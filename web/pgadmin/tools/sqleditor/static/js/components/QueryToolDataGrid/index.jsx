@@ -23,71 +23,95 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import PgReactDataGrid from '../../../../../../static/js/components/PgReactDataGrid';
 import { isMac } from '../../../../../../static/js/keyboard_shortcuts';
+import {columnTypeLabel} from 'sources/cdeadmin_ui/data/columnTypeLabel';
+import {PRESENTATION_PROFILE_IDS} from 'sources/cdeadmin_ui/foundations/presentation';
 
 export const ROWNUM_KEY = '$_pgadmin_rownum_key_$';
 export const GRID_ROW_SELECT_KEY = '$_pgadmin_gridrowselect_key_$';
 
-const StyledPgReactDataGrid = styled(PgReactDataGrid)(({stripedRows, theme})=>({
-  '& .QueryTool-columnHeader': {
-    padding: '3px 6px',
-    height: '100%',
-    display: 'flex',
-    lineHeight: '16px',
-    alignItems: 'center',
-    fontWeight: 'normal',
-    '& .QueryTool-columnName': {
+const StyledPgReactDataGrid = styled(PgReactDataGrid)(({stripedRows, theme})=>{
+  const light = theme.name === 'light' || (!theme.name && theme.palette.mode !== 'dark');
+  const strongBorders = [PRESENTATION_PROFILE_IDS.HIGH_CONTRAST_LIGHT,
+    PRESENTATION_PROFILE_IDS.HIGH_CONTRAST_DARK, PRESENTATION_PROFILE_IDS.LOW_VISION]
+    .includes(theme.cdeadminPresentation?.profileId);
+  const headerBg = light && !strongBorders ? '#ffffff' : theme.otherVars.headerBg;
+  return {
+    '&.ReactGrid-root': {
+      '--rdg-border-color': light && !strongBorders ? '#d6e7f2' : 'var(--cde-color-border)',
+      '--rdg-header-background-color': headerBg,
+      '--rdg-cell-frozen-box-shadow': '3px 0 6px -3px var(--rdg-border-color)',
+    },
+    '& .QueryTool-columnHeader': {
+      padding: '3px 6px',
+      height: '100%',
+      display: 'flex',
+      lineHeight: '16px',
+      alignItems: 'center',
+      fontWeight: 'normal',
+      '& .QueryTool-columnName': {
+        fontWeight: 'bold',
+      },
+      backgroundColor: headerBg,
+      minWidth: 0,
+      '& .QueryTool-columnLabel': {
+        display: 'flex', alignItems: 'center', gap: '6px',
+        minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
+      },
+      '& .QueryTool-columnName, & .QueryTool-columnType': {
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      },
+    },
+    '& .QueryTool-editedCell': {
       fontWeight: 'bold',
     },
-    backgroundColor: theme.palette.grey[600],
-  },
-  '& .QueryTool-editedCell': {
-    fontWeight: 'bold',
-  },
-  '& .QueryTool-deletedRow': {
-    '&:before': {
-      content: '" "',
-      position: 'absolute',
-      top: '50%',
-      left: 0,
-      borderTop: '1px solid ' + theme.palette.error.main,
-      width: '100%',
-    }
-  },
-  '& .QueryTool-rowNumCell': {
-    padding: '0px 8px',
-    color: 'inherit',
-  },
-  '& .QueryTool-colHeaderSelected': {
-    outlineColor: theme.palette.primary.main,
-    backgroundColor: theme.palette.primary.main,
-    color: theme.palette.primary.contrastText,
-  },
-  '& .QueryTool-colSelected': {
-    outlineColor: theme.palette.primary.main,
-    backgroundColor: theme.palette.primary.light,
-    color: theme.otherVars.qtDatagridSelectFg,
-    '&.rdg-cell-copied[aria-selected=false][role="gridcell"]': {
-      backgroundColor: theme.palette.primary.light + '!important',
-    }
-  },
-  ... (stripedRows && {'& .rdg-row.rdg-row-even': {
-    backgroundColor: theme.palette.grey[400],
-  }}),
-  '& .rdg-row': {
-    '& .rdg-cell:nth-of-type(1)': {
-      backgroundColor: theme.palette.grey[600] + '!important',
+    '& .QueryTool-deletedRow': {
+      '&:before': {
+        content: '" "',
+        position: 'absolute',
+        top: '50%',
+        left: 0,
+        borderTop: '1px solid ' + theme.palette.error.main,
+        width: '100%',
+      }
     },
-    '&[aria-selected="true"] .rdg-cell:nth-of-type(1)': {
-      backgroundColor: theme.palette.primary.main + '!important',
+    '& .QueryTool-rowNumCell': {
+      padding: '0px 8px',
+      color: 'inherit',
+    },
+    '& .QueryTool-colHeaderSelected': {
+      outlineColor: theme.palette.primary.main,
+      backgroundColor: theme.palette.primary.main,
       color: theme.palette.primary.contrastText,
-    }
-  },
-  '& .rdg-header-row': {
-    '& .rdg-cell:nth-of-type(1)': {
-      backgroundColor: theme.palette.grey[600]
     },
-  },
-}));
+    '& .QueryTool-colSelected': {
+      outlineColor: theme.palette.primary.main,
+      backgroundColor: theme.palette.primary.light,
+      color: theme.otherVars.qtDatagridSelectFg,
+      '&.rdg-cell-copied[aria-selected=false][role="gridcell"]': {
+        backgroundColor: theme.palette.primary.light + '!important',
+      }
+    },
+    ... (stripedRows && {'& .rdg-row.rdg-row-even': {
+      backgroundColor: theme.palette.grey[400],
+    }}),
+    '& .rdg-row': {
+      '& .rdg-cell:nth-of-type(1)': {
+        backgroundColor: headerBg + '!important',
+      },
+      '&[aria-selected="true"] .rdg-cell:nth-of-type(1)': {
+        backgroundColor: theme.palette.primary.main + '!important',
+        color: theme.palette.primary.contrastText,
+      }
+    },
+    '& .rdg-header-row': {
+      backgroundColor: headerBg,
+      boxShadow: '0 1px 0 var(--rdg-border-color)',
+      '& .rdg-cell:nth-of-type(1)': {
+        backgroundColor: headerBg
+      },
+    },
+  };
+});
 
 export const RowInfoContext = React.createContext();
 export const DataGridExtrasContext = React.createContext();
@@ -193,9 +217,10 @@ function SelectableHeaderRenderer({column, isSelected, onColumnSelected, isCellS
           eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_RENDER_GEOMETRIES, column);
         }}/>
       </Box>}
-      <Box marginRight="auto">
-        <span className='QueryTool-columnName'>{column.display_name}</span><br/>
-        <span>{column.display_type}</span>
+      <Box marginRight="auto" className="QueryTool-columnLabel"
+        title={`${column.display_name}\n${column.display_type}`}>
+        <span className='QueryTool-columnName'>{column.display_name}</span>
+        <span className='QueryTool-columnType'>{columnTypeLabel(column.display_type)}</span>
       </Box>
       <Box marginLeft="4px">{column.can_edit ?
         <EditIcon fontSize="small" style={{fontSize: '0.875rem'}} data-label="EditIcon"/>:
@@ -256,16 +281,18 @@ function cellClassGetter(col, isSelected, dataChangeStore, rowKeyGetter){
   };
 }
 
-function initialiseColumns(columns, rows, totalRowCount, columnWidthBy, maxColumnDataDisplayLength) {
+function initialiseColumns(columns, rows, totalRowCount, columnWidthBy, maxColumnDataDisplayLength, gridElement) {
   let retColumns = [
     ...columns,
   ];
   const canvas = document.createElement('canvas');
   const canvasContext = canvas.getContext('2d');
-  canvasContext.font = '12px Roboto';
+  const style = window.getComputedStyle(gridElement || document.body);
+  canvasContext.font = `${style.fontSize || '12px'} ${style.fontFamily || 'Roboto'}`;
 
   for(const col of retColumns) {
-    col.width = getColumnWidth(col, rows, canvasContext, columnWidthBy, maxColumnDataDisplayLength);
+    col.width = getColumnWidth(col, rows, canvasContext, columnWidthBy, maxColumnDataDisplayLength,
+      parseFloat(style.letterSpacing) || 0);
     col.resizable = true;
     col.editorOptions = {
       commitOnOutsideClick: false,
@@ -337,7 +364,7 @@ function formatColumns(columns, dataChangeStore, selectedColumns, onColumnSelect
   return retColumns;
 }
 
-function getColumnWidth(column, rows, canvasContext, columnWidthBy, maxColumnDataDisplayLength) {
+function getColumnWidth(column, rows, canvasContext, columnWidthBy, maxColumnDataDisplayLength, letterSpacing=0) {
   const dataWidthReducer = (longest, nextRow) => {
     let value = nextRow[column.key];
     if(_.isNull(value) || _.isUndefined(value)) {
@@ -351,10 +378,16 @@ function getColumnWidth(column, rows, canvasContext, columnWidthBy, maxColumnDat
     return longest.length > value.length ? longest : value;
   };
 
-  let columnHeaderLen = column.display_name.length > column.display_type.length ?
-    canvasContext.measureText(column.display_name).width : canvasContext.measureText(column.display_type).width;
-  /* padding 12,  margin 4, icon-width 15, */
-  columnHeaderLen += 15 + 12 + 4;
+  const font = canvasContext.font;
+  canvasContext.font = 'bold ' + font;
+  const nameWidth = canvasContext.measureText(column.display_name).width;
+  canvasContext.font = font;
+  const typeLabel = columnTypeLabel(column.display_type);
+  let columnHeaderLen = Math.ceil(nameWidth +
+    canvasContext.measureText(typeLabel).width + 6 +
+    (Array.from(column.display_name).length + Array.from(typeLabel).length) * letterSpacing);
+  /* Padding 12, margin 4, icon 15, and room for borders/rounding. */
+  columnHeaderLen += 15 + 12 + 4 + 2;
   if(column.column_type_internal == 'geometry' || column.column_type_internal == 'geography') {
     columnHeaderLen += 40;
   }
@@ -377,6 +410,7 @@ function getColumnWidth(column, rows, canvasContext, columnWidthBy, maxColumnDat
 export default function QueryToolDataGrid({columns, rows, totalRowCount, dataChangeStore,
   onSelectedCellChange, selectedColumns, onSelectedColumnsChange, columnWidthBy, startRowNum, maxColumnDataDisplayLength, ...props}) {
   const [readyColumns, setReadyColumns] = useState([]);
+  const gridRef = useRef(null);
   const [lastSelectedColumn, setLastSelectedColumn] = useState(null);
   const eventBus = useContext(QueryToolEventsContext);
   const onColumnSelected = (columnIdx, isSelected, isShiftClick)=>{
@@ -439,7 +473,7 @@ export default function QueryToolDataGrid({columns, rows, totalRowCount, dataCha
   };
 
   useEffect(()=>{
-    let initCols = initialiseColumns(columns, rows, totalRowCount, columnWidthBy, maxColumnDataDisplayLength);
+    let initCols = initialiseColumns(columns, rows, totalRowCount, columnWidthBy, maxColumnDataDisplayLength, gridRef.current?.element);
     setReadyColumns(formatColumns(initCols, dataChangeStore, selectedColumns, onColumnSelected, onSelectedColumnsChangeWrapped, props.rowKeyGetter));
   }, [columns]);
 
@@ -452,10 +486,11 @@ export default function QueryToolDataGrid({columns, rows, totalRowCount, dataCha
   return (
     <DataGridExtrasContext.Provider value={dataGridExtras}>
       <StyledPgReactDataGrid
+        gridRef={gridRef}
         id="datagrid"
         columns={readyColumns}
         rows={rows}
-        headerRowHeight={40}
+        headerRowHeight={28}
         rowHeight={25}
         mincolumnWidthBy={50}
         enableCellSelect={true}

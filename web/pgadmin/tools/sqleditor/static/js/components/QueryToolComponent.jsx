@@ -6,7 +6,7 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
-import {QueryToolFrame} from 'sources/cdeadmin_ui/editors/QueryToolControls';
+import {QueryToolFrame, QueryToolHeader} from 'sources/cdeadmin_ui/editors/QueryToolControls';
 import React, {useCallback, useRef, useMemo, useState, useEffect} from 'react';
 import _ from 'lodash';
 import {
@@ -238,17 +238,12 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
           mode: 'horizontal',
           children: [
             {
+              size: 70,
               maximizable: true,
               tabs: [
                 LayoutDocker.getPanel({id: PANELS.QUERY, title: gettext('Query'), content: <Query  onTextSelect={(text) => setSelectedText(text)} setQtStatePartial={setQtStatePartial}/>}),
                 ...(pgAdmin.llm_enabled ? [LayoutDocker.getPanel({id: PANELS.AI_ASSISTANT, title: gettext('AI Assistant'), content: <NLQChatPanel />})] : []),
                 LayoutDocker.getPanel({id: PANELS.HISTORY, title: gettext('Query History'), content: <QueryHistory />}),
-              ],
-            },
-            {
-              size: 75,
-              maximizable: true,
-              tabs: [
                 LayoutDocker.getPanel({
                   id: PANELS.SCRATCH, title: gettext('Scratch Pad'),
                   closable: true,
@@ -259,8 +254,20 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
                     resize: 'none'
                   }} title={gettext('Scratch Pad')}/>
                 }),
-              ]
-            }
+              ],
+            },
+            {
+              size: 30,
+              maximizable: true,
+              tabs: [
+                LayoutDocker.getPanel({
+                  id: PANELS.NOTIFICATIONS, title: gettext('Notifications'), content: <Notifications />,
+                }),
+                LayoutDocker.getPanel({
+                  id: PANELS.MESSAGES, title: gettext('Messages'), content: <Messages />,
+                }),
+              ],
+            },
           ]
         },
         {
@@ -271,12 +278,6 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
               tabs: [
                 LayoutDocker.getPanel({
                   id: PANELS.DATA_OUTPUT, title: gettext('Data Output'), content: <ResultSet />,
-                }),
-                LayoutDocker.getPanel({
-                  id: PANELS.MESSAGES, title: gettext('Messages'), content: <Messages />,
-                }),
-                LayoutDocker.getPanel({
-                  id: PANELS.NOTIFICATIONS, title: gettext('Notifications'), content: <Notifications />,
                 }),
               ],
             }
@@ -990,27 +991,32 @@ export default function QueryToolComponent({params, pgWindow, pgAdmin, selectedN
       <QueryToolConnectionContext.Provider value={queryToolConnContextValue}>
         <QueryToolEventsContext.Provider value={eventBus.current}>
           <QueryToolFrame tabIndex="0" ref={containerRef}>
-            <ConnectionBar
-              connected={qtState.connected}
-              connecting={qtState.obtaining_conn}
-              connectionStatus={qtState.connection_status}
-              connectionStatusMsg={qtState.connection_status_msg}
-              connectionList={qtState.connection_list}
-              onConnectionChange={(connectionData)=>updateQueryToolConnection(connectionData)}
-              onNewConnClick={onNewConnClick}
-              onNewQueryToolClick={onNewQueryToolClick}
-              onResetLayout={onResetLayout}
-              docker={docker.current}
-              containerRef={containerRef}
-            />
-            {React.useMemo(()=>(
-              <MainToolBar
-                containerRef={containerRef}
-                onManageMacros={onManageMacros}
-                onAddToMacros={onAddToMacros}
-                onFilterClick={onFilterClick}
-              />), [containerRef.current, onManageMacros, onFilterClick, onAddToMacros])}
+            <QueryToolHeader>
+              <div className="QueryTool-headerRows">
+                <ConnectionBar
+                  connected={qtState.connected}
+                  connecting={qtState.obtaining_conn}
+                  connectionStatus={qtState.connection_status}
+                  connectionStatusMsg={qtState.connection_status_msg}
+                  connectionList={qtState.connection_list}
+                  onConnectionChange={(connectionData)=>updateQueryToolConnection(connectionData)}
+                  onNewConnClick={onNewConnClick}
+                  onNewQueryToolClick={onNewQueryToolClick}
+                  onResetLayout={onResetLayout}
+                  docker={docker.current}
+                  containerRef={containerRef}
+                />
+                {React.useMemo(()=>(
+                  <MainToolBar
+                    containerRef={containerRef}
+                    onManageMacros={onManageMacros}
+                    onAddToMacros={onAddToMacros}
+                    onFilterClick={onFilterClick}
+                  />), [containerRef.current, onManageMacros, onFilterClick, onAddToMacros])}
+              </div>
+            </QueryToolHeader>
             <Layout
+              className="QueryTool-workspace"
               getLayoutInstance={(obj)=>docker.current=obj}
               defaultLayout={defaultLayout}
               layoutId="SQLEditor/Layout"

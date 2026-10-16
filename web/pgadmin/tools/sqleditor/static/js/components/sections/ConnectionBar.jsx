@@ -27,17 +27,22 @@ import RotateLeftRoundedIcon from '@mui/icons-material/RotateLeftRounded';
 import PropTypes from 'prop-types';
 import { useKeyboardShortcuts } from '../../../../../../static/js/custom_hooks';
 import CustomPropTypes from '../../../../../../static/js/custom_prop_types';
+import {queryToolControlStyles} from 'sources/cdeadmin_ui/editors/QueryToolControls';
 
 const Root = styled('div')(({theme}) => ({
+  minWidth: 0,
   '.ConnectionBar-root': {
     padding: '2px 4px',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
+    flexWrap: 'wrap',
+    ...queryToolControlStyles,
     backgroundColor: theme.otherVars.editorToolbarBg,
+    '& .ConnectionBar-connectionGroup': {flex: '1 1 12rem', minWidth: 0},
     '& .ConnectionBar-connectionButton': {
       display: 'flex',
-      width: '450px',
+      flex: '1 1 auto', minWidth: 0, maxWidth: '450px',
       backgroundColor: theme.palette.default.main,
       color: theme.palette.default.contrastText,
       border: '1px solid ' + theme.palette.default.borderColor,
@@ -105,10 +110,10 @@ export function ConnectionBar({connected, connecting, connectionStatus, connecti
     return title ? `PostgreSQL — ${title}` : title;
   }, [connectionList]);
   return (
-    (<Root>
+    (<Root className="QueryTool-connectionBar">
       <Box className='ConnectionBar-root'>
         <Box component="span" sx={{px: 1, alignSelf: 'center', flexShrink: 0}}>{gettext('PostgreSQL SQL')}</Box>
-        <PgButtonGroup size="small">
+        <PgButtonGroup size="small" className="ConnectionBar-connectionGroup">
           {queryToolCtx.preferences?.sqleditor?.connection_status &&
           <PgIconButton title={CONNECTION_STATUS_MESSAGE[connected ? connectionStatus : -1] ?? connectionStatusMsg}
             icon={<ConnectionStatusIcon connecting={connecting} status={connectionStatus} connected={connected}/>}

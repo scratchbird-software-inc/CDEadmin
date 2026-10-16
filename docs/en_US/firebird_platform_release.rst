@@ -106,6 +106,8 @@ uses its native absolute paths. Linux contributors may use their owned Firebird
 5.0.4 build; Windows and Mac contributors use their matching native distribution.
 No Docker or Linux client extraction is used by this platform runner. Native
 development setup and Electron/browser startup remain separate checks.
+The runner supplies the application import path to each workflow subprocess;
+local contributors do not need to export ``PYTHONPATH`` in their shell.
 
 Source and artifact reconciliation
 -----------------------------------
@@ -130,6 +132,38 @@ source/runner bindings, stale provider files, incomplete codec or workflow
 inventories, failed release/cleanup, an unexpected transport/authentication
 method, and changed native client hashes. A top-level success flag alone is
 insufficient. A targeted, skipped or incomplete run is not full platform evidence.
+
+Candidate collection
+--------------------
+
+``tools/firebird_release_candidate.py`` collects the native matrix for one clean,
+committed candidate from the Linux x64 qualification host. Refresh the current
+DDN dependency before commit validation, commit and publish the candidate, then
+dispatch the targeted native workflow above against that exact revision. Supply
+the resulting run ID and a complete, matching Linux Firebird runtime::
+
+    python -m tools.firebird_release_candidate --native-run <run-id> --runtime-root /absolute/native/firebird --wait-seconds 21600 --evidence /absolute/external/new-candidate-evidence
+
+Use the qualified CPython 3.14 application environment with its locked Node
+dependencies. This command runs Linux network and embedded qualification in a
+fresh process, captures the three native GitHub artifacts, and invokes the strict
+four-host reconciler. It preserves ``candidate.json``, GitHub run/artifact
+metadata before and after capture, download logs, each platform's original
+receipts/logs, ``release.json`` and ``summary.md``. Evidence must be outside the
+checkout in a new directory. An existing exact-candidate Linux proof can be
+supplied with ``--linux-receipt /evidence/linux/platform.json`` instead of
+``--runtime-root``; its public artifacts are verified and copied into the new
+evidence directory. Runtime directories, security databases and keys are excluded.
+
+The collector admits only this repository's native workflow dispatch for the
+candidate's exact revision. Artifact names, repository identity, run ID, rerun
+attempt, retention, host, clean source fingerprint and DDN artifacts must all
+match. A rerun during capture invalidates the collection. It never fills a
+missing host with an older artifact or relabels a development-only run as backend
+release proof. Failed hosts and downloads are retained in the failure inventory
+while other hosts are still inspected. The command exits nonzero on incomplete
+or inconsistent evidence, or if the local candidate changes during collection.
+GitHub authentication uses the contributor's existing ``gh`` session.
 
 Release boundaries
 -------------------
