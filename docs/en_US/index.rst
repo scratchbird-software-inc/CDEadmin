@@ -20,6 +20,7 @@ upstream attribution.
    cdeadmin_hard_fork
    project_governance
    cdeadmin_architecture
+   six_engine_completion
    firebird_driver_development
    mysql_driver_development
    mariadb_driver_development

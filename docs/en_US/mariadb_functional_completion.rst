@@ -1,6 +1,10 @@
 MariaDB engine functional completion
 ====================================
 
+Product-wide catalog, editor and complete native management acceptance is
+defined in :doc:`six_engine_completion`. The scoped receipts below do not close
+the open requirements recorded there.
+
 The native qualification target is MariaDB 12.2.2 with the patched MariaDB
 Connector/Python 1.1.14 described in ``mariadb_driver_development.rst``. MySQL
 qualification is not MariaDB qualification. This contract supplements that

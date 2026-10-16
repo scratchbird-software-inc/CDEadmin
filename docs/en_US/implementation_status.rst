@@ -267,6 +267,14 @@ successful run before any current revision is called CI-qualified.
 Current-run scope and open gates
 ================================
 
+The October 16 source audit records the four full-product acceptance areas and
+concrete cross-engine gaps in :doc:`six_engine_completion`. Existing declared-task
+and component receipts do not close that expanded acceptance. In particular,
+catalog-backed completion, full native/procedural grammar checking, persistent
+history integration, native recovery workflows and remaining DDN operation
+coverage must be tracked by engine. No full-product completion claim is made
+for any of the six required engine families.
+
 The owner's newer direction brings persistent monitoring history and its
 ScratchBird connection into this completion scope. Native ScratchBird
 management, persistent SQL history, saved DDN designs, dashboard definitions

@@ -1,6 +1,11 @@
 Firebird functional completion
 *****************************
 
+Product-wide catalog, editor and complete native management acceptance is
+defined in :doc:`six_engine_completion`. Network and embedded modes require
+their own native evidence; the scoped receipts below do not close the open
+requirements recorded there.
+
 Owner decision: 2026-10-10
 ==========================
 

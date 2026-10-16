@@ -45,9 +45,12 @@ Exported documents are static data and do not authorize imported queries.
 
 The existing PostgreSQL driver qualification is recorded in
 ``postgresql_driver_development.rst``. This checklist is additional required
-work, not a claim that the full feature set has been qualified. Persistent
-monitoring history, a ScratchBird history backend and Windows/macOS qualification
-remain deferred or assigned to the platform teams.
+work, not a claim that the full feature set has been qualified. The owner's
+October 14/16 completion scope includes persistent monitoring history and the
+ScratchBird history backend; PostgreSQL integration and native acceptance remain
+open. Windows/macOS qualification belongs to the platform teams. The additional
+catalog, language and complete management-workflow acceptance requirements and
+current gaps are recorded in :doc:`six_engine_completion`.
 
 Acceptance obligations
 ======================

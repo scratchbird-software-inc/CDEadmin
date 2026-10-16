@@ -150,10 +150,14 @@ SQLITE-COMP-07: Contextual forms and qualification
   independent observations and failure evidence. Static forms or a driver
   receipt alone cannot close this contract.
 
-Current-run exclusions
-----------------------
+Remaining completion and ownership
+----------------------------------
 
-Persistent monitoring history and its ScratchBird backend remain deferred.
-Windows/macOS development and platform UX qualification belong to their teams.
-Persistent SQL history, DDN design/dashboard definitions and recipes remain in
-scope.
+The owner's October 14/16 scope includes persistent monitoring history and its
+ScratchBird backend. SQLite archive integration and native acceptance remain
+open; they are not deferred. Windows/macOS development and platform UX
+qualification belong to their teams, and their evidence is required for a
+cross-platform completion claim. Persistent SQL history, DDN design/dashboard
+definitions and recipes remain in scope. The additional catalog, language and
+complete management-workflow requirements and current gaps are recorded in
+:doc:`six_engine_completion`.

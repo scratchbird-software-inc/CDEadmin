@@ -808,9 +808,14 @@ DUCK-COMP-08: Qualification and cleanup
   and evidence outside the repository. Clean up only owned disposable fixtures.
   Static forms and driver receipts alone do not prove full engine completion.
 
-Current-run exclusions
-----------------------
+Remaining completion and ownership
+----------------------------------
 
-Persistent monitoring history and its ScratchBird backend remain deferred.
-Windows/macOS development and platform UX qualification belong to their teams.
-Persistent SQL history, design/dashboard definitions and recipes remain in scope.
+The owner's October 14/16 scope includes persistent monitoring history and its
+ScratchBird backend. DuckDB archive integration and native acceptance remain
+open; they are not deferred. Windows/macOS development and platform UX
+qualification belong to their teams, and their evidence is required for a
+cross-platform completion claim. Persistent SQL history, design/dashboard
+definitions and recipes remain in scope. The additional catalog, language and
+complete management-workflow requirements and current gaps are recorded in
+:doc:`six_engine_completion`.

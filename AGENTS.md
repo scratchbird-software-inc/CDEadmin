@@ -87,3 +87,17 @@ requirements remain in scope, including published live dashboard bindings,
 native DDN roundtrip/diff/apply and remaining FlameRobin parity. Persistent
 SQL history, dashboard definitions and recipes remain in scope. Follow the
 acceptance rules in `docs/en_US/firebird_functional_completion.rst`.
+
+## Full native product coverage (owner direction, 2026-10-16)
+
+MySQL, MariaDB, PostgreSQL, DuckDB, SQLite and Firebird network/embedded must be
+catalog complete, feature complete, provide predictive SQL completion and syntax
+checking, and expose complete native management/maintenance workflows inside
+ScratchRobin. Follow `docs/en_US/six_engine_completion.rst` alongside the owning
+engine checklists. Declared-task counts and driver receipts qualify only their
+recorded scope; they cannot establish full product completion. Missing adapters
+are implementation gaps, not reasons to declare a native feature inapplicable.
+Native utility dependencies must be integrated with explicit execution-host and
+outcome handling; requiring another administration tool or hand-written SQL does
+not close a required workflow. Preserve the existing human form-validation and
+platform-team ownership boundaries.

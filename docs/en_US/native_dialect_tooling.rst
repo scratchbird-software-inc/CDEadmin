@@ -4,6 +4,9 @@ Native language and script tooling contract
 Status and scope
 ----------------
 
+The six required SQL engines also follow :doc:`six_engine_completion`, which
+records the current editor gaps and full product acceptance obligations.
+
 This contract defines required ScratchRobin language-tool behavior. It does not
 certify current full-language implementation. Engine inventories, keyword lists,
 wire compatibility, successful native execution and individual administration

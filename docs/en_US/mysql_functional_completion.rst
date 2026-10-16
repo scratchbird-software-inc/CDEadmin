@@ -1,6 +1,10 @@
 MySQL engine functional completion
 ==================================
 
+Product-wide catalog, editor and complete native management acceptance is
+defined in :doc:`six_engine_completion`. The scoped receipts below do not close
+the open requirements recorded there.
+
 The current target is native MySQL 9.7.0 with Connector/Python 26.7.0.
 MariaDB is a separate engine and is not accepted as MySQL qualification.
 This checklist governs completion alongside ``mysql_driver_development.rst``,
