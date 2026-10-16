@@ -22,11 +22,11 @@ def fingerprint(value):
 
 
 REVIEW_FIELDS=('job_id','owner','endpoint_id','configuration','operation','options','source','paths',
-               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','warnings')
+               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','runtime_limit','warnings')
 
 
 def review_digest(record):
-    return fingerprint({key:record[key] for key in REVIEW_FIELDS})
+    return fingerprint({key:record.get(key) for key in REVIEW_FIELDS})
 
 
 def job_identity(value):
@@ -147,13 +147,18 @@ class PostgreSQLContinuityJobs:
         except psutil.Error:pass
         raise ContinuityError('Backup writer termination is unconfirmed; verification cannot inspect files while they may change')
 
-    def review(self, request, owner, endpoint, source, configuration, paths):
+    def review(self, request, owner, endpoint, source, configuration, paths, *, runtime_limit=None):
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
         if operation not in {'full_backup','incremental_backup','verify','combine'}:
             raise ContinuityError('Native continuity operation is unavailable')
         options = combine_options(request.get('options',{})) if operation=='combine' else backup_options(request.get('options',{}))
+        if runtime_limit is not None:
+            if type(runtime_limit) is not int or not 1<=runtime_limit<=2147483647:
+                raise ContinuityError('Invalid application native-tool runtime policy')
+            if options['timeout_seconds'] is None or options['timeout_seconds']>runtime_limit:
+                raise ContinuityError('Application policy limits each native utility to '+str(runtime_limit)+' seconds')
         inputs = []
         ids = request.get('chain') if operation=='combine' else [request.get('base_job_id')] if operation in {'incremental_backup','verify'} else []
         if not isinstance(ids,list) or operation=='combine' and not 2<=len(ids)<=64 or operation in {'incremental_backup','verify'} and len(ids)!=1:
@@ -168,7 +173,12 @@ class PostgreSQLContinuityJobs:
             self.require_stopped_writer(previous)
             if previous['operation'] not in {'full_backup','incremental_backup','combine'}:
                 raise ContinuityError('Select a native physical backup artifact')
-            if proof is None:proof=manifest(self.directory(previous)/'backup')
+            if proof is None:
+                if not (self.directory(previous)/'backup/backup_manifest').is_file():
+                    raise ContinuityError('Native backup manifest is unavailable')
+                # Verification is read-only. An interrupted backup without a
+                # manifest receipt is inspected asynchronously by its worker.
+                proof={'manifest_sha256':None}
             if previous['source']['system_identifier']!=source['system_identifier']:
                 raise ContinuityError('Backup input belongs to another native cluster')
             inputs.append({'job_id':previous['job_id'], 'manifest_sha256':proof['manifest_sha256'],
@@ -183,7 +193,7 @@ class PostgreSQLContinuityJobs:
             options.update({key:inputs[0][key] for key in ('format','wal_method','manifest_checksums')})
         record = {'job_id':str(uuid.uuid4()), 'owner':owner, 'endpoint_id':endpoint, 'configuration':configuration,
             'operation':operation, 'options':options, 'source':deepcopy(source), 'paths':deepcopy(paths),
-            'inputs':inputs, 'state':'reviewed', 'created_at':time.time(), 'expires_at':time.time()+600,
+            'inputs':inputs, 'state':'reviewed', 'created_at':time.time(), 'expires_at':time.time()+600,'runtime_limit':runtime_limit,
             'cancel_requested':False, 'execution_host':{'kind':'application-host','platform':os.name},
             'warnings':['Physical backups include the complete native cluster, not only the selected database.',
                 'Artifacts are written on the application host. The database server may be on another host.',
@@ -206,6 +216,10 @@ class PostgreSQLContinuityJobs:
         if options['manifest_checksums']=='NONE':record['warnings'].append('The manifest has no file content checksums. Native size and WAL checks have a narrower verification scope.')
         if options.get('wal_method')=='none' or operation=='combine' and inputs[-1]['wal_method']=='none':
             record['warnings'].append('This artifact has no locally collected WAL. Verification checks files only; recovery requires an independently available WAL archive.')
+        if any(item['manifest_sha256'] is None for item in inputs):
+            record['warnings'].append('This uncertain artifact has no prior manifest receipt. Verification records its current manifest identity and native file checks; it does not resume the interrupted backup.')
+        if options['timeout_seconds'] is None:
+            record['warnings'].append('No runtime deadline is set. Each native utility continues until it exits or cancellation is requested.')
         record['review_digest']=review_digest(record)
         self.directory(record)  # Validate the artifact scope before publication.
         index=Path(str(self.path)+'.index')/str(owner)/endpoint
@@ -237,9 +251,11 @@ class PostgreSQLContinuityJobs:
                 def claim(state):
                     nonlocal claimed
                     record = self.record(state,request['job_id'],owner,endpoint)
-                    if record['review_digest']!=request['review_digest'] or review_digest(record)!=record['review_digest']:
+                    if record['review_digest']!=request['review_digest']:
                         raise ContinuityError('Backup review fingerprint changed')
                     if record['state']!='reviewed':return deepcopy(record)
+                    if review_digest(record)!=record['review_digest']:
+                        raise ContinuityError('Backup review fingerprint changed')
                     stable=lambda value:{key:fact for key,fact in value.items() if key!='lsn'}
                     if record['expires_at']<time.time() or record['configuration']!=configuration or stable(record['source'])!=stable(source):
                         raise ContinuityError('Native backup target or registration changed; prepare a new review')
@@ -307,13 +323,25 @@ class PostgreSQLContinuityJobs:
                 current=self.load(record['job_id'],record['owner'],record['endpoint_id'])
                 if current['cancel_requested']:signal.set()
                 self.update(record,progress=event)
+            next_manifest_progress=0
+            def file_progress(event):
+                nonlocal next_manifest_progress
+                if time.monotonic()<next_manifest_progress:return
+                current=self.load(record['job_id'],record['owner'],record['endpoint_id'])
+                if current['cancel_requested']:signal.set()
+                self.update(record,manifest_progress=event)
+                next_manifest_progress=time.monotonic()+.25
+            def read_proof(path):
+                return manifest(path,progress=file_progress,cancel_signal=signal)
             paths = []
             for item in record['inputs']:
                 previous=self.load(item['job_id'],record['owner'],record['endpoint_id'])
                 self.require_stopped_writer(previous)
                 path=self.directory(previous)/'backup'
-                if manifest(path)['manifest_sha256']!=item['manifest_sha256']:
+                observed=read_proof(path)
+                if item['manifest_sha256'] is not None and observed['manifest_sha256']!=item['manifest_sha256']:
                     raise ContinuityError('Native backup input changed after review')
+                if item['manifest_sha256'] is None:self.update(record,observed_input_manifest=observed)
                 paths.append(path)
             operation=record['operation']; destination=directory/'backup'
             if self.load(record['job_id'],record['owner'],record['endpoint_id'])['cancel_requested']:signal.set()
@@ -331,11 +359,11 @@ class PostgreSQLContinuityJobs:
                 self.update(record,state='verifying_inputs')
                 input_receipts=[]
                 for path,item in zip(paths,record['inputs']):
-                    checked=tools.verify(directory,path,parse_wal=item['wal_method']!='none',progress=progress,cancel_signal=signal)
+                    checked=tools.verify(directory,path,parse_wal=item['wal_method']!='none',timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
                     if checked['return_code']!=0 or signal.is_set():
                         self.update(record,state='cancelled' if signal.is_set() else 'failed',input_verification=checked)
                         return
-                    input_receipts.append({'manifest_sha256':manifest(path)['manifest_sha256'],
+                    input_receipts.append({'manifest_sha256':read_proof(path)['manifest_sha256'],
                                            'return_code':checked['return_code'],'verification_scope':checked['verification_scope'],
                                            'executable_sha256':checked['executable_sha256']})
                 self.update(record,input_verifications=input_receipts)
@@ -354,34 +382,36 @@ class PostgreSQLContinuityJobs:
                 destination=paths[0]
                 self.update(record,artifact_job_id=record['inputs'][0]['job_id'])
                 result=tools.verify(directory,destination,format=record['inputs'][0]['format'],
-                    parse_wal=record['inputs'][0]['wal_method']!='none',progress=progress,cancel_signal=signal)
+                    parse_wal=record['inputs'][0]['wal_method']!='none',timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
             self.update(record,tool_observation=result)
             if result['return_code']!=0 or result['process_observation'].get('cancel_requested'):
                 self.update(record,state='cancelled' if result['process_observation'].get('cancel_requested') else 'failed',
                             artifact_complete=False,remote_finality_inferred=False)
                 return
-            identity=manifest(destination)
+            identity=read_proof(destination)
             if identity['system_identifier']!=record['source']['system_identifier']:
                 raise ContinuityError('Native artifact belongs to another cluster')
             if operation!='verify':
                 self.update(record,state='verifying')
                 result=tools.verify(directory,destination,format=record['options']['format'],
                     parse_wal=(record['inputs'][-1]['wal_method'] if operation=='combine' else record['options']['wal_method'])!='none',
-                    progress=progress,cancel_signal=signal)
+                    timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
                 self.update(record,verification_observation=result)
                 if result['return_code']!=0 or signal.is_set():
                     self.update(record,state='cancelled' if signal.is_set() else 'failed',artifact_complete=False)
                     return
             self.update(record,state='verified',manifest=identity,artifact_complete=True,finished_at=time.time(),
                         verification_scope={**result['verification_scope'],
-                            'content_checksums':record['options']['manifest_checksums']!='NONE',
-                            'manifest_checksums':record['options']['manifest_checksums']},recovery_drill_complete=False)
+                            'content_checksums':identity['files_with_checksums']>0,
+                            'checksum_algorithms':identity['checksum_algorithms'],
+                            'files_with_checksums':identity['files_with_checksums'],
+                            'files_without_checksums':identity['files_without_checksums']},recovery_drill_complete=False)
         except ProviderToolError as error:
             self.update(record,state='unknown',error_type=type(error).__name__,
                         process_observation=getattr(error,'process_observation',None),automatic_retry=False)
         except ContinuityError as error:
             # Admission messages contain no native connection strings or SQL.
-            self.update(record,state='failed',error_type=type(error).__name__,error_reason=str(error),automatic_retry=False)
+            self.update(record,state='cancelled' if signal.is_set() else 'failed',error_type=type(error).__name__,error_reason=str(error),automatic_retry=False)
         except Exception as error:
             self.update(record,state='failed',error_type=type(error).__name__,automatic_retry=False)
         finally:

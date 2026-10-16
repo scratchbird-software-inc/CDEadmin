@@ -516,3 +516,29 @@ is refused until persistent standby credential provisioning can replace the
 temporary service alias. These scoped workflows do not close the
 full native utility option denominator or the complete six-engine matrix.
 History testing remains explicitly deferred by the owner.
+
+PostgreSQL manifest and runtime scaling increment
+================================================
+
+Native manifest file inventories are decoded incrementally. Their complete raw
+bytes are hashed while reading; the complete ``Files`` array is not retained in
+memory and there is no overall 128 MiB manifest cap. Individual native metadata
+values retain a 1 MiB decoding bound. Numeric progress and cancellation cover
+manifest inspection as well as native utility execution. Verification records
+observed checksum algorithms and the number of manifest files with and without
+checksums; requested backup options do not substitute for observed file facts.
+An uncertain artifact lacking a prior manifest receipt is inspected by its
+verification worker, rather than blocking the review request on a full scan.
+Native ``pg_verifybackup`` remains the authority for content and WAL checks.
+
+Every continuity utility accepts an explicit positive timeout or no deadline.
+The editor retains a 3,600-second default; clearing it selects no deadline.
+The SDK requires explicit trusted grant authority for an unbounded process, and
+cancellation remains available. Operators can impose a per-utility ceiling with
+``CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS``; unset/zero imposes none.
+A policy or configured binary-path change invalidates an undispatched review.
+Input verification and output verification use the reviewed timeout too.
+
+These changes address manifest inventory scaling and the previous one-hour
+hard limit. Production recovery, PITR, standby provisioning and remote execution
+hosts remain separate implementation work. History testing remains deferred.

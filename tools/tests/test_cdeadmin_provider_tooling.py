@@ -299,3 +299,17 @@ class ProviderToolRunnerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_unbounded_native_process_requires_explicit_authority_and_remains_cancellable(tmp_path):
+    import threading
+    import sys
+    from pgadmin.cdeadmin.sdk.tooling import ProviderToolError,ProviderToolGrant,ProviderToolRunner
+    with __import__('pytest').raises(ProviderToolError):
+        ProviderToolGrant('python',str(tmp_path),'localhost',5432,timeout_seconds=None)
+    signal=threading.Event()
+    runner=ProviderToolRunner({'python':sys.executable})
+    grant=ProviderToolGrant('python',str(tmp_path),'localhost',5432,timeout_seconds=None,allow_unbounded_runtime=True)
+    result=runner.run(grant,['-c','import time;time.sleep(30)'],cancel_signal=signal,progress=lambda _event:signal.set())
+    assert result['process_observation']['cancel_requested'] and not result['process_observation']['timed_out']
+    assert result['process_observation']['cleanup_confirmed']

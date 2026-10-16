@@ -103,7 +103,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                         raise RuntimeError(operation+' returned '+result['state'])
                     print(operation+' verified through application HTTP',flush=True)
                     return result
-                full=submit('full_backup',{'timeout_seconds':120})
+                full=submit('full_backup',{'timeout_seconds':None})
                 proof['checks'].append('authenticated-http-full-physical-backup-relocated-tablespaces-native-files-and-wal-verification')
                 native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740994,'incremental change',decode('aabb','hex'))")
                 native.execute('SELECT pg_switch_wal()')

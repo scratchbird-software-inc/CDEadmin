@@ -45,7 +45,7 @@ export default function PostgresqlContinuity({post}) {
   const prepare=() => {
     let nativeOptions;
     if(operation==='combine')nativeOptions={format:'plain',copy_mode:copyMode,...Object.fromEntries(['manifest_checksums','sync','sync_method','timeout_seconds'].map(key => [key,options[key]]))};
-    else if(operation==='verify')nativeOptions={};
+    else if(operation==='verify')nativeOptions={timeout_seconds:options.timeout_seconds};
     else nativeOptions={...options,max_rate_kib:options.max_rate_kib==='' ? null : Number(options.max_rate_kib)};
     run('review',{operation,options:nativeOptions,...(operation==='combine' ? {chain:inputs} : operation==='full_backup' ? {} : {base_job_id:inputs[0]})},setReview);
   };
@@ -85,8 +85,8 @@ export default function PostgresqlContinuity({post}) {
         {['label','compression','slot','max_rate_kib'].map(name => <TextField key={name} disabled={busy} size="small" label={name.replaceAll('_',' ')} value={options[name]} onChange={event => edit(name,event.target.value)} />)}</>}
       {operation==='combine' && <TextField disabled={busy} select size="small" label="Native copy method" value={copyMode} onChange={event => {setCopyMode(event.target.value);setReview(null);}}>
         {['copy','clone','copy-file-range','link'].map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>}
+      <TextField disabled={busy} size="small" type="number" label="Timeout seconds (blank: no limit)" value={options.timeout_seconds ?? ''} onChange={event => edit('timeout_seconds',event.target.value==='' ? null : Number(event.target.value))} />
       {operation!=='verify' && <>{select('manifest_checksums',['NONE','CRC32C','SHA224','SHA256','SHA384','SHA512'])}{select('sync_method',['fsync','syncfs'])}
-        <TextField disabled={busy} size="small" type="number" label="Timeout seconds" value={options.timeout_seconds} onChange={event => edit('timeout_seconds',Number(event.target.value))} />
         {(backup ? ['create_slot','no_slot','write_recovery_conf','verify_page_checksums','progress','estimate_size','sync'] : ['sync']).map(name => <FormControlLabel key={name} label={name.replaceAll('_',' ')}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>

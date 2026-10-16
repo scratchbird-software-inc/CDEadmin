@@ -1,6 +1,5 @@
 """PostgreSQL 18 native physical backup, verification and chain reconstruction."""
 import hashlib
-import json
 import os
 from pathlib import Path
 import re
@@ -34,20 +33,10 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
-def manifest(path):
-    filename = Path(path) / 'backup_manifest'
-    if not filename.is_file() or filename.stat().st_size > 128 * 1024 * 1024:
-        raise ContinuityError('A bounded native backup manifest is required')
-    data = json.loads(filename.read_text(encoding='utf8'))
-    system = data.get('System-Identifier')
-    if type(system) is not int or not 0 < system < 2**64 or data.get('PostgreSQL-Backup-Manifest-Version') != 2:
-        raise ContinuityError('PostgreSQL 18 backup manifest identity is unavailable')
-    ranges = data.get('WAL-Ranges')
-    if not isinstance(ranges,list) or not ranges:
-        raise ContinuityError('Native backup WAL ranges are unavailable')
-    return {'system_identifier':str(system), 'manifest_sha256':file_sha256(filename),
-            'files':len(data.get('Files',[])), 'wal_ranges':ranges,
-            'manifest_version':data['PostgreSQL-Backup-Manifest-Version']}
+def manifest(path, *, progress=None, cancel_signal=None):
+    from .continuity_manifest import NativeManifestError, read_manifest
+    try:return read_manifest(path,progress=progress,cancel_signal=cancel_signal)
+    except NativeManifestError as error:raise ContinuityError(str(error)) from None
 
 
 def backup_options(value):
@@ -67,8 +56,8 @@ def backup_options(value):
             raise ContinuityError('Invalid native physical backup ' + name)
     for name in ('progress','estimate_size','verify_page_checksums','sync','write_recovery_conf','create_slot','no_slot'):
         if type(result[name]) is not bool:raise ContinuityError('Physical backup options require native booleans')
-    if type(result['timeout_seconds']) is not int or not 1<=result['timeout_seconds']<=3600:
-        raise ContinuityError('Backup timeout must be between 1 and 3600 seconds')
+    if result['timeout_seconds'] is not None and (type(result['timeout_seconds']) is not int or not 1<=result['timeout_seconds']<=2147483647):
+        raise ContinuityError('Backup timeout must be a positive native duration or null for no deadline')
     rate = result['max_rate_kib']
     if rate is not None and (type(rate) is not int or not 32<=rate<=1048576):
         raise ContinuityError('Native transfer rate must be between 32 and 1048576 KiB/s')
@@ -133,7 +122,7 @@ class PhysicalTools:
 
     def grant(self, name, workspace, *, host='127.0.0.1', port=5432, timeout=3600, environment=()):
         return ProviderToolGrant(name,str(workspace),host,port,timeout_seconds=timeout,
-                                 secret_environment_names=tuple(environment))
+                                 secret_environment_names=tuple(environment),allow_unbounded_runtime=timeout is None)
 
     def identify(self, name, workspace):
         if name not in TOOLS:raise ContinuityError('Native tool is not admitted')
@@ -182,11 +171,11 @@ class PhysicalTools:
             secret_environment_name='PGSERVICEFILE' if config is not None else None,
             secret_suffix='.pg-service',redact_values=redactions,progress=progress,cancel_signal=cancel_signal)
 
-    def verify(self, workspace, backup, *, format='plain', parse_wal=True, progress=None, cancel_signal=None):
+    def verify(self, workspace, backup, *, format='plain', parse_wal=True, timeout=3600, progress=None, cancel_signal=None):
         if format not in {'plain','tar'} or type(parse_wal) is not bool:
             raise ContinuityError('Invalid native backup verification scope')
         args = ['--format='+format, '--progress']
         if not parse_wal or format=='tar':args.append('--no-parse-wal')
         args.append(str(backup))
-        result = self.execute('pg_verifybackup',workspace,args,progress=progress,cancel_signal=cancel_signal)
+        result = self.execute('pg_verifybackup',workspace,args,timeout=timeout,progress=progress,cancel_signal=cancel_signal)
         return {**result, 'verification_scope':{'files':True,'wal':parse_wal and format=='plain'}}

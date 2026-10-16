@@ -235,3 +235,39 @@ def test_refused_native_worker_preserves_an_actionable_nonsecret_reason(jobs,mon
     result=manager.get(record['job_id'],1,endpoint)
     assert result['state']=='failed' and result['error_reason']=='Native utility installation changed'
     assert lease.closed and result['automatic_retry'] is False
+
+
+def test_runtime_policy_is_host_authority_and_does_not_impose_a_one_hour_engine_limit(jobs):
+    manager,source,endpoint=jobs
+    for duration in (7200,None):
+        selected=manager.review({'operation':'full_backup','options':{'timeout_seconds':duration}},1,endpoint,source,'configuration',{})
+        assert selected['options']['timeout_seconds']==duration
+        with pytest.raises(ContinuityError,match='Application policy limits'):
+            manager.review({'operation':'full_backup','options':{'timeout_seconds':duration}},1,endpoint,source,'configuration',{},runtime_limit=3600)
+
+
+def test_uncertain_artifact_verification_defers_manifest_scanning_to_the_worker(jobs,monkeypatch):
+    manager,source,endpoint=jobs
+    selected=review(jobs);record=manager.load(selected['job_id'],1,endpoint)
+    backup=manager.directory(record)/'backup';backup.mkdir(parents=True);(backup/'backup_manifest').write_text('not yet verified')
+    manager.update(record,state='failed',tool_observation={'process_observation':{'cleanup_confirmed':True,'return_code':1}})
+    import pgadmin.cdeadmin.workspace.postgresql_continuity_jobs as module
+    monkeypatch.setattr(module,'manifest',lambda *_args,**_kwargs:pytest.fail('Review must not block on an unbounded manifest scan'))
+    checked=manager.review({'operation':'verify','base_job_id':selected['job_id']},1,endpoint,source,'configuration',{})
+    assert checked['inputs'][0]['manifest_sha256'] is None
+    assert any('no prior manifest receipt' in message for message in checked['warnings'])
+
+
+def test_repeated_start_of_a_terminal_preupgrade_receipt_never_revalidates_or_replays(jobs):
+    manager,source,endpoint=jobs
+    reviewed=review(jobs);record=manager.load(reviewed['job_id'],1,endpoint)
+    with manager.store(record['job_id']) as store:
+        def previous_format(state):
+            saved=state['postgresql_continuity_jobs'][record['job_id']]
+            saved.pop('runtime_limit');saved.update(state='verified',review_digest='previous-native-review')
+        store.change(previous_format)
+    transport=ContinuityTransport({})
+    result=manager.start({'job_id':record['job_id'],'review_digest':'previous-native-review','confirmed':True},
+        1,endpoint,source,'configuration',transport)
+    assert result['state']=='verified' and transport.closed
+    assert record['job_id'] not in manager.workers

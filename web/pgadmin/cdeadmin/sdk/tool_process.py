@@ -115,8 +115,8 @@ def observe_process(command, *, workspace, environment, input_bytes, input_strea
     try:
         while process.poll() is None:
             elapsed = time.monotonic() - started
-            if elapsed >= timeout or cancel_signal is not None and cancel_signal.is_set():
-                timed_out, cancelled = elapsed >= timeout, cancel_signal is not None and cancel_signal.is_set()
+            if timeout is not None and elapsed >= timeout or cancel_signal is not None and cancel_signal.is_set():
+                timed_out, cancelled = timeout is not None and elapsed >= timeout, cancel_signal is not None and cancel_signal.is_set()
                 cleanup = _stop_owned_process(process, identity)
                 break
             if progress is not None and elapsed >= next_progress and progress_error is None:

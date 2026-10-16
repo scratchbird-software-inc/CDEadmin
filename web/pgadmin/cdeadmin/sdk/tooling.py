@@ -76,9 +76,10 @@ class ProviderToolGrant:
     workspace: str
     endpoint_host: str
     endpoint_port: int
-    timeout_seconds: int = 300
+    timeout_seconds: int | None = 300
     max_output_bytes: int = MAX_TOOL_OUTPUT
     secret_environment_names: tuple[str, ...] = ()
+    allow_unbounded_runtime: bool = False
 
     def __post_init__(self):
         if not isinstance(self.executable_id, str) or not self.executable_id:
@@ -90,9 +91,11 @@ class ProviderToolGrant:
             self.endpoint_port, int
         ) or not 1 <= self.endpoint_port <= 65535:
             raise ProviderToolError('tool endpoint port is invalid')
-        if isinstance(self.timeout_seconds, bool) or not isinstance(
-            self.timeout_seconds, int
-        ) or not 1 <= self.timeout_seconds <= 3600:
+        if type(self.allow_unbounded_runtime) is not bool:
+            raise ProviderToolError('tool runtime authority is invalid')
+        if (self.timeout_seconds is None and not self.allow_unbounded_runtime or
+                self.timeout_seconds is not None and (type(self.timeout_seconds) is not int or
+                not 1 <= self.timeout_seconds <= 2147483647)):
             raise ProviderToolError('tool timeout is invalid')
         if isinstance(self.max_output_bytes, bool) or not isinstance(
             self.max_output_bytes, int

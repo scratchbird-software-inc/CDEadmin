@@ -42,3 +42,12 @@ describe('PostgreSQL native continuity jobs',() => {
     expect(screen.queryByText('Complete cluster backup')).not.toBeInTheDocument();
   });
 });
+
+it('preserves an explicit no-deadline selection in native review',async () => {
+  const post=jest.fn().mockResolvedValue(reviewed);
+  render(<Component post={post} />);
+  fireEvent.change(screen.getByLabelText('Timeout seconds (blank: no limit)'),{target:{value:''}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post.mock.calls[0][0].request.options.timeout_seconds).toBeNull();
+});

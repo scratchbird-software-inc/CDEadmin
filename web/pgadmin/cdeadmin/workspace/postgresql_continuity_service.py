@@ -7,7 +7,7 @@ from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, binary_paths
 from ..providers.postgresql.continuity_transport import ContinuityTransport, capture
 from ..providers.postgresql.provider import PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION
-from .postgresql_continuity_jobs import PostgreSQLContinuityJobs
+from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint
 from .postgresql_monitoring_host import PostgreSQLMonitoringHost
 
 
@@ -49,13 +49,16 @@ def action(service, server, operation, request):
             jobs=service.postgresql_continuity_jobs=PostgreSQLContinuityJobs(str(store.path)+'.postgresql-continuity',root)
             import atexit
             atexit.register(jobs.close)
-    configuration=PostgreSQLMonitoringHost._configuration(server)
     if operation=='list':
         if set(request)-{'offset','limit'}:raise ContinuityError('Invalid backup receipt page')
         return jobs.list(owner,endpoint,**request)
     if operation in {'status','cancel'}:
         if set(request)!={'job_id'}:raise ContinuityError('Select one native continuity job')
         return (jobs.get if operation=='status' else jobs.cancel)(request['job_id'],owner,endpoint)
+    runtime_limit=current_app.config.get('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS')
+    paths=paths_for_app(current_app)
+    configuration=fingerprint({'registration':PostgreSQLMonitoringHost._configuration(server),
+                               'runtime_limit':runtime_limit,'paths':paths})
     transport=None
     try:
         if operation=='review':
@@ -68,7 +71,7 @@ def action(service, server, operation, request):
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=capture(provider,payload['route'],server=server)
-            return jobs.review(request,owner,endpoint,source,configuration,paths_for_app(current_app))
+            return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']

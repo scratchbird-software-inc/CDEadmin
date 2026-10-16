@@ -351,6 +351,7 @@ CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
 # These paths are configured by the application operator, never by a job request.
 CDEADMIN_POSTGRESQL_CONTINUITY_ROOT = env('CDEADMIN_POSTGRESQL_CONTINUITY_ROOT') or ''
 CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH = env('CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH') or ''
+CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS') or 0) or None
 
 # SQLITE_TIMEOUT will define how long to wait before throwing the error -
 # OperationError due to database lock. On slower system, you may need to change
