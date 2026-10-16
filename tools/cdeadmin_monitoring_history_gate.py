@@ -30,8 +30,9 @@ def run(config, initialize=False, engine='firebird'):
     sample = {'sample_id': str(uuid.uuid4()), 'ended_at': iso(now),
               'source_epoch': 'epoch1', 'coverage': 'visible-to-collector',
               'status': 'available', 'groups': {'memory': {'values': {'used': '9007199254740993'}}}}
-    if engine == 'mysql':
-        sample.update(identity={'server_uuid': 'native-mysql-history-gate', 'database_name': 'owned', 'version': '9.7.0'},
+    if engine in {'mysql', 'mariadb'}:
+        sample.update(identity={'server_uid' if engine == 'mariadb' else 'server_uuid': 'native-history-gate',
+                                'database_name': 'owned', 'version': '12.2.2' if engine == 'mariadb' else '9.7.0'},
                       transaction_completed=True, elapsed_ms=1)
         sample['groups'] = {'status': {'status': 'available', 'rows': [
             {'variable_name': 'Questions', 'variable_value': '9007199254740993'}]}}
@@ -41,7 +42,7 @@ def run(config, initialize=False, engine='firebird'):
     args = {'start': iso(now-10), 'end': iso(now+10)}
     result = restarted.query(policy, engine, **args)
     assert len(result['samples']) == 1
-    if engine == 'mysql':
+    if engine in {'mysql', 'mariadb'}:
         assert result['samples'][0]['groups']['status']['rows'][0]['variable_value'] == '9007199254740993'
         assert result['samples'][0]['identity'] == sample['identity']
     else:
@@ -67,7 +68,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--initialize', action='store_true', help='Create schema once in a dedicated new database')
-    parser.add_argument('--engine', choices=('firebird', 'mysql'), default='firebird')
+    parser.add_argument('--engine', choices=('firebird', 'mysql', 'mariadb'), default='firebird')
     options = parser.parse_args()
     try:
         result = run(json.loads(options.config.read_text()), options.initialize, options.engine)

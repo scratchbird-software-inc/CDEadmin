@@ -440,6 +440,7 @@ def _gate_command(options, web_port, database, runtime_port,
             sys.executable,
             str(ROOT / 'tools/'
                 'cdeadmin_mariadb_database_lifecycle_ui_gate.py'),
+            '--functional-only',
             '--url', f'http://127.0.0.1:{web_port}',
             '--config-db', str(database), '--database', DATABASE,
             '--host', '127.0.0.1', '--port', str(runtime_port),
@@ -473,6 +474,8 @@ def _gate_command(options, web_port, database, runtime_port,
         '--theme', options.theme, '--font-scale', str(options.font_scale),
         '--timeout', str(options.timeout),
     ]
+    if options.gate_kind == 'maintenance':
+        command.append('--functional-only')
     if options.gate_kind == 'backup-restore':
         command.extend(['--tool-workspace', str(tool_workspace)])
     if options.browser_binary:
@@ -532,18 +535,18 @@ def run(options):
             environment[
                 'CDEADMIN_MARIADB_UI_GATE_PASSWORD'
             ] = runtime_password
-            environment['CDEADMIN_MARIADB_CLIENT_BINARY'] = str(
+            environment.setdefault('CDEADMIN_MARIADB_CLIENT_BINARY', str(
                 ROOT / 'tools/reference_engine_demos/runtime/mariadb/bin/'
                 'mariadb'
-            )
-            environment['CDEADMIN_MARIADB_DUMP_BINARY'] = str(
+            ))
+            environment.setdefault('CDEADMIN_MARIADB_DUMP_BINARY', str(
                 ROOT / 'tools/reference_engine_demos/runtime/mariadb/bin/'
                 'mariadb-dump'
-            )
-            environment['CDEADMIN_MARIADB_UPGRADE_BINARY'] = str(
+            ))
+            environment.setdefault('CDEADMIN_MARIADB_UPGRADE_BINARY', str(
                 ROOT / 'tools/reference_engine_demos/runtime/mariadb/bin/'
                 'mariadb-upgrade'
-            )
+            ))
             options.server_log.parent.mkdir(parents=True, exist_ok=True)
             cdeadmin_output = options.server_log.open('wb')
             cdeadmin_process = subprocess.Popen(
@@ -587,6 +590,10 @@ def run(options):
                     cdeadmin_process.wait(timeout=15)
             if cdeadmin_output is not None:
                 cdeadmin_output.close()
+            application_log = data_dir / 'cdeadmin.log'
+            if application_log.is_file():
+                shutil.copy2(application_log, options.server_log.with_name(
+                    options.server_log.stem + '-application.log'))
             if container_started:
                 logs = _run(['docker', 'logs', container], check=False)
                 runtime_log = options.server_log.with_name(

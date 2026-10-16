@@ -769,6 +769,85 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def _mariadb_server_context(self, server):
+        from ..providers.mariadb_family.provider import MariaDBPilotProvider
+        self._principal_id(server)
+        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native':
+            raise ProviderWorkspaceError('Select an owned native MariaDB server')
+        context, endpoint, _ = self.endpoint_service.workspace(server)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if context.profile_id != 'mariadb-native' or not isinstance(provider, MariaDBPilotProvider):
+            raise ProviderWorkspaceError('Select a native MariaDB endpoint')
+        return context, endpoint, provider
+
+    def mariadb_server_plan(self, server, request):
+        from .firebird_catalog_import import read_catalog
+        from .firebird_catalog_export import build_export
+        from .mariadb_server_plan import plan
+        if not isinstance(request, dict) or set(request) != {'baseline', 'source'}:
+            raise ProviderWorkspaceError('Server preview requires baseline and desired DDN')
+        context, endpoint, provider = self._mariadb_server_context(server)
+        try:
+            baseline, desired = [read_catalog(request[key], engine='mariadb') for key in ('baseline', 'source')]
+            if any(document['provenance']['endpoint_id'] != str(context.endpoint_id) for document in (baseline, desired)):
+                raise ValueError('Server DDN belongs to another registered endpoint')
+            acquired = provider.capture_server_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id),
+                target_id='server:' + acquired['server_uid'], generation=acquired['generation'],
+                include_system=True, refreshed=True, engine='mariadb', native_model=True)
+            result = plan(baseline, desired, live)
+            result['endpoint_id'] = str(context.endpoint_id)
+            return result
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_server_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_server_apply import MariaDBServerApplications
+        from .firebird_schema_plan import digest
+        from .firebird_catalog_import import read_catalog
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid server application request')
+        context, endpoint, provider = self._mariadb_server_context(server)
+        provider._require('administer', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Server application requires durable receipt storage')
+        applications = MariaDBServerApplications(str(store.path) + '.mariadb-server-applications.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'scope': 'mariadb-server'})
+        try:
+            if action == 'review':
+                if set(request) != {'baseline', 'source', 'execution_sha256'}:
+                    raise ValueError('Invalid server review request')
+                preview = self.mariadb_server_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if preview['execution_sha256'] != request['execution_sha256']:
+                    raise ValueError('Displayed native server plan changed; preview again')
+                return applications.review(preview, read_catalog(request['baseline'], engine='mariadb'),
+                    read_catalog(request['source'], engine='mariadb'), owner, binding)
+            if action == 'receipts' and not request:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid server application action')
+            def execute(record, operation):
+                fresh_context, fresh_endpoint, fresh_provider = self._mariadb_server_context(server)
+                if digest({'context': asdict(fresh_context), 'route': fresh_endpoint['route'], 'scope': 'mariadb-server'}) != binding:
+                    raise ValueError('Server registration changed before dispatch')
+                result = fresh_provider.apply_server_operation(fresh_endpoint['route'], record, operation)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(fresh_context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply(request, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def _mysql_server_context(self, server):
         from ..providers.mysql_family.provider import MySQLPilotProvider
         self._principal_id(server)
@@ -1042,6 +1121,88 @@ class ProviderWorkspaceService:
             model = build_export(captured['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
                 generation=captured['generation'], refreshed=True, engine='mariadb', native_model=True)
             return generate(model, request['recipe']) if 'recipe' in request else template(model)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_recipe_asset(self, server, action, request):
+        from .assets import ProjectAssetError
+        from .mysql_recipe_assets import MySQLRecipeAssets
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid MariaDB recipe request')
+        context, _endpoint, _provider = self._mariadb_catalog_context(server, request.get('database_target_id'))
+        assets = self.firebird_design_assets.assets
+        try:
+            if action == 'save':
+                # Validate native identities and generators without executing the script.
+                self.mariadb_test_data(server, {'database_target_id': request.get('database_target_id'), 'recipe': request.get('recipe')})
+            return MySQLRecipeAssets(assets, engine='mariadb').apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': request['database_target_id']}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Recipe changed concurrently; reload before saving') from None
+
+    def mariadb_data_plan(self, server, request):
+        from .mariadb_data_import import preview
+        from .firebird_catalog_export import build_export
+        if not isinstance(request, dict) or set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional'}:
+            raise ProviderWorkspaceError('Invalid native data import request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        try:
+            acquired = provider.capture_catalog(endpoint['route'])
+            live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id), target_id=target,
+                generation=acquired['generation'], refreshed=True, engine='mariadb', native_model=True)
+            return preview(request.get('source'), live, table=request.get('table'),
+                allow_nontransactional=request.get('allow_nontransactional', False),
+                node=getattr(self, 'ddn_node', 'node'))
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def mariadb_data_application(self, server, action, request):
+        from dataclasses import asdict
+        from .mariadb_data_import import MariaDBDataApplications
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid native data application request')
+        target = request.get('database_target_id')
+        context, endpoint, provider = self._mariadb_catalog_context(server, target)
+        provider._require('data_write', 'resource')
+        provider._require('execute')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Data imports require durable receipt storage')
+        applications = MariaDBDataApplications(str(store.path) + '.mariadb-data-imports.json')
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        try:
+            if action == 'review':
+                if set(request) - {'database_target_id', 'source', 'table', 'allow_nontransactional', 'execution_sha256'}:
+                    raise ValueError('Invalid native data review request')
+                plan = self.mariadb_data_plan(server, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if request.get('execution_sha256') != plan['execution_sha256']:
+                    raise ValueError('Displayed data import changed; preview again')
+                return applications.review(plan, owner, binding)
+            if action == 'receipts' and set(request) == {'database_target_id'}:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'database_target_id', 'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply':
+                raise ValueError('Invalid native data application action')
+            def execute(record):
+                result = provider.apply_data_import(endpoint['route'], record)
+                if result['state'] != 'not_dispatched':
+                    try:
+                        self.resource_service.invalidate(context)
+                    except Exception as error:
+                        result['explorer_refresh_error_type'] = type(error).__name__
+                return result
+            return applications.apply({key: value for key, value in request.items() if key != 'database_target_id'}, owner, binding, execute)
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 

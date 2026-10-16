@@ -100,13 +100,13 @@ class MySQLMonitoringHost(MonitoringHost):
             grant = self._grants.get((owner, sid, target))
             if grant is None:
                 return {'state': 'disabled', 'samples': [], 'history': 'volatile',
-                    'history_available': self.engine == 'mysql' and self.history is not None,
+                    'history_available': self.engine in {'mysql', 'mariadb'} and self.history is not None,
                     'runtime_scope': 'this-process', 'collection_available': self.available,
                     'navigation': navigation}
             current = self._authorizer(owner, sid, target)
             result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                 current(policy, purpose, grant.generation, grant.route_digest))
-            return {**result, 'navigation': navigation, 'history_available': self.engine == 'mysql' and self.history is not None,
+            return {**result, 'navigation': navigation, 'history_available': self.engine in {'mysql', 'mariadb'} and self.history is not None,
                 'authentication': dict(grant.authentication),
                 'policy': {key: getattr(grant.policy, key) for key in self.policy_fields}}
 
@@ -214,8 +214,8 @@ def init_app(app, shared_host, host_class=MySQLMonitoringHost):
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint(f'cdeadmin_{engine}_monitoring', __name__)
 
-    if engine == 'mysql':
-        @api.route('/cdeadmin/api/monitoring/mysql/<int:sid>/history', methods=['GET'])
+    if engine in {'mysql', 'mariadb'}:
+        @api.route(f'/cdeadmin/api/monitoring/{engine}/<int:sid>/history', methods=['GET'])
         @pga_login_required
         def history(sid):
             try:

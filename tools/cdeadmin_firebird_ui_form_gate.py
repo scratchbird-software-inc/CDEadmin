@@ -29,7 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (TimeoutException, ElementNotInteractableException,
+                                       ElementClickInterceptedException, StaleElementReferenceException)
 from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.by import By
@@ -924,10 +925,17 @@ def apply_plan(driver, wait, operation, endpoint_password=None):
 
 
 def close_workspace(driver, wait):
-    close = wait.until(
-        lambda value: visible_named_control(value, 'Close')
-    )
-    close.click()
+    def dismiss(current):
+        close = visible_named_control(current, 'Close')
+        try:
+            if close is None or not close.is_enabled():
+                return False
+            close.click()
+            return close
+        except (ElementNotInteractableException, ElementClickInterceptedException,
+                StaleElementReferenceException):
+            return False
+    close = wait.until(dismiss)
     # Workspaces dock by default. Close is removed for both a docked tab and
     # a floating dialog; neither needs a modal parent.
     wait.until(expected.staleness_of(close))

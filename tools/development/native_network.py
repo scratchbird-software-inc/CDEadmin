@@ -65,12 +65,12 @@ def execute(engine, specification, evidence):
                              password=password, path_style=specification.get('path_style', 'posix'))
     else:
         receipt = module.run(route, evidence, password=password)
-    if engine == 'mysql':
+    if engine in {'mysql','mariadb'}:
         # Collect product failures even when the driver proof failed. Each
         # consumer gate owns and removes its uniquely named native objects.
         for name in ('completion', 'extended'):
             try:
-                product = importlib.import_module('tools.cdeadmin_mysql_' + name + '_gate')
+                product = importlib.import_module('tools.cdeadmin_' + engine + '_' + name + '_gate')
                 proof = product.qualify(route, evidence / name, password=password)
                 if proof['complete']:
                     receipt.setdefault('checks', []).append(name)

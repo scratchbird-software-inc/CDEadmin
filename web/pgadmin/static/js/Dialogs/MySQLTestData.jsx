@@ -60,7 +60,7 @@ export default function MySQLTestData({post, databaseTargetId, engine='mysql'}) 
   const persist = async write => {
     const token = ++serial.current; setBusy(true); setError('');
     try {
-      const response = await post({action: write ? 'mysql_recipe_save' : 'mysql_recipe_read',
+      const response = await post({action: `${engine}_recipe_${write ? 'save' : 'read'}`,
         request: {database_target_id: databaseTargetId, recipe_id: recipeId,
           ...(write ? {expected_version: recipeVersion, recipe: JSON.parse(source)} :
             revision ? {version: Number(revision)} : {})}});
@@ -75,7 +75,7 @@ export default function MySQLTestData({post, databaseTargetId, engine='mysql'}) 
     <FormReference formKey={`${engine}-test-data`} />
     <Alert severity="info">Generate and review SQL, then open the saved script in the shared Query Tool on this database. Generation executes no SQL writes. The Query Tool owns autocommit, commit and rollback.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
-    {engine === 'mysql' && <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
+    {<Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
       <TextField size="small" label="Saved recipe name" value={recipeId} disabled={busy}
         onChange={event => {setRecipeId(event.target.value); setRecipeVersion(0); setRevision('');}} />
       <TextField size="small" type="number" label="Revision (blank for latest)" value={revision} disabled={busy}

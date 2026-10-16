@@ -8,6 +8,7 @@ from .firebird_schema_plan import digest
 
 
 class MySQLServerApplications(SchemaApplications):
+    format = 'scratchrobin.mysql.server-plan@1'
     def recent(self, owner, binding):
         with self._store() as store:
             records = [row for row in store.read().get('schema_applications', {}).values()
@@ -16,7 +17,7 @@ class MySQLServerApplications(SchemaApplications):
 
     def review(self, plan, baseline, desired, owner, binding):
         operations = plan.get('operations', [])
-        if (plan.get('format') != 'scratchrobin.mysql.server-plan@1' or not plan.get('ready_for_review') or
+        if (plan.get('format') != self.format or not plan.get('ready_for_review') or
                 not 1 <= len(operations) <= 32 or plan.get('execution_sha256') != digest(operations) or
                 len({item['resource_id'] for item in operations}) != len(operations)):
             raise SchemaApplyError('Prepare an unblocked native server plan with 1 to 32 distinct targets')

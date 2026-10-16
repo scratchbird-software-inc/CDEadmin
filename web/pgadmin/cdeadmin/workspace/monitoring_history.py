@@ -51,10 +51,10 @@ def sanitized(sample, engine=None):
             return value
         raise ValueError('Unsupported monitoring value')
     result = clean({key: value for key, value in sample.items() if key in _FIELDS})
-    if engine == 'mysql':
+    if engine in {'mysql', 'mariadb'}:
         # The account and collector connection are deliberately not archived.
         result['identity'] = {key: sample.get('identity', {}).get(key)
-                              for key in ('server_uuid', 'database_name', 'version')}
+                              for key in ('server_uid' if engine == 'mariadb' else 'server_uuid', 'database_name', 'version')}
         result['transaction_completed'] = sample.get('transaction_completed') is True
         result['elapsed_ms'] = sample.get('elapsed_ms')
     if len(encoded(result).encode()) > 2 * 1024 * 1024:
@@ -169,7 +169,7 @@ class MonitoringHistory:
                               if key not in ('age_seconds', 'observed_at')}
                         for name, group in sample.get('groups', {}).items()
                         if name in set(METADATA) | {'page_inventory', 'crypt_identity'}}
-        elif engine == 'mysql':
+        elif engine in {'mysql', 'mariadb'}:
             metadata = {name: {key: value for key, value in group.items()
                               if key not in {'observed_at', 'observation_age_seconds'}}
                         for name, group in sample.get('groups', {}).items()

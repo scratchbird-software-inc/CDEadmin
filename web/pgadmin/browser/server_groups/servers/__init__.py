@@ -2649,7 +2649,7 @@ class ServerNode(PGChildNodeView):
                         'resource_page', 'resource_inspect', 'resource_refresh',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
-                        'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
+                        'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
                         'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
@@ -2832,6 +2832,17 @@ class ServerNode(PGChildNodeView):
                     payload = service.mariadb_schema_application(server, action, data.get('request'))
                 elif action == 'mariadb_server_catalog':
                     payload = service.mariadb_server_catalog(server, data.get('request'))
+                elif action == 'mariadb_server_plan':
+                    payload = service.mariadb_server_plan(server, data.get('request'))
+                elif action in {'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts'}:
+                    payload = service.mariadb_server_application(server, action.removeprefix('mariadb_server_'), data.get('request'))
+                elif action in {'mariadb_recipe_read', 'mariadb_recipe_save'}:
+                    payload = service.mariadb_recipe_asset(server, action.removeprefix('mariadb_recipe_'), data.get('request'))
+                elif action == 'mariadb_data_plan':
+                    payload = service.mariadb_data_plan(server, data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts'}:
+                    payload = service.mariadb_data_application(server, action.removeprefix('mariadb_data_'), data.get('request'))
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
                 elif action == 'mysql_server_plan':

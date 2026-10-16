@@ -85,7 +85,8 @@ MARIADB_PROFILE = PilotProfile(
      'plugin', 'replication-channel', 'server-link', 'loadable-function', 'metric', 'session',
      'system-variable', 'lock', 'lock-wait', 'table-storage', 'binary-log',
      'binary-log-event', 'binary-log-status', 'log-configuration',
-     'general-log-entry', 'slow-query', 'tls-configuration'),
+     'general-log-entry', 'slow-query', 'tls-configuration',
+     'character-set', 'collation', 'storage-engine'),
     ('mariadb-client', 'mariadb-dump', 'mariadb-upgrade', 'replication',
      'user-administration'),
     semantic_sql_dialect={
@@ -214,6 +215,8 @@ def _administration(profile):
         })
     else:
         common.pop('materialized-view')
+        for kind in ('character-set', 'collation', 'storage-engine'):
+            common[kind] = frozenset({'inspect'})
         common['server'] = frozenset({'inspect', 'check_upgrade_required'})
         for resource_kind in (
                 'session', 'system-variable', 'lock', 'lock-wait',
@@ -1615,6 +1618,43 @@ class MariaDBPilotProvider(ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def apply_server_operation(self, route, record, operation):
+        from ..mariadb_server_application import apply_operation
+        self._require('administer', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB server application client is unavailable')
+        connection = self.client._connect({'route': {**route, 'database': None}})
+        try:
+            return apply_operation(connection, record, operation)
+        finally:
+            self.client._discard_failed_session(connection)
+
+    def apply_data_import(self, route, record):
+        from ..mariadb_data_application import apply_import, verify
+        self._require('data_write', 'resource')
+        self._require('data_read', 'resource')
+        self._require('execute')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB data client is unavailable')
+        connection = self.client._connect({'route': route})
+        try:
+            result = apply_import(connection, record)
+        finally:
+            self.client._discard_failed_session(connection)
+        if result['state'] == 'committed':
+            check = None
+            try:
+                check = self.client._connect({'route': {**route, 'autocommit': True}})
+                observed = verify(check, record['plan'])
+                result.update(independent_verification=observed, rediscovery_verified=observed['verified'])
+            except Exception as error:
+                result.update(rediscovery_verified=False, verification_error_type=type(error).__name__)
+            finally:
+                if check is not None:
+                    self.client._discard_failed_session(check)
+        return result
+
     def validate_schema_plan(self, route, plan):
         from ..mariadb_schema_validation import validate
         self._require('administer', 'resource')
@@ -1805,8 +1845,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         def resource_key(kind, path, name):
             parts = [kind, *map(str, path), str(name)]
             # Retain established uncomplicated IDs and avoid delimiter collisions.
-            return ('mysql-resource:' + json.dumps(parts, ensure_ascii=False, separators=(',', ':'))
-                    if profile is MYSQL_PROFILE and any(':' in part for part in parts)
+            return (profile.engine_id + '-resource:' + json.dumps(parts, ensure_ascii=False, separators=(',', ':'))
+                    if any(':' in part for part in parts)
                     else ':'.join(parts))
 
         def add(kind, path, name, native=None, *, identity=None):
@@ -1823,10 +1863,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             })
             if native:
                 resource.setdefault('native', {}).update(native)
-            if profile is MYSQL_PROFILE and kind in {'user', 'role', 'tablespace', 'plugin', 'component',
+            if kind in {'user', 'role', 'tablespace', 'plugin', 'component',
                     'loadable-function', 'resource-group', 'system-variable', 'session', 'metric',
                     'character-set', 'collation', 'storage-engine', 'replication-channel',
-                    'group-replication', 'group-replication-member'}:
+                    'group-replication', 'group-replication-member', 'server-link', 'lock', 'lock-wait',
+                    'binary-log', 'binary-log-status', 'binary-log-event', 'general-log-entry',
+                    'slow-query', 'log-configuration', 'tls-configuration'}:
                 resource.setdefault('native', {})['navigator_scope'] = 'server'
             if (path and path[0] in system_databases) or (
                     kind == 'database' and name in system_databases):
@@ -2151,21 +2193,15 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'ORDER BY 1, 2'
             )
             locked_accounts = {}
-            for user, host, privilege_json in optional(
-                    'SELECT User, Host, Priv FROM mysql.global_priv'):
-                try:
-                    document = json.loads(str(privilege_json))
-                except (TypeError, ValueError):
-                    document = {}
-                locked_accounts[(str(user), str(host))] = bool(
-                    document.get('account_locked', False)
-                )
+            for user, host, locked in optional(
+                    "SELECT User, Host, COALESCE(JSON_VALUE(Priv,'$.account_locked'),'false') IN ('true','1') FROM mysql.global_priv"):
+                locked_accounts[(str(user), str(host))] = bool(locked)
             for row in accounts:
                 user, host, is_role = row[:3]
                 if str(is_role).upper() == 'Y':
                     roles.add((str(user), str(host)))
                     add('role', [], str(user), {
-                        'host': str(host),
+                        'user': str(user), 'host': str(host),
                         'default_role': row[5],
                     })
         for row in accounts:
@@ -2175,6 +2211,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     native = {'account_locked': str(account_state), 'user': str(user), 'host': str(host)}
                 else:
                     native = {
+                        'user': str(user), 'host': str(host),
                         'is_role': str(account_state),
                         'authentication_plugin': row[3],
                         'password_expired': row[4],
@@ -2189,27 +2226,31 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         'x509_issuer': row[13],
                         'x509_subject': row[14],
                         'account_locked': locked_accounts.get(
-                            (str(user), str(host)), False
+                            (str(user), str(host))
                         ),
                         'authentication_secrets_returned': False,
                     }
                 add('user', [], f'{user}@{host}', native, identity=(
-                    'mysql-account:' + json.dumps([str(user), str(host)], ensure_ascii=False, separators=(',', ':'))
-                    if profile is MYSQL_PROFILE and ('@' in str(user) or '@' in str(host)) else None))
+                    profile.engine_id + '-account:' + json.dumps([str(user), str(host)], ensure_ascii=False, separators=(',', ':'))
+                    if '@' in str(user) or '@' in str(host) else None))
         for grantee, privilege in optional(
             'SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.'
             'USER_PRIVILEGES ORDER BY 1, 2'
         ):
             add('privilege', [grantee], privilege, {
                 'grantee': str(grantee), 'privilege': str(privilege),
-                **({'scope': 'global', 'navigator_scope': 'server'} if profile is MYSQL_PROFILE else {}),
+                'scope': 'global', 'navigator_scope': 'server',
             })
-        if profile is MYSQL_PROFILE:
+        if profile in (MYSQL_PROFILE, MARIADB_PROFILE):
             from ..mysql_grants import QUERIES as scoped_grants, routine_grants
             for _section, scope, source, keys in scoped_grants:
-                if scope == 'routine':
+                if scope == 'routine' and profile is MYSQL_PROFILE:
                     accounts = optional_records("SELECT User,Host,CONCAT(QUOTE(User),'@',QUOTE(Host)) AS grantee_identity FROM mysql.user ORDER BY User,Host")
                     records = routine_grants(accounts, optional_records)
+                elif scope == 'routine':
+                    from ..mariadb_grants import routine_grants as maria_routine_grants
+                    principals = optional_records("SELECT User,Host,is_role,CONCAT(QUOTE(User),'@',QUOTE(Host)) AS grantee_identity FROM mysql.user ORDER BY User,Host")
+                    records = maria_routine_grants(principals, optional_records)
                 else:
                     records = optional_records(source)
                 for record in records:
@@ -2233,7 +2274,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         'privilege': record['privilege_type'], 'scope': scope, 'database': database,
                         'navigator_parent_resource_id': owner_id,
                         'administration': {'allowed_operations': ['inspect']}},
-                        identity='mysql-grant:' + json.dumps([scope, *[record[key] for key in keys]], ensure_ascii=False, separators=(',', ':')))
+                        identity=profile.engine_id + '-grant:' + json.dumps([scope, *[record[key] for key in keys]], ensure_ascii=False, separators=(',', ':')))
         tablespace_source = (
             'SELECT DISTINCT TABLESPACE_NAME, ENGINE FROM '
             'information_schema.FILES WHERE TABLESPACE_NAME IS NOT NULL '
@@ -2525,10 +2566,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'tls-configuration', ['Security'],
                 'TLS configuration', tls_values,
             )
-        if profile is MYSQL_PROFILE:
+        if profile in (MYSQL_PROFILE, MARIADB_PROFILE):
             for kind, source, name_field in (
                 ('character-set', 'SELECT CHARACTER_SET_NAME, DEFAULT_COLLATE_NAME, DESCRIPTION, MAXLEN FROM information_schema.CHARACTER_SETS', 'character_set_name'),
-                ('collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN, PAD_ATTRIBUTE FROM information_schema.COLLATIONS', 'collation_name'),
+                ('collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN' + (', PAD_ATTRIBUTE' if profile is MYSQL_PROFILE else '') + ' FROM information_schema.COLLATIONS', 'collation_name'),
                 ('storage-engine', 'SELECT ENGINE, SUPPORT, COMMENT, TRANSACTIONS, XA, SAVEPOINTS FROM information_schema.ENGINES', 'engine'),
             ):
                 for record in optional_records(source):
@@ -2577,7 +2618,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         for resource in resources.values():
             native = resource.setdefault('native', {})
             owner = native.get('navigator_parent_resource_id')
-            if (profile is MYSQL_PROFILE and resource['resource_kind'] == 'privilege' and
+            if (resource['resource_kind'] == 'privilege' and
                     native.get('scope') != 'global' and owner not in resources):
                 # Grants may survive DROP or refer to an object not visible to
                 # this account. Keep their exact facts reachable at database scope.

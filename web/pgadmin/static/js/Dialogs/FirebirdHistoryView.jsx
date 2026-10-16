@@ -26,7 +26,7 @@ export default function FirebirdHistoryView({serverId, targetId, engine='firebir
       const params = {start: selected.start, end: selected.end, tier, limit: 720};
       if(targetId) params.target_id = targetId;
       if(next) params.after = selected.after;
-      const route = engine === 'mysql' ? 'cdeadmin_mysql_monitoring.history' : 'cdeadmin_monitoring.history';
+      const route = engine !== 'firebird' ? `cdeadmin_${engine}_monitoring.history` : 'cdeadmin_monitoring.history';
       const response = await getApiInstance().get(url_for(route, {sid: serverId}), {params});
       if(token === serial.current) {
         setSnapshot(response.data.data);
@@ -51,7 +51,7 @@ export default function FirebirdHistoryView({serverId, targetId, engine='firebir
     </Box>
     {error && <Alert severity="error">{error}</Alert>}
     {snapshot && <>
-      {engine === 'mysql' ? <MySQLTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} engine="mysql" /> :
+      {engine !== 'firebird' ? <MySQLTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} engine={engine} /> :
         <FirebirdTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} />}
       <details><summary>Exact samples, window summaries and source provenance</summary>
         <Box component="pre" sx={{overflow: 'auto', maxHeight: 400}}>{JSON.stringify(snapshot.samples, null, 2)}</Box>
@@ -60,4 +60,4 @@ export default function FirebirdHistoryView({serverId, targetId, engine='firebir
   </Box>;
 }
 FirebirdHistoryView.propTypes = {serverId: PropTypes.number.isRequired, targetId: PropTypes.string,
-  engine: PropTypes.oneOf(['firebird', 'mysql'])};
+  engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb'])};

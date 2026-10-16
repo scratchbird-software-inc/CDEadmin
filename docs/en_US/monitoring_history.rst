@@ -1,7 +1,7 @@
 Persistent monitoring history
 =============================
 
-Firebird network/embedded database-file collectors and MySQL server/database
+Firebird network/embedded database-file collectors and MySQL/MariaDB server/database
 collectors can opt into a native
 ScratchBird archive with
 ``history_enabled: true`` in the monitoring policy. Collection remains independent

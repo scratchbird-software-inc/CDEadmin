@@ -41,8 +41,8 @@ from tools.cdeadmin_firebird_grid_ui_gate import (  # noqa: E402
 )
 from tools.cdeadmin_firebird_ui_form_gate import (  # noqa: E402
     create_driver,
-    prepare_tree,
 )
+from tools.cdeadmin_provider_object_form_gate import _prepare_tree as prepare_provider_tree  # noqa: E402
 from tools.cdeadmin_ui_evidence import (  # noqa: E402
     complete_endpoint_prompt,
     invoke_context_action,
@@ -177,7 +177,19 @@ def _run_source(driver, wait, source, button='Run'):
     if previous is not None:
         wait.until(expected.staleness_of(previous))
     try:
-        wait.until(lambda value: _visible_result_actions(value) is not None)
+        if button == 'Run':
+            wait.until(lambda value: _visible_result_actions(value) is not None)
+        else:
+            wait.until(lambda current: any(item.is_displayed() for item in current.find_elements(
+                By.CSS_SELECTOR, '[aria-label="Query plan results"]')))
+        if re.match(r'^\s*(UPDATE|INSERT|DELETE)\b', source, re.I):
+            def finished(current):
+                if _button(wait, 'Provider transaction state').is_enabled():
+                    return True
+                poll = _button(wait, 'Poll')
+                if poll.is_enabled(): poll.click()
+                return False
+            wait.until(finished)
     except Exception as exc:
         raise RuntimeError(
             f'MariaDB SQL Studio execution did not render a result; '
@@ -246,7 +258,8 @@ def run(options):
 
     try:
         password = os.environ[options.endpoint_password_env]
-        prepare_tree(driver, wait, options, password)
+        driver.get(options.url.rstrip('/') + '/browser/')
+        prepare_provider_tree(driver, wait, options)
         database = wait_for_tree_item(wait, options.database)
         invoke_context_action(
             wait, driver, database,
@@ -308,7 +321,7 @@ def run(options):
         if not next_page.is_enabled():
             raise RuntimeError('MariaDB result paging is disabled')
         first_buffer = wait.until(lambda value: re.search(
-            r'Buffered rows: (\d+)', value.find_element(
+            r'Rows on displayed page: (\d+)', value.find_element(
                 By.CSS_SELECTOR, '[aria-label="Statement metrics"]'
             ).text))
         next_row = int(first_buffer.group(1)) + 1
@@ -318,17 +331,16 @@ def run(options):
         capture('result-page-two')
         # Native fetch batches and browser buffers have separate limits.
         # Drain the remaining qualified rows before authoring another query.
-        for _ in range(10):
-            if _source_editor(driver).get_attribute('contenteditable') == 'true':
-                break
-            next_page = _button(wait, 'Next result page')
-            if next_page.is_enabled():
-                next_page.click()
-            wait.until(lambda value: (
-                _source_editor(value).get_attribute('contenteditable') == 'true'
-                or _button(wait, 'Next result page').is_enabled()))
-        wait.until(lambda value: _source_editor(value).get_attribute(
-            'contenteditable') == 'true')
+        def drain(current):
+            if _button(wait, 'Provider transaction state').is_enabled():
+                return True
+            for label in ('Next result page', 'Poll'):
+                control = _button(wait, label)
+                if control.is_enabled():
+                    control.click()
+                    break
+            return False
+        wait.until(drain)
 
         _set_query_source(driver, wait, 'SELECT SLEEP(30) AS cancellation_probe')
         _button(wait, 'Run').click()
@@ -404,6 +416,7 @@ def run(options):
         capture('transaction-committed')
 
         _button(wait, 'Provider transaction state').click()
+        _button(wait, 'Messages').click()
         wait.until(lambda value: 'mariadb-session-transaction' in
                    value.page_source)
         capture('transaction-state')

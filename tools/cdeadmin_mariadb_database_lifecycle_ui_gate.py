@@ -21,6 +21,7 @@ from pathlib import Path
 
 import mariadb
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
 
 if __package__:
     from . import cdeadmin_sqlite_database_lifecycle_ui_gate as base
@@ -63,6 +64,7 @@ def arguments(argv=None):
     parser.add_argument(
         '--font-scale', type=int, choices=(100, 150, 200, 300), default=100,
     )
+    parser.add_argument('--functional-only', action='store_true', help='Run native workflows; human form validation is separate')
     parser.add_argument('--timeout', type=int, default=90)
     return parser.parse_args(argv)
 
@@ -139,7 +141,12 @@ def _complete_cases(driver, wait, options):
     _execute(options, f'DROP DATABASE IF EXISTS `{CREATED_DATABASE}`')
     evidence = []
 
-    base._open_form(driver, wait, 'connect', options.database)
+    action = base._action(driver, 'connect', options.database)
+    selected = driver.find_element(By.CSS_SELECTOR, '.file-entry[aria-selected="true"]')
+    base.invoke_context_action(wait, driver, selected,
+        [base.MENU_GROUPS[action['menu_group']], action['label']],
+        endpoint_password=base.ENDPOINT_PASSWORD, endpoint_prompt_timeout=5)
+    wait.until(lambda current: base.visible_named_control(current, 'Connect database'))
     base._submit_target_form(driver, wait, 'connect', {
         'Default character set': CHARACTER_SET,
         'Default collation': COLLATION,
@@ -299,7 +306,8 @@ def run(options):
             raise RuntimeError(forms['__error__'])
         completed = _complete_cases(driver, wait, options)
         _refresh_tree(driver, wait, options, options.database)
-        for mode in base.RENDER_ORDER:
+        for mode in (() if options.functional_only else base.RENDER_ORDER):
+            if mode == 'connect': continue
             database_label = (
                 options.database if mode not in {'define', 'create'} else None
             )
@@ -350,8 +358,9 @@ def run(options):
         ),
         'failures': failures, 'credential_values_exported': False,
         'provider_values_recorded': False,
+        'human_form_validation': 'excluded' if options.functional_only else 'automated-contract-observations',
         'complete': (
-            {item['mode'] for item in rendered} == expected and
+            (options.functional_only or {item['mode'] for item in rendered} == expected - {'connect'}) and
             {item['mode'] for item in completed} == expected and
             not failures
         ),

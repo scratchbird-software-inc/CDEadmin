@@ -125,7 +125,8 @@ def qualify(route, evidence, *, password=None):
             target_id='server:' + server['server_uid'], generation=server['generation'],
             include_system=True, engine='mariadb')
         decoded_server = read_catalog(json.dumps(server_export['snapshot']), engine='mariadb')
-        assert decoded_server['provenance']['objects'] == len(server['resources'])
+        expected_server = {row['resource_id'] for row in server['resources'] if row['resource_kind'] not in {'metric', 'service-operation'}}
+        assert set(decoded_server['rows']) == expected_server
         proof['checks'].append('native_server_uid_roles_links_and_credential_free_ddn_inventory')
         from pgadmin.cdeadmin.providers.mysql_family.provider import _resources
         discovered = _resources(owner, {'route': {'database': schema}}, MARIADB_PROFILE)

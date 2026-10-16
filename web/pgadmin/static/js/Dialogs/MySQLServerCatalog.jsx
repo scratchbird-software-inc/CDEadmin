@@ -38,7 +38,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
       const request = action === 'receipts' ? {} : action === 'plan' || action === 'review' ? {baseline, source,
         ...(action === 'review' ? {execution_sha256: plan.execution_sha256} : {})} :
         {review_id: review.review_id, ...(action === 'apply' ? {review_digest: review.review_digest, confirmed} : {})};
-      const response = await post({action: `mysql_server_${action}`, request});
+      const response = await post({action: `${engine}_server_${action}`, request});
       if(token !== serial.current) return;
       if(action === 'plan') {setPlan(response); setReview(null); setConfirmed(false);}
       else if(action === 'receipts') setReceipts(response.receipts);
@@ -65,7 +65,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
       <FormControlLabel label="Include built-in system objects" control={<Checkbox checked={system} disabled={busy}
         onChange={event => setSystem(event.target.checked)} />} />
       <Button disabled={busy} onClick={() => capture()}>Capture server inventory</Button>
-      {engine === 'mysql' && <Button disabled={busy} onClick={() => native('receipts')}>Load recent server receipts</Button>}
+      {<Button disabled={busy} onClick={() => native('receipts')}>Load recent server receipts</Button>}
       <TextField select size="small" label="Registered databases to include" value={targets} disabled={busy || !result}
         slotProps={{select: {multiple: true}}} sx={{minWidth: 260}} onChange={event => setTargets(event.target.value)}>
         {(result?.registered_targets || []).map(item => <MenuItem value={item.target_id} key={item.target_id}>
@@ -88,7 +88,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
       </TextField>}
     </Box>
     {(shown?.provenance?.warnings || []).map(warning => <Alert severity="warning" key={warning}>{warning}</Alert>)}
-    {engine === 'mysql' && (baseline || receipts.length > 0) && <Box component="details" sx={{my: 1}}>
+    {(baseline || receipts.length > 0) && <Box component="details" sx={{my: 1}}>
       <summary>Review native server metadata changes</summary>
       {receipts.length > 0 && <TextField select size="small" label="Saved server receipt" value={review?.review_id || ''} disabled={busy}
         onChange={event => {const selected = receipts.find(item => item.review_id === event.target.value);
@@ -96,7 +96,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
         <MenuItem value="">Select saved receipt</MenuItem>
         {receipts.map(item => <MenuItem key={item.review_id} value={item.review_id}>{item.review_id}: {item.state}</MenuItem>)}
       </TextField>}
-      <Alert severity="info">Author explicit mysql_change instructions in the server DDN. Missing selections never remove objects.
+      <Alert severity="info">Author explicit {engine}_change instructions in the server DDN. Missing selections never remove objects.
         Server operations have independent native effects. Use an exclusive administration window; automatic retry is disabled.</Alert>
       <Button component="label" disabled={busy}>Read desired server DDN<input hidden type="file" accept=".json,.ddn" onChange={async event => {
         const file = event.target.files?.[0]; event.target.value = ''; if(!file) return;
@@ -117,7 +117,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
       </Box>)}
       {review && <>
         <Alert severity="info">Server receipt {review.review_id}: {review.state}. Repeated requests read this receipt without replaying statements.</Alert>
-        <FormControlLabel label="Apply these displayed native server changes" control={<Checkbox checked={confirmed}
+        <FormControlLabel label="Apply these displayed native server changes in an exclusive administration window" control={<Checkbox checked={confirmed}
           disabled={busy || review.state !== 'reviewed'} onChange={event => setConfirmed(event.target.checked)} />} />
         <Button disabled={busy || !confirmed || review.state !== 'reviewed'} onClick={() => native('apply')}>Apply server changes once</Button>
         <Button disabled={busy} onClick={() => native('receipt')}>Read server receipt</Button>

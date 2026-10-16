@@ -26,7 +26,9 @@ def decode(source):
                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite data value')))
 
 
-def read(source, node='node'):
+def read(source, node='node', *, engine='mysql'):
+    if engine not in {'mysql', 'mariadb'}:
+        raise ValueError('Unsupported native data engine')
     if not isinstance(source, str) or not source or len(source.encode('utf8')) > MAX_BYTES:
         raise ValueError('Data DDN must be nonempty text within 8 MiB')
     snapshot = decode(source) if source.lstrip().startswith('{') else {
@@ -42,16 +44,16 @@ def read(source, node='node'):
             input=json.dumps(snapshot), text=True, encoding='utf8', capture_output=True, timeout=15,
             env={key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'TMPDIR') if key in os.environ})
         if result.returncode:
-            raise ValueError('Invalid native MySQL static data DDN')
+            raise ValueError('Invalid native static data DDN')
         parsed = decode(result.stdout)
         metadata = decode(parsed['header'])
         acquisition = metadata.get('acquisition', {})
         columns = metadata.get('schema', {}).get('columns', [])
-        if (metadata.get('mapping') != 'scratchrobin.result.static@1' or acquisition.get('engine_id') != 'mysql' or
-                str(acquisition.get('native_version', '')).split('-')[0] != '9.7.0' or
+        if (metadata.get('mapping') != 'scratchrobin.result.static@1' or acquisition.get('engine_id') != engine or
+                str(acquisition.get('native_version', '')).split('-')[0] != ('12.2.2' if engine == 'mariadb' else '9.7.0') or
                 not acquisition.get('transaction_completed') or not 1 <= len(columns) <= 256 or
                 len(parsed['rows']) != acquisition.get('rows') or not isinstance(acquisition.get('native_columns'), list)):
-            raise ValueError('A native MySQL relation capture with exact column metadata is required')
+            raise ValueError('A native relation capture with exact column metadata is required')
         rows = []
         for record in parsed['rows']:
             row = decode(record['values'])
@@ -159,6 +161,7 @@ def preview(source, current, *, table=None, allow_nontransactional=False, node='
 
 
 class MySQLDataApplications(SchemaApplications):
+    format = 'scratchrobin.mysql.data-import-plan@1'
     def recent(self, owner, binding):
         with self._store() as store:
             records = [row for row in store.read().get('schema_applications', {}).values()
@@ -173,7 +176,7 @@ class MySQLDataApplications(SchemaApplications):
         return value
 
     def review(self, plan, owner, binding):
-        if (plan.get('format') != 'scratchrobin.mysql.data-import-plan@1' or not plan.get('ready_for_review') or
+        if (plan.get('format') != self.format or not plan.get('ready_for_review') or
                 not 1 <= plan.get('row_count', 0) <= 6000 or plan.get('execution_sha256') != plan_digest(plan)):
             raise SchemaApplyError('An unblocked native data import preview is required')
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed', 'owner': owner, 'binding': binding,

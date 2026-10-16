@@ -11,8 +11,11 @@ LOCK = threading.RLock()
 
 
 class MySQLRecipeAssets:
-    def __init__(self, assets):
+    def __init__(self, assets, *, engine='mysql'):
+        if engine not in {'mysql', 'mariadb'}:
+            raise ValueError('Unsupported native recipe engine')
         self.assets = assets
+        self.engine = engine
 
     def apply(self, owner, scope, action, request):
         if not isinstance(request, dict) or set(request) - {
@@ -23,9 +26,9 @@ class MySQLRecipeAssets:
             raise ProjectAssetError('Recipe name requires 1 to 64 letters, digits, dots, underscores or hyphens')
         if action not in {'read', 'save'}:
             raise ProjectAssetError('Invalid recipe action')
-        identity = {'engine': 'mysql', **scope, 'recipe_id': name}
+        identity = {'engine': self.engine, **scope, 'recipe_id': name}
         key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-        project = f'mysql-recipes-{owner}'
+        project = f'{self.engine}-recipes-{owner}'
         version = request.get('version')
         if version is not None and (type(version) is not int or version < 1):
             raise ProjectAssetError('Select a positive recipe revision')
@@ -47,16 +50,16 @@ class MySQLRecipeAssets:
                 saved = self.assets.get_asset(owner, (), project, key, version) if version is not None else current
             else:
                 recipe = request.get('recipe')
-                if version is not None or not isinstance(recipe, dict) or recipe.get('scope') != scope or recipe.get('format') != 'scratchrobin.mysql.test-data@1':
+                if version is not None or not isinstance(recipe, dict) or recipe.get('scope') != scope or recipe.get('format') != f'scratchrobin.{self.engine}.test-data@1':
                     raise ProjectAssetError('Recipe belongs to another native database')
-                body = {'asset_type': 'mysql-test-data-recipe', 'schema_name': 'scratchrobin.mysql.test-data@1',
+                body = {'asset_type': f'{self.engine}-test-data-recipe', 'schema_name': f'scratchrobin.{self.engine}.test-data@1',
                         'name': name, 'path': f'recipes/{key}.json', 'expected_version': request.get('expected_version'),
                         'content': recipe, 'metadata': {'scope': identity}, 'source_control_eligible': False}
                 validate_asset_request(body, project, key)
                 if current is None and body['expected_version'] != 0:
                     raise ProjectAssetError('The recipe has no current revision; refresh before saving')
                 if row is None:
-                    self.assets.create_project(owner, project, {'name': 'MySQL test-data recipes', 'source_control_eligible': False})
+                    self.assets.create_project(owner, project, {'name': ('MariaDB' if self.engine == 'mariadb' else 'MySQL') + ' test-data recipes', 'source_control_eligible': False})
                 saved = self.assets.save_asset(owner, (), project, key, body)
                 current = saved
             if saved and (saved['metadata'].get('scope') != identity or saved['content'].get('scope') != scope):

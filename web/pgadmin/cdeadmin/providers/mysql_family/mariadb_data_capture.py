@@ -5,12 +5,20 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from .mariadb_catalog import identifier, SYSTEM
+from .mariadb_catalog import identifier, SYSTEM, _value
 from .mariadb_values import value, columns, Cursor
 from ...results.ddn_export import export_workspace
 
 MAX_ROWS = 6000
 MAX_BYTES = 4 * 1024 * 1024
+LAYOUT_FIELDS = ('column_name', 'column_type', 'is_nullable', 'extra', 'generation_expression',
+                 'character_set_name', 'collation_name')
+
+
+def native_layout(cursor, database, name):
+    cursor.execute('SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,EXTRA,GENERATION_EXPRESSION,CHARACTER_SET_NAME,COLLATION_NAME '
+                   'FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION LIMIT 257', (database, name))
+    return [{field: _value(value) for field, value in zip(LAYOUT_FIELDS, row)} for row in cursor.fetchall()]
 
 
 def relation_address(database, resource_id):
@@ -60,14 +68,23 @@ def capture(connection, database, resource_id, *, endpoint_id, target_id, expect
                 kind == 'table' and relation[0] not in {'BASE TABLE', 'SYSTEM VERSIONED'} or
                 kind == 'view' and relation[0] != 'VIEW'):
             raise ValueError('Native relation is unavailable or its kind changed')
+        layout = native_layout(control, database, name)
+        if not 1 <= len(layout) <= 256:
+            raise ValueError('Data capture requires 1–256 exact native columns')
+        control.execute('SELECT @@sql_mode')
+        sql_mode = control.fetchone()[0]
+        control.execute('SET SESSION time_zone=?', ('+00:00',))
         stream = Cursor(connection)
-        stream.execute('SELECT * FROM ' + identifier(database) + '.' + identifier(name) + ' LIMIT ?', (row_limit + 1,))
+        stream.execute('SELECT ' + ','.join(identifier(column['column_name']) for column in layout) +
+                       ' FROM ' + identifier(database) + '.' + identifier(name) + ' LIMIT ?', (row_limit + 1,))
         schema = {'columns': columns(stream)}
         if not schema['columns'] or len(schema['columns']) > 256:
             raise ValueError('DDN data capture needs 1–256 visible columns')
         description = stream.description
         records = []
-        size = len(json.dumps(schema, ensure_ascii=False).encode('utf8'))
+        size = len(json.dumps({'schema': schema, 'native_columns': layout}, ensure_ascii=False).encode('utf8'))
+        if size > MAX_BYTES:
+            raise ValueError('Native column metadata exceeds the capture byte budget')
         exceeded = False
         while True:
             page = stream.fetchmany(128)
@@ -96,6 +113,7 @@ def capture(connection, database, resource_id, *, endpoint_id, target_id, expect
         acquisition = {'engine_id': 'mariadb', 'endpoint_id': endpoint_id, 'database_target_id': target_id,
             'resource_id': resource_id, 'database': database, 'relation': name, 'kind': kind,
             'server_uid': identity[2], 'native_version': identity[1], 'storage_engine': relation[1],
+            'native_columns': layout, 'sql_mode': sql_mode, 'time_zone': '+00:00',
             'observed_at': datetime.now(timezone.utc).isoformat(), 'mode': mode, 'row_limit': row_limit,
             'rows': len(records), 'more_rows_observed': exceeded, 'ordering': 'unspecified native order',
             'transaction_completed': True, 'consistent_innodb_table_snapshot': consistent,

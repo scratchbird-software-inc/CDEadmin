@@ -2,7 +2,8 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 
-export default function MySQLDataImport({post, databaseTargetId}) {
+export default function MySQLDataImport({post, databaseTargetId, engine='mysql'}) {
+  const label = engine === 'mariadb' ? 'MariaDB' : 'MySQL';
   const [source, setSource] = useState(''), [table, setTable] = useState('');
   const [allow, setAllow] = useState(false), [confirmed, setConfirmed] = useState(false);
   const [plan, setPlan] = useState(null), [review, setReview] = useState(null);
@@ -13,7 +14,7 @@ export default function MySQLDataImport({post, databaseTargetId}) {
     serial.current++; setSource(''); setTable(''); setAllow(false); setConfirmed(false);
     setPlan(null); setReview(null); setReceipts([]); setError(''); setBusy(false);
     return () => {serial.current++;};
-  }, [post, databaseTargetId]);
+  }, [post, databaseTargetId, engine]);
   const invalidate = () => {setPlan(null); setReview(null); setConfirmed(false);};
   const load = async event => {
     const file = event.target.files?.[0]; event.target.value = ''; if(!file) return;
@@ -32,7 +33,7 @@ export default function MySQLDataImport({post, databaseTargetId}) {
         ...(action === 'review' ? {execution_sha256: plan.execution_sha256} : {})} :
         {database_target_id: databaseTargetId, review_id: review.review_id,
           ...(action === 'apply' ? {review_digest: review.review_digest, confirmed} : {})};
-      const result = await post({action: `mysql_data_${action}`, request});
+      const result = await post({action: `${engine}_data_${action}`, request});
       if(token !== serial.current) return;
       if(action === 'plan') {setPlan(result); setReview(null); setConfirmed(false);}
       else if(action === 'receipts') setReceipts(result.receipts);
@@ -44,7 +45,7 @@ export default function MySQLDataImport({post, databaseTargetId}) {
     finally {if(token === serial.current) setBusy(false);}
   };
   return <Box component="details" sx={{my: 1}}>
-    <summary>Import native MySQL data DDN</summary>
+    <summary>Import native {label} data DDN</summary>
     <Alert severity="info">Read a native relation data capture, review its exact destination and explicitly import and commit.
       Constraints and triggers remain active. This inserts rows; it never replaces or clears a table. Unknown outcomes cannot be retried.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
@@ -55,7 +56,7 @@ export default function MySQLDataImport({post, databaseTargetId}) {
       <MenuItem value="">Select saved receipt</MenuItem>
       {receipts.map(item => <MenuItem key={item.review_id} value={item.review_id}>{item.review_id}: {item.state}</MenuItem>)}
     </TextField>}
-    <Button component="label" disabled={busy}>Read native data DDN<input type="file" hidden accept=".json,.ddn" aria-label="Native MySQL data DDN" onChange={load} /></Button>
+    <Button component="label" disabled={busy}>Read native data DDN<input type="file" hidden accept=".json,.ddn" aria-label={`Native ${label} data DDN`} onChange={load} /></Button>
     <TextField size="small" label="Destination table (blank uses captured name)" value={table} disabled={busy}
       onChange={event => {setTable(event.target.value); invalidate();}} />
     <FormControlLabel label="Acknowledge nontransactional table effects" control={<Checkbox checked={allow} disabled={busy}
@@ -76,4 +77,4 @@ export default function MySQLDataImport({post, databaseTargetId}) {
     </>}
   </Box>;
 }
-MySQLDataImport.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string.isRequired};
+MySQLDataImport.propTypes = {engine: PropTypes.oneOf(['mysql', 'mariadb']), post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string.isRequired};

@@ -51,6 +51,26 @@ def test_busy_session_is_never_repurposed():
     with pytest.raises(ValueError,match='idle'):module.capture(connection)
     assert not connection.calls
 
+
+def test_denied_lock_projection_preserves_visible_credential_free_accounts():
+    class Denied(Exception): errno=1142; sqlstate='42000'
+    class VisibleAccounts(Connection):
+        def cursor(self, **options):
+            cursor=super().cursor(**options)
+            execute=cursor.execute
+            def projected(source):
+                if 'mysql.global_priv' in source: raise Denied()
+                return execute(source)
+            cursor.execute=projected
+            return cursor
+    result=module.capture(VisibleAccounts())
+    account=next(row for row in result['resources'] if row['resource_kind']=='user')
+    assert account['native']['catalog_row']['user']=='test'
+    assert account['native']['catalog_row']['account_locked'] is None
+    assert not account['native']['catalog_row']['account_lock_observed']
+    coverage={row['section']:row['available'] for row in result['observations']}
+    assert coverage['accounts'] and not coverage['account-lock-state']
+
 def test_host_expands_only_explicit_registered_targets_and_checks_native_server(monkeypatch):
     import config
     from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService,ProviderWorkspaceError

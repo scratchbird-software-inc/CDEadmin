@@ -56,7 +56,7 @@ describe('MariaDB dedicated monitoring controls', () => {
     fireEvent.click(start);
     await waitFor(() => expect(api.post).toHaveBeenCalled());
     expect(api.post.mock.calls[0][1]).toEqual({interval_seconds: 5, retain_samples: 120,
-      lease_seconds: 3600, metadata_interval_seconds: 60, heartbeat_enabled: true, heartbeat_timeout_seconds: 20});
+      lease_seconds: 3600, metadata_interval_seconds: 60, heartbeat_enabled: true, heartbeat_timeout_seconds: 20, history_enabled: false});
     await waitFor(() => expect(screen.getByRole('button', {name: 'Stop collection'})).toBeEnabled());
     fireEvent.click(screen.getByRole('button', {name: 'Stop collection'}));
     await waitFor(() => expect(api.delete).toHaveBeenCalled());
