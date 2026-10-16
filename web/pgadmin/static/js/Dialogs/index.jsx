@@ -27,6 +27,7 @@ import ProviderWorkspaceContent from './ProviderWorkspaceContent';
 import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
 import PostgresqlMonitoring from './PostgresqlMonitoring';
+import PostgresqlContinuity from './PostgresqlContinuity';
 import MySQLMonitoring from './MySQLMonitoring';
 import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
@@ -291,53 +292,54 @@ export function showProviderWorkspace(
     title,
     closable: true,
     floatable: true,
-    content: <ErrorBoundary>{initialTab === 'firebird-registration' ?
-      <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
-        post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
-          .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
-        onChanged={() => {
-          const tree = pgAdmin.Browser.tree;
-          const connector = tree.parent(itemNodeData);
-          const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
-          node?.callbacks?.refresh?.call(node, null, connector);
-        }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
-        (['mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : nodeData.cde_profile_id === 'sqlite-native' ? 'sqlite' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
-          targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
-          <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
-            targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
-          closeModal={onClose}
-          endpointUrl={endpointUrl}
-          initialTab={initialTab}
-          initialContext={initialContext}
-          onTargetCatalogChanged={() => {
-            nodeObj.callbacks.refresh.call(nodeObj, null, itemNodeData);
-          }}
-          onRecreateEmpty={(databasePath) => {
-            showProviderWorkspace(
-              gettext('Create empty Firebird database'), nodeObj, nodeData,
-              itemNodeData, 'connections', {
-                database_mode: 'create', recreate_empty_path: databasePath,
-              }
-            );
-            onClose();
-          }}
-          onOpenSearchResult={(targetId, resource) => showProviderWorkspace(
-            resource.display_name, nodeObj, nodeData, itemNodeData, 'object', {
-              database_target_id: targetId, resource_id: resource.resource_id,
-              resource_kind: resource.resource_kind, operation_id: 'inspect',
-            })}
-          onEndpointRemoved={onEndpointRemoved}
-          onEndpointProfileSaved={(result) => invalidateProviderEndpointProfile(
-            pgAdmin.Browser.tree, itemNodeData, result
-          )}
-          onCredentialRequired={(retry)=>{
-            nodeObj.callbacks.verify_cde_endpoint.call(nodeObj, {
-              item: itemNodeData,
-              databaseTargetId,
-              onSuccess: retry,
-            });
-          }}
-        />}</ErrorBoundary>,
+    content: <ErrorBoundary>{initialTab === 'postgresql-continuity' ?
+      <PostgresqlContinuity post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'firebird-registration' ?
+        <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
+          post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
+            .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
+          onChanged={() => {
+            const tree = pgAdmin.Browser.tree;
+            const connector = tree.parent(itemNodeData);
+            const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
+            node?.callbacks?.refresh?.call(node, null, connector);
+          }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
+          (['mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : nodeData.cde_profile_id === 'sqlite-native' ? 'sqlite' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
+            targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
+            <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
+              targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
+            closeModal={onClose}
+            endpointUrl={endpointUrl}
+            initialTab={initialTab}
+            initialContext={initialContext}
+            onTargetCatalogChanged={() => {
+              nodeObj.callbacks.refresh.call(nodeObj, null, itemNodeData);
+            }}
+            onRecreateEmpty={(databasePath) => {
+              showProviderWorkspace(
+                gettext('Create empty Firebird database'), nodeObj, nodeData,
+                itemNodeData, 'connections', {
+                  database_mode: 'create', recreate_empty_path: databasePath,
+                }
+              );
+              onClose();
+            }}
+            onOpenSearchResult={(targetId, resource) => showProviderWorkspace(
+              resource.display_name, nodeObj, nodeData, itemNodeData, 'object', {
+                database_target_id: targetId, resource_id: resource.resource_id,
+                resource_kind: resource.resource_kind, operation_id: 'inspect',
+              })}
+            onEndpointRemoved={onEndpointRemoved}
+            onEndpointProfileSaved={(result) => invalidateProviderEndpointProfile(
+              pgAdmin.Browser.tree, itemNodeData, result
+            )}
+            onCredentialRequired={(retry)=>{
+              nodeObj.callbacks.verify_cde_endpoint.call(nodeObj, {
+                item: itemNodeData,
+                databaseTargetId,
+                onSuccess: retry,
+              });
+            }}
+          />}</ErrorBoundary>,
   };
   if (initialTab === 'studio') {
     activateSQLConnection({...connection, content: panel.content});

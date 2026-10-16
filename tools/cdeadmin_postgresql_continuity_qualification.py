@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""Owned PostgreSQL 18.3 HTTP backup chain and independent recovery proof.
+
+Requires Docker and application-host PostgreSQL 18 utilities. Writes only a
+fresh external evidence directory; never attaches to a preexisting server.
+History and ScratchBird qualification are intentionally excluded.
+"""
+import argparse
+import builtins
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import shutil
+import subprocess
+import sys
+import time
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path[:0]=[str(ROOT/'web'),str(ROOT/'tools')]
+
+
+def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
+    from postgresql_qualification_support import server as owned_server
+    import psycopg
+    output=Path(output).resolve()
+    if output==ROOT or ROOT in output.parents:raise ValueError('Evidence must be outside the source checkout')
+    output.mkdir(parents=True,exist_ok=False)
+    proof={'complete':False,'checks':[],'history_testing':'not run','source_sha256':{}}
+    for directory in ('web/pgadmin/cdeadmin/providers/postgresql','web/pgadmin/cdeadmin/workspace','web/pgadmin/cdeadmin/sdk'):
+        for path in (ROOT/directory).glob('*.py'):
+            proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    builtins.SERVER_MODE=None
+    import config
+    config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
+    config.MASTER_PASSWORD_REQUIRED=False;config.USE_OS_SECRET_STORAGE=False
+    config.DATA_DIR=str(output/'app');config.SQLITE_PATH=str(output/'app/application.db')
+    config.SESSION_DB_PATH=str(output/'app/sessions');config.STORAGE_DIR=str(output/'app/storage')
+    config.LOG_FILE=str(output/'app/application.log');config.AZURE_CREDENTIAL_CACHE_DIR=str(output/'app/azure')
+    config.CDEADMIN_OPERATION_STORE_PATH=str(output/'app/operations.json')
+    config.CDEADMIN_POSTGRESQL_CONTINUITY_ROOT=str(output/'artifacts')
+    config.CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH=str(binary_path)
+    from pgadmin import create_app
+    from pgadmin.model import db,User,ServerGroup,Server
+    from flask import url_for
+    from pgadmin.cdeadmin.workspace import service_for_app
+    app=create_app('ScratchRobin-native-continuity-qualification');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY=''
+    app.run_before_app_start()
+    client=app.test_client();jobs=None
+    restored_name='scratchrobin-continuity-restore-'+secrets.token_hex(8)
+    restored_started=False;restored_stopped=False
+    restored=output/'restored-clone'
+    try:
+        with owned_server(output/'fixture',server_options=('-c','summarize_wal=on')) as (route,password,fixture):
+            with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
+                                 dbname=route['database'],autocommit=True) as native:
+                hba=native.execute('SHOW hba_file').fetchone()[0]
+                subprocess.run(['docker','exec','--user','postgres','-i',fixture['owned_container_name'],'sh','-c','cat >> "$1"','fixture',hba],
+                    input=b'\nhost replication postgres all scram-sha-256\n',check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
+                native.execute('SELECT pg_reload_conf()')
+                subprocess.run(['docker','exec','--user','postgres',fixture['owned_container_name'],'mkdir','/var/lib/postgresql/sr_continuity_space'],check=True,timeout=15)
+                native.execute("CREATE TABLESPACE sr_continuity_space LOCATION '/var/lib/postgresql/sr_continuity_space'")
+                native.execute('CREATE TABLE sr_continuity_data (id bigint PRIMARY KEY,body text,payload bytea) TABLESPACE sr_continuity_space')
+                native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740993,'Unicode 😀',decode('0080ff','hex'))")
+                with app.test_request_context('/'):
+                    user=User.query.first()
+                    group=ServerGroup.query.filter_by(user_id=user.id).order_by(ServerGroup.id).first()
+                    assert group is not None
+                    app.blueprints['NODE-engine_type'].connector_visibility['postgresql'].set(True,user_id=user.id)
+                    registered=Server(user_id=user.id,servergroup_id=group.id,name='Owned PostgreSQL continuity',
+                        host=route['host'],port=route['port'],username=route['user'],maintenance_db=route['database'],
+                        connection_params={'sslmode':'disable'},save_password=0)
+                    db.session.add(registered);db.session.commit()
+                    uid,sid,gid,endpoint=user.id,registered.id,group.id,registered.endpoint_profile.id
+                    connect_url=url_for('NODE-server.connect_id',gid=gid,sid=sid)
+                    workspace_url=url_for('NODE-server.cde_workspace_id',gid=gid,sid=sid)
+                with client.session_transaction() as session:session['_user_id']=str(uid);session['_fresh']=True
+                connected=client.post(connect_url,json={'password':password}).get_json()
+                if not connected.get('success'):
+                    (output/'connect-failure.json').write_text(json.dumps(connected,indent=2).replace(password,'<redacted>')+'\n')
+                    raise RuntimeError('Owned application connection failed')
+                def http(operation,request):
+                    response=client.post(workspace_url,json={'action':'postgresql_continuity_'+operation,'request':request})
+                    value=response.get_json()
+                    if response.status_code!=200 or not value.get('success'):
+                        (output/'http-failure.json').write_text(json.dumps(value,indent=2)+'\n')
+                        raise RuntimeError('Native continuity HTTP '+operation+' failed')
+                    return value['data']
+                def submit(operation,options=None,**inputs):
+                    review=http('review',{'operation':operation,'options':options or {},**inputs})
+                    assert review['source']['server_version']==180003
+                    request={'job_id':review['job_id'],'review_digest':review['review_digest'],'confirmed':True}
+                    result=http('start',request)
+                    # A duplicate HTTP start must observe the same durable job.
+                    repeated=http('start',request);assert repeated['job_id']==result['job_id']
+                    deadline=time.monotonic()+180
+                    while result['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}:
+                        if time.monotonic()>deadline:http('cancel',{'job_id':result['job_id']});raise TimeoutError('Native backup job deadline')
+                        time.sleep(.1);result=http('status',{'job_id':result['job_id']})
+                    if result['state']!='verified':
+                        (output/(operation+'-failure.json')).write_text(json.dumps(result,indent=2)+'\n')
+                        raise RuntimeError(operation+' returned '+result['state'])
+                    print(operation+' verified through application HTTP',flush=True)
+                    return result
+                full=submit('full_backup',{'timeout_seconds':120})
+                proof['checks'].append('authenticated-http-full-physical-backup-relocated-tablespaces-native-files-and-wal-verification')
+                native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740994,'incremental change',decode('aabb','hex'))")
+                native.execute('SELECT pg_switch_wal()')
+                incremental=submit('incremental_backup',{'timeout_seconds':120},base_job_id=full['job_id'])
+                proof['checks'].append('authenticated-http-native-incremental-backup-against-selected-manifest')
+                combined=submit('combine',{'timeout_seconds':120},chain=[full['job_id'],incremental['job_id']])
+                proof['checks'].append('native-input-verification-chain-reconstruction-and-output-verification')
+                tar=submit('full_backup',{'format':'tar','compression':'client-gzip','timeout_seconds':120})
+                assert tar['verification_scope']['files'] and not tar['verification_scope']['wal']
+                proof['checks'].append('compressed-tar-native-format-verification-and-explicit-wal-exclusion')
+                jobs=service_for_app(app).postgresql_continuity_jobs
+                combined_record=jobs.load(combined['job_id'],uid,endpoint)
+                combined_path=jobs.directory(combined_record)
+                shutil.copytree(combined_path,restored,symlinks=True)
+                for link in (restored/'backup/pg_tblspc').iterdir():
+                    assert link.is_symlink()
+                    oid=link.name;link.unlink();link.symlink_to('/owned/tablespaces/'+oid)
+                # The drill modifies only the independent clone, including its
+                # native tablespace links and ownership. Inputs remain immutable.
+                subprocess.run(['docker','run','--rm','--user','0:0','--entrypoint','find','--mount',
+                    'type=bind,source='+str(restored)+',target=/owned','postgres:18.3','/owned','!','-type','l','-exec','chown','999:999','{}','+'],
+                    check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+                subprocess.run(['docker','run','--rm','-d','--user','postgres','--name',restored_name,'--publish','127.0.0.1::5432',
+                    '--env','PGDATA=/owned/backup','--mount','type=bind,source='+str(restored)+',target=/owned','postgres:18.3'],
+                    check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+                restored_started=True
+                restored_port=int(subprocess.check_output(['docker','port',restored_name,'5432/tcp'],text=True,timeout=15).strip().rsplit(':',1)[1])
+                deadline=time.monotonic()+60
+                while True:
+                    try:
+                        recovered=psycopg.connect(host='127.0.0.1',port=restored_port,user=route['user'],password=password,
+                            dbname=route['database'],autocommit=True,connect_timeout=2);break
+                    except psycopg.OperationalError:
+                        if time.monotonic()>deadline:raise
+                        time.sleep(.2)
+                with recovered:
+                    expected=native.execute("SELECT id::text,body,encode(payload,'hex') FROM sr_continuity_data ORDER BY id").fetchall()
+                    actual=recovered.execute("SELECT id::text,body,encode(payload,'hex') FROM sr_continuity_data ORDER BY id").fetchall()
+                    assert actual==expected and len(actual)==2
+                    assert recovered.info.server_version==180003
+                    assert recovered.execute('SELECT system_identifier::text FROM pg_control_system()').fetchone()[0]==combined['source']['system_identifier']
+                proof['checks'].append('independent-postgresql18.3-recovery-of-reconstructed-chain-exact-int64-unicode-binary-and-tablespace-data')
+                assert combined['recovery_drill_complete'] is False  # Evidence is separate from the product job.
+            # Release the source fixture before exercising offline verification.
+        assert fixture['owned_server_stopped']
+        verified=submit('verify',base_job_id=full['job_id'])
+        assert verified['verification_scope']['wal']
+        proof['checks'].append('offline-authenticated-http-native-artifact-verification-after-source-server-stopped')
+        page=http('list',{'offset':0,'limit':2});assert page['total']==5 and len(page['jobs'])==2 and page['more']
+        for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
+        if browser_binary:
+            proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary)
+            proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
+        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,tar,verified)],
+                     source=combined['source'],native_artifact_password_absent_from_receipts=True)
+    finally:
+        if jobs is not None:jobs.close()
+        if restored_started:
+            with (output/'restore-server.log').open('wb') as stream:
+                subprocess.run(['docker','logs',restored_name],stdout=stream,stderr=subprocess.STDOUT,timeout=15)
+            stopped=subprocess.run(['docker','stop',restored_name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=45)
+            restored_stopped=stopped.returncode==0
+        if restored.exists():
+            cleanup=subprocess.run(['docker','run','--rm','--user','0:0','--entrypoint','find','--mount',
+                'type=bind,source='+str(restored)+',target=/owned','postgres:18.3','/owned','!','-type','l','-exec','chown',str(os.getuid())+':'+str(os.getgid()),'{}','+'],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+            proof['owned_clone_ownership_restored']=cleanup.returncode==0
+            if cleanup.returncode!=0:proof['complete']=False
+        proof['owned_restored_server_stopped']=restored_stopped
+        (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
+    assert restored_stopped
+    assert proof['complete']
+    return proof
+
+
+def qualify_browser(app, output, job_id, browser_binary, driver_binary):
+    """Exercise the actual disconnected-server callback and compiled panel."""
+    import threading
+    from werkzeug.serving import make_server
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from cdeadmin_ui_evidence import ensure_data_explorer,expand,wait_for_tree_item
+    http=make_server('127.0.0.1',0,app,threaded=True)
+    thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+    driver=None
+    try:
+        options=webdriver.ChromeOptions();options.binary_location=browser_binary
+        options.add_argument('--headless=new');options.add_argument('--no-sandbox');options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--window-size=1600,1000')
+        options.add_argument('--user-data-dir='+str(output/'browser-profile'))
+        options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
+        driver=webdriver.Chrome(options=options,service=Service(driver_binary) if driver_binary else Service())
+        driver.get('http://127.0.0.1:'+str(http.server_port)+'/browser/')
+        wait=WebDriverWait(driver,60)
+        ensure_data_explorer(wait)
+        expand(wait,'Connectors')
+        wait_for_tree_item(wait,'PostgreSQL')
+        expand(wait,'PostgreSQL')
+        element=wait_for_tree_item(wait,'localhost',ancestors=('Connectors','PostgreSQL'))
+        for control in driver.find_elements(By.CSS_SELECTOR,'[role="dialog"] button'):
+            if control.is_displayed() and control.text.strip()=='Cancel':control.click();break
+        # Scope console observations to this workspace; the normal shell may
+        # previously have offered an interactive connection password prompt.
+        driver.get_log('browser')
+        driver.execute_script("""
+          const tree=window.pgAdmin.Browser.tree;
+          const item=tree.itemFrom(arguments[0].closest('.file-entry'));
+          const data=tree.itemData(item);
+          if(data._type!=='server' || data.connected) throw Error('Expected the owned disconnected server');
+          const node=window.pgAdmin.Browser.Nodes.server;
+          node.callbacks.open_postgresql_continuity.call(node,{item});
+        """,element)
+        def button(name):
+            return wait.until(lambda browser:next((element for element in browser.find_elements(By.TAG_NAME,'button')
+                if element.is_displayed() and element.is_enabled() and element.text.strip()==name),None))
+        def click(name):
+            from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException
+            def attempt(browser):
+                try:
+                    # The shell's pending connection prompt can arrive after
+                    # the disconnected workspace has mounted. Dismiss it using
+                    # its real control, then click the requested workspace UI.
+                    password=browser.find_elements(By.CSS_SELECTOR,'input[aria-label="Password"]')
+                    if any(item.is_displayed() for item in password):
+                        cancel=next((item for item in browser.find_elements(By.TAG_NAME,'button')
+                            if item.is_displayed() and item.text.strip()=='Cancel'),None)
+                        if cancel is not None:cancel.click()
+                        return False
+                    control=next((item for item in browser.find_elements(By.TAG_NAME,'button')
+                        if item.is_displayed() and item.is_enabled() and item.text.strip()==name),None)
+                    if control is None:return False
+                    control.click();return True
+                except (ElementClickInterceptedException,StaleElementReferenceException):return False
+            wait.until(attempt)
+        click('Load backup jobs')
+        wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Native physical backup jobs"]'))
+        wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+job_id+'"]')).click()
+        wait.until(lambda browser:any('Recovery drill: not completed' in element.text for element in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        assert not driver.find_elements(By.CSS_SELECTOR,'[role="alert"] .MuiAlert-icon svg[data-testid="ErrorOutlineIcon"]')
+        driver.save_screenshot(str(output/'offline-continuity.png'))
+        messages=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE']
+        expected=lambda item:'/browser/server/connect/' in item.get('message','') and '428' in item.get('message','')
+        errors=[item for item in messages if not expected(item)]
+        (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n')
+        assert not errors
+        return {'complete':True,'source_server_stopped':True,'console_errors':0,
+                'console_scope':'offline-continuity-workspace-after-shell-startup',
+                'expected_native_password_admission_errors':sum(map(expected,messages)),'screenshot':'offline-continuity.png'}
+    finally:
+        if driver is not None:driver.quit()
+        http.shutdown();http.server_close();thread.join(timeout=5)
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--evidence',type=Path,required=True)
+    parser.add_argument('--binary-path',type=Path,default=Path('/usr/lib/postgresql/18/bin'))
+    parser.add_argument('--browser-binary')
+    parser.add_argument('--driver-binary')
+    args=parser.parse_args()
+    qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary)

@@ -141,6 +141,7 @@ class ProviderToolRunner:
         secret_argument_position=None, redact_values=(),
         secret_environment=None,
         progress=None, cancel_signal=None,
+        secret_environment_name=None,
     ):
         if not isinstance(grant, ProviderToolGrant):
             raise ProviderToolError('provider tool grant is required')
@@ -181,6 +182,11 @@ class ProviderToolRunner:
             if set(secret_environment).intersection(environment):
                 raise ProviderToolError('Secret environment cannot replace native process settings')
             environment.update(secret_environment)
+        if secret_environment_name is not None and (
+                not isinstance(secret_environment_name,str) or
+                secret_environment_name not in grant.secret_environment_names or
+                secret_environment_name in environment or secret_config is None):
+            raise ProviderToolError('provider tool secret file environment is not granted')
         input_stream = None
         if input_path is not None:
             if input_bytes:
@@ -223,7 +229,11 @@ class ProviderToolRunner:
                     stream.write(bytes(secret_config))
                     stream.flush()
                     os.fsync(stream.fileno())
-                if isinstance(secret_argument, str):
+                if secret_environment_name is not None:
+                    environment[secret_environment_name] = str(config_path)
+                if secret_argument is None and secret_environment_name is not None:
+                    secret_arguments = []
+                elif isinstance(secret_argument, str):
                     secret_arguments = [secret_argument]
                 elif (
                     isinstance(secret_argument, (list, tuple)) and
@@ -237,7 +247,7 @@ class ProviderToolRunner:
                     raise ProviderToolError(
                         'provider tool secret argument is invalid'
                     )
-                if sum(
+                if secret_arguments and sum(
                     item.count('{path}') for item in secret_arguments
                 ) != 1:
                     raise ProviderToolError(

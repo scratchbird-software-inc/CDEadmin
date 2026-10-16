@@ -39,6 +39,17 @@ from pgadmin.cdeadmin.sdk.tooling import (  # noqa: E402
 
 class ProviderToolRunnerTests(unittest.TestCase):
 
+    def test_native_service_file_is_granted_by_environment_and_never_added_to_arguments(self):
+        with tempfile.TemporaryDirectory(prefix='sr-tool-service-file-') as workspace:
+            result = ProviderToolRunner({'python':sys.executable}).run(
+                ProviderToolGrant('python',workspace,'127.0.0.1',5432,secret_environment_names=('PGSERVICEFILE',)),
+                ['-c','import os,sys,pathlib;assert len(sys.argv)==1;print(pathlib.Path(os.environ["PGSERVICEFILE"]).read_text(),end="")'],
+                secret_config=b'private-service-canary',secret_argument=None,
+                secret_environment_name='PGSERVICEFILE',redact_values=('private-service-canary',))
+            self.assertEqual(0,result['return_code'])
+            self.assertEqual('[redacted]',result['stdout'])
+            self.assertEqual([],list(Path(workspace).iterdir()))
+
     def test_live_process_environment_is_isolated_and_host_is_explicit(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory(prefix='sr-tool-environment-') as workspace:

@@ -347,6 +347,11 @@ SQLITE_PATH = env('SQLITE_PATH') or \
 CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
     os.path.join(DATA_DIR, 'cdeadmin-operations.json')
 
+# Application-host PostgreSQL physical backup artifacts and trusted native tools.
+# These paths are configured by the application operator, never by a job request.
+CDEADMIN_POSTGRESQL_CONTINUITY_ROOT = env('CDEADMIN_POSTGRESQL_CONTINUITY_ROOT') or ''
+CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH = env('CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH') or ''
+
 # SQLITE_TIMEOUT will define how long to wait before throwing the error -
 # OperationError due to database lock. On slower system, you may need to change
 # this to some higher value.

@@ -2944,6 +2944,12 @@ class ServerNode(PGChildNodeView):
                     payload = service.postgresql_data_capture(server, data.get('request'))
                 elif action == 'postgresql_server_catalog':
                     payload = service.postgresql_server_catalog(server, data.get('request'))
+                elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
+                                'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel'}:
+                    try:
+                        payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
                     payload = service.postgresql_schema_application(server, action, data.get('request'))
                 elif action == 'postgresql_relational_review':

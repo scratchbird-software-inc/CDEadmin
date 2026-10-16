@@ -110,14 +110,23 @@ def _windows_security():
 
 def private_file(path):
     """Use mode 0600 on POSIX or a protected current-user-only Windows DACL."""
+    _private_path(path, directory=False)
+
+
+def private_directory(path):
+    """Protect native artifacts, including newly created children on Windows."""
+    _private_path(path, directory=True)
+
+
+def _private_path(path, *, directory):
     if os.name != 'nt':
-        os.chmod(path, 0o600)
+        os.chmod(path, 0o700 if directory else 0o600)
         return
     import ctypes
     api, kernel, sid = _windows_security()
     descriptor = ctypes.c_void_p()
     if not api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            f'D:P(A;;FA;;;{sid})', 1, ctypes.byref(descriptor), None):
+            f'D:P(A;{"OICI" if directory else ""};FA;;;{sid})', 1, ctypes.byref(descriptor), None):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
         if not api.SetFileSecurityW(os.fspath(path), 4 | 0x80000000, descriptor):

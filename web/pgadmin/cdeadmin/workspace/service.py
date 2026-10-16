@@ -1581,6 +1581,14 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_continuity(self, server, operation, request):
+        from .postgresql_continuity_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return action(self, server, operation, request)
+        except ContinuityError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_server_catalog(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
         from ..providers.postgresql.server_catalog import inventory, bundle, export_inventory

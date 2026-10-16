@@ -32,6 +32,7 @@
   "permissions": [
     {"permission_id": "network", "granted": true, "scope": ["endpoint"]},
     {"permission_id": "secret_read", "granted": true, "scope": ["endpoint"]},
+    {"permission_id": "backup_admin", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "data_read", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "data_write", "granted": true, "scope": ["endpoint", "resource"]},
     {"permission_id": "administer", "granted": true, "scope": ["endpoint", "resource"]},

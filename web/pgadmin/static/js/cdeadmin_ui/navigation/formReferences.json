@@ -5701,6 +5701,10 @@
     "sqlite-test-data": {
       "reference": "SR-F-001422",
       "title": "SQLite native test-data recipe and SQL generation"
+    },
+    "postgresql-continuity": {
+      "reference": "SR-F-010009",
+      "title": "PostgreSQL physical backup, verification and chain reconstruction"
     }
   }
 }

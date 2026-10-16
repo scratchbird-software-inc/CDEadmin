@@ -468,3 +468,51 @@ Native recovery requirements extend beyond SQL dumps. See the
 <https://www.postgresql.org/docs/18/backup.html>`_. Selected local release-source
 packets provide catalog/grammar/tool inventories; their acquisition status is
 separate from ScratchRobin native product qualification.
+
+PostgreSQL physical continuity increment (2026-10-16)
+==================================================
+
+The server menu and Operations workspace now expose reviewed native physical
+full/incremental backups, backup verification and ordered chain reconstruction.
+The application supervises PostgreSQL 18 utilities on the **application host**;
+this does not imply that the application host is the database server. Configure
+``CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH`` (or the fixed/default ``pg-18``
+binary directory) and ``CDEADMIN_POSTGRESQL_CONTINUITY_ROOT`` for that host.
+
+Each owner/registration has durable, paged job receipts and protected artifacts.
+Review records native replication cluster identity, timeline, authenticated
+principal, tablespaces, WAL summarization, tool versions/hashes and exact options.
+Start rechecks the target and registration before dispatch. Repeated starts
+observe the same job. Private connection material is sealed for the worker and
+released afterward; credentials are excluded from receipts and command arguments.
+Native recovery-configuration output, when explicitly selected, can contain
+credentials inside the protected backup, as PostgreSQL's utility specifies.
+
+Plain backups relocate every observed tablespace into the managed artifact.
+Reconstruction verifies each input and relocates the output tablespaces again.
+Native PostgreSQL 18 verification supports plain and compressed TAR files; TAR
+verification reports that WAL parsing was excluded. A native tool exit, verified
+files and a successful independent recovery drill have separate meanings.
+Cancellation retains its native process observation. A lost worker is reported
+as unknown and is never automatically restarted. Verification of uncertain
+artifacts requires observed writer termination. Receipt inspection and artifact
+verification remain available when the source server is offline.
+
+``tools/cdeadmin_postgresql_continuity_qualification.py`` exercises the
+application's authenticated HTTP routes against a uniquely owned PostgreSQL
+18.3 fixture. It independently restores the reconstructed chain, including
+relocated tablespaces and exact bigint, Unicode and binary data, and verifies an
+artifact after stopping the source server. Its tools' versions are recorded
+separately from the exact server version. This Docker fixture is development
+evidence; it is not native Windows/macOS qualification.
+
+PRODUCT-GAP-11 remains open for application recovery drills, production restore,
+PITR/WAL archive and retention workflows, standby bootstrap and registered remote
+execution hosts, plus corresponding MySQL/MariaDB physical continuity work.
+TAR input materialization for reconstruction, very large manifests and long
+running backup limits also remain open. Standby recovery configuration using
+non-environment libpq secrets (such as an encrypted TLS private-key password)
+is refused until persistent standby credential provisioning can replace the
+temporary service alias. These scoped workflows do not close the
+full native utility option denominator or the complete six-engine matrix.
+History testing remains explicitly deferred by the owner.

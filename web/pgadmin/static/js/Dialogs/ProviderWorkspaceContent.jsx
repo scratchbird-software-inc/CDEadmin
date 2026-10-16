@@ -39,6 +39,7 @@ import DuckDBAttachment from './DuckDBAttachment';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import PostgresqlServerCatalog from './PostgresqlServerCatalog';
+import PostgresqlContinuity from './PostgresqlContinuity';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -8235,14 +8236,15 @@ export default function ProviderWorkspaceContent({
           focused={Boolean(initialContext.operation_id &&
             initialContext.resource_kind)} />}
       {workspace && tab === 'operations' &&
-        <OperationalWorkspace workspace={workspace.operational_workspace}
+        <><OperationalWorkspace workspace={workspace.operational_workspace}
           endpoint={workspace.endpoint}
           catalog={workspace.visual_admin}
           resources={resourcePage?.items || []}
           resourceGeneration={resourcePage?.generation}
           onRefresh={refreshResources} refreshing={loadingMore}
           onMutationApplied={reloadAfterAdministration}
-          post={post} setError={setError} />}
+          post={post} setError={setError} />
+        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} />}</>}
       {workspace && tab === 'semantic' &&
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}
