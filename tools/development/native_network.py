@@ -65,6 +65,22 @@ def execute(engine, specification, evidence):
                              password=password, path_style=specification.get('path_style', 'posix'))
     else:
         receipt = module.run(route, evidence, password=password)
+    if engine == 'mysql':
+        # Collect product failures even when the driver proof failed. Each
+        # consumer gate owns and removes its uniquely named native objects.
+        for name in ('completion', 'extended'):
+            try:
+                product = importlib.import_module('tools.cdeadmin_mysql_' + name + '_gate')
+                proof = product.qualify(route, evidence / name, password=password)
+                if proof['complete']:
+                    receipt.setdefault('checks', []).append(name)
+                else:
+                    receipt.setdefault('failures', []).append({'scope': name, 'type': 'NativeQualificationFailed'})
+                    receipt['complete'] = False
+            except Exception as error:
+                receipt.setdefault('failures', []).append({'scope': name, 'type': type(error).__name__})
+                receipt['complete'] = False
+        (evidence / 'summary.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps({'engine': engine, 'complete': receipt['complete'],
                       'checks': receipt.get('checks', []),
                       'failures': receipt.get('failures', [])}, indent=2))

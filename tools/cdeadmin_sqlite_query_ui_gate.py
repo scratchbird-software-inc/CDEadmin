@@ -271,7 +271,8 @@ def run(options):
             driver, password, timeout=5 if password else 1
         )
         wait.until(lambda value: _query_editor(value))
-        if visible_named_control(driver, 'Explain / query plan') is None:
+        plan_label = 'MySQL JSON query plan' if options.engine == 'MySQL' else 'Explain / query plan'
+        if visible_named_control(driver, plan_label) is None:
             raise RuntimeError(
                 f'{options.engine} provider did not contribute its native '
                 'plan action'
@@ -342,7 +343,7 @@ def run(options):
         _capture(driver, options, 'result-compared', screenshots, controls)
 
         _set_query(driver, wait, small_query)
-        _button(wait, 'Explain / query plan').click()
+        _button(wait, plan_label).click()
         wait.until(lambda value: any(
             item.is_displayed() and
             item.get_attribute('aria-label') == 'Query plan results' and
@@ -400,8 +401,17 @@ def run(options):
             _capture(driver, options, 'large-result-final-page', screenshots,
                      controls)
 
-        transaction_state = wait.until(lambda value: _enabled_control(
-            value, 'Provider transaction state'))
+        def completed_transaction_control(current):
+            state = _enabled_control(current, 'Provider transaction state')
+            if state is not None:
+                return state
+            # Consuming a cached final page is distinct from observing the
+            # native stream's terminal response. Explicitly request that reply.
+            pending = _enabled_control(current, 'Poll')
+            if pending is not None:
+                pending.click()
+            return False
+        transaction_state = wait.until(completed_transaction_control)
         transaction_state.click()
         wait.until(lambda value: any(
             item.is_displayed() and 'driver_observation_only' in item.text

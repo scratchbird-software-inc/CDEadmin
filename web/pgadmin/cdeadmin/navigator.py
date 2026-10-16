@@ -394,7 +394,7 @@ def _prepared_resources(resources, state):
     prepared = []
     for item in values:
         path = item['display_path']
-        if prefix:
+        if prefix and resource_native(item['_source']).get('navigator_scope') != 'server':
             if path[:len(prefix)] != prefix:
                 owner = next((kind for database_path, kind in
                               database_prefixes if tuple(

@@ -25,6 +25,8 @@ def qualify(options, output):
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement = MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         cursor.execute(statement['source'], statement['parameters'])
+        from tools.mysql_task_evidence import record
+        record(proof, request)
     try:
         cursor.execute('SELECT VERSION()')
         proof['native_version'] = cursor.fetchone()[0]

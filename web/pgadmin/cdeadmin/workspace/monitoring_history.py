@@ -38,7 +38,7 @@ _DENIED = ('password', 'secret', 'token', 'credential', 'sql_text', 'query_text'
            'context_variable', 'server_log', 'connection_string', 'dsn')
 
 
-def sanitized(sample):
+def sanitized(sample, engine=None):
     def clean(value, depth=0):
         if depth > 24:
             raise ValueError('History sample exceeds nesting limit')
@@ -51,6 +51,12 @@ def sanitized(sample):
             return value
         raise ValueError('Unsupported monitoring value')
     result = clean({key: value for key, value in sample.items() if key in _FIELDS})
+    if engine == 'mysql':
+        # The account and collector connection are deliberately not archived.
+        result['identity'] = {key: sample.get('identity', {}).get(key)
+                              for key in ('server_uuid', 'database_name', 'version')}
+        result['transaction_completed'] = sample.get('transaction_completed') is True
+        result['elapsed_ms'] = sample.get('elapsed_ms')
     if len(encoded(result).encode()) > 2 * 1024 * 1024:
         raise ValueError('History sample exceeds size limit')
     return result
@@ -63,6 +69,15 @@ def measures(sample):
         if isinstance(value, dict):
             for key, item in value.items():
                 walk(item, path + [key])
+        elif isinstance(value, list):
+            for row in value:
+                if not isinstance(row, dict):
+                    continue
+                # Stable native row identity, never a row's transient position.
+                key = next((row[name] for name in ('variable_name', 'engine', 'processlist_id', 'channel_name')
+                            if isinstance(row.get(name), str)), None)
+                if key is not None:
+                    walk(row, path + [encoded(key)])
         elif isinstance(value, (str, int)) and not isinstance(value, bool):
             try:
                 number = Decimal(value)
@@ -140,7 +155,7 @@ class MonitoringHistory:
                                       policy.endpoint_id, policy.target_id]).encode()).hexdigest()
 
     def write(self, policy, engine, revision, route_revision, sample):
-        sample = sanitized(sample)
+        sample = sanitized(sample, engine)
         observed = timestamp(sample['ended_at'])
         now = int(self.clock() * 1000000)
         if observed > now + 300000000:
@@ -154,6 +169,11 @@ class MonitoringHistory:
                               if key not in ('age_seconds', 'observed_at')}
                         for name, group in sample.get('groups', {}).items()
                         if name in set(METADATA) | {'page_inventory', 'crypt_identity'}}
+        elif engine == 'mysql':
+            metadata = {name: {key: value for key, value in group.items()
+                              if key not in {'observed_at', 'observation_age_seconds'}}
+                        for name, group in sample.get('groups', {}).items()
+                        if name in {'settings', 'storage'}}
         provenance = {'metadata_revision': hashlib.sha256(encoded(metadata).encode()).hexdigest(),
                       'collection_interval_seconds': policy.interval_seconds,
                       'metadata_interval_seconds': policy.metadata_interval_seconds,

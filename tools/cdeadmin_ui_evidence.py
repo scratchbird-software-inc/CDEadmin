@@ -668,6 +668,15 @@ def invoke_context_action(
 
 def _control_evidence(driver):
     """Inventory rendered controls without recording entered values."""
+    def observe(current):
+        try:
+            return _mounted_control_evidence(current)
+        except StaleElementReferenceException:
+            return False
+    return WebDriverWait(driver, 10).until(observe)
+
+
+def _mounted_control_evidence(driver):
     controls = []
     selectors = (
         'button, input, textarea, [role="button"], [role="combobox"], '

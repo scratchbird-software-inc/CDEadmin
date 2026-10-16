@@ -34,6 +34,8 @@ def qualify(options, output):
         preview = MYSQL_ADMINISTRATION.plan(request)['command_preview']['statements'][0]
         if compiled['parameters']: assert preview['parameters_redacted'] and '<redacted>' in preview['source']
         cursor.execute(compiled['source'], compiled['parameters'] or None)
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         proof['statements'].setdefault(operation, compiled['source'])
     try:
         cursor.execute('SELECT VERSION()')

@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import mysql.connector
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 if __package__:
@@ -54,6 +55,8 @@ def arguments(argv=None):
         '--font-scale', type=int, choices=(100, 150, 200, 300), default=100,
     )
     parser.add_argument('--timeout', type=int, default=90)
+    parser.add_argument('--functional-only', action='store_true',
+                        help='Qualify native lifecycle effects; human form validation is separate')
     return parser.parse_args(argv)
 
 
@@ -121,11 +124,13 @@ def _complete_cases(driver, wait, options):
     _execute(options, f'DROP DATABASE IF EXISTS `{CREATED_DATABASE}`')
     evidence = []
 
-    base._open_form(driver, wait, 'connect', options.database)
-    base._submit_target_form(driver, wait, 'connect', {
-        'Default character set': 'utf8mb4',
-        'Default collation': 'utf8mb4_0900_ai_ci',
-    })
+    action = base._action(driver, 'connect', options.database)
+    selected = driver.find_element(By.CSS_SELECTOR, '.file-entry[aria-selected="true"]')
+    base.invoke_context_action(wait, driver, selected,
+        [base.MENU_GROUPS[action['menu_group']], action['label']],
+        endpoint_password=base.ENDPOINT_PASSWORD, endpoint_prompt_timeout=5)
+    wait.until(lambda current: 'Connected. Select a database or open SQL to use this connection.'
+               in current.find_element(By.TAG_NAME, 'body').text)
     base._wait_for_native_state(
         wait,
         lambda: bool(_target(options, options.database) and
@@ -137,7 +142,6 @@ def _complete_cases(driver, wait, options):
         'preview_state': 'not_applicable',
     })
     base._capture_completed(driver, options, 'connect', evidence[-1])
-    base._close(driver, wait)
 
     base._open_form(driver, wait, 'edit', options.database)
     base._submit_target_form(driver, wait, 'edit', {
@@ -272,7 +276,9 @@ def run(options):
             raise RuntimeError(forms['__error__'])
         completed = _complete_cases(driver, wait, options)
         base._refresh_tree(driver, wait, options, options.database)
-        for mode in base.RENDER_ORDER:
+        for mode in (() if options.functional_only else base.RENDER_ORDER):
+            if mode == 'connect':
+                continue  # Connection is a direct native command, not a form.
             database_label = (
                 options.database if mode not in {'define', 'create'} else None
             )
@@ -326,8 +332,9 @@ def run(options):
         ),
         'failures': failures, 'credential_values_exported': False,
         'provider_values_recorded': False,
+        'human_form_validation': 'excluded' if options.functional_only else 'automated-contract-observations',
         'complete': (
-            {item['mode'] for item in rendered} == expected and
+            (options.functional_only or {item['mode'] for item in rendered} == expected - {'connect'}) and
             {item['mode'] for item in completed} == expected and
             not failures
         ),

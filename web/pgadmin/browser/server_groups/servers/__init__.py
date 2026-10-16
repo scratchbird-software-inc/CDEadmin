@@ -2650,7 +2650,7 @@ class ServerNode(PGChildNodeView):
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_design_read', 'mariadb_design_save',
-                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_test_data', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
+                        'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
                         'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
@@ -2834,6 +2834,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.mariadb_server_catalog(server, data.get('request'))
                 elif action == 'mysql_server_catalog':
                     payload = service.mysql_server_catalog(server, data.get('request'))
+                elif action == 'mysql_server_plan':
+                    payload = service.mysql_server_plan(server, data.get('request'))
+                elif action in {'mysql_server_review', 'mysql_server_apply', 'mysql_server_receipt', 'mysql_server_receipts'}:
+                    payload = service.mysql_server_application(server, action.removeprefix('mysql_server_'), data.get('request'))
                 elif action == 'mysql_relational_review':
                     payload = service.mysql_relational_review(server, data.get('request'))
                 elif action in {'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt'}:
@@ -2842,8 +2846,15 @@ class ServerNode(PGChildNodeView):
                     payload = service.mysql_schema_plan(server, data.get('request'), validate=action == 'mysql_schema_validate')
                 elif action == 'mysql_test_data':
                     payload = service.mysql_test_data(server, data.get('request'))
+                elif action in {'mysql_recipe_read', 'mysql_recipe_save'}:
+                    payload = service.mysql_recipe_asset(server, action.removeprefix('mysql_recipe_'), data.get('request'))
                 elif action == 'mysql_data_capture':
                     payload = service.mysql_data_capture(server, data.get('request'))
+                elif action == 'mysql_data_plan':
+                    payload = service.mysql_data_plan(server, data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts'}:
+                    payload = service.mysql_data_application(server, action.removeprefix('mysql_data_'), data.get('request'))
                 elif action in {'mysql_design_read', 'mysql_design_save'}:
                     payload = service.mysql_design_asset(server, action.removeprefix('mysql_design_'), data.get('request'))
                 elif action == 'mysql_sql_export':

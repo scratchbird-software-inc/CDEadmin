@@ -22,6 +22,8 @@ def qualify(options,output):
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         cursor.execute(statement['source'])
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         if cursor.description:proof['native_results'].append({'operation':operation,'rows':cursor.fetchall()})
         proof['statements'].setdefault(kind+'.'+operation,statement['source'])
     def rows(name=address):

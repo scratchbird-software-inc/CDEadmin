@@ -47,9 +47,10 @@ def qualify(options,output):
             cursor.execute('DROP TABLE t');receipt=review(template)
             class CursorProxy:
                 def __init__(self,cursor):self.cursor=cursor
-                def execute(self,source):
-                    result=self.cursor.execute(source)
-                    if source.startswith('CREATE TABLE'):raise OSError('fixture drops successful CREATE acknowledgement')
+                def execute(self,source,*args,**kwargs):
+                    result=self.cursor.execute(source,*args,**kwargs)
+                    prefix=b'CREATE TABLE' if isinstance(source,bytes) else 'CREATE TABLE'
+                    if source.startswith(prefix):raise OSError('fixture drops successful CREATE acknowledgement')
                     return result
                 def __getattr__(self,key):return getattr(self.cursor,key)
             class ConnectionProxy:

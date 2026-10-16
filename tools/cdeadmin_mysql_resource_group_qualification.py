@@ -27,6 +27,8 @@ def qualify(connection_options, output):
         assert not errors, errors
         source = MYSQL_ADMINISTRATION.plan(request)['command_preview']['statements'][0]['source']
         cursor.execute(source)
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         proof['statements'].setdefault(operation, source)
     try:
         cursor.execute('SELECT VERSION()')

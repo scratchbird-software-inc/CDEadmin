@@ -30,7 +30,7 @@ def qualify(output):
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         result=query(index,statement['source'],statement['parameters'])
         proof['task_evidence']['visual_admin.group-replication.'+operation]={'source':statement['source'],
-            'parameter_count':len(statement['parameters']),'native_execution':'passed'}
+            'parameter_count':len(statement['parameters']),'native_execution':'passed','live_execution':'passed'}
         return result
     def until(predicate,seconds=60):
         deadline=time.monotonic()+seconds
@@ -51,6 +51,9 @@ def qualify(output):
         for index,node in enumerate(nodes):
             port=_wait_until_ready('mysql',node,300)
             connection=_root_connection('mysql',port);connection.autocommit=True;connections.append(connection)
+            version=query(index,'SELECT VERSION()')[0][0]
+            assert version.split('-')[0]=='9.7.0'
+            proof['engine_version']=version.split('-')[0]
             query(index,"INSTALL PLUGIN group_replication SONAME 'group_replication.so'")
             query(index,'SET SESSION sql_log_bin=0')
             query(index,"CREATE USER 'sr_recovery'@'%' IDENTIFIED BY %s",(password,))

@@ -59,7 +59,11 @@ MYSQL-COMP-06: Monitoring and dashboards
   registration credentials or configurable monitoring credentials. Configure
   heartbeat and sample/retention/lease policies. Refresh transaction scope for
   each sample; collection continues without an open viewer. Distinguish denied,
-  unavailable and zero metrics; retain only a bounded volatile sample window.
+  unavailable and zero metrics; retain a bounded volatile sample window and
+  opt-in persistent history in the native ScratchBird archive. Historical reads
+  require current owner/registration authorization, not an active collector or
+  browser credential grant. Preserve exact values, epochs, metadata revisions,
+  retention, rollups and ingestion gaps.
 
 MYSQL-COMP-07: Forms and routing
   Context menus must lead to engine-appropriate compact forms with stable form
@@ -75,9 +79,74 @@ MYSQL-COMP-08: Qualification
   outside the repository and clean owned disposable fixtures. Unit tests or
   old activation gates alone do not establish full support.
 
-Current-run exclusions
-----------------------
+Implementation and qualification
+--------------------------------
 
-Persistent monitoring history and its ScratchBird backend remain deferred by
-owner direction. Windows/macOS work belongs to the platform teams. Persistent
-SQL history, dashboard definitions and DDN native conversion are not deferred.
+The October 16 implementation adds native server/security/storage DDN review
+and application, typed relation-data DDN import, named durable test-data recipes
+and MySQL persistent monitoring history. These complement the existing editor,
+SQL history, database DDN and graphical design, backup/restore, maintenance,
+dashboard/collector and connection ownership workflows.
+
+Server DDN changes use explicit ``native.mysql_change`` instructions while the
+captured facts remain immutable. The server UUID, registered endpoint, exact
+native address, current section visibility and reviewed baseline are checked
+before each statement. Missing selections never request deletion. Accounts,
+role/default-role edges, global/database/table/column/routine grants, native
+plugins/components, tablespaces, resource groups, selected system variables and
+replication channels use engine-specific compilers. Authentication secrets are
+excluded; new DDN accounts are locked and authentication is administered
+separately. An unavailable account identity cannot authorize a privilege change.
+Routine privileges use effective native ``SHOW GRANTS`` observations rather
+than assuming private grant-table storage encoding identifies an account.
+
+Server reviews expire after five minutes, persist each dispatched statement's
+unknown state before I/O, retain the acknowledged prefix and stop on refusal,
+unconfirmed replies or failed rediscovery. Native server operations are not an
+atomic transaction; advisory locks coordinate ScratchRobin only. Recent receipts
+can be reopened after restart. Repeated requests never dispatch again.
+
+Data import reads the paired DDN public workspace contract and preserves native
+column order, types, character sets, spatial SRIDs and invisible columns. It
+retains explicit AUTO_INCREMENT values including zero, omits generated columns,
+and binds exact integers, decimals, dates/times, JSON, opaque text, binary,
+geometry and VECTOR data. VECTOR parameters explicitly use binary character
+semantics without converting their float32 bytes. Import owns its transaction,
+revalidates metadata while holding its metadata lock, commits explicitly and
+independently rereads primary-key postimages. Native constraints/triggers remain
+active. Nontransactional engines require an explicit acknowledgement and report
+partial effects. Unknown COMMIT replies remain unknown. Imported rows disappear
+from durable reviews before dispatch and never appear in public receipts.
+
+Named test-data recipes use immutable project-asset revisions with owner,
+endpoint and registered-database binding and optimistic version checks. Reading
+a recipe, historical SQL or a DDN document never executes SQL. Human form
+validation remains assigned to the UX team.
+
+Reproducible gates (refresh DDN first; evidence belongs outside the repository)::
+
+    python tools/cdeadmin_mysql_tasks_gate.py --output /work/mysql-tasks --ddn-work /work/ddn --mysqlsh /path/to/mysqlsh
+    python tools/cdeadmin_mysql_catalog_completeness_gate.py --output /work/mysql-catalog
+    python tools/cdeadmin_mysql_completion_gate.py --output /work/mysql-product
+    python tools/cdeadmin_mysql_extended_gate.py --output /work/mysql-extended
+    python tools/cdeadmin_monitoring_history_gate.py --config /etc/cdeadmin/history.json --engine mysql
+
+The first four commands default to uniquely owned MySQL 9.7.0 Docker fixtures.
+The product and extended gates also accept a credential-free ``--route`` JSON
+and a ``--password-env`` variable for a disposable native estate. They qualify
+both Connector/Python implementations. The native Windows/macOS fixture workflow
+runs these portable consumers after the driver proof, retaining their separate
+receipts. Native resource-group availability comes from the serving engine,
+not the client operating system.
+
+The consolidated administration gate covers all 105 declared tasks. Independent
+catalog reconciliation compares 30 categories plus native DDN child facts for
+privileged and restricted accounts and checks navigator reachability. These are
+separate from broader product, browser and platform acceptance.
+
+Persistent-history implementation is included, not deferred. Native acceptance
+remains open: the October 16 rebuilt ScratchBird runtime still fails its durable
+agent catalog seed with ``SECURITY.CONTEXT.EXPIRED`` / ``CATALOG_MUTATE`` before
+archive SQL. No fallback database or security bypass is used. Windows/macOS
+evidence remains with the platform teams and must match the final source before
+cross-platform completion is claimed. Signing/release approvals remain separate.

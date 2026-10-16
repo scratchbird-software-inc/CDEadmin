@@ -11,7 +11,7 @@ class Connection:
     def cursor(self, **options):
         parent=self
         class Cursor:
-            def execute(self, source):
+            def execute(self, source, parameters=None):
                 parent.calls.append(source)
                 if source.startswith('SET '):return
                 if parent.failure and 'mysql.user' in source:raise parent.failure
@@ -20,7 +20,7 @@ class Connection:
                 elif 'SCHEMATA' in source:
                     rows=[{'schema_name':'demo','default_character_set_name':'utf8mb4'}]
                 elif 'mysql.user' in source:
-                    rows=[{'user':'test','host':'%','account_locked':'N'}]
+                    rows=[{'user':'test','host':'%','account_locked':'N','grantee_identity':"'test'@'%'"}]
                 else: rows=[]
                 self.description=[(key,) for key in rows[0]] if rows else []
                 self.rows=[tuple(row.values()) for row in rows]

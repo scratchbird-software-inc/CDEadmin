@@ -4,22 +4,26 @@ import time
 import uuid
 
 from .mysql_catalog import _value, DENIED, SYSTEM
+from ..mysql_grants import QUERIES as GRANTS
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
 SECTIONS = (
     ('databases', 'database', 'SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME, DEFAULT_ENCRYPTION FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME', ('schema_name',)),
-    ('accounts', 'user', 'SELECT User, Host, account_locked, password_expired, password_lifetime, max_questions, max_updates, max_connections, max_user_connections FROM mysql.user ORDER BY User, Host', ('user','host')),
+    ('accounts', 'user', "SELECT User, Host, account_locked, password_expired, password_lifetime, max_questions, max_updates, max_connections, max_user_connections, CONCAT(QUOTE(User),'@',QUOTE(Host)) AS grantee_identity FROM mysql.user ORDER BY User, Host", ('user','host')),
     ('role-edges', 'role-membership', 'SELECT FROM_USER, FROM_HOST, TO_USER, TO_HOST, WITH_ADMIN_OPTION FROM mysql.role_edges ORDER BY FROM_USER, FROM_HOST, TO_USER, TO_HOST', ('from_user','from_host','to_user','to_host')),
     ('default-roles', 'default-role', 'SELECT USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST FROM mysql.default_roles ORDER BY USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST', ('user','host','default_role_user','default_role_host')),
     ('visible-global-grants', 'privilege', 'SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.USER_PRIVILEGES ORDER BY GRANTEE, PRIVILEGE_TYPE', ('grantee','privilege_type')),
     ('plugins', 'plugin', 'SELECT PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_STATUS, PLUGIN_TYPE, PLUGIN_TYPE_VERSION, PLUGIN_LIBRARY, PLUGIN_LIBRARY_VERSION, PLUGIN_LICENSE, LOAD_OPTION FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME', ('plugin_name',)),
-    ('components', 'component', 'SELECT component_id, component_group_id, component_urn FROM mysql.component ORDER BY component_id', ('component_id',)),
+    ('components', 'component', 'SELECT component_id, component_group_id, component_urn FROM mysql.component ORDER BY component_id', ('component_urn',)),
     ('character-sets', 'character-set', 'SELECT CHARACTER_SET_NAME, DEFAULT_COLLATE_NAME, DESCRIPTION, MAXLEN FROM information_schema.CHARACTER_SETS ORDER BY CHARACTER_SET_NAME', ('character_set_name',)),
     ('collations', 'collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN, PAD_ATTRIBUTE FROM information_schema.COLLATIONS ORDER BY COLLATION_NAME', ('collation_name',)),
     ('storage-engines', 'storage-engine', 'SELECT ENGINE, SUPPORT, COMMENT, TRANSACTIONS, XA, SAVEPOINTS FROM information_schema.ENGINES ORDER BY ENGINE', ('engine',)),
-    ('tablespaces', 'tablespace', 'SELECT SPACE, NAME, ROW_FORMAT, PAGE_SIZE, FS_BLOCK_SIZE, FILE_SIZE, ALLOCATED_SIZE, ENCRYPTION, STATE FROM information_schema.INNODB_TABLESPACES ORDER BY SPACE', ('space',)),
-)
+    ('tablespaces', 'tablespace', 'SELECT s.SPACE, s.NAME, s.SPACE_TYPE, s.ROW_FORMAT, s.PAGE_SIZE, s.FS_BLOCK_SIZE, s.FILE_SIZE, s.ALLOCATED_SIZE, s.ENCRYPTION, s.STATE, s.AUTOEXTEND_SIZE, e.ENGINE_ATTRIBUTE FROM information_schema.INNODB_TABLESPACES s LEFT JOIN information_schema.TABLESPACES_EXTENSIONS e ON e.TABLESPACE_NAME=s.NAME ORDER BY s.NAME', ('name',)),
+    ('resource-groups', 'resource-group', 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, RESOURCE_GROUP_ENABLED, VCPU_IDS, THREAD_PRIORITY FROM information_schema.RESOURCE_GROUPS ORDER BY RESOURCE_GROUP_NAME', ('resource_group_name',)),
+    ('system-variables', 'system-variable', "SELECT g.VARIABLE_NAME,g.VARIABLE_VALUE AS GLOBAL_VALUE,p.VARIABLE_VALUE AS PERSISTED_VALUE FROM performance_schema.global_variables g LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME WHERE g.VARIABLE_NAME IN ('max_connections','max_execution_time','long_query_time','read_only','super_read_only','event_scheduler','innodb_buffer_pool_size','connect_timeout','wait_timeout','interactive_timeout') ORDER BY g.VARIABLE_NAME", ('variable_name',)),
+    ('replication-channels', 'replication-channel', 'SELECT CHANNEL_NAME,HOST,PORT,USER,AUTO_POSITION,CONNECTION_RETRY_INTERVAL,CONNECTION_RETRY_COUNT,HEARTBEAT_INTERVAL,TLS_VERSION,SSL_ALLOWED,SSL_VERIFY_SERVER_CERTIFICATE FROM performance_schema.replication_connection_configuration ORDER BY CHANNEL_NAME', ('channel_name',)),
+) + tuple((section, 'privilege', sql, keys) for section, _scope, sql, keys in GRANTS)
 
 
 def capture(connection):
@@ -41,10 +45,13 @@ def capture(connection):
         facts += 1
         if size > MAX_BYTES or facts > MAX_FACTS or time.monotonic() - started > 60:
             raise ValueError('Server inventory exceeds 20,000 facts, 8 MiB or 60 seconds')
-    def read(source):
+    def read(source, parameters=None):
         cursor = connection.cursor(buffered=False)
         try:
-            cursor.execute(source)
+            if parameters is None:
+                cursor.execute(source)
+            else:
+                cursor.execute(source, parameters)
             names = [str(column[0]).lower() for column in cursor.description or ()]
             while True:
                 rows = cursor.fetchmany(128)
@@ -75,14 +82,39 @@ def capture(connection):
             'display_path':[server_uuid,section,name], 'native':{'system_object':system,
                 'server_uuid':server_uuid,'section':section,'catalog_row':row}}
         account(resource);resources.append(resource)
+    accounts = {}
+    account_rows = None
     for section,kind,source,keys in SECTIONS:
         try:
-            rows = list(read(source))
+            if section == 'routine-grants':
+                from ..mysql_grants import routine_grants
+                if account_rows is None:
+                    observations.append({'section': section, 'available': False,
+                        'reason': 'Separate account identities are not visible'})
+                    continue
+                rows = list(routine_grants(account_rows, read))
+            else:
+                rows = list(read(source))
         except Exception as error:
             if getattr(error,'errno',None) not in DENIED:raise
             observations.append({'section':section,'available':False,'error_code':error.errno,
                 'sqlstate':getattr(error,'sqlstate',None)})
         else:
+            if section == 'accounts':
+                account_rows = rows
+                # I_S GRANTEE wraps raw components in quotes without escaping.
+                # Resolve through separately observed User/Host, never SQL-parse it.
+                for row in rows:
+                    raw = "'" + row['user'] + "'@'" + row['host'] + "'"
+                    accounts[raw] = row if raw not in accounts else None
+            if section in {'visible-global-grants', 'schema-grants', 'table-grants', 'column-grants'}:
+                for row in rows:
+                    account_row = accounts.get(row['grantee'])
+                    row['grantee_identity_available'] = account_row is not None
+                    if account_row:
+                        row.update(information_schema_grantee=row['grantee'],
+                            grantee=account_row['grantee_identity'],
+                            grantee_user=account_row['user'], grantee_host=account_row['host'])
             for row in rows:add(section,kind,row,keys)
             observations.append({'section':section,'available':True,'rows':len(rows)})
     if len({row['resource_id'] for row in resources}) != len(resources):

@@ -23,6 +23,8 @@ def qualify(source_options,replica_options,source_host,output):
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
         statement=MYSQL_ADMINISTRATION._compile(request)['statements'][0]
         rc.execute(statement['source'],statement['parameters'] or None)
+        from tools.mysql_task_evidence import record
+        record(proof, request)
         if rc.description:rc.fetchall()
         proof['statements'].setdefault(operation,statement['source'])
     def count():

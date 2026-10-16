@@ -5601,6 +5601,8 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird':
                 return firebird_privileges.form(operation, self._field)
             object_types = (
+                ('GLOBAL', 'DATABASE', 'TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'LIBRARY')
+                if self.dialect.engine_id == 'mysql' else
                 ('TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'SEQUENCE',
                  'DATABASE')
                 if self.dialect.sql_family == 'mysql'
@@ -5612,7 +5614,7 @@ class RelationalAdministration:
                     'object_type', 'Object type', 'select', True,
                     options=object_types,
                 ),
-                self._field('object_name', 'Object name', 'text', True),
+                self._field('object_name', 'Object name', 'text', self.dialect.engine_id != 'mysql'),
                 self._field('privileges', 'Privileges', 'json', True),
             ]
             if operation == 'grant':
@@ -7876,9 +7878,8 @@ class RelationalAdministration:
         target_kind = self._safe_fragment(
             draft.get('object_type'), 'privilege object type'
         ).upper()
-        target_name = self._qualified(
-            self._path_value(draft.get('object_name'))
-        )
+        target_name = ('*.*' if self.dialect.engine_id == 'mysql' and target_kind == 'GLOBAL' else
+                       self._qualified(self._path_value(draft.get('object_name'))))
         preposition = 'TO' if operation == 'GRANT' else 'FROM'
         if self.dialect.sql_family == 'mysql':
             principal = (
@@ -7892,7 +7893,7 @@ class RelationalAdministration:
                 target_name = '*.*'
             elif target_kind == 'DATABASE':
                 target_name = self._quote(draft.get('object_name')) + '.*'
-            elif target_kind in {'FUNCTION', 'PROCEDURE'}:
+            elif target_kind in {'FUNCTION', 'PROCEDURE'} or target_kind == 'LIBRARY' and self.dialect.engine_id == 'mysql':
                 object_prefix = f'{target_kind} '
         else:
             object_prefix = f'{target_kind} '

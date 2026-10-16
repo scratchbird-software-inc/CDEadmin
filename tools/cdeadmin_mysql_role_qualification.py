@@ -24,6 +24,8 @@ try:
    request={'resource_kind':'role','operation_id':operation,'target_resource':target,'draft':{'member_user':member,'member_host':host,**draft},'_provider_route':{'host':connection_options.get('host','localhost'),'port':connection_options.get('port',3306)}}
    assert not MYSQL_ADMINISTRATION.validate(request)['errors']
    planned=MYSQL_ADMINISTRATION.plan(request);source=planned['command_preview']['statements'][0]['source'];cur.execute(source)
+   from tools.mysql_task_evidence import record
+   record(proof,request)
    statements.setdefault(operation,source)
    if operation=='grant':
     cur.execute('SELECT WITH_ADMIN_OPTION FROM mysql.role_edges WHERE FROM_USER=%s AND FROM_HOST=%s AND TO_USER=%s AND TO_HOST=%s',(role,host,member,host));assert cur.fetchone()[0]=='Y'

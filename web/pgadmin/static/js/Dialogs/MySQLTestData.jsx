@@ -18,10 +18,12 @@ export default function MySQLTestData({post, databaseTargetId, engine='mysql'}) 
   const [count, setCount] = useState(10), [source, setSource] = useState(() => initial(engine));
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
+  const [recipeId, setRecipeId] = useState('default'), [recipeVersion, setRecipeVersion] = useState(0);
+  const [revision, setRevision] = useState('');
   const columns = tables.find(table => table.resource_id === selected)?.columns || [];
   useEffect(() => {setPage(0);}, [selected]);
   const serial = useRef(0), scope = useRef(null);
-  useEffect(() => {serial.current++; scope.current = null; setTables([]); setSelected(''); setSource(initial(engine)); setResult(null); setError(''); setBusy(false);
+  useEffect(() => {serial.current++; scope.current = null; setTables([]); setSelected(''); setSource(initial(engine)); setResult(null); setError(''); setBusy(false); setRecipeId('default'); setRecipeVersion(0); setRevision('');
     return () => {serial.current++;};}, [post, databaseTargetId, engine]);
   const change = value => {setSource(value); setResult(null);};
   const run = async generate => {
@@ -55,10 +57,33 @@ export default function MySQLTestData({post, databaseTargetId, engine='mysql'}) 
       if(token === serial.current) {change(text); setError('');}
     } catch(failure) {if(token === serial.current) setError(failure.message);}
   };
+  const persist = async write => {
+    const token = ++serial.current; setBusy(true); setError('');
+    try {
+      const response = await post({action: write ? 'mysql_recipe_save' : 'mysql_recipe_read',
+        request: {database_target_id: databaseTargetId, recipe_id: recipeId,
+          ...(write ? {expected_version: recipeVersion, recipe: JSON.parse(source)} :
+            revision ? {version: Number(revision)} : {})}});
+      if(token !== serial.current) return;
+      setRecipeVersion(response.current_version);
+      if(response.recipe) change(JSON.stringify(response.recipe, null, 2));
+      else setError('No saved recipe with this name in this database.');
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'Recipe storage unavailable');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
   return <Box sx={{...compactFormSx, gridAutoRows: 'max-content', p: 1, overflow: 'auto'}}>
     <FormReference formKey={`${engine}-test-data`} />
     <Alert severity="info">Generate and review SQL, then open the saved script in the shared Query Tool on this database. Generation executes no SQL writes. The Query Tool owns autocommit, commit and rollback.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
+    {engine === 'mysql' && <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
+      <TextField size="small" label="Saved recipe name" value={recipeId} disabled={busy}
+        onChange={event => {setRecipeId(event.target.value); setRecipeVersion(0); setRevision('');}} />
+      <TextField size="small" type="number" label="Revision (blank for latest)" value={revision} disabled={busy}
+        onChange={event => setRevision(event.target.value)} />
+      <Button disabled={busy || !recipeId} onClick={() => persist(false)}>Load saved recipe</Button>
+      <Button disabled={busy || !recipeId} onClick={() => persist(true)}>Store recipe revision</Button>
+      <Box>Current saved revision: {recipeVersion}</Box>
+    </Box>}
     <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', my: 1}}>
       <Button disabled={busy} onClick={() => run(false)}>Load native tables</Button>
       <TextField select size="small" label="Native table" value={selected} disabled={busy || !tables.length} onChange={event => setSelected(event.target.value)} sx={{minWidth: 260}}>

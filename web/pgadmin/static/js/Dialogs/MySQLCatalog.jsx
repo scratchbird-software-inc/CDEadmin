@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FirebirdERD from './FirebirdERD';
+import MySQLDataImport from './MySQLDataImport';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
@@ -99,6 +100,7 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="mysql-catalog-ddn" />
+    <MySQLDataImport post={post} databaseTargetId={databaseTargetId} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native MySQL metadata on a separate connection. Catalog visibility is privilege filtered and concurrent DDL is not fenced. Documentary comparison does not authorize migration or deletion.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
