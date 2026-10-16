@@ -348,7 +348,11 @@ transformation, recovery, operations and platform requirements remain open.
   paths. PostgreSQL refreshes its adapter for each request so dropped objects
   and earlier search paths are not retained indefinitely. Bounded or denied
   observations are explicitly partial. CTE projections and aliases have editor
-  support; complete procedural-scope coverage still requires qualification.
+  support. Native completion reparses the current source using newly observed
+  modes before resolving scopes, decodes doubled identifier delimiters, preserves
+  distinct quoted aliases and uses native MySQL/MariaDB table-name case settings.
+  Firebird dialect 1 suggestions preserve its unquoted identifier rules. Complete
+  procedural-scope coverage still requires qualification.
   SQLite source compilation preserves the existing authorizer and suppresses
   PRAGMA settings/VFS preparation effects through native ``SQLITE_IGNORE``.
   PRAGMA syntax is checked; its options are not executed or semantically applied.

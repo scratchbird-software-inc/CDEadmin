@@ -131,6 +131,10 @@ def qualify(engine, route, output, *, password=None, embedded=False):
             proof['checks'].append({'name': 'native-psql-script-terminators-and-body-checking', 'passed': True})
         symbols = client_provider.complete({'session_id': session['session_id'],
             'full_source': 'SELECT ', 'source_before_cursor': 'SELECT '})['editor_context']
+        if engine in {'mysql', 'mariadb'}:
+            actual_case = int(execute(handle, 'SELECT @@lower_case_table_names')[0])
+            assert symbols['context']['lower_case_table_names'] == actual_case
+            proof['checks'].append({'name':'native-table-name-case-identity', 'lower_case_table_names':actual_case})
         if not any(item['display_name'] == name for item in symbols['resources']):
             raise AssertionError('Native relation completion is missing')
         if not any(item['display_name'] == 'odd column' for item in symbols['resources']):

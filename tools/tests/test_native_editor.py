@@ -10,6 +10,23 @@ from pgadmin.cdeadmin.providers.native_editor import metadata, mysql_bind_marker
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
+@pytest.mark.parametrize('engine', ['sqlite', 'duckdb'])
+def test_native_identifier_case_folds_ascii_without_merging_non_ascii_aliases(engine):
+    if engine == 'sqlite':
+        connection, error = sqlite3.connect(':memory:'), sqlite3.Error
+    else:
+        import duckdb
+        connection, error = duckdb.connect(), duckdb.Error
+    try:
+        assert connection.execute('SELECT a.value FROM (SELECT 1 AS value) AS A').fetchone()[0] == 1
+        assert connection.execute('SELECT Ä.value FROM (SELECT 1 AS value) AS Ä').fetchone()[0] == 1
+        assert connection.execute('SELECT 🚀.value FROM (SELECT 1 AS value) AS 🚀').fetchone()[0] == 1
+        with pytest.raises(error):
+            connection.execute('SELECT ä.value FROM (SELECT 1 AS value) AS Ä')
+    finally:
+        connection.close()
+
+
 def test_sqlite_symbols_include_attached_identifiers_functions_and_compile_identity(tmp_path):
     connection = sqlite3.connect(tmp_path / 'primary.db')
     connection.execute('ATTACH DATABASE ? AS "other.schema"', (str(tmp_path / 'other.db'),))

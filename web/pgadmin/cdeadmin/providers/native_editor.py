@@ -115,8 +115,9 @@ def metadata(handle, engine, transaction=None, dialect=None):
 
     try:
         if engine in {'mysql', 'mariadb'}:
-            state = query('session', 'SELECT VERSION(), DATABASE(), @@sql_mode, @@character_set_client')[0]
-            context.update(version=str(state[0]), default_schema=state[1], sql_mode=str(state[2]), character_set_client=state[3])
+            state = query('session', 'SELECT VERSION(), DATABASE(), @@sql_mode, @@character_set_client, @@lower_case_table_names')[0]
+            context.update(version=str(state[0]), default_schema=state[1], sql_mode=str(state[2]),
+                           character_set_client=state[3], lower_case_table_names=int(state[4]))
             for (database,) in query('databases', 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 25001'):
                 add('schema', [database])
             for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):

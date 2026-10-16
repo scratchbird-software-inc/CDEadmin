@@ -1,15 +1,18 @@
-import {SQLDialect, MySQL, MariaSQL, PostgreSQL, SQLite, StandardSQL, schemaCompletionSource, keywordCompletionSource} from '@codemirror/lang-sql';
+import {SQLDialect, MySQL, MariaSQL, PostgreSQL, SQLite, StandardSQL, sql, keywordCompletionSource} from '@codemirror/lang-sql';
+import {EditorState} from '@codemirror/state';
+import {CompletionContext} from '@codemirror/autocomplete';
 import {firebirdSQLConfig} from './firebirdSyntax';
-import {scopedSQLConfig} from './nativeScopes';
+import {scopedSQLConfig, nativeSchemaCompletion} from './nativeScopes';
 
 const key = name => name.replaceAll('.', '\\.');
 
 export function nativeSQLConfig(metadata) {
   const context = metadata.context;
   const engine = context.engine;
-  if (engine === 'firebird') return firebirdSQLConfig(context.keywords, context.sql_dialect,
+  if (engine === 'firebird') return {...firebirdSQLConfig(context.keywords, context.sql_dialect,
     metadata.resources.map(item => ({...item, package_name: ['function', 'procedure'].includes(item.resource_kind) &&
-      item.display_path.length === 2 ? item.display_path[0] : undefined})), context.reserved_words);
+      item.display_path.length === 2 ? item.display_path[0] : undefined})), context.reserved_words),
+  nativeEngine: engine, nativeLanguageContext: context, nativeIdentifierQuote: context.sql_dialect === 1 ? '' : '"'};
   const modes = new Set((context.sql_mode || '').split(','));
   const mysql = ['mysql', 'mariadb'].includes(engine);
   const base = engine === 'mysql' ? MySQL : engine === 'mariadb' ? MariaSQL : engine === 'postgresql' ? PostgreSQL : engine === 'sqlite' ? SQLite : StandardSQL;
@@ -52,7 +55,20 @@ export function nativeSQLConfig(metadata) {
       identifierQuotes: modes.has('ANSI_QUOTES') ? '`"' : '`', plsqlQuotingMechanism: false} : {}),
     ...(engine === 'postgresql' ? {backslashEscapes: context.standard_conforming_strings === 'off'} : {}),
     ...(engine === 'duckdb' ? {identifierQuotes: '"', doubleDollarQuotedStrings: true, backslashEscapes: false} : {})}),
-  schema, defaultSchema: (engine === 'duckdb' ? context.schema : context.default_schema) || undefined, upperCaseKeywords: true};
+  schema, nativeEngine: engine, nativeIdentifierQuote: quote,
+  nativeLanguageContext: context,
+  nativeRelationCaseSensitive: mysql && context.lower_case_table_names === 0,
+  defaultSchema: (engine === 'duckdb' ? context.schema : context.default_schema) || undefined, upperCaseKeywords: true};
+}
+
+export function nativeCompletionContext(metadata, context) {
+  const base = nativeSQLConfig(metadata);
+  // The response can report a mode changed by an earlier statement. Parse the
+  // current source with that mode before resolving aliases or CTE projections.
+  // Updating React metadata alone leaves this request using the old token tree.
+  const state = EditorState.create({doc: context.state.doc, selection: context.state.selection, extensions: sql(base)});
+  const observed = new CompletionContext(state, context.pos, context.explicit);
+  return {context: observed, config: scopedSQLConfig(base, state, context.pos)};
 }
 
 export function registerNativeCompletion(editor, current) {
@@ -74,9 +90,9 @@ export function registerNativeCompletion(editor, current) {
       if (!applicable()) return null;
       const metadata = result.editor_context;
       if (metadata?.context?.engine + '-sql' !== initial.nativeProfile) throw new Error('Native completion language changed');
-      const config = scopedSQLConfig(nativeSQLConfig(metadata), context.state, context.pos);
-      const schema = schemaCompletionSource(config)(context);
-      const words = keywordCompletionSource(config.dialect, true)(context);
+      const observed = nativeCompletionContext(metadata, context);
+      const schema = nativeSchemaCompletion(observed.config, observed.context);
+      const words = keywordCompletionSource(observed.config.dialect, true)(observed.context);
       initial.onMetadata(metadata);
       if (!schema) return words;
       if (!words || words.from !== schema.from) return schema;
