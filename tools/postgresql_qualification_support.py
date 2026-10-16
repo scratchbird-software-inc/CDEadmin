@@ -3,18 +3,24 @@ from contextlib import contextmanager
 import json
 from pathlib import Path
 import secrets
+import hashlib
 import subprocess
 import time
 
 
 @contextmanager
-def server(output):
+def server(output, *, server_options=()):
     import psycopg
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
+    if (not isinstance(server_options, (tuple, list)) or len(server_options) > 32 or
+            any(not isinstance(value, str) or '\x00' in value or len(value) > 4096 for value in server_options)):
+        raise ValueError('Owned PostgreSQL fixture options must be bounded native arguments')
     name = 'scratchrobin-postgresql-' + secrets.token_hex(8)
     password = secrets.token_urlsafe(32)
-    proof = {'image': 'postgres:18.3', 'owned_server_stopped': False}
+    proof = {'image': 'postgres:18.3', 'owned_server_stopped': False,
+        'owned_container_name': name,
+        'server_options_sha256': hashlib.sha256(json.dumps(server_options).encode()).hexdigest()}
     started = False
     try:
         image = subprocess.run(['docker', 'image', 'inspect', 'postgres:18.3', '--format', '{{.Id}}'],
@@ -22,7 +28,7 @@ def server(output):
         proof['image_id'] = image.stdout.strip()
         subprocess.run(['docker', 'run', '-d', '--rm', '--name', name,
             '--publish', '127.0.0.1::5432', '--env', 'POSTGRES_PASSWORD=' + password,
-            'postgres:18.3'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+            'postgres:18.3', *server_options], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
         started = True
         port = subprocess.run(['docker', 'port', name, '5432/tcp'], check=True,
             capture_output=True, text=True, timeout=15).stdout.strip().rsplit(':', 1)[1]

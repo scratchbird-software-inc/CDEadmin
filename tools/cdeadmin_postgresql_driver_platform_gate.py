@@ -71,6 +71,7 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
         'cdeadmin_postgresql_aggregate_qualification.py',
         'cdeadmin_postgresql_editor_qualification.py',
         'cdeadmin_postgresql_large_object_qualification.py',
+        'cdeadmin_postgresql_server_catalog_qualification.py',
         'cdeadmin_postgresql_ssh_qualification.py')]
     if native_transform:
         files += [ROOT / 'tools/cdeadmin_postgresql_transform_qualification.py']
@@ -381,6 +382,8 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
             if catalog_ddn:
                 from cdeadmin_postgresql_catalog_qualification import qualify as qualify_catalog
                 qualify_catalog(provider, route, password, server, user, receipt, evidence)
+                from cdeadmin_postgresql_server_catalog_qualification import qualify as qualify_server_catalog
+                qualify_server_catalog(provider, route, password, server, user, receipt, evidence)
             original_admin_apply = provider.apply_admin_operation
             def record_admin_apply(plan):
                 result = original_admin_apply(plan)

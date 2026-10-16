@@ -385,8 +385,14 @@ transformation, recovery, operations and platform requirements remain open.
   ``tools/cdeadmin_native_catalog_gate.py`` for PostgreSQL, DuckDB and SQLite.
   PostgreSQL database/system catalogs, SQLite attachments/temporary objects and
   loaded capabilities, and DuckDB attachments/temporary objects and complete
-  function overload groups have distinct observations. Shared PostgreSQL server
-  inventories and restricted-identity qualification remain separate obligations.
+  function overload groups have distinct observations. PostgreSQL server capture
+  includes database properties, roles/authentication state, memberships,
+  tablespaces, settings/configuration files, HBA/identity mappings, available
+  extension versions and live replication/session/TLS/GSSAPI state. Secret
+  values are redacted without hiding the owning object. Server-only inspection
+  and DDN download do not require database expansion. Independent shared-catalog
+  reconciliation checks privileged and restricted observations; session-local
+  database catalogs and broader live topology qualification remain separate.
 * PostgreSQL, DuckDB and SQLite have durable owner/endpoint/database-scoped
   recipe revisions with optimistic concurrency. Reading a revision loads the
   editor; saving a revision does not execute the recipe.

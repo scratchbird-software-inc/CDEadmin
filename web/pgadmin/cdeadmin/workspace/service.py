@@ -1583,16 +1583,21 @@ class ProviderWorkspaceService:
 
     def postgresql_server_catalog(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
-        from ..providers.postgresql.server_catalog import inventory, bundle
+        from ..providers.postgresql.server_catalog import inventory, bundle, export_inventory
         if not isinstance(request, dict) or set(request) - {'database_ids', 'include_system'}:
             raise ProviderWorkspaceError('Invalid PostgreSQL server catalog request')
+        if type(request.get('include_system', False)) is not bool:
+            raise ProviderWorkspaceError('PostgreSQL system-object inclusion must be boolean')
         context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=None)
         provider = self.endpoint_service.provider_registry.resolve(context).instance
         if not isinstance(provider, PostgreSQLProvider):
             raise ProviderWorkspaceError('Select a native PostgreSQL server')
         try:
             if 'database_ids' not in request:
-                return inventory(provider, endpoint['route'])
+                result = inventory(provider, endpoint['route'])
+                result['document'] = export_inventory(result, context.endpoint_id, endpoint['route']['server_id'],
+                    include_system=request.get('include_system', False))
+                return result
             return bundle(provider, endpoint['route'], context.endpoint_id, request['database_ids'],
                           include_system=request.get('include_system', False))
         except ValueError as error:
