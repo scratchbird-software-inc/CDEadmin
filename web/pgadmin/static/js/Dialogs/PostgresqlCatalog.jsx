@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, Dialog, FormControlLabel, MenuItem, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import NativeDataImport from './NativeDataImport';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
@@ -79,6 +80,7 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
   const shown = display === 'relations' ? result?.diagram : result;
   return <Box sx={{...compactFormSx, gridAutoRows: 'max-content', overflow: 'auto', flex: 1, p: 1}}>
     <FormReference formKey="postgresql-catalog-ddn" />
+    <NativeDataImport post={post} databaseTargetId={databaseTargetId} engine="postgresql" objects={result?.objects} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native catalog evidence and DDN design. Capture and comparison do not execute imported definitions. Coverage and omissions are recorded with each capture.</Alert>
     <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>

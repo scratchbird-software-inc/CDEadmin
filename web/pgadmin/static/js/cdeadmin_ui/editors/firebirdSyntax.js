@@ -39,7 +39,7 @@ export function firebirdSQLConfig(keywords, dialect, resources, reservedWords = 
       else schema[key].self.detail=[schema[key].self.detail,completion.detail].filter(Boolean).join(' / ');
     }
   }
-  return {dialect: SQLDialect.define({keywords, backslashEscapes: false,
+  return {dialect: SQLDialect.define({keywords: (keywords || '').toLowerCase(), backslashEscapes: false,
     doubleDollarQuotedStrings: false, doubleQuotedStrings: dialect === 1,
     plsqlQuotingMechanism: true, charSetCasts: true, specialVar: ':?',
     identifierQuotes: dialect === 1 ? '' : '"', caseInsensitiveIdentifiers: false}),

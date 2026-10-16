@@ -100,29 +100,30 @@ class MySQLMonitoringHost(MonitoringHost):
             grant = self._grants.get((owner, sid, target))
             if grant is None:
                 return {'state': 'disabled', 'samples': [], 'history': 'volatile',
-                    'history_available': self.engine in {'mysql', 'mariadb'} and self.history is not None,
+                    'history_available': self.history is not None,
                     'runtime_scope': 'this-process', 'collection_available': self.available,
                     'navigation': navigation}
             current = self._authorizer(owner, sid, target)
             result = self.runtime.snapshot(grant.policy, lambda policy, purpose:
                 current(policy, purpose, grant.generation, grant.route_digest))
-            return {**result, 'navigation': navigation, 'history_available': self.engine in {'mysql', 'mariadb'} and self.history is not None,
+            return {**result, 'navigation': navigation, 'history_available': self.history is not None,
                 'authentication': dict(grant.authentication),
                 'policy': {key: getattr(grant.policy, key) for key in self.policy_fields}}
+
+    def _historical_scope(self, owner, sid, target):
+        with self.app.app_context():
+            server = self._owned_server(owner, sid)
+            self.definition_scope(owner, sid, target)
+            context, _endpoint, _ = self.endpoints.workspace(server, database_target_id=target)
+            if context.profile_id != self.profile_id:
+                raise PermissionError('History provider changed')
+            return server.endpoint_profile.id, self._configuration(server)
 
     def historical(self, owner, sid, target, arguments):
         """Read after a restart or stop without credentials or a collector grant."""
         from .monitoring import MonitoringPolicy
         from .monitoring_host import MonitoringHostUnavailable
-        def scope():
-            with self.app.app_context():
-                server = self._owned_server(owner, sid)
-                self.definition_scope(owner, sid, target)
-                context, _endpoint, _ = self.endpoints.workspace(server, database_target_id=target)
-                if context.profile_id != self.profile_id:
-                    raise PermissionError('History provider changed')
-                return server.endpoint_profile.id, self._configuration(server)
-        endpoint, configuration = scope()
+        endpoint, configuration = self._historical_scope(owner, sid, target)
         if self.history is None:
             raise MonitoringHostUnavailable('ScratchBird history is not configured')
         if (set(arguments) - {'start', 'end', 'tier', 'limit', 'after', 'target_id'} or
@@ -131,7 +132,7 @@ class MySQLMonitoringHost(MonitoringHost):
         policy = MonitoringPolicy(owner, endpoint, target, interval_seconds=15 if target is None else 5)
         result = self.history.query(policy, self.engine, start=arguments['start'], end=arguments['end'],
             tier=arguments.get('tier', 'raw'), limit=int(arguments.get('limit', 120)), after=arguments.get('after'))
-        if scope() != (endpoint, configuration):
+        if self._historical_scope(owner, sid, target) != (endpoint, configuration):
             raise PermissionError('History scope changed')
         return result
 
@@ -214,7 +215,7 @@ def init_app(app, shared_host, host_class=MySQLMonitoringHost):
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint(f'cdeadmin_{engine}_monitoring', __name__)
 
-    if engine in {'mysql', 'mariadb'}:
+    if engine in {'mysql', 'mariadb', 'duckdb', 'sqlite'}:
         @api.route(f'/cdeadmin/api/monitoring/{engine}/<int:sid>/history', methods=['GET'])
         @pga_login_required
         def history(sid):

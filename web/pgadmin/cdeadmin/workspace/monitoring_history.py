@@ -57,6 +57,14 @@ def sanitized(sample, engine=None):
                               for key in ('server_uid' if engine == 'mariadb' else 'server_uuid', 'database_name', 'version')}
         result['transaction_completed'] = sample.get('transaction_completed') is True
         result['elapsed_ms'] = sample.get('elapsed_ms')
+    elif engine == 'postgresql':
+        result['identity'] = {key: sample.get('identity', {}).get(key) for key in (
+            'database', 'database_oid', 'postmaster_started_at', 'in_recovery',
+            'statistics_visibility')}
+        result['transaction_completed'] = sample.get('transaction_completed') is True
+    elif engine in {'duckdb', 'sqlite'}:
+        result['identity'] = {key: sample.get('identity', {}).get(key) for key in (
+            'database_name', 'version', 'target_id', 'engine_id')}
     if len(encoded(result).encode()) > 2 * 1024 * 1024:
         raise ValueError('History sample exceeds size limit')
     return result
@@ -74,10 +82,14 @@ def measures(sample):
                 if not isinstance(row, dict):
                     continue
                 # Stable native row identity, never a row's transient position.
-                key = next((row[name] for name in ('variable_name', 'engine', 'processlist_id', 'channel_name')
-                            if isinstance(row.get(name), str)), None)
+                key = next((row[name] for name in ('variable_name', 'engine', 'processlist_id', 'channel_name',
+                             'name', 'datid', 'relid', 'pid', 'database_name')
+                             if isinstance(row.get(name), (str, int)) and not isinstance(row.get(name), bool)), None)
                 if key is not None:
                     walk(row, path + [encoded(key)])
+                elif len(value) == 1:
+                    # Embedded scalar groups have one row and no native row key.
+                    walk(row, path + ['scalar'])
         elif isinstance(value, (str, int)) and not isinstance(value, bool):
             try:
                 number = Decimal(value)
@@ -174,6 +186,12 @@ class MonitoringHistory:
                               if key not in {'observed_at', 'observation_age_seconds'}}
                         for name, group in sample.get('groups', {}).items()
                         if name in {'settings', 'storage'}}
+        elif engine in {'postgresql', 'duckdb', 'sqlite'}:
+            names = {'settings'} if engine == 'postgresql' else {'database', 'extensions'}
+            metadata = {name: {key: value for key, value in group.items()
+                              if key not in {'observed_at', 'observation_age_seconds'}}
+                        for name, group in sample.get('groups', {}).items()
+                        if name in names}
         provenance = {'metadata_revision': hashlib.sha256(encoded(metadata).encode()).hexdigest(),
                       'collection_interval_seconds': policy.interval_seconds,
                       'metadata_interval_seconds': policy.metadata_interval_seconds,

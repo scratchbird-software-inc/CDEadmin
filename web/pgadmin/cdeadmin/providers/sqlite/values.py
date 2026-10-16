@@ -76,6 +76,15 @@ def parameter(item):
         'SQLite parameter requires a native value or exact envelope')
 
 
+def archive_value(item):
+    """Preserve SQLite's dynamic storage class, including numeric TEXT."""
+    if type(item) is int and abs(item) > SAFE_INTEGER:
+        return {'encoding': 'integer', 'data': str(item)}
+    if type(item) is float:
+        return {'encoding': 'float64', 'data': repr(item)}
+    return value(item)
+
+
 def parameters(items):
     if items is None:
         return ()

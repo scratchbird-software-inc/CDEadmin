@@ -2646,6 +2646,12 @@ class ServerNode(PGChildNodeView):
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
+                        'postgresql_recipe_read', 'postgresql_recipe_save',
+                        'duckdb_recipe_read', 'duckdb_recipe_save',
+                        'sqlite_recipe_read', 'sqlite_recipe_save',
+                        'postgresql_data_plan', 'postgresql_data_review', 'postgresql_data_apply', 'postgresql_data_receipt', 'postgresql_data_receipts',
+                        'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
+                        'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts',
                         'resource_page', 'resource_inspect', 'resource_refresh',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
@@ -2836,8 +2842,21 @@ class ServerNode(PGChildNodeView):
                     payload = service.mariadb_server_plan(server, data.get('request'))
                 elif action in {'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts'}:
                     payload = service.mariadb_server_application(server, action.removeprefix('mariadb_server_'), data.get('request'))
+                elif action in {'postgresql_recipe_read', 'postgresql_recipe_save',
+                                'duckdb_recipe_read', 'duckdb_recipe_save',
+                                'sqlite_recipe_read', 'sqlite_recipe_save'}:
+                    engine, _recipe, operation = action.split('_')
+                    payload = service.native_recipe_asset(server, engine, operation, data.get('request'))
                 elif action in {'mariadb_recipe_read', 'mariadb_recipe_save'}:
                     payload = service.mariadb_recipe_asset(server, action.removeprefix('mariadb_recipe_'), data.get('request'))
+                elif action in {'postgresql_data_plan', 'duckdb_data_plan', 'sqlite_data_plan'}:
+                    payload = service.native_data_plan(server, action.split('_')[0], data.get('request'))
+                    payload = {key: value for key, value in payload.items() if key != 'rows'}
+                elif action in {'postgresql_data_review', 'postgresql_data_apply', 'postgresql_data_receipt', 'postgresql_data_receipts',
+                                'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
+                                'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts'}:
+                    engine, _data, operation = action.split('_')
+                    payload = service.native_data_application(server, engine, operation, data.get('request'))
                 elif action == 'mariadb_data_plan':
                     payload = service.mariadb_data_plan(server, data.get('request'))
                     payload = {key: value for key, value in payload.items() if key != 'rows'}

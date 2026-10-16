@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import NativeDataImport from './NativeDataImport';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
@@ -119,6 +120,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="sqlite-catalog-ddn" />
+    <NativeDataImport post={post} databaseTargetId={databaseTargetId} engine="sqlite" objects={result?.objects} />
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">SQLite metadata is captured from a separate connection to this registered file. Uncommitted changes and temporary objects on other connections are outside this view.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>

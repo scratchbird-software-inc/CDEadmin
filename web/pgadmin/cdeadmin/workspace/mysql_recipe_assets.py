@@ -8,11 +8,13 @@ from .assets import (ProjectAssetError, ProjectAssetForbidden,
                      ProjectAssetNotFound, validate_asset_request)
 
 LOCK = threading.RLock()
+ENGINE_NAMES = {'mysql': 'MySQL', 'mariadb': 'MariaDB', 'postgresql': 'PostgreSQL',
+                'duckdb': 'DuckDB', 'sqlite': 'SQLite'}
 
 
 class MySQLRecipeAssets:
     def __init__(self, assets, *, engine='mysql'):
-        if engine not in {'mysql', 'mariadb'}:
+        if engine not in ENGINE_NAMES:
             raise ValueError('Unsupported native recipe engine')
         self.assets = assets
         self.engine = engine
@@ -59,7 +61,7 @@ class MySQLRecipeAssets:
                 if current is None and body['expected_version'] != 0:
                     raise ProjectAssetError('The recipe has no current revision; refresh before saving')
                 if row is None:
-                    self.assets.create_project(owner, project, {'name': ('MariaDB' if self.engine == 'mariadb' else 'MySQL') + ' test-data recipes', 'source_control_eligible': False})
+                    self.assets.create_project(owner, project, {'name': ENGINE_NAMES[self.engine] + ' test-data recipes', 'source_control_eligible': False})
                 saved = self.assets.save_asset(owner, (), project, key, body)
                 current = saved
             if saved and (saved['metadata'].get('scope') != identity or saved['content'].get('scope') != scope):

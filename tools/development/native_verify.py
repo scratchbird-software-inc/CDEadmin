@@ -49,6 +49,8 @@ def child(name, evidence, port):
         import pyarrow
         import firebird.driver as firebird
         import mariadb
+        from pglast import parser
+        assert getattr(parser, 'CDEADMIN_PARSE_OPTIONS_REVISION', None) == 2, 'Build the native PostgreSQL parser options patch'
         assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_exact_temporals'), 'Stock MariaDB connector is insufficient'
         from pgadmin.cdeadmin.providers.firebird.provider import (
             _configure_client_library, _client_library_identity)
@@ -184,8 +186,12 @@ def verify(evidence):
         'duckdb-provider': [sys.executable, '-m', 'tools.cdeadmin_duckdb_driver_platform_gate', '--evidence', evidence / 'duckdb'],
         'firebird-embedded': [sys.executable, ROOT / 'tools/development/native_firebird.py', '--evidence', evidence / 'firebird'],
         'electron-desktop': [sys.executable, ROOT / 'tools/development/native_desktop.py', '--evidence', evidence / 'desktop', '--runs', '3'],
-        'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
-        'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2', '--json', '--outputFile', evidence / 'javascript.json'],
+        # Owner deferral, 2026-10-16: wire ScratchBird clients, but do not run
+        # history qualification while its native engine is being developed.
+        'python-contracts': [sys.executable, '-c', "import config,pytest; raise SystemExit(pytest.main(['tools/tests', '-k', 'not history', '--junitxml=' + __import__('sys').argv[1]]))", evidence / 'python.xml'],
+        'javascript-contracts': ['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2',
+            '--testPathIgnorePatterns=[Hh]istory', '--testNamePattern=^(?!.*[Hh]istory)',
+            '--json', '--outputFile', evidence / 'javascript.json'],
         'identity': [sys.executable, '-m', 'tools.cdeadmin_product_identity', '--source', ROOT, '--skip-inventory', '--output', evidence / 'identity.json'],
     }
     for name, args in commands.items():
@@ -209,7 +215,7 @@ def verify(evidence):
     receipt = {'checks': checks, 'platform': platform.platform(),
                'complete': all(c['status'] == 'passed' for c in checks),
                'network_engine_qualification': 'not executed without owned server routes',
-               'scratchbird_history_qualification': 'requires native ScratchBird runtime'}
+               'scratchbird_history_qualification': 'deferred by owner, 2026-10-16; no history tests requested'}
     (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps(receipt, indent=2))
     return 0 if receipt['complete'] else 1

@@ -71,6 +71,7 @@ RUN apk add --no-cache \
         make && \
     apk add --no-cache --virtual build-deps \
         build-base \
+        git \
         openssl-dev \
         libffi-dev \
         postgresql-dev \
@@ -81,8 +82,12 @@ RUN apk add --no-cache \
         libjpeg-turbo-dev \
         libpng-dev
 COPY requirements.txt /
+COPY tools/cdeadmin_build_postgresql_parser.py tools/install_postgresql_parser.py /build/postgresql-parser/tools/
+COPY tools/driver_patches/pglast-8.5-native-options.patch /build/postgresql-parser/tools/driver_patches/
 RUN python3 -m venv --system-site-packages --without-pip /venv && \
     /venv/bin/python3 -m pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/python3 -B /build/postgresql-parser/tools/install_postgresql_parser.py --output /tmp/postgresql-parser && \
+    rm -rf /tmp/postgresql-parser /tmp/postgresql-parser-downloads /build/postgresql-parser && \
     apk del --no-cache build-deps
 
 #########################################################################

@@ -17,6 +17,8 @@ transaction payload as opaque.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import uuid
 import threading
 from contextlib import ExitStack, contextmanager
@@ -54,7 +56,7 @@ from .native_admin import (
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .preserved_surface import (
-    SURFACE_ID, adapt_catalog, concept_declarations, preserved_operations,
+    SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
 
 
@@ -66,7 +68,7 @@ LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
-                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'})
+                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'})
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -80,7 +82,7 @@ TOOL_DISPOSITIONS = {
 POSTGRESQL_CONCEPT_DECLARATIONS = {
     'relational': concept_declarations(),
 }
-POSTGRESQL_ADMIN_OPERATIONS = preserved_operations()
+POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 
 
 class PostgreSQLProviderError(RuntimeError):
@@ -193,7 +195,7 @@ class PostgreSQLCatalogSource:
             return self._databases(manager, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
-        if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate'}:
+        if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'}:
             return self._advanced(connection, catalog_kind, route, object_id)
         if catalog_kind == 'schema':
             return self._schemas(manager, connection, route, object_id)
@@ -203,6 +205,8 @@ class PostgreSQLCatalogSource:
         if not connection.connected():
             raise PostgreSQLProviderError('Connect to the selected database before browsing objects')
         queries = {
+            'large-object': ('SELECT c.oid,c.oid::text AS name,pg_catalog.pg_get_userbyid(c.lomowner) AS owner '
+                'FROM pg_catalog.pg_largeobject_metadata c', None),
             'aggregate': ('SELECT c.oid, c.proname AS name, n.nspname AS schema, '
                 'pg_catalog.pg_get_function_identity_arguments(c.oid) AS identity_arguments '
                 ', (pg_catalog.pg_identify_object(\'pg_catalog.pg_proc\'::regclass,c.oid,0)).identity AS sql_identity '
@@ -358,12 +362,14 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256') if key in compiled},
         }
         return {
             'command_preview': {
                 'language': 'postgresql-sql',
                 'statement': compiled['statement'],
                 'provider_owned': True,
+                **({'verification_statement': compiled['post_statement']} if 'post_statement' in compiled else {}),
             },
             'provider_payload': payload,
             'warnings': [],
@@ -382,7 +388,11 @@ class PostgreSQLProvider:
         route = payload.get('route') or {}
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
-        if compiled != {'statement': statement, 'read_only': payload.get('read_only')}:
+        expected = {'statement': statement, 'read_only': payload.get('read_only')}
+        for key in ('returns_rows', 'post_statement', 'expected_sha256'):
+            if key in compiled:
+                expected[key] = payload.get(key)
+        if compiled != expected:
             raise PostgreSQLProviderError('Retained administrative statement changed')
         self.permissions.require('data_read' if compiled['read_only'] else 'administer')
         self.permissions.require('execute')
@@ -407,10 +417,15 @@ class PostgreSQLProvider:
                 'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
             if not status or identity.get('rows') != [{'oid': database_id}]:
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
-            status, result = (connection.execute_dict(statement) if compiled['read_only']
+            status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
                               else connection.execute_void(statement))
             if not status:
                 raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+            if compiled.get('post_statement'):
+                status, result = connection.execute_dict(compiled['post_statement'])
+                if (not status or len(result.get('rows', [])) != 1 or
+                        result['rows'][0].get('observed_sha256') != compiled['expected_sha256']):
+                    raise PostgreSQLProviderError('PostgreSQL large-object write verification failed before commit')
             committing = True
             status, command = native_control(connection.conn, 'COMMIT')
             if not status or command != 'COMMIT':
@@ -642,7 +657,14 @@ class PostgreSQLProvider:
 
     @staticmethod
     def _studio_complete(binding, request):
-        return binding.instance.complete(request)
+        provider = binding.instance
+        completions = provider.complete(request)
+        state = provider._require_idle_session(request.get('session_id'))
+        with state.lock:
+            context = provider._editor_context(state, request.get('full_source', ''))
+        return {'completions': dict(list(completions.items())[:1000]), 'editor_context': {
+            'context': context, 'truncated': len(completions) > 1000,
+            'coverage': 'Authorized PostgreSQL session completion', 'completion_count': len(completions)}}
 
     @classmethod
     def data_studio_contributions(cls):
@@ -1090,6 +1112,13 @@ class PostgreSQLProvider:
                 'PostgreSQL delegated connection failed'
             )
 
+    def source_tooling(self, language_profile):
+        if language_profile != 'postgresql-sql':
+            raise PostgreSQLProviderError('PostgreSQL SQL language binding required')
+        return {'validation_authority': 'postgresql-offline-grammar',
+                'native_validation_available': True, 'nonexecuting': True,
+                'parser_binding': 'pglast 8.5; PostgreSQL 18.6; native options revision 2'}
+
     @_session_serialized
     def validate_source_without_execution(self, request):
         from .language import analyze
@@ -1099,11 +1128,46 @@ class PostgreSQLProvider:
         state = self._require_idle_session(payload.get('session_id'))
         self._ensure_native_connection(state)
         connection = state.connection.conn
+        context = self._editor_context(state, payload.get('source'))
         result = analyze(payload.get('source'), script=payload.get('script', False),
-                         standard_strings=connection.info.parameter_status(
-                             'standard_conforming_strings'))
+                         standard_strings=context['standard_conforming_strings'],
+                         backslash_quote=context['backslash_quote'])
         result['server_version'] = connection.info.server_version
         return result
+
+    @staticmethod
+    def _editor_context(state, source):
+        connection = state.connection.conn
+        strings = connection.info.parameter_status('standard_conforming_strings')
+        quote = None
+        if isinstance(source, str) and '\\' in source:
+            # backslash_quote is not a ParameterStatus value. Observe this
+            # session without parsing/executing any submitted SQL, preserving
+            # an existing transaction (including an aborted transaction).
+            from psycopg.pq import TransactionStatus
+            status = connection.info.transaction_status
+            if status == TransactionStatus.INERROR:
+                strings = None
+            else:
+                owned = status == TransactionStatus.IDLE and not connection.autocommit
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT current_setting('backslash_quote')")
+                        quote = cursor.fetchone()[0]
+                except Exception:
+                    strings = None
+                    if connection.closed or connection.broken:
+                        state.uncertain = True
+                finally:
+                    if owned and not connection.closed:
+                        try: connection.rollback()
+                        except Exception:
+                            state.uncertain = True
+                            raise PostgreSQLProviderError('Editor observation outcome is unknown; close this session') from None
+        context = {'engine': 'postgresql', 'standard_conforming_strings': strings,
+                   'backslash_quote': quote, 'version': connection.info.server_version}
+        context['context_revision'] = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+        return context
 
     def _require_idle_session(self, session_id):
         state = self._sessions.get(session_id)
@@ -1297,7 +1361,10 @@ class PostgreSQLProvider:
                 conn=state.connection,
                 manager=state.manager,
             )
-            self._completion_adapters[session_id] = adapter
+            # Rebuild native metadata for each request. The legacy adapter
+            # extends cached objects and can retain dropped objects, revoked
+            # visibility or a previous search_path when reused indefinitely.
+            # Session ownership remains cached; catalog suggestions do not.
         return adapter.get_completions(
             str(payload.get('full_source', '')),
             str(payload.get('source_before_cursor', '')),

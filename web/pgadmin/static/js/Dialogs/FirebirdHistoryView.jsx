@@ -5,6 +5,9 @@ import getApiInstance from '../api_instance';
 import url_for from 'sources/url_for';
 import FirebirdTrendView from './FirebirdTrendView';
 import MySQLTrendView from './MySQLTrendView';
+import PostgresqlTrendView from './PostgresqlTrendView';
+import DuckDBTrendView from './DuckDBTrendView';
+import SQLiteTrendView from './SQLiteTrendView';
 
 export default function FirebirdHistoryView({serverId, targetId, engine='firebird'}) {
   const serial = useRef(0);
@@ -51,8 +54,11 @@ export default function FirebirdHistoryView({serverId, targetId, engine='firebir
     </Box>
     {error && <Alert severity="error">{error}</Alert>}
     {snapshot && <>
-      {engine !== 'firebird' ? <MySQLTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} engine={engine} /> :
-        <FirebirdTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} />}
+      {engine === 'postgresql' ? <PostgresqlTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} historical /> :
+        engine === 'duckdb' ? <DuckDBTrendView snapshot={snapshot} /> :
+          engine === 'sqlite' ? <SQLiteTrendView snapshot={snapshot} /> :
+            engine !== 'firebird' ? <MySQLTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} engine={engine} /> :
+              <FirebirdTrendView snapshot={snapshot} scope={targetId ? 'database' : 'server'} />}
       <details><summary>Exact samples, window summaries and source provenance</summary>
         <Box component="pre" sx={{overflow: 'auto', maxHeight: 400}}>{JSON.stringify(snapshot.samples, null, 2)}</Box>
       </details>
@@ -60,4 +66,4 @@ export default function FirebirdHistoryView({serverId, targetId, engine='firebir
   </Box>;
 }
 FirebirdHistoryView.propTypes = {serverId: PropTypes.number.isRequired, targetId: PropTypes.string,
-  engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb'])};
+  engine: PropTypes.oneOf(['firebird', 'mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'])};

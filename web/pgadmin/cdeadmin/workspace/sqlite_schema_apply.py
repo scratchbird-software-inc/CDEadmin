@@ -15,6 +15,31 @@ from ..providers.sqlite.provider import _resources
 from ..providers.sqlite.driver import uncertain_error
 
 
+class _PreservationRefused(ValueError):
+    """An application invariant failed before COMMIT was dispatched."""
+
+
+def _validate_dependencies(connection, observed):
+    """Prepare retained view/trigger uses without stepping their mutation VMs."""
+    for row in observed.values():
+        if row['resource_kind'] == 'view':
+            connection.execute('EXPLAIN SELECT * FROM "main".' +
+                _quote(row['display_name']) + ' LIMIT 0').fetchone()
+    owners = {row['display_path'][1] for row in observed.values()
+        if row['resource_kind'] == 'trigger' and row['display_path'][0] == 'main'}
+    for owner in owners:
+        target = '"main".' + _quote(owner)
+        columns = [row[1] for row in connection.execute(
+            'PRAGMA main.table_xinfo(' + _quote(owner) + ')') if not row[6]]
+        statements = ['INSERT INTO ' + target + ' DEFAULT VALUES',
+                      'DELETE FROM ' + target]
+        if columns:
+            statements.append('UPDATE ' + target + ' SET ' + ', '.join(
+                _quote(name) + '=' + _quote(name) for name in columns))
+        for source in statements:
+            connection.execute('EXPLAIN ' + source).fetchone()
+
+
 class SQLiteSchemaApplications(SchemaApplications):
     def review(self, preview, baseline, desired, owner, binding, database, *, file_identity):
         operations = preview.get('operations')
@@ -116,6 +141,13 @@ def apply_review(provider, route, record):
     close_failed = False
     autoincrement_sequences = {}
     try:
+        if any(op.get('operation') == 'rebuild' for op in record['plan']['operations']):
+            # A retained view may temporarily reference the absent original
+            # table between DROP and RENAME. Keep its source names unchanged;
+            # prepare all retained bindings again before native COMMIT.
+            connection.execute('PRAGMA legacy_alter_table=ON')
+            if connection.execute('PRAGMA legacy_alter_table').fetchone() != (1,):
+                return {'state': 'not_dispatched', 'reason': 'SQLite owned rename mode unavailable'}
         if any(op.get('operation') == 'rebuild' and op.get('preserve_foreign_keys')
                for op in record['plan']['operations']):
             connection.execute('PRAGMA foreign_keys=OFF')
@@ -145,10 +177,12 @@ def apply_review(provider, route, record):
                     'system': 'true' if now['native'].get('system_object') else 'false',
                     'native': now['native']}
                 if (digest(_definition(old)) != digest(_definition(current_model)) or
-                        any(row['resource_kind'] == 'view' or
+                        {child_id: digest(row['native'].get('ddl'))
+                            for child_id, row in observed.items()
+                            if row['resource_kind'] == 'view' or
                             (row['resource_kind'] == 'trigger' and
-                             row['display_path'][:len(old['path'])] != old['path'])
-                            for row in observed.values()) or
+                             row['display_path'][:2] != old['path'])}
+                        != operation.get('dependency_sha256', {}) or
                         any(row['display_name'] == operation['temp_name'] for row in observed.values())):
                     connection.rollback()
                     return {'state': 'not_dispatched', 'reason': 'SQLite rebuild dependency or target changed'}
@@ -271,6 +305,11 @@ def apply_review(provider, route, record):
                     connection.execute(stage)
                 if operation.get('preserve_autoincrement'):
                     high_water = autoincrement_sequences[operation['resource_id']]
+                    copied = connection.execute(
+                        'SELECT seq FROM main.sqlite_sequence WHERE name=?',
+                        (operation['name'],)).fetchone()
+                    if copied is not None:
+                        high_water = max(high_water or 0, copied[0])
                     connection.execute('DELETE FROM main.sqlite_sequence WHERE name=?',
                                        (operation['name'],))
                     if high_water is not None:
@@ -280,21 +319,24 @@ def apply_review(provider, route, record):
                         'SELECT seq FROM main.sqlite_sequence WHERE name=?',
                         (operation['name'],)).fetchall()
                     if observed_sequence != ([(high_water,)] if high_water is not None else []):
-                        raise ValueError('SQLite AUTOINCREMENT sequence preservation failed')
+                        raise _PreservationRefused('SQLite AUTOINCREMENT sequence preservation failed')
                 new_count = connection.execute('SELECT count(*) FROM "main".' + name).fetchone()[0]
                 if new_count != old_count:
-                    raise ValueError('SQLite rebuild row count differs before commit')
+                    raise _PreservationRefused('SQLite rebuild row count differs before commit')
                 if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
-                    raise ValueError('SQLite rebuild failed native foreign-key check')
+                    raise _PreservationRefused('SQLite rebuild failed native foreign-key check')
+                _validate_dependencies(connection, observed)
             else:
                 connection.execute(operation['source'])
         connection.commit()
         committed = True
     except Exception as error:
-        uncertain = uncertain_error(error)
+        uncertain = not isinstance(error, _PreservationRefused) and uncertain_error(error)
         try:
             if connection.in_transaction:
                 connection.rollback()
+            if connection.in_transaction:
+                raise RuntimeError('SQLite rollback did not end the owned write transaction')
             if not dispatched:
                 return {'state': 'not_dispatched', 'error_type': type(error).__name__,
                     'rediscovery_verified': False}
@@ -344,10 +386,23 @@ def apply_review(provider, route, record):
                 old = record['baseline']['rows'][operation['resource_id']]
                 def indexed_keys(items):
                     return [{**item, 'keys': [key for key in item.get('keys', [])
-                        if key.get('is_key')]} for item in items]
+                        if key.get('is_key')]} for item in items if item.get('ddl')]
                 if (indexed_keys(row['native'].get('indexes', [])) !=
                         indexed_keys(old['native'].get('indexes', [])) or
                         row['native'].get('triggers') != old['native'].get('triggers')):
+                    return False
+                # The fresh catalog connection has already closed. Derive the
+                # same native signatures from its captured PRAGMA facts.
+                implicit = sorted([(int(item.get('unique', False)), item['origin'],
+                    int(item.get('partial', False)), tuple((key['column_id'],
+                        key['name'], int(key.get('descending', False)), key['collation'])
+                        for key in item['keys'] if key.get('is_key')))
+                    for item in row['native'].get('indexes', []) if not item.get('ddl')], key=repr)
+                if digest(implicit) != digest(operation['implicit_index_signatures']):
+                    return False
+                metadata = row['native'].get('catalog_metadata', {})
+                if (bool(metadata.get('without_rowid')) != operation['target_without_rowid'] or
+                        bool(metadata.get('strict')) != operation['target_strict']):
                     return False
                 for child_id in operation['preserved_child_ids']:
                     current = by_id.get(child_id)

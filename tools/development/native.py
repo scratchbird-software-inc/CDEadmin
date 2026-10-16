@@ -313,6 +313,16 @@ def stage(name, evidence):
         command([PYTHON, '-m', 'pip', 'install', '--no-deps',
                  '--force-reinstall', wheels[0]], env=env,
                 log=evidence / 'mariadb-python-install.log')
+        parser_build = Path(tempfile.mkdtemp(prefix='pglast-parent-', dir=evidence)) / 'build'
+        command([PYTHON, '-m', 'tools.cdeadmin_build_postgresql_parser',
+                 '--archive', download('pglast'), '--library-archive', download('libpg-query'),
+                 '--output', parser_build], env=env,
+                log=evidence / 'pglast-build.log')
+        parser_wheels = list((parser_build / 'wheels').glob('*.whl'))
+        if len(parser_wheels) != 1:
+            raise RuntimeError('Expected one PostgreSQL parser with native context options')
+        command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', parser_wheels[0]], env=env,
+                log=evidence / 'pglast-install.log')
         install_scratchbird_driver(env, evidence)
         command([PYTHON, '-m', 'pip', 'check'], env=env,
                 log=evidence / 'pip-check.log')

@@ -51,6 +51,8 @@ class ScriptCoordinator:
     def prepare(self, context, session_id, source):
         session, binding = self.studio._operational_session(
             context, session_id)
+        if session.language_profile == 'firebird-sql':
+            raise DataStudioAccessError('Use the Firebird native script workflow for its dialect and client settings')
         if not callable(
                 getattr(binding.instance, 'script_statement_outcome', None)):
             raise DataStudioAccessError(
@@ -70,6 +72,7 @@ class ScriptCoordinator:
             plan = {'plan_id': str(uuid.uuid4()), 'session_id': session_id,
                     'endpoint_id': context.endpoint_id, 'language_profile': session.language_profile,
                     'source_sha256': checked['source_sha256'], 'statements': checked['statements'],
+                    'syntax_context': {key: checked[key] for key in ('syntax_settings', 'sql_mode', 'client_sql_dialect') if key in checked},
                     'state': 'ready', 'revision': 0, 'next_statement': 0, 'occurrence_id': None, 'history': []}
             self.plans[plan['plan_id']] = plan
             return copy.deepcopy(plan)
@@ -136,7 +139,12 @@ class ScriptCoordinator:
                     'language_profile': session.language_profile, 'script': True,
                     'source': plan['statements'][plan['next_statement']]['source'],
                 })
-                if not checked['script_ready']:
+                context_changed = any(
+                    any(observed is not None and observed != value.get(name)
+                        for name, observed in checked.get(key, {}).items())
+                    if key == 'syntax_settings' else checked.get(key) != value
+                    for key, value in plan.get('syntax_context', {}).items())
+                if not checked['script_ready'] or context_changed:
                     plan.update(state='stopped', stop_reason='source-validation-changed',
                                 validation=checked, revision=plan['revision'] + 1)
                     return copy.deepcopy(plan)

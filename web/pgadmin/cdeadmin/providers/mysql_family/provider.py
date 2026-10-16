@@ -9,6 +9,7 @@ from pathlib import Path
 from importlib import resources as package_resources
 
 from ..catalog_presentation import annotate_relation_ownership
+from ..native_editor import NativeEditorProvider
 
 from pgadmin.cdeadmin.sdk import (
     ActualEnginePilotProvider,
@@ -1498,7 +1499,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         return result
 
 
-class MySQLPilotProvider(ActualEnginePilotProvider):
+class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
@@ -1614,7 +1615,7 @@ class MySQLPilotProvider(ActualEnginePilotProvider):
             self.client._discard_failed_session(connection)
 
 
-class MariaDBPilotProvider(ActualEnginePilotProvider):
+class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
@@ -1935,7 +1936,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 '@@lower_case_table_names, @@default_storage_engine, '
                 '@@tx_isolation, CURRENT_USER(), USER(), @@sql_mode, '
                 '@@character_set_server, @@collation_server, @@log_bin, '
-                '@@binlog_format, @@gtid_strict_mode, @@wsrep_on, '
+                '@@binlog_format, @@gtid_strict_mode, '
+                '(SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_VARIABLES '
+                "WHERE VARIABLE_NAME='WSREP_ON'), "
                 '@@max_connections'
             )
             server_names = (

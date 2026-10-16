@@ -38,6 +38,8 @@ _KIND_LABELS = {
     'external-function': 'External functions',
     'blob-filter': 'BLOB filters',
     'function': 'Functions',
+    'native-function': 'Native callable functions',
+    'compile-option': 'Runtime compile options',
     'index': 'Indexes',
     'package': 'Packages',
     'partition': 'Partitions',

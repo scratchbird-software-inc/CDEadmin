@@ -69,7 +69,7 @@ class MonitoringHost:
         self.endpoints = endpoint_service
         self.runtime = MonitoringRuntime()
         self.history = None
-        if self.engine in {'firebird', 'mysql', 'mariadb'}:
+        if self.engine in {'firebird', 'mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'}:
             from .monitoring_history import configured_history
             if 'cdeadmin_monitoring_history' not in app.extensions:
                 app.extensions['cdeadmin_monitoring_history'] = configured_history(app)

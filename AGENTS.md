@@ -101,3 +101,8 @@ Native utility dependencies must be integrated with explicit execution-host and
 outcome handling; requiring another administration tool or hand-written SQL does
 not close a required workflow. Preserve the existing human form-validation and
 platform-team ownership boundaries.
+
+Owner correction, 2026-10-16: ScratchBird is under heavy development. Wire its
+client drivers and the history integration, but do not run history tests for now.
+Keep history qualification explicitly deferred until the owner resumes it; its
+absence must not block implementation of the rest of the six-engine matrix.

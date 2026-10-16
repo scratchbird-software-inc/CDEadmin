@@ -27,7 +27,8 @@ def decode(source):
 
 
 def read(source, node='node', *, engine='mysql'):
-    if engine not in {'mysql', 'mariadb'}:
+    versions = {'mysql': '9.7.0', 'mariadb': '12.2.2', 'postgresql': '18.3', 'duckdb': '1.5.2', 'sqlite': '3.53.0'}
+    if engine not in versions:
         raise ValueError('Unsupported native data engine')
     if not isinstance(source, str) or not source or len(source.encode('utf8')) > MAX_BYTES:
         raise ValueError('Data DDN must be nonempty text within 8 MiB')
@@ -50,7 +51,7 @@ def read(source, node='node', *, engine='mysql'):
         acquisition = metadata.get('acquisition', {})
         columns = metadata.get('schema', {}).get('columns', [])
         if (metadata.get('mapping') != 'scratchrobin.result.static@1' or acquisition.get('engine_id') != engine or
-                str(acquisition.get('native_version', '')).split('-')[0] != ('12.2.2' if engine == 'mariadb' else '9.7.0') or
+                str(acquisition.get('native_version', '')).split('-')[0] != versions[engine] or
                 not acquisition.get('transaction_completed') or not 1 <= len(columns) <= 256 or
                 len(parsed['rows']) != acquisition.get('rows') or not isinstance(acquisition.get('native_columns'), list)):
             raise ValueError('A native relation capture with exact column metadata is required')
@@ -63,6 +64,9 @@ def read(source, node='node', *, engine='mysql'):
                     any(decode(display['c_' + str(i)]) != value for i, value in enumerate(row))):
                 raise ValueError('Displayed data and positional native values differ')
             rows.append(row)
+        if parsed.get('native_payload'):
+            if engine != 'duckdb': raise ValueError('Unexpected native type payload')
+            metadata['native_payload'] = parsed['native_payload']
         return metadata, rows
     except (OSError, subprocess.TimeoutExpired, KeyError, TypeError, RecursionError):
         raise ValueError('Data DDN could not be admitted') from None

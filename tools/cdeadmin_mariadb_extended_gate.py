@@ -29,7 +29,6 @@ def qualify(route, output, *, password=None):
             for p in sorted((ROOT / 'web/pgadmin/cdeadmin').rglob('*.py'))}}
     for pure in (True,):
         mode = 'native'
-        options = {**route, **({'password': password} if password else {})}
         for name in (*JOBS, 'driver_platform'):
             directory = output / mode / name
             try:
@@ -42,7 +41,7 @@ def qualify(route, output, *, password=None):
                 else:
                     if name == 'catalog_completeness':
                         module = importlib.import_module('tools.cdeadmin_mariadb_catalog_completeness_gate')
-                    module.qualify(options, directory)
+                    module.qualify(route, directory, password=password)
                     receipt = json.loads((directory / 'summary.json').read_text())
                     passed = receipt.get('complete') is True
                 if not passed:

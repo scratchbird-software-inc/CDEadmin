@@ -21,6 +21,11 @@ admission, authorization and native-operation validation remain required.
 Windows/macOS qualification remains assigned to the platform teams and is
 required for a cross-platform completion claim.
 
+Owner correction, 2026-10-16: ScratchBird is under heavy development. Keep its
+client-driver and archive integration wired, but do not run history tests until
+the owner resumes qualification. History acceptance is deferred; it must not
+hold up implementation of the other matrix items.
+
 Version and installation identity
 ---------------------------------
 
@@ -329,6 +334,93 @@ Qualify each affected native scope as it is completed and aggregate platform
 evidence only after the corresponding implementation is qualified. The blocked
 ScratchBird archive acceptance can proceed when its native runtime serves; other
 engine work need not wait for that dependency.
+
+Implementation progress
+=======================
+
+The following additions supersede the corresponding source gaps in the audit
+baseline. They do not certify full native product completion; the broader
+transformation, recovery, operations and platform requirements remain open.
+
+* Retained-session metadata completion is wired for MySQL, MariaDB, DuckDB,
+  SQLite and Firebird, alongside PostgreSQL's native completion adapter.
+  Suggestions include native functions/types and exact quoted relation/column
+  paths. PostgreSQL refreshes its adapter for each request so dropped objects
+  and earlier search paths are not retained indefinitely. Bounded or denied
+  observations are explicitly partial. CTE projections and aliases have editor
+  support; complete procedural-scope coverage still requires qualification.
+  SQLite source compilation preserves the existing authorizer and suppresses
+  PRAGMA settings/VFS preparation effects through native ``SQLITE_IGNORE``.
+  PRAGMA syntax is checked; its options are not executed or semantically applied.
+* MySQL and MariaDB source checks use native ``PREPARE`` without ``EXECUTE``.
+  Metadata lock waiting is bounded and the original session setting restored.
+  Firebird checks use native DSQL/PSQL preparation in the selected statement
+  dialect, including native-script framing. Idle checks own a separate read
+  transaction; checks during interactive work preserve its transaction.
+  Catalog/privilege failures leave grammar unconfirmed. Firebird execution
+  continues through its dedicated client-setting-aware script workflow.
+* PostgreSQL checks quoted SQL and PL/pgSQL bodies and observed string settings.
+  A reproducible pglast 8.5 patch exposes native parse options and separate
+  routine-body settings. Its exact library revision restores files omitted
+  from the upstream source archive after verifying every overlapping file.
+  Native bootstrap and Docker builds install this parser. PostgreSQL 18.6
+  parser identity and the 18.3 server profile remain separate recorded facts;
+  other installed procedural languages are explicitly unconfirmed.
+* The shared editor selects the MySQL, MariaDB, PostgreSQL, DuckDB or SQLite
+  formatter explicitly, with token preservation and native validation before
+  replacing source. Firebird retains its native formatter. Incremental native
+  diagnostics are opt-in through **Check while typing**; stale replies are
+  discarded and Unicode character offsets translated for the editor.
+* SQLite discovery now includes connection-local native function overloads,
+  collations, compile options and supported PRAGMA names. Listing PRAGMA names
+  does not execute those PRAGMAs. PostgreSQL catalog paths follow exact native
+  ownership, including schema and table-owned objects; TOAST relations and
+  large-object ownership/ACL metadata are discoverable. Large-object contents
+  have native create, bounded read/write, truncate, owner/comment, privilege and
+  drop workflows. Binary file chunks load into the review; downloads verify the
+  returned length and checksum. Large-object operations own their transaction,
+  preserving interactive sessions. Continuous whole-file transfers remain a
+  separate workflow obligation.
+* Independent raw catalog/child-fact/navigator reconciliation is available in
+  ``tools/cdeadmin_native_catalog_gate.py`` for PostgreSQL, DuckDB and SQLite.
+  PostgreSQL database/system catalogs, SQLite attachments/temporary objects and
+  loaded capabilities, and DuckDB attachments/temporary objects and complete
+  function overload groups have distinct observations. Shared PostgreSQL server
+  inventories and restricted-identity qualification remain separate obligations.
+* PostgreSQL, DuckDB and SQLite have durable owner/endpoint/database-scoped
+  recipe revisions with optimistic concurrency. Reading a revision loads the
+  editor; saving a revision does not execute the recipe.
+* Typed data DDN import is wired for PostgreSQL, DuckDB and SQLite through
+  separate preview, durable review and explicit one-time apply actions.
+  Fresh native layouts guard dispatch. SQLite archives retain storage classes;
+  DuckDB archives include an Arrow IPC representation, checked against displayed
+  values by the installed native engine. PostgreSQL uses exact text-protocol
+  values and native casts. Constraints and triggers remain active, generated
+  columns are recomputed, and a lost commit reply is never replayed. Native
+  qualification is recorded independently from implementation. Static data
+  capture remains bounded to 6,000 rows and an 8 MiB workspace; review storage
+  has a separate 4 MiB limit. A full capture exceeding a limit is refused.
+* Explicit SQLite rebuilds support native type/affinity changes, generated
+  columns, primary/unique/foreign-key constraints, STRICT and WITHOUT ROWID
+  transitions and AUTOINCREMENT changes. The desired CREATE definition and
+  complete column facts are reviewed. Row copying enforces the native desired
+  constraints; generated values are recomputed. Retained views/triggers and
+  foreign keys are checked before COMMIT. Dependency changes after review
+  refuse dispatch. Failed preservation checks roll back the owned transaction.
+  Exact independently declared index/trigger definitions remain preserved;
+  changing those definitions and multi-table rebuild batches remain separate.
+* PostgreSQL, DuckDB and SQLite collector archive writers, scoped history routes,
+  identity/redaction/rollup mappings and historical viewers are wired to the
+  shared ScratchBird client boundary. **No history qualification is claimed**;
+  PRODUCT-GAP-07 is owner-deferred.
+
+PRODUCT-GAP-09 still includes remaining native schema transformations beyond the
+typed imports. PRODUCT-GAP-11 still requires dedicated physical/incremental/PITR
+workflows and recovery drills. PRODUCT-GAP-12 still requires the full native
+feature denominator and outstanding lifecycle/upgrade, availability, security,
+extension and maintenance adapters. PRODUCT-GAP-13 requires current-source
+browser/native/platform evidence for that expanded scope. Existing passing
+component receipts must not be promoted to those broader completion claims.
 
 References
 ==========

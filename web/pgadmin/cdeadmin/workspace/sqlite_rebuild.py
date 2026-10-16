@@ -1,4 +1,4 @@
-"""Conservative SQLite table rebuild preserving rows in one native transaction."""
+"""Reviewed SQLite table transformations in one native write transaction."""
 
 import re
 import sqlite3
@@ -26,6 +26,8 @@ def _autoincrement_table(ddl):
 def _implicit_indexes(connection, table):
     signatures = []
     for index in connection.execute('PRAGMA main.index_list(' + _quote(table) + ')'):
+        if index[3] == 'c':
+            continue  # Independently declared indexes are replayed separately.
         keys = tuple((part[1], part[2], part[3], part[4])
                      for part in connection.execute('PRAGMA main.index_xinfo(' +
                          _quote(index[1]) + ')') if part[5])
@@ -48,13 +50,11 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     old = before['native']
     source_autoincrement = _autoincrement_table(old.get('ddl') or '')
     target_autoincrement = _autoincrement_table(source)
-    if source_autoincrement != target_autoincrement:
-        raise ValueError('SQLite rebuild cannot add or remove AUTOINCREMENT identity')
     indexes, triggers = old.get('indexes', []), old.get('triggers', [])
-    if (after['native'].get('indexes') != indexes or
+    explicit_indexes = [item for item in indexes if item.get('ddl')]
+    if ([item for item in after['native'].get('indexes', []) if item.get('ddl')] != explicit_indexes or
             after['native'].get('triggers') != triggers):
         raise ValueError('SQLite rebuild must retain exact index and trigger definitions')
-    explicit_indexes = [item for item in indexes if item.get('ddl')]
     if any((not item.get('ddl') and not item['name'].startswith('sqlite_autoindex_')) or
            (item.get('ddl') and not isinstance(item['ddl'], str))
            for item in indexes) or any(not isinstance(item.get('ddl'), str) or
@@ -67,10 +67,10 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         if row['kind'] == 'table' and row['resource_id'] != before['resource_id'] and
         any(dep.get('referenced_table') == before['name']
             for dep in row['native'].get('dependencies', []))}
-    if any(row['kind'] == 'view' or
-           (row['kind'] == 'trigger' and row['path'][:2] != before['path'])
-           for row in baseline['rows'].values()):
-        raise ValueError('SQLite rebuild with dependent views or external triggers needs a dependency review')
+    dependencies = {identity: digest(row['native'].get('ddl'))
+        for identity, row in baseline['rows'].items()
+        if row['kind'] == 'view' or
+        (row['kind'] == 'trigger' and row['path'][:2] != before['path'])}
     if temp_name is None:
         temp_name = '__cde_rebuild_' + uuid.uuid4().hex
     elif not re.fullmatch(r'__cde_rebuild_[0-9a-f]{32}', temp_name):
@@ -98,16 +98,10 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     old_probe = sqlite3.connect(':memory:')
     try:
         old_probe.execute(old.get('ddl') or '')
-        old_foreign_keys = old_probe.execute('PRAGMA main.foreign_key_list(' +
-            _quote(before['name']) + ')').fetchall()
-        old_implicit_indexes = _implicit_indexes(old_probe, before['name'])
+        old_keys = [(row[1], row[2], row[5]) for row in old_probe.execute(
+            'PRAGMA main.table_xinfo(' + _quote(before['name']) + ')') if row[5]]
     finally:
         old_probe.close()
-    if foreign_keys != old_foreign_keys:
-        raise ValueError('SQLite changed foreign-key definitions need a dependency review')
-    if (bool(target_options[4]) != bool(_metadata(before).get('without_rowid')) or
-            bool(target_options[5]) != bool(_metadata(before).get('strict'))):
-        raise ValueError('SQLite rebuild cannot change WITHOUT ROWID or STRICT identity mode')
     previous = {item['name']: item for item in old.get('columns', [])}
     if not previous or len(previous) != len(old.get('columns', [])):
         raise ValueError('SQLite source columns are unavailable or ambiguous')
@@ -115,8 +109,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
                          'hidden': int(row[6] or 0), 'ordinal_position': int(row[0]),
                          'nullable': not bool(row[3]), 'default': row[4]}
            for row in wanted}
-    if not new or len(new) != len(wanted) or any(col['hidden'] for col in new.values()):
-        raise ValueError('SQLite generated/hidden columns need a dedicated rebuild adapter')
+    if not new or len(new) != len(wanted) or any(col['hidden'] not in (0, 2, 3) for col in new.values()):
+        raise ValueError('SQLite rebuild requires ordinary or native generated columns')
     column_renames = column_renames or {}
     if (not isinstance(column_renames, dict) or len(column_renames) > 16 or
             len(set(column_renames.values())) != len(column_renames)):
@@ -125,11 +119,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         if (not isinstance(former, str) or not isinstance(renamed, str) or
                 former not in previous or former in new or
                 renamed not in new or renamed in previous or
-                int(previous[former].get('primary_key_position') or 0) or
-                new[renamed]['pk'] or
-                str(previous[former].get('data_type') or '') != new[renamed]['type'] or
-                int(previous[former].get('hidden') or 0)):
-            raise ValueError('SQLite column rename needs an exact non-key retained source and target')
+                new[renamed]['hidden']):
+            raise ValueError('SQLite column rename needs an exact source and writable target')
     if column_renames and (indexes or triggers):
         raise ValueError('SQLite column rename with indexes or triggers needs a dependency review')
     removed = [name for name in previous
@@ -139,21 +130,9 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     if any(str(previous[former].get('data_type') or '') == new[renamed]['type']
            for former in removed for renamed in added):
         raise ValueError('SQLite removed/new columns may be a rename; map it explicitly or use separate changes')
-    common = [name for name in previous if name in new]
+    common = [name for name in previous if name in new and not new[name]['hidden']]
     if not common and not column_renames:
         raise ValueError('SQLite rebuild requires retained named columns')
-    for name in common:
-        if (str(previous[name].get('data_type') or '') != new[name]['type'] or
-                int(previous[name].get('primary_key_position') or 0) != new[name]['pk'] or
-                int(previous[name].get('hidden') or 0) != 0):
-            raise ValueError('SQLite rebuild cannot silently change a retained column type or key')
-    if any(int(item.get('primary_key_position') or 0) and name not in new
-           for name, item in previous.items()):
-        raise ValueError('SQLite rebuild cannot remove a primary-key column')
-    if any(facts['pk'] and name not in previous for name, facts in new.items()):
-        raise ValueError('SQLite rebuild cannot add a primary-key column')
-    if target_indexes != old_implicit_indexes:
-        raise ValueError('SQLite changed implicit index or unique-key definition needs a preservation review')
     declared = after['native'].get('columns')
     if not isinstance(declared, list) or len(declared) != len(new):
         raise ValueError('Desired SQLite DDN must list every rebuilt column')
@@ -170,7 +149,9 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     temp = _quote('main') + '.' + _quote(temp_name)
     source_names = common + list(column_renames)
     target_names = common + [column_renames[name] for name in column_renames]
-    preserve_rowid = not _metadata(before).get('without_rowid')
+    new_keys = [(row[1], row[2], row[5]) for row in wanted if row[5]]
+    preserve_rowid = (not _metadata(before).get('without_rowid') and
+        not target_options[4] and old_keys == new_keys)
     rowid_alias = None
     if preserve_rowid:
         rowid_alias = next((alias for alias in ('rowid', '_rowid_', 'oid')
@@ -194,21 +175,28 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         'stages': stages, 'temp_name': temp_name,
         'preserved_columns': common, 'column_renames': column_renames,
         'preserve_rowid': preserve_rowid,
-        'preserve_foreign_keys': bool(foreign_keys or inbound),
+        'preserve_foreign_keys': True,
         'inbound_sha256': inbound,
-        'preserve_autoincrement': source_autoincrement,
+        'dependency_sha256': dependencies,
+        'preserve_autoincrement': source_autoincrement and target_autoincrement,
+        'target_autoincrement': target_autoincrement,
+        'implicit_index_signatures': target_indexes,
+        'target_without_rowid': bool(target_options[4]),
+        'target_strict': bool(target_options[5]),
         'rowid_alias': rowid_alias,
         'target_columns': [{'name': name, **facts} for name, facts in new.items()],
         'expected_ddl': expected_ddl,
-        'preserved_child_ids': [item['resource_id'] for item in indexes + triggers],
+        'preserved_child_ids': [item['resource_id'] for item in explicit_indexes + triggers],
         'baseline_sha256': digest({'ddl': before['native'].get('ddl'),
             'columns': before['native'].get('columns'),
             'indexes': before['native'].get('indexes'),
             'triggers': before['native'].get('triggers')}),
         'desired_sha256': digest({'ddl': after['native'].get('ddl'),
             'columns': after['native'].get('columns')}),
-        'warnings': ['Rebuild copies rows under one SQLite write transaction; writers wait for the native lock.'
-            + (' Unchanged foreign keys are checked before commit.'
-               if foreign_keys or inbound else '')
-            + (' The live AUTOINCREMENT high-water mark is restored under that lock.'
-               if source_autoincrement else '')]}
+        'warnings': ['Rebuild copies rows under one SQLite write transaction; writers wait for the native lock.',
+            'The desired native types apply SQLite affinity and STRICT conversion rules during copying. Generated columns are recomputed. New constraints must accept all copied rows.',
+            'All native foreign keys and retained view/trigger bindings are checked before commit.',
+            'Removed columns and constraints are explicitly discarded by this selected rebuild.',
+            *(['Physical rowids are not preserved when changing storage mode or primary-key identity.'] if not preserve_rowid else []),
+            *(['The live AUTOINCREMENT high-water mark is preserved.'] if source_autoincrement and target_autoincrement else []),
+            *(['AUTOINCREMENT continuation changes with the explicitly selected desired identity definition.'] if source_autoincrement != target_autoincrement else [])]}

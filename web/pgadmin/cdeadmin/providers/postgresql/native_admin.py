@@ -14,12 +14,12 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
-from .preserved_surface import preserved_operations
+from .preserved_surface import administration_operations
 
 
-POSTGRESQL_ADMIN_OPERATIONS = preserved_operations()
+POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
-    'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate',
+    'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -310,6 +310,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(draft, Mapping):
         raise PostgreSQLNativeAdminError('PostgreSQL draft is invalid')
     native = _native_target(request)
+    if kind == 'large-object':
+        from .large_objects import compile_operation
+        return compile_operation(operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

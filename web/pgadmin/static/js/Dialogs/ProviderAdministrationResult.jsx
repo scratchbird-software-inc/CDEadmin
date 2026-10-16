@@ -9,10 +9,13 @@ import gettext from 'sources/gettext';
 import {Alert, Box} from '@mui/material';
 import FirebirdServiceObservation from './FirebirdServiceObservation';
 import FirebirdLimboObservation from './FirebirdLimboObservation';
+import {PostgresqlBinaryResult} from './PostgresqlBinaryChunk';
 
 export default function ProviderAdministrationResult({result, title, target}) {
   if (!result) return null;
   const observation = result.provider_result?.driver_observation;
+  const binary = result.provider_result?.result?.rows?.filter(row =>
+    typeof row.data_base64 === 'string' && row.sha256 && row.oid !== undefined && row.offset !== undefined) || [];
   return <>
     {target?.resource_id && <Box component="p" sx={{mt: 2, overflowWrap: 'anywhere'}}
       aria-label={gettext('Provider response target')}>
@@ -33,6 +36,7 @@ export default function ProviderAdministrationResult({result, title, target}) {
     <Alert severity="info" sx={{mt: 2}}>
       {gettext('The provider response was recorded. Finality remains provider-owned; review the returned state and any required post-state validation.')}
     </Alert>
+    {binary.map((row, index) => <PostgresqlBinaryResult key={`${row.oid}:${row.offset}:${index}`} row={row} />)}
     {observation?.schema === 'cdeadmin.firebird-limbo-result.v1' ?
       <FirebirdLimboObservation observation={observation} /> :
       observation?.schema === 'cdeadmin.firebird-service-result.v1' ?
@@ -40,7 +44,8 @@ export default function ProviderAdministrationResult({result, title, target}) {
         <Box component="pre" aria-label={gettext('Provider operation result')}
           sx={{mt: 1, p: 1, overflow: 'auto', maxHeight: 320,
             bgcolor: 'background.default'}}>
-          {JSON.stringify(result.provider_result ?? result, null, 2)}
+          {JSON.stringify(result.provider_result ?? result, (key, value) =>
+            binary.length && key === 'data_base64' ? gettext('Available as binary download') : value, 2)}
         </Box>}
   </>;
 }

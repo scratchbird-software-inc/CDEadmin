@@ -53,6 +53,7 @@ from .query_parameters import normalize_parameters
 from .query_values import normalize_value
 from .query_columns import describe_columns
 from .query_client import FirebirdQueryClient
+from ..native_editor import NativeEditorProvider
 from .service_connection import (
     connect_service, notify_attached, security_context,
 )
@@ -197,7 +198,7 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 ))
 
 
-class FirebirdProvider(ActualEnginePilotProvider):
+class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client, *, profile=PROFILE):
         embedded = context.target_adapter_id == 'firebird-embedded-client'
         if embedded and 'network' in context.effective_permissions:

@@ -67,7 +67,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
   }, [endpoint, targetId, definitionEndpoint, showPolicy, scope, engineMode, engine]);
   useEffect(() => {
     if(!showPolicy || !snapshot?.policy || snapshot.state === 'disabled') return;
-    setPolicy(value => ({...value, ...Object.fromEntries([...Object.keys(defaults), ...(['mysql', 'mariadb'].includes(engine) ? ['history_enabled'] : [])]
+    setPolicy(value => ({...value, ...Object.fromEntries([...Object.keys(defaults), ...(['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ? ['history_enabled'] : [])]
       .filter(key => Object.hasOwn(snapshot.policy, key)).map(key => [key, snapshot.policy[key]]))}));
     if(snapshot.authentication) {
       setMode(snapshot.authentication.mode === 'dedicated' ? 'dedicated' : 'current');
@@ -79,7 +79,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     changing.current = true; setBusy(true); setActionError('');
     try {
       const response = stop ? await getApiInstance().delete(endpoint) : await getApiInstance().post(endpoint,
-        {...policy, ...(['mysql', 'mariadb'].includes(engine) ? {history_enabled: Boolean(policy.history_enabled)} : {}),
+        {...policy, ...(['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ? {history_enabled: Boolean(policy.history_enabled)} : {}),
           ...(!embedded && mode === 'dedicated' ? {credentials} : {})});
       if(token === serial.current) setSnapshot(response.data.data);
     } catch(failure) {if(token === serial.current) setActionError(failure.response?.data?.errormsg || 'Monitoring policy change failed');}
@@ -128,10 +128,10 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
             onChange={event => setPolicy({...policy, [key]: Number(event.target.value)})} />)}
         <FormControlLabel label="Use completed refreshes as availability heartbeats" control={<Checkbox checked={policy.heartbeat_enabled}
           disabled={busy || active} onChange={event => setPolicy({...policy, heartbeat_enabled: event.target.checked})} />} />
-        {['mysql', 'mariadb'].includes(engine) && <FormControlLabel label="Persist observations in ScratchBird" control={<Checkbox
+        {['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) && <FormControlLabel label="Persist observations in ScratchBird" control={<Checkbox
           checked={Boolean(policy.history_enabled)} disabled={busy || active || snapshot?.history_available === false}
           onChange={event => setPolicy({...policy, history_enabled: event.target.checked})} />} />}
-        {['mysql', 'mariadb'].includes(engine) && snapshot?.history_storage && <Alert severity={snapshot.history_storage.status === 'unconfirmed' ? 'warning' : 'info'}>
+        {['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) && snapshot?.history_storage && <Alert severity={snapshot.history_storage.status === 'unconfirmed' ? 'warning' : 'info'}>
           History: {snapshot.history_storage.status}. Unconfirmed writes: {snapshot.history_storage.failures || 0}.
         </Alert>}
         <TextField size="small" type="number" label="Heartbeat timeout (seconds; blank uses policy default)"
@@ -144,7 +144,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
     </> : <>
       {!engineMode && <TextField select size="small" label="Display" value={display} onChange={event => setDisplay(event.target.value)}>
         <MenuItem value="dashboard">Dashboard</MenuItem><MenuItem value="trends">Retained observations</MenuItem>
-        {['mysql', 'mariadb'].includes(engine) && <MenuItem value="history">Persistent history</MenuItem>}
+        {['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) && <MenuItem value="history">Persistent history</MenuItem>}
       </TextField>}
       {engineMode && pages.length > 1 && !publishedView && <TextField select size="small" label="Dashboard page" value={pages.includes(page) ? page : 'dashboard'} onChange={event => setPage(event.target.value)}>
         {pages.map((item, index) => <MenuItem key={item} value={item}>Page {index + 1}</MenuItem>)}
@@ -158,7 +158,7 @@ export default function MySQLMonitoring({serverId, targetId, policyMode=false, e
           ...(server.databases || []).map(database => <MenuItem key={`${server.server_id}/${database.target_id}`} value={JSON.stringify([server.server_id, database.target_id, database.name])}>{server.name} / {database.name}</MenuItem>),
         ])}
       </TextField>}
-      {display === 'history' && !engineMode && ['mysql', 'mariadb'].includes(engine) ?
+      {display === 'history' && !engineMode && ['mysql', 'mariadb', 'duckdb', 'sqlite'].includes(engine) ?
         <FirebirdHistoryView key={`${serverId}:${targetId || ''}`} serverId={serverId} targetId={targetId} engine={engine} /> :
         display === 'trends' && !engineMode ? engine === 'sqlite' ? <SQLiteTrendView snapshot={snapshot} /> : embedded ? <DuckDBTrendView snapshot={snapshot} /> :
           <MySQLTrendView snapshot={snapshot} scope={scope} engine={engine} /> :

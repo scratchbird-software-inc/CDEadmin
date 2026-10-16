@@ -34,7 +34,7 @@
     "maximum_bytes": 77623060
   },
   "startup": {
-    "route_count": 1409,
+    "route_count": 1412,
     "wall_seconds_maximum": 8.0,
     "wall_seconds_platform_maximum": {"darwin:x86_64": 25.0, "darwin:arm64": 12.0, "win32:AMD64": 35.0},
     "max_rss_kib_maximum": 240000,

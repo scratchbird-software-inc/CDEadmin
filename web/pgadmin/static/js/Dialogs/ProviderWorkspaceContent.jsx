@@ -47,6 +47,7 @@ import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
+import {PostgresqlBinaryField} from './PostgresqlBinaryChunk';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
 import {
   Fragment, createContext, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
@@ -622,6 +623,10 @@ export function VisualAdminField({field, value, onChange, disabled=false}) {
     value={[record]} onChange={(records) => onChange(records[0])} />;
   }
   const admittedValue = value ?? initialFieldValue(field);
+  if (field.field_id === 'large_object_data_base64' && field.control === 'multiline') {
+    return <PostgresqlBinaryField field={field} value={admittedValue}
+      disabled={disabled} onChange={onChange} />;
+  }
   if (field.array_editor) {
     return <RecordListAdminField disabled={disabled} field={field} value={admittedValue}
       onChange={onChange} />;
@@ -1617,7 +1622,7 @@ export function VisualAdministration({catalog, resources, selectedResource, post
                     changedFieldDraft(allFields, current, field.field_id, value, inspectedResource));
                 }} />} /> : <Box sx={{display: 'grid', gap: 1,
               gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 24rem))'}}>
-              {fields.map((field) => <Box key={field.field_id} sx={{minWidth: 0,
+              {fields.map((field) => <Box key={`${resourceKind}:${operationId}:${targetResource?.resource_id || ''}:${field.field_id}`} sx={{minWidth: 0,
                 gridColumn: field.array_editor || field.object_editor ||
                     ['code', 'multiline', 'json', 'multiselect'].includes(field.control) ? '1 / -1' : undefined}}>
                 <VisualAdminField disabled={working || inspecting} field={field} value={draft[field.field_id]}

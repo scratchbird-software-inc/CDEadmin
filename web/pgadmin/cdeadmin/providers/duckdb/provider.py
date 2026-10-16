@@ -17,6 +17,7 @@ from ..relational_admin import (
 )
 from .administration import DuckDBAdministration
 from .driver import DuckDBClient
+from ..native_editor import NativeEditorProvider
 from ..embedded_route import duckdb_arguments
 from ..embedded_route import contained_database
 
@@ -142,7 +143,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
 ))
 
 
-class DuckDBPilotProvider(ActualEnginePilotProvider):
+class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

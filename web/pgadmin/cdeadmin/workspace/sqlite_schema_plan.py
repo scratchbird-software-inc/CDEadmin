@@ -231,10 +231,10 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                 _resource_id('table', ['main'], row['path'][1]) in rebuilds and
                 row['kind'] in {'column', 'constraint'})
             if observed is None or not _equal(_definition(old), _definition(observed)):
-                if row['kind'] not in {'database', 'pragma', 'extension', 'metric'}:
+                if row['kind'] not in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                     conflicts.append({'resource_id': identity, 'name': row['name'],
                         'reason': 'Native baseline differs from the freshly observed file'})
-            if row['kind'] in {'database', 'pragma', 'extension', 'metric'}:
+            if row['kind'] in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                 continue
             if not _equal(_definition(old), _definition(row)) and identity not in rebuilds and not rebuilding_child:
                 blockers.append({'resource_id': identity, 'name': row['name'],
@@ -349,7 +349,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         covered_deletions.add(identity)
         covered_deletions.update(descendant_ids)
     for identity, row in sorted(before.items()):
-        if identity not in after and row['kind'] not in {'metric', 'pragma', 'extension'}:
+        if identity not in after and row['kind'] not in {'metric', 'pragma', 'extension', 'native-function', 'collation', 'compile-option'}:
             if (len(row['path']) > 2 and row['kind'] in {'column', 'constraint'} and
                     _resource_id('table', ['main'], row['path'][1]) in rebuilds):
                 continue

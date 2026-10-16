@@ -55,7 +55,7 @@ class DuckDBMonitoringHost(MySQLMonitoringHost):
     provider_id = 'org.cdeadmin.duckdb'
     identity_key = 'target_id'
     policy_fields = frozenset({'interval_seconds', 'retain_samples', 'lease_seconds',
-        'heartbeat_enabled', 'heartbeat_timeout_seconds', 'metadata_interval_seconds'})
+        'heartbeat_enabled', 'heartbeat_timeout_seconds', 'metadata_interval_seconds', 'history_enabled'})
 
     @property
     def available(self):
@@ -88,13 +88,15 @@ class DuckDBMonitoringHost(MySQLMonitoringHost):
                 previous = self._grants.get(key)
                 if previous is not None:
                     previous.require(policy, 'configure')
-                    self.runtime.enable(policy, previous.open_source, previous.require)
+                    self.runtime.enable(policy, previous.open_source, previous.require,
+                                        history_writer=self._history_writer(previous))
                 else:
                     self.ownership.acquire()
                     grant = DuckDBFileGrant(policy, scope['route'], scope['generation'],
                         self._authorizer(owner, sid, target))
                     try:
-                        self.runtime.enable(policy, grant.open_source, grant.require)
+                        self.runtime.enable(policy, grant.open_source, grant.require,
+                                            history_writer=self._history_writer(grant))
                     except BaseException:
                         grant.revoke()
                         raise

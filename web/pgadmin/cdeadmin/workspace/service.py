@@ -1447,6 +1447,99 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def native_recipe_asset(self, server, engine, action, request):
+        from .assets import ProjectAssetError
+        from .mysql_recipe_assets import MySQLRecipeAssets
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.sqlite.provider import SQLiteProvider
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        providers = {'postgresql': PostgreSQLProvider, 'duckdb': DuckDBPilotProvider,
+                     'sqlite': SQLiteProvider}
+        if engine not in providers or not isinstance(request, dict):
+            raise ProviderWorkspaceError('Invalid native recipe request')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target:
+            raise ProviderWorkspaceError('Select an explicit native database')
+        context, _endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, providers[engine]):
+            raise ProviderWorkspaceError('Recipe engine differs from the native endpoint')
+        assets = self.firebird_design_assets.assets
+        try:
+            if action == 'save':
+                getattr(self, engine + '_test_data')(server, {
+                    'database_target_id': target, 'recipe': request.get('recipe')})
+            return MySQLRecipeAssets(assets, engine=engine).apply(self._principal_id(server), {
+                'endpoint_id': str(context.endpoint_id), 'database_target_id': target}, action, request)
+        except ProjectAssetError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProviderWorkspaceError('Recipe changed concurrently; reload before saving') from None
+
+    def _native_data_context(self, server, engine, request):
+        from ..providers.postgresql.provider import PostgreSQLProvider
+        from ..providers.duckdb.provider import DuckDBPilotProvider
+        from ..providers.sqlite.provider import SQLiteProvider
+        providers = {'postgresql': PostgreSQLProvider, 'duckdb': DuckDBPilotProvider, 'sqlite': SQLiteProvider}
+        if engine not in providers or not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str) or not request['database_target_id']:
+            raise ProviderWorkspaceError('Select an explicit native data destination')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=request['database_target_id'])
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, providers[engine]):
+            raise ProviderWorkspaceError('Data import engine differs from the selected endpoint')
+        provider.permissions.require('data_write', 'resource')
+        provider.permissions.require('execute')
+        return context, endpoint, provider
+
+    def native_data_plan(self, server, engine, request):
+        from .native_data_import import preview
+        context, endpoint, provider = self._native_data_context(server, engine, request)
+        if set(request) != {'database_target_id', 'source', 'resource_id'}:
+            raise ProviderWorkspaceError('Invalid native data preview request')
+        try:
+            return preview(provider, endpoint['route'], engine, request['source'], request['resource_id'],
+                endpoint_id=str(context.endpoint_id), target_id=request['database_target_id'], node=getattr(self, 'ddn_node', 'node'))
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def native_data_application(self, server, engine, action, request):
+        from dataclasses import asdict
+        from .native_data_import import NativeDataApplications, apply
+        from .firebird_schema_plan import digest
+        from ..operations.store import JsonOperationStore
+        context, endpoint, provider = self._native_data_context(server, engine, request)
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Data imports require durable operation storage')
+        applications = NativeDataApplications(str(store.path) + '.' + engine + '-data-imports.json', engine)
+        owner = self._principal_id(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': request['database_target_id']})
+        try:
+            if action == 'review':
+                if set(request) != {'database_target_id', 'source', 'resource_id', 'execution_sha256'}:
+                    raise ValueError('Invalid native data review request')
+                plan = self.native_data_plan(server, engine, {key: value for key, value in request.items() if key != 'execution_sha256'})
+                if request['execution_sha256'] != plan['execution_sha256']:
+                    raise ValueError('Displayed native data import changed; preview again')
+                return applications.review(plan, owner, binding)
+            if action == 'receipts' and set(request) == {'database_target_id'}:
+                return {'receipts': applications.recent(owner, binding)}
+            if action == 'receipt' and set(request) == {'database_target_id', 'review_id'}:
+                return applications.get(request['review_id'], owner, binding)
+            if action != 'apply': raise ValueError('Invalid native data application action')
+            def execute(record):
+                outcome = apply(provider, endpoint['route'], engine, record)
+                if outcome['state'] != 'not_dispatched':
+                    try: self.resource_service.invalidate(context)
+                    except Exception as error: outcome['explorer_refresh_error_type'] = type(error).__name__
+                return outcome
+            return applications.apply({key: value for key, value in request.items() if key != 'database_target_id'}, owner, binding, execute)
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_test_data(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
         from ..providers.postgresql.connection_target import database_oid
@@ -2942,9 +3035,13 @@ class ProviderWorkspaceService:
                 if (not isinstance(source, str) or not isinstance(prefix, str) or
                         len(source.encode('utf8')) > 1024 * 1024 or not source.startswith(prefix)):
                     raise ProviderWorkspaceError('Completion requires bounded source and its exact cursor prefix')
-                return self.studio_service.complete(context, data.get('session_id'), source, prefix)
+                options = {'client_sql_dialect': data['client_sql_dialect']} if 'client_sql_dialect' in data else {}
+                return self.studio_service.complete(context, data.get('session_id'), source, prefix, **options)
             if action == 'source_validate':
-                return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'))
+                options = {'client_sql_dialect': data['client_sql_dialect']} if 'client_sql_dialect' in data else {}
+                if 'script' in data:
+                    options['script'] = data['script']
+                return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'), **options)
             if action == 'native_script_prepare':
                 parameters = data.get('parameters', {})
                 if not isinstance(parameters, (dict, list)) or parameters:

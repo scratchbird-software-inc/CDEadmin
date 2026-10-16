@@ -9,6 +9,7 @@ import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {postgresqlDashboardFiles, postgresqlFleetFiles} from '../cdeadmin_ui/integrations/ddn/postgresqlDashboard';
 import PostgresqlTrendView from './PostgresqlTrendView';
+import FirebirdHistoryView from './FirebirdHistoryView';
 
 export default function PostgresqlMonitoring({serverId, targetId, policyMode=false, engineMode=false, onNavigate}) {
   const [snapshot, setSnapshot] = useState(null);
@@ -22,7 +23,7 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
   const [credentials, setCredentials] = useState({username: '', password: '', role: ''});
   const [policy, setPolicy] = useState({interval_seconds: targetId ? 5 : 15,
     retain_samples: 120, lease_seconds: 3600, metadata_interval_seconds: 60,
-    heartbeat_enabled: false, heartbeat_timeout_seconds: null});
+    heartbeat_enabled: false, heartbeat_timeout_seconds: null, history_enabled: false});
   const endpoint = useMemo(() => engineMode ? url_for('cdeadmin_postgresql_monitoring.fleet') : url_for('cdeadmin_postgresql_monitoring.monitoring', {sid: serverId}) +
     (targetId ? `?target_id=${encodeURIComponent(targetId)}` : ''), [serverId, targetId, engineMode]);
   const definitionEndpoint = useMemo(() => {
@@ -120,6 +121,12 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
       <FormControlLabel label="Use completed refreshes as availability heartbeats" control={<Checkbox
         checked={policy.heartbeat_enabled} disabled={busy || active}
         onChange={(event) => setPolicy({...policy, heartbeat_enabled: event.target.checked})} />} />
+      <FormControlLabel label="Persist observations in ScratchBird" control={<Checkbox
+        checked={Boolean(policy.history_enabled)} disabled={busy || active || snapshot?.history_available === false}
+        onChange={event => setPolicy({...policy, history_enabled: event.target.checked})} />} />
+      {snapshot?.history_storage && <Alert severity={snapshot.history_storage.status === 'unconfirmed' ? 'warning' : 'info'}>
+        History: {snapshot.history_storage.status}. Unconfirmed writes: {snapshot.history_storage.failures || 0}.
+      </Alert>}
       {policy.heartbeat_enabled && <TextField size="small" type="number" label="Heartbeat overdue after (seconds)"
         value={policy.heartbeat_timeout_seconds ?? ''} disabled={busy || active}
         helperText={`Blank uses ${Math.max(15, policy.interval_seconds * 3)} seconds`}
@@ -134,14 +141,16 @@ export default function PostgresqlMonitoring({serverId, targetId, policyMode=fal
         onChange={event => setDisplay(event.target.value)}>
         <MenuItem value="dashboard">Current dashboard</MenuItem>
         <MenuItem value="trends">Retained observations</MenuItem>
+        <MenuItem value="history">Persistent history</MenuItem>
       </TextField>}
       {(engineMode || display === 'dashboard') && pages.length > 1 && <TextField select size="small" label="Dashboard page" value={selectedPage}
         sx={{minWidth: 160, my: 1}} onChange={(event) => setPage(event.target.value)}>
         {publishedView && !pages.includes(publishedView.view) && <MenuItem value={publishedView.view}>Published view</MenuItem>}
         {pages.map((id, index) => <MenuItem key={id} value={id}>Page {index + 1} of {pages.length}</MenuItem>)}
       </TextField>}
-      {!engineMode && display === 'trends' ? <PostgresqlTrendView key={endpoint} snapshot={snapshot} scope={targetId ? 'database' : 'server'} /> :
-        <DDNViewerSurface files={files} snapshot={displaySnapshot} entry="dashboard.ddn" view={selectedPage} presentation />}
+      {!engineMode && display === 'history' ? <FirebirdHistoryView key={endpoint} serverId={serverId} targetId={targetId} engine="postgresql" /> :
+        !engineMode && display === 'trends' ? <PostgresqlTrendView key={endpoint} snapshot={snapshot} scope={targetId ? 'database' : 'server'} /> :
+          <DDNViewerSurface files={files} snapshot={displaySnapshot} entry="dashboard.ddn" view={selectedPage} presentation />}
     </>}
   </Box>;
 }

@@ -194,11 +194,16 @@ class DataStudioService:
         identity = binding.manifest['identity']
         key = (identity['provider_id'], identity['provider_version'])
         profiles = self._provider_languages.get(key, ())
+        def tooling(profile):
+            result = capabilities(profile)
+            if callable(getattr(type(binding.instance), 'source_tooling', None)):
+                result.update(binding.instance.source_tooling(profile))
+            return result
         return tuple({
             'language_profile': item.language_profile,
             'title': item.title,
             'editor_mode': item.editor_mode,
-            'tooling': capabilities(item.language_profile),
+            'tooling': tooling(item.language_profile),
             'model_families': sorted(item.model_families),
             'source_kind': item.source_kind,
             'parameter_shape': item.parameter_shape,
@@ -273,8 +278,9 @@ class DataStudioService:
         })
         return session.to_dict()
 
+    @serialized_execution
     def complete(
-        self, context, session_id, full_source, source_before_cursor
+        self, context, session_id, full_source, source_before_cursor, *, client_sql_dialect=None
     ):
         session, binding = self._operational_session(context, session_id)
         contribution = self.contributions.completion(
@@ -285,6 +291,10 @@ class DataStudioService:
             'full_source': str(full_source),
             'source_before_cursor': str(source_before_cursor),
         }
+        if client_sql_dialect is not None:
+            if session.language_profile != 'firebird-sql' or type(client_sql_dialect) is not int or client_sql_dialect not in {1, 2, 3}:
+                raise DataStudioAccessError('Invalid native editor dialect')
+            request['client_sql_dialect'] = client_sql_dialect
         return contribution.complete(binding, request)
 
     @serialized_execution
@@ -531,17 +541,27 @@ class DataStudioService:
         )
         return copy.deepcopy(presentation)
 
-    def validate_source(self, context, session_id, source):
+    @serialized_execution
+    def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)
+        options = {}
+        if type(script) is not bool:
+            raise DataStudioAccessError('Script checking requires a boolean')
+        if script:
+            options['script'] = True
+        if client_sql_dialect is not None:
+            if session.language_profile != 'firebird-sql' or type(client_sql_dialect) is not int or client_sql_dialect not in {1, 2, 3}:
+                raise DataStudioAccessError('Invalid native editor dialect')
+            options['client_sql_dialect'] = client_sql_dialect
         # Providers may supply an explicitly non-executing native validator.
         validator = getattr(binding.instance, 'validate_source_without_execution', None)
         if callable(validator):
             return validator({
                 'session_id': session.provider_session['session_id'],
                 'language_profile': session.language_profile,
-                'source': source})
-        return analyze(source, session.language_profile)
+                'source': source, **options})
+        return analyze(source, session.language_profile, script=script)
 
     def preview_script(self, context, session_id, source):
         session, binding = self._operational_session(context, session_id)

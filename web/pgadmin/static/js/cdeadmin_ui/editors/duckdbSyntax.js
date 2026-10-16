@@ -29,7 +29,7 @@ export function duckdbSQLConfig(editor={}, resources=[]) {
       !columns.some(entry => entry.label === path[3]))
       columns.push({label: path[3], apply: quoted(path[3]), type: 'property'});
   }
-  return {dialect: SQLDialect.define({keywords: editor.keywords || StandardSQL.spec.keywords,
+  return {dialect: SQLDialect.define({keywords: editor.keywords?.toLowerCase() || StandardSQL.spec.keywords,
     identifierQuotes: '"', caseInsensitiveIdentifiers: true,
     doubleDollarQuotedStrings: true, backslashEscapes: false}),
   schema, upperCaseKeywords: true};

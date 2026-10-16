@@ -51,7 +51,7 @@ describe('PostgreSQL monitoring controls', () => {
   it('starts with current credentials and sends native heartbeat policy without browser route data', async () => {
     const {unmount} = render(<Component serverId={7} policyMode />);
     await waitFor(() => expect(screen.getByRole('button', {name: 'Start collection'})).toBeEnabled());
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Use completed refreshes as availability heartbeats'}));
     fireEvent.click(screen.getByRole('button', {name: 'Start collection'}));
     await waitFor(() => expect(api.post).toHaveBeenCalled());
     const body = api.post.mock.calls[0][1];

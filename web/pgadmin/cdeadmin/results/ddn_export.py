@@ -1,4 +1,5 @@
 """Portable, static DDN views of an authorized and redacted result selection."""
+import base64
 import json
 
 from .models import ResultLimitError
@@ -26,6 +27,9 @@ def export_workspace(metadata, records):
     provenance['consistency'] = metadata.get('consistency', 'buffered result selection; no new database read')
     header = 'ddn "0.6"; module "scratchrobin.result.static";\n'
     files = {}
+    native_payload = metadata.get('native_payload_bytes')
+    if native_payload is not None and (not isinstance(native_payload, bytes) or len(native_payload) > 4 * 1024 * 1024):
+        raise ResultLimitError('Native data payload must be bytes within 4 MiB')
     # The paired runtime admits 128 elements per live view. Leave space for
     # provenance/placeholder elements instead of creating unrenderable pages.
     for start in range(0, max(1, len(records)), 100):
@@ -54,6 +58,17 @@ def export_workspace(metadata, records):
         if len(source.encode('utf-16-le')) // 2 > 2000000:
             raise ResultLimitError('DDN result file exceeds its document limit')
         files['result-' + str(page) + '.ddn'] = source
+    if native_payload is not None:
+        # Keep the binary type representation once per workspace instead of
+        # duplicating it in every page's provenance. These static records have
+        # no view, connector or executable expression.
+        for start in range(0, len(native_payload), 1024 * 1024):
+            if len(files) >= 64:
+                raise ResultLimitError('Native data payload exceeds 64 workspace files')
+            ordinal = start // (1024 * 1024) + 1
+            facts = {'ordinal': ordinal, 'encoding': 'arrow-ipc-base64',
+                     'data': base64.b64encode(native_payload[start:start + 1024 * 1024]).decode('ascii')}
+            files['native-values-' + str(ordinal) + '.ddn'] = header + 'data native_payload {record p_' + str(ordinal) + ' "Native typed values" {x_record:' + encoded(facts) + ';}}'
     result = encoded({'format': 'ddn-workspace@1', 'entry': 'result-1.ddn',
                       'view': 'result_1', 'files': files}).encode('utf8')
     if len(result) > 8 * 1024 * 1024:

@@ -15,7 +15,8 @@ from pgadmin.cdeadmin.sdk import (
     RelationalClientConfig,
     RelationalClientError,
 )
-from .driver import SQLiteClient
+from .driver import SQLiteClient, SQLiteConnection
+from ..native_editor import NativeEditorProvider
 from .values import text as native_text
 from .backup import database_operation as _sqlite_database_operation
 from ..relational_admin import (
@@ -31,7 +32,7 @@ PROFILE = PilotProfile(
     'sqlite-native-transaction', 'tabular',
     ('database', 'attached-database', 'table', 'column', 'view', 'index',
      'constraint', 'trigger', 'virtual-table', 'fts-table', 'pragma',
-     'extension', 'metric'),
+     'extension', 'metric', 'native-function', 'collation', 'compile-option'),
     ('sqlite-shell', 'backup', 'integrity-check', 'vacuum'),
     ('embedded_runtime', 'filesystem'),
     semantic_sql_dialect={
@@ -126,11 +127,14 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
         }),
         'pragma': frozenset({'inspect'}),
         'extension': frozenset({'inspect'}),
+        'native-function': frozenset({'inspect'}),
+        'collation': frozenset({'inspect'}),
+        'compile-option': frozenset({'inspect'}),
     },
 ))
 
 
-class SQLiteProvider(ActualEnginePilotProvider):
+class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 
@@ -150,8 +154,10 @@ class SQLiteProvider(ActualEnginePilotProvider):
         if result['diagnostics'] or not result['statements']:
             return result
         all_valid = True
+        pragma_suppressed = False
         for statement in result['statements']:
             native = self.client.validate_parse_only(session.handle, statement['source'])
+            pragma_suppressed = pragma_suppressed or native.get('pragma_preparation_suppressed', False)
             if native['grammar_valid'] is False:
                 result['diagnostics'].append({**native['diagnostic'],
                     'offset': statement['start'],
@@ -170,7 +176,10 @@ class SQLiteProvider(ActualEnginePilotProvider):
         result['authority'] = 'sqlite-native-explain-compile'
         result['scope'] = ('SQLite native compilation against the retained session; '
                            'EXPLAIN does not execute the submitted SQL. '
+                           'PRAGMA settings and VFS callbacks are suppressed during preparation. '
                            'Context or parameter binding errors leave grammar unconfirmed.')
+        if pragma_suppressed:
+            result['pragma_context_evaluated'] = False
         if all_valid is False:
             result['syntax_valid'] = False
             result['script_ready'] = False
@@ -207,7 +216,7 @@ class SQLiteProvider(ActualEnginePilotProvider):
                         item['native']['registered_file_identity'] = [
                             file_info.st_dev, file_info.st_ino]
                     item['native']['catalog_observations'] = [{
-                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list',
+                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list/function_list/collation_list/compile_options/pragma_list',
                         'available': True,
                     }]
                     item['native']['coverage_complete'] = False
@@ -248,7 +257,7 @@ class SQLiteProvider(ActualEnginePilotProvider):
 
 
 def _route_arguments(route):
-    return sqlite_arguments(route)
+    return {**sqlite_arguments(route), 'factory': SQLiteConnection}
 
 
 def _metric_records():
@@ -618,6 +627,7 @@ def _resources(connection, request):
                 for item in resources.values():
                     if (
                         item['resource_kind'] == 'trigger' and
+                        item['display_path'][0] == schema_name and
                         item['native']['catalog_metadata']['table_name'] ==
                         table_name
                     ):
@@ -626,12 +636,26 @@ def _resources(connection, request):
                             'name': item['display_name'],
                             'ddl': item['native'].get('ddl'),
                         })
-        for name in (
-            'application_id', 'auto_vacuum', 'cache_size', 'foreign_keys',
-            'journal_mode', 'page_size', 'query_only', 'synchronous',
-            'user_version',
-        ):
-            add('pragma', [], name)
+        cursor.execute('PRAGMA pragma_list')
+        for (name,) in cursor.fetchall():
+            add('pragma', [], name, {'native_name': name, 'scope': 'connection',
+                                     'observation': 'supported pragma name; not executed'})
+        cursor.execute('PRAGMA function_list')
+        for name, builtin, kind, encoding, arity, flags in cursor.fetchall():
+            identity = json.dumps([name, builtin, kind, encoding, arity], ensure_ascii=False, separators=(',', ':'))
+            item = add('native-function', [], identity, {
+                'name': name, 'builtin': bool(builtin), 'function_type': kind,
+                'encoding': encoding, 'argument_count': arity, 'flags': flags,
+                'loaded_in_connection': True, 'scope': 'connection',
+                'system_object': bool(builtin)})
+            item['display_name'] = f'{name} ({arity}; {encoding}; {kind})'
+        cursor.execute('PRAGMA collation_list')
+        for ordinal, name in cursor.fetchall():
+            add('collation', [], name, {'native_name': name, 'ordinal': ordinal,
+                                       'scope': 'connection', 'loaded_in_connection': True})
+        cursor.execute('PRAGMA compile_options')
+        for (option,) in cursor.fetchall():
+            add('compile-option', [], option, {'native_option': option, 'scope': 'runtime'})
         cursor.execute('SELECT name FROM pragma_module_list ORDER BY name')
         for (name,) in cursor.fetchall():
             add('extension', [], name, {
