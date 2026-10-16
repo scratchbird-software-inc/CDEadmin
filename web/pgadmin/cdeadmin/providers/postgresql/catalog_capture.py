@@ -1,7 +1,8 @@
 """Bounded PostgreSQL-native catalog evidence on an independently owned session.
 
 This adapter captures definitions; it never interprets imported SQL as authority.
-Callers own attachment creation/release. No existing transaction may be borrowed.
+Callers own attachment creation/release. Retained-session captures require an
+explicit transaction guard which restores settings and preserves pending work.
 """
 import json
 import uuid
@@ -92,12 +93,14 @@ EXCLUSIONS = (
 )
 
 
-def capture(connection, database_oid, *, include_system=False, _in_transaction=False):
-    """Capture using an idle, independently owned psycopg connection."""
+def capture(connection, database_oid, *, include_system=False, _in_transaction=False, session_scope=False):
+    """Capture using an owned connection or an explicitly guarded transaction."""
     if type(database_oid) is not int or not 1 <= database_oid <= 4294967295:
         raise ValueError('Select an explicit native database OID')
     if type(include_system) is not bool:
         raise ValueError('Invalid system-object selection')
+    if type(session_scope) is not bool or (session_scope and not _in_transaction):
+        raise ValueError('Session catalog capture requires an admitted transaction guard')
     if type(_in_transaction) is not bool or int(connection.info.transaction_status) != (2 if _in_transaction else 0):
         raise ValueError('Catalog capture requires its own idle connection or an admitted owned transaction')
     resources, observations, addresses = [], [], {}
@@ -146,6 +149,11 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
             oid, database_name, metadata = cursor.fetchone()
             if oid != database_oid:
                 raise ValueError('Selected database identity changed')
+            cursor.execute('SELECT pg_catalog.pg_my_temp_schema()::oid, pg_catalog.pg_backend_pid(), current_user, current_setting(\'transaction_isolation\')')
+            temp_oid, backend_pid, principal, isolation = cursor.fetchone()
+            cursor.execute('SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=%s', (temp_oid,))
+            temp_row = cursor.fetchone()
+            temp_schema = temp_row[0] if temp_row else None
             root_id = f'postgresql:pg_database:{oid}'
             root = {'resource_id': root_id, 'resource_kind': 'database', 'display_name': database_name,
                     'display_path': [database_name], 'native': {'system_object': False, 'catalog': 'pg_database',
@@ -162,12 +170,18 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                 # never selected as a side effect of metadata discovery.
                 catalog = 'pg_largeobject' if storage_catalog == 'pg_largeobject_metadata' else storage_catalog
                 where = predicate
+                if catalog == 'pg_class' and session_scope:
+                    where = predicate.replace("c.relpersistence <> 't'", "NOT pg_catalog.pg_is_other_temp_schema(c.relnamespace)")
                 if namespace == 'NULL::text' and not include_system and catalog != 'pg_largeobject':
                     where += ' AND c.oid >= 16384'
                 if catalog == 'pg_subscription':
                     where += f' AND c.subdbid = {database_oid}'
                 if namespace != 'NULL::text' and not include_system:
-                    where += f" AND {namespace} NOT IN ('pg_catalog','information_schema') AND {namespace} NOT LIKE 'pg_toast%%' AND {namespace} NOT LIKE 'pg_temp_%%'"
+                    temporary = f" OR {namespace} = (SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=pg_catalog.pg_my_temp_schema())" if session_scope else ''
+                    where += f" AND {namespace} NOT IN ('pg_catalog','information_schema') AND {namespace} NOT LIKE 'pg_toast%%' AND ({namespace} NOT LIKE 'pg_temp_%%'{temporary})"
+                if namespace != 'NULL::text' and session_scope:
+                    namespace_oid = 'c.oid' if catalog == 'pg_namespace' else 'n.oid'
+                    where += f" AND NOT pg_catalog.pg_is_other_temp_schema({namespace_oid})"
                 native = 'to_jsonb(c)'
                 if catalog == 'pg_proc':
                     native += " || jsonb_build_object('identity_arguments', pg_catalog.pg_get_function_identity_arguments(c.oid))"
@@ -205,10 +219,15 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                     for objid, label, schema, data, ddl, comment, sql_identity in read(cursor, query, (catalog,)):
                         raw = json.loads(data)
                         system = schema in {'pg_catalog', 'information_schema'} or bool(schema and schema.startswith(('pg_toast', 'pg_temp_'))) if schema is not None else objid < 16384 and catalog != 'pg_largeobject'
+                        if session_scope and temp_schema is not None and schema == temp_schema:
+                            system = False
                         native = {'catalog': catalog, 'oid': objid, 'subobject': 0, 'schema': schema,
                                   'system_object': system, 'catalog_row': raw, 'definition': ddl, 'comment': comment,
                                   'sql_identity': sql_identity,
                                   'navigator_parent_resource_id': root_id}
+                        if session_scope:
+                            native['observation_scope'] = 'retained-session'
+                            native['session_local'] = bool(schema and schema.startswith(('pg_temp_', 'pg_toast_temp_')))
                         item = {'resource_id': f'postgresql:{catalog}:{objid}', 'resource_kind': kind,
                                 'display_name': label, 'display_path': [database_name] + ([schema] if schema else []) + [label], 'native': native}
                         account(item)
@@ -356,6 +375,13 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                 item['display_path'] = navigator_path(item, set())
             root['native'].update(catalog_observations=observations, catalog_warnings=list(EXCLUSIONS),
                                   isolation='repeatable-read/owned-write' if _in_transaction else 'repeatable-read/read-only', coverage_complete=False)
+            if session_scope:
+                root['native'].update(observation_scope='retained-session', isolation=isolation,
+                    session_context={'backend_pid': backend_pid, 'principal': principal,
+                                     'temporary_schema_oid': temp_oid, 'temporary_schema': temp_schema})
+                root['native']['catalog_warnings'].append('This retained-session observation includes pending catalog changes and this session\'s temporary objects. Other sessions\' temporary objects are excluded. It cannot be applied as an independent database migration.')
+            else:
+                root['native']['catalog_warnings'].append('Temporary relations require explicit retained-session catalog inspection.')
         if not _in_transaction:
             connection.execute('COMMIT')
     except BaseException:

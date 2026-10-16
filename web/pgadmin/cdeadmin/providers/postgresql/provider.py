@@ -1053,6 +1053,26 @@ class PostgreSQLProvider:
         finally:
             self.close_session(opened)
 
+    @_session_serialized
+    def capture_session_catalog(self, request):
+        self.permissions.require('data_read', 'resource')
+        payload = _mapping(request)
+        if payload.get('language_profile') != 'postgresql-sql' or type(payload.get('include_system', False)) is not bool:
+            raise PostgreSQLProviderError('Invalid PostgreSQL session catalog selection')
+        state = self._require_idle_session(payload.get('session_id'))
+        self._ensure_native_connection(state)
+        from .session_catalog import observe
+        try:
+            return observe(state, include_system=payload.get('include_system', False))
+        except ValueError as error:
+            raise PostgreSQLProviderError(str(error)) from None
+        except Exception:
+            if state.connection.conn.closed or state.connection.conn.broken:
+                state.uncertain = True
+            raise PostgreSQLProviderError('Session catalog capture failed; ' +
+                ('cleanup is unconfirmed, close this session without replay' if state.uncertain else
+                 'pending work and session settings were preserved')) from None
+
     def _resolve_delegated_database(self, route, database_id):
         # A fresh delegated manager has no interactive db_info cache. Resolve
         # through its own authenticated attachment, never a guessed DB name.
@@ -1117,6 +1137,7 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError('PostgreSQL SQL language binding required')
         return {'validation_authority': 'postgresql-offline-grammar',
                 'native_validation_available': True, 'nonexecuting': True,
+                'session_catalog': True,
                 'parser_binding': 'pglast 8.5; PostgreSQL 18.6; native options revision 2'}
 
     @_session_serialized

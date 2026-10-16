@@ -542,6 +542,28 @@ class DataStudioService:
         return copy.deepcopy(presentation)
 
     @serialized_execution
+    def session_catalog(self, context, session_id, *, include_system=False):
+        session, binding = self._operational_session(context, session_id)
+        if type(include_system) is not bool:
+            raise DataStudioAccessError('Invalid system-object selection')
+        if session.language_profile != 'postgresql-sql' or not callable(
+                getattr(type(binding.instance), 'capture_session_catalog', None)):
+            raise DataStudioAccessError('Retained-session catalog is unavailable for this provider')
+        result = binding.instance.capture_session_catalog({
+            'session_id': session.provider_session['session_id'],
+            'language_profile': session.language_profile, 'include_system': include_system})
+        from ..workspace.firebird_catalog_export import build_export
+        try:
+            result['document'] = build_export(result['resources'], endpoint_id=context.endpoint_id,
+                target_id='postgresql-database:' + str(result['database_oid']),
+                generation=result['generation'], include_system=include_system,
+                refreshed=True, engine='postgresql')
+        except ValueError:
+            result['document'] = None
+            result['export_warning'] = 'This catalog exceeds the DDN export bounds. Native inspection remains available.'
+        return result
+
+    @serialized_execution
     def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)

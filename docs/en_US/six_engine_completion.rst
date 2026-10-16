@@ -391,8 +391,13 @@ transformation, recovery, operations and platform requirements remain open.
   extension versions and live replication/session/TLS/GSSAPI state. Secret
   values are redacted without hiding the owning object. Server-only inspection
   and DDN download do not require database expansion. Independent shared-catalog
-  reconciliation checks privileged and restricted observations; session-local
-  database catalogs and broader live topology qualification remain separate.
+  reconciliation checks privileged and restricted observations. Explicit
+  retained-session inspection captures PostgreSQL temporary relations, types,
+  constraints and native child facts, plus pending catalog changes. It preserves
+  healthy user transactions and local settings; an aborted transaction is refused
+  without implicit rollback. Session observations have separate DDN provenance
+  and cannot enter an independent database migration. Broader live topology
+  qualification remains separate.
 * PostgreSQL, DuckDB and SQLite have durable owner/endpoint/database-scoped
   recipe revisions with optimistic concurrency. Reading a revision loads the
   editor; saving a revision does not execute the recipe.

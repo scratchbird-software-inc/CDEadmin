@@ -3035,6 +3035,9 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'source_catalog':
+                return self.studio_service.session_catalog(context, data.get('session_id'),
+                    include_system=data.get('include_system', False))
             if action == 'source_complete':
                 source, prefix = data.get('source'), data.get('source_before_cursor')
                 if (not isinstance(source, str) or not isinstance(prefix, str) or
