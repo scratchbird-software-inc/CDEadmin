@@ -413,6 +413,7 @@ def run(options):
             return False
         transaction_state = wait.until(completed_transaction_control)
         transaction_state.click()
+        _button(wait, 'Messages').click()
         wait.until(lambda value: any(
             item.is_displayed() and 'driver_observation_only' in item.text
             for item in value.find_elements(By.TAG_NAME, 'pre')
