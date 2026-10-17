@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
+def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external_content=False):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700);builtins.SERVER_MODE=None
@@ -21,6 +21,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
     for path in [*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite*.py')),
                  ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',
                  ROOT/'web/pgadmin/cdeadmin/providers/sqlite/provider.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/modules.py',
+                 ROOT/'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py',
                  ROOT/'web/pgadmin/static/js/Dialogs/SQLiteCatalog.jsx',ROOT/'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx',Path(__file__)]:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     import config
@@ -35,7 +36,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
     path=output/'native.sqlite';connection=sqlite3.connect(path)
     try:
         assert sqlite3.sqlite_version=='3.53.0'
-        if virtual_module:
+        if virtual_module and not external_content:
             if virtual_module not in {'fts3','fts4','fts5'}:raise ValueError('Select a native FTS fixture')
             connection.execute('CREATE VIRTUAL TABLE parent USING "'+virtual_module+'"(body)')
             connection.executescript('CREATE TABLE child(id INTEGER PRIMARY KEY); '
@@ -46,6 +47,10 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
                 'CREATE TABLE child(id INTEGER PRIMARY KEY,parent_id INTEGER REFERENCES parent(id)); '
                 'CREATE VIEW projection AS SELECT id,note FROM parent; '
                 "INSERT INTO parent VALUES(9007199254740993,'雪'); INSERT INTO child VALUES(1,9007199254740993);")
+        if external_content:
+            connection.execute("CREATE VIRTUAL TABLE search USING fts5(note,content='parent',content_rowid='id')")
+            connection.execute("INSERT INTO search(search) VALUES('rebuild')")
+            for key,value in [('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]:connection.execute('INSERT INTO search(search,rank) VALUES(?,?)',(key,value))
         connection.commit()
     finally:connection.close()
     app=create_app('ScratchRobin-native-sqlite-rename');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start()
@@ -73,12 +78,16 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
                 (output/'http-failure.json').write_text(json.dumps(value,indent=2)+'\n');raise RuntimeError('Native SQLite HTTP '+action+' failed')
             return value['data']
         captured=post('sqlite_catalog_export',{'include_system':False});baseline=json.dumps(captured['snapshot'])
-        renames=[{'kind':'table','table':'parent','to':'renamed:雪'},*([{'kind':'column','table':'renamed:雪','from':'note','to':'body:雪'}] if not virtual_module else [])]
-        generated=post('sqlite_schema_rename_design',{'baseline':baseline,'renames':renames})
+        renames=[{'kind':'table','table':'parent','to':'renamed:雪'},*([{'kind':'column','table':'renamed:雪','from':'note','to':'body:雪'}] if not virtual_module and not external_content else [])]
+        if external_content:
+            from pgadmin.cdeadmin.providers.sqlite.provider import _resource_id
+            fts_rebindings=[_resource_id('fts-table',['main'],'search')]
+        else:fts_rebindings=[]
+        generated=post('sqlite_schema_rename_design',{'baseline':baseline,'renames':renames,**({'fts_rebindings':fts_rebindings} if external_content else {})})
         connection=sqlite3.connect(path)
         try:assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
         finally:connection.close()
-        request={'baseline':baseline,'desired':json.dumps(generated['snapshot']),'renames':renames}
+        request={'baseline':baseline,'desired':json.dumps(generated['snapshot']),'renames':renames,**({'fts_rebindings':fts_rebindings} if external_content else {})}
         displayed=post('sqlite_schema_plan',request);assert displayed['ready_for_review'],displayed
         reviewed=post('sqlite_schema_review',{**request,'execution_sha256':displayed['execution_sha256']})
         apply_request={**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True}
@@ -86,7 +95,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
         assert post('sqlite_schema_apply',apply_request)==result
         connection=sqlite3.connect(path)
         try:
-            assert connection.execute(('SELECT rowid,body' if virtual_module else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
+            assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
         finally:connection.close()
@@ -94,21 +103,24 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
         assert post('sqlite_schema_receipt',{'review_id':reviewed['review_id']})['state']=='committed'
         proof['checks'].append('authenticated-durable-native-rename-receipt')
         if binary:
-            proof['browser']=browser(app,output,path,sid,target_label,binary,driver_binary)
+            proof['browser']=browser(app,output,path,sid,target_label,binary,driver_binary,external_content=external_content)
             connection=sqlite3.connect(path)
             try:
-                assert connection.execute(('SELECT rowid,body' if virtual_module else 'SELECT *')+' FROM "browser:雪"').fetchall()==[(9007199254740993,'雪')]
-                if virtual_module:assert connection.execute('SELECT rowid FROM "browser:雪" WHERE "browser:雪" MATCH \'雪\'').fetchall()==[(9007199254740993,)]
+                assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "browser:雪"').fetchall()==[(9007199254740993,'雪')]
+                if virtual_module and not external_content:assert connection.execute('SELECT rowid FROM "browser:雪" WHERE "browser:雪" MATCH \'雪\'').fetchall()==[(9007199254740993,)]
+                if external_content:
+                    assert connection.execute("SELECT rowid,note FROM search WHERE search MATCH '雪'").fetchall()==[(9007199254740993,'雪')]
+                    assert connection.execute('SELECT k,v FROM search_config WHERE k<>\'version\' ORDER BY k').fetchall()==[('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]
                 assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
                 assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
             finally:connection.close()
             proof['checks'].append('browser-context-menu-native-rename-generation-confirmed-apply-and-independent-rows')
-        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module)
+        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module,external_content=external_content)
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
 
-def browser(app,output,path,sid,target_label,binary,driver_binary):
+def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_content=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -145,6 +157,9 @@ def browser(app,output,path,sid,target_label,binary,driver_binary):
         click('Capture metadata')
         summary=wait.until(lambda browser:browser.find_element(By.XPATH,'//summary[normalize-space()="Native table and column renames"]'));driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',summary);summary.click()
         select('Native rename table','renamed:雪')
+        if external_content:
+            checkbox=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Rebuild external-content FTS search from renamed:雪")]//input'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
         node=driver.find_element(By.XPATH,'//label[normalize-space()="New native name"]');field=driver.find_element(By.ID,node.get_attribute('for'));field.send_keys('browser:雪')
         click('Generate native rename design');wait.until(lambda browser:'The generated rename intent is included' in browser.find_element(By.TAG_NAME,'body').text)
         click('Preview native changes');click('Prepare native change review')
@@ -163,5 +178,5 @@ def browser(app,output,path,sid,target_label,binary,driver_binary):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));args=parser.parse_args()
-    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));parser.add_argument('--external-content',action='store_true');args=parser.parse_args()
+    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module,external_content=args.external_content)

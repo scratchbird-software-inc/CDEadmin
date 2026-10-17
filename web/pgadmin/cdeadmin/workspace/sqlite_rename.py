@@ -58,21 +58,15 @@ def options(renames):
     return result
 
 
-def generate(baseline,renames):
+def generate(baseline,renames,fts_rebindings=()):
     """Run schema-only native rewriting in an empty independent database."""
     selected=options(renames);probe=sqlite3.connect(':memory:')
     try:
         probe.execute('PRAGMA legacy_alter_table=OFF')
         probe.execute('PRAGMA foreign_keys=ON')
         rows=[row for row in baseline['rows'].values() if row['kind'] in KINDS and row['system']=='false']
-        from ..providers.sqlite.modules import option,declaration
-        for row in rows:
-            declared=declaration(row['native'].get('ddl')) if row['kind']=='fts-table' else None
-            if declared and declared[1].lower() in {'fts4','fts5'}:
-                content=option(row['native']['ddl'],'content')
-                fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
-                if content and any(item['table'].translate(fold)==content.translate(fold) for item in selected):
-                    raise ValueError('Renaming an external-content owner requires the native FTS rebinding adapter')
+        from .sqlite_fts_rebind import plans as rebind_plans
+        rebindings=rebind_plans(baseline,selected,fts_rebindings)
         if any(row['path'][0]!='main' for row in rows):
             raise ValueError('Native rename design generation for attached environments requires its attachment adapter')
         declarations=sorted((row for row in rows if row['kind'] in {'table','view','index','trigger','fts-table','virtual-table'}),
@@ -85,6 +79,10 @@ def generate(baseline,renames):
             # Source is compared with the fresh registered catalog at the service
             # boundary; execute() still rejects additional statements.
             probe.execute(source)
+        from ..providers.sqlite.fts_configuration import statements
+        for row in rows:
+            if row['kind']=='fts-table':
+                for source in statements(row['name'],row['native'].get('fts_configuration')):probe.execute(source)
         if schema(model(probe,baseline))!=schema(baseline):
             raise ValueError('The empty native rename schema cannot reproduce all baseline facts')
         stages=[]
@@ -94,6 +92,8 @@ def generate(baseline,renames):
             source='ALTER TABLE "main".'+_quote(item['table'])+' RENAME '+(
                 'TO '+_quote(item['to']) if item['kind']=='table' else 'COLUMN '+_quote(item['from'])+' TO '+_quote(item['to']))
             probe.execute(source);stages.append(source)
+        for rebind in rebindings:
+            for source in rebind['stages']:probe.execute(source);stages.append(source)
         generated=model(probe,baseline)
         desired=deepcopy(baseline)
         desired['rows']={identity:row for identity,row in desired['rows'].items() if row['kind'] not in KINDS}
@@ -105,20 +105,24 @@ def generate(baseline,renames):
     finally:probe.close()
 
 
-def plan(baseline,desired,live,renames):
-    generated,selected,stages=generate(baseline,renames)
+def plan(baseline,desired,live,renames,fts_rebindings=()):
+    generated,selected,stages=generate(baseline,renames,fts_rebindings)
+    from .sqlite_fts_rebind import plans as rebind_plans
+    rebuilds=rebind_plans(baseline,selected,fts_rebindings)
     conflicts=[];blockers=[]
     if schema(baseline)!=schema(live):conflicts.append({'resource_id':'','name':'SQLite rename','reason':'Native schema changed since the captured baseline'})
     if schema(generated)!=schema(desired):blockers.append({'resource_id':'','name':'SQLite rename','reason':'Desired DDN differs from the native rewritten schema; generate the rename design again'})
     operation={'operation':'rename-batch','kind':'table','resource_id':'sqlite-native-rename-batch',
-        'name':'Native table/column renames','renames':selected,'stages':stages,
+        'name':'Native table/column renames','renames':selected,'fts_rebindings':list(fts_rebindings),'stages':stages,
+        'fts_rebuilds':[{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration')} for item in rebuilds],
         'source':'\n'.join(stage+';' for stage in stages),'baseline_schema_sha256':digest(schema(baseline)),
         'desired_schema_sha256':digest(schema(generated))}
     ready=not conflicts and not blockers
     return {'format':FORMAT,'engine':'sqlite','database_target_id':baseline['provenance']['database_target_id'],
         'operations':[operation],'blockers':blockers,'conflicts':conflicts,'execution_sha256':digest([operation]),
         'native_grammar_validated':True,'ready_for_review':ready,'application_supported':ready,
-        'warnings':['SQLite rewrites table/column references using its native ALTER TABLE implementation. All original schema facts are rechecked before dispatch; the complete rewritten schema and bindings are checked before commit. No rows are copied and trigger DML is not executed by this operation.']}
+        'warnings':['SQLite rewrites table/column references using its native ALTER TABLE implementation. All original schema facts are rechecked before dispatch; the complete rewritten schema and bindings are checked before commit. Owner rows are not copied and trigger DML is not executed by this operation.',
+            *(['The explicitly selected external-content FTS indexes are dropped, recreated and rebuilt from current content rows in this same transaction. Existing index drift is repaired. Native settings are preserved; index file formats remain engine-owned.'] if rebuilds else [])]}
 
 
 def apply(provider,route,record):
@@ -132,7 +136,7 @@ def apply(provider,route,record):
         if path==':memory:' or route.get('read_only') is True or not identity():
             return {'state':'not_dispatched','reason':'Native SQLite rename file identity changed'}
         operation=record['plan']['operations'][0]
-        expected=plan(record['baseline'],record['desired'],record['baseline'],operation['renames'])
+        expected=plan(record['baseline'],record['desired'],record['baseline'],operation['renames'],operation.get('fts_rebindings',()))
         if expected['operations']!=[operation] or not expected['ready_for_review']:
             return {'state':'not_dispatched','reason':'Reviewed native rename design changed'}
         connection=provider.client._connect({'route':route})

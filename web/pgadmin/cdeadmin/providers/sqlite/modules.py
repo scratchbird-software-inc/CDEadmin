@@ -67,12 +67,14 @@ def arguments(source):
     return []
 
 
+def unquote(value):
+    value=value.strip()
+    if len(value)>=2 and value[0] in {'\'', '"', '`', '['} and value[-1]==(']' if value[0]=='[' else value[0]):
+        return value[1:-1].replace(value[0]*2,value[0])
+    return value
+
+
 def option(source,name):
-    def unquote(value):
-        value=value.strip()
-        if len(value)>=2 and value[0] in {'\'', '"', '`', '['} and value[-1]==(']' if value[0]=='[' else value[0]):
-            return value[1:-1].replace(value[0]*2,value[0])
-        return value
     found=[]
     for argument in arguments(source):
         key,separator,value=argument.partition('=')

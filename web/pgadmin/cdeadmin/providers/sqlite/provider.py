@@ -473,6 +473,9 @@ def _resources(connection, request):
                     resource['native']['module_observation']={'available':declared is not None,
                         'authority':'native-nonexecuting-create-vtable-authorization',
                         'module':declared[1] if declared else None}
+                    if declared and declared[1].lower() in {'fts3','fts4','fts5'}:
+                        from .fts_configuration import capture as capture_fts_configuration
+                        resource['native']['fts_configuration']=capture_fts_configuration(connection,schema_name,name,declared[1])
                 if native_kind in {'table', 'view'}:
                     relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))

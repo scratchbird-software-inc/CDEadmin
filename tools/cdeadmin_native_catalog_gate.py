@@ -92,6 +92,19 @@ def sqlite(connection):
             if kind in {'fts-table','virtual-table'}:
                 observed=(resource or {}).get('native',{}).get('module_observation',{})
                 facts.append({'section':canonical([schema,name,'native-module']),'equal':observed.get('available') is True and observed.get('module')==module(ddl)})
+                native_module=module(ddl)
+                if native_module and native_module.lower() in {'fts3','fts4','fts5'}:
+                    configuration=(resource or {}).get('native',{}).get('fts_configuration',{})
+                    if native_module.lower()=='fts5':
+                        settings=list(connection.execute('SELECT k,v FROM '+quote(schema)+'.'+quote(name+'_config')+' ORDER BY k'))
+                        native_version=next(value for key,value in settings if key=='version')
+                        expected_commands=[list(row) for row in settings if row[0]!='version']
+                    else:
+                        present=connection.execute('SELECT 1 FROM '+quote(schema)+'.sqlite_schema WHERE name=?',(name+'_stat',)).fetchone()
+                        settings=list(connection.execute('SELECT value FROM '+quote(schema)+'.'+quote(name+'_stat')+' WHERE id=2')) if present else []
+                        native_version=None;expected_commands=[['automerge',settings[0][0]]] if settings else []
+                    facts.append({'section':canonical([schema,name,'native-fts-configuration']),
+                        'equal':configuration.get('available') is True and configuration.get('commands')==expected_commands and configuration.get('native_format_version')==native_version})
             if kind not in {'table', 'view', 'fts-table', 'virtual-table'}: continue
             raw = list(connection.execute('PRAGMA ' + quote(schema) + '.table_xinfo(' + quote(name) + ')'))
             for _, column, *_ in raw: add('column', [schema, name, column])
@@ -231,6 +244,10 @@ def qualify(engine, output):
                 "CREATE VIRTUAL TABLE 'single.search' USING 'fts4'(body)",
                 'CREATE VIRTUAL TABLE [bracket.search] USING [fts3](body)',
                 'CREATE VIRTUAL TABLE "quoted.spatial" USING "rtree"(id,x1,x2)']
+            statements += ["INSERT INTO search(search,rank) VALUES('pgsz',1024)",
+                "INSERT INTO search(search,rank) VALUES('rank','bm25(2.0)')",
+                "INSERT INTO 'single.search'('single.search') VALUES('automerge=4')",
+                "INSERT INTO 'bracket.search'('bracket.search') VALUES('automerge=4')"]
         else:
             import duckdb as native
             connection = native.connect(str(root / 'owned.duckdb'))
@@ -249,7 +266,8 @@ def qualify(engine, output):
     result['owned_state_removed'] = not root.exists()
     result['source_sha256'] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in [Path(__file__), ROOT / 'web/pgadmin/cdeadmin/navigator.py',
-            ROOT / f'web/pgadmin/cdeadmin/providers/{engine}/provider.py']}
+            ROOT / f'web/pgadmin/cdeadmin/providers/{engine}/provider.py',
+            *([ROOT/'web/pgadmin/cdeadmin/providers/sqlite/modules.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py'] if engine=='sqlite' else [])]}
     (output / 'summary.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
 

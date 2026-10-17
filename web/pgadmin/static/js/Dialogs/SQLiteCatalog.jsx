@@ -17,6 +17,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   const [rebuilds, setRebuilds] = useState([]);
   const [columnRenames, setColumnRenames] = useState([]);
   const [nativeRenames,setNativeRenames]=useState([]),[renameKind,setRenameKind]=useState('table');
+  const [ftsRebindings,setFtsRebindings]=useState([]);
   const [renameTable,setRenameTable]=useState(''),[renameColumn,setRenameColumn]=useState(''),[renameTo,setRenameTo]=useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
@@ -26,7 +27,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]); setError('');
-    setNativeRenames([]);setRenameKind('table');setRenameTable('');setRenameColumn('');setRenameTo('');
+    setNativeRenames([]);setFtsRebindings([]);setRenameKind('table');setRenameTable('');setRenameColumn('');setRenameTo('');
     setBusy(false); setDisplay('inventory'); setView('inventory_1'); setData(null); setDataScript(null); setRelation('');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -40,7 +41,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       if(token !== serial.current) return;
       if(compare) setComparison(value);
       else {setResult(value); setComparison(null); setData(null); setDataScript(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]);
-        setNativeRenames([]);setRenameTable('');setRenameColumn('');setRenameTo('');
+        setNativeRenames([]);setFtsRebindings([]);setRenameTable('');setRenameColumn('');setRenameTo('');
         setBaselineSource(JSON.stringify(value.snapshot));
         setRelation(value.objects?.find(item => item.resource_id === resourceId && item.kind === 'table')?.resource_id ||
           value.objects?.find(item => ['table', 'view', 'virtual-table', 'fts-table'].includes(item.kind))?.resource_id || '');
@@ -76,7 +77,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     try {
       const value = await post({action: 'sqlite_schema_plan', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
-        deletions, rebuilds, column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {})}});
+        deletions, rebuilds, column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
       if(token === serial.current) setSchemaPlan(value);
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite schema preview failed');
@@ -88,7 +89,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       const value = await post({action: 'sqlite_schema_review', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
         execution_sha256: schemaPlan.execution_sha256, deletions, rebuilds,
-        column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {})}});
+        column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
       if(token === serial.current) {setSchemaReceipt(value); setConfirmApply(false);}
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite review failed');
@@ -98,8 +99,8 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     const token=++serial.current;setBusy(true);setError('');
     try {
       const value=await post({action:'sqlite_schema_rename_design',request:{database_target_id:databaseTargetId,
-        baseline:baselineSource,renames:[{kind:renameKind,table:renameTable,to:renameTo,...(renameKind==='column' ? {from:renameColumn} : {})}]}});
-      if(token===serial.current) {setSource(JSON.stringify(value.snapshot,null,2));setNativeRenames(value.renames);setDeletions([]);setRebuilds([]);setColumnRenames([]);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}
+        baseline:baselineSource,renames:[{kind:renameKind,table:renameTable,to:renameTo,...(renameKind==='column' ? {from:renameColumn} : {})}],...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
+      if(token===serial.current) {setSource(JSON.stringify(value.snapshot,null,2));setNativeRenames(value.renames);setFtsRebindings(value.fts_rebindings || []);setDeletions([]);setRebuilds([]);setColumnRenames([]);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}
     } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'Native SQLite rename design generation failed');}
     finally {if(token===serial.current)setBusy(false);}
   };
@@ -146,7 +147,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
           const file = event.target.files?.[0]; event.target.value = '';
           if(!file) return;
           if(file.size > 8 * 1024 * 1024) {setError('Catalog file exceeds 8 MiB'); return;}
-          try {setNativeRenames([]);setSource(await file.text()); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]); setError('');}
+          try {setNativeRenames([]);setFtsRebindings([]);setSource(await file.text()); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]); setError('');}
           catch(failure) {setError(failure.message || 'Could not read DDN file');}
         }} /></Button>
       <Button disabled={busy || !source || !databaseTargetId} onClick={() => capture(true)}>Compare with live catalog</Button>
@@ -198,8 +199,11 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
         {renameKind==='column' && <TextField select size="small" label="Native rename column" value={renameColumn} disabled={busy} sx={{minWidth:180}} onChange={event => setRenameColumn(event.target.value)}>{(result.objects || []).filter(item => item.kind==='column' && item.path?.[0]==='main' && item.path?.[1]===renameTable).map(item => <MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}</TextField>}
         <TextField size="small" label="New native name" value={renameTo} disabled={busy} onChange={event => setRenameTo(event.target.value)} />
         <Button disabled={busy || includeSystem || !renameTable || !renameTo || renameKind==='column' && !renameColumn} onClick={generateRename}>Generate native rename design</Button>
-        {nativeRenames.length>0 && <Button disabled={busy} onClick={() => {setNativeRenames([]);setSource('');setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}}>Discard native rename design</Button>}
+        {nativeRenames.length>0 && <Button disabled={busy} onClick={() => {setNativeRenames([]);setFtsRebindings([]);setSource('');setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}}>Discard native rename design</Button>}
       </Box>
+      {(result.objects || []).filter(item => item.kind==='fts-table' && item.external_content).map(item => <FormControlLabel key={item.resource_id}
+        label={'Rebuild external-content FTS '+item.name+' from '+item.external_content}
+        control={<Checkbox disabled={busy} checked={ftsRebindings.includes(item.resource_id)} onChange={event => {setFtsRebindings(current => event.target.checked ? [...current,item.resource_id] : current.filter(identity => identity!==item.resource_id));setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}} />} />)}
       {nativeRenames.length>0 && <Alert severity="info">The generated rename intent is included in the next preview and review. Capture a fresh baseline after applying it.</Alert>}
     </Box>}
     {result && <Box component="details" sx={{my: 1}}><summary>Explicit native deletions ({deletions.length})</summary>
@@ -257,7 +261,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     </Box>}
     {result?.snapshot && <FirebirdCatalogDesigner engine="sqlite" baseline={JSON.stringify(result.snapshot)}
       post={post} databaseTargetId={databaseTargetId} disabled={busy}
-      onReview={(desired, baseline) => {setNativeRenames([]);setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]);}} />}
+      onReview={(desired, baseline) => {setNativeRenames([]);setFtsRebindings([]);setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]);}} />}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="sqlite/catalog-comparison" aria-label="SQLite catalog differences"
@@ -279,6 +283,8 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
         ]} /></Box>
       {schemaPlan.application_supported && !schemaReceipt &&
         <Button disabled={busy} onClick={reviewSchema}>Prepare native change review</Button>}
+      {schemaPlan.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
+      {schemaPlan.operations.some(item => item.operation==='rename-batch') && <Box component="details"><summary>Exact native rename statements and settings</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>{JSON.stringify(schemaPlan.operations,null,2)}</Box></Box>}
     </Box>}
     {schemaReceipt && <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
       <Alert severity={schemaReceipt.state === 'committed' ? 'success' : schemaReceipt.state === 'unknown_outcome' ? 'warning' : 'info'}>

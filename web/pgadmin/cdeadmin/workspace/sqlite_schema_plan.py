@@ -35,9 +35,13 @@ def _definition(row):
     if row is None:
         return None
     native = row['native']
-    return {'kind': row['kind'], 'path': row['path'], 'name': row['name'],
+    result={'kind': row['kind'], 'path': row['path'], 'name': row['name'],
         'system': row['system'], 'ddl': native.get('ddl'),
         'catalog_metadata': native.get('catalog_metadata')}
+    if row['kind']=='fts-table':
+        from ..providers.sqlite.fts_configuration import identity
+        result['fts_configuration']=identity(native.get('fts_configuration'))
+    return result
 
 
 def _source(row):
@@ -74,6 +78,11 @@ def _source(row):
             raise ValueError('Native virtual-table module, target or kind differs from the desired SQLite object')
         if row['native'].get('catalog_metadata', {}).get('table_list_type') not in (None, 'virtual'):
             raise ValueError('SQLite virtual table kind differs from native metadata')
+        if kind=='fts-table' and row['native'].get('fts_configuration') is not None:
+            from ..providers.sqlite.fts_configuration import validate
+            configuration=row['native']['fts_configuration']
+            if configuration.get('module')!=native[1].lower():raise ValueError('Native FTS configuration belongs to another module')
+            validate(configuration)
         return ddl
     elif kind == 'view':
         pattern = r'^\s*CREATE\s+VIEW\s+' + re.escape(exact) + r'(?=\s|\()'
@@ -187,7 +196,7 @@ def _compile_created_child(row, source, owner):
 
 
 def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
-         column_renames=(), renames=()):
+         column_renames=(), renames=(), fts_rebindings=()):
     scope = _scope(baseline)
     if _scope(desired) != scope or _scope(live) != scope:
         raise ValueError('Native designs refer to different registered SQLite files')
@@ -202,7 +211,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         if deletions or rebuilds or column_renames:
             raise ValueError('Review native renames separately from rebuilds and other transformations')
         from .sqlite_rename import plan as rename_plan
-        return rename_plan(baseline,desired,live,renames)
+        return rename_plan(baseline,desired,live,renames,fts_rebindings)
+    if fts_rebindings:raise ValueError('FTS rebinding requires an explicit native owner rename')
     operations, blockers, conflicts = [], [], []
     before, after, current = baseline['rows'], desired['rows'], live['rows']
     if (not isinstance(deletions, (list, tuple)) or len(deletions) > 32 or

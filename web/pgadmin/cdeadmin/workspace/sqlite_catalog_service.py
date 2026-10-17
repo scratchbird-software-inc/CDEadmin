@@ -1,6 +1,7 @@
 """Owner-bound SQLite catalog exchange for the shared workspace."""
 
 from ..providers.sqlite.provider import SQLiteProvider
+from ..providers.sqlite.modules import option as module_option
 from .firebird_catalog_export import build_export
 from .firebird_catalog_import import compare_catalogs, read_catalog
 
@@ -49,7 +50,9 @@ def catalog(service, server, request, *, compare=False):
     result['generation'] = captured['generation']
     result['objects'] = [{
         'resource_id': item['resource_id'], 'name': item['display_name'],
-        'kind': item['resource_kind'], 'path': item['display_path']}
+        'kind': item['resource_kind'], 'path': item['display_path'],
+        **({'external_content':module_option(item['native'].get('ddl',''),'content')}
+           if item['resource_kind']=='fts-table' and item['native'].get('module_observation',{}).get('module','').lower() in {'fts4','fts5'} else {})}
         for item in captured['resources']]
     return result
 
@@ -113,8 +116,8 @@ def schema_plan(service, server, request, *, generate_renames=False):
     required={'database_target_id','baseline','renames'} if generate_renames else {'database_target_id','baseline','desired'}
     if (not isinstance(request, dict) or not required <= set(request) or
             set(request) - {'database_target_id', 'baseline', 'desired', 'deletions', 'rebuilds',
-                            'column_renames', 'renames'} or
-            generate_renames and set(request)!=required):
+                            'column_renames', 'renames', 'fts_rebindings'} or
+            generate_renames and set(request)-required-{'fts_rebindings'}):
         raise ValueError('SQLite schema preview requires exact baseline and desired DDN')
     target = request['database_target_id']
     if not isinstance(target, str) or not target:
@@ -156,12 +159,13 @@ def schema_plan(service, server, request, *, generate_renames=False):
     if generate_renames:
         from .sqlite_rename import generate,schema
         if schema(baseline)!=schema(live):raise ValueError('Native SQLite schema changed; capture a new baseline')
-        desired,selected,_stages=generate(baseline,request['renames'])
+        desired,selected,_stages=generate(baseline,request['renames'],request.get('fts_rebindings',()))
         resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],
             'display_name':row['name'],'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
         result=build_export(resources,endpoint_id=str(context.endpoint_id),target_id=target,
             generation=captured['generation'],include_system=False,refreshed=True,engine='sqlite')
-        return {'snapshot':result['snapshot'],'renames':selected,'scope':'native schema-only generation; registered file has not changed'}
+        return {'snapshot':result['snapshot'],'renames':selected,'fts_rebindings':request.get('fts_rebindings',[]),
+            'scope':'native schema-only generation; registered file has not changed'}
     connection = provider.client._connect({'route': endpoint['route']})
     try:
         before_info = os.stat(path)
@@ -171,7 +175,7 @@ def schema_plan(service, server, request, *, generate_renames=False):
                        deletions=request.get('deletions', ()),
                        rebuilds=request.get('rebuilds', ()),
                        column_renames=request.get('column_renames', ()),
-                       renames=request.get('renames', ()))
+                       renames=request.get('renames', ()),fts_rebindings=request.get('fts_rebindings',()))
         after_info = os.stat(path)
         if [after_info.st_dev, after_info.st_ino] != [file_info.st_dev, file_info.st_ino]:
             raise ValueError('SQLite registered file changed during native grammar validation')

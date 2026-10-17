@@ -71,7 +71,7 @@ class SQLiteSchemaApplications(SchemaApplications):
             identity = operation['resource_id']
             if operation.get('operation')=='rename-batch':
                 from .sqlite_rename import plan as rename_plan
-                expected=rename_plan(baseline,desired,baseline,operation.get('renames'))
+                expected=rename_plan(baseline,desired,baseline,operation.get('renames'),operation.get('fts_rebindings',()))
                 if len(operations)!=1 or not expected['ready_for_review'] or expected['operations']!=operations:
                     raise SchemaApplyError('SQLite native rename differs from the reviewed design')
                 continue
@@ -392,6 +392,10 @@ def apply_review(provider, route, record):
                     raise _PreservationRefused('SQLite rebuild row count differs before commit')
             else:
                 connection.execute(operation['source'])
+                row=record['desired']['rows'].get(operation['resource_id'])
+                if operation['operation']=='create' and row and row['kind']=='fts-table' and row['native'].get('fts_configuration') is not None:
+                    from ..providers.sqlite.fts_configuration import statements
+                    for source in statements(row['name'],row['native']['fts_configuration']):connection.execute(source)
         if any(operation['operation'] == 'rebuild' for operation in record['plan']['operations']):
             if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
                 raise _PreservationRefused('SQLite rebuild batch failed native foreign-key check')
@@ -524,6 +528,10 @@ def apply_review(provider, route, record):
             row = by_id.get(operation['resource_id'])
             if row is None or row['resource_kind'] != operation['kind']:
                 return False
+            if operation['kind']=='fts-table':
+                from ..providers.sqlite.fts_configuration import identity
+                wanted=record['desired']['rows'][operation['resource_id']]['native'].get('fts_configuration')
+                if wanted is not None and identity(row['native'].get('fts_configuration'))!=identity(wanted):return False
             if operation['kind'] == 'column':
                 actual = row['native'].get('catalog_metadata', {})
                 expected = record['desired']['rows'][operation['resource_id']]['native'].get('catalog_metadata', {})

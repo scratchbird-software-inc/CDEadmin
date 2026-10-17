@@ -260,7 +260,7 @@ remains open for every engine; a scoped workflow is not the full denominator.
        relations with their explicitly declared indexes and triggers; native
        table/column rename design generation, reference rewriting and native
        FTS/RTree/Geopoly table renames; native quoted module identities.
-     - Remaining attached/external-content and installed-module transformations and
+     - Remaining attached/public-FTS-column and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1389,7 +1389,33 @@ the native rename selector. Column rename remains an ordinary-table operation
 because SQLite refuses column renames on virtual tables.
 
 Renaming an external-content owner can leave an FTS constructor pointing at the
-old table/column even when native ALTER TABLE succeeds. Until its reviewed
-rebinding adapter is implemented, that case is refused explicitly. Other
+old table/column even when native ALTER TABLE succeeds. The separately selected
+reconstruction adapter below covers owner names and qualified row identities. Other
 module-specific operations, attached transformations and the complete installed
 capability denominator retain separate acceptance.
+
+SQLite external-content FTS reconstruction
+-------------------------------------------
+
+The rename workspace exposes exact external-content FTS4/FTS5 identities for
+explicit reconstruction. Native owner table renames and FTS5 content-row identity
+renames can rebuild the selected dependent index in the same owned write
+transaction. The generated review includes its DROP/CREATE, constructor changes,
+native settings, rebuild and native integrity check. Owner rows, row IDs and
+AUTOINCREMENT state remain in the original table. Search indexes are rebuilt
+from the current content rows; this deliberately repairs pre-existing index
+drift rather than promising identical old index bytes.
+
+Catalogs preserve native FTS5 stored configuration and FTS3/FTS4 auto-merge
+settings. The exact3.53 native maintenance commands restore those settings;
+native FTS5 index-format versions remain separately observed. Desired settings
+must reproduce their proposed catalog values through native setters in an empty
+private database. Creation also restores explicitly supplied FTS configuration.
+Configuration changes after review prevent dispatch. Native denial and failures
+after real DROP/CREATE roll back the complete operation; a lost reply after an
+actual commit remains unknown and the original review never repeats.
+
+FTS3's ``content=...`` spelling is a column declaration, not FTS4's external-
+content option. It retains its native behavior. Renaming public FTS content
+columns or FTS4 language/row mappings still needs coordinated column and
+dependency rewriting; those remaining adapters are not claimed complete.

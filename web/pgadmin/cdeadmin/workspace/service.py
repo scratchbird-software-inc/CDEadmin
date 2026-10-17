@@ -1829,7 +1829,7 @@ class ProviderWorkspaceService:
                 'target': target, 'file_identity': [info.st_dev, info.st_ino]})
             if action == 'sqlite_schema_review':
                 if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
-                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames', 'renames'}):
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames', 'renames', 'fts_rebindings'}):
                     raise ValueError('Invalid SQLite schema review request')
                 preview = self.sqlite_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'})

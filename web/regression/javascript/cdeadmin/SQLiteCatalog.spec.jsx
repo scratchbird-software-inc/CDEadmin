@@ -11,6 +11,27 @@ const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
+it('requires the selected external-content index identity in rename generation and review', async () => {
+  const renames=[{kind:'table',table:'owner',to:'renamed'}],fts_rebindings=['search-id'];
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[{resource_id:'owner-id',kind:'table',name:'owner',path:['main','owner']},
+      {resource_id:'search-id',kind:'fts-table',name:'search',path:['main','search'],external_content:'owner'}],provenance:{objects:2,coverage:'partial'}})
+    .mockResolvedValueOnce({snapshot,renames,fts_rebindings})
+    .mockResolvedValueOnce({operations:[{operation:'rename-batch',resource_id:'rename',name:'Rename',source:'native reviewed statements'}],blockers:[],conflicts:[],application_supported:true,execution_sha256:'reviewed'})
+    .mockResolvedValueOnce({review_id:'native',state:'reviewed'});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  fireEvent.click(screen.getByText('Native table and column renames'));
+  fireEvent.change(screen.getByRole('combobox',{name:'Native rename table'}).parentElement.querySelector('input'),{target:{value:'owner'}});
+  fireEvent.change(screen.getByRole('textbox',{name:'New native name'}),{target:{value:'renamed'}});
+  fireEvent.click(screen.getByRole('checkbox',{name:'Rebuild external-content FTS search from owner'}));
+  fireEvent.click(screen.getByRole('button',{name:'Generate native rename design'}));await screen.findByText(/The generated rename intent is included/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_rename_design',request:{database_target_id:'file-1',baseline:JSON.stringify(snapshot),renames,fts_rebindings}});
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));await screen.findByText('Exact native rename statements and settings');
+  fireEvent.click(screen.getByRole('button',{name:'Prepare native change review'}));await screen.findByText(/Native receipt native: reviewed/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_review',request:{database_target_id:'file-1',baseline:JSON.stringify(snapshot),desired:JSON.stringify(snapshot,null,2),execution_sha256:'reviewed',deletions:[],rebuilds:[],column_renames:[],renames,fts_rebindings}});
+});
+
 it('offers an observed FTS table for native table rename generation', async () => {
   const renames=[{kind:'table',table:'search:雪',to:'renamed:雪'}];
   const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
