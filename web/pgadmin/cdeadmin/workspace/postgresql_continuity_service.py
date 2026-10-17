@@ -46,9 +46,17 @@ def action(service, server, operation, request):
         jobs=getattr(service,'postgresql_continuity_jobs',None)
         if jobs is None:
             root=current_app.config.get('CDEADMIN_POSTGRESQL_CONTINUITY_ROOT') or str(store.path.parent/'postgresql-native-backups')
-            jobs=service.postgresql_continuity_jobs=PostgreSQLContinuityJobs(str(store.path)+'.postgresql-continuity',root)
+            jobs=service.postgresql_continuity_jobs=PostgreSQLContinuityJobs(str(store.path)+'.postgresql-continuity',root,
+                current_app.config.get('CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT') or None)
             import atexit
             atexit.register(jobs.close)
+    if operation=='archives':
+        if request:raise ContinuityError('Invalid native WAL archive selection')
+        # No cross-owner or cross-endpoint directory traversal is exposed.
+        from ..providers.postgresql.continuity_wal import ARCHIVE_NAME
+        root=jobs.archive_directory(owner,endpoint)
+        return {'archives':sorted(entry.name for entry in root.iterdir() if entry.is_dir() and not entry.is_symlink() and ARCHIVE_NAME.fullmatch(entry.name)) if root.is_dir() else [],
+                'execution_host':'application-host','owner_endpoint_directory':str(root)}
     if operation=='list':
         if set(request)-{'offset','limit'}:raise ContinuityError('Invalid backup receipt page')
         return jobs.list(owner,endpoint,**request)
@@ -58,7 +66,7 @@ def action(service, server, operation, request):
     runtime_limit=current_app.config.get('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS')
     paths=paths_for_app(current_app)
     configuration=fingerprint({'registration':PostgreSQLMonitoringHost._configuration(server),
-                               'runtime_limit':runtime_limit,'paths':paths})
+                               'runtime_limit':runtime_limit,'paths':paths,'wal_archive_root':str(jobs.archive_root)})
     transport=None
     try:
         if operation=='review':

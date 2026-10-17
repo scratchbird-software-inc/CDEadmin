@@ -856,3 +856,28 @@ Native clone completion, independent file verification and a recovery drill
 retain separate receipt fields. Server-host restore/provisioning, remote clone,
 the remaining native physical backup utilities, PITR and archive management
 remain separate product requirements.
+
+PostgreSQL native point-in-time recovery drills
+===============================================
+
+The physical recovery dialog selects native timestamp, transaction ID, WAL LSN,
+named restore point or earliest-consistency targets, with native inclusion and
+timeline policy. It selects completed WAL archives scoped to the current owner
+and registered endpoint on the application host. Archive directories are under
+``CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT/<owner>/<endpoint>/<archive>`` or, by
+default, ``<continuity-root>/wal-archives/<owner>/<endpoint>/<archive>``.
+
+The reviewed inventory contains native filenames, exact byte lengths and SHA256
+hashes. Up to 100000 completed segment/history/backup-history files are admitted
+per review. Partial files, other entries, links and reparse points are refused.
+Dispatch checks the inventory and file content while staging into the independent
+copy's private WAL directory. The original backup and archive are unchanged.
+
+Native PostgreSQL validates WAL headers, cluster identity, record checksums,
+timeline ancestry and the requested stop point. An unreachable target fails
+before the standalone SQL receipt. Successful recovery promotes the independent
+copy onto its own timeline without a network listener. The receipt separately
+records reviewed archive matching, the selected target and recovered heap row
+counts. Duplicate starts observe the durable job and do not replay recovery.
+Production cutover, continuous archive collection/retention and remote execution
+host integration remain separate obligations.

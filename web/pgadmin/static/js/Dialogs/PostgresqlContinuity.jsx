@@ -12,12 +12,15 @@ export default function PostgresqlContinuity({post}) {
   const [operation,setOperation]=useState('full_backup'), [options,setOptions]=useState(defaults);
   const [copyMode,setCopyMode]=useState('copy'), [inputs,setInputs]=useState([]);
   const [recoveryDatabase,setRecoveryDatabase]=useState('postgres'), [checks,setChecks]=useState([]);
+  const [targetKind,setTargetKind]=useState(''), [targetValue,setTargetValue]=useState(''), [targetInclusive,setTargetInclusive]=useState(true), [targetTimeline,setTargetTimeline]=useState('current');
+  const [walArchives,setWalArchives]=useState(null), [walArchive,setWalArchive]=useState('');
   const [page,setPage]=useState(0), [catalog,setCatalog]=useState(null), [review,setReview]=useState(null), [receipt,setReceipt]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
   const generation=useRef(0);
   useEffect(() => {
     generation.current++;setOperation('full_backup');setOptions(defaults());setCopyMode('copy');setInputs([]);
     setRecoveryDatabase('postgres');setChecks([]);
+    setTargetKind('');setTargetValue('');setTargetInclusive(true);setTargetTimeline('current');setWalArchives(null);setWalArchive('');
     setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');
     return () => {generation.current++;};
   },[post]);
@@ -47,7 +50,8 @@ export default function PostgresqlContinuity({post}) {
   const prepare=() => {
     let nativeOptions;
     if(operation==='combine')nativeOptions={format:'plain',copy_mode:copyMode,...Object.fromEntries(['manifest_checksums','sync','sync_method','timeout_seconds'].map(key => [key,options[key]]))};
-    else if(operation==='recovery_drill')nativeOptions={database:recoveryDatabase,checks:checks.map(check => ({schema:check.schema,table:check.table,...(check.expected_rows==='' ? {} : {expected_rows:check.expected_rows})})),timeout_seconds:options.timeout_seconds};
+    else if(operation==='recovery_drill')nativeOptions={database:recoveryDatabase,checks:checks.map(check => ({schema:check.schema,table:check.table,...(check.expected_rows==='' ? {} : {expected_rows:check.expected_rows})})),timeout_seconds:options.timeout_seconds,
+      ...(targetKind ? {target:{kind:targetKind,...(targetKind==='immediate' ? {} : {value:targetValue}),inclusive:targetInclusive,timeline:targetTimeline},wal_archive:walArchive} : {})};
     else if(operation==='verify')nativeOptions={timeout_seconds:options.timeout_seconds};
     else nativeOptions={...options,max_rate_kib:options.max_rate_kib==='' ? null : Number(options.max_rate_kib)};
     run('review',{operation,options:nativeOptions,...(operation==='combine' ? {chain:inputs} : operation==='full_backup' ? {} : {base_job_id:inputs[0]})},setReview);
@@ -95,6 +99,21 @@ export default function PostgresqlContinuity({post}) {
     </Box>
     {operation==='recovery_drill' && <Box sx={{my:1}}>
       <TextField disabled={busy} size="small" label="Recovery database" value={recoveryDatabase} onChange={event => {setRecoveryDatabase(event.target.value);setReview(null);}} />
+      <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
+        <TextField disabled={busy} select size="small" label="Recovery target" value={targetKind} onChange={event => {setTargetKind(event.target.value);setReview(null);}}>
+          {[['','Backup consistency'],['time','Timestamp'],['xid','Transaction ID'],['lsn','WAL location (LSN)'],['name','Named restore point'],['immediate','Earliest consistent state']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+        </TextField>
+        {targetKind && <>
+          {targetKind!=='immediate' && <TextField disabled={busy} size="small" label="Exact native target value" value={targetValue} onChange={event => {setTargetValue(event.target.value);setReview(null);}} />}
+          <TextField disabled={busy} size="small" label="Recovery timeline (current, latest or ID)" value={targetTimeline} onChange={event => {setTargetTimeline(event.target.value);setReview(null);}} />
+          {['time','xid','lsn'].includes(targetKind) && <FormControlLabel label="Include target" control={<Checkbox disabled={busy} checked={targetInclusive} onChange={event => {setTargetInclusive(event.target.checked);setReview(null);}} />} />}
+          <Button disabled={busy} onClick={() => run('archives',{},setWalArchives)}>Load WAL archives</Button>
+          <TextField disabled={busy} select size="small" label="Native WAL archive" value={walArchive} onChange={event => {setWalArchive(event.target.value);setReview(null);}}>
+            <MenuItem value="">Select archive</MenuItem>{(walArchives?.archives || []).map(name => <MenuItem key={name} value={name}>{name}</MenuItem>)}
+          </TextField>
+        </>}
+      </Box>
+      {targetKind && <Alert severity="info">Completed native WAL files are read from the selected owner/endpoint archive on the application host. PostgreSQL must reach the selected target before a successful receipt is produced. The original backup and archive remain unchanged.{walArchives && ` Archive directory: ${walArchives.owner_endpoint_directory}`}</Alert>}
       <Alert severity="info">The private recovery copy runs without a network listener. Optional checks count rows in the selected native heap tables or materialized views. Names are exact; leave the expected count blank to record the observed count.</Alert>
       {checks.map((check,index) => <Box key={index} sx={{display:'flex',gap:1,my:1}}>
         {['schema','table','expected_rows'].map(name => <TextField key={name} disabled={busy} size="small" label={`${name.replaceAll('_',' ')} ${index+1}`} value={check[name]}
@@ -113,7 +132,7 @@ export default function PostgresqlContinuity({post}) {
       <Alert severity={['verified','recovered'].includes(receipt.state) ? 'success' : ['failed','unknown','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>
         Job {receipt.job_id}: {receipt.state}. {receipt.observation_blocker}
         {receipt.state==='verified' && ` Native file verification: ${receipt.verification_scope?.files ? 'yes' : 'no'}; WAL verification: ${receipt.verification_scope?.wal ? 'yes' : 'no'}. Recovery drill: ${receipt.recovery_drill_complete ? 'complete' : 'not completed'}.`}
-        {receipt.state==='recovered' && ` Isolated native recovery completed. Selected heap row counts: ${receipt.verification_scope?.selected_heap_counts}. Production restore and point-in-time recovery have separate receipts.`}
+        {receipt.state==='recovered' && ` Isolated native recovery completed. Selected heap row counts: ${receipt.verification_scope?.selected_heap_counts}. Point-in-time recovery: ${receipt.recovery_observation?.point_in_time_recovery ? 'completed for the reviewed target' : 'not requested'}. Production restore has a separate receipt.`}
       </Alert>
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh receipt</Button>
       <Button onClick={download}>Download receipt</Button>

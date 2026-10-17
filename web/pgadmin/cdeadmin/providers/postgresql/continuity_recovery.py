@@ -15,10 +15,35 @@ from .continuity import ContinuityError, backup_options
 
 
 def recovery_options(value):
-    defaults = {'database':'postgres', 'checks':[], 'timeout_seconds':3600}
+    defaults = {'database':'postgres', 'checks':[], 'timeout_seconds':3600,
+                'target':None, 'wal_archive':None}
     if not isinstance(value,dict) or set(value)-defaults.keys():
         raise ContinuityError('Invalid native recovery drill options')
     result = {**defaults,**value}
+    target = result['target']
+    if target is not None:
+        from .continuity_wal import ARCHIVE_NAME
+        if not isinstance(target,dict) or set(target)-{'kind','value','inclusive','timeline'} or target.get('kind') not in {'time','xid','lsn','name','immediate'}:
+            raise ContinuityError('Select one native recovery target')
+        target = {'inclusive':True, 'timeline':'current', **target}
+        if type(target['inclusive']) is not bool or not isinstance(target['timeline'],str) or not re.fullmatch(r'current|latest|[1-9][0-9]{0,9}',target['timeline']):
+            raise ContinuityError('Invalid native recovery inclusion or timeline')
+        value = target.get('value')
+        if target['kind']=='immediate':
+            if value is not None: raise ContinuityError('Immediate recovery has no target value')
+        elif not isinstance(value,str) or not value or '\x00' in value or len(value.encode('utf8'))>1024:
+            raise ContinuityError('Recovery targets require bounded exact native text')
+        elif target['kind']=='xid' and (not re.fullmatch(r'[0-9]{1,10}',value) or not 0<int(value)<=4294967295):
+            raise ContinuityError('Recovery XIDs require exact native uint32 decimal text')
+        elif target['kind']=='lsn' and not re.fullmatch(r'[0-9A-Fa-f]{1,8}/[0-9A-Fa-f]{1,8}',value):
+            raise ContinuityError('Recovery LSN requires two native hexadecimal halves')
+        elif target['kind']=='name' and len(value.encode('utf8'))>=64:
+            raise ContinuityError('Native restore-point names require fewer than 64 UTF8 bytes')
+        if not isinstance(result['wal_archive'],str) or ARCHIVE_NAME.fullmatch(result['wal_archive']) is None:
+            raise ContinuityError('Point-in-time recovery requires a selected native WAL archive')
+        result['target'] = target
+    elif result['wal_archive'] is not None:
+        raise ContinuityError('WAL archive selection requires a native recovery target')
     backup_options({'timeout_seconds':result['timeout_seconds']})
     def identifier(name):
         # Native byte length depends on the recovered database encoding. Exact
@@ -107,7 +132,23 @@ def recovery_command(directory, options, token):
     auto=clone/'postgresql.auto.conf'
     auto.write_bytes(b'');private_file(auto)
     config=directory/'recovery.conf'
-    config.write_text("listen_addresses = ''\nshared_preload_libraries = ''\nsession_preload_libraries = ''\nlocal_preload_libraries = ''\narchive_mode = off\narchive_command = ''\narchive_library = ''\nrestore_command = ''\nrecovery_end_command = ''\nrecovery_min_apply_delay = 0\nhot_standby = off\nprimary_conninfo = ''\nprimary_slot_name = ''\nssl = off\n",encoding='utf8')
+    configuration="listen_addresses = ''\nshared_preload_libraries = ''\nsession_preload_libraries = ''\nlocal_preload_libraries = ''\narchive_mode = off\narchive_command = ''\narchive_library = ''\nrestore_command = ''\nrecovery_end_command = ''\nrecovery_min_apply_delay = 0\nhot_standby = off\nprimary_conninfo = ''\nprimary_slot_name = ''\nssl = off\n"
+    target = options.get('target')
+    if target is not None:
+        if target['kind']=='time':
+            # PostgreSQL checks recovery timestamps while reading GUCs, before
+            # its default timezone abbreviation table is otherwise initialized.
+            configuration += "timezone_abbreviations = 'Default'\n"
+        # All reviewed archive bytes are staged in the clone's own pg_wal.
+        # No caller-supplied archive command or source connection is executed.
+        configuration += "restore_command = '"+('cmd /c exit /b 1' if os.name=='nt' else 'false')+"'\nrecovery_target_action = 'promote'\n"
+        def setting(value): return "'"+str(value).replace('\\','\\\\').replace("'","''")+"'"
+        key = 'recovery_target' if target['kind']=='immediate' else 'recovery_target_'+target['kind']
+        configuration += key+' = '+setting('immediate' if target['kind']=='immediate' else target['value'])+'\n'
+        configuration += 'recovery_target_inclusive = '+('on' if target['inclusive'] else 'off')+'\n'
+        configuration += 'recovery_target_timeline = '+setting(target['timeline'])+'\n'
+        signal = clone/'recovery.signal'; signal.write_bytes(b''); private_file(signal)
+    config.write_text(configuration,encoding='utf8')
     private_file(config)
     output=directory/'recovery-result.csv'
     if output.exists():raise ContinuityError('A native recovery result already exists; automatic replay is refused')
@@ -117,7 +158,10 @@ def recovery_command(directory, options, token):
         assertions.append("IF NOT EXISTS (SELECT FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace JOIN pg_catalog.pg_am a ON a.oid=c.relam WHERE n.nspname="+unicode_literal(schema)+" AND c.relname="+unicode_literal(table)+" AND c.relkind IN ('r','m') AND a.amname='heap') THEN RAISE EXCEPTION 'Recovery check requires a native heap relation'; END IF;")
         checks.append("pg_catalog.jsonb_build_object('schema',"+unicode_literal(schema)+",'table',"+unicode_literal(table)+",'rows',(SELECT count(*)::text FROM "+identifier(schema)+'.'+identifier(table)+'))')
     validate='DO '+literal('BEGIN '+''.join(assertions)+' END;')+';' if assertions else ''
-    query="SELECT pg_catalog.jsonb_build_object('token',"+literal(token)+",'system_identifier',(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),'database',pg_catalog.current_database(),'server_version',current_setting('server_version_num')::int,'in_recovery',pg_catalog.pg_is_in_recovery(),'checks',pg_catalog.jsonb_build_array("+','.join(checks)+'))'
+    observed_target=''
+    if target is not None:
+        observed_target=",'native_target',pg_catalog.jsonb_build_object('value',pg_catalog.current_setting("+literal(key)+"),'timeline',pg_catalog.current_setting('recovery_target_timeline'),'inclusive',pg_catalog.current_setting('recovery_target_inclusive'),'action',pg_catalog.current_setting('recovery_target_action'))"
+    query="SELECT pg_catalog.jsonb_build_object('token',"+literal(token)+",'system_identifier',(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),'database',pg_catalog.current_database(),'server_version',current_setting('server_version_num')::int,'in_recovery',pg_catalog.pg_is_in_recovery()"+observed_target+",'checks',pg_catalog.jsonb_build_array("+','.join(checks)+'))'
     sql="BEGIN READ ONLY;SET LOCAL search_path=pg_catalog;SET LOCAL row_security=off;"+validate+'COPY ('+query+') TO '+literal(str(output))+" WITH (FORMAT csv, ENCODING 'UTF8');COMMIT;\n\n"
     return ['--single','-j','-D',str(clone),'-c','config_file='+str(config),'--',options['database']],sql.encode('utf8'),output
 
@@ -136,6 +180,10 @@ def read_result(path, options, token, system_identifier):
         raise ContinuityError('Native recovery identity or completion could not be established')
     if not isinstance(result.get('checks'),list) or len(result['checks'])!=len(options['checks']):
         raise ContinuityError('Native recovery table checks are incomplete')
+    target=options.get('target')
+    if target is not None and result.get('native_target')!={'value':'immediate' if target['kind']=='immediate' else target['value'],
+            'timeline':target['timeline'],'inclusive':'on' if target['inclusive'] else 'off','action':'promote'}:
+        raise ContinuityError('Native recovery target observation differs from the reviewed target')
     for actual,expected in zip(result['checks'],options['checks']):
         if not isinstance(actual,dict) or any(actual.get(key)!=expected[key] for key in ('schema','table')) or not isinstance(actual.get('rows'),str) or not re.fullmatch(r'0|[1-9][0-9]{0,18}',actual['rows']):
             raise ContinuityError('Invalid native recovery table result')
@@ -144,4 +192,5 @@ def read_result(path, options, token, system_identifier):
     result.pop('token')
     return {**result,'network_listener_started':False,'source_connection_used':False,
             'scope':'native WAL recovery, cluster identity and selected heap row counts',
-            'production_restore':False,'point_in_time_recovery':False}
+            'production_restore':False,'point_in_time_recovery':options.get('target') is not None,
+            'recovery_target':options.get('target')}

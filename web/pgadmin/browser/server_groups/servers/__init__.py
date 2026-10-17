@@ -2945,7 +2945,7 @@ class ServerNode(PGChildNodeView):
                 elif action == 'postgresql_server_catalog':
                     payload = service.postgresql_server_catalog(server, data.get('request'))
                 elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
-                                'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel'}:
+                                'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel', 'postgresql_continuity_archives'}:
                     try:
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:

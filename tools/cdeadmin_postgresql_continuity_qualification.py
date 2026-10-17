@@ -21,7 +21,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
+def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pitr=False):
     from postgresql_qualification_support import server as owned_server
     import psycopg
     output=Path(output).resolve()
@@ -41,6 +41,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
     config.CDEADMIN_OPERATION_STORE_PATH=str(output/'app/operations.json')
     config.CDEADMIN_POSTGRESQL_CONTINUITY_ROOT=str(output/'artifacts')
     config.CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH=str(binary_path)
+    config.CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT=str(output/'wal-archives')
     from pgadmin import create_app
     from pgadmin.model import db,User,ServerGroup,Server
     from flask import url_for
@@ -49,16 +50,22 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
     app.run_before_app_start()
     client=app.test_client();jobs=None
     restored_name='scratchrobin-continuity-restore-'+secrets.token_hex(8)
-    restored_started=False;restored_stopped=False
+    restored_started=False;restored_stopped=False;pitr_jobs=()
     restored=output/'restored-clone'
     try:
-        with owned_server(output/'fixture',server_options=('-c','summarize_wal=on'),initdb_options=('--locale=C','--encoding=UTF8')) as (route,password,fixture):
+        server_options=('-c','summarize_wal=on')
+        if pitr:server_options+=('-c','archive_mode=on','-c','archive_command=test ! -f /var/lib/postgresql/sr_pitr_archive/%f && cp %p /var/lib/postgresql/sr_pitr_archive/%f')
+        with owned_server(output/'fixture',server_options=server_options,initdb_options=('--locale=C','--encoding=UTF8')) as (route,password,fixture):
             with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
                                  dbname=route['database'],autocommit=True) as native:
                 hba=native.execute('SHOW hba_file').fetchone()[0]
                 subprocess.run(['docker','exec','--user','postgres','-i',fixture['owned_container_name'],'sh','-c','cat >> "$1"','fixture',hba],
                     input=b'\nhost replication postgres all scram-sha-256\n',check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
                 native.execute('SELECT pg_reload_conf()')
+                if pitr:
+                    subprocess.run(['docker','exec','--user','postgres',fixture['owned_container_name'],'mkdir','/var/lib/postgresql/sr_pitr_archive'],check=True,timeout=15)
+                    native.execute('CREATE TABLE sr_pitr_state(id bigint PRIMARY KEY, body text)')
+                    native.execute("INSERT INTO sr_pitr_state VALUES(0,'base state')")
                 subprocess.run(['docker','exec','--user','postgres',fixture['owned_container_name'],'mkdir','/var/lib/postgresql/sr_continuity_space'],check=True,timeout=15)
                 native.execute("CREATE TABLESPACE sr_continuity_space LOCATION '/var/lib/postgresql/sr_continuity_space'")
                 native.execute('CREATE TABLE sr_continuity_data (id bigint PRIMARY KEY,body text,payload bytea) TABLESPACE sr_continuity_space')
@@ -118,6 +125,8 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                     return result
                 full=submit('full_backup',{'timeout_seconds':None})
                 proof['checks'].append('authenticated-http-full-physical-backup-relocated-tablespaces-native-files-and-wal-verification')
+                if pitr:
+                    pitr_jobs=qualify_pitr(native,full,http,submit,app,fixture,output,uid,endpoint,proof)
                 tar_base=submit('full_backup',{'format':'tar','compression':'client-gzip','timeout_seconds':120})
                 native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740994,'incremental change',decode('aabb','hex'))")
                 native.execute('SELECT pg_switch_wal()')
@@ -222,11 +231,12 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
         proof['checks'].append('native-zero-exit-with-sql-error-and-incorrect-row-count-do-not-qualify-recovery')
         for job in (full,combined,tar_combined,mixed_combined,*tar_jobs):assert artifact_facts(job)==before[job['job_id']]
         proof['checks'].append('source-backup-bytes-and-tablespace-links-unchanged-after-successful-and-refused-drills')
-        qualified_jobs=(full,incremental,combined,tar_base,tar_incremental,tar_combined,plain_incremental,mixed_combined,wrong_chain,*tar_jobs,verified,recovered,*chain_recoveries,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result)
+        qualified_jobs=(full,incremental,combined,tar_base,tar_incremental,tar_combined,plain_incremental,mixed_combined,wrong_chain,*tar_jobs,verified,recovered,*chain_recoveries,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result,*pitr_jobs)
         page=http('list',{'offset':0,'limit':2});assert page['total']==len(qualified_jobs) and len(page['jobs'])==2 and page['more']
         for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
         if browser_binary:
-            proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary)
+            proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary,
+                pitr_target=proof['pitr']['targets'][0]['target'] if pitr else None)
             proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
         proof.update(complete=True,job_ids=[value['job_id'] for value in qualified_jobs],
                      source=combined['source'],native_artifact_password_absent_from_receipts=True)
@@ -250,7 +260,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
     return proof
 
 
-def qualify_browser(app, output, job_id, browser_binary, driver_binary):
+def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_target=None):
     """Exercise the actual disconnected-server callback and compiled panel."""
     import threading
     from werkzeug.serving import make_server
@@ -331,8 +341,22 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
             if item.text.strip()=='Recover isolated backup copy'),None)).click()
         row=driver.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+job_id+'"]').find_element(By.XPATH,'ancestor::tr')
         next(item for item in row.find_elements(By.TAG_NAME,'button') if item.get_attribute('textContent').strip()=='Select input').click()
+        if pitr_target is not None:
+            def selection(label_text, option_text):
+                control=driver.find_element(By.XPATH,'//label[normalize-space()="'+label_text+'"]')
+                field=driver.find_element(By.ID,control.get_attribute('for'))
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
+                wait.until(lambda _browser:field.is_enabled());field.click()
+                wait.until(lambda browser:next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
+                    if item.text.strip()==option_text),None)).click()
+            selection('Recovery target','Named restore point')
+            control=driver.find_element(By.XPATH,'//label[normalize-space()="Exact native target value"]')
+            driver.find_element(By.ID,control.get_attribute('for')).send_keys(pitr_target['value'])
+            click('Load WAL archives')
+            wait.until(lambda browser:'Archive directory:' in browser.find_element(By.TAG_NAME,'body').get_attribute('textContent'))
+            selection('Native WAL archive','completed')
         click('Add recovery table check')
-        for label,value in (('table 1','sr_continuity_data'),('expected rows 1','1')):
+        for label,value in (('table 1','sr_pitr_state' if pitr_target is not None else 'sr_continuity_data'),('expected rows 1','2' if pitr_target is not None else '1')):
             control=driver.find_element(By.XPATH,'//label[normalize-space()="'+label+'"]')
             field=driver.find_element(By.ID,control.get_attribute('for'))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
@@ -341,6 +365,7 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
         wait.until(lambda browser:'recovery_drill' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
         click('Confirm and start reviewed operation')
         wait.until(lambda _browser:receipt_message('Isolated native recovery completed'))
+        if pitr_target is not None:assert receipt_message('Point-in-time recovery: completed for the reviewed target')
         assert not driver.find_elements(By.CSS_SELECTOR,'[role="alert"] .MuiAlert-icon svg[data-testid="ErrorOutlineIcon"]')
         driver.save_screenshot(str(output/'offline-continuity.png'))
         messages=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE']
@@ -349,6 +374,7 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n')
         assert not errors
         return {'complete':True,'source_server_stopped':True,'console_errors':0,'reviewed_native_recovery_drill':True,
+                'point_in_time_recovery':pitr_target is not None,
                 'console_scope':'offline-continuity-workspace-after-shell-startup',
                 'expected_native_password_admission_errors':sum(map(expected,messages)),'screenshot':'offline-continuity.png'}
     except Exception:
@@ -362,11 +388,98 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
         http.shutdown();http.server_close();thread.join(timeout=5)
 
 
+def qualify_pitr(native,base,http,submit,app,fixture,output,owner,endpoint,proof):
+    from pgadmin.cdeadmin.workspace import service_for_app
+    jobs=service_for_app(app).postgresql_continuity_jobs
+    xid=native.execute("INSERT INTO sr_pitr_state VALUES(1,'target state ü') RETURNING xmin::text").fetchone()[0]
+    timestamp=native.execute('SELECT to_char(clock_timestamp() AT TIME ZONE \'UTC\',\'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\')').fetchone()[0]
+    point="ScratchRobin ü ' "+secrets.token_hex(6)
+    lsn=native.execute('SELECT pg_create_restore_point(%s)::text',(point,)).fetchone()[0]
+    native.execute("INSERT INTO sr_pitr_state VALUES(2,'after target')")
+    segment=native.execute('SELECT pg_walfile_name(pg_current_wal_insert_lsn())').fetchone()[0]
+    native.execute('SELECT pg_switch_wal()')
+    deadline=time.monotonic()+90
+    while True:
+        archived=native.execute('SELECT last_archived_wal FROM pg_stat_archiver').fetchone()[0]
+        if archived is not None and archived>=segment:break
+        if time.monotonic()>deadline:raise TimeoutError('Owned native WAL archiver deadline')
+        time.sleep(.2)
+    directory=jobs.archive_directory(owner,endpoint)/'completed';directory.mkdir(parents=True)
+    subprocess.run(['docker','cp',fixture['owned_container_name']+':/var/lib/postgresql/sr_pitr_archive/.',str(directory)],check=True,timeout=30)
+    archives=http('archives',{});assert 'completed' in archives['archives']
+    before={path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in directory.iterdir()}
+    outcomes=[];completed=[]
+    for kind,value,inclusive,rows in [('name',point,True,'2'),('xid',xid,True,'2'),('xid',xid,False,'1'),
+                                      ('time',timestamp,True,'2'),('lsn',lsn,True,'2'),('immediate',None,True,'1')]:
+        target={'kind':kind,'inclusive':inclusive,'timeline':'current',**({'value':value} if value is not None else {})}
+        result=submit('recovery_drill',{'target':target,'wal_archive':'completed','checks':[{'schema':'public','table':'sr_pitr_state','expected_rows':rows}],'timeout_seconds':120},
+                      expected_state='recovered',base_job_id=base['job_id'])
+        assert result['recovery_observation']['point_in_time_recovery'] and result['wal_archive_observation']['reviewed_content_matched']
+        outcomes.append({'target':target,'checks':result['recovery_observation']['checks'],'job_id':result['job_id']})
+        completed.append(result)
+    unreachable=submit('recovery_drill',{'target':{'kind':'name','value':'sr_unreachable_'+secrets.token_hex(6)},'wal_archive':'completed','timeout_seconds':120},
+                       expected_state='failed',base_job_id=base['job_id'])
+    assert unreachable.get('recovery_drill_complete') is False and not unreachable.get('recovery_observation')
+    assert {path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in directory.iterdir()}==before
+    assert int(native.execute('SELECT count(*) FROM sr_pitr_state').fetchone()[0])==3
+    proof['pitr']={'targets':outcomes,'unreachable_target_refused':True,'source_archive_unchanged':True,'live_source_data_unchanged':True,
+                   'execution_scope':'independent application-host copy; no listener or source connection during recovery'}
+    proof['checks'].append('authenticated-http-native-point-in-time-recovery-name-xid-inclusive-exclusive-time-lsn-immediate-and-unreachable-target')
+    return (*completed,unreachable)
+
+
+def resume_pitr_browser(previous, output, binary_path, browser_binary, driver_binary):
+    """Requalify only browser behavior against preserved, owned native evidence."""
+    previous,output=Path(previous).resolve(),Path(output).resolve()
+    if output==ROOT or ROOT in output.parents:raise ValueError('Evidence must be outside the source checkout')
+    output.mkdir(parents=True,exist_ok=False)
+    prior=json.loads((previous/'summary.json').read_text())
+    if len(prior.get('pitr',{}).get('targets',[]))!=6 or not prior.get('owned_restored_server_stopped'):
+        raise RuntimeError('Complete native PITR target and cleanup observations are required')
+    for name,digest in prior['source_sha256'].items():
+        if hashlib.sha256((ROOT/name).read_bytes()).hexdigest()!=digest:
+            raise RuntimeError('Native-qualified product backend inputs changed; run full qualification')
+    builtins.SERVER_MODE=None
+    import config
+    config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
+    config.MASTER_PASSWORD_REQUIRED=False;config.USE_OS_SECRET_STORAGE=False
+    config.DATA_DIR=str(previous/'app');config.SQLITE_PATH=str(previous/'app/application.db')
+    config.SESSION_DB_PATH=str(previous/'app/sessions');config.STORAGE_DIR=str(previous/'app/storage')
+    config.LOG_FILE=str(output/'application.log');config.AZURE_CREDENTIAL_CACHE_DIR=str(previous/'app/azure')
+    config.CDEADMIN_OPERATION_STORE_PATH=str(previous/'app/operations.json')
+    config.CDEADMIN_POSTGRESQL_CONTINUITY_ROOT=str(previous/'artifacts')
+    config.CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH=str(binary_path)
+    config.CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT=str(previous/'wal-archives')
+    from pgadmin import create_app
+    from pgadmin.cdeadmin.workspace import service_for_app
+    app=create_app('ScratchRobin-native-pitr-browser-qualification');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY=''
+    app.run_before_app_start()
+    records=[]
+    for path in Path(str(config.CDEADMIN_OPERATION_STORE_PATH)+'.postgresql-continuity.jobs').glob('*.json'):
+        records.extend(json.loads(path.read_text()).get('postgresql_continuity_jobs',{}).values())
+    base=next(record['inputs'][0]['job_id'] for record in records if record['job_id']==prior['pitr']['targets'][0]['job_id'])
+    verified=next(record for record in records if record['operation']=='verify' and record['state']=='verified' and record.get('artifact_job_id')==base)
+    try:
+        browser=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary,pitr_target=prior['pitr']['targets'][0]['target'])
+        result={'complete':browser['complete'],'browser':browser,'native_receipt':str(previous/'summary.json'),
+                'native_backend_hashes_unchanged':True,'native_checks':prior['checks'],'pitr':prior['pitr'],
+                'history_tests_executed':False,'full_product_complete':False}
+        (output/'summary.json').write_text(json.dumps(result,indent=2)+'\n')
+    finally:
+        jobs=getattr(service_for_app(app),'postgresql_continuity_jobs',None)
+        if jobs is not None:jobs.close()
+
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence',type=Path,required=True)
     parser.add_argument('--binary-path',type=Path,default=Path('/usr/lib/postgresql/18/bin'))
     parser.add_argument('--browser-binary')
     parser.add_argument('--driver-binary')
+    parser.add_argument('--pitr',action='store_true')
+    parser.add_argument('--resume-browser-from',type=Path)
     args=parser.parse_args()
-    qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary)
+    if args.resume_browser_from:
+        resume_pitr_browser(args.resume_browser_from,args.evidence,args.binary_path,args.browser_binary,args.driver_binary)
+    else:
+        qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,pitr=args.pitr)

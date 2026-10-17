@@ -16,6 +16,7 @@ from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
 from ..providers.postgresql.continuity_recovery import recovery_options, independent_copy, recovery_command, read_result
 from ..providers.postgresql.continuity_tar import materialize
+from ..providers.postgresql import continuity_wal
 from ..sdk.tooling import ProviderToolError
 
 
@@ -24,7 +25,7 @@ def fingerprint(value):
 
 
 REVIEW_FIELDS=('job_id','owner','endpoint_id','configuration','operation','options','source','paths',
-               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','runtime_limit','warnings')
+               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','runtime_limit','warnings','wal_archive')
 
 
 def review_digest(record):
@@ -43,8 +44,9 @@ class PostgreSQLContinuityJobs:
     _worker_maps = {}
     _worker_maps_lock = threading.RLock()
 
-    def __init__(self, path, root):
+    def __init__(self, path, root, archive_root=None):
         self.path, self.root = Path(path), Path(root).resolve()
+        self.archive_root = Path(archive_root).resolve() if archive_root else self.root/'wal-archives'
         self.lock = threading.RLock()
         with self._worker_maps_lock:
             self.workers=self._worker_maps.setdefault(str(self.path.resolve()),{})
@@ -87,6 +89,14 @@ class PostgreSQLContinuityJobs:
         if type(record['owner']) is not int or record['owner']<=0 or str(uuid.UUID(record['endpoint_id']))!=record['endpoint_id']:
             raise ContinuityError('Invalid native backup artifact scope')
         return self.root / str(record['owner']) / record['endpoint_id'] / job_id
+
+    def archive_directory(self, owner, endpoint):
+        self.directory({'owner':owner,'endpoint_id':endpoint,'job_id':'00000000-0000-0000-0000-000000000000'})
+        selected=self.archive_root/str(owner)/endpoint
+        for path in (selected.parent,selected):
+            if path.is_symlink() or path.resolve()!=path or path.exists() and getattr(path.lstat(),'st_file_attributes',0)&0x400:
+                raise ContinuityError('WAL archive ownership directories cannot contain links or reparse points')
+        return selected
 
     def list(self, owner, endpoint, *, offset=0, limit=25):
         if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=100:
@@ -207,6 +217,10 @@ class PostgreSQLContinuityJobs:
         artifact_record=self.load(inputs[0]['job_id'],owner,endpoint) if operation=='verify' else record
         record['artifact_location']={'host':'application-host','path':str(self.directory(artifact_record)/('recovered-clone' if operation=='recovery_drill' else 'backup')),
                                      'format':options['format']}
+        if operation=='recovery_drill' and options.get('target') is not None:
+            # Existing directory validation also checks owner/endpoint shape.
+            self.directory(record)
+            record['wal_archive'] = continuity_wal.freeze(self.archive_directory(owner,endpoint), options['wal_archive'])
         record['artifact_wal_method']=inputs[-1]['wal_method'] if operation=='combine' else options['wal_method']
         self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         private_directory(self.root)
@@ -217,7 +231,9 @@ class PostgreSQLContinuityJobs:
             raise ContinuityError('Install the selected PostgreSQL 18 native continuity utilities on the application host')
         if operation=='recovery_drill':
             record['warnings'].append('The drill copies the artifact and managed tablespaces into private application-host storage, then runs a standalone native backend without a network listener. It requires the source build dependencies and sufficient space for an independent copy.')
-            record['warnings'].append('The drill discards configuration and recovery commands on its copy. It verifies native recovery and only the selected heap row counts; production restore, extension availability and point-in-time recovery require separate qualification.')
+            record['warnings'].append('The drill discards source configuration and recovery commands on its copy. It verifies native recovery and only the selected heap row counts; production restore and extension availability require separate qualification.')
+            if options.get('target') is not None:
+                record['warnings'].append('The selected owner/endpoint WAL archive is read-only. Reviewed file hashes are checked while staging into the independent copy. PostgreSQL validates the cluster, timeline, WAL records and recovery target; missing continuity or an unreachable target fails the drill. The native recovered copy is promoted on its own timeline without starting a listener.')
         if operation=='combine' and any(item['format']=='tar' for item in inputs):
             record['warnings'].append('TAR chain inputs are copied into private plain-file storage and verified before reconstruction. Keep space for the source archives, materialized inputs and output; intermediate copies remain with this job.')
             record['warnings'].append('The native output can retain a TAR tablespace_map with source-host paths. Recovery preparation must replace or remove that map on an independent copy before startup. The application recovery drill does this.')
@@ -470,6 +486,11 @@ class PostgreSQLContinuityJobs:
         identity=manifest(clone,progress=file_progress,cancel_signal=signal)
         if identity['manifest_sha256']!=record['inputs'][0]['manifest_sha256'] or identity['system_identifier']!=record['source']['system_identifier']:
             raise ContinuityError('Independent recovery copy differs from the reviewed backup')
+        if options.get('target') is not None:
+            self.update(record,phase='staging_recovery_wal')
+            archived = continuity_wal.stage(self.archive_directory(record['owner'],record['endpoint_id']),
+                record['wal_archive'],clone,progress=file_progress,cancel_signal=signal)
+            self.update(record,wal_archive_observation=archived)
         arguments,sql,output=recovery_command(directory,options,record['job_id'])
         self.update(record,phase='native_recovery')
         result=tools.execute('postgres',directory,arguments,input_bytes=sql,timeout=options['timeout_seconds'],progress=progress,cancel_signal=signal)

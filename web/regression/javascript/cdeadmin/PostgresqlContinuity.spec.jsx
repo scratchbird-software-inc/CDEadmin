@@ -74,3 +74,27 @@ it('reviews structured recovery counts without rounding int64 text',async () => 
   await screen.findByText(/Isolated native recovery completed/);
   expect(screen.getByRole('button',{name:'Cancel native job'})).toBeDisabled();
 });
+
+it('reviews a native restore point and the selected owner-scoped WAL archive',async () => {
+  const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'verified'}],total:1,unavailable_job_ids:[]});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Recover isolated backup copy'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Select input'}));
+  fireEvent.mouseDown(screen.getByLabelText('Recovery target'));
+  fireEvent.click(await screen.findByRole('option',{name:'Named restore point'}));
+  fireEvent.change(screen.getByLabelText('Exact native target value'),{target:{value:'Exact ü \' restore point'}});
+  post.mockResolvedValue({archives:['completed'],owner_endpoint_directory:'/owned/native/archives'});
+  fireEvent.click(screen.getByRole('button',{name:'Load WAL archives'}));
+  await screen.findByText(/Archive directory: \/owned\/native\/archives/);
+  fireEvent.mouseDown(screen.getByLabelText('Native WAL archive'));
+  fireEvent.click(await screen.findByRole('option',{name:'completed'}));
+  post.mockResolvedValue({...reviewed,operation:'recovery_drill'});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'recovery_drill',base_job_id:'native-job',
+    options:{database:'postgres',checks:[],timeout_seconds:3600,wal_archive:'completed',target:{kind:'name',value:'Exact ü \' restore point',inclusive:true,timeline:'current'}}}});
+  fireEvent.change(screen.getByLabelText('Exact native target value'),{target:{value:'new target'}});
+  expect(screen.queryByRole('button',{name:'Confirm and start reviewed operation'})).not.toBeInTheDocument();
+});

@@ -812,8 +812,9 @@ Remaining completion and ownership
 ----------------------------------
 
 The owner's October 14/16 scope includes persistent monitoring history and its
-ScratchBird backend. DuckDB archive integration and native acceptance remain
-open; they are not deferred. Windows/macOS development and platform UX
+ScratchBird backend. DuckDB archive integration is wired. The owner
+correction of October 16 defers ScratchBird history testing until explicitly
+resumed; the remaining product work continues independently. Windows/macOS development and platform UX
 qualification belong to their teams, and their evidence is required for a
 cross-platform completion claim. Persistent SQL history, design/dashboard
 definitions and recipes remain in scope. The additional catalog, language and
