@@ -288,15 +288,15 @@ class SQLAutoComplete():
         """extend column metadata.
 
         :param column_data: list of (schema_name, rel_name, column_name,
-        column_type, has_default, default) tuples
+        column_type, has_default, default[, system_column]) tuples
         :param kind: either 'tables' or 'views'
 
         :return:
 
         """
         metadata = self.dbmetadata[kind]
-        for schema, relname, colname, datatype, \
-                has_default, default in column_data:
+        for row in column_data:
+            schema, relname, colname, datatype, has_default, default = row[:6]
             (schema, relname, colname) = self.escaped_names(
                 [schema, relname, colname])
             column = ColumnMetadata(
@@ -304,6 +304,7 @@ class SQLAutoComplete():
                 datatype=datatype,
                 has_default=has_default,
                 default=default,
+                system_column=bool(row[6]) if len(row) > 6 else False,
             )
             metadata[schema][relname][colname] = column
             self.all_completions.add(colname)
@@ -434,8 +435,9 @@ class SQLAutoComplete():
             "table format",
         ]
         type_priority = prio_order.index(meta) if meta in prio_order else -1
-        text = last_word(text, include="most_punctuations").lower()
+        text = last_word(text, include="most_punctuations")
         text_len = len(text)
+        text = text.lower()
 
         if text and text[0] == '"':
             # text starts with double quote; user is manually escaping a name
@@ -565,7 +567,13 @@ class SQLAutoComplete():
         result = dict()
         for m in matches:
             name = m.completion.display
-            result[name] = {'object_type': m.completion.display_meta}
+            start = len(text_before_cursor) + m.completion.start_position
+            if not 0 <= start <= len(text_before_cursor):
+                continue
+            result[name] = {'object_type': m.completion.display_meta,
+                            'insert_text': m.completion.text,
+                            # Browser positions are UTF-16 code units.
+                            'replacement_start': len(text_before_cursor[:start].encode('utf-16-le', errors='surrogatepass')) // 2}
 
         return result
 
@@ -595,6 +603,13 @@ class SQLAutoComplete():
 
         scoped_cols = \
             self.populate_scoped_cols(tables, suggestion.local_tables)
+        lastword = last_word(word_before_cursor, include="most_punctuations")
+        if (lastword == '*' or suggestion.require_last_table or
+                suggestion.context in {'insert', 'update', 'ddl'}):
+            # System attributes are selectable, but are absent from wildcard
+            # projections, JOIN USING and writable/DDL column target lists.
+            scoped_cols = {table: [column for column in cols if not column.system_column]
+                           for table, cols in scoped_cols.items()}
 
         def make_cand(name, ref):
             synonyms = (name, generate_alias(name))
@@ -622,7 +637,6 @@ class SQLAutoComplete():
                 if t.ref == ltbl
             }
 
-        lastword = last_word(word_before_cursor, include="most_punctuations")
         if lastword == "*":
             if suggestion.context == "insert":
 
@@ -1277,7 +1291,7 @@ class SQLAutoComplete():
                     data.append((
                         row['schema_name'], row['table_name'],
                         row['column_name'], row['type_name'],
-                        row['has_default'], row['default']
+                        row['has_default'], row['default'], row.get('system_column', False)
                     ))
         return data
 

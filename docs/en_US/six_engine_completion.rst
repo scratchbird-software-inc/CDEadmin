@@ -588,4 +588,11 @@ an explicitly selected hidden column becomes an ordinary projected column. The
 native editor gate independently compares native cursor descriptions and direct
 column queries on owned fixtures, preserving pending user work. This closes a
 specific projection gap, not the complete editor/grammar or product inventory.
-PostgreSQL's separate native system-column completion inventory remains open.
+PostgreSQL completion also observes native negative attribute numbers on base
+tables, partitioned tables and materialized views. System columns stay out of
+star expansion, JOIN USING and INSERT/UPDATE/ALTER target lists; ordinary views
+do not acquire system fields. Foreign tables are included, with universal
+``tableoid`` completion; additional system columns specific to a loaded FDW
+remain a separate capability inventory. PostgreSQL completion preserves native
+insertion text and UTF-16 replacement starts at the shared editor boundary,
+including expanded column lists and quoted identifier spans.

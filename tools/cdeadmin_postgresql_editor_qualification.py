@@ -18,7 +18,7 @@ def qualify(provider, session, raw, route, password, receipt, evidence, *, owner
         'owner_id': owner_id, 'principal_reference': 'worker:proof', 'credential_reference_id': 'proof-password'}
     observer = psycopg.connect(host=route['host'], port=route['port'], user=route['user'], password=password,
         dbname=route['database'], autocommit=True, **route.get('connection_params', {}))
-    created = False
+    created = foreign_created = False
     original_quote = raw.execute("SELECT current_setting('backslash_quote')").fetchone()[0]
     def check(source, **options):
         return provider.validate_source_without_execution({**session, 'language_profile': 'postgresql-sql', 'source': source, **options})
@@ -42,6 +42,48 @@ def qualify(provider, session, raw, route, password, receipt, evidence, *, owner
         definition = '(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, amount numeric(38,10), state ' + sql.Identifier(name, 'mood').as_string(raw) + ', "values" int[], payload bytea, document jsonb, moment timestamptz, duration interval, calculated bigint GENERATED ALWAYS AS(id*2) STORED)'
         for table in ('source', 'destination'):
             raw.execute(sql.SQL('CREATE TABLE {} ').format(sql.Identifier(name, table)) + sql.SQL(definition))
+        raw.execute(sql.SQL('CREATE VIEW {} AS SELECT id FROM {}').format(sql.Identifier(name, 'plain_view'),sql.Identifier(name, 'source')))
+        raw.execute(sql.SQL('CREATE MATERIALIZED VIEW {} AS SELECT id FROM {}').format(sql.Identifier(name, 'materialized'),sql.Identifier(name, 'source')))
+        raw.execute(sql.SQL('CREATE TABLE {}(id integer) PARTITION BY RANGE(id)').format(sql.Identifier(name,'partitioned')))
+        # No extension, external server or handler execution is needed to
+        # independently observe a foreign relation's catalog and completion.
+        raw.execute(sql.SQL('CREATE FOREIGN DATA WRAPPER {} NO HANDLER').format(sql.Identifier(name))); foreign_created = True
+        raw.execute(sql.SQL('CREATE SERVER {} FOREIGN DATA WRAPPER {}').format(sql.Identifier(name),sql.Identifier(name)))
+        raw.execute(sql.SQL('CREATE FOREIGN TABLE {}(id integer) SERVER {}').format(sql.Identifier(name,'foreign_relation'),sql.Identifier(name)))
+        native_system_columns = {}
+        for relation in ('source','plain_view','materialized','partitioned'):
+            target = sql.Identifier(name,relation).as_string(raw)
+            with psycopg.Cursor(raw, row_factory=psycopg.rows.tuple_row) as cursor:
+                cursor.execute('SELECT attname FROM pg_catalog.pg_attribute WHERE attrelid=%s::regclass AND attnum<0 AND NOT attisdropped ORDER BY attname',(target,))
+                observed = cursor.fetchall()
+            system_names = {row[0] for row in observed}
+            prefix = 'SELECT t.'
+            choices = provider.complete({**session,'full_source':prefix+' FROM '+target+' t','source_before_cursor':prefix})
+            assert system_names <= set(choices)
+            if relation == 'plain_view': assert 'ctid' not in choices
+            for column in system_names:
+                raw.execute(sql.SQL('SELECT {} FROM {} LIMIT 0').format(sql.Identifier(column),sql.Identifier(name,relation)))
+            star_prefix = 'SELECT *'
+            star = provider.complete({**session,'full_source':star_prefix+' FROM '+target,'source_before_cursor':star_prefix})
+            assert '*' in star
+            with raw.cursor() as cursor:
+                cursor.execute(sql.SQL('SELECT * FROM {} LIMIT 0').format(sql.Identifier(name,relation)))
+                native_star = [column.name for column in cursor.description]
+                cursor.execute(sql.SQL('SELECT {} FROM {} LIMIT 0').format(sql.SQL(star['*']['insert_text']),sql.Identifier(name,relation)))
+                assert [column.name for column in cursor.description] == native_star
+            native_system_columns[relation] = {'native_system_columns':sorted(system_names),'native_star':native_star}
+        prefix = 'SELECT t.'
+        choices = provider.complete({**session,'full_source':prefix+' FROM '+sql.Identifier(name,'foreign_relation').as_string(raw)+' t','source_before_cursor':prefix})
+        assert 'id' in choices and 'tableoid' in choices and 'ctid' not in choices
+        native_system_columns['foreign_relation'] = {'completion_columns':sorted(choices),
+            'scope':'catalog and completion only; no foreign handler or external server execution'}
+        for prefix in ('INSERT INTO '+sql.Identifier(name,'source').as_string(raw)+' (',
+                       'UPDATE '+sql.Identifier(name,'source').as_string(raw)+' SET ',
+                       'ALTER TABLE '+sql.Identifier(name,'source').as_string(raw)+' ALTER COLUMN '):
+            choices = provider.complete({**session,'full_source':prefix,'source_before_cursor':prefix})
+            assert 'ctid' not in choices and 'id' in choices
+        (evidence/'system-column-completion.json').write_text(json.dumps(native_system_columns,indent=2)+'\n')
+        receipt['checks'].append('native-system-column-read-projection-and-writable-target-filtering-with-cursor-descriptions')
         raw.execute(sql.SQL('INSERT INTO {}(amount,state,"values",payload,document,moment,duration) VALUES(12345678901234567890.1234567890,\'Quoted ü\',ARRAY[1,NULL,3],decode(\'0080ff\',\'hex\'),%s::jsonb,TIMESTAMPTZ \'2026-10-16 12:13:14.123456+03\',INTERVAL \'2 months 3 days 1 microsecond\')').format(sql.Identifier(name, 'source')), ('{"exact":12345678901234567890}',))
         source_oid, target_oid = [raw.execute('SELECT %s::regclass::oid', (sql.Identifier(name, table).as_string(raw),)).fetchone()[0] for table in ('source', 'destination')]
         before = set(provider._sessions)
@@ -90,4 +132,5 @@ def qualify(provider, session, raw, route, password, receipt, evidence, *, owner
             raw.execute('SET standard_conforming_strings=on')
             raw.execute(sql.SQL('SET backslash_quote={}').format(sql.Literal(original_quote)))
             if created: raw.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(name)))
+            if foreign_created: raw.execute(sql.SQL('DROP FOREIGN DATA WRAPPER {} CASCADE').format(sql.Identifier(name)))
         observer.close()

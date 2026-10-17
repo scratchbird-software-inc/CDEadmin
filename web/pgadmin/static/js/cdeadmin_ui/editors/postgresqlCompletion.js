@@ -1,3 +1,5 @@
+import {insertCompletionText} from '@codemirror/autocomplete';
+
 // PostgreSQL owns completion semantics; the shared editor owns reply lifetime.
 export function registerPostgresqlCompletion(editor, current) {
   editor.registerAutocomplete(async (context, available) => {
@@ -19,8 +21,20 @@ export function registerPostgresqlCompletion(editor, current) {
         source, source_before_cursor: prefix, database_target_id: initial.databaseTargetId});
       if (!applicable()) return null;
       if (result.editor_context) initial.onMetadata?.(result.editor_context);
-      return {from: word.from, options: Object.entries(result.completions || result || {}).slice(0, 1000)
-        .map(([label, details]) => ({label, type: details.object_type || 'text'}))};
+      const entries = Object.entries(result.completions || result || {}).slice(0, 1000)
+        .map(([label, details]) => ({label, details, from: Number.isInteger(details.replacement_start) &&
+          details.replacement_start >= 0 && details.replacement_start <= context.pos ? details.replacement_start : word.from}));
+      const from = Math.min(word.from, ...entries.map(item => item.from));
+      return {from, options: entries.map(item => {
+        const option = {label:item.label, type:item.details.object_type || 'text'};
+        const insert = item.details.insert_text ?? item.label;
+        if (item.from !== from) {
+          const offset = item.from - from;
+          option.apply = (view, _completion, start, end) => view.dispatch(
+            insertCompletionText(view.state, insert, start + offset, end));
+        } else if (insert !== item.label) option.apply = insert;
+        return option;
+      })};
     } catch (failure) {
       if (applicable()) initial.onError('Native PostgreSQL completion is unavailable: ' + failure.message);
       return null;

@@ -1,14 +1,13 @@
 import {registerPostgresqlCompletion} from '../../../pgadmin/static/js/cdeadmin_ui/editors/postgresqlCompletion';
 
-function fixture() {
-  const source = 'SELECT * FROM ord';
+function fixture(source='SELECT * FROM ord', wordFrom=source.length - 3) {
   const state = {doc: {toString: () => source}, sliceDoc: (start, end) => source.slice(start, end), selection: {main: {head: source.length}}};
   const editor = {state, registerAutocomplete: jest.fn()};
   const settings = {active: true, blocked: false, scope: 'pg:one', databaseTargetId: 'one',
     ensureSession: jest.fn().mockResolvedValue('owned'), post: jest.fn().mockResolvedValue({orders: {object_type: 'table'}}), onError: jest.fn()};
   registerPostgresqlCompletion(editor, () => settings);
   return {editor, settings, callback: editor.registerAutocomplete.mock.calls[0][0],
-    context: {state, pos: source.length, matchBefore: () => ({from: source.length - 3}), aborted: false}};
+    context: {state, pos: source.length, matchBefore: () => ({from: wordFrom}), aborted: false}};
 }
 
 test('uses the owned PostgreSQL session and exact cursor prefix without execution', async () => {
@@ -41,4 +40,31 @@ test('blocked completion opens no session and sends no request', async () => {
   expect(await callback(context, jest.fn())).toBeNull();
   expect(settings.ensureSession).not.toHaveBeenCalled();
   expect(settings.post).not.toHaveBeenCalled();
+});
+
+test('native insertion and quote replacement span reach the editor', async () => {
+  const {settings, callback, context} = fixture('SELECT * FROM "Mi',15);
+  settings.post.mockResolvedValue({completions:{Mixed:{object_type:'column',insert_text:'"Mixed"',replacement_start:14}}});
+  const result=await callback(context,jest.fn());
+  expect(result).toEqual({from:14,options:[{label:'Mixed',type:'column',apply:'"Mixed"'}]});
+});
+
+test('native star expansion replaces the asterisk with the returned column list', async () => {
+  const {settings,callback,context}=fixture('SELECT *',8);
+  settings.post.mockResolvedValue({completions:{'*':{object_type:'columns',insert_text:'id, value',replacement_start:7}}});
+  expect(await callback(context,jest.fn())).toEqual({from:7,options:[{label:'*',type:'columns',apply:'id, value'}]});
+});
+
+test('candidates can retain distinct native replacement starts', async () => {
+  const {settings, callback, context}=fixture();
+  settings.post.mockResolvedValue({completions:{value:{object_type:'column',insert_text:'value',replacement_start:16}}});
+  const result=await callback(context,jest.fn());
+  expect(result.from).toBe(14);
+  const view={state:context.state,dispatch:jest.fn()};
+  // Use a real state so CodeMirror builds its native completion transaction.
+  const {EditorState}=await import('@codemirror/state');
+  view.state=EditorState.create({doc:context.state.doc.toString()});
+  result.options[0].apply(view,result.options[0],result.from,context.pos);
+  const updated=view.state.update(view.dispatch.mock.calls[0][0]).state;
+  expect(updated.doc.toString()).toBe('SELECT * FROM orvalue');
 });
