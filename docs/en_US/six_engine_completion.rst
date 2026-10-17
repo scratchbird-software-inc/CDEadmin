@@ -256,7 +256,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Native schema/function/collation/flag observations, compiled keyword
        roles, retained completion and guarded nonexecuting compilation.
      - Native file/data workflows, typed imports, durable recipes, coordinated
-       rebuilds and view/index/trigger replacements with native preservation.
+       rebuilds, view/index/trigger replacement and atomic creation of ordinary
+       relations with their explicitly declared indexes and triggers.
      - Remaining coordinated dependency transformations and complete native
        module/extension/feature and platform reconciliation.
    * - Firebird 5.0.4
@@ -1317,3 +1318,19 @@ receipts do not repeat a completed or refused migration.
 
 This extends coordinated migration scope; complete native rename/generation and
 installed-module reconciliation remain separate full-product requirements.
+
+SQLite coordinated relation creation
+-------------------------------------
+
+New ordinary tables and views can share a native DDN creation batch with their
+explicit indexes and triggers. Preview compiles child ownership and grammar in
+a separate empty SQLite database with the desired owner; it does not create
+objects or run trigger DML on the registered file. The applying transaction
+rechecks every target and owner, creates relations before their children and
+prepares final view and trigger bindings before committing. A late binding
+failure rolls back the complete batch. Stale targets prevent dispatch and
+durable receipts never replay the original review.
+
+This closes the separate-review restriction for those new relation children.
+It does not qualify arbitrary installed module/function/collation environments,
+full native renames or the complete native transformation denominator.

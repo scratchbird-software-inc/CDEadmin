@@ -10,7 +10,8 @@ import uuid
 from .firebird_schema_apply import SchemaApplications, SchemaApplyError
 from .firebird_schema_plan import digest
 from .sqlite_schema_plan import (FORMAT, CREATABLE, _definition, _quote,
-                                 _source, _require_virtual_module, _compile_exact, batch_blockers)
+                                 _source, _require_virtual_module, _compile_exact,
+                                 _created_owner, _compile_created_child, batch_blockers)
 from ..providers.sqlite.provider import _resources
 from ..providers.sqlite.driver import uncertain_error
 
@@ -330,6 +331,15 @@ def apply_review(provider, route, record):
                 return {'state': 'not_dispatched',
                     'reason': 'SQLite virtual table module availability changed'}
             if row['kind'] in {'index', 'trigger', 'column'}:
+                new_owner = _created_owner(row, record['desired'], record['baseline'])
+                if new_owner is not None:
+                    if not any(item['operation']=='create' and
+                               item['resource_id']==new_owner['resource_id']
+                               for item in record['plan']['operations']):
+                        connection.rollback()
+                        return {'state':'not_dispatched','reason':'SQLite new owning relation is not in the reviewed plan'}
+                    _compile_created_child(row, operation['source'], new_owner)
+                    continue
                 from ..providers.sqlite.provider import _resource_id
                 parent = _resource_id('table', ['main'], row['path'][1])
                 if parent not in baseline and row['kind']=='trigger':parent=_resource_id('view',['main'],row['path'][1])
@@ -377,7 +387,9 @@ def apply_review(provider, route, record):
             if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
                 raise _PreservationRefused('SQLite rebuild batch failed native foreign-key check')
         replacements = [operation for operation in record['plan']['operations'] if operation['operation'] == 'replace']
-        if replacements or any(operation['operation'] == 'rebuild' for operation in record['plan']['operations']):
+        if replacements or any(operation['operation'] == 'rebuild' or
+                operation['operation'] == 'create' and operation['kind'] in {'view','trigger'}
+                for operation in record['plan']['operations']):
             from .sqlite_replace import matches
             actual_objects = {row['resource_id']:row for row in _resources(connection, {})
                               if row['native'].get('system_object') is not True}

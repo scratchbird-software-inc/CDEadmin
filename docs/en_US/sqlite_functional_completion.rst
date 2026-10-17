@@ -98,36 +98,38 @@ SQLITE-COMP-05: DDN design exchange
   The native application adapter admits additive ``CREATE TABLE``,
   ``CREATE VIEW``, ``CREATE INDEX``, ``CREATE TRIGGER`` and ``ALTER TABLE ADD
   COLUMN`` for exact main-file identities. Explicit, individually selected
-  ``DROP TABLE``, ``DROP VIEW``, ``DROP INDEX`` and ``DROP TRIGGER`` operations
-  are reviewed separately from additions. A missing DDN row never implies
-  deletion. It compiles each statement under native ``EXPLAIN`` without
-  executing it and checks SQLite authorizer facts for the exact object and
-  owning table, then records a durable owner/file-bound review, claims that review
+  ``DROP TABLE`` operations are reviewed separately from additions; selected
+  view/index/trigger removals can share an admitted atomic migration. A missing
+  DDN row never implies deletion. New ordinary tables and views can be created
+  with their explicit indexes and triggers in the same review. Child grammar
+  and ownership are compiled in a separate empty native database containing the
+  desired owner; preview executes no CREATE or DML on the registered file.
+  Native ``EXPLAIN`` and authorizer facts bind statements to the exact object
+  and owner. The application records a durable owner/file-bound review, claims that review
   before dispatch, applies the batch in one SQLite transaction and rediscovers
-  the committed definitions or absence. An ordinary table with no views may
-  be rebuilt to add or remove non-key columns while preserving native row IDs,
-  retained column values, unchanged explicit and implicit indexes, owning triggers and
-  unchanged inbound/outbound foreign keys; the desired DDN must carry matching
-  table and column facts.
+  the committed definitions or absence. Ordinary-table rebuilds support admitted
+  column/type/key changes and coordinated index/trigger definitions. The desired
+  DDN must carry matching table, column and child facts and explicit child-removal
+  intent. Native constraints, retained views/trigger bindings and unchanged
+  inbound/outbound foreign keys are checked before commit. Row IDs are preserved
+  when the native key and storage identity permit that preservation.
   The rebuild runs
   in one SQLite write transaction, checks row count and foreign keys before
   commit, restores the live ``AUTOINCREMENT`` high-water mark when applicable,
   and verifies the rewritten native definition afterward. The rebuild can
   retain non-key column data across a changed name when the user supplies
   an exact old-to-new mapping; an ambiguous same-type removal and addition
-  without that mapping is refused. Rebuilds with unresolved dependencies,
-  changed keys, type changes, and
-  standalone column deletion remain blocked. Native ``fts3``, ``fts4``,
+  without that mapping is refused. Unresolved dependencies and unsupported
+  standalone transformations remain blocked. Native ``fts3``, ``fts4``,
   ``fts5``, ``rtree``, ``rtree_i32``, ``geopoly`` and ``fts5vocab`` virtual
   tables admit exact reviewed creation and explicit ``DROP TABLE`` when the
   installed runtime provides their modules; other modules and rewrites need
   separate qualification. The rebuild follows SQLite's documented
   `generalized ALTER TABLE procedure <https://www.sqlite.org/lang_altertable.html#otheralter>`_
   within its admitted dependency scope. This bounded operation set is the
-  current-run native DDN application contract. A blocked transformation can
-  be authored as reviewed native SQL in the shared editor under its own
-  transaction controls; a DDN preview never guesses a data conversion or
-  treats a missing object as deletion intent.
+  current native DDN application contract. Unsupported transformations remain
+  implementation gaps; a DDN preview never guesses a data conversion or treats
+  a missing object as deletion intent.
 
 SQLITE-COMP-06: Monitoring and dashboards
   Provide display-only DDN engine, registered-file aggregate and database

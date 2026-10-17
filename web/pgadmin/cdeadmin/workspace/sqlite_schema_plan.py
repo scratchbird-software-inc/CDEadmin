@@ -157,6 +157,31 @@ def batch_blockers(operations, desired):
     return blockers
 
 
+def _created_owner(row, desired, baseline):
+    """Bind a child to an ordinary relation added by this same native plan."""
+    if row['kind'] not in {'index', 'trigger'}:
+        return None
+    kinds = {'table', 'view'} if row['kind'] == 'trigger' else {'table'}
+    owners = [desired['rows'].get(_resource_id(kind, ['main'], row['path'][1]))
+              for kind in kinds]
+    owners = [owner for owner in owners if owner is not None and
+              owner['resource_id'] not in baseline['rows']]
+    if len(owners) > 1:
+        raise ValueError('SQLite child has ambiguous new relation ownership')
+    return owners[0] if owners else None
+
+
+def _compile_created_child(row, source, owner):
+    # A separate empty native database provides the new owner for EXPLAIN.
+    # No CREATE or trigger DML is executed on the registered file at preview.
+    probe = sqlite3.connect(':memory:')
+    try:
+        probe.execute(_source(owner))
+        _compile_exact(probe, row, source)
+    finally:
+        probe.close()
+
+
 def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
          column_renames=()):
     scope = _scope(baseline)
@@ -305,9 +330,13 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                 parent_baseline_sha256 = digest(_definition(parent))
             if row['kind'] in {'index', 'trigger'}:
                 owners={_resource_id(kind,['main'],row['path'][1]) for kind in ({'table','view'} if row['kind']=='trigger' else {'table'})}
-                if not owners & set(before) or owners & created_relations:
-                    raise ValueError('Create the owning table in a separate reviewed batch')
-            _compile_exact(connection, row, source)
+                if not owners & (set(before) | created_relations):
+                    raise ValueError('SQLite child requires a retained or explicitly created owning relation')
+            new_owner = _created_owner(row, desired, baseline)
+            if new_owner is not None:
+                _compile_created_child(row, source, new_owner)
+            else:
+                _compile_exact(connection, row, source)
             operations.append({'operation': 'add-column' if row['kind'] == 'column' else 'create', 'resource_id': identity,
                 'name': row['name'], 'kind': row['kind'], 'source': source,
                 'desired_sha256': digest(_definition(row)),
