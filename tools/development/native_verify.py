@@ -64,6 +64,10 @@ def child(name, evidence, port):
         assert pyarrow.__version__ == '25.0.1'
         assert sqlite3.sqlite_version == '3.53.0', sqlite3.sqlite_version
         with sqlite3.connect(':memory:') as connection:
+            assert callable(getattr(connection, 'load_extension', None)), 'SQLite extension loader is missing from CPython'
+            assert callable(getattr(connection, 'enable_load_extension', None)), 'Rebuild CPython with --enable-loadable-sqlite-extensions'
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, True)
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, False)
             connection.execute('CREATE VIRTUAL TABLE f USING fts5(value)')
             connection.execute('CREATE VIRTUAL TABLE r USING rtree(id, lo, hi)')
             assert connection.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone() == (1,)

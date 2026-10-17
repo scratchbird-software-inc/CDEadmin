@@ -162,6 +162,22 @@ SQLITE-COMP-05: DDN design exchange
   column and FTS4 row/language mappings retain separate acceptance. Native ALTER
   alone can leave an external-content search table unusable.
 
+  The SQL editor also provides native extension inventory, review, confirmed
+  load and receipt retrieval on its retained connection. The application
+  operator supplies approved host library identities, SHA-256 values and
+  optional native entry points. Verified private staging prevents source-file
+  replacement from substituting different bytes at dispatch. Host dependencies
+  are separately operator-managed. Pending work blocks loading; native code is
+  never automatically retried or loaded on reconnect. SQL ``load_extension()``
+  remains disabled during initialization. Failed native initialization can
+  leave partial effects, blocks session reuse and reports an unknown outcome.
+  A receipt remains readable before closing the session. Registered functions
+  become visible to retained-session catalog, completion and native compilation.
+  Native library initialization cannot be safely force-cancelled in this
+  process. Optional library-specific administration remains separate coverage.
+  See ``tools/development/NATIVE.md`` for the operator manifest and CPython
+  build prerequisite; Windows/macOS qualification remains platform-team work.
+
 SQLITE-COMP-06: Monitoring and dashboards
   Provide display-only DDN engine, registered-file aggregate and database
   dashboards with a separately authorized dashboard editor. An independently

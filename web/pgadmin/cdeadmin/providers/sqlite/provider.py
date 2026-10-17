@@ -142,6 +142,21 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def extension_action(self, request, manifest):
+        from .extensions import action
+        self._require('execute')
+        if request.get('operation') in {'review', 'load'}:
+            self._require('administer')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            # A receipt is readable after an uncertain initialization has
+            # blocked further use of this connection.
+            if request.get('operation') != 'receipt':
+                self.client._require_idle(handle)
+            return action(self.client, handle, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}}, manifest)
+
     def validate_source_without_execution(self, request):
         from pgadmin.cdeadmin.data_studio.language_tools import analyze
         if (not isinstance(request, dict) or

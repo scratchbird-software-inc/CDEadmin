@@ -32,6 +32,7 @@ import MySQLCatalog from './MySQLCatalog';
 import MariaDBCatalog from './MariaDBCatalog';
 import DuckDBCatalog from './DuckDBCatalog';
 import SQLiteCatalog from './SQLiteCatalog';
+import SQLiteExtensions from './SQLiteExtensions';
 import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
@@ -8142,6 +8143,11 @@ export default function ProviderWorkspaceContent({
             key={sessionId || 'no-session'} sessionId={sessionId}
             disabled={busy || querySessionBlocked || !!occurrenceId}
             onExecute={(command) => execute(command, 'native', true)} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteExtensions
+            key={queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
           </Box></Box>
           {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
             {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}

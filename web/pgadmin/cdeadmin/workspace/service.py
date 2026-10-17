@@ -3116,6 +3116,10 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'sqlite_extensions':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Invalid native extension request')
+                return self.studio_service.sqlite_extension_action(context, data.get('session_id'), data['request'])
             if action == 'source_catalog':
                 return self.studio_service.session_catalog(context, data.get('session_id'),
                     include_system=data.get('include_system', False))

@@ -259,7 +259,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        rebuilds, view/index/trigger replacement and atomic creation of ordinary
        relations with their explicitly declared indexes and triggers; native
        table/column rename design generation, reference rewriting and native
-       FTS/RTree/Geopoly table renames; native quoted module identities.
+       FTS/RTree/Geopoly table renames; native quoted module identities;
+       reviewed approved-library loading into retained query sessions, native
+       symbol refresh and explicit uncertain initialization outcomes.
      - Remaining attached/public-FTS-column and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4

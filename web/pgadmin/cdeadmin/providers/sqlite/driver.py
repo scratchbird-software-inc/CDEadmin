@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -40,6 +41,13 @@ class SQLiteConnection(sqlite3.Connection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cdeadmin_authorizer = None
+        self._cdeadmin_extension_directories = []
+
+    def close(self):
+        super().close()
+        for directory in self._cdeadmin_extension_directories:
+            shutil.rmtree(directory, ignore_errors=True)
+        self._cdeadmin_extension_directories.clear()
 
     def set_authorizer(self, callback):
         super().set_authorizer(callback)

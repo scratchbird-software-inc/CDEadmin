@@ -13,7 +13,10 @@ import urllib.error
 import urllib.request
 import zipfile
 
-from native import ROOT, STATE, command
+if __package__:
+    from .native import ROOT, STATE, command
+else:
+    from native import ROOT, STATE, command
 
 ASSETS = {
     'python': ('https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz',
@@ -269,6 +272,7 @@ def build_macos_python(evidence, env):
     marker = prefix / '.cdeadmin-complete'
     fingerprint = json.dumps({'python': ASSETS['python'][1], 'sqlite': ASSETS['sqlite'][1],
                               'machine': platform.machine(),
+                              'loadable_sqlite_extensions': True,
                               'rpaths': [str(STATE / 'sqlite'), str(STATE / 'firebird')]}, sort_keys=True)
     if marker.is_file():
         if marker.read_text(encoding='utf-8') == fingerprint:
@@ -289,12 +293,16 @@ def build_macos_python(evidence, env):
     build.mkdir(exist_ok=True)
     command([source / 'Python-3.14.8/configure', '--prefix=' + str(prefix),
              '--with-openssl=' + openssl, '--with-openssl-rpath=auto',
-             '--with-ensurepip=install'], cwd=build, env=selected,
+             '--with-ensurepip=install', '--enable-loadable-sqlite-extensions'], cwd=build, env=selected,
             log=evidence / 'python-configure.log')
     command(['make', '-j3'], cwd=build, env=selected, log=evidence / 'python-build.log')
     command(['make', 'install'], cwd=build, env=selected, log=evidence / 'python-install.log')
     command([prefix / 'bin/python3.14', '-c',
-             'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; print(ssl.OPENSSL_VERSION)'],
+             'import sqlite3,ssl; assert sqlite3.sqlite_version == "3.53.0"; '
+             'c=sqlite3.connect(":memory:"); '
+             'assert callable(c.load_extension); '
+             'c.enable_load_extension(True); c.enable_load_extension(False); '
+             'c.close(); print(ssl.OPENSSL_VERSION)'],
             env=selected, log=evidence / 'python-runtime.log')
     marker.write_text(fingerprint, encoding='utf-8')
 

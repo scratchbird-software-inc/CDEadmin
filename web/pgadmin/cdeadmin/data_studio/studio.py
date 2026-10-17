@@ -569,6 +569,20 @@ class DataStudioService:
         return result
 
     @serialized_execution
+    def sqlite_extension_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.extension_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile},
+                config.CDEADMIN_SQLITE_EXTENSION_MANIFEST)
+        except (ValueError, OSError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)
@@ -724,7 +738,12 @@ class DataStudioService:
                 'non-production Data Studio fixtures cannot execute'
             )
         binding = self.provider_registry.resolve(context)
-        if dict(session.provider_session['identity']) != dict(binding.manifest['identity']):
+        # Evidence references describe qualification provenance. A provider's
+        # session citation may differ from its package citation without changing
+        # the contract/provider/profile identity that owns the retained handle.
+        identity_keys = ('contract_version', 'provider_id', 'provider_version', 'profile_id', 'profile_version')
+        if any(session.provider_session['identity'].get(key) != binding.manifest['identity'].get(key)
+               for key in identity_keys):
             raise DataStudioAccessError('Retained session provider identity changed')
         self._ensure_contributions(binding)
         return session, binding

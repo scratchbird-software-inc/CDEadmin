@@ -367,6 +367,10 @@ CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MARIADB_BINLOG_M
 CDEADMIN_MARIADB_BINLOG_REPLAY_ROOT = env('CDEADMIN_MARIADB_BINLOG_REPLAY_ROOT') or ''
 CDEADMIN_MARIADB_BINLOG_REPLAY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MARIADB_BINLOG_REPLAY_MAX_RUNTIME_SECONDS') or 0) or None
 
+# Operator-approved native SQLite libraries on this application host. Browser
+# requests select an entry; they cannot supply a library path or checksum.
+CDEADMIN_SQLITE_EXTENSION_MANIFEST = env('CDEADMIN_SQLITE_EXTENSION_MANIFEST') or ''
+
 # SQLITE_TIMEOUT will define how long to wait before throwing the error -
 # OperationError due to database lock. On slower system, you may need to change
 # this to some higher value.

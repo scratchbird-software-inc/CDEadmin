@@ -36,6 +36,35 @@ brew install libpq openssl@3 krb5 pkg-config cmake bison icu4c libxml2 lz4 zstd 
 The clients stage builds an owned CPython 3.14.8 interpreter on macOS against
 the required SQLite library. It does not replace Apple's Python or SQLite.
 Windows loads the owned SQLite DLL before Python's `_sqlite3` extension.
+The owned macOS build enables CPython's loadable SQLite extension APIs. Native
+verification refuses an interpreter missing these APIs. Existing interpreter
+fingerprints must be rebuilt in a fresh owned runtime when this option changes.
+
+SQLite's query editor includes a session-local native library workflow. The
+application operator provisions trusted host libraries and sets
+`CDEADMIN_SQLITE_EXTENSION_MANIFEST` to an absolute JSON file, for example:
+
+```json
+{"format":"scratchrobin.sqlite.extensions@1","extensions":[
+  {"id":"approved-module","path":"/absolute/host/module.so","sha256":"<64 lowercase hex characters>","entrypoint":"sqlite3_extension_init"}
+]}
+```
+
+Use the platform's native library suffix. The entry point is optional; SQLite
+can select its native default. Approval includes native dependencies resolved
+by the application host loader. The application stages and verifies the main
+library bytes privately, then loads on explicit confirmation into the retained
+query session. Libraries that depend on files beside the original library need
+an installation with host-resolvable dependencies; the private copy changes
+that directory. Browser requests cannot submit host paths or new approvals.
+Pending transaction work blocks loading. SQL `load_extension()` stays disabled.
+Native initialization can have irreversible effects; a failed initialization
+blocks further session use and remains an unknown outcome. Read its receipt,
+then close the session. Closing ends the connection and attempts to remove its
+private staging. Extensions using SQLite's permanent-load facility may retain
+machine code or process-wide state. Closing does not undo external effects.
+Reopening does not automatically reload. Review and loading require native
+administration and filesystem permissions in addition to query execution.
 
 Clone the sister project beside CDEadmin and install its pinned dependencies:
 
