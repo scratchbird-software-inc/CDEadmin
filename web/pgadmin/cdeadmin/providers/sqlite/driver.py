@@ -41,6 +41,7 @@ class SQLiteConnection(sqlite3.Connection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cdeadmin_authorizer = None
+        self._cdeadmin_progress_handler = (None, 0)
         self._cdeadmin_extension_directories = []
 
     def close(self):
@@ -52,6 +53,10 @@ class SQLiteConnection(sqlite3.Connection):
     def set_authorizer(self, callback):
         super().set_authorizer(callback)
         self._cdeadmin_authorizer = callback
+
+    def set_progress_handler(self, callback, n):
+        super().set_progress_handler(callback, n)
+        self._cdeadmin_progress_handler = (callback, n) if callback is not None and n > 0 else (None, 0)
 
 
 class Execution:

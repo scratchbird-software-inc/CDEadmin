@@ -1,6 +1,7 @@
 """SQLite 3.53.0 exact-version native provider."""
 
 import json
+from copy import deepcopy
 import os
 import re
 import sqlite3
@@ -70,8 +71,24 @@ PROFILE = PilotProfile(
 
 
 class SQLiteAdministration(RelationalAdministration):
+    def catalog(self, catalog):
+        from .fts_maintenance import OPERATIONS, TITLES
+        value = deepcopy(catalog)
+        for resource in value.get('objects', []):
+            if resource['resource_kind'] == 'fts-table':
+                resource['operations'].extend({
+                    'operation_id': operation, 'title': TITLES[operation],
+                    'mutation_class': 'destructive' if operation == 'fts_delete_all' else 'admin',
+                    'target_required': True, 'confirmation_required': True,
+                    'long_running': True, 'cancellable': True, 'post_state_required': False,
+                } for operation in OPERATIONS)
+        return super().catalog(value)
+
     def _form(self, kind, operation):
         from .virtual_tables import KINDS, form
+        from .fts_maintenance import OPERATIONS, form as maintenance_form
+        if kind == 'fts-table' and operation in OPERATIONS:
+            return maintenance_form(operation, self._field)
         if kind in KINDS and operation == 'create':
             return form(self._field, kind)
         return super()._form(kind, operation)
@@ -91,6 +108,13 @@ class SQLiteAdministration(RelationalAdministration):
 
     def validate(self, request):
         from .virtual_tables import KINDS
+        from .fts_maintenance import OPERATIONS, compile_operation
+        if request.get('resource_kind') == 'fts-table' and request.get('operation_id') in OPERATIONS:
+            try:
+                compile_operation(request)
+                return {'errors': []}
+            except (RelationalClientError, OSError, ValueError) as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_sqlite_fts_maintenance', 'message': str(error)}]}
         result = super().validate(request)
         if request.get('resource_kind') in KINDS and request.get('operation_id') == 'create':
             try:
@@ -125,6 +149,9 @@ class SQLiteAdministration(RelationalAdministration):
 
     def _compile(self, request):
         from .virtual_tables import KINDS
+        from .fts_maintenance import OPERATIONS, compile_operation
+        if request['resource_kind'] == 'fts-table' and request['operation_id'] in OPERATIONS:
+            return compile_operation(request)
         result = super()._compile(request)
         if request['resource_kind'] in KINDS and request['operation_id'] == 'create':
             options = request['draft'].get('options') or {}
@@ -143,6 +170,9 @@ class SQLiteAdministration(RelationalAdministration):
     def apply(self, client, request, connection=None):
         from .virtual_tables import apply_creation
         compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        if 'sqlite_fts_maintenance' in compiled:
+            from .fts_maintenance import apply
+            return apply(client, request, connection)
         if 'sqlite_virtual_constructor' in compiled:
             with client._lock:
                 return apply_creation(client, request, connection)
@@ -155,6 +185,14 @@ class SQLiteAdministration(RelationalAdministration):
             with client._lock:
                 return observe_creation(client, request)
         return {'confirmed': False, 'reason': 'provider_post_state_validator_unavailable'}
+
+    def inspect_operation(self, client, request):
+        from .fts_maintenance import observe
+        return observe(client, request)
+
+    def cancel_operation(self, client, request):
+        from .fts_maintenance import observe
+        return observe(client, request, cancel=True)
 
     @staticmethod
     def _validate_sqlite_database_operation(operation, draft, route):
@@ -211,6 +249,8 @@ ADMINISTRATION = SQLiteAdministration(RelationalAdminDialect(
         }),
         'fts-table': frozenset({
             'inspect', 'create', 'rename', 'drop',
+            'fts_optimize', 'fts_rebuild', 'fts_integrity_check', 'fts_merge',
+            'fts_delete_all', 'fts_flush',
         }),
         'pragma': frozenset({'inspect'}),
         'extension': frozenset({'inspect'}),
@@ -582,7 +622,9 @@ def _resources(connection, request):
                         'module':declared[1] if declared else None}
                     if declared and declared[1].lower() in {'fts3','fts4','fts5'}:
                         from .fts_configuration import capture as capture_fts_configuration
+                        from .fts_maintenance import allowed_operations
                         resource['native']['fts_configuration']=capture_fts_configuration(connection,schema_name,name,declared[1])
+                        resource['native']['administration'] = {'allowed_operations': allowed_operations(source_value, declared[1].lower())}
                 if native_kind in {'table', 'view'}:
                     relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))

@@ -360,7 +360,7 @@ def _relational_editor_evidence(provider, request, engine):
     def record(kind, operation):
         passed.setdefault(kind, set()).add(operation)
 
-    def attempt(label, kind, operation, draft, target=None):
+    def attempt(label, kind, operation, draft, target=None, *, session_id=None):
         # These native DROP forms have no generic CASCADE switch.
         # Build the fixture in its native shape; never suppress true intent.
         if (engine in {'mariadb', 'sqlite', 'firebird'} and
@@ -396,7 +396,7 @@ def _relational_editor_evidence(provider, request, engine):
         try:
             result = _apply_editor(
                 provider, route, kind, operation, draft, target=target,
-                task_evidence=task_evidence,
+                task_evidence=task_evidence, session_id=session_id,
             )
             observation = result.get('provider_result', {}).get(
                 'driver_observation'
@@ -972,6 +972,24 @@ def _relational_editor_evidence(provider, request, engine):
                 )
                 if resource is None:
                     continue
+                if kind == 'fts-table':
+                    for operation in ('fts_optimize', 'fts_rebuild', 'fts_merge', 'fts_integrity_check'):
+                        resource = inspect_created('fts-table.maintenance.inspect', kind, name)
+                        if resource is not None:
+                            attempt(kind + '.' + operation, kind, operation, {'timeout_seconds': 30}, resource)
+                    retained = provider.open_session({'route': route})
+                    try:
+                        inserted = provider.execute({**retained, 'source': 'INSERT INTO "' + name + '"(content,category) VALUES(?,?)',
+                            'parameters': ('native retained terms', 'qualification')})
+                        insertion_result = _live_result(provider, inserted, engine)
+                        if insertion_result['extensions'][engine]['payload'].get('error'):
+                            raise RuntimeError('Native retained FTS fixture insertion failed')
+                        resource = _target(provider.list_resources({**request, 'session_id': retained['session_id']}), kind, name)
+                        attempt(kind + '.fts_flush', kind, 'fts_flush', {'timeout_seconds': 30}, resource, session_id=retained['session_id'])
+                        provider.control_transaction({**retained, 'action': 'commit'})
+                    finally:
+                        provider.close_session(retained)
+                    resource = inspect_created('fts-table.maintenance.refresh', kind, name)
                 renamed_name = f'{name}_renamed'
                 if attempt(
                     f'{kind}.rename', kind, 'rename', {
@@ -988,6 +1006,16 @@ def _relational_editor_evidence(provider, request, engine):
                             'confirmation': f'drop-live-editor-{kind}',
                         }, resource,
                     )
+
+            if attempt('fts-table.contentless.create', 'fts-table', 'create', {
+                    'name': 'cde_editor_fts_contentless', 'module': 'fts5', 'columns': ['content'],
+                    'module_options': {'content': ''}}):
+                contentless = inspect_created('fts-table.contentless.inspect', 'fts-table', 'cde_editor_fts_contentless')
+                if contentless is not None:
+                    attempt('fts-table.fts_delete_all', 'fts-table', 'fts_delete_all',
+                            {'timeout_seconds': 30, 'confirmation': 'cde_editor_fts_contentless'}, contentless)
+                    attempt('fts-table.contentless.drop', 'fts-table', 'drop',
+                            {'confirmation': 'drop-contentless'}, contentless)
 
     if engine in {
         'mysql', 'mariadb', 'dolt', 'tidb', 'vitess',

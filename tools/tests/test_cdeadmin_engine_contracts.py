@@ -507,7 +507,7 @@ def test_sqlite_exact_contracts_activate_generated_tasks_and_metrics():
     checked = validate_dialect_contract(
         dialect_document, SQLITE, SQLITE_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 32
+    assert checked['coverage']['authoritative_task_count'] == 38
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 148,
         'statements': 45,

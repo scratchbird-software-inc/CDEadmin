@@ -194,6 +194,20 @@ SQLITE-COMP-05: DDN design exchange
   reset workflow. FTS3/4 automerge and the installed FTS5 configuration commands
   retain their own native admission and normalization rules.
 
+  FTS object menus also expose native optimize, rebuild, integrity-check,
+  segment merge, delete-all and retained-session flush. Native FTS3/4 merge
+  arguments, FTS5 signed merge budgets and external-content integrity comparison
+  retain separate admission. Delete-all is limited to contentless/external-
+  content FTS5; contentless FTS5 cannot be rebuilt. Reviews bind the original
+  definition, settings and file identity. Native work preserves observed
+  settings, restores FTS3/4 automerge after rebuild and checks index integrity
+  before commit. Delete-all also checks the empty native vocabulary without
+  deleting external content rows. Operation observations expose VM callback
+  counts, timeout/cancellation and explicit native outcomes, with no percentage
+  inference or mutation replay. Caller authorization/progress/busy policies are
+  retained. SQLite interruption can roll back an entire caller write
+  transaction; a lost private savepoint blocks reuse and reports uncertainty.
+
   The SQL editor also provides native extension inventory, review, confirmed
   load and receipt retrieval on its retained connection. The application
   operator supplies approved host library identities, SHA-256 values and

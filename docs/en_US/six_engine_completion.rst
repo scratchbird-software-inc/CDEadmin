@@ -1462,3 +1462,23 @@ unknown. Fresh post-state observations compare the recorded native definition
 and columns. An external-content constructor does not populate or synchronize
 the index. This scope does not close arbitrary extension constructors or the
 remaining native maintenance/transformation workflows.
+
+SQLite native FTS index maintenance
+------------------------------------
+
+FTS object workflows now provide reviewed native optimize, rebuild, integrity
+checks, segment merge, delete-all and session flush. Native module/content modes
+determine admission; FTS3/4 and FTS5 merge arguments remain distinct. The applying
+transaction checks reviewed definitions/settings/file identity, preserves native
+settings, runs native integrity checks and observes delete-all through an empty
+native vocabulary. External content rows are retained. Session flush uses the
+retained connection and keeps caller finality separate from an owned commit.
+
+Native operation observations and cancellation use the provider's retained
+operation identity. Receipts distinguish not-dispatched, rolled-back, staged,
+committed and unknown outcomes. Native VM callbacks provide work observations,
+not completion percentages. Timeout/cancellation restore native progress and
+busy policies; a lost caller savepoint after native interruption blocks session
+reuse. A lost commit reply remains unknown and never authorizes replay. These
+controls cover the recorded FTS operations; they do not qualify unrelated
+extension APIs or remaining schema transformations.

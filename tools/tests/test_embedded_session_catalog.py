@@ -59,6 +59,50 @@ def test_sqlite_catalog_preserves_deferred_foreign_key_setting(active,tracked):
     finally:connection.close()
 
 
+@pytest.mark.parametrize('module',['fts3','fts4','fts5'])
+def test_retained_fts_configuration_in_main_temp_and_attached_scopes_preserves_pending_work(tmp_path,module):
+    connection=sqlite3.connect(tmp_path/'fts.sqlite');client=sqlite_client()
+    try:
+        connection.execute('ATTACH ? AS attached',(str(tmp_path/'attached.sqlite'),))
+        connection.execute('CREATE TABLE pending(value)')
+        for schema in ('main','temp','attached'):
+            connection.execute('CREATE VIRTUAL TABLE '+schema+'.search USING '+module+'(body)')
+            connection.execute('INSERT INTO '+schema+'.search(search'+(',rank' if module=='fts5' else '')+
+                ') VALUES('+ ("'automerge',6" if module=='fts5' else "'automerge=6'") +')')
+        connection.commit();connection.execute('INSERT INTO pending VALUES(42)');connection.execute('SAVEPOINT caller')
+        connection.execute("INSERT INTO main.search(rowid,body) VALUES(9007199254740993,'pending native token')")
+        result=sqlite_catalog(client,connection,'retained',include_system=True)
+        tables=[row for row in result['resources'] if row['resource_kind']=='fts-table']
+        assert {tuple(row['display_path']) for row in tables}=={(schema,'search') for schema in ('main','temp','attached')}
+        assert all(dict(row['native']['fts_configuration']['commands'])['automerge']==6 for row in tables)
+        assert connection.in_transaction and not client._uncertain
+        connection.execute('ROLLBACK TO caller')
+        assert connection.execute('SELECT * FROM pending').fetchall()==[(42,)]
+        assert connection.execute('SELECT count(*) FROM main.search').fetchone()==(0,)
+        connection.rollback()
+    finally:connection.close()
+
+
+def test_retained_fts_damaged_native_settings_remain_typed_and_bounded(tmp_path,monkeypatch):
+    from pgadmin.cdeadmin.providers import embedded_session_catalog
+    connection=sqlite3.connect(tmp_path/'fts.sqlite');client=sqlite_client()
+    try:
+        connection.execute('CREATE VIRTUAL TABLE search USING fts5(body)')
+        connection.execute("INSERT INTO search_config VALUES('owned-unknown',?)",(b'\x00\xff',))
+        connection.execute('CREATE TABLE pending(value)');connection.commit()
+        connection.execute('INSERT INTO pending VALUES(42)');connection.execute('SAVEPOINT caller')
+        result=sqlite_catalog(client,connection,'retained')
+        table=next(row for row in result['resources'] if row['resource_kind']=='fts-table')
+        assert table['native']['fts_configuration']['restorable'] is False
+        assert ['owned-unknown',{'type':'blob','hex':'00ff'}] in table['native']['fts_configuration']['observed_settings']
+        monkeypatch.setattr(embedded_session_catalog,'MAX_FACTS',4)
+        with pytest.raises(ValueError,match='observation bounds'):sqlite_catalog(client,connection,'retained')
+        connection.execute('ROLLBACK TO caller')
+        assert connection.in_transaction and connection.execute('SELECT * FROM pending').fetchall()==[(42,)]
+        assert not client._uncertain
+    finally:connection.close()
+
+
 def test_duckdb_retained_temp_schema_and_pending_native_fields_use_the_original_connection(tmp_path):
     import duckdb
     from pgadmin.cdeadmin.providers.duckdb.provider import _create_client
