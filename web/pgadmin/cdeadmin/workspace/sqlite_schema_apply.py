@@ -69,6 +69,12 @@ class SQLiteSchemaApplications(SchemaApplications):
         if refused:raise SchemaApplyError(refused[0])
         for operation in operations:
             identity = operation['resource_id']
+            if operation.get('operation')=='rename-batch':
+                from .sqlite_rename import plan as rename_plan
+                expected=rename_plan(baseline,desired,baseline,operation.get('renames'))
+                if len(operations)!=1 or not expected['ready_for_review'] or expected['operations']!=operations:
+                    raise SchemaApplyError('SQLite native rename differs from the reviewed design')
+                continue
             if operation.get('operation') == 'replace':
                 from .sqlite_replace import plan_replace,validate_view_children
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
@@ -152,6 +158,9 @@ class SQLiteSchemaApplications(SchemaApplications):
 
 def apply_review(provider, route, record):
     """Execute once on a private SQLite handle; never borrow a query session."""
+    if len(record['plan']['operations'])==1 and record['plan']['operations'][0].get('operation')=='rename-batch':
+        from .sqlite_rename import apply as apply_rename
+        return apply_rename(provider,route,record)
     from ..providers.embedded_route import contained_database
     path = contained_database(route)
     if path == ':memory:' or route.get('read_only') is True:

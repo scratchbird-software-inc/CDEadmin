@@ -183,7 +183,7 @@ def _compile_created_child(row, source, owner):
 
 
 def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
-         column_renames=()):
+         column_renames=(), renames=()):
     scope = _scope(baseline)
     if _scope(desired) != scope or _scope(live) != scope:
         raise ValueError('Native designs refer to different registered SQLite files')
@@ -194,6 +194,11 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
     if (file_identity(baseline) != file_identity(desired) or
             file_identity(baseline) != file_identity(live)):
         raise ValueError('Native designs refer to different SQLite file identities')
+    if renames:
+        if deletions or rebuilds or column_renames:
+            raise ValueError('Review native renames separately from rebuilds and other transformations')
+        from .sqlite_rename import plan as rename_plan
+        return rename_plan(baseline,desired,live,renames)
     operations, blockers, conflicts = [], [], []
     before, after, current = baseline['rows'], desired['rows'], live['rows']
     if (not isinstance(deletions, (list, tuple)) or len(deletions) > 32 or

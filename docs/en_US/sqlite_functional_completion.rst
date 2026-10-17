@@ -131,6 +131,16 @@ SQLITE-COMP-05: DDN design exchange
   implementation gaps; a DDN preview never guesses a data conversion or treats
   a missing object as deletion intent.
 
+  The native rename controls generate desired table/column names and rewritten
+  references through SQLite itself in an independent empty schema. The generated
+  DDN is then previewed and reviewed before applying modern native ALTER TABLE
+  statements on the registered file. Complete original and resulting schema
+  facts, native bindings, file identity and mapped foreign-key violations are
+  verified. The operation copies no rows and preserves native row IDs and
+  AUTOINCREMENT state. Contention refuses dispatch; a missing commit reply stays
+  unknown without replay. Generation for attached/virtual-table environments
+  and additional installed module/function/collation adapters remains open.
+
 SQLITE-COMP-06: Monitoring and dashboards
   Provide display-only DDN engine, registered-file aggregate and database
   dashboards with a separately authorized dashboard editor. An independently

@@ -257,9 +257,10 @@ remains open for every engine; a scoped workflow is not the full denominator.
        roles, retained completion and guarded nonexecuting compilation.
      - Native file/data workflows, typed imports, durable recipes, coordinated
        rebuilds, view/index/trigger replacement and atomic creation of ordinary
-       relations with their explicitly declared indexes and triggers.
-     - Remaining coordinated dependency transformations and complete native
-       module/extension/feature and platform reconciliation.
+       relations with their explicitly declared indexes and triggers; native
+       table/column rename design generation and reference rewriting.
+     - Remaining virtual/attached and installed-module transformations and
+       complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
        preparation, exact dialect context and native catalog completion.
@@ -1334,3 +1335,30 @@ durable receipts never replay the original review.
 This closes the separate-review restriction for those new relation children.
 It does not qualify arbitrary installed module/function/collation environments,
 full native renames or the complete native transformation denominator.
+
+SQLite native rename generation and application
+------------------------------------------------
+
+The catalog workspace generates table and column rename designs through the
+loaded SQLite runtime in a separate empty schema. SQLite rewrites the native
+table, column, foreign-key, view, index and trigger references. Generated DDN
+contains the complete rewritten main schema; a visual rename is not interpreted
+as deletion and creation. Sequential table/column renames can share one review.
+The registered file is unchanged until the separately confirmed application.
+
+The owned applying connection uses native modern rename mode and checks the
+original file identity and complete schema inside its write transaction. It
+compares the rewritten schema and native view/trigger bindings before commit,
+then rediscovers the committed postimage. Data and AUTOINCREMENT sequence state
+are not copied. Existing foreign-key violations are compared after mapping the
+renamed table identities; an existing violation does not itself authorize data
+repair or prevent a metadata-only rename. A failed preservation check rolls back
+the rename. Writer contention refuses dispatch without settling another
+connection's work. A lost commit acknowledgement remains unknown and never
+replays the original review.
+
+Current generation covers ordinary main-file schemas using the runtime's
+available native grammar. Attached/virtual-table environments and additional
+installed module/function/collation adapters retain separate coverage. These
+are implementation gaps, not inapplicable native features. Native rename
+reviews remain separate from rebuilds and other transformations.

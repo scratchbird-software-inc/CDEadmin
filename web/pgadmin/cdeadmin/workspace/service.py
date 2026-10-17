@@ -1784,6 +1784,13 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_schema_rename_design(self, server, request):
+        from .sqlite_catalog_service import schema_plan
+        try:
+            return schema_plan(self,server,request,generate_renames=True)
+        except (ValueError,TypeError,KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_schema_application(self, server, action, request):
         from dataclasses import asdict
         import os
@@ -1822,7 +1829,7 @@ class ProviderWorkspaceService:
                 'target': target, 'file_identity': [info.st_dev, info.st_ino]})
             if action == 'sqlite_schema_review':
                 if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
-                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames'}):
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'deletions', 'rebuilds', 'column_renames', 'renames'}):
                     raise ValueError('Invalid SQLite schema review request')
                 preview = self.sqlite_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'})

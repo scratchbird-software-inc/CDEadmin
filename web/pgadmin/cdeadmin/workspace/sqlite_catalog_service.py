@@ -108,18 +108,19 @@ def test_data(service, server, request):
     return generate(model, request['recipe']) if 'recipe' in request else template(model)
 
 
-def schema_plan(service, server, request):
+def schema_plan(service, server, request, *, generate_renames=False):
     from .sqlite_schema_plan import plan
-    if (not isinstance(request, dict) or not {
-            'database_target_id', 'baseline', 'desired'} <= set(request) or
+    required={'database_target_id','baseline','renames'} if generate_renames else {'database_target_id','baseline','desired'}
+    if (not isinstance(request, dict) or not required <= set(request) or
             set(request) - {'database_target_id', 'baseline', 'desired', 'deletions', 'rebuilds',
-                            'column_renames'}):
+                            'column_renames', 'renames'} or
+            generate_renames and set(request)!=required):
         raise ValueError('SQLite schema preview requires exact baseline and desired DDN')
     target = request['database_target_id']
     if not isinstance(target, str) or not target:
         raise ValueError('Select a registered SQLite file')
     baseline = read_catalog(request['baseline'], engine='sqlite')
-    desired = read_catalog(request['desired'], engine='sqlite')
+    desired = baseline if generate_renames else read_catalog(request['desired'], engine='sqlite')
     context, endpoint, _root = service.endpoint_service.workspace(
         server, database_target_id=target)
     provider = service.endpoint_service.provider_registry.resolve(context).instance
@@ -152,6 +153,15 @@ def schema_plan(service, server, request):
     live = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
         target_id=target, generation=captured['generation'], include_system=False,
         refreshed=True, engine='sqlite', native_model=True)
+    if generate_renames:
+        from .sqlite_rename import generate,schema
+        if schema(baseline)!=schema(live):raise ValueError('Native SQLite schema changed; capture a new baseline')
+        desired,selected,_stages=generate(baseline,request['renames'])
+        resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],
+            'display_name':row['name'],'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
+        result=build_export(resources,endpoint_id=str(context.endpoint_id),target_id=target,
+            generation=captured['generation'],include_system=False,refreshed=True,engine='sqlite')
+        return {'snapshot':result['snapshot'],'renames':selected,'scope':'native schema-only generation; registered file has not changed'}
     connection = provider.client._connect({'route': endpoint['route']})
     try:
         before_info = os.stat(path)
@@ -160,7 +170,8 @@ def schema_plan(service, server, request):
         preview = plan(baseline, desired, live, connection,
                        deletions=request.get('deletions', ()),
                        rebuilds=request.get('rebuilds', ()),
-                       column_renames=request.get('column_renames', ()))
+                       column_renames=request.get('column_renames', ()),
+                       renames=request.get('renames', ()))
         after_info = os.stat(path)
         if [after_info.st_dev, after_info.st_ino] != [file_info.st_dev, file_info.st_ino]:
             raise ValueError('SQLite registered file changed during native grammar validation')
