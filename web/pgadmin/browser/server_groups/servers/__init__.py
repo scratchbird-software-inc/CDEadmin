@@ -2628,6 +2628,19 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'postgresql_large_object_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_large_object_service import download
+                    from pgadmin.cdeadmin.providers.postgresql.large_object_files import LargeObjectFileError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:
+                        data=json.loads(body)
+                        target=request.args.get('database_target_id')
+                        if target is not None and (not isinstance(data,dict) or data.get('database_target_id')!=target):
+                            raise LargeObjectFileError('File download database scope does not match this workspace')
+                        return download(service,server,data)
+                    except (ValueError,TypeError,KeyError) as error:
+                        return bad_request(str(error) if isinstance(error,LargeObjectFileError) else 'Invalid file delivery request')
                 if request.form.get('action') == 'firebird_file_download':
                     from pgadmin.cdeadmin.workspace.firebird_download import (
                         response as file_response,
@@ -2646,6 +2659,8 @@ class ServerNode(PGChildNodeView):
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
+                        'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
+                        'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
                         'postgresql_recipe_read', 'postgresql_recipe_save',
                         'duckdb_recipe_read', 'duckdb_recipe_save',
                         'sqlite_recipe_read', 'sqlite_recipe_save',
@@ -2944,6 +2959,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.postgresql_data_capture(server, data.get('request'))
                 elif action == 'postgresql_server_catalog':
                     payload = service.postgresql_server_catalog(server, data.get('request'))
+                elif action in {'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
+                                'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact'}:
+                    try:payload=service.postgresql_large_object_file(server,action.removeprefix('postgresql_large_object_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel', 'postgresql_continuity_archives'}:
                     try:

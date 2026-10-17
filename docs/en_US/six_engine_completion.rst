@@ -882,6 +882,35 @@ Remote status uses the exact native host:port source in addition to the frozen
 worker/operation identity. Native refusal, cancellation, unknown outcomes and
 independent recovery retain the same separate receipt semantics as local clones.
 
+PostgreSQL whole-file large-object transfers
+--------------------------------------------
+
+The database context menu opens a dedicated client-file workspace. Imports stage
+bounded, checksummed chunks in private application-host storage, validate retry
+bytes, and prepare an exact whole-file checksum review. Confirmation creates a
+new native large object in a separately owned PostgreSQL transaction, verifies
+its complete native postimage, then commits. An existing explicit OID is refused
+by PostgreSQL; this workflow does not replace an existing large object.
+
+Exports read one repeatable-read native snapshot into a private application
+artifact and independently verify that artifact. Authenticated form navigation
+streams its binary HTTP response to the browser download manager without a
+complete-file JavaScript Blob or a filesystem picker. Native metadata, effective
+role, database identity, lengths, OIDs and SHA-256 values remain in owner,
+endpoint and database scoped durable receipts. Application artifact storage is
+under ``CDEADMIN_POSTGRESQL_LARGE_OBJECT_ROOT`` or the operation store's
+``postgresql-large-object-files`` sibling directory.
+Application files can be removed with an exact transfer-ID confirmation after
+their writer stops. Durable receipts and committed PostgreSQL objects remain.
+
+Cancellation requests apply to an owned native connection and report rollback
+only after native acknowledgement. Lost commit replies remain unknown with no
+automatic replay. Import reconciliation queries the retained native xid8 status;
+export reconciliation can verify complete application bytes while retaining an
+unknown read-only commit outcome. An artifact receipt does not certify that a
+browser saved or independently verified the client file. Server-file LO import
+and export remain separate database-server operations.
+
 PostgreSQL native point-in-time recovery drills
 ===============================================
 

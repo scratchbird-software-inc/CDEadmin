@@ -40,6 +40,7 @@ import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import PostgresqlServerCatalog from './PostgresqlServerCatalog';
 import PostgresqlContinuity from './PostgresqlContinuity';
+import PostgresqlLargeObjectFiles from './PostgresqlLargeObjectFiles';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -82,6 +83,8 @@ import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal','postgresql_large_object_start',
+  'postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
   'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
@@ -7895,6 +7898,7 @@ export default function ProviderWorkspaceContent({
           'firebird-templates': gettext('Native Code Templates'),
           'firebird-test-data': gettext('Generate Test Data'),
           'postgresql-test-data': gettext('PostgreSQL Test Data'),
+          'postgresql-large-object-files': gettext('PostgreSQL Large-object Files'),
           'mysql-test-data': gettext('MySQL Test Data'),
           'mariadb-test-data': gettext('MariaDB Test Data'),
           'duckdb-test-data': gettext('DuckDB Test Data'),
@@ -7942,6 +7946,7 @@ export default function ProviderWorkspaceContent({
         key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
         languageProfile={languageProfile} resources={resourcePage?.items || []} />}
       {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-large-object-files' && <PostgresqlLargeObjectFiles key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
       {workspace && tab === 'firebird-isql' && <FirebirdIsql post={post}
         databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'metadata-search' && <FirebirdMetadataSearch

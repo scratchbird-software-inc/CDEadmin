@@ -31,7 +31,7 @@ define('pgadmin.node.database', [
     while (serverItem && tree.itemData(serverItem)?._type !== 'server') serverItem = tree.parent(serverItem);
     if (!serverItem) return;
     const server = tree.itemData(serverItem);
-    showProviderWorkspace(tab === 'export' ? 'PostgreSQL catalog DDN' : tab === 'postgresql-test-data' ? 'PostgreSQL test data' : tab === 'administration' ? 'PostgreSQL advanced objects' : 'SQL', pgBrowser.Nodes.server, server, serverItem,
+    showProviderWorkspace(tab === 'export' ? 'PostgreSQL catalog DDN' : tab === 'postgresql-test-data' ? 'PostgreSQL test data' : tab === 'postgresql-large-object-files' ? 'PostgreSQL large-object files' : tab === 'administration' ? 'PostgreSQL advanced objects' : 'SQL', pgBrowser.Nodes.server, server, serverItem,
       tab, {database_target_id: `postgresql-database:${database._id}`,
         display_name: database.label || database._label,
         ...(tab === 'administration' ? {resource_kind: 'access-method'} : {})}, undefined, registerOnly);
@@ -117,6 +117,10 @@ define('pgadmin.node.database', [
           name: 'postgresql_test_data', node: 'database', module: this,
           applies: ['object', 'context'], callback: 'open_test_data', priority: 11,
           label: gettext('Generate PostgreSQL test data...'), enable: 'is_connected',
+        },{
+          name: 'postgresql_large_object_files', node: 'database', module: this,
+          applies: ['object', 'context'], callback: 'open_large_object_files', priority: 11,
+          label: gettext('PostgreSQL large-object files...'), enable: 'is_connected',
         },{
           name: 'postgresql_advanced_objects', node: 'database', module: this,
           applies: ['object', 'context'], callback: 'open_native_administration', priority: 11,
@@ -284,6 +288,7 @@ define('pgadmin.node.database', [
         open_monitor: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), false); },
         open_monitor_policy: function(args) { monitoringWorkspace(args?.item || pgBrowser.tree.selected(), true); },
         open_test_data: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'postgresql-test-data'); },
+        open_large_object_files: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'postgresql-large-object-files'); },
         open_catalog_ddn: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'export'); },
         open_native_administration: function(args) { sqlWorkspace(args?.item || pgBrowser.tree.selected(), false, 'administration'); },
         open_global_sql: function(args) {
