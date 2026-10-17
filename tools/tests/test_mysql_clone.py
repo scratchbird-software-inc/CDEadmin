@@ -7,6 +7,54 @@ from pgadmin.cdeadmin.providers.mysql_family.mysql_clone import CloneError, corr
 from pgadmin.cdeadmin.workspace.mysql_clone_jobs import MySQLCloneJobs
 
 
+def remote_options(**overrides):
+    return {'destination':'/clone','confirmation':'/clone','donor':{
+        'server_id':2,'host':'donor.example','port':3306,'require_ssl':True,'delegate_credentials':True,**overrides}}
+
+
+@pytest.mark.parametrize('overrides',[{'server_id':True},{'host':'host\nname'},{'port':True},{'port':65536},
+    {'delegate_credentials':False},{'require_ssl':None},{'host':'u@host'},{'host':'/socket'}])
+def test_remote_clone_requires_an_exact_native_route_and_explicit_delegation(overrides):
+    with pytest.raises(CloneError):options(remote_options(**overrides))
+
+
+def test_native_clone_tls_policy_does_not_downgrade_registered_identity_or_ca_verification():
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_clone import donor_policy
+    selected=options(remote_options())['donor'];source={'clone_settings':{'clone_ssl_ca':''}}
+    with pytest.raises(CloneError,match='hostname verification'):
+        donor_policy({'user':'reader','ssl_verify_identity':True},selected,source)
+    with pytest.raises(CloneError,match='clone_ssl_ca'):
+        donor_policy({'user':'reader','ssl_verify_cert':True},selected,source)
+    assert donor_policy({'user':'reader','ssl_verify_cert':True},selected,{'clone_settings':{'clone_ssl_ca':'/server/ca.pem'}})=='reader'
+    with pytest.raises(CloneError,match='multiple authentication'):
+        donor_policy({'user':'reader','credential_references':{'database_password_2':'ref'}},selected,source)
+
+
+def test_remote_statement_binds_special_credentials_and_closes_its_zeroizing_lease(monkeypatch):
+    from pgadmin.cdeadmin.providers.mysql_family import mysql_clone as module
+    from pgadmin.cdeadmin.security.secrets import SecretLease
+    captured=[];monkeypatch.setattr(module,'rows',lambda connection,source,params:captured.append((source,params)))
+    record={'options':options(remote_options()),'donor':{'username':"reader'ü\\"}}
+    with SecretLease("secret'😀\\") as lease:
+        module.clone_statement(None,record,lease)
+        assert captured==[('CLONE INSTANCE FROM %s@%s:%s IDENTIFIED BY %s DATA DIRECTORY = %s REQUIRE SSL',
+            ("reader'ü\\",'donor.example',3306,"secret'😀\\",'/clone'))]
+    assert lease.closed
+    record['options']['donor']['require_ssl']=False
+    module.clone_statement(None,record)
+    assert captured[-1][0].endswith('REQUIRE NO SSL') and captured[-1][1][3]==''
+
+
+def test_native_clone_password_admission_preserves_its_system_string_grammar():
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_clone import seal_password
+    for value in ('not\x00preserved','not😀preserved'):
+        with pytest.raises(CloneError,match='utf8mb3'):seal_password([value],'utf8mb3')
+    with pytest.raises(CloneError,match='character set'):seal_password(['password'],'unknown')
+    with seal_password(["exact'ü\\"],'utf8mb3') as lease:
+        assert lease.use(lambda view:bytes(view).decode('utf8'))=="exact'ü\\"
+    assert seal_password([],'utf8mb3') is None
+
+
 @pytest.mark.parametrize('value',[{}, {'destination':'a','confirmation':'b'},
     {'destination':'x\x00y','confirmation':'x\x00y'}, {'destination':'x'*511,'confirmation':'x'*511},
     {'destination':'/clone','confirmation':'/clone','timeout_seconds':False},
@@ -102,3 +150,23 @@ def test_runtime_policy_refuses_an_unbounded_native_client_when_required(manager
     jobs,source,endpoint=manager
     with pytest.raises(CloneError,match='Application policy'):
         jobs.review({'options':{'destination':'/clone','confirmation':'/clone','timeout_seconds':None}},1,endpoint,source,'configuration',None,runtime_limit=3600)
+
+
+def test_remote_review_binds_donor_identity_and_fresh_start_refuses_a_changed_donor(manager):
+    jobs,source,endpoint=manager
+    donor={'server_id':2,'native_identity':{'server_uuid':str(uuid.uuid4())},'username':'reader'}
+    item=jobs.review({'options':remote_options()},1,endpoint,source,'configuration',None,donor=donor)
+    assert item['operation']=='remote_clone' and item['donor']==donor
+    transport=Transport();transport.donor_identity={**donor,'username':'changed'}
+    with pytest.raises(CloneError,match='donor identity'):
+        jobs.start({'job_id':item['job_id'],'review_digest':item['review_digest'],'confirmed':True},1,endpoint,source,'configuration',transport)
+    assert transport.closed and jobs.get(item['job_id'],1,endpoint)['state']=='reviewed'
+
+
+def test_remote_status_requires_native_tcp_source_and_frozen_operation_identity():
+    record={'source':{'operating_system':'Linux'},'options':options(remote_options()),
+        'native_thread':{'connection_id':'123'},'native_operation_key':{'id':'1','pid':'123','begin_time':'native-start'}}
+    observed={'available':True,'status':{'id':'1','pid':'123','begin_time':'native-start','source':'donor.example:3306','destination':'/clone'}}
+    assert correlated(observed,record)
+    for source in ('LOCAL INSTANCE','donor.example:3307','other.example:3306'):
+        assert not correlated({**observed,'status':{**observed['status'],'source':source}},record)

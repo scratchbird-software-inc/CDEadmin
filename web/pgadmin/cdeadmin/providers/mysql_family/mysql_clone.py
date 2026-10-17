@@ -1,4 +1,4 @@
-"""Native MySQL 9.7 local physical clone and correlated PFS observations."""
+"""Native MySQL 9.7 physical cloning and correlated PFS observations."""
 from pathlib import PurePosixPath, PureWindowsPath
 import re
 import uuid
@@ -17,7 +17,7 @@ def rows(connection,source,parameters=()):
 
 
 def configure(connection):
-    if connection.in_transaction:raise CloneError('Local cloning requires an independently owned idle native connection')
+    if connection.in_transaction:raise CloneError('Cloning requires an independently owned idle native connection')
     connection.autocommit=True
     connection.set_charset_collation(charset='utf8mb4',collation='utf8mb4_0900_ai_ci')
     rows(connection,"SET SESSION time_zone='+00:00'")
@@ -25,24 +25,24 @@ def configure(connection):
 
 def capture(connection):
     import mysql.connector
-    identity=rows(connection,"SELECT VERSION() AS `version`,@@server_uuid AS `server_uuid`,@@version_comment AS `edition`,@@version_compile_os AS `operating_system`,@@datadir AS `data_directory`,CURRENT_USER() AS `authenticated_principal`,@@character_set_filesystem AS `filesystem_charset`,@@sql_mode AS `sql_mode`")[0]
-    if identity['version'].split('-')[0]!='9.7.0':raise CloneError('Local cloning requires the selected native MySQL 9.7.0 profile')
+    identity=rows(connection,"SELECT VERSION() AS `version`,@@server_uuid AS `server_uuid`,@@version_comment AS `edition`,@@version_compile_os AS `operating_system`,@@datadir AS `data_directory`,CURRENT_USER() AS `authenticated_principal`,@@character_set_filesystem AS `filesystem_charset`,@@character_set_system AS `system_charset`,@@sql_mode AS `sql_mode`")[0]
+    if identity['version'].split('-')[0]!='9.7.0':raise CloneError('Cloning requires the selected native MySQL 9.7.0 profile')
     try:uuid.UUID(identity['server_uuid'])
     except (TypeError,ValueError):raise CloneError('Native MySQL server identity is unavailable') from None
     plugins=rows(connection,"SELECT PLUGIN_VERSION AS `version`,PLUGIN_LIBRARY AS `library`,PLUGIN_STATUS AS `state` FROM information_schema.PLUGINS WHERE PLUGIN_NAME='clone'")
     if len(plugins)!=1 or plugins[0]['state']!='ACTIVE':
-        raise CloneError('Install and activate the native clone plugin through the Plugins workspace before local cloning')
+        raise CloneError('Install and activate the native clone plugin through the Plugins workspace before cloning')
     identity['clone_plugin']=plugins[0]
     identity['client_interface']=type(connection).__name__
     identity['client_version']=mysql.connector.__version__
     identity['clone_settings']={row['Variable_name']:row['Value'] for row in rows(connection,
-        "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('clone_autotune_concurrency','clone_buffer_size','clone_max_concurrency','clone_block_ddl','clone_ddl_timeout','clone_max_data_bandwidth')")}
+        "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('clone_autotune_concurrency','clone_buffer_size','clone_max_concurrency','clone_block_ddl','clone_ddl_timeout','clone_max_data_bandwidth','clone_valid_donor_list','clone_ssl_ca','clone_ssl_cert','clone_ssl_key','clone_enable_compression','clone_max_network_bandwidth','clone_donor_timeout','clone_network_timeout')")}
     return identity
 
 
 def options(value):
-    if not isinstance(value,dict) or set(value)-{'destination','confirmation','timeout_seconds'}:
-        raise CloneError('Invalid native local clone options')
+    if not isinstance(value,dict) or set(value)-{'destination','confirmation','timeout_seconds','donor'}:
+        raise CloneError('Invalid native clone options')
     path=value.get('destination')
     if not isinstance(path,str) or not path or '\x00' in path or len(path)>510:
         raise CloneError('Select an exact bounded native server directory')
@@ -50,7 +50,57 @@ def options(value):
     timeout=value.get('timeout_seconds',3600)
     if timeout is not None and (type(timeout) is not int or not 1<=timeout<=2147483647):
         raise CloneError('Clone timeout requires positive seconds or null for no client deadline')
-    return {'destination':path,'confirmation':path,'timeout_seconds':timeout}
+    result={'destination':path,'confirmation':path,'timeout_seconds':timeout}
+    if 'donor' in value:
+        donor=value['donor']
+        if not isinstance(donor,dict) or set(donor)!={'server_id','host','port','require_ssl','delegate_credentials'}:
+            raise CloneError('Select an owned registered MySQL donor and its native TCP address')
+        if type(donor['server_id']) is not int or donor['server_id']<=0:
+            raise CloneError('Select an owned registered MySQL donor')
+        host=donor['host']
+        if not isinstance(host,str) or not host or len(host.encode('utf8'))>255 or any(ord(char)<33 or char in "@/\\\x7f" for char in host):
+            raise CloneError('Select an exact recipient-reachable donor TCP hostname or address')
+        if type(donor['port']) is not int or not 1<=donor['port']<=65535 or type(donor['require_ssl']) is not bool:
+            raise CloneError('Select a native donor TCP port and TLS policy')
+        if donor['delegate_credentials'] is not True:
+            raise CloneError('Explicit credential delegation to the recipient server is required')
+        result['donor']=dict(donor)
+    return result
+
+
+def donor_policy(route,selected,recipient):
+    """Native CLONE can verify a CA, but cannot verify a donor hostname."""
+    if route.get('ssl_verify_identity'):
+        raise CloneError('Native CLONE cannot preserve the registered donor hostname verification policy')
+    if route.get('ssl_verify_cert') or route.get('ssl_ca'):
+        if not selected['require_ssl'] or not recipient['clone_settings'].get('clone_ssl_ca'):
+            raise CloneError('The registered donor CA policy requires TLS and clone_ssl_ca on the recipient server')
+    user=route.get('user') or route.get('username')
+    if not isinstance(user,str) or not user or '\x00' in user:
+        raise CloneError('A native donor authentication username is required')
+    if any(key in (route.get('credential_references') or {}) for key in ('database_password_2','database_password_3')):
+        raise CloneError('Native CLONE cannot delegate multiple authentication factors')
+    return user
+
+
+def clone_statement(connection,record,password=None):
+    selected=record['options'];donor=record.get('donor')
+    if donor is None:
+        return rows(connection,'CLONE LOCAL DATA DIRECTORY = %s',(selected['destination'],))
+    command='CLONE INSTANCE FROM %s@%s:%s IDENTIFIED BY %s DATA DIRECTORY = %s REQUIRE '+('SSL' if selected['donor']['require_ssl'] else 'NO SSL')
+    def execute(secret):
+        return rows(connection,command,(donor['username'],selected['donor']['host'],selected['donor']['port'],secret,selected['destination']))
+    return password.use(lambda view:execute(bytes(view).decode('utf8'))) if password is not None else execute('')
+
+
+def seal_password(values,system_charset):
+    from ...security.secrets import SecretLease
+    if len(values)>1:raise CloneError('Native CLONE cannot delegate multiple authentication factors')
+    password=values[0] if values else ''
+    if system_charset!='utf8mb3':raise CloneError('Native CLONE system password character set is unavailable')
+    if '\x00' in password or any(ord(char)>0xffff for char in password):
+        raise CloneError('Native CLONE cannot preserve this password in its utf8mb3 system-string grammar')
+    return SecretLease(password) if password else None
 
 
 def destination(connection,path,source):
@@ -112,7 +162,9 @@ def correlated(observed,record,*,allow_new=False):
     native=PureWindowsPath if record['source']['operating_system'].lower().startswith('win') else PurePosixPath
     key=operation_key(status)
     bound=record.get('native_operation_key')
-    return (status.get('pid')==record['native_thread']['connection_id'] and status.get('source')=='LOCAL INSTANCE' and
+    donor=record['options'].get('donor')
+    expected_source=donor['host']+':'+str(donor['port']) if donor else 'LOCAL INSTANCE'
+    return (status.get('pid')==record['native_thread']['connection_id'] and status.get('source')==expected_source and
             native(status.get('destination') or '')==native(record['options']['destination']) and
             status.get('begin_time') is not None and
             (key==bound if bound is not None else allow_new and key!=record.get('baseline_operation_key')))
@@ -121,13 +173,18 @@ def correlated(observed,record,*,allow_new=False):
 class CloneTransport:
     def __init__(self,client,worker,monitor):
         self.client,self.worker,self.monitor=client,worker,monitor
+        self.donor=None;self.donor_client=None;self.donor_identity=None;self.password=None
         self.closed=False
 
     def close(self):
         if self.closed:return
         self.closed=True
-        for connection in (self.worker,self.monitor):
-            self.client._discard_failed_session(connection)
+        try:
+            for connection in (self.worker,self.monitor):
+                self.client._discard_failed_session(connection)
+            if self.donor is not None:self.donor_client._discard_failed_session(self.donor)
+        finally:
+            if self.password is not None:self.password.close()
 
 
 def connect(provider,route,timeout):

@@ -853,9 +853,34 @@ jobs can inspect native state again without replaying the clone. Terminal
 receipts remain available while the source is offline.
 
 Native clone completion, independent file verification and a recovery drill
-retain separate receipt fields. Server-host restore/provisioning, remote clone,
+retain separate receipt fields. Server-host restore/provisioning,
 the remaining native physical backup utilities, PITR and archive management
 remain separate product requirements.
+
+Registered remote MySQL cloning
+-------------------------------
+
+The same dialog can select an owned native MySQL donor registration and an
+explicit TCP address reachable from the recipient. Review captures both native
+SQL identities and registration fingerprints. Confirmation delegates the donor's
+registered password under provider-tool authorization to an independently owned
+recipient connection; a zeroizing lease is released after native execution.
+Passwords are excluded from durable reviews, receipts and downloaded evidence.
+Native CLONE's utf8mb3 system-string password grammar cannot preserve NUL or
+supplementary Unicode characters; those credentials are refused before dispatch.
+Only a new directory is supported; this workflow does not replace the recipient's
+active data directory or restart it.
+
+The recipient's native donor allowlist and CLONE_ADMIN privilege, and the donor's
+BACKUP_ADMIN privilege, remain authoritative. Required TLS is the default.
+Native CLONE uses recipient-side clone_ssl_ca/cert/key settings and cannot verify
+the donor hostname; registrations requiring hostname verification are refused.
+Registered CA verification requires recipient-side CA configuration and TLS.
+The donor SQL UUID and the clone protocol's source address are distinct recorded
+observations; the latter does not provide application-visible UUID attestation.
+Remote status uses the exact native host:port source in addition to the frozen
+worker/operation identity. Native refusal, cancellation, unknown outcomes and
+independent recovery retain the same separate receipt semantics as local clones.
 
 PostgreSQL native point-in-time recovery drills
 ===============================================

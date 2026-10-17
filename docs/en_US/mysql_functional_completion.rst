@@ -143,6 +143,13 @@ runs these portable consumers after the driver proof, retaining their separate
 receipts. Native resource-group availability comes from the serving engine,
 not the client operating system.
 
+The physical clone workspace supports local and registered remote donors into a
+new recipient-server directory. Remote reviews bind both native identities and
+registrations, require explicit credential delegation, and preserve native TLS,
+allowlist and privilege admission. Native completion, file verification and
+independent recovery remain separate outcomes. Active-directory replacement,
+production cutover and the wider physical continuity surface remain open.
+
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are

@@ -2,6 +2,9 @@ import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import MySQLClone from 'sources/Dialogs/MySQLClone';
 import {withTheme} from '../fake_theme';
 const Component=withTheme(MySQLClone);
+const viewportHeight=window.innerHeight;
+beforeAll(() => {window.innerHeight=1200;});
+afterAll(() => {window.innerHeight=viewportHeight;});
 const review={job_id:'job',review_digest:'digest',state:'reviewed',source:{server_uuid:'native-uuid'},
   warnings:['Native server directory'],options:{destination:'/server/Clone "ü"'},execution_host:{kind:'database-server'}};
 
@@ -30,4 +33,22 @@ it('loads offline receipts and exposes native reconciliation for an uncertain cl
   expect(screen.getByRole('button',{name:'Cancel local clone'})).toBeDisabled();
   fireEvent.click(screen.getByRole('button',{name:'Reconcile native clone'}));
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_clone_reconcile',request:{job_id:'job'}}));
+});
+
+it('selects a registered donor and explicitly delegates its credentials with required TLS',async () => {
+  const post=jest.fn().mockResolvedValue({donors:[{server_id:2,name:'Owned donor',host:'app-route',port:13306}],offset:0,limit:25,total:1});
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load registered donors'}));
+  const select=await screen.findByLabelText('Clone source');fireEvent.mouseDown(select);
+  fireEvent.click(await screen.findByRole('option',{name:'Owned donor'}));
+  expect(screen.getByRole('button',{name:'Review remote clone'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Donor host reachable from recipient'),{target:{value:'native-donor'}});
+  fireEvent.change(screen.getByLabelText('Donor TCP port'),{target:{value:'3306'}});
+  fireEvent.click(screen.getByLabelText('Delegate registered donor credentials to recipient'));
+  post.mockResolvedValue({...review,operation:'remote_clone',donor:{native_identity:{server_uuid:'donor-uuid'}}});
+  fireEvent.click(screen.getByRole('button',{name:'Review remote clone'}));
+  await screen.findByRole('button',{name:'Confirm and start remote clone'});
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_clone_review',request:{options:{destination:'',confirmation:'',timeout_seconds:3600,
+    donor:{server_id:2,host:'native-donor',port:3306,require_ssl:true,delegate_credentials:true}}}});
+  expect(screen.getByLabelText('Native clone review')).toHaveTextContent('donor-uuid');
 });

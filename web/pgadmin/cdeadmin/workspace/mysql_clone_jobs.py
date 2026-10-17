@@ -13,11 +13,11 @@ import psutil
 
 from ..operations.fileio import durable_replace, exclusive_file_lock, private_directory, private_file
 from ..operations.store import JsonOperationStore
-from ..providers.mysql_family.mysql_clone import CloneError, capture, correlated, destination, observation, operation_key, options, rows, thread_identity, thread_matches
+from ..providers.mysql_family.mysql_clone import CloneError, capture, clone_statement, correlated, destination, observation, operation_key, options, rows, thread_identity, thread_matches
 
 
 ACTIVE={'dispatching','active','cancel_requested'}
-FIELDS=('job_id','owner','endpoint_id','configuration','operation','options','source','created_at','expires_at','native_path_bytes','execution_host','warnings')
+FIELDS=('job_id','owner','endpoint_id','configuration','operation','options','source','donor','created_at','expires_at','native_path_bytes','execution_host','warnings')
 
 
 def digest(value):
@@ -110,16 +110,17 @@ class MySQLCloneJobs:
             except CloneError:unavailable.append(job_id)
         return {'jobs':result,'offset':offset,'limit':limit,'total':len(entries),'more':offset+limit<len(entries),'unavailable_job_ids':unavailable}
 
-    def review(self,request,owner,endpoint,source,configuration,connection,*,runtime_limit=None):
+    def review(self,request,owner,endpoint,source,configuration,connection,*,runtime_limit=None,donor=None):
         if not isinstance(request,dict) or set(request)!={'options'}:raise CloneError('Invalid native clone review')
         selected=options(request['options'])
+        if ('donor' in selected)!=(donor is not None):raise CloneError('Native donor admission is required for a remote clone')
         if runtime_limit is not None and (type(runtime_limit) is not int or not 1<=runtime_limit<=2147483647):
             raise CloneError('Invalid application native clone runtime policy')
         if runtime_limit is not None and (selected['timeout_seconds'] is None or selected['timeout_seconds']>runtime_limit):
             raise CloneError('Application policy limits each clone client to '+str(runtime_limit)+' seconds')
         size=destination(connection,selected['destination'],source)
         record={'job_id':str(uuid.uuid4()),'owner':owner,'endpoint_id':endpoint,'configuration':configuration,
-            'operation':'local_clone','options':selected,'source':deepcopy(source),'native_path_bytes':size,
+            'operation':'remote_clone' if donor else 'local_clone','options':selected,'source':deepcopy(source),'donor':deepcopy(donor),'native_path_bytes':size,
             'created_at':time.time(),'expires_at':time.time()+600,'state':'reviewed','cancel_requested':False,
             'execution_host':{'kind':'database-server','operating_system':source['operating_system']},
             'recovery_drill_complete':False,'files_verified':False,
@@ -128,6 +129,11 @@ class MySQLCloneJobs:
                 'Clone creates nontransactional files. Failure, cancellation or a lost reply can leave partial files; SQL rollback cannot remove them.',
                 'Native completion and a successful independent recovery drill have separate receipts. External administration is not fenced by the application lock.',
                 'Cancellation requires a live native performance-schema thread identity. A client timeout or disconnect does not establish that the server stopped copying.']}
+        if donor is not None:
+            record['warnings'].extend([
+                'The recipient server authenticates directly to the selected donor using delegated credentials. Its clone_valid_donor_list and native CLONE_ADMIN permission, and the donor BACKUP_ADMIN permission, govern execution.',
+                'The donor SQL connection verifies the registered identity. The recipient clone protocol identifies its source by the reviewed TCP address; it does not attest that source UUID to the application.',
+                'Native CLONE supports required TLS and recipient-side CA verification, but not donor hostname verification. The recipient clone_ssl_ca/cert/key settings govern that channel.'])
         record['review_digest']=review_digest(record)
         scope=self.scope(owner,endpoint)
         for path in (self.root,self.root/str(owner),scope,scope/'index'):
@@ -155,6 +161,8 @@ class MySQLCloneJobs:
                     if review_digest(record)!=record['review_digest']:raise CloneError('Native clone review fingerprint changed')
                     if record['expires_at']<time.time() or record['configuration']!=configuration or record['source']!=source:
                         raise CloneError('Native clone target or registration changed; prepare a new review')
+                    if record.get('donor')!=getattr(transport,'donor_identity',None):
+                        raise CloneError('Native clone donor identity or policy changed; prepare a new review')
                     if destination(transport.worker,record['options']['destination'],source)!=record['native_path_bytes']:
                         raise CloneError('Native filesystem encoding changed after review')
                     record.update(state='dispatching',worker_identity=self.worker_identity,started_at=time.time())
@@ -163,7 +171,7 @@ class MySQLCloneJobs:
             if not claimed:
                 if transport is not None:transport.close()
                 return self.get(record['job_id'],owner,endpoint)
-            worker=threading.Thread(target=self.run,args=(record,transport,signal),daemon=True,name='mysql-local-clone-'+record['job_id'])
+            worker=threading.Thread(target=self.run,args=(record,transport,signal),daemon=True,name='mysql-clone-'+record['job_id'])
             with self._maps_lock:self.workers[record['job_id']]=(worker,signal)
             worker.start()
             return self.get(record['job_id'],owner,endpoint)
@@ -205,13 +213,15 @@ class MySQLCloneJobs:
             directory=self.directory(record);directory.mkdir(parents=True,exist_ok=False,mode=0o700);private_directory(directory)
             if capture(transport.worker)!=record['source'] or capture(transport.monitor)!=record['source']:
                 raise CloneError('Native clone identity or policy changed before dispatch')
+            if record.get('donor') is not None and capture(transport.donor)!=record['donor']['native_identity']:
+                raise CloneError('Native clone donor identity or policy changed before dispatch')
             identity=thread_identity(transport.worker)
             prior=observation(transport.monitor)
             record['native_thread']=identity
             record['baseline_clone_id']=(prior.get('status') or {}).get('id')
             record['baseline_operation_key']=operation_key(prior.get('status'))
             locked=rows(transport.worker,'SELECT GET_LOCK(%s,0) AS acquired',(lock,))[0]['acquired']==1
-            if not locked:raise CloneError('Another application local clone holds the native server lock')
+            if not locked:raise CloneError('Another application clone holds the native server lock')
             try:can_cancel=thread_matches(transport.monitor,identity)
             except Exception:can_cancel=False
             self.update(record,native_thread=identity,baseline_clone_id=record['baseline_clone_id'],baseline_operation_key=record['baseline_operation_key'],
@@ -234,7 +244,9 @@ class MySQLCloneJobs:
             self.update(record,state='active',statement_dispatched=True)
             def execute():
                 try:
-                    rows(transport.worker,'CLONE LOCAL DATA DIRECTORY = %s',(record['options']['destination'],))
+                    if record.get('donor') is None:
+                        rows(transport.worker,'CLONE LOCAL DATA DIRECTORY = %s',(record['options']['destination'],))
+                    else:clone_statement(transport.worker,record,transport.password)
                     outcome['acknowledged']=True
                 except Exception as error:
                     number=getattr(error,'errno',None);sqlstate=getattr(error,'sqlstate',None)
