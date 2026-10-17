@@ -9,27 +9,30 @@ const oldHeight=window.innerHeight;
 beforeAll(() => {window.innerHeight=1800;});
 afterAll(() => {window.innerHeight=oldHeight;});
 
-it('selects an owned sealed input and exact target before review and confirmation',async () => {
+it.each(['mysql','mariadb'])('selects an owned sealed input and exact %s target before review and confirmation',async engine => {
+  const identityKey=engine==='mariadb' ? 'server_uid' : 'server_uuid';
+  const replayTarget=engine==='mariadb' ? 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0=' : target;
+  const prefix=engine+'_binlog_replay_';
   const post=jest.fn(async ({action}) => ({
-    mysql_binlog_replay_inspect:{identity:{server_uuid:target},state:{gtid_mode:'ON'}},
-    mysql_binlog_replay_sources:{sources:[{server_id:7,name:'Registered source'}],offset:0,total:1},
-    mysql_binlog_replay_archives:{jobs:[{job_id:'sealed-archive',state:'completed',native_process_termination_confirmed:true,result:{artifact:{total_bytes:'9007199254740993'}}}],offset:0,total:1},
-    mysql_binlog_replay_review:item,
-    mysql_binlog_replay_start:{...item,state:'native_load_returned',native_load_outcome:'returned'},
+    [prefix+'inspect']:{identity:{[identityKey]:replayTarget},state:{gtid_mode:'ON'}},
+    [prefix+'sources']:{sources:[{server_id:7,name:'Registered source'}],offset:0,total:1},
+    [prefix+'archives']:{jobs:[{job_id:'sealed-archive',state:'completed',native_process_termination_confirmed:true,result:{artifact:{total_bytes:'9007199254740993'}}}],offset:0,total:1},
+    [prefix+'review']:{...item,target:{[identityKey]:replayTarget}},
+    [prefix+'start']:{...item,state:'native_load_returned',native_load_outcome:'returned'},
   }[action]));
-  render(<Component post={post} />);expect(post).not.toHaveBeenCalled();
+  render(<Component post={post} engine={engine} />);expect(post).not.toHaveBeenCalled();
   expect(screen.getByRole('button',{name:'Review replay'})).toBeDisabled();
-  fireEvent.click(screen.getByRole('button',{name:'Inspect replay target'}));await screen.findByText('Native replay target: '+target);
+  fireEvent.click(screen.getByRole('button',{name:'Inspect replay target'}));await screen.findByText('Native replay target: '+replayTarget);
   fireEvent.click(screen.getByRole('button',{name:'Load archive sources'}));await screen.findByLabelText('Owned archive source');
   fireEvent.mouseDown(screen.getByLabelText('Owned archive source'));fireEvent.click(await screen.findByRole('option',{name:'Registered source (7)'}));
   fireEvent.click(screen.getByRole('button',{name:'Load sealed archives'}));await screen.findByLabelText('Sealed native archive');
   fireEvent.mouseDown(screen.getByLabelText('Sealed native archive'));fireEvent.click(await screen.findByRole('option',{name:'sealed-archive (9007199254740993 bytes)'}));
-  fireEvent.change(screen.getByLabelText('Confirm target server UUID'),{target:{value:target}});
+  fireEvent.change(screen.getByLabelText(engine==='mariadb' ? 'Confirm target server UID' : 'Confirm target server UUID'),{target:{value:replayTarget}});
   fireEvent.click(screen.getByRole('button',{name:'Review replay'}));await screen.findByText('Native commits are independent');
-  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_review',request:{source_server_id:7,archive_job_id:'sealed-archive',options:{stop_mode:'all',stop_gtid:null,target_confirmation:target,timeout_seconds:3600}}});
+  expect(post).toHaveBeenLastCalledWith({action:prefix+'review',request:{source_server_id:7,archive_job_id:'sealed-archive',options:{stop_mode:'all',stop_gtid:null,target_confirmation:replayTarget,timeout_seconds:3600}}});
   expect(screen.getByLabelText('Native replay review')).toHaveTextContent('sealed-native-bytes');
   fireEvent.click(screen.getByRole('button',{name:'Confirm and start replay'}));await screen.findByText(/Native load: returned/);
-  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_start',request:{job_id:item.job_id,review_digest:'digest',confirmed:true}});
+  expect(post).toHaveBeenLastCalledWith({action:prefix+'start',request:{job_id:item.job_id,review_digest:'digest',confirmed:true}});
   expect(screen.getByRole('button',{name:'Confirm and start replay'})).toBeDisabled();
   expect(screen.getByText(/Recovered data has not been independently verified/)).toBeInTheDocument();
 });

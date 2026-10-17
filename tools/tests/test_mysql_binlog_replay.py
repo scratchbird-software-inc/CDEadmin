@@ -11,16 +11,21 @@ from pgadmin.cdeadmin.workspace.mysql_binlog_jobs import digest
 from pgadmin.cdeadmin.workspace.mysql_binlog_replay_jobs import MySQLBinlogReplayJobs
 
 
-@pytest.fixture
-def manager(tmp_path):
-    jobs=MySQLBinlogReplayJobs(tmp_path/'jobs.json',tmp_path/'replays');endpoint=str(uuid.uuid4())
+@pytest.fixture(params=['mysql','mariadb'])
+def manager(tmp_path,request):
+    from pgadmin.cdeadmin.workspace.mariadb_binlog_replay_jobs import MariaDBBinlogReplayJobs
+    from pgadmin.cdeadmin.providers.mysql_family.mariadb_binlog_replay import options as maria_options
+    maria=request.param=='mariadb';cls=MariaDBBinlogReplayJobs if maria else MySQLBinlogReplayJobs
+    jobs=cls(tmp_path/'jobs.json',tmp_path/'replays');endpoint=str(uuid.uuid4())
     target={'version':'9.7.0','server_uuid':str(uuid.uuid4()),'authenticated_principal':'restore@%','active_role':'NONE'}
+    if maria:target['server_uid']='aBcDeFgHiJkLmNoPqRsTuVwXyZ0=';target.pop('server_uuid')
+    native_options=maria_options if maria else options
     state={'target':{'identity':target,'state':{'gtid_executed':'native-baseline'}},'input_reference':{
         'server_id':7,'endpoint_id':str(uuid.uuid4()),'job_id':str(uuid.uuid4()),'artifact_digest':'sealed',
         'summary':{'total_bytes':9007199254740993,'start_from':{'position':9007199254740993},'end_at':{'position':4}}}}
     program={'execution_host':{'kind':'application-host'},'executable_sha256':'native'}
     def review(scope=endpoint):
-        value=jobs.review(1,scope,options({'target_confirmation':target['server_uuid']}),{'identity':target,'state':state},'configuration',program)
+        value=jobs.review(1,scope,native_options({'target_confirmation':target.get('server_uuid',target.get('server_uid'))}),{'identity':target,'state':state},'configuration',program)
         return value,{'job_id':value['job_id'],'review_digest':value['review_digest'],'confirmed':True}
     current={'source':target,'program':program,'configuration':'configuration'}
     yield jobs,endpoint,target,review,current
@@ -58,7 +63,7 @@ def finished(jobs,review,endpoint):
 
 def test_replay_review_is_owned_durable_and_preserves_wide_archive_numbers(manager):
     jobs,endpoint,_target,review,_current=manager;item,_request=review()
-    restarted=MySQLBinlogReplayJobs(jobs.path,jobs.root);value=restarted.get(item['job_id'],1,endpoint)
+    restarted=type(jobs)(jobs.path,jobs.root);value=restarted.get(item['job_id'],1,endpoint)
     assert value['remote_database_mutation'] and value['automatic_retry'] is False and value['data_recovery_verified'] is False
     assert value['source_archive']['summary']['total_bytes']=='9007199254740993'
     assert value['source_archive']['summary']['start_from']['position']=='9007199254740993'
@@ -74,7 +79,7 @@ def test_native_control_and_process_finality_keep_distinct_outcomes(manager,mode
     jobs,endpoint,_target,review,current=manager;item,request=review();transport=Transport(mode)
     jobs.start(request,1,endpoint,current,transport);value=finished(jobs,item,endpoint)
     assert value['state']==state and value['native_load_outcome']==outcome and transport.closed and transport.calls==1
-    restarted=MySQLBinlogReplayJobs(jobs.path,jobs.root)
+    restarted=type(jobs)(jobs.path,jobs.root)
     assert restarted.start(request,1,endpoint,{},None)['state']==state and transport.calls==1
     other,_other_request=review(str(uuid.uuid4()))
     if blocked:
@@ -86,7 +91,7 @@ def test_native_control_and_process_finality_keep_distinct_outcomes(manager,mode
 def test_cancellation_does_not_infer_rollback_after_dispatch(manager,mode,expected):
     jobs,endpoint,_target,review,current=manager;item,request=review();transport=Transport(mode)
     jobs.start(request,1,endpoint,current,transport);assert transport.entered.wait(3)
-    other=MySQLBinlogReplayJobs(jobs.path,jobs.root);other.cancel(item['job_id'],1,endpoint)
+    other=type(jobs)(jobs.path,jobs.root);other.cancel(item['job_id'],1,endpoint)
     value=finished(jobs,item,endpoint)
     assert value['state']==expected and value['native_process_termination_confirmed'] is True and transport.closed
     assert 'stdout' not in value['tool_observation'] and 'stderr' not in value['tool_observation']
@@ -98,7 +103,7 @@ def test_unknown_reconciliation_never_relabels_return_or_replays_and_ack_is_exac
     record=jobs.load(item['job_id'],1,endpoint);observation={'all_archive_gtids_present':1,'native_lock_free':True}
     reconciled=jobs.reconcile(record,observation)
     assert reconciled['native_load_outcome']=='unknown' and reconciled['state']=='unknown'
-    acknowledgement={'target_confirmation':target['server_uuid'],'observation_digest':digest(observation)}
+    acknowledgement={'target_confirmation':target.get('server_uuid',target.get('server_uid')),'observation_digest':digest(observation)}
     with pytest.raises(BinlogArchiveError,match='exact'):jobs.acknowledge(record,{**observation,'all_archive_gtids_present':0},acknowledgement)
     with pytest.raises(BinlogArchiveError,match='termination'):jobs.acknowledge(record,{**observation,'native_lock_free':False},{**acknowledgement,'observation_digest':digest({**observation,'native_lock_free':False})})
     acknowledged=jobs.acknowledge(record,observation,acknowledgement)
@@ -111,7 +116,7 @@ def test_active_native_worker_cannot_be_acknowledged_or_superseded(manager):
     jobs,endpoint,target,review,current=manager;item,request=review();transport=Transport('cancel-after')
     jobs.start(request,1,endpoint,current,transport);assert transport.entered.wait(3)
     record=jobs.load(item['job_id'],1,endpoint);observation={'native_lock_free':True}
-    with pytest.raises(BinlogArchiveError,match='active'):jobs.acknowledge(record,observation,{'target_confirmation':target['server_uuid'],'observation_digest':digest(observation)})
+    with pytest.raises(BinlogArchiveError,match='active'):jobs.acknowledge(record,observation,{'target_confirmation':target.get('server_uuid',target.get('server_uid')),'observation_digest':digest(observation)})
     other,other_request=review(str(uuid.uuid4()));other_transport=Transport('returned')
     with pytest.raises(BinlogArchiveError,match='unresolved'):jobs.start(other_request,1,other['endpoint_id'],current,other_transport)
     assert other_transport.closed and other_transport.calls==0

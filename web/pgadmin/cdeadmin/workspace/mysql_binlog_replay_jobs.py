@@ -31,6 +31,9 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         result['data_recovery_verified']=False
         return result
 
+    @staticmethod
+    def target_identity(record):return record['source']['server_uuid']
+
     @contextmanager
     def fence_store(self,target_uuid):
         root=Path(str(self.path)+'.target-fences');root.mkdir(parents=True,exist_ok=True,mode=0o700);private_directory(root)
@@ -41,7 +44,7 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
         finally:os.close(descriptor)
 
     def claim_fence(self,record):
-        with self.fence_store(record['source']['server_uuid']) as store:
+        with self.fence_store(self.target_identity(record)) as store:
             def claim(state):
                 current=state.get('replay_fence')
                 if current is not None and current['job_id']!=record['job_id']:
@@ -54,7 +57,7 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             store.change(claim)
 
     def release_fence(self,record):
-        with self.fence_store(record['source']['server_uuid']) as store:
+        with self.fence_store(self.target_identity(record)) as store:
             def release(state):
                 if state.get('replay_fence',{}).get('job_id')==record['job_id']:state.pop('replay_fence',None)
             store.change(release)
@@ -128,7 +131,7 @@ class MySQLBinlogReplayJobs(MySQLBinlogJobs):
             if known and known[0].is_alive():raise BinlogArchiveError('The native replay worker is still active')
         record=self.load(record['job_id'],record['owner'],record['endpoint_id'])
         if self.public(record)['state']!='unknown':raise BinlogArchiveError('Only an uncertain native replay needs target acknowledgement')
-        if request.get('target_confirmation')!=record['source']['server_uuid'] or request.get('observation_digest')!=digest(observation):
+        if request.get('target_confirmation')!=self.target_identity(record) or request.get('observation_digest')!=digest(observation):
             raise BinlogArchiveError('Confirm the exact native target and current reconciliation facts')
         if record.get('native_process_termination_confirmed') is not True or observation.get('native_lock_free') is not True:
             raise BinlogArchiveError('Native process termination and the released native replay lock must be observed before acknowledging this target')

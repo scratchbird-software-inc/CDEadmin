@@ -231,8 +231,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Independent native category/DDN reconciliation; retained catalog and
        mode/role-aware completion; native normal/Oracle-mode preparation.
      - Native administration, data/DDN work and independently verified closed
-       raw logs with native checksum, compressed-event and GTID-domain semantics.
-     - Native replay/PITR/physical continuity, active/continuous logs and
+       raw logs with native checksum, compressed-event and GTID-domain semantics;
+       reviewed native archive replay with target fencing and GTID boundaries.
+     - Complete PITR/physical continuity, active/continuous logs and
        retention, wider procedural/package scopes and full native operational
        and installed-capability acceptance.
    * - PostgreSQL 18.3
@@ -1136,8 +1137,8 @@ Native utility dependencies use explicit application-host execution grants and
 registered transport/credential policy. Both MySQL and MariaDB now flush file
 data before atomic archive-name publication. Archive verification does not
 establish successful replay/recovery. Active/continuous collection, retention,
-native replay/PITR, physical continuity and production cutover remain separate
-open requirements.
+complete PITR, physical continuity and production cutover remain separate
+open requirements. Reviewed archive replay is described below.
 
 SQLite native keyword-name completion
 ======================================
@@ -1231,3 +1232,42 @@ escaping path. Typed quote, backslash, NUL, Unicode and binary values retain
 their original representations across tested mode changes. Full character-set
 switching, mixed-mode parameterized batches and additional parser/rewrite
 components retain separate reconciliation and qualification.
+
+MariaDB native closed-log replay
+-------------------------------
+
+MariaDB 12.2.2 now has a dedicated server Restore workflow for sealed native
+closed-log archives. It uses the registered transport and delegated credential,
+checks both native utility identities, and runs ``mariadb-binlog`` followed by
+``mariadb`` on the explicitly recorded application execution host. Reviews bind
+the owned archive digest, native target ``server_uid`` and principal, current
+GTID state, options, executable hashes and runtime policy. The archive source
+can be offline. A compatible restored base must already be independently
+verified; native GTID admission does not prove that base's data contents.
+
+Native GTID/GTID_LIST event headers preserve MariaDB domain/server/unsigned
+64-bit sequence identities. Resume admission combines the observed binlog and
+replication positions per domain. With preserved source server IDs, native
+``gtid_current_pos`` alone can lag ``gtid_binlog_pos`` on a separate target.
+All three native positions are guarded and retained separately; the derived
+replay position never changes the server replication stores. The native decoder filters transactions already
+present on the target. Stop-before/stop-after boundaries use complete native
+transaction groups in the ordered archived files. An in-client target/GTID
+guard and named lock precede archive execution; a changed target or held lock
+stops the batch. Replaying keeps native GTID assignments and requires target
+binary logging and GTID strict mode. Complete archive checksums, framing and
+cross-file GTID state are checked before native execution.
+
+Durable owner/endpoint receipts distinguish utility return, local process
+termination, native domain-sequence observations and independent data recovery.
+A missing acknowledgement keeps the result unknown and fences every registration
+of that native target. Reconciliation does not convert an unknown result into
+success. Releasing that fence requires confirmed local process termination, a
+free native replay lock and acknowledgement of the exact current observations.
+An old job never replays automatically. Cancellation cannot undo committed
+transactions. SQL output and raw native diagnostics remain private.
+
+This closes the application archived-log replay gap in its recorded native
+scope. Physical base recovery, continuous collection/retention, production
+cutover, remote execution hosts and platform-team qualification remain separate
+acceptance work. Persistent history qualification remains owner-deferred.

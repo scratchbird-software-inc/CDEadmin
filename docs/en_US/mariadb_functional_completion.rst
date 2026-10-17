@@ -424,5 +424,24 @@ archive formats and verifiers remain separate for MySQL and MariaDB. Configure
 ``CDEADMIN_MARIADB_BINLOG_BINARY``, ``CDEADMIN_MARIADB_BINLOG_ROOT`` and the
 optional ``CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS`` at the application host.
 The native development provisioner already includes the platform's vendor
-binary. Continuous/active-log collection, retention automation, native replay,
+binary. Continuous/active-log collection and retention automation,
 PITR and physical continuity retain separate product acceptance.
+
+
+Native archived-log replay
+-------------------------
+
+The server Restore menu exposes native MariaDB 12.2.2 archive replay using
+``mariadb-binlog`` and ``mariadb`` on the recorded application host. Select an
+owned sealed archive, inspect the separate native target, confirm its exact
+``server_uid``, review native GTID and stop-before/stop-after boundaries, then
+confirm dispatch. Registered transport and delegated credentials remain bound
+to that review. The source server can be offline.
+
+Native unsigned domain/server/sequence positions, sealed bytes and native
+transaction group boundaries drive admission. Restore and independently verify
+a compatible base first. The in-client native target/state guard and named lock
+precede replay. Durable cross-registration fences retain uncertain outcomes;
+fresh native observations and exact acknowledgement cannot rewrite an unknown
+result as success. Utility return and domain-sequence coverage do not verify
+recovered data, physical recovery, complete PITR or production cutover.

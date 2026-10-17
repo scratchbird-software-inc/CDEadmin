@@ -8,13 +8,13 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import _run,_wait_unti
 
 
 @contextmanager
-def server(output):
+def server(output,*,server_id=173):
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     name='sr-mariadb-'+secrets.token_hex(8);started=False
     proof={'image':_image_identity('mariadb:12.2.2'),'owned_server_stopped':False}
     try:
         _run(['docker','run','--rm','-d','--name',name,'-p','127.0.0.1::3306','-e','MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1',
-            'mariadb:12.2.2','--server-id=173','--log-bin=sr-owned','--gtid-strict-mode=ON','--binlog-format=ROW'])
+            'mariadb:12.2.2','--server-id='+str(server_id),'--log-bin=sr-owned','--gtid-strict-mode=ON','--binlog-format=ROW'])
         started=True;port=_wait_until_ready('mariadb',name,180)
         connection=_root_connection('mariadb',port)
         try:
