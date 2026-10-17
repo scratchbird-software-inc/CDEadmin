@@ -1296,3 +1296,22 @@ native diagnostic state across application metadata reads remains a separate
 requirement. Session-tracking-disabled pure connections, mixed-charset/mixed-mode
 multi-statement parameter batches, the complete native charset denominator and
 all optional protocol/parser components retain separate acceptance work.
+
+SQLite coordinated dependency retirement
+---------------------------------------
+
+Explicitly selected view, index and trigger removals can now share a reviewed
+native DDN batch with supported table rebuilds, column mappings, additions and
+replacements. Removing a view also binds the exact observed identities of its
+native children. Filtered or missing DDN rows still never authorize deletion.
+Table and virtual-table deletions retain their separate-review requirement.
+
+The owned SQLite write transaction revalidates the original file and dependency
+facts before dispatch, removes selected dependencies before rebuilding, and
+checks final views, trigger bindings, foreign keys and native postimages before
+commit. An invalid new binding or failed native constraint rolls back the
+retirements and rebuild together. Stale dependencies refuse dispatch. Durable
+receipts do not repeat a completed or refused migration.
+
+This extends coordinated migration scope; complete native rename/generation and
+installed-module reconciliation remain separate full-product requirements.

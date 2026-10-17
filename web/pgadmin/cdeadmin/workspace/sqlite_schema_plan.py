@@ -146,7 +146,8 @@ def _compile_exact(connection, row, source):
 def batch_blockers(operations, desired):
     """Keep preservation contracts explicit when combining admitted stages."""
     blockers=[]
-    if any(item['operation']=='drop' for item in operations) and any(item['operation']!='drop' for item in operations):
+    mixed=any(item['operation']=='drop' for item in operations) and any(item['operation']!='drop' for item in operations)
+    if mixed and any(item['operation']=='drop' and item.get('kind') not in {'view','index','trigger'} for item in operations):
         blockers.append('Review deletion separately from additions')
     rebuilt={item['name'] for item in operations if item['operation']=='rebuild'}
     for item in operations:
@@ -410,4 +411,4 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         'operations': operations, 'blockers': blockers, 'conflicts': conflicts,
         'execution_sha256': digest(operations), 'native_grammar_validated': True,
         'ready_for_review': executable, 'application_supported': executable,
-        'warnings': ['Deletions require exact explicit identities; missing DDN rows alone never delete. Deletions outside selected rebuilt tables require a separate review. Table rebuilds require explicit selection and their native preservation checks.']}
+        'warnings': ['Deletions require exact explicit identities; missing DDN rows alone never delete. Table and virtual-table deletions require a separate review. Explicit view, index and trigger removals can share a reviewed batch with admitted creations, replacements and rebuilds. Table rebuilds require explicit selection and their native preservation checks.']}
