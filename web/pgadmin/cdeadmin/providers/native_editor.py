@@ -195,6 +195,9 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 add('type', [database, schema, name])
         else:
             context.update(version=str(handle.info.version), sql_dialect=dialect or handle.sql_dialect)
+            identity=query('authentication','SELECT CURRENT_USER,CURRENT_ROLE FROM RDB$DATABASE')
+            if len(identity)!=1:raise RelationalClientError('Native editor authentication context is unavailable')
+            context.update(authenticated_principal=identity[0][0],active_role=identity[0][1])
             relations = query('relations', 'SELECT RDB$RELATION_NAME,CASE WHEN RDB$VIEW_BLR IS NULL THEN 0 ELSE 1 END FROM RDB$RELATIONS')
             for name, view in relations:
                 add('view' if view else 'table', [name])

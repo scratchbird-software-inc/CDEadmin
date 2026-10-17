@@ -772,6 +772,11 @@ change invalidates the previous context even when visible object names stay the
 same. Metadata observation uses the retained native session without finishing
 pending interactive work.
 
+Firebird network and embedded editor contexts also observe CURRENT_USER and
+CURRENT_ROLE from the retained attachment. Native role changes invalidate the
+completion context. Metadata releases its own idle read transaction while
+preserving an existing interactive transaction and its pending writes.
+
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 
