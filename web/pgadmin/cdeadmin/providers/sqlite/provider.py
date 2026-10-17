@@ -70,6 +70,92 @@ PROFILE = PilotProfile(
 
 
 class SQLiteAdministration(RelationalAdministration):
+    def _form(self, kind, operation):
+        from .virtual_tables import KINDS, form
+        if kind in KINDS and operation == 'create':
+            return form(self._field, kind)
+        return super()._form(kind, operation)
+
+    def _normalize_draft(self, kind, operation, draft):
+        from .virtual_tables import KINDS
+        if kind in KINDS and operation == 'create' and isinstance(draft, Mapping):
+            draft = dict(draft)
+            if 'options' in draft and not isinstance(draft['options'], Mapping):
+                raise RelationalClientError('create options must be an object')
+            if 'module_options' in draft:
+                options = draft.get('options', {})
+                if not isinstance(options, Mapping):
+                    raise RelationalClientError('create options must be an object')
+                draft['options'] = {**options, 'module_options': draft.pop('module_options')}
+        return super()._normalize_draft(kind, operation, draft)
+
+    def validate(self, request):
+        from .virtual_tables import KINDS
+        result = super().validate(request)
+        if request.get('resource_kind') in KINDS and request.get('operation_id') == 'create':
+            try:
+                normalized = {**request, 'draft': self._normalize_draft(
+                    request['resource_kind'], 'create', request.get('draft', {}))}
+                self._compile_create(normalized)
+            except (RelationalClientError, KeyError) as error:
+                result['errors'].append({'field_id': 'module_options',
+                    'code': 'invalid_sqlite_virtual_constructor', 'message': str(error)})
+        return result
+
+    def _compile_create(self, request):
+        from .virtual_tables import KINDS, arguments
+        if request['resource_kind'] not in KINDS:
+            return super()._compile_create(request)
+        draft = request['draft']
+        options = draft.get('options') or {}
+        if not isinstance(options, Mapping):
+            raise RelationalClientError('create options must be an object')
+        if set(options) - {'parent', 'database', 'schema', 'module', 'columns', 'module_options'}:
+            raise RelationalClientError('Unknown SQLite virtual-table create option')
+        name = self._identifier(draft['name'])
+        parent = options.get('parent') or options.get('schema') or options.get('database') or 'main'
+        path = self._path_value(parent)
+        if len(path) != 1:
+            raise RelationalClientError('SQLite virtual-table database must be a single path component')
+        module = options.get('module')
+        args = arguments(module, options.get('columns'), options.get('module_options', {}), schema=path[0])
+        qualified = self._new_object_name(name, {**options, 'parent': path})
+        return [{'source': f'CREATE VIRTUAL TABLE {qualified} USING {module}' +
+                 (' (' + args + ')' if args else ''), 'parameters': ()}]
+
+    def _compile(self, request):
+        from .virtual_tables import KINDS
+        result = super()._compile(request)
+        if request['resource_kind'] in KINDS and request['operation_id'] == 'create':
+            options = request['draft'].get('options') or {}
+            parent = options.get('parent') or options.get('schema') or options.get('database') or 'main'
+            result['sqlite_virtual_constructor'] = {
+                'schema': self._path_value(parent)[0], 'name': request['draft']['name'],
+                'module': options['module'],
+            }
+            result['warnings'] = [
+                'SQLite checks installed modules, tokenizer availability and native constructor constraints at execution.',
+                'TEMP and attached database objects require the retained session. Session operations remain staged until its transaction is committed.',
+                'External-content indexes require explicit population and synchronization with their content table.',
+            ]
+        return result
+
+    def apply(self, client, request, connection=None):
+        from .virtual_tables import apply_creation
+        compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        if 'sqlite_virtual_constructor' in compiled:
+            with client._lock:
+                return apply_creation(client, request, connection)
+        return super().apply(client, request, connection)
+
+    def validate_operation_post_state(self, client, request):
+        from .virtual_tables import observe_creation
+        compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        if 'sqlite_virtual_constructor' in compiled:
+            with client._lock:
+                return observe_creation(client, request)
+        return {'confirmed': False, 'reason': 'provider_post_state_validator_unavailable'}
+
     @staticmethod
     def _validate_sqlite_database_operation(operation, draft, route):
         validate = RelationalAdministration._validate_sqlite_database_operation

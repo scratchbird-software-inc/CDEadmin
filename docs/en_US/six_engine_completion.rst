@@ -1442,3 +1442,23 @@ checked independently from native column refusal. Additional native cases cover
 authorizer denial and damaged FTS configuration while another connection keeps
 pending work and a savepoint. This does not install the missing component or
 claim that the inspecting client exposes every extension-management API.
+
+SQLite structured virtual-table creation
+-----------------------------------------
+
+The explorer now exposes native structured constructors for FTS3/4/5,
+RTree/RTree_i32, Geopoly, FTS4aux, FTS5vocab, FTS3tokenize and dbstat.
+Module-specific options are typed values, quoted through each native constructor
+grammar. They include tokenizers, prefix indexes, FTS4 compression and language
+mapping, FTS5 contentless/external-content modes and spatial auxiliary columns.
+SQLite still decides installed availability and native constructor constraints.
+Eponymous-only functions are not presented as creatable modules.
+
+Independent connections own a write transaction; retained connections stage
+creation inside a private savepoint and preserve caller transactions. TEMP and
+attached targets require a retained session. A failed constructor or declaration
+check rolls back this operation; a missing reply after native commit remains
+unknown. Fresh post-state observations compare the recorded native definition
+and columns. An external-content constructor does not populate or synchronize
+the index. This scope does not close arbitrary extension constructors or the
+remaining native maintenance/transformation workflows.

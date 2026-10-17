@@ -172,6 +172,19 @@ SQLITE-COMP-05: DDN design exchange
   column and FTS4 row/language mappings retain separate acceptance. Native ALTER
   alone can leave an external-content search table unusable.
 
+  The explorer's virtual-table creation form provides structured native
+  constructors for FTS3/4/5, RTree/RTree integer, Geopoly, FTS4 auxiliary,
+  FTS5 vocabulary, FTS3 tokenizer and dbstat tables. Module options preserve
+  tokenizer arguments, FTS4 compression callbacks and language/content mapping,
+  FTS5 contentless and external-content settings, vocabulary modes and spatial
+  auxiliary columns. The connected SQLite library admits installed modules and
+  native constraints. Eponymous-only modules are not offered as creatable tables.
+  Owned creation uses a native transaction; retained-session creation uses a
+  private savepoint without committing caller work. TEMP/attached creation
+  requires that retained session. Receipts distinguish staged and committed
+  definitions; fresh post-state checks compare native definitions and columns.
+  External-content population and synchronization remain explicit operations.
+
   Native FTS configuration controls generate normalized desired DDN through
   SQLite's public setting commands in an empty private module. Configuration-
   only application preserves the table definition and content, rechecks the
