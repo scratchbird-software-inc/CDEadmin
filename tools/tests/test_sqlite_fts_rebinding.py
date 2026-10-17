@@ -17,24 +17,29 @@ CASES=[(module,'owner',failure) for module in ('fts4','fts5') for failure in (No
 CASES += [(module,mode,None) for module in ('fts4','fts5') for mode in ('chain','rowid','unrelated')]
 CASES += [(module,mode,failure) for module in ('fts4','fts5') for mode in ('public','public-chain')
           for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [('fts4',mode,failure) for mode in ('language','language-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [(module,'control',failure) for module in ('fts4','fts5')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
 
 
 @pytest.mark.parametrize('module,mode,failure',CASES)
 def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(tmp_path,module,mode,failure):
     path=tmp_path/'external.sqlite';owner="Owner'雪";search="search'雪";new_owner='renamed:雪';new_search='rebuilt:雪';wide=9007199254740993
+    language=mode.startswith('language')
     quote=lambda value:'"'+value.replace('"','""')+'"'
     with closing(sqlite3.connect(path)) as connection:
-        connection.execute('CREATE TABLE '+quote(owner)+'(id INTEGER PRIMARY KEY AUTOINCREMENT,body TEXT,extra TEXT)')
+        connection.execute('CREATE TABLE '+quote(owner)+'(id INTEGER PRIMARY KEY AUTOINCREMENT,body TEXT,extra TEXT'+(',lang INTEGER DEFAULT 3' if language else '')+')')
         connection.executemany('INSERT INTO '+quote(owner)+'(id,body,extra) VALUES(?,?,?)',[(1,'native token','one'),(wide,'native 雪 token','two')])
-        connection.execute('CREATE VIRTUAL TABLE '+quote(search)+' USING "'+module+'"(body,content=\'owner\'\'雪\''+(",content_rowid='id'" if module=='fts5' else '')+')')
+        connection.execute('CREATE VIRTUAL TABLE '+quote(search)+' USING "'+module+'"(body,content=\'owner\'\'雪\''+(",content_rowid='id'" if module=='fts5' else ",languageid='lang'" if language else '')+')')
         connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('rebuild')")
         if module=='fts5':
             for key,value in [('automerge',8),('usermerge',4),('crisismerge',10),('deletemerge',11),('pgsz',1024),('hashsize',16384),('rank','bm25(2.0)'),('secure-delete',1),('insttoken',1)]:
                 connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+',rank) VALUES(?,?)',(key,value))
         else:connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('automerge=4')")
-        connection.execute('CREATE VIEW projection AS SELECT rowid,body FROM '+quote(search));connection.commit()
-        if mode.startswith('public'):
-            connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON '+quote(owner)+' BEGIN INSERT INTO '+quote(search)+'(rowid,body) VALUES(new.id,new.body);END')
+        connection.execute('CREATE VIEW projection AS SELECT rowid,body FROM '+quote(search)+(' WHERE '+('lang=3 AND ' if language else '')+quote(search)+" MATCH 'native'" if language or mode=='control' else ''));connection.commit()
+        if mode.startswith('public') or language or mode=='control':
+            connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON '+quote(owner)+' BEGIN INSERT INTO '+quote(search)+'(rowid,body'+(',lang' if language else '')+') VALUES(new.id,new.body'+(',new.lang' if language else '')+');END')
             connection.commit()
         original=connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()
         saved=configuration(connection,'main',search,module)
@@ -42,12 +47,15 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
     try:
         service=workspace(tmp_path,provider,route)
         baseline=json.dumps(build_export(provider.capture_catalog(route,include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
-        renames=([{'kind':'column','table':owner,'from':'body','to':'text:雪'}] if mode.startswith('public') else
+        renames=([{'kind':'table','table':search,'to':new_search}] if mode=='control' else
+            [{'kind':'column','table':owner,'from':'lang','to':'intermediate:雪' if mode=='language-chain' else 'locale:雪'}] if language else
+            [{'kind':'column','table':owner,'from':'body','to':'text:雪'}] if mode.startswith('public') else
             [{'kind':'table','table':owner,'to':new_owner}] if mode in {'owner','chain'} else
             [{'kind':'column','table':owner,'from':'id' if mode=='rowid' else 'extra','to':'new_id' if mode=='rowid' else 'new_extra'}])
         if mode=='chain':renames.append({'kind':'table','table':search,'to':new_search})
         if mode=='public-chain':renames.extend([{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
-        required=mode in {'owner','chain'} or mode.startswith('public') or module=='fts5' and mode=='rowid'
+        if mode=='language-chain':renames.extend([{'kind':'column','table':owner,'from':'intermediate:雪','to':'locale:雪'},{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
+        required=mode in {'owner','chain','control'} or mode.startswith('public') or language or module=='fts5' and mode=='rowid'
         selected=[_resource_id('fts-table',['main'],search)] if required else []
         request={'database_target_id':'file','baseline':baseline,'renames':renames,'fts_rebindings':selected}
         generated=service.sqlite_schema_rename_design('owned',request)
@@ -86,21 +94,23 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
         assert service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)['state']==expected
         provider.client._connect.assert_not_called()
         applied=failure in {None,'lost_commit'}
-        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain'} else owner
-        actual_search=new_search if applied and mode in {'chain','public-chain'} else search
+        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain','language-chain'} else owner
+        actual_search=new_search if applied and mode in {'chain','public-chain','language-chain','control'} else search
         actual_field='text:雪' if applied and mode.startswith('public') else 'body'
+        actual_language='locale:雪' if applied and language else 'lang'
+        language_filter=' AND '+quote(actual_language)+'=3' if language else ''
         with closing(sqlite3.connect(path)) as observer:
-            assert observer.execute('SELECT rowid,* FROM '+quote(actual_owner)+' ORDER BY rowid').fetchall()==[(1,1,'native token','one'),(wide,wide,'native 雪 token','two')]
-            assert observer.execute('SELECT rowid,'+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native' ORDER BY rowid").fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            assert observer.execute('SELECT rowid,* FROM '+quote(actual_owner)+' ORDER BY rowid').fetchall()==[row+((3,) if language else ()) for row in [(1,1,'native token','one'),(wide,wide,'native 雪 token','two')]]
+            assert observer.execute('SELECT rowid,'+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native'"+language_filter+' ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
             assert observer.execute('SELECT * FROM projection ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
             assert configuration(observer,'main',actual_search,module)['commands']==saved['commands']
             if not applied:assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==original
             else:
                 observer.execute('INSERT INTO '+quote(actual_search)+'('+quote(actual_search)+(',rank) VALUES(\'integrity-check\',1)' if module=='fts5' else ") VALUES('integrity-check')"))
                 assert observer.execute('SELECT seq FROM sqlite_sequence WHERE name=?',(actual_owner,)).fetchone()==(wide,)
-                if mode.startswith('public'):
+                if mode.startswith('public') or language or mode=='control':
                     observer.execute('INSERT INTO '+quote(actual_owner)+'('+quote(actual_field)+") VALUES('fresh native term')")
-                    assert observer.execute('SELECT '+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'fresh'").fetchall()==[('fresh native term',)]
+                    assert observer.execute('SELECT '+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'fresh'"+language_filter).fetchall()==[('fresh native term',)]
     finally:provider.close()
 
 

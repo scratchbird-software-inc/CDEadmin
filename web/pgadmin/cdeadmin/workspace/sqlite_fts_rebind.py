@@ -44,26 +44,36 @@ def plans(baseline,renames,selected):
         module=native[1].lower();source=row['native']['ddl'];content=option(source,'content')
         if not content:continue
         original_content=content;name=row['name'];rowid=option(source,'content_rowid') or 'rowid';new_rowid=rowid
+        language=option(source,'languageid') if module=='fts4' else None;new_language=language
         columns=row['native'].get('columns',[])
         fields={item['name'].translate(FOLD):item['name'] for item in columns if not item.get('hidden')}
-        field_renames=[]
+        field_renames=[];control_renames=[]
         for item in renames:
             if item['kind']=='table':
-                if equal(item['table'],name):name=item['to']
+                if equal(item['table'],name):control_renames.append((name,item['to']));name=item['to']
                 if equal(item['table'],content):content=item['to']
             elif equal(item['table'],content):
                 if item['from'].translate(FOLD) in fields:
                     former=fields.pop(item['from'].translate(FOLD));fields[item['to'].translate(FOLD)]=item['to']
                     field_renames.append((former,item['to']))
+                elif module=='fts4' and new_language and equal(item['from'],new_language):
+                    observed=[column['name'] for column in columns if equal(column['name'],language)]
+                    if len(observed)!=1:raise ValueError('Native FTS4 language-column observation is incomplete')
+                    former=observed[0] if new_language==language else new_language
+                    field_renames.append((former,item['to']));new_language=item['to']
                 if module=='fts5' and equal(item['from'],new_rowid):new_rowid=item['to']
-                elif module=='fts4' and (item['from'].translate(FOLD) in {'rowid','oid','_rowid_'} or
-                        option(source,'languageid') and equal(item['from'],option(source,'languageid'))):
-                    raise ValueError('Native FTS4 row/language identity renames require a dedicated mapping')
-        if content==original_content and new_rowid==rowid and not field_renames:continue
+                elif module=='fts4' and item['from'].translate(FOLD) in {'rowid','oid','_rowid_'}:
+                    raise ValueError('Native FTS4 row identity renames require a dedicated mapping')
+        if (content==original_content and new_rowid==rowid and not field_renames and
+                not (control_renames and row['resource_id'] in selected)):continue
         constructor=arguments(source)
         for former,renamed in field_renames:
             constructor=[rename_field(argument,former,renamed) for argument in constructor]
-        replacements={'content':content,**({'content_rowid':new_rowid} if new_rowid!=rowid else {})}
+        # The virtual module's hidden MATCH/control column follows its table
+        # name. Our ordinary rewrite relation must model that change as well.
+        if field_renames or row['resource_id'] in selected:field_renames.extend(control_renames)
+        replacements={'content':content,**({'content_rowid':new_rowid} if new_rowid!=rowid else {}),
+                      **({'languageid':new_language} if new_language!=language else {})}
         for key,value in replacements.items():
             encoded="'"+value.replace("'","''")+"'";found=False
             for index,argument in enumerate(constructor):

@@ -172,7 +172,10 @@ SQLITE-COMP-05: DDN design exchange
   content-column changes reconstruct selected indexes and use native schema
   rewriting for dependent ordinary views and maintenance triggers. Quoted
   column names and native UNINDEXED/notindexed settings survive the change.
-  Native table-function views and FTS4 row/language mappings retain separate
+  FTS4 language-column changes preserve language-specific searches and rewrite
+  dependent views and maintenance triggers. Explicitly selected reconstruction
+  also rewrites the hidden MATCH/control column when the FTS table is renamed.
+  Native table-function views and FTS4 row-identity mappings retain separate
   adapter acceptance. Native ALTER alone can leave an external-content search
   table unusable.
 

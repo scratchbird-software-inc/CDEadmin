@@ -13,10 +13,13 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external_content=False,fts_settings=False,public_column=False):
+def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external_content=False,fts_settings=False,public_column=False,fts_language=False):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700);builtins.SERVER_MODE=None
+    if fts_language:
+        if virtual_module or fts_settings or public_column:raise ValueError('FTS4 language qualification selects its own native fixture')
+        external_content=True
     if fts_settings and (virtual_module!='fts5' or external_content):raise ValueError('FTS settings qualification selects the native FTS5 fixture')
     if public_column and not external_content:raise ValueError('Public FTS column qualification requires external content')
     proof={'complete':False,'checks':[],'history_testing':'not run','source_sha256':{}}
@@ -50,12 +53,15 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
                 'CREATE VIEW projection AS SELECT id,note FROM parent; '
                 "INSERT INTO parent VALUES(9007199254740993,'雪'); INSERT INTO child VALUES(1,9007199254740993);")
         if external_content:
-            connection.execute("CREATE VIRTUAL TABLE search USING fts5(note,content='parent',content_rowid='id')")
+            if fts_language:connection.execute('ALTER TABLE parent ADD COLUMN lang INTEGER DEFAULT 3')
+            connection.execute("CREATE VIRTUAL TABLE search USING "+("fts4(note,content='parent',languageid='lang')" if fts_language else "fts5(note,content='parent',content_rowid='id')"))
             connection.execute("INSERT INTO search(search) VALUES('rebuild')")
-            for key,value in [('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]:connection.execute('INSERT INTO search(search,rank) VALUES(?,?)',(key,value))
-            if public_column:
-                connection.execute('CREATE VIEW fts_projection AS SELECT rowid,note FROM search')
-                connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON parent BEGIN INSERT INTO search(rowid,note) VALUES(new.id,new.note);END')
+            if fts_language:connection.execute("INSERT INTO search(search) VALUES('automerge=8')")
+            else:
+                for key,value in [('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]:connection.execute('INSERT INTO search(search,rank) VALUES(?,?)',(key,value))
+            if public_column or fts_language:
+                connection.execute('CREATE VIEW fts_projection AS SELECT rowid,note FROM search'+(" WHERE lang=3 AND search MATCH '雪'" if fts_language else ''))
+                connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON parent BEGIN INSERT INTO search(rowid,note'+(',lang' if fts_language else '')+') VALUES(new.id,new.note'+(',new.lang' if fts_language else '')+');END')
         connection.commit()
     finally:connection.close()
     app=create_app('ScratchRobin-native-sqlite-rename');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start()
@@ -84,6 +90,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
             return value['data']
         captured=post('sqlite_catalog_export',{'include_system':False});baseline=json.dumps(captured['snapshot'])
         renames=[{'kind':'table','table':'parent','to':'renamed:雪'},*([{'kind':'column','table':'renamed:雪','from':'note','to':'body:雪'}] if public_column or not virtual_module and not external_content else [])]
+        if fts_language:renames.append({'kind':'column','table':'renamed:雪','from':'lang','to':'locale:雪'})
         if external_content:
             from pgadmin.cdeadmin.providers.sqlite.provider import _resource_id
             fts_rebindings=[_resource_id('fts-table',['main'],'search')]
@@ -100,7 +107,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
         assert post('sqlite_schema_apply',apply_request)==result
         connection=sqlite3.connect(path)
         try:
-            assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
+            assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪',3) if fts_language else (9007199254740993,'雪')]
             assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
         finally:connection.close()
@@ -125,34 +132,38 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
                 assert observer.execute('SELECT rowid,body FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
             proof['checks'].append('authenticated-native-normalized-fts-settings-generation-review-once-only-apply-and-independent-content')
         if binary:
-            proof['browser']=browser(app,output,path,sid,target_label,binary,driver_binary,external_content=external_content,fts_settings=fts_settings,public_column=public_column)
+            proof['browser']=browser(app,output,path,sid,target_label,binary,driver_binary,external_content=external_content,fts_settings=fts_settings,public_column=public_column,fts_language=fts_language)
             connection=sqlite3.connect(path)
             try:
-                final_name='renamed:雪' if fts_settings or public_column else 'browser:雪'
-                assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "'+final_name+'"').fetchall()==[(9007199254740993,'雪')]
+                final_name='renamed:雪' if fts_settings or public_column or fts_language else 'browser:雪'
+                assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "'+final_name+'"').fetchall()==[(9007199254740993,'雪',3) if fts_language else (9007199254740993,'雪')]
                 if virtual_module and not external_content:assert connection.execute('SELECT rowid FROM "'+final_name+'" WHERE "'+final_name+'" MATCH \'雪\'').fetchall()==[(9007199254740993,)]
                 if fts_settings:
                     settings=dict(connection.execute('SELECT k,v FROM "renamed:雪_config"'))
                     assert {key:settings[key] for key in ('automerge','rank','pgsz','insttoken')}=={'automerge':6,'rank':'bm25(2.0)','pgsz':1024,'insttoken':1}
                 if external_content:
                     field='"browser:雪"' if public_column else 'note'
-                    assert connection.execute('SELECT rowid,'+field+" FROM search WHERE search MATCH '雪'").fetchall()==[(9007199254740993,'雪')]
-                    assert connection.execute('SELECT k,v FROM search_config WHERE k<>\'version\' ORDER BY k').fetchall()==[('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]
+                    language_filter=' AND "browser:雪"=3' if fts_language else ''
+                    assert connection.execute('SELECT rowid,'+field+" FROM search WHERE search MATCH '雪'"+language_filter).fetchall()==[(9007199254740993,'雪')]
+                    if fts_language:
+                        from pgadmin.cdeadmin.providers.sqlite.fts_configuration import capture
+                        assert capture(connection,'main','search','fts4')['commands']==[['automerge',8]]
+                    else:assert connection.execute('SELECT k,v FROM search_config WHERE k<>\'version\' ORDER BY k').fetchall()==[('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]
                 assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
                 assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
-                if public_column:
+                if public_column or fts_language:
                     assert connection.execute('SELECT * FROM fts_projection').fetchall()==[(9007199254740993,'雪')]
-                    connection.execute('INSERT INTO "renamed:雪"(id,"browser:雪") VALUES(9007199254740994,\'fresh native term\')')
-                    assert connection.execute("SELECT rowid FROM search WHERE search MATCH 'fresh'").fetchall()==[(9007199254740994,)]
+                    connection.execute('INSERT INTO "renamed:雪"(id,'+('note' if fts_language else '"browser:雪"')+") VALUES(9007199254740994,'fresh native term')")
+                    assert connection.execute("SELECT rowid FROM search WHERE search MATCH 'fresh'"+language_filter).fetchall()==[(9007199254740994,)]
                     connection.commit()
             finally:connection.close()
             proof['checks'].append('browser-native-fts-settings-generation-confirmed-apply-and-independent-content' if fts_settings else 'browser-context-menu-native-rename-generation-confirmed-apply-and-independent-rows')
-        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module,external_content=external_content,fts_settings=fts_settings,public_column=public_column)
+        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module,external_content=external_content,fts_settings=fts_settings,public_column=public_column,fts_language=fts_language)
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
 
-def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_content=False,fts_settings=False,public_column=False):
+def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_content=False,fts_settings=False,public_column=False,fts_language=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -197,9 +208,10 @@ def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_con
             click('Generate FTS settings design')
         else:
             summary=wait.until(lambda browser:browser.find_element(By.XPATH,'//summary[normalize-space()="Native table and column renames"]'));driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',summary);summary.click()
-            if public_column:select('Native rename kind','Column')
+            if public_column or fts_language:select('Native rename kind','Column')
             select('Native rename table','renamed:雪')
             if public_column:select('Native rename column','body:雪')
+            if fts_language:select('Native rename column','locale:雪')
             if external_content:
                 checkbox=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Rebuild external-content FTS search from renamed:雪")]//input'))
                 driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
@@ -221,5 +233,5 @@ def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_con
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));parser.add_argument('--external-content',action='store_true');parser.add_argument('--fts-settings',action='store_true');parser.add_argument('--public-column',action='store_true');args=parser.parse_args()
-    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module,external_content=args.external_content,fts_settings=args.fts_settings,public_column=args.public_column)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));parser.add_argument('--external-content',action='store_true');parser.add_argument('--fts-settings',action='store_true');parser.add_argument('--public-column',action='store_true');parser.add_argument('--fts-language',action='store_true');args=parser.parse_args()
+    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module,external_content=args.external_content,fts_settings=args.fts_settings,public_column=args.public_column,fts_language=args.fts_language)

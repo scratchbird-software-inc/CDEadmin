@@ -275,7 +275,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        observations retain healthy editor completion and explicit coverage.
        Reviewed external-content FTS4/FTS5 public-column renames preserve
        ordinary dependent views, maintenance triggers and native index settings.
-     - Remaining attached/FTS table-function-view/row-language and installed-module transformations and
+       FTS4 language-column and selected FTS hidden MATCH-column mappings
+       preserve native language-specific searches and dependent code.
+     - Remaining attached/FTS table-function-view/row-identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
