@@ -375,9 +375,9 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
     if any(item['operation'] == 'rebuild' for item in operations) and len(operations) > 1:
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
             'reason': 'Review one isolated table rebuild per batch'})
-    if any(item['operation'] == 'replace' for item in operations) and len(operations) > 1:
+    if any(item['operation'] == 'replace' for item in operations) and any(item['operation'] != 'replace' for item in operations):
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
-            'reason': 'Review one isolated index or trigger replacement per batch'})
+            'reason': 'Review index and trigger replacements separately from other schema changes'})
     operations.sort(key=lambda item: (
         0 if item['operation'] == 'drop' else 1,
         {'trigger': 0, 'index': 1, 'view': 2, 'table': 3, 'fts-table': 3,

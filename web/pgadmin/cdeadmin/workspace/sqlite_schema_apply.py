@@ -66,8 +66,8 @@ class SQLiteSchemaApplications(SchemaApplications):
             if operation.get('operation') == 'replace':
                 from .sqlite_replace import plan_replace
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
-                if old is None or wanted is None or len(operations) != 1:
-                    raise SchemaApplyError('SQLite replacement requires one retained index or trigger')
+                if old is None or wanted is None or any(item['operation'] != 'replace' for item in operations):
+                    raise SchemaApplyError('SQLite replacement batches require retained indexes and triggers only')
                 expected = plan_replace(old, wanted, baseline, probe_name=operation.get('probe_name'))
                 if digest(expected) != digest(operation):
                     raise SchemaApplyError('SQLite replacement differs from the reviewed native design')
@@ -333,17 +333,8 @@ def apply_review(provider, route, record):
         for operation in record['plan']['operations']:
             dispatched = True
             if operation['operation'] == 'replace':
-                from .sqlite_replace import matches
                 for stage in operation['stages']:
                     connection.execute(stage)
-                actual_objects = {row['resource_id']:row for row in _resources(connection, {})
-                                  if row['native'].get('system_object') is not True}
-                _validate_dependencies(connection, actual_objects)
-                actual = actual_objects.get(operation['resource_id'])
-                if actual is None or not matches(record['desired']['rows'][operation['resource_id']],
-                        {'resource_id':actual['resource_id'],'kind':actual['resource_kind'],'path':actual['display_path'],
-                         'name':actual['display_name'],'system':'false','native':actual['native']}):
-                    raise _PreservationRefused('SQLite replacement differs from desired native metadata')
             elif operation['operation'] == 'rebuild':
                 name = _quote(operation['name'])
                 old_count = connection.execute('SELECT count(*) FROM "main".' + name).fetchone()[0]
@@ -374,6 +365,20 @@ def apply_review(provider, route, record):
                 _validate_dependencies(connection, observed)
             else:
                 connection.execute(operation['source'])
+        replacements = [operation for operation in record['plan']['operations'] if operation['operation'] == 'replace']
+        if replacements:
+            from .sqlite_replace import matches
+            actual_objects = {row['resource_id']:row for row in _resources(connection, {})
+                              if row['native'].get('system_object') is not True}
+            # Validate the final schema. A later replacement in this atomic
+            # batch can repair a binding changed by an earlier replacement.
+            _validate_dependencies(connection, actual_objects)
+            for operation in replacements:
+                actual = actual_objects.get(operation['resource_id'])
+                if actual is None or not matches(record['desired']['rows'][operation['resource_id']],
+                        {'resource_id':actual['resource_id'],'kind':actual['resource_kind'],'path':actual['display_path'],
+                         'name':actual['display_name'],'system':'false','native':actual['native']}):
+                    raise _PreservationRefused('SQLite replacement differs from desired native metadata')
         connection.commit()
         committed = True
     except Exception as error:

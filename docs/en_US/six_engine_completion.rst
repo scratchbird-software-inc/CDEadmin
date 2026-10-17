@@ -636,7 +636,10 @@ rebuild or replacement during review preserves the displayed execution digest.
 
 INSTEAD OF triggers on views are checked for their actual defining write events.
 Changing a trigger event does not require unsupported INSERT/UPDATE/DELETE
-operations on that view. Multiple simultaneous replacements, replacements
-combined with a table rebuild and column renames requiring rewritten index or
+operations on that view. Batches of up to 32 index/trigger replacements share
+one native transaction. All baseline guards run before dispatch; dependency
+binding and desired catalog verification use the final batch schema before
+commit. A later failure rolls back every earlier replacement in that batch.
+Replacements combined with a table rebuild and column renames requiring rewritten index or
 trigger sources remain separate migration work. Human form validation and
 ScratchBird history qualification retain their existing ownership/deferral.

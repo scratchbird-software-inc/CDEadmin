@@ -187,3 +187,60 @@ def test_production_workspace_replans_reviews_and_applies_the_displayed_native_p
         assert again['state'] == 'committed'
     finally:
         provider.client.close()
+
+
+@pytest.mark.parametrize('failure',[None,'unique','trigger-binding'])
+def test_replacement_batch_commits_together_or_restores_every_original_object(tmp_path,failure):
+    path,target_path = tmp_path/'batch.sqlite',tmp_path/'desired-batch.sqlite'
+    originals = {'a_first':'CREATE INDEX "main"."a_first" ON "owned"(id)',
+                 'z_last':'CREATE INDEX "main"."z_last" ON "owned"(note)',
+                 'touch':'CREATE TRIGGER "main"."touch" AFTER INSERT ON "owned" BEGIN SELECT new.id; END'}
+    desired_sql = dict(originals,a_first='CREATE INDEX "main"."a_first" ON "owned"(id DESC)')
+    if failure == 'unique': desired_sql['z_last'] = 'CREATE UNIQUE INDEX "main"."z_last" ON "owned"(note)'
+    else:
+        destination = 'missing_relation' if failure == 'trigger-binding' else 'audit'
+        desired_sql['touch'] = f'CREATE TRIGGER "main"."touch" AFTER INSERT ON "owned" BEGIN INSERT INTO {destination} VALUES(new.note); END'
+    for filename,definitions in ((path,originals),(target_path,desired_sql)):
+        with sqlite3.connect(filename) as connection:
+            connection.executescript('CREATE TABLE owned(id INTEGER PRIMARY KEY,note TEXT); CREATE TABLE audit(value TEXT);')
+            for source in definitions.values(): connection.execute(source)
+    provider = SQLiteProvider(SimpleNamespace(),SimpleNamespace(require=Mock()),_create_client())
+    route = {'database':str(path),'filesystem_root':str(tmp_path)}
+    try:
+        def capture(filename):
+            return build_export(provider.capture_catalog({**route,'database':str(filename)})['resources'],
+                endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite',native_model=True)
+        baseline,template = capture(path),capture(target_path)
+        desired = deepcopy(baseline)
+        for name,source in desired_sql.items():
+            if source == originals[name]: continue
+            kind = 'trigger' if name == 'touch' else 'index'
+            identity = _resource_id(kind,['main','owned'],name)
+            desired['rows'][identity] = deepcopy(template['rows'][identity])
+            desired['rows'][identity]['native']['ddl'] = source
+        with sqlite3.connect(path) as connection:
+            connection.executemany('INSERT INTO owned VALUES(?,?)',[(1,'duplicate'),(2,'duplicate')])
+            original_schema = connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()
+            preview = plan(baseline,desired,baseline,connection)
+            assert preview['ready_for_review'],preview
+            assert len(preview['operations']) == 2
+            assert plan(baseline,desired,baseline,connection)['execution_sha256'] == preview['execution_sha256']
+        info = path.stat()
+        store = SQLiteSchemaApplications(tmp_path/'batch-receipts.json')
+        reviewed = store.review(preview,baseline,desired,'owner','binding','file',file_identity=[info.st_dev,info.st_ino])
+        request = {key:reviewed[key] for key in ('review_id','review_digest')}; request['confirmed'] = True
+        result = store.apply(request,'owner','binding',lambda record:apply_review(provider,route,record))
+        expected = 'rolled_back' if failure else 'committed'
+        assert result['state'] == expected,result
+        assert store.apply(request,'owner','binding',lambda _:pytest.fail('replayed'))['state'] == expected
+        with sqlite3.connect(path) as observer:
+            assert observer.execute('SELECT * FROM owned').fetchall() == [(1,'duplicate'),(2,'duplicate')]
+            assert observer.execute('SELECT * FROM audit').fetchall() == []
+            if failure:
+                assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall() == original_schema
+            else:
+                assert observer.execute('PRAGMA index_xinfo(a_first)').fetchone()[3] == 1
+                observer.execute("INSERT INTO owned VALUES(3,'new')")
+                assert observer.execute('SELECT * FROM audit').fetchall() == [('new',)]
+    finally:
+        provider.client.close()
