@@ -15,6 +15,7 @@ from ..operations.fileio import durable_replace, exclusive_file_lock, private_fi
 from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
 from ..providers.postgresql.continuity_recovery import recovery_options, independent_copy, recovery_command, read_result
+from ..providers.postgresql.continuity_tar import materialize
 from ..sdk.tooling import ProviderToolError
 
 
@@ -176,8 +177,8 @@ class PostgreSQLContinuityJobs:
             self.require_stopped_writer(previous)
             if previous['operation'] not in {'full_backup','incremental_backup','combine'}:
                 raise ContinuityError('Select a native physical backup artifact')
-            if operation=='recovery_drill' and (previous['operation']=='incremental_backup' or previous['options']['format']!='plain' or previous.get('artifact_wal_method',previous['options'].get('wal_method','stream'))=='none'):
-                raise ContinuityError('A recovery drill requires a plain full or reconstructed backup with locally collected WAL')
+            if operation=='recovery_drill' and (previous['operation']=='incremental_backup' or previous.get('artifact_wal_method',previous['options'].get('wal_method','stream'))=='none'):
+                raise ContinuityError('A recovery drill requires a full or reconstructed backup with locally collected WAL')
             if proof is None:
                 if not (self.directory(previous)/'backup/backup_manifest').is_file():
                     raise ContinuityError('Native backup manifest is unavailable')
@@ -195,7 +196,7 @@ class PostgreSQLContinuityJobs:
         if operation=='combine' and any(value['format']!='plain' for value in inputs):
             raise ContinuityError('Native reconstruction requires materialized plain backup inputs')
         if operation in {'verify','recovery_drill'}:
-            options.update({key:inputs[0][key] for key in ('format','wal_method','manifest_checksums')})
+            options.update({key:inputs[0][key] for key in (('wal_method','manifest_checksums') if operation=='recovery_drill' else ('format','wal_method','manifest_checksums'))})
         record = {'job_id':str(uuid.uuid4()), 'owner':owner, 'endpoint_id':endpoint, 'configuration':configuration,
             'operation':operation, 'options':options, 'source':deepcopy(source), 'paths':deepcopy(paths),
             'inputs':inputs, 'state':'reviewed', 'created_at':time.time(), 'expires_at':time.time()+600,'runtime_limit':runtime_limit,
@@ -432,16 +433,18 @@ class PostgreSQLContinuityJobs:
 
     def run_recovery(self, record, tools, source, progress, file_progress, signal):
         directory=self.directory(record);options=record['options'];clone=directory/'recovered-clone'
-        def verify(path,field):
-            result=tools.verify(directory,path,timeout=options['timeout_seconds'],progress=progress,cancel_signal=signal)
+        def verify(path,field,format='plain'):
+            result=tools.verify(directory,path,format=format,timeout=options['timeout_seconds'],progress=progress,cancel_signal=signal)
             self.update(record,**{field:result})
             if signal.is_set() or result['return_code']!=0 or result['process_observation'].get('cleanup_confirmed') is not True:
                 raise ContinuityError('Native recovery input verification did not complete')
             return result
         self.update(record,state='verifying_inputs',phase='verifying_recovery_source')
-        verify(source,'input_verification')
+        verify(source,'input_verification',record['inputs'][0]['format'])
         self.update(record,state='active',phase='copying_recovery_artifact')
-        copied=independent_copy(source,clone,record['source'].get('tablespaces',[]),progress=file_progress,cancel_signal=signal)
+        if record['inputs'][0]['format']=='tar':
+            copied=materialize(source,clone,record['source'].get('tablespaces',[]),options['wal_method'],progress=file_progress,cancel_signal=signal)
+        else:copied=independent_copy(source,clone,record['source'].get('tablespaces',[]),progress=file_progress,cancel_signal=signal)
         self.update(record,copy_observation=copied,phase='verifying_recovery_copy')
         verified=verify(clone,'copy_verification')
         # Verification and copied manifest identity precede any clone edits.

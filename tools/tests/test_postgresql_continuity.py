@@ -275,11 +275,20 @@ def test_repeated_start_of_a_terminal_preupgrade_receipt_never_revalidates_or_re
     assert record['job_id'] not in manager.workers
 
 
-@pytest.mark.parametrize('changes',[{'operation':'incremental_backup'},{'options':{'format':'tar'}},{'options':{'wal_method':'none'}}])
+@pytest.mark.parametrize('changes',[{'operation':'incremental_backup'},{'options':{'wal_method':'none'}}])
 def test_recovery_requires_materialized_full_backup_and_local_wal(jobs,changes):
     manager,source,endpoint=jobs
     selected=manager.review({'operation':'full_backup','options':changes.get('options',{})},1,endpoint,source,'configuration',{})
     record=manager.load(selected['job_id'],1,endpoint)
     manager.update(record,state='verified',manifest={'manifest_sha256':'a'*64},**({'operation':'incremental_backup'} if changes.get('operation')=='incremental_backup' else {}))
-    with pytest.raises(ContinuityError,match='plain full or reconstructed'):
+    with pytest.raises(ContinuityError,match='full or reconstructed'):
         manager.review({'operation':'recovery_drill','base_job_id':selected['job_id']},1,endpoint,source,'configuration',{})
+
+
+def test_tar_recovery_review_keeps_input_format_and_materialized_destination_separate(jobs):
+    manager,source,endpoint=jobs
+    selected=manager.review({'operation':'full_backup','options':{'format':'tar'}},1,endpoint,source,'configuration',{})
+    manager.update(manager.load(selected['job_id'],1,endpoint),state='verified',manifest={'manifest_sha256':'a'*64})
+    reviewed=manager.review({'operation':'recovery_drill','base_job_id':selected['job_id']},1,endpoint,source,'configuration',{})
+    assert reviewed['inputs'][0]['format']=='tar' and reviewed['options']['format']=='plain'
+    assert reviewed['artifact_location']['format']=='plain' and 'postgres' in reviewed['tool_identities']

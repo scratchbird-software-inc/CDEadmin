@@ -688,7 +688,7 @@ PostgreSQL application recovery drills
 =====================================
 
 The continuity workspace can review and run an offline recovery drill against a
-verified plain full or reconstructed physical backup with locally collected WAL.
+verified full or reconstructed physical backup with locally collected WAL.
 It verifies the input, copies file bytes and managed tablespaces into private
 application-host storage, verifies that copy, and runs a supervised PostgreSQL
 18 standalone backend. It opens no network listener or source connection. The
@@ -705,8 +705,8 @@ is durable and never automatically replayed; cancellation retains its receipt.
 
 This qualifies native WAL recovery and the selected counts on that execution
 host. It does not qualify every database or extension in a cluster, production
-restore, point-in-time recovery, archived-WAL retrieval, standby provisioning or
-TAR materialization. Source-build dependencies must exist on the execution host.
+restore, point-in-time recovery, archived-WAL retrieval or standby provisioning.
+Source-build dependencies must exist on the execution host.
 History testing remains deferred by owner direction.
 
 SQLite mixed native migrations
@@ -725,3 +725,19 @@ Changes to a rebuilt table's own child definitions still require coordinated
 dependency rewriting. Explicit deletions remain a separate destructive review.
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
+
+PostgreSQL compressed TAR recovery
+=================================
+
+Recovery drills materialize full directory TAR backups using uncompressed,
+gzip, LZ4 or Zstandard archives. Base files, managed tablespaces and applicable
+streamed WAL archives are copied into separate private plain-file storage.
+Fetch-mode WAL is retained from the base archive. The source archives remain
+unchanged. Decoding is bounded, reads concatenated compression frames and final
+checksums, refuses unsafe paths/links/special entries and supports cancellation.
+
+Native compressed-file verification precedes materialization. Native plain-file
+and WAL verification then checks the materialized copy before PostgreSQL starts.
+The recovery receipt retains both scopes; TAR file checks alone do not establish
+WAL availability or recovery. Materialization for incremental chain reconstruction
+and production restore remains separate work.

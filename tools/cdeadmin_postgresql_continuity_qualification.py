@@ -127,6 +127,10 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                 tar=submit('full_backup',{'format':'tar','compression':'client-gzip','timeout_seconds':120})
                 assert tar['verification_scope']['files'] and not tar['verification_scope']['wal']
                 proof['checks'].append('compressed-tar-native-format-verification-and-explicit-wal-exclusion')
+                tar_jobs=[tar]
+                for compression in ('client-lz4','client-zstd',''):
+                    tar_jobs.append(submit('full_backup',{'format':'tar','compression':compression,
+                        'wal_method':'stream' if compression else 'fetch','timeout_seconds':120}))
                 jobs=service_for_app(app).postgresql_continuity_jobs
                 combined_record=jobs.load(combined['job_id'],uid,endpoint)
                 combined_path=jobs.directory(combined_record)
@@ -170,7 +174,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
             path=jobs.directory(jobs.load(job['job_id'],uid,endpoint))
             return {str(item.relative_to(path)):os.readlink(item) if item.is_symlink() else hashlib.sha256(item.read_bytes()).hexdigest()
                     for item in path.rglob('*') if item.is_file() or item.is_symlink()}
-        before={job['job_id']:artifact_facts(job) for job in (full,combined)}
+        before={job['job_id']:artifact_facts(job) for job in (full,combined,*tar_jobs)}
         exact_check={'schema':exact_schema,'table':exact_table,'expected_rows':'1'}
         drill_options={'database':'postgres','checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'2'},exact_check],'timeout_seconds':120}
         recovered=submit('recovery_drill',drill_options,base_job_id=combined['job_id'],expected_state='recovered')
@@ -185,19 +189,26 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
         latin_recovery=submit('recovery_drill',{'database':'sr_recovery_latin1','checks':[{'schema':latin_schema,'table':latin_table,'expected_rows':'1'}]},base_job_id=full['job_id'],expected_state='recovered')
         assert latin_recovery['recovery_observation']['checks'][0]['schema']==latin_schema
         proof['checks'].append('offline-native-latin1-database-recovery-with-exact-non-ascii-newline-names-longer-than-63-utf8-bytes')
+        tar_recoveries=[]
+        for job in tar_jobs:
+            recovered_tar=submit('recovery_drill',drill_options,base_job_id=job['job_id'],expected_state='recovered')
+            assert recovered_tar['copy_observation']['source_format']=='tar'
+            assert recovered_tar['copy_verification']['verification_scope']['wal'] is True
+            tar_recoveries.append(recovered_tar)
+        proof['checks'].append('offline-native-none-gzip-lz4-zstd-tar-materialization-relocated-tablespaces-and-native-wal-verification-before-recovery')
         wrong_count=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'999'}]},base_job_id=full['job_id'],expected_state='failed')
         assert wrong_count['recovery_drill_complete'] is False and 'row count' in wrong_count['error_reason']
         no_result=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'missing_recovery_table'}]},base_job_id=full['job_id'],expected_state='failed')
         assert no_result['tool_observation']['return_code']==0 and no_result['recovery_drill_complete'] is False
         proof['checks'].append('native-zero-exit-with-sql-error-and-incorrect-row-count-do-not-qualify-recovery')
-        for job in (full,combined):assert artifact_facts(job)==before[job['job_id']]
+        for job in (full,combined,*tar_jobs):assert artifact_facts(job)==before[job['job_id']]
         proof['checks'].append('source-backup-bytes-and-tablespace-links-unchanged-after-successful-and-refused-drills')
-        page=http('list',{'offset':0,'limit':2});assert page['total']==10 and len(page['jobs'])==2 and page['more']
+        page=http('list',{'offset':0,'limit':2});assert page['total']==17 and len(page['jobs'])==2 and page['more']
         for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
         if browser_binary:
             proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary)
             proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
-        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,tar,verified,recovered,full_recovery,latin_recovery,wrong_count,no_result)],
+        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,*tar_jobs,verified,recovered,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result)],
                      source=combined['source'],native_artifact_password_absent_from_receipts=True)
     finally:
         if jobs is not None:jobs.close()
