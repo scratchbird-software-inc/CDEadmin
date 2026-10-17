@@ -10,7 +10,7 @@ import uuid
 from .firebird_schema_apply import SchemaApplications, SchemaApplyError
 from .firebird_schema_plan import digest
 from .sqlite_schema_plan import (FORMAT, CREATABLE, _definition, _quote,
-                                 _source, _require_virtual_module, _compile_exact)
+                                 _source, _require_virtual_module, _compile_exact, batch_blockers)
 from ..providers.sqlite.provider import _resources
 from ..providers.sqlite.driver import uncertain_error
 
@@ -61,13 +61,15 @@ class SQLiteSchemaApplications(SchemaApplications):
         if (not isinstance(file_identity, list) or len(file_identity) != 2 or
                 any(type(value) is not int or value < 0 for value in file_identity)):
             raise SchemaApplyError('SQLite file identity must be an exact device/inode pair')
+        refused=batch_blockers(operations,desired)
+        if refused:raise SchemaApplyError(refused[0])
         for operation in operations:
             identity = operation['resource_id']
             if operation.get('operation') == 'replace':
                 from .sqlite_replace import plan_replace
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
-                if old is None or wanted is None or any(item['operation'] != 'replace' for item in operations):
-                    raise SchemaApplyError('SQLite replacement batches require retained indexes and triggers only')
+                if old is None or wanted is None:
+                    raise SchemaApplyError('SQLite replacements require exact retained indexes and triggers')
                 expected = plan_replace(old, wanted, baseline, probe_name=operation.get('probe_name'))
                 if digest(expected) != digest(operation):
                     raise SchemaApplyError('SQLite replacement differs from the reviewed native design')
@@ -75,8 +77,8 @@ class SQLiteSchemaApplications(SchemaApplications):
             if operation.get('operation') == 'rebuild':
                 from .sqlite_rebuild import plan_rebuild
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
-                if old is None or wanted is None or any(item['operation'] != 'rebuild' for item in operations):
-                    raise SchemaApplyError('SQLite rebuild batches require exact retained tables only')
+                if old is None or wanted is None:
+                    raise SchemaApplyError('SQLite rebuilds require exact retained tables')
                 expected = plan_rebuild(old, wanted, baseline, None,
                     temp_name=operation.get('temp_name'),
                     column_renames=operation.get('column_renames'))
@@ -365,14 +367,13 @@ def apply_review(provider, route, record):
         if any(operation['operation'] == 'rebuild' for operation in record['plan']['operations']):
             if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
                 raise _PreservationRefused('SQLite rebuild batch failed native foreign-key check')
-            _validate_dependencies(connection, observed)
         replacements = [operation for operation in record['plan']['operations'] if operation['operation'] == 'replace']
-        if replacements:
+        if replacements or any(operation['operation'] == 'rebuild' for operation in record['plan']['operations']):
             from .sqlite_replace import matches
             actual_objects = {row['resource_id']:row for row in _resources(connection, {})
                               if row['native'].get('system_object') is not True}
-            # Validate the final schema. A later replacement in this atomic
-            # batch can repair a binding changed by an earlier replacement.
+            # Validate the complete final schema, including newly created
+            # views/triggers and replaced events in a mixed atomic batch.
             _validate_dependencies(connection, actual_objects)
             for operation in replacements:
                 actual = actual_objects.get(operation['resource_id'])

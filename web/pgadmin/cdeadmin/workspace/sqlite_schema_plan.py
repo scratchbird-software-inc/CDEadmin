@@ -143,6 +143,19 @@ def _compile_exact(connection, row, source):
         raise ValueError('SQLite native compiled DDL targets a different object or owner')
 
 
+def batch_blockers(operations, desired):
+    """Keep preservation contracts explicit when combining admitted stages."""
+    blockers=[]
+    if any(item['operation']=='drop' for item in operations) and any(item['operation']!='drop' for item in operations):
+        blockers.append('Review deletion separately from additions')
+    rebuilt={item['name'] for item in operations if item['operation']=='rebuild'}
+    for item in operations:
+        row=desired['rows'].get(item['resource_id'])
+        if item['operation']!='rebuild' and row and row['kind'] in {'column','index','trigger'} and len(row['path'])==3 and row['path'][0]=='main' and row['path'][1] in rebuilt:
+            blockers.append('Changes to a rebuilt table\'s own columns, indexes or triggers require coordinated dependency rewriting')
+    return blockers
+
+
 def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
          column_renames=()):
     scope = _scope(baseline)
@@ -368,16 +381,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     'reason': 'Absent DDN row is not an explicit SQLite deletion instruction'})
     if len(operations) > 32:
         raise ValueError('SQLite preview exceeds 32 native statements')
-    if any(item['operation'] == 'drop' for item in operations) and any(
-            item['operation'] != 'drop' for item in operations):
-        blockers.append({'resource_id': '', 'name': 'SQLite design batch',
-            'reason': 'Review deletion separately from additions'})
-    if any(item['operation'] == 'rebuild' for item in operations) and any(item['operation'] != 'rebuild' for item in operations):
-        blockers.append({'resource_id': '', 'name': 'SQLite design batch',
-            'reason': 'Review table rebuilds separately from other schema changes'})
-    if any(item['operation'] == 'replace' for item in operations) and any(item['operation'] != 'replace' for item in operations):
-        blockers.append({'resource_id': '', 'name': 'SQLite design batch',
-            'reason': 'Review index and trigger replacements separately from other schema changes'})
+    for reason in batch_blockers(operations,desired):
+        blockers.append({'resource_id':'','name':'SQLite design batch','reason':reason})
     operations.sort(key=lambda item: (
         0 if item['operation'] == 'drop' else 1,
         {'trigger': 0, 'index': 1, 'view': 2, 'table': 3, 'fts-table': 3,

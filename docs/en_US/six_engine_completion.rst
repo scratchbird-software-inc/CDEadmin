@@ -640,8 +640,8 @@ operations on that view. Batches of up to 32 index/trigger replacements share
 one native transaction. All baseline guards run before dispatch; dependency
 binding and desired catalog verification use the final batch schema before
 commit. A later failure rolls back every earlier replacement in that batch.
-Replacements combined with a table rebuild and column renames requiring rewritten index or
-trigger sources remain separate migration work. Human form validation and
+Replacements that rewrite a rebuilt table's own children, and column renames
+requiring rewritten index or trigger sources, remain separate migration work. Human form validation and
 ScratchBird history qualification retain their existing ownership/deferral.
 
 Coordinated SQLite table transformations
@@ -657,8 +657,8 @@ so coordinated parent/child key conversions can be reviewed together. Failure
 in any copy or final constraint check rolls back the whole batch. Independent
 rediscovery verifies every acknowledged table transformation.
 
-Table rebuilds remain separate from index/trigger replacement or other DDL
-operations in the same review. The current rename editor maps columns on a
+Mixed batches can combine rebuilds with replacements on other objects and
+admitted additions. The current rename editor maps columns on a
 single selected table; broader coordinated dependency source rewriting remains
 separate implementation work.
 
@@ -708,3 +708,20 @@ host. It does not qualify every database or extension in a cluster, production
 restore, point-in-time recovery, archived-WAL retrieval, standby provisioning or
 TAR materialization. Source-build dependencies must exist on the execution host.
 History testing remains deferred by owner direction.
+
+SQLite mixed native migrations
+==============================
+
+A reviewed SQLite transaction may combine table rebuilds, replacements on other
+retained indexes/triggers, and admitted schema additions. Every baseline,
+dependency and native grammar guard runs before the first write. Row/identity
+preservation applies to each rebuilt table; foreign keys and the complete final
+view/trigger bindings are checked before commit, including newly created views
+and changed trigger events. A later failure rolls back all preceding stages.
+Acknowledged commits receive independent catalog rediscovery; durable receipts
+never replay the migration.
+
+Changes to a rebuilt table's own child definitions still require coordinated
+dependency rewriting. Explicit deletions remain a separate destructive review.
+Native grammar/binding refusals remain visible and do not certify the full
+SQLite migration denominator.
