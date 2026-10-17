@@ -171,6 +171,8 @@ def test_mysql_family_invisible_columns_remain_suggested_but_do_not_expand_star(
     def execute(sql):
         if sql.startswith('SELECT VERSION()'):
             cursor.fetchmany.return_value = [('native', 'owned', '', 'utf8mb4', 0)]
+        elif sql.startswith('SELECT CURRENT_USER()'):
+            cursor.fetchmany.return_value=[('native-owner@native-host','NONE' if engine=='mysql' else None)]
         elif 'FROM information_schema.COLUMNS' in sql:
             cursor.fetchmany.return_value = [('owned', 't', 'visible', 'int', ''),
                                             ('owned', 't', 'hidden', 'int', 'DEFAULT_GENERATED INVISIBLE')]

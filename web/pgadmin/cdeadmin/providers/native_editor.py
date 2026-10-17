@@ -129,6 +129,9 @@ def metadata(handle, engine, transaction=None, dialect=None):
             state = query('session', 'SELECT VERSION(), DATABASE(), @@sql_mode, @@character_set_client, @@lower_case_table_names')[0]
             context.update(version=str(state[0]), default_schema=state[1], sql_mode=str(state[2]),
                            character_set_client=state[3], lower_case_table_names=int(state[4]))
+            identity=query('authentication','SELECT CURRENT_USER(),CURRENT_ROLE()')
+            if len(identity)!=1:raise RelationalClientError('Native editor authentication context is unavailable')
+            context.update(authenticated_principal=identity[0][0],active_role=identity[0][1])
             for (database,) in query('databases', 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 25001'):
                 add('schema', [database])
             for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):

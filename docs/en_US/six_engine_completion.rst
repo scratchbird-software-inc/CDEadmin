@@ -766,6 +766,12 @@ Native editor context revisions include the observed symbols and section
 availability, so repairs, rollback and observed catalog changes invalidate the
 previous completion context.
 
+MySQL and MariaDB editor contexts retain the native authenticated principal and
+active role, including each engine's representation of no active role. A role
+change invalidates the previous context even when visible object names stay the
+same. Metadata observation uses the retained native session without finishing
+pending interactive work.
+
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 
