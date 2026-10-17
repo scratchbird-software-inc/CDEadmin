@@ -53,9 +53,28 @@ def catalog(service, server, request, *, compare=False):
         'resource_id': item['resource_id'], 'name': item['display_name'],
         'kind': item['resource_kind'], 'path': item['display_path'],
         **({'external_content':module_option(item['native'].get('ddl',''),'content')}
-           if item['resource_kind']=='fts-table' and item['native'].get('module_observation',{}).get('module','').lower() in {'fts4','fts5'} else {})}
+           if item['resource_kind']=='fts-table' and item['native'].get('module_observation',{}).get('module','').lower() in {'fts4','fts5'} else {}),
+        **({'fts_configuration': item['native'].get('fts_configuration')} if item['resource_kind']=='fts-table' else {})}
         for item in captured['resources']]
     return result
+
+
+def fts_configuration_design(service, server, request):
+    from .sqlite_fts_settings import generate
+    if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'resource_id', 'settings'}:
+        raise ValueError('FTS design requires the exact baseline, table and native settings')
+    baseline = read_catalog(request['baseline'], engine='sqlite')
+    checked = schema_plan(service, server, {'database_target_id': request['database_target_id'],
+        'baseline': request['baseline'], 'desired': request['baseline']})
+    if checked['conflicts']:
+        raise ValueError('Native SQLite metadata changed; capture a new baseline')
+    desired = generate(baseline, request['resource_id'], request['settings'])
+    resources = [{'resource_id': row['resource_id'], 'resource_kind': row['kind'], 'display_name': row['name'],
+                  'display_path': row['path'], 'native': row['native']} for row in desired['rows'].values()]
+    result = build_export(resources, endpoint_id=baseline['provenance']['endpoint_id'],
+        target_id=request['database_target_id'], generation='native-fts-settings-design', include_system=False,
+        refreshed=True, engine='sqlite')
+    return {'snapshot': result['snapshot'], 'scope': 'native settings normalized in a private empty FTS module; registered file unchanged'}
 
 
 def data(service, server, request):

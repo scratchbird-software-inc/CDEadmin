@@ -11,6 +11,25 @@ const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
+it('generates an FTS settings design for native preview and existing review controls', async () => {
+  const post = jest.fn().mockResolvedValueOnce({snapshot, views: [{id: 'inventory_1', label: 'Inventory', entry: 'catalog.ddn'}],
+    objects: [{resource_id: 'fts', kind: 'fts-table', name: 'search', path: ['main', 'search'],
+      fts_configuration: {restorable: true, module: 'fts5', commands: [['automerge', 4]]}}], provenance: {objects: 1, coverage: 'partial'}})
+    .mockResolvedValueOnce({snapshot: {...snapshot, files: {'catalog.ddn': 'native desired settings'}}})
+    .mockResolvedValueOnce({operations: [{operation: 'fts-configure', resource_id: 'fts', name: 'search', source: 'native setters'}], blockers: [], conflicts: [], application_supported: true});
+  render(<Component post={post} databaseTargetId="file" />);
+  fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'})); await screen.findByText('SQLite DDN viewer');
+  fireEvent.click(screen.getByText('Native FTS configuration'));
+  fireEvent.change(screen.getByRole('textbox', {name: 'Native FTS settings (JSON)'}), {target: {value: '{"automerge":"8","rank":"bm25(2.0)"}'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Generate FTS settings design'}));
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Preview native changes'})).toBeEnabled());
+  expect(post).toHaveBeenLastCalledWith({action: 'sqlite_fts_configuration_design', request: {
+    database_target_id: 'file', baseline: JSON.stringify(snapshot), resource_id: 'fts', settings: {automerge: '8', rank: 'bm25(2.0)'}}});
+  fireEvent.click(screen.getByRole('button', {name: 'Preview native changes'}));
+  await screen.findByRole('button', {name: 'Prepare native change review'});
+  expect(post.mock.calls[2][0].request).toMatchObject({database_target_id: 'file', deletions: [], rebuilds: [], column_renames: []});
+});
+
 it('requires the selected external-content index identity in rename generation and review', async () => {
   const renames=[{kind:'table',table:'owner',to:'renamed'}],fts_rebindings=['search-id'];
   const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],

@@ -18,6 +18,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   const [columnRenames, setColumnRenames] = useState([]);
   const [nativeRenames,setNativeRenames]=useState([]),[renameKind,setRenameKind]=useState('table');
   const [ftsRebindings,setFtsRebindings]=useState([]);
+  const [ftsConfigId, setFtsConfigId] = useState(''), [ftsSettings, setFtsSettings] = useState('{}');
   const [renameTable,setRenameTable]=useState(''),[renameColumn,setRenameColumn]=useState(''),[renameTo,setRenameTo]=useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
@@ -28,6 +29,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   useEffect(() => {
     serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]); setError('');
     setNativeRenames([]);setFtsRebindings([]);setRenameKind('table');setRenameTable('');setRenameColumn('');setRenameTo('');
+    setFtsConfigId(''); setFtsSettings('{}');
     setBusy(false); setDisplay('inventory'); setView('inventory_1'); setData(null); setDataScript(null); setRelation('');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -43,6 +45,8 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       else {setResult(value); setComparison(null); setData(null); setDataScript(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setDeletions([]); setRebuilds([]); setColumnRenames([]);
         setNativeRenames([]);setFtsRebindings([]);setRenameTable('');setRenameColumn('');setRenameTo('');
         setBaselineSource(JSON.stringify(value.snapshot));
+        const fts = value.objects?.find(item => item.kind === 'fts-table' && item.fts_configuration?.restorable);
+        setFtsConfigId(fts?.resource_id || ''); setFtsSettings(JSON.stringify(Object.fromEntries(fts?.fts_configuration?.commands || []), null, 2));
         setRelation(value.objects?.find(item => item.resource_id === resourceId && item.kind === 'table')?.resource_id ||
           value.objects?.find(item => ['table', 'view', 'virtual-table', 'fts-table'].includes(item.kind))?.resource_id || '');
         setDisplay('inventory'); setView(value.snapshot.view);}
@@ -115,6 +119,18 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite application outcome is unavailable; read the receipt before reviewing again');
     } finally {if(token === serial.current) setBusy(false);}
   };
+  const generateFTSSettings = async () => {
+    const token = ++serial.current; setBusy(true); setError('');
+    try {
+      const value = await post({action: 'sqlite_fts_configuration_design', request: {
+        database_target_id: databaseTargetId, baseline: baselineSource, resource_id: ftsConfigId, settings: JSON.parse(ftsSettings)}});
+      if(token === serial.current) {
+        setSource(JSON.stringify(value.snapshot, null, 2)); setNativeRenames([]); setFtsRebindings([]);
+        setDeletions([]); setRebuilds([]); setColumnRenames([]); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);
+      }
+    } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'Native FTS settings design failed');}
+    finally {if(token === serial.current) setBusy(false);}
+  };
   const readReceipt = async () => {
     const token = ++serial.current; setBusy(true); setError('');
     try {
@@ -179,6 +195,24 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
         onClick={captureData}>Capture selected data</Button>
       <Button disabled={busy || !result.objects?.some(item => item.resource_id === relation && item.kind === 'table')}
         onClick={exportDataScript}>Export table as native SQL</Button>
+    </Box>}
+    {result && <Box component="details" sx={{my: 1}}>
+      <summary>Native FTS configuration</summary>
+      <Alert severity="info">Generate native settings without changing this file. Preview, review and confirm the resulting DDN change before applying. Existing settings remain unless explicitly reset to another native value. Index content is preserved.</Alert>
+      <TextField select size="small" label="FTS configuration table" value={ftsConfigId} disabled={busy || includeSystem}
+        onChange={event => {
+          setFtsConfigId(event.target.value);
+          const item = result.objects?.find(row => row.resource_id === event.target.value);
+          setFtsSettings(JSON.stringify(Object.fromEntries(item?.fts_configuration?.commands || []), null, 2));
+        }}>
+        <MenuItem value="">Select an observed FTS table</MenuItem>
+        {(result.objects || []).filter(item => item.kind === 'fts-table').map(item => <MenuItem
+          key={item.resource_id} value={item.resource_id} disabled={!item.fts_configuration?.restorable}>{item.name}</MenuItem>)}
+      </TextField>
+      <TextField multiline minRows={3} fullWidth label="Native FTS settings (JSON)" value={ftsSettings}
+        disabled={busy || includeSystem} onChange={event => setFtsSettings(event.target.value)}
+        helperText="FTS5: automerge, usermerge, crisismerge, deletemerge, pgsz, hashsize, rank, secure-delete, insttoken. FTS3/4: automerge. Values are checked and normalized by SQLite." />
+      <Button disabled={busy || includeSystem || !ftsConfigId || !baselineSource} onClick={generateFTSSettings}>Generate FTS settings design</Button>
     </Box>}
     {dataScript && <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.5, my: 1}}>
       <Alert severity="info">{dataScript.rows} SQLite rows exported as SQL; no writes were executed. Review the script before importing it through the shared Query Tool.</Alert>

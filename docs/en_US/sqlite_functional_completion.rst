@@ -162,6 +162,15 @@ SQLITE-COMP-05: DDN design exchange
   column and FTS4 row/language mappings retain separate acceptance. Native ALTER
   alone can leave an external-content search table unusable.
 
+  Native FTS configuration controls generate normalized desired DDN through
+  SQLite's public setting commands in an empty private module. Configuration-
+  only application preserves the table definition and content, rechecks the
+  original settings, verifies native results before commit and retains a durable
+  once-only receipt. Existing keys are preserved; resetting a setting requires
+  an explicit native value. Direct deletion of private config rows is not a
+  reset workflow. FTS3/4 automerge and the installed FTS5 configuration commands
+  retain their own native admission and normalization rules.
+
   The SQL editor also provides native extension inventory, review, confirmed
   load and receipt retrieval on its retained connection. The application
   operator supplies approved host library identities, SHA-256 values and

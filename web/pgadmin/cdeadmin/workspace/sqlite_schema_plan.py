@@ -305,7 +305,13 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             if row['kind'] in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                 continue
             if not _equal(_definition(old), _definition(row)) and identity not in rebuilds and not rebuilding_child:
-                if row['kind'] in {'view','index', 'trigger'} and observed is not None:
+                if row['kind'] == 'fts-table' and observed is not None:
+                    try:
+                        from .sqlite_fts_settings import plan as configure
+                        operations.append(configure(old, row))
+                    except (ValueError, sqlite3.Error) as error:
+                        blockers.append({'resource_id': identity, 'name': row['name'], 'reason': str(error)[:400]})
+                elif row['kind'] in {'view','index', 'trigger'} and observed is not None:
                     try:
                         from .sqlite_replace import plan_replace,validate_view_children
                         if row['kind']=='view':validate_view_children(row,desired)

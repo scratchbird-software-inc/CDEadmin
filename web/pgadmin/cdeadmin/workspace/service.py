@@ -1784,6 +1784,13 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_fts_configuration_design(self, server, request):
+        from .sqlite_catalog_service import fts_configuration_design
+        try:
+            return fts_configuration_design(self, server, request)
+        except (ValueError, TypeError, KeyError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_schema_rename_design(self, server, request):
         from .sqlite_catalog_service import schema_plan
         try:

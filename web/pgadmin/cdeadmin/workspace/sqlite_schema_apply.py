@@ -69,6 +69,12 @@ class SQLiteSchemaApplications(SchemaApplications):
         if refused:raise SchemaApplyError(refused[0])
         for operation in operations:
             identity = operation['resource_id']
+            if operation.get('operation') == 'fts-configure':
+                from .sqlite_fts_settings import plan as configure
+                old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
+                if old is None or wanted is None or configure(old, wanted) != operation:
+                    raise SchemaApplyError('SQLite FTS configuration differs from the reviewed design')
+                continue
             if operation.get('operation')=='rename-batch':
                 from .sqlite_rename import plan as rename_plan
                 expected=rename_plan(baseline,desired,baseline,operation.get('renames'),operation.get('fts_rebindings',()))
@@ -201,6 +207,16 @@ def apply_review(provider, route, record):
         baseline = record['baseline']['rows']
         for operation in record['plan']['operations']:
             identity = operation['resource_id']
+            if operation['operation'] == 'fts-configure':
+                from .sqlite_fts_settings import plan as configure
+                old, wanted, now = baseline.get(identity), record['desired']['rows'].get(identity), observed.get(identity)
+                current_model = None if now is None else {'resource_id': identity, 'kind': now['resource_kind'],
+                    'path': now['display_path'], 'name': now['display_name'], 'system': 'false', 'native': now['native']}
+                if (old is None or wanted is None or now is None or
+                        digest(_definition(old)) != digest(_definition(current_model)) or configure(old, wanted) != operation):
+                    connection.rollback()
+                    return {'state': 'not_dispatched', 'reason': 'Native FTS configuration or reviewed definition changed'}
+                continue
             if operation['operation'] == 'replace':
                 from .sqlite_replace import dependencies, plan_replace
                 modeled = {key:{'resource_id':key,'kind':row['resource_kind'],'path':row['display_path'],
@@ -390,6 +406,13 @@ def apply_review(provider, route, record):
                 new_count = connection.execute('SELECT count(*) FROM "main".' + name).fetchone()[0]
                 if new_count != old_count:
                     raise _PreservationRefused('SQLite rebuild row count differs before commit')
+            elif operation['operation'] == 'fts-configure':
+                for source in operation['stages']:
+                    connection.execute(source)
+                from ..providers.sqlite.fts_configuration import capture, identity
+                if identity(capture(connection, 'main', operation['name'], operation['module'])) != identity(
+                        record['desired']['rows'][operation['resource_id']]['native']['fts_configuration']):
+                    raise _PreservationRefused('Native FTS setters differ from the reviewed configuration')
             else:
                 connection.execute(operation['source'])
                 row=record['desired']['rows'].get(operation['resource_id'])
@@ -528,6 +551,10 @@ def apply_review(provider, route, record):
             row = by_id.get(operation['resource_id'])
             if row is None or row['resource_kind'] != operation['kind']:
                 return False
+            if operation['operation'] == 'fts-configure':
+                actual = {'resource_id': operation['resource_id'], 'kind': row['resource_kind'],
+                    'path': row['display_path'], 'name': row['display_name'], 'system': 'false', 'native': row['native']}
+                return _definition(actual) == _definition(record['desired']['rows'][operation['resource_id']])
             if operation['kind']=='fts-table':
                 from ..providers.sqlite.fts_configuration import identity
                 wanted=record['desired']['rows'][operation['resource_id']]['native'].get('fts_configuration')
