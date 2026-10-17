@@ -53,6 +53,64 @@ def test_sqlite_symbols_include_attached_identifiers_functions_and_compile_ident
         connection.close()
 
 
+@pytest.mark.parametrize('case',['module-error','column-denied','column-ignored','schema-denied',
+                                 'table-flags-denied','masking-unconfirmed','rowid-denied',
+                                 'table-flags-ignored','schema-name-ignored','schema-and-flags-ignored'])
+def test_sqlite_partial_native_metadata_keeps_healthy_symbols_and_caller_work(tmp_path,case):
+    from pgadmin.cdeadmin.providers.sqlite.driver import SQLiteConnection
+    connection=sqlite3.connect(tmp_path/'partial.sqlite',factory=SQLiteConnection)
+    calls=[]
+    try:
+        connection.executescript("CREATE TABLE healthy(id INTEGER PRIMARY KEY,body TEXT); INSERT INTO healthy VALUES(1,'committed'); "
+            "CREATE TABLE blocked(rowid TEXT); CREATE TABLE without_rows(id INTEGER PRIMARY KEY) WITHOUT ROWID;")
+        if case=='module-error':
+            connection.execute('CREATE VIRTUAL TABLE bad_fts USING fts5(body)')
+            connection.execute("UPDATE bad_fts_config SET v=999 WHERE k='version'")
+        if case in {'masking-unconfirmed','schema-and-flags-ignored'}:connection.execute('CREATE TABLE json_each(owned TEXT)')
+        connection.commit();connection.close()
+        connection=sqlite3.connect(tmp_path/'partial.sqlite',factory=SQLiteConnection)
+        connection.execute("INSERT INTO healthy VALUES(2,'pending')");connection.execute('SAVEPOINT caller')
+        connection.create_function('owner_function',0,lambda:calls.append(True) or 1)
+        def policy(action,name,value,*_):
+            if action==sqlite3.SQLITE_PRAGMA and name=='table_xinfo' and str(value).strip('"')=='blocked':
+                if case=='column-denied':return sqlite3.SQLITE_DENY
+                if case=='column-ignored':return sqlite3.SQLITE_IGNORE
+            if action==sqlite3.SQLITE_READ and name in {'sqlite_schema','sqlite_master'} and case in {'schema-denied','masking-unconfirmed'}:
+                return sqlite3.SQLITE_DENY
+            if action==sqlite3.SQLITE_READ and name in {'sqlite_schema','sqlite_master'} and value=='name' and case in {'schema-name-ignored','schema-and-flags-ignored'}:
+                return sqlite3.SQLITE_IGNORE
+            if action==sqlite3.SQLITE_PRAGMA and name=='table_list' and case in {'table-flags-denied','masking-unconfirmed'}:
+                return sqlite3.SQLITE_DENY
+            if action==sqlite3.SQLITE_PRAGMA and name=='table_list' and case in {'table-flags-ignored','schema-and-flags-ignored'}:
+                return sqlite3.SQLITE_IGNORE
+            if action==sqlite3.SQLITE_READ and name=='healthy' and value=='id' and case=='rowid-denied':
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK
+        connection.set_authorizer(policy)
+        result=metadata(connection,'sqlite')
+        assert result['complete'] is False
+        symbols={(row['resource_kind'],tuple(row['display_path'])) for row in result['resources']}
+        assert ('function',('owner_function',)) in symbols and not calls
+        assert any(not row.get('available',True) for row in result['observations'])
+        if case not in {'masking-unconfirmed','schema-and-flags-ignored'}:
+            assert ('column',('main','healthy','body')) in symbols
+            assert ('table',('main','blocked')) in symbols
+        if case in {'column-denied','column-ignored'}:
+            assert not any(kind=='column' and path[:2]==('main','blocked') for kind,path in symbols)
+        if case in {'masking-unconfirmed','schema-and-flags-ignored'}:
+            assert not any(row.get('table_valued') for row in result['resources'])
+            assert any(scope.get('reason')=='native-relation-masking-unconfirmed'
+                       for row in result['observations'] for scope in row.get('native_scopes',[]))
+        if case=='rowid-denied':
+            assert not any(('column',('main','healthy',alias)) in symbols for alias in ('rowid','_rowid_','oid'))
+        assert not any(('column',('main','without_rows',alias)) in symbols for alias in ('rowid','_rowid_','oid'))
+        assert connection.in_transaction and connection._cdeadmin_authorizer is policy
+        connection.execute('ROLLBACK TO caller')
+        assert connection.execute('SELECT count(*) FROM healthy').fetchone()==(2,)
+        connection.rollback()
+    finally:connection.close()
+
+
 def test_sqlite_keyword_binding_observation_never_executes_overridden_functions_or_pending_work(tmp_path):
     connection=sqlite3.connect(tmp_path/'native-keywords.sqlite');calls=[]
     try:

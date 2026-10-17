@@ -41,13 +41,13 @@ def inventory():
         probe.close()
 
 
-def rowid_observations(cursor, schema, name, columns):
+def rowid_observations(cursor, schema, name, columns, *, table_valued=True):
     """Compile physical row aliases; never step the virtual-table result VM."""
     names = {row['name'].translate(FOLD) for row in columns}
     aliases = [alias for alias in ('rowid', '_rowid_', 'oid') if alias not in names]
-    placeholders = ','.join('?' for row in columns if row['hidden'] == 1)
+    placeholders = ','.join('?' for row in columns if row['hidden'] == 1) if table_valued else ''
     source = quote(schema) + '.' + quote(name) + ('(' + placeholders + ')' if placeholders else '') + ' AS j'
-    parameters = [None for row in columns if row['hidden'] == 1]
+    parameters = [None for row in columns if row['hidden'] == 1] if table_valued else []
     def compile_aliases(selected):
         cursor.execute('EXPLAIN SELECT ' + ','.join('j.' + quote(alias) for alias in selected) + ' FROM ' + source, parameters)
         cursor.fetchone()
@@ -75,7 +75,7 @@ def rowid_observations(cursor, schema, name, columns):
         return result
 
 
-def discover(cursor, schemas, relations):
+def discover(cursor, schemas, relations, *, masking_complete=None):
     """Respect live authorization and name masking on the original connection.
 
     table_xinfo resolves and connects a virtual table, but does not call its
@@ -87,6 +87,9 @@ def discover(cursor, schemas, relations):
     for name in inventory():
         scopes = []
         for schema in schemas:
+            if masking_complete is not None and not masking_complete.get(schema, False):
+                scopes.append({'schema': schema, 'available': False, 'reason': 'native-relation-masking-unconfirmed'})
+                continue
             if (schema.translate(FOLD), name.translate(FOLD)) in masked:
                 scopes.append({'schema': schema, 'available': False, 'masked_by_relation': True})
                 continue

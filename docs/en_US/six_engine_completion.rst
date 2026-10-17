@@ -1496,3 +1496,16 @@ coverage partial. Native fixture queries qualify direct aliases, CTE projections
 explicit renaming and real relation masking separately from the parser's own
 declarations. Direct result labels and CTE column names need not be identical;
 the actual native CTE observations determine the completion expectation.
+
+SQLite partial editor metadata
+--------------------------------
+
+Unavailable virtual-table modules, native metadata denial and ignored metadata
+results retain healthy SQL-editor symbols with explicit incomplete coverage.
+Authorized native table-list observations can supply identities when direct
+schema queries are denied. Unconfirmed relation masking prevents a real table
+from being relabeled as a builtin function. Empty or unavailable column results
+do not authorize invented columns or row identifiers. Physical relation aliases
+are checked with the native nonexecuting compiler and preserve the caller's
+authorization and pending transaction. A real unloaded-module fixture qualifies
+healthy completion and native checking separately from the unavailable object.

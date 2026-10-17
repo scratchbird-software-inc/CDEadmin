@@ -21,9 +21,10 @@ def qualify(output,prefix,compiler='cc'):
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
     source=ROOT/'tools/fixtures/sqlite_catalog_module.c';program=output/'create-fixture';database=output/'native.sqlite'
     proof={'complete':False,'history_testing':'not run','checks':[],'native_sqlite_version':sqlite3.sqlite_version,
-        'scope':'Native Linux unavailable-module fixture, catalog/navigator/DDN retention; extension loading remains separate',
+        'scope':'Native Linux unavailable-module fixture, catalog/navigator/DDN/editor retention; extension loading remains separate',
         'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__),source,
-            ROOT/'web/pgadmin/cdeadmin/providers/sqlite/provider.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_catalog_service.py']}}
+            ROOT/'web/pgadmin/cdeadmin/providers/sqlite/provider.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_catalog_service.py',
+            ROOT/'web/pgadmin/cdeadmin/providers/native_editor.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/table_functions.py']}}
     provider=None
     try:
         assert sqlite3.sqlite_version=='3.53.0'
@@ -73,6 +74,24 @@ def qualify(output,prefix,compiler='cc'):
         assert restored['rows'][identity]['native']['module_observation']['module']=='cde_catalog_probe'
         assert any('unavailable' in message for message in exported['provenance']['warnings'])
         proof['checks'].append('production-catalog-service-and-public-ddn-preserve-unavailable-facts-without-empty-catalog')
+        opened=provider.open_session({'route':route});handle=provider._sessions[opened['session_id']].handle
+        try:
+            handle.execute("INSERT INTO healthy VALUES(9007199254740993,'pending native module check')")
+            handle.execute('SAVEPOINT caller')
+            symbols=provider.complete({'session_id':opened['session_id']})['editor_context']
+            assert symbols['complete'] is False
+            paths={(row['resource_kind'],tuple(row['display_path'])) for row in symbols['resources']}
+            assert ('table',('main','unavailable')) in paths and ('column',('main','healthy','body')) in paths
+            assert not any(kind=='column' and path[:2]==('main','unavailable') for kind,path in paths)
+            assert next(row for row in symbols['observations'] if row['section']=='columns:main:unavailable')['reason']=='native-relation-binding'
+            checked=provider.validate_source_without_execution({'session_id':opened['session_id'],'language_profile':'sqlite-sql',
+                'source':'SELECT id,body FROM healthy'})
+            assert checked['grammar_valid'] is True
+            handle.execute('ROLLBACK TO caller')
+            assert handle.in_transaction and handle.execute('SELECT id,body FROM healthy').fetchall()==[(9007199254740993,'pending native module check')]
+            handle.rollback()
+            proof['checks'].append('real-unloaded-module-partial-editor-keeps-healthy-identifiers-native-checking-and-pending-work')
+        finally:provider.close_session(opened)
         proof.update(complete=True,resource_count=len(by_id),extension_loader_bound_in_python=hasattr(sqlite3.Connection,'load_extension'))
     finally:
         if provider is not None:provider.client.close()

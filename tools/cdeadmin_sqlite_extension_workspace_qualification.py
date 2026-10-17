@@ -4,6 +4,7 @@ import builtins
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import sys
 import threading
@@ -14,7 +15,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')]
 from tools.sqlite_extension_fixture import build  # noqa: E402
 
 
-def qualify(output, headers, binary=None, driver_binary=None, table_functions=False):
+def qualify(output, headers, binary=None, driver_binary=None, table_functions=False, unavailable_source=None):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Evidence belongs outside source')
@@ -49,7 +50,13 @@ def qualify(output, headers, binary=None, driver_binary=None, table_functions=Fa
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
     from flask import url_for
     database = output / 'native.sqlite'
-    sqlite3.connect(database).close()
+    if unavailable_source:
+        shutil.copy2(unavailable_source,database)
+        from contextlib import closing
+        with closing(sqlite3.connect(database)) as fixture:
+            assert fixture.execute("SELECT sql FROM sqlite_schema WHERE name='unavailable'").fetchone()==('CREATE VIRTUAL TABLE unavailable USING cde_catalog_probe',)
+            fixture.execute("INSERT INTO healthy VALUES(1,'native healthy metadata')");fixture.commit()
+    else:sqlite3.connect(database).close()
     app = create_app('ScratchRobin-native-sqlite-extension')
     app.PGADMIN_RUNTIME = False; app.PGADMIN_INT_KEY = ''; app.run_before_app_start()
     client = app.test_client()
@@ -90,10 +97,14 @@ def qualify(output, headers, binary=None, driver_binary=None, table_functions=Fa
         catalog = post('source_catalog', session_id=session_id)
         assert any(row['native'].get('name') == 'cde_native_probe' for row in catalog['resources'])
         assert post('source_validate', session_id=session_id, source='SELECT cde_native_probe()')['grammar_valid']
+        if unavailable_source:
+            assert any(row['display_name']=='unavailable' for row in catalog['resources'])
+            proof['checks'].append('unloaded-module-keeps-healthy-source-catalog-and-native-function-validation')
         post('close_session', session_id=session_id)
         proof['checks'].append('authenticated-approved-file-review-load-receipt-no-replay-retained-catalog-and-native-checking')
         if binary:
-            proof['browser'] = browser(app, output, sid, binary, driver_binary, table_functions=table_functions)
+            proof['browser'] = browser(app, output, sid, binary, driver_binary, table_functions=table_functions,
+                                       unavailable_module=bool(unavailable_source))
             proof['checks'].append('browser-query-context-review-confirm-load-and-native-function-result')
         proof.update(complete=True, library_sha256=digest, table_function_completion=table_functions)
     finally:
@@ -101,7 +112,7 @@ def qualify(output, headers, binary=None, driver_binary=None, table_functions=Fa
     return proof
 
 
-def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
+def browser(app, output, sid, binary, driver_binary, *, table_functions=False, unavailable_module=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -149,6 +160,16 @@ def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
         click('Load native library')
         wait.until(lambda browser: any(node.text.endswith(': loaded') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         _run_query(driver, wait, 'SELECT cde_native_probe() AS native_value', 'native extension: 雪', 'SQLite', output)
+        if unavailable_module:
+            source="SELECT 'healthy metadata:' || h. FROM healthy h"
+            prefix="SELECT 'healthy metadata:' || h."
+            _set_query(driver,wait,source);editor=wait.until(lambda browser:_query_editor(browser))
+            editor.send_keys(Keys.CONTROL,Keys.HOME);editor.send_keys(Keys.ARROW_RIGHT*len(prefix));editor.send_keys(Keys.CONTROL,Keys.SPACE)
+            option=wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'.cm-tooltip-autocomplete .cm-completionLabel')
+                if node.is_displayed() and node.text=='body'),None));option.click()
+            inserted=driver.execute_script('return [...arguments[0].querySelectorAll(".cm-line")].map(n=>n.textContent).join("\\n");',_query_editor(driver))
+            assert inserted==prefix+'"body"'+source[len(prefix):],inserted
+            _run_query(driver,wait,inserted,'healthy metadata:native healthy metadata','SQLite',output)
         if table_functions:
             source = 'SELECT j. FROM json_each(\'{"snow":7}\') AS j'
             _set_query(driver, wait, source)
@@ -184,7 +205,8 @@ def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
         driver.save_screenshot(str(output / 'native-sqlite-extension.png'))
         errors = [row for row in driver.get_log('browser') if row.get('level') == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2)); assert not errors
-        return {'complete': True, 'console_errors': 0, 'table_function_completion': table_functions}
+        return {'complete': True, 'console_errors': 0, 'table_function_completion': table_functions,
+                'healthy_completion_with_unloaded_module':unavailable_module}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output / 'browser-failure.png'))
@@ -198,5 +220,6 @@ def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', type=Path, required=True); parser.add_argument('--sqlite-headers', type=Path, required=True)
-    parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary'); parser.add_argument('--table-functions', action='store_true'); args = parser.parse_args()
-    qualify(args.evidence, args.sqlite_headers, args.browser_binary, args.driver_binary, args.table_functions)
+    parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary'); parser.add_argument('--table-functions', action='store_true')
+    parser.add_argument('--unavailable-source',type=Path);args = parser.parse_args()
+    qualify(args.evidence, args.sqlite_headers, args.browser_binary, args.driver_binary, args.table_functions,args.unavailable_source)

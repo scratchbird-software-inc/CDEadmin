@@ -114,21 +114,29 @@ def metadata(handle, engine, transaction=None, dialect=None):
     cursor = handle if engine == 'duckdb' else (
         transaction.cursor() if engine == 'firebird' else handle.cursor())
 
-    def query(name, sql, *, unavailable_view=False):
+    def query(name, sql, *, unavailable_view=False, unavailable_relation=False):
         try:
             cursor.execute(sql)
+            if engine == 'sqlite' and cursor.description is None:
+                observations.append({'section': name, 'available': False,
+                                     'reason': 'native-result-unobserved'})
+                return []
             rows = cursor.fetchmany(MAX_SYMBOLS + 1)
             observations.append({'section': name, 'available': True,
                                  'truncated': len(rows) > MAX_SYMBOLS})
             return rows[:MAX_SYMBOLS]
         except Exception as error:
             code = getattr(error, 'errno', None)
-            if engine=='sqlite' and unavailable_view:
+            if engine=='sqlite':
                 import sqlite3
                 native_code=getattr(error,'sqlite_errorcode',None)
-                if isinstance(error,sqlite3.Error) and type(native_code) is int and native_code & 255 in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}:
+                if (isinstance(error,sqlite3.Error) and type(native_code) is int and
+                        (native_code & 255 == sqlite3.SQLITE_AUTH or
+                         native_code & 255 == sqlite3.SQLITE_ERROR and (unavailable_view or unavailable_relation))):
                     observations.append({'section':name,'available':False,'error_code':native_code,
-                        'error_name':getattr(error,'sqlite_errorname',None),'reason':'native-view-binding'})
+                        'error_name':getattr(error,'sqlite_errorname',None),'reason':
+                        'native-authorization' if native_code & 255 == sqlite3.SQLITE_AUTH else
+                        'native-view-binding' if unavailable_view else 'native-relation-binding'})
                     return []
             # Only native permission failures are incomplete metadata. A broken
             # transport/transaction or invalid query is never an empty section.
@@ -190,32 +198,52 @@ def metadata(handle, engine, transaction=None, dialect=None):
             databases = query('databases', 'PRAGMA database_list')
             context['search_path'] = ([row[1] for row in databases if row[1]=='temp'] +
                 [row[1] for row in databases if row[1]!='temp'])
-            native_relations = set()
+            native_relations = set(); masking_complete = {}
             for _ordinal, schema, _path in databases:
                 add('schema', [schema])
                 quoted = '"' + schema.replace('"', '""') + '"'
-                table_flags = {row[1]: row for row in query('table-flags:' + schema, f'PRAGMA {quoted}.table_list')}
-                for name, kind in query('relations:' + schema, f'SELECT name,type FROM {quoted}.sqlite_schema WHERE type IN (\'table\',\'view\') ORDER BY name LIMIT 25001'):
+                raw_flags = query('table-flags:' + schema, f'PRAGMA {quoted}.table_list')
+                if observations[-1]['available'] and not raw_flags:
+                    observations[-1].update(available=False, reason='native-table-list-unobserved')
+                flags_complete = observations[-1]['available'] and not observations[-1].get('truncated', False)
+                table_flags = {row[1]: row for row in raw_flags if row[0] == schema}
+                native_relations.update((schema, row[1]) for row in table_flags.values())
+                relations = query('relations:' + schema, f'SELECT name,type FROM {quoted}.sqlite_schema WHERE type IN (\'table\',\'view\') ORDER BY name LIMIT 25001')
+                if any(not isinstance(row[0], str) or not row[0] or row[1] not in {'table', 'view'} for row in relations):
+                    observations[-1].update(available=False, reason='native-relation-identities-unobserved')
+                    relations = [row for row in relations if isinstance(row[0], str) and row[0] and row[1] in {'table', 'view'}]
+                relations_complete = observations[-1]['available'] and not observations[-1].get('truncated', False)
+                masking_complete[schema] = flags_complete or relations_complete
+                if not relations_complete and flags_complete:
+                    relations = [(row[1], 'view' if row[2] == 'view' else 'table') for row in table_flags.values()]
+                for name, kind in relations:
                     native_relations.add((schema, name))
                     add(kind, [schema, name])
                     table = '"' + name.replace('"', '""') + '"'
-                    columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})',unavailable_view=kind=='view')
+                    columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})',
+                                    unavailable_view=kind=='view',unavailable_relation=True)
+                    column_observation = observations[-1]
+                    if column_observation['available'] and not columns:
+                        column_observation.update(available=False, reason='native-columns-unobserved')
                     for column in columns:
                         # Virtual-table hidden fields are excluded from star;
                         # generated columns (flags 2/3) remain in the projection.
                         add('column', [schema, name, column[1]], column[2], hidden_from_star=column[6] == 1)
                     flags = table_flags.get(name)
-                    names = {str(column[1]).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))
-                             for column in columns}
-                    if kind == 'table' and flags and not flags[4] and not observations[-1]['truncated']:
-                        for alias in ('rowid', '_rowid_', 'oid'):
-                            if alias not in names:
-                                add('column', [schema, name, alias], 'INTEGER; native row identifier, not a durable application key',
-                                    hidden_from_star=True)
+                    if (kind == 'table' and (not flags or not flags[4]) and column_observation['available'] and
+                            not column_observation.get('truncated', False)):
+                        from .sqlite.table_functions import rowid_observations
+                        aliases = rowid_observations(cursor, schema, name, [
+                            {'name': column[1], 'hidden': column[6]} for column in columns], table_valued=False)
+                        observations.append({'section': 'row-identifiers:' + schema + ':' + name,
+                            'available': all(row['available'] for row in aliases), 'native_aliases': aliases})
+                        for alias in aliases:
+                            if alias['available']:
+                                add('column', [schema, name, alias['name']], 'INTEGER; native row identifier, not a durable application key', hidden_from_star=True)
             for name, builtin, kind, encoding, arity, flags in query('functions', 'PRAGMA function_list'):
                 add('function', [name], f'{kind}({arity}); {encoding}; flags={flags}; builtin={builtin}')
             from .sqlite.table_functions import discover
-            table_functions = discover(cursor, [row[1] for row in databases], native_relations)
+            table_functions = discover(cursor, [row[1] for row in databases], native_relations, masking_complete=masking_complete)
             for function in table_functions:
                 observations.append({'section': 'table-function:' + function['name'],
                     'available': function['observation_complete'], 'native_scopes': function['scopes']})
@@ -359,8 +387,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
             context.update(native_keywords);observations.extend(native_observations)
         context['context_revision'] = hashlib.sha256(json.dumps({'context':context,'resources':symbols,
             'observations':observations,'visible_resource_count':total}, sort_keys=True, default=str).encode()).hexdigest()
+        truncated = total > len(symbols) or any(row.get('truncated') for row in observations)
         return {'context': context, 'resources': symbols, 'visible_resource_count': total,
-                'observations': observations, 'truncated': total > len(symbols) or any(row.get('truncated') for row in observations),
+                'observations': observations, 'truncated': truncated,
+                'complete': not truncated and all(row.get('available', True) and not row.get('unavailable', False) for row in observations),
                 'coverage': 'Native visible metadata on the retained session; denied, unavailable or truncated sections are incomplete.'}
     finally:
         if type_parser is not None:type_parser.close()
