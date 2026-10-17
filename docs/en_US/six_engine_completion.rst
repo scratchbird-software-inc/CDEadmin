@@ -991,6 +991,16 @@ built-in function name; ambiguous source columns are not guessed. These rules
 apply to retained member types and direct CTE/derived projections as well as
 ordinary alias paths.
 
+MySQL and MariaDB qualified keyword names
+------------------------------------------
+
+The editor follows the native MySQL-family lexer rule that an identifier
+immediately following a qualifying dot is an identifier even when its spelling
+is a keyword. Qualified table/column names retain native source bindings through
+aliases, CTE stars and direct projections. Insertion quoting follows the observed
+SQL mode. Native qualification includes MySQL pure/C clients and MariaDB normal
+and Oracle modes; this does not close other procedural or mode-specific scopes.
+
 PostgreSQL exact dialect and statistics contracts
 =================================================
 

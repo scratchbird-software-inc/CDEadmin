@@ -66,6 +66,9 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
       i += token.length;
       name = /^[A-Za-z_$\u0080-\u{10ffff}][A-Za-z_0-9$\u0080-\u{10ffff}]*$/u.test(token) ? words.has(token.toUpperCase()) && !identifierWords.has(token.toUpperCase()) ? 'Keyword' : 'Identifier' :
         /^\p{N}/u.test(token) ? 'Number' : ['.', '(', ')', ';', ','].includes(token) ? token : 'Operator';
+      // Both native MySQL-family lexers enter IDENT_START for an
+      // immediately adjacent identifier after a qualifying dot.
+      if(mysql && name==='Keyword' && result.at(-1)?.name==='.' && result.at(-1).to===start)name='Identifier';
     }
     result.push({name, from: start, to: i});
   }

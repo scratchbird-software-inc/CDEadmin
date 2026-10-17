@@ -30,6 +30,27 @@ function suggestions(source, data, previous=data, position=source.length) {
   });
 });
 
+(process.env.CDEADMIN_NATIVE_IDENTIFIER_FIXTURES ? describe : describe.skip)('native MySQL-family qualified identifiers',()=> {
+  test('inserts every independently bound native result column across client interfaces and modes',()=> {
+    const paths=JSON.parse(process.env.CDEADMIN_NATIVE_IDENTIFIER_FIXTURES);
+    expect(paths).toHaveLength(2);
+    for(const path of paths) {
+      const fixture=JSON.parse(fs.readFileSync(path,'utf8'));
+      expect(fixture.interfaces).toHaveLength(2);
+      for(const observed of fixture.interfaces) {
+        expect(observed.cases).toHaveLength(5);
+        for(const example of observed.cases) {
+          const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
+          const result=suggestions(source,observed.metadata,observed.metadata,position);
+          if(!result)throw new Error('No '+fixture.engine+' '+observed.label+' completion: '+example.marked);
+          expect(result.options.map(({label,apply,type})=>({label,apply,type}))).toEqual(example.expected);
+          expect(result.options.map(option=>source.slice(0,result.from)+option.apply+source.slice(result.to))).toEqual(example.native_inserted_sql);
+        }
+      }
+    }
+  });
+});
+
 const memberShape={kind:'struct',sql:'STRUCT("Field ü" BIGINT)',fields:[{name:'Field ü',type:{kind:'bigint',sql:'BIGINT'}}]};
 const containerMetadata=()=> {
   const data=metadata('duckdb');
@@ -153,6 +174,17 @@ test.each(['mysql','mariadb'])('%s completion reparses newly observed ANSI_QUOTE
   const result=suggestions(source,metadata(engine,{sql_mode:'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'}),metadata(engine));
   expect(result.options).toEqual(expect.arrayContaining([expect.objectContaining({label:'first',apply:'"first"'})]));
   expect(result.options.some(item => item.label==='second')).toBe(false);
+});
+
+test.each(['mysql','mariadb'])('%s native qualified keyword table names retain CTE and alias columns',engine=> {
+  const data=metadata(engine,{sql_mode:'ANSI_QUOTES'});
+  data.resources=data.resources.map(row=>({...row,display_path:row.display_path.map(name=>name==='one'?'select':name)}));
+  for(const marked of ['SELECT t.| FROM main.select t',
+    'WITH q AS (SELECT t.* FROM main.select t) SELECT q.| FROM q',
+    'SELECT q.| FROM (SELECT t.first FROM main.select t) q']) {
+    const result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+    expect(result.options).toEqual([expect.objectContaining({label:'first',apply:'"first"'})]);
+  }
 });
 
 test('native callback uses the returned mode without waiting for React to reconfigure the editor', async () => {
