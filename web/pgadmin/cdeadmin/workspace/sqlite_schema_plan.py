@@ -67,12 +67,14 @@ def _source(row):
     elif kind == 'table':
         pattern = r'^\s*CREATE\s+TABLE\s+' + re.escape(exact) + r'\s*\('
     elif kind in {'fts-table', 'virtual-table'}:
-        module = (r'(?:fts3|fts4|fts5)' if kind == 'fts-table' else
-                  r'(?:rtree|rtree_i32|geopoly|fts5vocab)')
+        from ..providers.sqlite.modules import declaration
+        native=declaration(ddl)
+        if (native is None or native[0]!=name or native[2]!='main' or
+                (native[1].lower() in {'fts3','fts4','fts5'})!=(kind=='fts-table')):
+            raise ValueError('Native virtual-table module, target or kind differs from the desired SQLite object')
         if row['native'].get('catalog_metadata', {}).get('table_list_type') not in (None, 'virtual'):
             raise ValueError('SQLite virtual table kind differs from native metadata')
-        pattern = (r'^\s*CREATE\s+VIRTUAL\s+TABLE\s+' + re.escape(exact) +
-                   r'\s+USING\s+' + module + r'\s*\(')
+        return ddl
     elif kind == 'view':
         pattern = r'^\s*CREATE\s+VIEW\s+' + re.escape(exact) + r'(?=\s|\()'
     elif kind == 'index':
@@ -98,12 +100,14 @@ def _source(row):
 def _require_virtual_module(connection, row, source):
     if row['kind'] not in {'fts-table', 'virtual-table'}:
         return
-    match = re.search(r'\bUSING\s+([A-Za-z0-9_]+)\s*\(', source, re.I)
-    if match is None:
+    from ..providers.sqlite.modules import declaration
+    native=declaration(source)
+    if native is None:
         raise ValueError('SQLite virtual table module is missing')
-    available = {str(item[0]).lower()
+    fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
+    available = {str(item[0]).translate(fold)
                  for item in connection.execute('PRAGMA module_list')}
-    if match.group(1).lower() not in available:
+    if native[1].translate(fold) not in available:
         raise ValueError('SQLite virtual table module is not installed')
 
 
@@ -134,11 +138,11 @@ def _compile_exact(connection, row, source):
               'fts-table': sqlite3.SQLITE_CREATE_VTABLE,
               'virtual-table': sqlite3.SQLITE_CREATE_VTABLE,
               'column': sqlite3.SQLITE_ALTER_TABLE}[kind]
-    module = (re.search(r'\bUSING\s+([A-Za-z0-9_]+)\s*\(', source, re.I)
-              if kind in {'fts-table', 'virtual-table'} else None)
+    from ..providers.sqlite.modules import declaration
+    module = declaration(source) if kind in {'fts-table','virtual-table'} else None
     expected = ((action, 'main', row['path'][1], None) if kind == 'column'
                 else (action, row['name'], row['path'][1] if kind in {'index', 'trigger'}
-                      else module.group(1) if module else None, 'main'))
+                      else module[1] if module else None, 'main'))
     if len([item for item in actions if item[0] == action]) != 1 or expected not in actions:
         raise ValueError('SQLite native compiled DDL targets a different object or owner')
 

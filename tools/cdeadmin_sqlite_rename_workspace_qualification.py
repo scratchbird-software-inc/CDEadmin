@@ -13,13 +13,14 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,*,binary=None,driver_binary=None):
+def qualify(output,*,binary=None,driver_binary=None,virtual_module=None):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700);builtins.SERVER_MODE=None
     proof={'complete':False,'checks':[],'history_testing':'not run','source_sha256':{}}
     for path in [*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite*.py')),
                  ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',
+                 ROOT/'web/pgadmin/cdeadmin/providers/sqlite/provider.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/modules.py',
                  ROOT/'web/pgadmin/static/js/Dialogs/SQLiteCatalog.jsx',ROOT/'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx',Path(__file__)]:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     import config
@@ -34,10 +35,17 @@ def qualify(output,*,binary=None,driver_binary=None):
     path=output/'native.sqlite';connection=sqlite3.connect(path)
     try:
         assert sqlite3.sqlite_version=='3.53.0'
-        connection.executescript('CREATE TABLE parent(id INTEGER PRIMARY KEY,note TEXT UNIQUE); '
-            'CREATE TABLE child(id INTEGER PRIMARY KEY,parent_id INTEGER REFERENCES parent(id)); '
-            'CREATE VIEW projection AS SELECT id,note FROM parent; '
-            "INSERT INTO parent VALUES(9007199254740993,'雪'); INSERT INTO child VALUES(1,9007199254740993);")
+        if virtual_module:
+            if virtual_module not in {'fts3','fts4','fts5'}:raise ValueError('Select a native FTS fixture')
+            connection.execute('CREATE VIRTUAL TABLE parent USING "'+virtual_module+'"(body)')
+            connection.executescript('CREATE TABLE child(id INTEGER PRIMARY KEY); '
+                'CREATE VIEW projection AS SELECT rowid AS id,body AS note FROM parent; '
+                "INSERT INTO parent(rowid,body) VALUES(9007199254740993,'雪'); INSERT INTO child VALUES(1);")
+        else:
+            connection.executescript('CREATE TABLE parent(id INTEGER PRIMARY KEY,note TEXT UNIQUE); '
+                'CREATE TABLE child(id INTEGER PRIMARY KEY,parent_id INTEGER REFERENCES parent(id)); '
+                'CREATE VIEW projection AS SELECT id,note FROM parent; '
+                "INSERT INTO parent VALUES(9007199254740993,'雪'); INSERT INTO child VALUES(1,9007199254740993);")
         connection.commit()
     finally:connection.close()
     app=create_app('ScratchRobin-native-sqlite-rename');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start()
@@ -65,7 +73,7 @@ def qualify(output,*,binary=None,driver_binary=None):
                 (output/'http-failure.json').write_text(json.dumps(value,indent=2)+'\n');raise RuntimeError('Native SQLite HTTP '+action+' failed')
             return value['data']
         captured=post('sqlite_catalog_export',{'include_system':False});baseline=json.dumps(captured['snapshot'])
-        renames=[{'kind':'table','table':'parent','to':'renamed:雪'},{'kind':'column','table':'renamed:雪','from':'note','to':'body:雪'}]
+        renames=[{'kind':'table','table':'parent','to':'renamed:雪'},*([{'kind':'column','table':'renamed:雪','from':'note','to':'body:雪'}] if not virtual_module else [])]
         generated=post('sqlite_schema_rename_design',{'baseline':baseline,'renames':renames})
         connection=sqlite3.connect(path)
         try:assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
@@ -78,7 +86,7 @@ def qualify(output,*,binary=None,driver_binary=None):
         assert post('sqlite_schema_apply',apply_request)==result
         connection=sqlite3.connect(path)
         try:
-            assert connection.execute('SELECT * FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
+            assert connection.execute(('SELECT rowid,body' if virtual_module else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
         finally:connection.close()
@@ -89,12 +97,13 @@ def qualify(output,*,binary=None,driver_binary=None):
             proof['browser']=browser(app,output,path,sid,target_label,binary,driver_binary)
             connection=sqlite3.connect(path)
             try:
-                assert connection.execute('SELECT * FROM "browser:雪"').fetchall()==[(9007199254740993,'雪')]
+                assert connection.execute(('SELECT rowid,body' if virtual_module else 'SELECT *')+' FROM "browser:雪"').fetchall()==[(9007199254740993,'雪')]
+                if virtual_module:assert connection.execute('SELECT rowid FROM "browser:雪" WHERE "browser:雪" MATCH \'雪\'').fetchall()==[(9007199254740993,)]
                 assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
                 assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
             finally:connection.close()
             proof['checks'].append('browser-context-menu-native-rename-generation-confirmed-apply-and-independent-rows')
-        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version)
+        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module)
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
@@ -154,5 +163,5 @@ def browser(app,output,path,sid,target_label,binary,driver_binary):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');args=parser.parse_args()
-    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));args=parser.parse_args()
+    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module)

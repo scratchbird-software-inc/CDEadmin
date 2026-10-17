@@ -69,16 +69,29 @@ def sqlite(connection):
     def add(kind, path): expected.setdefault(kind, []).append(tuple(path))
     resources = _resources(connection, {})
     by_path = {(row['resource_kind'], tuple(row['display_path'])): row for row in resources}
+    def module(source):
+        # Observe the native parser independently of provider classifications.
+        import sqlite3
+        probe=sqlite3.connect(':memory:');observed=[]
+        def record(code,_name,argument,_database,_context):
+            if code==sqlite3.SQLITE_CREATE_VTABLE:observed.append(argument)
+            return sqlite3.SQLITE_OK
+        try:
+            probe.set_authorizer(record);probe.execute('EXPLAIN '+source).fetchone()
+            return observed[0] if len(observed)==1 else None
+        finally:probe.close()
     for _, schema, _ in connection.execute('PRAGMA database_list'):
         add('database' if schema == 'main' else 'attached-database', [schema])
         for kind, name, owner, ddl in connection.execute('SELECT type,name,tbl_name,sql FROM ' + quote(schema) + '.sqlite_schema'):
             if kind == 'table' and (ddl or '').lstrip().upper().startswith('CREATE VIRTUAL TABLE'):
-                import re
-                kind = 'fts-table' if re.search(r'\bUSING\s+fts\d?\b', ddl, re.I) else 'virtual-table'
+                kind = 'fts-table' if (module(ddl) or '').lower() in {'fts3','fts4','fts5'} else 'virtual-table'
             path = [schema, owner, name] if kind in {'index', 'trigger'} else [schema, name]
             if kind != 'index' or tuple(path) not in expected.get('index', []): add(kind, path)
             resource = by_path.get((kind, tuple(path)))
             facts.append({'section': canonical([schema, name, 'ddl']), 'equal': resource is not None and resource['native'].get('ddl') == (ddl or '')})
+            if kind in {'fts-table','virtual-table'}:
+                observed=(resource or {}).get('native',{}).get('module_observation',{})
+                facts.append({'section':canonical([schema,name,'native-module']),'equal':observed.get('available') is True and observed.get('module')==module(ddl)})
             if kind not in {'table', 'view', 'fts-table', 'virtual-table'}: continue
             raw = list(connection.execute('PRAGMA ' + quote(schema) + '.table_xinfo(' + quote(name) + ')'))
             for _, column, *_ in raw: add('column', [schema, name, column])
@@ -213,7 +226,11 @@ def qualify(engine, output):
                 'CREATE TABLE child(parent INTEGER REFERENCES "odd.table"("odd.column"))',
                 'CREATE INDEX "odd.index" ON child(parent)', 'CREATE VIEW "odd.view" AS SELECT * FROM child',
                 'CREATE TEMP TABLE session_table(id INTEGER)', 'CREATE TABLE "other.db".attached(id INTEGER)',
-                'CREATE VIRTUAL TABLE search USING fts5(body)']
+                'CREATE VIRTUAL TABLE search USING fts5(body)',
+                'CREATE VIRTUAL TABLE "quoted.search" USING "fts5"(body)',
+                "CREATE VIRTUAL TABLE 'single.search' USING 'fts4'(body)",
+                'CREATE VIRTUAL TABLE [bracket.search] USING [fts3](body)',
+                'CREATE VIRTUAL TABLE "quoted.spatial" USING "rtree"(id,x1,x2)']
         else:
             import duckdb as native
             connection = native.connect(str(root / 'owned.duckdb'))

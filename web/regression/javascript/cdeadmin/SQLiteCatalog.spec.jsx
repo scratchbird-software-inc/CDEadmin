@@ -11,6 +11,21 @@ const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
+it('offers an observed FTS table for native table rename generation', async () => {
+  const renames=[{kind:'table',table:'search:雪',to:'renamed:雪'}];
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[{resource_id:'fts',kind:'fts-table',name:'search:雪',path:['main','search:雪']}],provenance:{objects:1,coverage:'partial'}})
+    .mockResolvedValueOnce({snapshot,renames});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  fireEvent.click(screen.getByText('Native table and column renames'));
+  fireEvent.change(screen.getByRole('combobox',{name:'Native rename table'}).parentElement.querySelector('input'),{target:{value:'search:雪'}});
+  fireEvent.change(screen.getByRole('textbox',{name:'New native name'}),{target:{value:'renamed:雪'}});
+  fireEvent.click(screen.getByRole('button',{name:'Generate native rename design'}));
+  await screen.findByText(/The generated rename intent is included/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_rename_design',request:{database_target_id:'file-1',baseline:JSON.stringify(snapshot),renames}});
+});
+
 it('generates a native rename design and carries exact intent into its preview', async () => {
   const renames=[{kind:'column',table:'owned',from:'old_note',to:'new:雪'}];
   const generated={...snapshot,files:{'catalog.ddn':'native rewritten facts'}};

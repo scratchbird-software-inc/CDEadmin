@@ -12,6 +12,24 @@ from ..providers.sqlite.provider import _resources
 from ..providers.sqlite.driver import uncertain_error
 
 KINDS={'table','view','column','constraint','index','trigger','fts-table','virtual-table'}
+RENAME_MODULES={'fts3','fts4','fts5','rtree','rtree_i32','geopoly'}
+
+
+def virtual_module(connection,row):
+    """Use native authorizer arguments, including quoted module declarations."""
+    observed=[]
+    def authorize(action,name,module,database,_context):
+        if action==sqlite3.SQLITE_CREATE_VTABLE:observed.append((name,module,database))
+        return sqlite3.SQLITE_OK
+    connection.set_authorizer(authorize)
+    try:connection.execute('EXPLAIN '+row['native']['ddl']).fetchone()
+    finally:connection.set_authorizer(None)
+    if len(observed)!=1 or observed[0][0]!=row['name'] or observed[0][2]!='main':
+        raise ValueError('Native virtual-table declaration targets a different rename scope')
+    module=observed[0][1]
+    if module.lower() not in RENAME_MODULES:
+        raise ValueError('Native rename design generation requires an adapter for installed module '+module)
+    return module
 
 
 def schema(model):
@@ -47,14 +65,23 @@ def generate(baseline,renames):
         probe.execute('PRAGMA legacy_alter_table=OFF')
         probe.execute('PRAGMA foreign_keys=ON')
         rows=[row for row in baseline['rows'].values() if row['kind'] in KINDS and row['system']=='false']
-        if any(row['path'][0]!='main' or row['kind'] in {'fts-table','virtual-table'} for row in rows):
-            raise ValueError('Native rename design generation for attached or virtual-table environments requires its installed-module adapter')
-        declarations=sorted((row for row in rows if row['kind'] in {'table','view','index','trigger'}),
-            key=lambda row:({'table':0,'view':1,'index':2,'trigger':3}[row['kind']],row['resource_id']))
+        from ..providers.sqlite.modules import option,declaration
+        for row in rows:
+            declared=declaration(row['native'].get('ddl')) if row['kind']=='fts-table' else None
+            if declared and declared[1].lower() in {'fts4','fts5'}:
+                content=option(row['native']['ddl'],'content')
+                fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
+                if content and any(item['table'].translate(fold)==content.translate(fold) for item in selected):
+                    raise ValueError('Renaming an external-content owner requires the native FTS rebinding adapter')
+        if any(row['path'][0]!='main' for row in rows):
+            raise ValueError('Native rename design generation for attached environments requires its attachment adapter')
+        declarations=sorted((row for row in rows if row['kind'] in {'table','view','index','trigger','fts-table','virtual-table'}),
+            key=lambda row:({'table':0,'fts-table':0,'virtual-table':0,'view':1,'index':2,'trigger':3}[row['kind']],row['resource_id']))
         for row in declarations:
             source=row['native'].get('ddl')
             if not isinstance(source,str) or not source or len(source.encode('utf8'))>1024*1024:
                 raise ValueError('Native rename requires complete bounded schema declarations')
+            if row['kind'] in {'fts-table','virtual-table'}:virtual_module(probe,row)
             # Source is compared with the fresh registered catalog at the service
             # boundary; execute() still rejects additional statements.
             probe.execute(source)
@@ -63,7 +90,7 @@ def generate(baseline,renames):
         stages=[]
         for item in selected:
             if probe.execute('SELECT type FROM main.sqlite_schema WHERE name=?',(item['table'],)).fetchone()!=('table',):
-                raise ValueError('Select an observed ordinary native table for each rename')
+                raise ValueError('Select an observed native table for each rename')
             source='ALTER TABLE "main".'+_quote(item['table'])+' RENAME '+(
                 'TO '+_quote(item['to']) if item['kind']=='table' else 'COLUMN '+_quote(item['from'])+' TO '+_quote(item['to']))
             probe.execute(source);stages.append(source)

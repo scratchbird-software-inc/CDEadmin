@@ -18,6 +18,7 @@ from pgadmin.cdeadmin.sdk import (
 from .driver import SQLiteClient, SQLiteConnection
 from ..native_editor import NativeEditorProvider
 from .values import text as native_text
+from .modules import family as virtual_family,declaration as module_declaration
 from .backup import database_operation as _sqlite_database_operation
 from ..relational_admin import (
     RelationalAdministration,
@@ -418,9 +419,7 @@ def _resources(connection, request):
                 if kind == 'table' and re.match(
                         r'^\s*CREATE\s+VIRTUAL\s+TABLE',
                         str(source or ''), re.I):
-                    kind = ('fts-table' if re.search(
-                        r'\bUSING\s+fts\d?\b', str(source), re.I)
-                        else 'virtual-table')
+                    kind = virtual_family(source)
                 if kind in {'table', 'view', 'fts-table', 'virtual-table'}:
                     relation_kinds[(schema_name, str(name))] = kind
                     relation_system[(schema_name, str(name))] = (
@@ -435,11 +434,7 @@ def _resources(connection, request):
                 if native_kind == 'table' and re.match(
                     r'^\s*CREATE\s+VIRTUAL\s+TABLE', source_value, re.I
                 ):
-                    kind = (
-                        'fts-table' if re.search(
-                            r'\bUSING\s+fts\d?\b', source_value, re.I
-                        ) else 'virtual-table'
-                    )
+                    kind = virtual_family(source_value)
                 if kind not in {
                     'table', 'view', 'index', 'trigger', 'virtual-table',
                     'fts-table',
@@ -473,6 +468,11 @@ def _resources(connection, request):
                               (schema_name, str(table_name)) in relation_kinds
                               else [schema_name])
                 resource = add(kind, owner_path, name, native)
+                if kind in {'fts-table','virtual-table'}:
+                    declared=module_declaration(source_value)
+                    resource['native']['module_observation']={'available':declared is not None,
+                        'authority':'native-nonexecuting-create-vtable-authorization',
+                        'module':declared[1] if declared else None}
                 if native_kind in {'table', 'view'}:
                     relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))

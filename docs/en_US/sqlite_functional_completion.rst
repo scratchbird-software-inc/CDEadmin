@@ -138,8 +138,18 @@ SQLITE-COMP-05: DDN design exchange
   facts, native bindings, file identity and mapped foreign-key violations are
   verified. The operation copies no rows and preserves native row IDs and
   AUTOINCREMENT state. Contention refuses dispatch; a missing commit reply stays
-  unknown without replay. Generation for attached/virtual-table environments
-  and additional installed module/function/collation adapters remains open.
+  unknown without replay. Native FTS3/4/5, RTree/RTree_i32 and Geopoly table
+  renames are also admitted. Generation for attached environments, external-
+  content rebinding and additional installed module/function/collation adapters
+  remains open.
+
+  Virtual-table catalog families and module identities are resolved with the
+  native compiler/authorizer, including quoted module names. DDN creation checks
+  actual installed module availability and native ownership rather than a fixed
+  list of module spellings. Native creation/query acceptance includes FTS3/4/5,
+  RTree, Geopoly, fts3tokenize, dbstat, fts4aux and fts5vocab. An external-content
+  owner rename needs its own reviewed FTS rebinding adapter; native ALTER alone
+  can leave that search table unusable.
 
 SQLITE-COMP-06: Monitoring and dashboards
   Provide display-only DDN engine, registered-file aggregate and database

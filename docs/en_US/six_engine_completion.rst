@@ -258,8 +258,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Native file/data workflows, typed imports, durable recipes, coordinated
        rebuilds, view/index/trigger replacement and atomic creation of ordinary
        relations with their explicitly declared indexes and triggers; native
-       table/column rename design generation and reference rewriting.
-     - Remaining virtual/attached and installed-module transformations and
+       table/column rename design generation, reference rewriting and native
+       FTS/RTree/Geopoly table renames; native quoted module identities.
+     - Remaining attached/external-content and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1362,3 +1363,33 @@ available native grammar. Attached/virtual-table environments and additional
 installed module/function/collation adapters retain separate coverage. These
 are implementation gaps, not inapplicable native features. Native rename
 reviews remain separate from rebuilds and other transformations.
+
+SQLite native virtual-table modules
+-------------------------------------
+
+Catalog classification now obtains virtual-table module identifiers through
+SQLite's nonexecuting native compiler and authorizer. Quoted FTS declarations
+remain FTS objects, and each virtual table records its native module observation.
+The independent catalog gate observes module identities separately and reconciles
+quoted/single-quoted/bracket-quoted FTS and spatial declarations, their native
+child facts and navigator destinations.
+
+Native DDN creation checks the declared module, target and installed runtime
+without imposing a fixed module-name whitelist. Native acceptance covers quoted
+FTS3/4/5, RTree, Geopoly, fts3tokenize, dbstat, fts4aux and fts5vocab creation and
+their corresponding native queries. Constructor grammar, installed availability
+and execution-time module refusal remain separate observations.
+
+The rename adapter also admits native FTS3/4/5, RTree, RTree_i32 and Geopoly table
+renames. Their real data, FTS postings/spatial queries and shadow storage remain
+owned by SQLite's native rename implementation; the application copies no rows.
+Stale schema and lost commit replies preserve the established refusal/unknown
+receipt behavior. The catalog workspace exposes these observed table kinds in
+the native rename selector. Column rename remains an ordinary-table operation
+because SQLite refuses column renames on virtual tables.
+
+Renaming an external-content owner can leave an FTS constructor pointing at the
+old table/column even when native ALTER TABLE succeeds. Until its reviewed
+rebinding adapter is implemented, that case is refused explicitly. Other
+module-specific operations, attached transformations and the complete installed
+capability denominator retain separate acceptance.
