@@ -661,3 +661,25 @@ Table rebuilds remain separate from index/trigger replacement or other DDL
 operations in the same review. The current rename editor maps columns on a
 single selected table; broader coordinated dependency source rewriting remains
 separate implementation work.
+
+PostgreSQL server-file large-object workflows
+============================================
+
+Large-object forms expose native ``lo_import`` and ``lo_export`` on the database
+server host, including native allocation or an explicitly selected import OID.
+These native file operations are not limited to the editor's 1 MiB chunk size.
+File paths preserve exact whitespace, quotes and backslashes, and input exceeding
+PostgreSQL's native path buffer is refused rather than silently truncated.
+The native function ACL, large-object ACL and server operating-system access
+still govern each operation. Import allocates a transactional database object;
+export can overwrite its selected server file and requires exact path confirmation.
+
+Receipts identify the database-server filesystem separately from SQL transaction
+finality. A lost export acknowledgement is unconfirmed and is not replayed;
+SQL rollback cannot undo bytes already written by the server. Native SQL success
+does not assert an independent file-content or filesystem durability check.
+The owned platform fixture enables ``server_file_tests`` and removes its files
+with the disposable cluster. External route qualifications leave those tests
+disabled unless explicitly requested on a disposable estate with teardown.
+Continuous browser/client whole-file streaming remains separate implementation
+work; these native server paths are not application-host upload/download paths.

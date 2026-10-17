@@ -4,7 +4,7 @@ import hashlib
 import secrets
 
 
-def qualify(provider, route, password, server, receipt):
+def qualify(provider, route, password, server, receipt, *, server_files=False):
     import psycopg
     from psycopg import sql
     from psycopg.rows import tuple_row
@@ -21,7 +21,7 @@ def qualify(provider, route, password, server, receipt):
         password=password, dbname=route['database'], autocommit=True, row_factory=tuple_row,
         **route.get('connection_params', {}))
     connection.adapters.register_loader(17, ByteaLoader)
-    oid, lost_oid, role_created = None, None, False
+    oid, lost_oid, file_oid, role_created = None, None, None, False
     role, role_password = 'sr_lo_' + secrets.token_hex(8), secrets.token_urlsafe(32)
     try:
         database_oid = int(connection.execute('SELECT oid FROM pg_catalog.pg_database WHERE datname=current_database()').fetchone()[0])
@@ -42,6 +42,49 @@ def qualify(provider, route, password, server, receipt):
         from unittest.mock import patch
         from pgadmin.utils.driver.psycopg3.connection import Connection
         from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProviderError
+        if server_files:
+            filename = 'scratchrobin_owned_lo_' + secrets.token_hex(16) + '.bin'
+            fault_filename = filename + '.unconfirmed'
+            receipt['owned_server_file_artifacts'] = [filename,fault_filename]
+            receipt['server_file_cleanup'] = 'Owned fixture shutdown and data-directory teardown; not SQL rollback'
+            file_data = data * 3
+            connection.execute('SELECT pg_catalog.lo_put(%s::oid,%s::bigint,%s::bytea)', (oid,len(data),data*2))
+            exported = execute('export-server-file', {'server_file':filename,'confirmation':filename})
+            assert exported['file_effects']['host'] == 'database-server'
+            assert not exported['file_effects']['filesystem_write_rolled_back_by_sql']
+            assert bytes(connection.execute('SELECT pg_catalog.pg_read_binary_file(%s)',(filename,)).fetchone()[0]) == file_data
+            imported = execute('import-server-file', {'server_file':filename,'oid':'0'})
+            file_oid = imported['result']['rows'][0]['oid']
+            assert bytes(connection.execute('SELECT pg_catalog.lo_get(%s::oid)',(file_oid,)).fetchone()[0]) == file_data
+            connection.execute('SELECT pg_catalog.lo_unlink(%s::oid)',(file_oid,)); file_oid = None
+            export_calls = []
+            native_execute = Connection.execute_dict
+            def lose_export_reply(native,statement,*args,**kwargs):
+                result = native_execute(native,statement,*args,**kwargs)
+                if 'pg_catalog.lo_export(' in statement:
+                    export_calls.append(1)
+                    raise OSError('Owned server-file acknowledgement fault')
+                return result
+            with patch.object(Connection,'execute_dict',lose_export_reply):
+                try: execute('export-server-file',{'server_file':fault_filename,'confirmation':fault_filename})
+                except PostgreSQLProviderError as error: assert 'SQL rollback does not undo file output' in str(error)
+                else: raise AssertionError('Lost native export acknowledgement was reported confirmed')
+            assert export_calls == [1]
+            assert bytes(connection.execute('SELECT pg_catalog.pg_read_binary_file(%s)',(fault_filename,)).fetchone()[0]) == file_data
+            export_calls.clear()
+            close_session = provider.close_session
+            def lose_release_reply(session):
+                close_session(session)
+                raise OSError('Owned release acknowledgement fault')
+            with patch.object(Connection,'execute_dict',lose_export_reply), patch.object(provider,'close_session',lose_release_reply):
+                try: execute('export-server-file',{'server_file':fault_filename,'confirmation':fault_filename})
+                except PostgreSQLProviderError as error:
+                    assert 'connection release remain unconfirmed' in str(error) and 'SQL rollback does not undo file output' in str(error)
+                else: raise AssertionError('Lost export and release acknowledgement was reported confirmed')
+            assert export_calls == [1]
+            assert bytes(connection.execute('SELECT pg_catalog.pg_read_binary_file(%s)',(fault_filename,)).fetchone()[0]) == file_data
+            execute('truncate',{'length':str(len(data)),'confirmation':str(oid)})
+            receipt['checks'].append('native-server-file-large-object-import-export-beyond-chunk-budget-and-external-write-survives-lost-reply-without-replay')
         original_read = Connection.execute_dict
         def wrong_verification(connection, statement, *args, **kwargs):
             status, result = original_read(connection, statement, *args, **kwargs)
@@ -76,6 +119,12 @@ def qualify(provider, route, password, server, receipt):
         try:
             execute('grant', {'role': role, 'privileges': ['SELECT']})
             assert bytes(limited.execute('SELECT lo_get(%s::oid)', (oid,)).fetchone()[0]) == data[:128]
+            if server_files:
+                try: limited.execute('SELECT pg_catalog.lo_export(%s::oid,%s)',(oid,filename+'.denied'))
+                except psycopg.errors.InsufficientPrivilege: pass
+                else: raise AssertionError('Native server file privilege was bypassed')
+                assert connection.execute('SELECT pg_catalog.pg_stat_file(%s,true)',(filename+'.denied',)).fetchone()[0] is None
+                receipt['checks'].append('native-large-object-select-grant-does-not-grant-server-file-export')
             execute('revoke', {'role': role, 'privileges': ['SELECT']})
             try:
                 limited.execute('SELECT lo_get(%s::oid)', (oid,))
@@ -115,6 +164,8 @@ def qualify(provider, route, password, server, receipt):
         assert set(provider._sessions) == initial_sessions
         receipt['checks'].append('native-large-object-write-verification-refusal-rolls-back-and-lost-create-commit-reply-is-unknown-without-automatic-retry')
     finally:
+        if file_oid is not None:
+            connection.execute('SELECT lo_unlink(%s::oid)',(file_oid,))
         if oid is not None:
             connection.execute('SELECT lo_unlink(%s::oid)', (oid,))
         if lost_oid is not None and connection.execute('SELECT oid FROM pg_largeobject_metadata WHERE oid=%s', (lost_oid,)).fetchone() is not None:

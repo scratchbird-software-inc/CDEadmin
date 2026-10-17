@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'web'))
 
 
-def qualify(route, password, evidence, *, reply_loss=False, multi_database=False, catalog_ddn=False, native_transform=False):
+def qualify(route, password, evidence, *, reply_loss=False, multi_database=False, catalog_ddn=False, native_transform=False, server_files=False):
     evidence = Path(evidence).resolve()
     if evidence == ROOT or ROOT in evidence.parents:
         raise ValueError('Evidence must be outside the repository')
@@ -405,7 +405,7 @@ def qualify(route, password, evidence, *, reply_loss=False, multi_database=False
             try:
                 qualify_admin_transactions(provider, driver, route, password, server, receipt)
                 from cdeadmin_postgresql_large_object_qualification import qualify as qualify_large_objects
-                qualify_large_objects(provider, route, password, server, receipt)
+                qualify_large_objects(provider, route, password, server, receipt, server_files=server_files)
                 from cdeadmin_postgresql_operator_qualification import qualify as qualify_operator
                 qualify_operator(provider, route, password, server, receipt)
                 from cdeadmin_postgresql_aggregate_qualification import qualify as qualify_aggregate

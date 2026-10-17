@@ -26,9 +26,11 @@ def execute(engine, specification, evidence):
         if executable:
             directory = str(Path(executable).parent)
             config.DEFAULT_BINARY_PATHS.update({'pg': directory, 'pg-18': directory})
-    allowed = {'route', 'password_env', 'database_directory', 'path_style'}
+    allowed = {'route', 'password_env', 'database_directory', 'path_style', 'server_file_tests'}
     if set(specification) - allowed:
         raise ValueError('Unknown network gate settings; keep credentials outside JSON')
+    if 'server_file_tests' in specification and (engine != 'postgresql' or type(specification['server_file_tests']) is not bool):
+        raise ValueError('Server file qualification requires an explicit PostgreSQL boolean')
     route = specification['route']
     if not isinstance(route, dict) or any('password' in name.lower() for name in route):
         raise ValueError('Network route must not contain passwords')
@@ -59,7 +61,7 @@ def execute(engine, specification, evidence):
         connector.connect = observed_connect
     module = importlib.import_module('tools.cdeadmin_' + engine + '_driver_platform_gate')
     if engine == 'postgresql':
-        receipt = module.qualify(route, password, evidence)
+        receipt = module.qualify(route, password, evidence, server_files=specification.get('server_file_tests',False))
     elif engine == 'firebird':
         receipt = module.run(route, specification['database_directory'], evidence,
                              password=password, path_style=specification.get('path_style', 'posix'))

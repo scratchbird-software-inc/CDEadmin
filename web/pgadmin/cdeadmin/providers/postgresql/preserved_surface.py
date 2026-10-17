@@ -416,6 +416,7 @@ def adapt_catalog(catalog):
         'delete': 'destructive', 'drop': 'destructive',
         'refresh': 'admin',
         'read': 'read', 'write': 'write', 'truncate': 'destructive',
+        'import-server-file': 'admin', 'export-server-file': 'destructive',
     }
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
@@ -558,9 +559,9 @@ def adapt_catalog(catalog):
                 'title': operation_id.replace('-', ' ').title(),
                 'mutation_class': mutation_classes[operation_id],
                 'form_id': 'postgresql-preserved-route',
-                'target_required': operation_id != 'create',
+                'target_required': operation_id not in {'create', 'import-server-file'},
                 'confirmation_required': operation_id in {
-                    'delete', 'drop', 'truncate',
+                    'delete', 'drop', 'truncate', 'export-server-file',
                 },
             })
             if kind in native_form_kinds:

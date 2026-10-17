@@ -362,7 +362,7 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
-            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256') if key in compiled},
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation') if key in compiled},
         }
         return {
             'command_preview': {
@@ -372,7 +372,10 @@ class PostgreSQLProvider:
                 **({'verification_statement': compiled['post_statement']} if 'post_statement' in compiled else {}),
             },
             'provider_payload': payload,
-            'warnings': [],
+            'warnings': (['File paths refer to the database server host. Native function privileges and OS file access apply.'] +
+                         (['Export can overwrite the selected file. SQL rollback does not undo server filesystem output.']
+                          if compiled.get('server_file_operation') == 'export' else []))
+                        if compiled.get('server_file_operation') else [],
             'receipt': {
                 'provider_owned': True,
                 'automatic_mutation_retry': False,
@@ -389,7 +392,7 @@ class PostgreSQLProvider:
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
         expected = {'statement': statement, 'read_only': payload.get('read_only')}
-        for key in ('returns_rows', 'post_statement', 'expected_sha256'):
+        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation'):
             if key in compiled:
                 expected[key] = payload.get(key)
         if compiled != expected:
@@ -401,6 +404,7 @@ class PostgreSQLProvider:
         state = self._sessions[session['session_id']]
         response = None
         committing = False
+        file_export_dispatched = False
         try:
             self._ensure_native_connection(state)
             connection = state.connection
@@ -417,10 +421,18 @@ class PostgreSQLProvider:
                 'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
             if not status or identity.get('rows') != [{'oid': database_id}]:
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
+            file_export_dispatched = compiled.get('server_file_operation') == 'export'
             status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
                               else connection.execute_void(statement))
             if not status:
                 raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+            if compiled.get('server_file_operation'):
+                rows = result.get('rows', [])
+                if (len(rows) != 1 or
+                        compiled['server_file_operation'] == 'export' and rows[0].get('native_result') != 1 or
+                        compiled['server_file_operation'] == 'import' and
+                        (type(rows[0].get('oid')) is not int or not 1 <= rows[0]['oid'] <= 2**32-1)):
+                    raise PostgreSQLProviderError('Native PostgreSQL server-file acknowledgement is unavailable')
             if compiled.get('post_statement'):
                 status, result = connection.execute_dict(compiled['post_statement'])
                 if (not status or len(result.get('rows', [])) != 1 or
@@ -436,17 +448,27 @@ class PostgreSQLProvider:
                 'result': copy.deepcopy(result), 'automatic_retry_performed': False,
                 'common_finality_inference': False,
             }
+            if compiled.get('server_file_operation'):
+                response['file_effects'] = {'host':'database-server','operation':compiled['server_file_operation'],
+                    'native_function_acknowledged':True,'independent_file_verification':False,
+                    'filesystem_write_rolled_back_by_sql':False}
         except Exception:
             if committing:
                 state.uncertain = True
                 raise PostgreSQLProviderError(
-                    'PostgreSQL administrative commit outcome is unknown; do not replay') from None
+                    'PostgreSQL administrative commit outcome is unknown; do not replay' +
+                    ('. Database-server file output may already exist and is not undone by SQL rollback'
+                     if file_export_dispatched else '')) from None
+            if file_export_dispatched:
+                raise PostgreSQLProviderError('PostgreSQL server-file export outcome is unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying') from None
             raise
         finally:
             try:
                 self.close_session(session)
             except Exception:
                 if response is None:
+                    if file_export_dispatched:
+                        raise PostgreSQLProviderError('PostgreSQL server-file export outcome and connection release remain unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying') from None
                     raise PostgreSQLProviderError('Administrative connection release remains unconfirmed') from None
                 response.update(release_status='unconfirmed',
                                 release_pending_session_id=session['session_id'])

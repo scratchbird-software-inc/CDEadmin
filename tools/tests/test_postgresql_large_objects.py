@@ -22,6 +22,8 @@ def request(operation, draft=None, oid='42'):
     ('grant', {'role': 'PUBLIC', 'privileges': ['SELECT'], 'grant_option': True}),
     ('revoke', {'role': 'Mixed role', 'privileges': ['SELECT', 'UPDATE'], 'grant_option': True, 'cascade': True}),
     ('drop', {'confirmation': '42'}),
+    ('import-server-file', {'server_file':"C:\\owned\\'source ü.bin", 'oid':'0'}),
+    ('export-server-file', {'server_file':"/owned/'output ü.bin", 'confirmation':"/owned/'output ü.bin"}),
 ])
 def test_exact_native_statement(operation, draft):
     from pglast import parse_sql
@@ -42,6 +44,9 @@ def test_exact_native_statement(operation, draft):
     ('grant', {'role': 'x', 'privileges': ['DELETE']}, '42'),
     ('grant', {'role': 'x', 'privileges': [{}]}, '42'),
     ('grant', {'role': 'x', 'privileges': ['SELECT', 'SELECT']}, '42'),
+    ('import-server-file', {'server_file':'a\x00b'}, '42'),
+    ('import-server-file', {'server_file':'é'*512}, '42'),
+    ('export-server-file', {'server_file':'owned.bin','confirmation':'other.bin'}, '42'),
 ])
 def test_invalid_or_ambiguous_requests_refused(operation, draft, oid):
     with pytest.raises(PostgreSQLNativeAdminError):
@@ -52,6 +57,20 @@ def test_native_forms_are_separate_from_preserved_surface_and_offer_all_operatio
     assert 'large-object' not in preserved_operations()
     obj = next(item for item in adapt_catalog({'objects': []})['objects'] if item['resource_kind'] == 'large-object')
     assert {item['operation_id'] for item in obj['operations']} == {
-        'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop'}
+        'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',
+        'import-server-file', 'export-server-file'}
     assert all(item['execution_route'] == 'provider-native' and item['form']['form_key'] ==
         'native:postgresql:database:large-object' for item in obj['operations'])
+    operations = {item['operation_id']:item for item in obj['operations']}
+    assert operations['import-server-file']['target_required'] is False
+    assert operations['export-server-file']['mutation_class'] == 'destructive'
+    assert operations['export-server-file']['confirmation_required'] is True
+
+
+def test_server_file_literal_preserves_exact_whitespace_quotes_and_backslashes():
+    from pglast import parse_sql
+    filename = "  C:\\owned\\'file ü.bin  "
+    compiled = compile_native_admin(request('import-server-file',{'server_file':filename}))
+    call = parse_sql(compiled['statement'])[0].stmt.targetList[0].val
+    assert call.args[0].val.sval == filename
+    assert compiled['server_file_operation'] == 'import'

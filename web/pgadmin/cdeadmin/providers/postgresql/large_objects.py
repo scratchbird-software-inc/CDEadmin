@@ -4,7 +4,8 @@ import binascii
 import hashlib
 import re
 
-OPERATIONS = frozenset({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop'})
+OPERATIONS = frozenset({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',
+                        'import-server-file', 'export-server-file'})
 CHUNK_BYTES = 1024 * 1024
 MAX_LENGTH = 4 * 1024 ** 4
 
@@ -19,6 +20,8 @@ def compile_operation(operation, native, draft):
         'truncate': {'length', 'confirmation'}, 'alter': {'action', 'value'},
         'grant': {'role', 'privileges', 'grant_option'},
         'revoke': {'role', 'privileges', 'grant_option', 'cascade'}, 'drop': {'confirmation'},
+        'import-server-file': {'oid', 'server_file'},
+        'export-server-file': {'server_file', 'confirmation'},
     }
     if operation not in allowed or set(draft) - allowed[operation]:
         refuse('Unknown PostgreSQL large-object operation or option')
@@ -29,8 +32,16 @@ def compile_operation(operation, native, draft):
         if not isinstance(value, str) or not re.fullmatch(r'0|[1-9][0-9]{0,19}', value) or not minimum <= int(value) <= maximum:
             refuse(label + ' requires exact bounded decimal text')
         return value
-    oid = number(draft.get('oid', '0') if operation == 'create' else native.get('oid'),
-        'Large-object OID', 2**32 - 1, minimum=0 if operation == 'create' else 1)
+    creating = operation in {'create', 'import-server-file'}
+    oid = number(draft.get('oid', '0') if creating else native.get('oid'),
+        'Large-object OID', 2**32 - 1, minimum=0 if creating else 1)
+    if operation in {'import-server-file', 'export-server-file'}:
+        filename = draft.get('server_file')
+        # PostgreSQL's native MAXPGPATH buffer would truncate longer input.
+        if not isinstance(filename, str) or not filename or '\x00' in filename or len(filename.encode('utf8')) >= 1024:
+            refuse('Database-server file path requires nonempty text within 1023 UTF-8 bytes')
+        if operation == 'export-server-file' and draft.get('confirmation') != filename:
+            refuse('Server-file export confirmation must match its exact destination path')
     if operation in {'create', 'write'}:
         encoded = draft.get('large_object_data_base64', '')
         if not isinstance(encoded, str) or len(encoded) > 4 * ((CHUNK_BYTES + 2) // 3):
@@ -44,7 +55,11 @@ def compile_operation(operation, native, draft):
         binary = "pg_catalog.decode('" + data.hex() + "','hex')"
     if operation in {'read', 'write'}:
         offset = number(draft.get('offset', '0'), 'Large-object offset', MAX_LENGTH - 1)
-    if operation == 'inspect':
+    if operation == 'import-server-file':
+        source = f'SELECT pg_catalog.lo_import({_literal(filename, "server file")},{oid}::oid) AS oid'
+    elif operation == 'export-server-file':
+        source = f'SELECT pg_catalog.lo_export({oid}::oid,{_literal(filename, "server file")}) AS native_result'
+    elif operation == 'inspect':
         source = ('SELECT m.oid, pg_catalog.pg_get_userbyid(m.lomowner) AS owner, '
             'm.lomacl::text AS privileges, pg_catalog.obj_description(m.oid,\'pg_largeobject\') AS comment '
             'FROM pg_catalog.pg_largeobject_metadata m WHERE m.oid=' + oid + '::oid')
@@ -99,6 +114,8 @@ def compile_operation(operation, native, draft):
         source = f'SELECT pg_catalog.lo_unlink({oid}::oid) AS native_result'
     result = {'statement': source, 'read_only': operation in {'inspect', 'read'},
         'returns_rows': operation not in {'alter', 'grant', 'revoke'}}
+    if operation in {'import-server-file', 'export-server-file'}:
+        result['server_file_operation'] = 'import' if creating else 'export'
     if operation == 'write':
         # Large-object pages use the command snapshot. A separate native
         # statement observes the new command ID; a CTE in the write statement
@@ -111,8 +128,15 @@ def compile_operation(operation, native, draft):
 
 def form(operation, field):
     fields = []
-    if operation == 'create':
+    if operation in {'create', 'import-server-file'}:
         fields.append(field('oid', 'OID (0 allocates a native identity)', default='0'))
+    if operation in {'import-server-file', 'export-server-file'}:
+        fields.append(field('server_file', 'Source file on database server' if operation == 'import-server-file' else
+            'Destination file on database server (existing file is overwritten)', required=True,
+            help='This path belongs to the PostgreSQL server host. Native server file privileges and operating-system access apply.'))
+        if operation == 'export-server-file':
+            fields.append(field('confirmation', 'Type the exact server destination path', required=True,
+                help='SQL rollback cannot undo a file written by PostgreSQL lo_export.'))
     if operation in {'create', 'write'}:
         fields.append(field('large_object_data_base64', 'Binary chunk', 'multiline',
             default='', max_length=4 * ((CHUNK_BYTES + 2) // 3),
@@ -137,4 +161,5 @@ def form(operation, field):
         fields.append(field('confirmation', 'Type the large-object OID to confirm', required=True))
     return {'form_id': 'postgresql-large-object-' + operation,
         'form_key': 'native:postgresql:database:large-object',
-        'title': operation.title() + ' large object', 'fields': fields}
+        'title': {'import-server-file':'Import server file into large object',
+                  'export-server-file':'Export large object to server file'}.get(operation, operation.title() + ' large object'), 'fields': fields}
