@@ -85,13 +85,14 @@ def qualify(engine, route, output, *, password=None, embedded=False):
             if engine == 'duckdb': connection.execute(action.upper())
             else: getattr(connection, action)()
 
-        execute(handle, f'CREATE TABLE {table} (ID INTEGER PRIMARY KEY, "odd column" INTEGER)'.replace('"odd column"', quoted('odd column')))
+        invisible = ', SR_INVISIBLE INTEGER INVISIBLE DEFAULT 123' if engine in {'mysql', 'mariadb'} else ''
+        execute(handle, f'CREATE TABLE {table} (ID INTEGER PRIMARY KEY, "odd column" INTEGER{invisible})'.replace('"odd column"', quoted('odd column')))
         created = True
         if engine == 'duckdb': client_provider.client.control_transaction(handle, 'commit')
         else: handle.commit()
         if engine in {'mysql', 'mariadb'}:
             client_provider.client.control_transaction(handle, 'autocommit_off')
-        execute(handle, f'INSERT INTO {table} VALUES (1, 9)')
+        execute(handle, f'INSERT INTO {table} (ID, {quoted("odd column")}) VALUES (1, 9)')
         request = {'session_id': session['session_id'], 'language_profile': engine + '-sql'}
         checks = [('select', f'SELECT ID FROM {table}', True),
                   ('invalid-syntax', 'SELEC 1', False),
@@ -139,6 +140,25 @@ def qualify(engine, route, output, *, password=None, embedded=False):
             raise AssertionError('Native relation completion is missing')
         if not any(item['display_name'] == 'odd column' for item in symbols['resources']):
             raise AssertionError('Exact native column completion is missing')
+        columns = [item for item in symbols['resources'] if item['resource_kind'] == 'column'
+                   and item['display_path'][-2] == name]
+        cursor = handle if engine == 'duckdb' else handle.cursor()
+        try:
+            cursor.execute(f'SELECT * FROM {table}')
+            star = [column[0] for column in cursor.description]
+            cursor.fetchall()
+            assert star == [item['display_name'] for item in columns if not item.get('hidden_from_star')]
+            hidden = [item['display_name'] for item in columns if item.get('hidden_from_star')]
+            expected = ['SR_INVISIBLE'] if engine in {'mysql', 'mariadb'} else ['RDB$DB_KEY'] if engine == 'firebird' else ['rowid'] if engine == 'duckdb' else ['rowid', '_rowid_', 'oid']
+            assert hidden == expected
+            for column in hidden:
+                native_column = column if engine == 'firebird' and column == 'RDB$DB_KEY' else quoted(column)
+                cursor.execute(f'SELECT {table}.{native_column} FROM {table}')
+                assert len(cursor.fetchall()) == 1
+        finally:
+            if cursor is not handle: cursor.close()
+        proof['checks'].append({'name': 'hidden-column-native-star-and-explicit-projection',
+                                'star_columns': star, 'explicit_only_columns': hidden, 'passed': True})
         proof['checks'].append({'name': 'native-metadata', 'context': symbols['context'],
                                 'symbols': len(symbols['resources']), 'truncated': symbols['truncated']})
         if execute(observer, f'SELECT count(*) FROM {table}')[0] != 0:

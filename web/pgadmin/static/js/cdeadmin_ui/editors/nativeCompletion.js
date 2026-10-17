@@ -39,6 +39,7 @@ export function nativeSQLConfig(metadata) {
     const entry = ensure(path, kind === 'column' ? 'property' :
       ['function', 'procedure', 'package', 'package body'].includes(kind) ? 'function' :
         ['table', 'view', 'type', 'domain', 'collation'].includes(kind) ? 'type' : 'namespace', item.detail);
+    if (item.hidden_from_star) entry.self.nativeHiddenFromStar = true;
     if (path.length === 1 && ['function', 'type'].includes(kind) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(path[0]))
       entry.self.apply = path[0];
     if (engine === 'duckdb' && kind === 'function' && path[0] === 'system') {

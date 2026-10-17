@@ -50,6 +50,28 @@ test.each(['duckdb','sqlite'])('%s quoted paths remain insensitive to identifier
   expect(suggestions('SELECT * FROM "ONE" AS t WHERE t.',metadata(engine)).options[0].label).toBe('first');
 });
 
+test.each(['mysql','mariadb','duckdb','sqlite','postgresql'])('%s hidden columns stay queryable but are omitted from CTE star expansion', engine => {
+  const data=metadata(engine);
+  const owner=data.resources[1].display_path.slice(0,-1);
+  data.resources.push({resource_kind:'column',display_path:[...owner,'hidden'],display_name:'hidden',hidden_from_star:true});
+  expect(suggestions('SELECT * FROM one t WHERE t.',data).options.map(item=>item.label)).toEqual(['first','hidden']);
+  for (const projection of ['*', 't.*']) {
+    expect(suggestions(`WITH c AS (SELECT ${projection} FROM one t) SELECT c.`,data).options.map(item=>item.label)).toEqual(['first']);
+  }
+  expect(suggestions('WITH c AS (SELECT t.hidden FROM one t) SELECT c.',data).options.map(item=>item.label)).toEqual(['hidden']);
+});
+
+test.each([1,3])('Firebird dialect %s DB_KEY suggestions do not leak into star projection', sql_dialect => {
+  const data={context:{engine:'firebird',sql_dialect,keywords:'WITH SELECT FROM WHERE AS',reserved_words:[]},resources:[
+    {resource_kind:'table',display_name:'WIDGETS',display_path:['WIDGETS']},
+    {resource_kind:'column',display_name:'ID',display_path:['WIDGETS','ID']},
+    {resource_kind:'column',display_name:'RDB$DB_KEY',display_path:['WIDGETS','RDB$DB_KEY'],hidden_from_star:true,native_identifier_token:true}]};
+  expect(suggestions('SELECT * FROM WIDGETS t WHERE t.',data).options.map(item=>item.label)).toEqual(['ID','RDB$DB_KEY']);
+  expect(suggestions('SELECT * FROM WIDGETS t WHERE t.',data).options.find(item=>item.label==='RDB$DB_KEY').apply).toBe('RDB$DB_KEY');
+  expect(suggestions('WITH c AS (SELECT t.* FROM WIDGETS t) SELECT c.',data).options.map(item=>item.label)).toEqual(['ID']);
+  expect(suggestions('WITH c AS (SELECT t.RDB$DB_KEY FROM WIDGETS t) SELECT c.',data).options.map(item=>item.label)).toEqual(['RDB$DB_KEY']);
+});
+
 test.each(['postgresql','duckdb','sqlite'])('%s identifier folding preserves distinct non-ASCII names', engine => {
   const data=metadata(engine);
   data.resources=data.resources.slice(0,2).map(item=>({...item,display_path:item.display_path.map(part=>part==='one'?'Ä':part)}));

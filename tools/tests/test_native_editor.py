@@ -72,6 +72,71 @@ def test_duckdb_metadata_uses_original_session_and_retains_pending_work(tmp_path
         connection.close()
 
 
+def test_sqlite_hidden_generated_and_rowid_columns_follow_native_star_projection():
+    connection = sqlite3.connect(':memory:')
+    try:
+        connection.execute('CREATE TABLE ordinary (id INTEGER, computed TEXT GENERATED ALWAYS AS (id || id))')
+        connection.execute('CREATE TABLE no_rowid (id INTEGER PRIMARY KEY) WITHOUT ROWID')
+        connection.execute('CREATE TABLE shadowed ("RoWiD" TEXT, "_ROWID_" TEXT, oid TEXT)')
+        connection.execute('CREATE VIEW projected AS SELECT id FROM ordinary')
+        connection.execute('CREATE VIRTUAL TABLE documents USING fts5(body)')
+        result = metadata(connection, 'sqlite')
+        for table in ('ordinary', 'no_rowid', 'shadowed', 'projected', 'documents'):
+            rows = [row for row in result['resources'] if row['resource_kind'] == 'column'
+                    and row['display_path'][:2] == ['main', table]]
+            native = connection.execute(f'SELECT * FROM "{table}" LIMIT 0')
+            assert [row['display_name'] for row in rows if not row.get('hidden_from_star')] == [col[0] for col in native.description]
+            for row in rows:
+                name = row['display_name'].replace('"', '""')
+                connection.execute(f'SELECT "{table}"."{name}" FROM "{table}" LIMIT 0')
+        ordinary = {row['display_name']: row for row in result['resources'] if row['display_path'][:2] == ['main', 'ordinary'] and row['resource_kind'] == 'column'}
+        assert all(ordinary[alias]['hidden_from_star'] for alias in ('rowid', '_rowid_', 'oid'))
+        assert not ordinary['computed'].get('hidden_from_star')
+        assert not any(row.get('hidden_from_star') for row in result['resources'] if row['display_path'][:2] == ['main', 'shadowed'])
+    finally:
+        connection.close()
+
+
+def test_duckdb_rowid_is_native_storage_only_and_shadowed_by_real_columns():
+    import duckdb
+    connection = duckdb.connect()
+    try:
+        connection.execute('CREATE TABLE ordinary (id INTEGER)')
+        connection.execute('CREATE TEMP TABLE temporary (id INTEGER)')
+        connection.execute('CREATE TABLE shadowed ("RoWiD" VARCHAR)')
+        connection.execute('CREATE VIEW projected AS SELECT id FROM ordinary')
+        result = metadata(connection, 'duckdb')
+        for table in ('ordinary', 'temporary', 'shadowed', 'projected'):
+            rows = [row for row in result['resources'] if row['resource_kind'] == 'column' and row['display_path'][-2] == table]
+            native = connection.execute(f'SELECT * FROM "{table}" LIMIT 0')
+            assert [row['display_name'] for row in rows if not row.get('hidden_from_star')] == [col[0] for col in native.description]
+            for row in rows:
+                name = row['display_name'].replace('"', '""')
+                connection.execute(f'SELECT "{table}"."{name}" FROM "{table}" LIMIT 0')
+            assert any(row.get('hidden_from_star') for row in rows) == (table in {'ordinary', 'temporary'})
+        assert any(row['display_path'][-1] == 'projected' and row['resource_kind'] == 'view' for row in result['resources'])
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize('engine', ['mysql', 'mariadb'])
+def test_mysql_family_invisible_columns_remain_suggested_but_do_not_expand_star(engine):
+    cursor = Mock()
+    def execute(sql):
+        if sql.startswith('SELECT VERSION()'):
+            cursor.fetchmany.return_value = [('native', 'owned', '', 'utf8mb4', 0)]
+        elif 'FROM information_schema.COLUMNS' in sql:
+            cursor.fetchmany.return_value = [('owned', 't', 'visible', 'int', ''),
+                                            ('owned', 't', 'hidden', 'int', 'DEFAULT_GENERATED INVISIBLE')]
+        else:
+            cursor.fetchmany.return_value = []
+    cursor.execute.side_effect = execute
+    result = metadata(SimpleNamespace(cursor=lambda: cursor), engine)
+    rows = [row for row in result['resources'] if row['resource_kind'] == 'column']
+    assert len(rows) == 2 and rows[1]['hidden_from_star']
+    assert not rows[0].get('hidden_from_star')
+
+
 @pytest.mark.parametrize('engine', ['mysql', 'mariadb'])
 def test_mysql_prepare_never_executes_submitted_sql_or_changes_transaction(engine):
     cursor = Mock()

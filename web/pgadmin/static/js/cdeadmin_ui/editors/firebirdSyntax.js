@@ -16,8 +16,11 @@ export function firebirdSQLConfig(keywords, dialect, resources, reservedWords = 
   for(const item of resources || []) {
     if(item.resource_kind !== 'column') continue;
     const owner = item.native?.relation_name || item.display_path?.at(-2);
-    if(names.has(owner) && admitted(item.display_name)) schema[names.get(owner)].children.push({label: item.display_name,
-      apply: quoted(item.display_name), type: 'property'});
+    // RDB$DB_KEY is a native grammar token; quoting it produces a different
+    // identifier and fails native preparation even in dialect 3.
+    const recordKey = item.native_identifier_token && item.display_name === 'RDB$DB_KEY';
+    if(names.has(owner) && (recordKey || admitted(item.display_name))) schema[names.get(owner)].children.push({label: item.display_name,
+      apply: recordKey ? item.display_name : quoted(item.display_name), type: 'property', ...(item.hidden_from_star ? {nativeHiddenFromStar:true} : {})});
   }
   const packages = new Map();
   for(const item of resources || []) {

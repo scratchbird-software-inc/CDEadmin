@@ -42,7 +42,7 @@ export function scopedSQLConfig(config, state, position) {
     children: Object.fromEntries([...new Set(columns)].map(column => [key(column),
       {self: {label: column, apply: quote(column), type: 'property', detail: 'Source scope'}, children: Object.create(null)}]))});
   const columns = entry => Object.values(entry?.children || {}).map(child => child.self || child)
-    .filter(child => child.type === 'property').map(child => child.label);
+    .filter(child => child.type === 'property' && !child.nativeHiddenFromStar).map(child => child.label);
 
   const sourceBindings = (body, depth=0) => {
     const nodes = children(body).filter(node => !['(', ')'].includes(node.name));

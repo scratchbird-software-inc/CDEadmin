@@ -103,10 +103,14 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail=''):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
+        if hidden_from_star:
+            row['hidden_from_star'] = True
+        if native_identifier_token:
+            row['native_identifier_token'] = True
         total += 1
         count = len(json.dumps(row, ensure_ascii=False).encode())
         if len(symbols) < MAX_SYMBOLS and size + count <= MAX_BYTES:
@@ -122,8 +126,9 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 add('schema', [database])
             for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):
                 add('view' if kind == 'VIEW' else 'table', [database, table])
-            for database, table, column, native_type in query('columns', 'SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE FROM information_schema.COLUMNS ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION LIMIT 25001'):
-                add('column', [database, table, column], native_type)
+            for database, table, column, native_type, extra in query('columns', 'SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,EXTRA FROM information_schema.COLUMNS ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION LIMIT 25001'):
+                add('column', [database, table, column], native_type,
+                    hidden_from_star='INVISIBLE' in str(extra).upper().split())
             for database, routine, kind, native_type in query('routines', 'SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,DTD_IDENTIFIER FROM information_schema.ROUTINES ORDER BY (ROUTINE_SCHEMA=DATABASE()) DESC,ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE LIMIT 25001'):
                 add(kind.lower(), [database, routine], native_type or kind)
         elif engine == 'sqlite':
@@ -132,11 +137,23 @@ def metadata(handle, engine, transaction=None, dialect=None):
             for _ordinal, schema, _path in databases:
                 add('schema', [schema])
                 quoted = '"' + schema.replace('"', '""') + '"'
+                table_flags = {row[1]: row for row in query('table-flags:' + schema, f'PRAGMA {quoted}.table_list')}
                 for name, kind in query('relations:' + schema, f'SELECT name,type FROM {quoted}.sqlite_schema WHERE type IN (\'table\',\'view\') ORDER BY name LIMIT 25001'):
                     add(kind, [schema, name])
                     table = '"' + name.replace('"', '""') + '"'
-                    for column in query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})'):
-                        add('column', [schema, name, column[1]], column[2])
+                    columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})')
+                    for column in columns:
+                        # Virtual-table hidden fields are excluded from star;
+                        # generated columns (flags 2/3) remain in the projection.
+                        add('column', [schema, name, column[1]], column[2], hidden_from_star=column[6] == 1)
+                    flags = table_flags.get(name)
+                    names = {str(column[1]).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))
+                             for column in columns}
+                    if kind == 'table' and flags and not flags[4] and not observations[-1]['truncated']:
+                        for alias in ('rowid', '_rowid_', 'oid'):
+                            if alias not in names:
+                                add('column', [schema, name, alias], 'INTEGER; native row identifier, not a durable application key',
+                                    hidden_from_star=True)
             for name, builtin, kind, encoding, arity, flags in query('functions', 'PRAGMA function_list'):
                 add('function', [name], f'{kind}({arity}); {encoding}; flags={flags}; builtin={builtin}')
             for _ordinal, name in query('collations', 'PRAGMA collation_list'):
@@ -147,20 +164,39 @@ def metadata(handle, engine, transaction=None, dialect=None):
             context.update(version=version, default_schema=f'{database}.{schema}', catalog=database, schema=schema)
             for database, schema in query('schemas', 'SELECT database_name,schema_name FROM duckdb_schemas() ORDER BY database_name,schema_name LIMIT 25001'):
                 add('schema', [database, schema])
-            for database, schema, name in query('relations', 'SELECT database_name,schema_name,table_name FROM duckdb_tables() UNION ALL SELECT database_name,schema_name,view_name FROM duckdb_views() LIMIT 25001'):
-                add('table', [database, schema, name])
+            storage = {name: kind for name, kind in query('databases', 'SELECT database_name,type FROM duckdb_databases()')}
+            relations = query('relations', "SELECT database_name,schema_name,table_name,'table' FROM duckdb_tables() UNION ALL SELECT database_name,schema_name,view_name,'view' FROM duckdb_views() LIMIT 25001")
+            for database, schema, name, kind in relations:
+                add(kind, [database, schema, name])
+            rowid_owners = {(database, schema, name) for database, schema, name, kind in relations
+                            if kind == 'table' and storage.get(database) == 'duckdb'}
             for database, schema, table, name, data_type in query('columns', 'SELECT database_name,schema_name,table_name,column_name,data_type FROM duckdb_columns() ORDER BY database_name,schema_name,table_name,column_index LIMIT 25001'):
                 add('column', [database, schema, table, name], data_type)
+                if str(name).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) == 'rowid':
+                    rowid_owners.discard((database, schema, table))
+            # Do not invent rowids on foreign extension storage or views.
+            if not observations[-1]['truncated']:
+                for owner in sorted(rowid_owners):
+                    add('column', [*owner, 'rowid'], 'BIGINT; native row identifier, not a durable application key',
+                        hidden_from_star=True)
             for database, schema, name, kind, parameters, types, returns in query('functions', 'SELECT database_name,schema_name,function_name,function_type,parameters,parameter_types,return_type FROM duckdb_functions() ORDER BY database_name,schema_name,function_name LIMIT 25001'):
                 add('function', [database, schema, name], f'{kind} {parameters} {types} -> {returns}')
             for database, schema, name in query('types', 'SELECT database_name,schema_name,type_name FROM duckdb_types() ORDER BY database_name,schema_name,type_name LIMIT 25001'):
                 add('type', [database, schema, name])
         else:
             context.update(version=str(handle.info.version), sql_dialect=dialect or handle.sql_dialect)
-            for name, view in query('relations', 'SELECT RDB$RELATION_NAME,CASE WHEN RDB$VIEW_BLR IS NULL THEN 0 ELSE 1 END FROM RDB$RELATIONS'):
+            relations = query('relations', 'SELECT RDB$RELATION_NAME,CASE WHEN RDB$VIEW_BLR IS NULL THEN 0 ELSE 1 END FROM RDB$RELATIONS')
+            for name, view in relations:
                 add('view' if view else 'table', [name])
+            column_names = set()
             for relation, name in query('columns', 'SELECT RDB$RELATION_NAME,RDB$FIELD_NAME FROM RDB$RELATION_FIELDS ORDER BY RDB$RELATION_NAME,RDB$FIELD_POSITION'):
                 add('column', [relation, name])
+                column_names.add((relation.rstrip(' '), name.rstrip(' ')))
+            if not observations[-1]['truncated']:
+                for name, view in relations:
+                    if not view and (name.rstrip(' '), 'RDB$DB_KEY') not in column_names:
+                        add('column', [name, 'RDB$DB_KEY'], 'Native binary record identifier, not a durable application key',
+                            hidden_from_star=True, native_identifier_token=True)
             for catalog, field, kind in (
                     ('RDB$PROCEDURES', 'RDB$PROCEDURE_NAME', 'procedure'),
                     ('RDB$FUNCTIONS', 'RDB$FUNCTION_NAME', 'function')):

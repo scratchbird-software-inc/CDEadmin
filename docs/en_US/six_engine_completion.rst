@@ -569,3 +569,23 @@ DDN documents carry explicit observation provenance and are refused by the
 independent DuckDB/SQLite schema planners. Existing catalog/DDN size bounds remain
 explicit; this increment does not assert whole-product catalog completeness or
 close the broader independent catalog, native feature and platform inventories.
+
+Native editor hidden-column projection
+======================================
+
+Retained editor metadata distinguishes queryable columns from a relation's
+wildcard projection. MySQL/MariaDB invisible columns and SQLite virtual-table
+hidden fields remain explicit completion candidates. SQLite generated columns
+remain in ``SELECT *``; native rowid aliases are offered only on observed rowid
+tables and are suppressed when a real column shadows them. DuckDB rowids are
+offered on native DuckDB storage tables, including temporary tables, with real
+column shadowing respected. Views and foreign extension storage do not acquire
+invented DuckDB rowids. Firebird base-table ``RDB$DB_KEY`` is an explicit binary
+record identifier suggestion. These identifiers are not durable application keys.
+
+Wildcard expansion in CTEs and derived tables excludes explicit-only columns;
+an explicitly selected hidden column becomes an ordinary projected column. The
+native editor gate independently compares native cursor descriptions and direct
+column queries on owned fixtures, preserving pending user work. This closes a
+specific projection gap, not the complete editor/grammar or product inventory.
+PostgreSQL's separate native system-column completion inventory remains open.
