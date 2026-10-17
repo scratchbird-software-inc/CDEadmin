@@ -955,8 +955,7 @@ The companion shares the native database installation and committed type
 catalogs; it does not replace the retained catalog/session observation. Parsing
 failures cannot abort the user's transaction. Session-local type resolution
 that the companion cannot observe remains explicitly unavailable.
-Positional tuple completion and wider procedural scopes remain separate
-obligations.
+Wider procedural scopes retain separate acceptance.
 
 DuckDB indexed collection members
 ---------------------------------
@@ -974,8 +973,17 @@ unbound type preserves its owning column and reports incomplete observation.
 Type parsing continues to use the companion connection; pending editor work is
 neither committed nor rolled back. Index expressions are not evaluated by
 completion, and suggestions do not establish grammar/binding acceptance of an
-arbitrary index expression. Positional tuples and computed-expression inference
-retain separate acceptance.
+arbitrary index expression. Computed-expression inference retains separate
+acceptance.
+
+When the native string type parser cannot represent an unnamed tuple, the
+companion binds the observed quoted column/relation and reads its logical type
+without fetching rows. That type must exactly match the retained catalog's
+observed type. The editor preserves unnamed positions and resolves positive
+literal ordinals followed by named members or further list/array indexing.
+Ordinal access does not invent dot-field names. A session-local or changed type
+that the companion cannot confirm remains explicitly unavailable. Dynamic and
+computed tuple ordinals retain separate acceptance.
 
 PostgreSQL exact dialect and statistics contracts
 =================================================

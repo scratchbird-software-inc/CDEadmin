@@ -53,6 +53,13 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
       if(!shape.child)return undefined;
       entry=duckdbTypedEntry(sliced ? {kind:'list',sql:shape.child.sql+'[]',child:shape.child} : shape.child,quote);
     } else if(shape?.kind==='map' && !sliced && shape.value)entry=duckdbTypedEntry(shape.value,quote);
+    else if(shape?.kind==='struct' && shape.positions && body.length===1 && body[0].name==='Number') {
+      const value=source.slice(body[0].from,body[0].to);
+      if(!/^\d+$/.test(value))return undefined;
+      const ordinal=Number(value);
+      if(!Number.isInteger(ordinal) || ordinal<1 || ordinal>shape.positions.length)return undefined;
+      entry=duckdbTypedEntry(shape.positions[ordinal-1],quote);
+    }
     else if(shape?.kind==='struct' && body.length===1 && body[0].name==='String') {
       const literal=source.slice(body[0].from,body[0].to);
       if(!/^'(?:[^']|'')*'$/.test(literal))return undefined;

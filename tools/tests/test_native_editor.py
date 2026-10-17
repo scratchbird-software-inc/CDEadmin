@@ -155,16 +155,32 @@ def test_duckdb_nested_members_follow_native_type_parser_and_bind_without_intern
         assert connection.execute('SELECT count(*) FROM nested').fetchone()[0]==0
 
 
-def test_duckdb_unnamed_tuple_binding_is_explicitly_partial_without_aborting_pending_work():
+def test_duckdb_unnamed_tuple_types_bind_on_companion_without_aborting_pending_work():
     import duckdb
     with duckdb.connect() as connection:
         connection.execute('CREATE VIEW tuples AS SELECT row(1,2) AS positional')
         connection.execute('CREATE TABLE owned(value INTEGER)');connection.execute('INSERT INTO owned VALUES(1)')
         connection.execute('BEGIN');connection.execute('INSERT INTO owned VALUES(2)')
         result=metadata(connection,'duckdb')
-        assert any(row['resource_kind']=='column' and row['display_name']=='positional' for row in result['resources'])
-        assert any(item.get('reason')=='native-type-binding' and item['available'] is False for item in result['observations'])
+        column=next(row for row in result['resources'] if row['resource_kind']=='column' and row['display_name']=='positional')
+        assert [item['sql'] for item in column['native_type']['positions']]==['INTEGER','INTEGER']
+        assert not any(item.get('reason')=='native-type-binding' and item['available'] is False for item in result['observations'])
         assert not any(row['resource_kind']=='field' and row['display_path'][2]=='tuples' for row in result['resources'])
+        assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==2
+        connection.execute('ROLLBACK')
+        assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==1
+
+
+def test_duckdb_session_local_tuple_stays_unavailable_when_companion_cannot_observe_it():
+    import duckdb
+    with duckdb.connect() as connection:
+        connection.execute('CREATE TABLE owned(value INTEGER)');connection.execute('INSERT INTO owned VALUES(1)')
+        connection.execute('BEGIN');connection.execute('INSERT INTO owned VALUES(2)')
+        connection.execute('CREATE VIEW pending_tuple AS SELECT row(1,2) AS "positional"')
+        result=metadata(connection,'duckdb')
+        column=next(row for row in result['resources'] if row['resource_kind']=='column' and row['display_path'][2]=='pending_tuple')
+        assert 'native_type' not in column
+        assert any(item.get('reason')=='native-type-binding' and item['available'] is False for item in result['observations'])
         assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==2
         connection.execute('ROLLBACK')
         assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==1

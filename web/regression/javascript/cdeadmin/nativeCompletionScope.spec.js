@@ -19,7 +19,7 @@ function suggestions(source, data, previous=data, position=source.length) {
   test('inserts exactly the members independently bound and executed by DuckDB',()=> {
     const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE,'utf8'));
     expect(fixture.metadata.context.engine).toBe('duckdb');
-    expect(fixture.cases).toHaveLength(10);
+    expect(fixture.cases).toHaveLength(13);
     for(const example of fixture.cases) {
       const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
       const result=suggestions(source,fixture.metadata,fixture.metadata,position);
@@ -72,6 +72,25 @@ test('DuckDB does not guess an ambiguous unqualified indexed column',()=> {
 
 test('DuckDB unknown prototype-named members remain unresolved',()=> {
   const data=containerMetadata(),marked='SELECT n.items[1].__proto__.| FROM one n';
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
+
+const positionalMetadata=()=> {
+  const data=metadata('duckdb');
+  data.resources.push({resource_kind:'column',display_path:['owned','main','one','positional'],
+    native_type:{kind:'struct',sql:'STRUCT(BIGINT, STRUCT("Field ü" BIGINT), STRUCT("Field ü" BIGINT)[])',
+      positions:[{kind:'bigint',sql:'BIGINT'},memberShape,{kind:'list',sql:memberShape.sql+'[]',child:memberShape}]}});
+  return data;
+};
+test.each(['SELECT n.positional[2].| FROM one n','SELECT n.positional[3][1].| FROM one n',
+  'WITH q AS (SELECT n.positional[2] AS part FROM one n) SELECT q.part.| FROM q'])(
+  'DuckDB positional tuple completion retains native ordinal types in %s',marked=> {
+    const data=positionalMetadata();
+    expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|')).options).toEqual([
+      expect.objectContaining({label:'Field ü',apply:'"Field ü"',detail:'BIGINT'})]);
+  });
+test.each(['0','-1','4','1:2','ordinal','2.0','2e0'])('DuckDB does not infer a positional tuple member from %s',index=> {
+  const data=positionalMetadata(),marked=`SELECT n.positional[${index}].| FROM one n`;
   expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
 });
 

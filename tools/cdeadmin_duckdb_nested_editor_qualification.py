@@ -24,6 +24,7 @@ def qualify(output):
         with duckdb.connect() as connection:
             connection.execute('CREATE TABLE one(items STRUCT("Field ü" BIGINT)[], fixed STRUCT("Field ü" BIGINT)[2], lookup MAP(VARCHAR,STRUCT("Field ü" BIGINT)), matrix STRUCT("Field ü" BIGINT)[][])')
             connection.execute('INSERT INTO one VALUES ([struct_pack("Field ü":=7)], [struct_pack("Field ü":=8),struct_pack("Field ü":=9)], map([\'key\'],[struct_pack("Field ü":=10)]), [[struct_pack("Field ü":=11)]])')
+            connection.execute('CREATE VIEW tuple_values AS SELECT row(42::BIGINT,struct_pack("Field ü":=12::BIGINT),[struct_pack("Field ü":=13::BIGINT)]) AS "positional"')
             connection.execute('BEGIN');connection.execute('INSERT INTO one DEFAULT VALUES')
             observed=metadata(connection,'duckdb')
             cases=[]
@@ -34,6 +35,9 @@ def qualify(output):
                 'SELECT items[1].| FROM one','WITH q AS (SELECT n.items[1] AS item FROM one n) SELECT q.item.| FROM q',
                 'WITH q AS (SELECT n.lookup AS value FROM one n) SELECT q.value[\'key\'].| FROM q',
                 'SELECT q.item.| FROM (SELECT n.fixed[1] AS item FROM one n) q',
+                'SELECT n."positional"[2].| FROM tuple_values n',
+                'SELECT n."positional"[3][1].| FROM tuple_values n',
+                'WITH q AS (SELECT n."positional"[2] AS part FROM tuple_values n) SELECT q.part.| FROM q',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

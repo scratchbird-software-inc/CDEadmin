@@ -23,14 +23,22 @@ class NativeTypeShapeLimit(ValueError):
     """A visible type exceeds this observation's bounded traversal."""
 
 
+class NativeTypeBindingUnavailable(ValueError):
+    """The companion cannot confirm the retained catalog's exact type."""
+
+
 def duckdb_type_shape(native_type, budget, depth=0):
     if depth>32 or budget[0]<=0:
         raise NativeTypeShapeLimit('Native type observation limit')
     budget[0]-=1
     shape={'kind':native_type.id,'sql':str(native_type)}
     if native_type.id in {'struct','union'}:
-        shape['fields']=[{'name':name,'type':duckdb_type_shape(child,budget,depth+1)}
-            for name,child in native_type.children if name]
+        children=native_type.children
+        if native_type.id=='struct' and children and all(not name for name,_child in children):
+            shape['positions']=[duckdb_type_shape(child,budget,depth+1) for _name,child in children]
+        else:
+            shape['fields']=[{'name':name,'type':duckdb_type_shape(child,budget,depth+1)}
+                for name,child in children if name]
     elif native_type.id in {'list','array','map'}:
         for name,child in native_type.children:
             if name=='size':shape['size']=child
@@ -230,11 +238,24 @@ def metadata(handle, engine, transaction=None, dialect=None):
                         # connection's transaction. Catalog facts remain on
                         # the retained session; parsing owns this companion.
                         if type_parser is None:type_parser=handle.cursor()
-                        shape=duckdb_type_shape(duckdb.sqltype(data_type,connection=type_parser),type_budget)
+                        try:native_type=duckdb.sqltype(data_type,connection=type_parser)
+                        except (duckdb.InvalidInputException,duckdb.ParserException,duckdb.CatalogException,duckdb.BinderException):
+                            type_parser.close();type_parser=handle.cursor()
+                            # Unnamed tuple types cannot roundtrip through the
+                            # type-string parser. Bind observed identities on
+                            # the companion and inspect types without fetching
+                            # rows. Its committed catalog may be older/newer
+                            # than the retained session; require exact shape.
+                            quoted=lambda value:'"'+str(value).replace('"','""')+'"'
+                            source='SELECT '+quoted(name)+' FROM '+'.'.join(map(quoted,(database,schema,table)))+' LIMIT 0'
+                            bound=type_parser.sql(source).types
+                            if len(bound)!=1 or str(bound[0])!=str(data_type):raise NativeTypeBindingUnavailable()
+                            native_type=bound[0]
+                        shape=duckdb_type_shape(native_type,type_budget)
                     except NativeTypeShapeLimit:
                         observations.append({'section':'nested-types:'+database+':'+schema+':'+table+':'+name,
                             'available':False,'truncated':True,'reason':'native-type-observation-limit'})
-                    except (duckdb.InvalidInputException,duckdb.ParserException,duckdb.CatalogException,duckdb.BinderException):
+                    except (duckdb.InvalidInputException,duckdb.ParserException,duckdb.CatalogException,duckdb.BinderException,NativeTypeBindingUnavailable):
                         if type_parser is not None:type_parser.close();type_parser=None
                         observations.append({'section':'nested-fields:'+database+':'+schema+':'+table+':'+name,
                             'available':False,'reason':'native-type-binding'})
