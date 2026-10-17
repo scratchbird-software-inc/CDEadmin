@@ -42,3 +42,14 @@ describe('Retained-session native catalog', () => {
     expect(post).not.toHaveBeenCalled();
   });
 });
+
+it.each([['duckdb','DuckDB'],['sqlite','SQLite']])('shows %s session-native facts without a PostgreSQL label',async (engine,label) => {
+  const post=jest.fn().mockResolvedValue({...catalog,resources:[{resource_id:'wide',resource_kind:'sequence',display_name:'Exact sequence',
+    display_path:['native','main','Exact sequence'],native:{session_scope_kind:'connection',catalog_metadata:{start_value:'9007199254740993'}}}]});
+  render(<Component engine={engine} post={post} ensureSession={jest.fn().mockResolvedValue('retained')} />);
+  fireEvent.click(screen.getByRole('button',{name:'Refresh session catalog'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Inspect session object Exact sequence'}));
+  expect(screen.getByRole('table',{name:label+' session objects'})).toBeInTheDocument();
+  expect(screen.getByLabelText(label+' session object properties')).toHaveTextContent('9007199254740993');
+  expect(screen.getByText('Connection')).toBeInTheDocument();
+});

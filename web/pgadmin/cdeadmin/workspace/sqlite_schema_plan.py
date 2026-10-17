@@ -18,6 +18,9 @@ def _quote(name):
 
 
 def _scope(model):
+    if model.get('provenance',{}).get('observation_scope')=='retained-session' or any(
+            row.get('native',{}).get('observation_scope')=='retained-session' for row in model.get('rows',{}).values()):
+        raise ValueError('Retained-session observations cannot authorize an independent SQLite migration')
     provenance = model['provenance']
     if provenance.get('mapping') != 'scratchrobin.sqlite.catalog@1':
         raise ValueError('Native SQLite DDN catalog is required')

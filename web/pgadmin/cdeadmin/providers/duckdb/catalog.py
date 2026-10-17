@@ -99,12 +99,14 @@ def _capture_macro_source(connection, resources, account):
 
 
 def capture(connection, *, include_system=False, _in_transaction=False,
-            include_macro_source=False):
+            include_macro_source=False, session_scope=False):
     from .provider import _resources
     if type(include_system) is not bool or type(include_macro_source) is not bool:
         raise ValueError('DuckDB system-object selection must be Boolean')
     if include_macro_source and _in_transaction:
         raise ValueError('Macro source capture needs its own read transaction')
+    if session_scope and not _in_transaction:
+        raise ValueError('Retained catalog must preserve the caller transaction context')
     started = time.monotonic()
     facts = size = 0
     def account(value):
@@ -137,7 +139,7 @@ def capture(connection, *, include_system=False, _in_transaction=False,
     timer.start()
     try:
         generation = str(uuid.uuid4())
-        resources = _resources(Reader(), {'capability_generation': generation})
+        resources = _resources(Reader(), {'capability_generation': generation,'session_catalog':session_scope})
         if include_macro_source:
             _capture_macro_source(connection, list(resources), account)
         retained = []
@@ -151,8 +153,8 @@ def capture(connection, *, include_system=False, _in_transaction=False,
             if system and not include_system: continue
             account(resource); retained.append(resource)
         warnings = [
-            'Native catalog reads share one transaction; runtime extension state is observational.',
-            'Temporary objects and interactive uncommitted work on other connections are not captured.',
+            'Native catalog reads use the retained transaction context; no independent snapshot is asserted.' if session_scope else 'Native catalog reads share one transaction; runtime extension state is observational.',
+            'Includes this session\'s temporary objects, attachments and pending catalog changes.' if session_scope else 'Temporary objects and interactive uncommitted work on other connections are not captured.',
             'Foreign attachment connection strings and confidential options are omitted.',
             'Sequence observations are not a resumable backup; nextval is never called.',
             'This metadata collection is not a physical backup or deployable migration.',
@@ -163,7 +165,7 @@ def capture(connection, *, include_system=False, _in_transaction=False,
                     coverage_complete=False,
                     catalog_observations=[{'section': 'visible-native-catalog', 'available': True}])
         result = {'resources': retained, 'generation': generation, 'warnings': warnings,
-                  'complete': False, 'consistency': 'owned-native-transaction'}
+                  'complete': False, 'consistency': 'retained-native-session' if session_scope else 'owned-native-transaction'}
         # Account final provenance as well as native read/expanded rows.
         account(result)
         return result

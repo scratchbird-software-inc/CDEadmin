@@ -209,6 +209,8 @@ def _resources(connection, request):
     cursor = connection
     generation = str(request.get('capability_generation') or 'current')
     resources = {}
+    database_filter="NOT internal OR database_name='temp'" if request.get('session_catalog') else 'NOT internal'
+    schema_filter="NOT d.internal OR d.database_name='temp'" if request.get('session_catalog') else 'NOT d.internal'
 
     def qualified(parts):
         return '.'.join('"' + str(part).replace('"', '""') + '"' for part in parts)
@@ -252,7 +254,7 @@ def _resources(connection, request):
     cursor.execute(
         'SELECT database_name, database_oid, path, comment, tags, type, '
         'readonly, encrypted, cipher, options FROM duckdb_databases() '
-        'WHERE NOT internal ORDER BY database_name'
+        'WHERE '+database_filter+' ORDER BY database_name'
     )
     databases = cursor.fetchall()
     for row in databases:
@@ -283,7 +285,7 @@ def _resources(connection, request):
         'SELECT s.database_name, s.schema_name, s.oid, s.comment, '
         's.tags, s.sql FROM duckdb_schemas() s '
         'JOIN duckdb_databases() d USING (database_name) '
-        'WHERE NOT d.internal ORDER BY 1, 2'
+        'WHERE '+schema_filter+' ORDER BY 1, 2'
     )
     for database, schema, oid, comment, tags, sql in cursor.fetchall():
         native = {

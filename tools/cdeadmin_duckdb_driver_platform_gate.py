@@ -39,6 +39,17 @@ def run(evidence):
     files = list((ROOT / 'web/pgadmin/cdeadmin/providers/duckdb').glob('*.py'))
     files += [Path(__file__),
               ROOT / 'web/pgadmin/cdeadmin/providers/embedded_route.py']
+    files += [ROOT / path for path in (
+        'tools/cdeadmin_embedded_session_catalog_qualification.py',
+        'web/pgadmin/cdeadmin/providers/embedded_session_catalog.py',
+        'web/pgadmin/cdeadmin/providers/native_editor.py',
+        'web/pgadmin/cdeadmin/data_studio/studio.py',
+        'web/pgadmin/cdeadmin/data_studio/catalog_values.py',
+        'web/pgadmin/cdeadmin/workspace/firebird_catalog_export.py',
+        'web/pgadmin/cdeadmin/workspace/firebird_catalog_import.py',
+        'web/pgadmin/cdeadmin/workspace/duckdb_schema_plan.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_schema_plan.py',
+        'web/pgadmin/static/vendor/ddn/current/resource-manifest.json')]
     receipt['source_sha256'] = {str(p.relative_to(ROOT)): hashlib.sha256(
         p.read_bytes()).hexdigest() for p in files}
     context = SimpleNamespace(
@@ -191,6 +202,12 @@ def run(evidence):
             assert observer.execute(
                 'SELECT * FROM owned').fetchall() == [(1, 'committed')]
         receipt['checks'].append('independent-final-effect')
+        if __package__:
+            from .cdeadmin_embedded_session_catalog_qualification import qualify as qualify_session_catalog
+        else:
+            from cdeadmin_embedded_session_catalog_qualification import qualify as qualify_session_catalog
+        qualify_session_catalog(provider,route,receipt)
+        assert not provider.client._connections
         receipt['complete'] = True
     except Exception as exc:
         receipt['failures'].append(dict(type=type(exc).__name__,

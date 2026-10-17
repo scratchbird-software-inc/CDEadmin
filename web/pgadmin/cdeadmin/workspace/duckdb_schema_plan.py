@@ -27,6 +27,9 @@ def _quote(value):
 
 
 def _root(model):
+    if model.get('provenance',{}).get('observation_scope')=='retained-session' or any(
+            row.get('native',{}).get('observation_scope')=='retained-session' for row in model.get('rows',{}).values()):
+        raise ValueError('Retained-session observations cannot authorize an independent DuckDB migration')
     if model['provenance'].get('mapping') != 'scratchrobin.duckdb.catalog@1':
         raise ValueError('Native DuckDB DDN catalog is required')
     roots = [row for row in model['rows'].values() if row['kind'] == 'database']

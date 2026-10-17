@@ -542,3 +542,30 @@ Input verification and output verification use the reviewed timeout too.
 These changes address manifest inventory scaling and the previous one-hour
 hard limit. Production recovery, PITR, standby provisioning and remote execution
 hosts remain separate implementation work. History testing remains deferred.
+
+DuckDB and SQLite retained-session catalogs
+==========================================
+
+The editor's explicit Session catalog inspection now covers DuckDB and SQLite
+alongside PostgreSQL. It uses the original provider handle, serializes access
+against execution and retained scripts, and includes that session's temporary
+objects, attached databases, loaded connection functions/collations and pending
+catalog changes. DuckDB's temporary database and schema parents are included;
+temporary objects are not mistaken for objects on another connection.
+
+SQLite reads use a uniquely owned savepoint and restore the original transaction
+state. An idle connection's ``defer_foreign_keys`` setting is preserved after the
+owned read transaction, through the caller's unchanged native authorizer.
+An unhealthy DuckDB transaction is refused without rollback. DuckDB observes its
+existing native transaction context without asserting an independent snapshot or
+running the separate macro-source export's ATTACH/COPY/EXPORT operations.
+Native cleanup failures block session reuse; no caller transaction is repaired
+implicitly.
+
+Inspection distinguishes temporary, connection, attached-database and runtime
+scope. Wide native integers are decimal text at the browser boundary with an
+encoding descriptor; the DDN source retains the original exact metadata. Session
+DDN documents carry explicit observation provenance and are refused by the
+independent DuckDB/SQLite schema planners. Existing catalog/DDN size bounds remain
+explicit; this increment does not assert whole-product catalog completeness or
+close the broader independent catalog, native feature and platform inventories.

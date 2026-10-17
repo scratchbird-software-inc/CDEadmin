@@ -323,6 +323,18 @@ class NativeEditorProvider:
         with session_access(self.client, handle, engine) as transaction:
             return {'editor_context': metadata(handle, engine, transaction, request.get('client_sql_dialect'))}
 
+    def capture_session_catalog(self, request):
+        engine=self.profile.engine_id
+        if engine not in {'sqlite','duckdb'} or request.get('language_profile')!=self.profile.language_profile:
+            raise RelationalClientError('Retained catalog is unavailable for this native language')
+        include_system=request.get('include_system',False)
+        if type(include_system) is not bool:raise RelationalClientError('Invalid native system-object selection')
+        handle=self._editor_session(request)
+        from .embedded_session_catalog import sqlite_catalog,duckdb_catalog
+        with session_access(self.client,handle,engine):
+            return (sqlite_catalog if engine=='sqlite' else duckdb_catalog)(self.client,handle,
+                request['session_id'],include_system=include_system)
+
     def validate_source_without_execution(self, request):
         if request.get('language_profile') != self.profile.language_profile:
             raise RelationalClientError('Native editor language changed')

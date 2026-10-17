@@ -3,18 +3,18 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField} from '@mui/material';
 import {DDNViewerSurface} from '../integrations/ddn';
 
-export default function SessionCatalog({post, ensureSession, databaseTargetId, disabled=false}) {
+export default function SessionCatalog({post, ensureSession, databaseTargetId, disabled=false, engine='postgresql'}) {
   const [catalog, setCatalog] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [includeSystem, setIncludeSystem] = useState(false), [filter, setFilter] = useState('');
   const [page, setPage] = useState(0), [selected, setSelected] = useState(''), [view, setView] = useState('');
   const epoch = useRef({values: [], token: 0, active: true});
-  const values = [post, ensureSession, databaseTargetId, disabled];
+  const values = [post, ensureSession, databaseTargetId, disabled, engine];
   if (values.some((value, index) => value !== epoch.current.values[index])) {
     epoch.current = {values, token: epoch.current.token + 1, active: epoch.current.active};
   }
   useEffect(() => {
     setCatalog(null); setBusy(false); setError(''); setPage(0); setSelected(''); setView('');
-  }, [post, ensureSession, databaseTargetId, disabled]);
+  }, [post, ensureSession, databaseTargetId, disabled, engine]);
   useEffect(() => {
     epoch.current.active = true;
     return () => {epoch.current.active = false; epoch.current.token++;};
@@ -38,7 +38,7 @@ export default function SessionCatalog({post, ensureSession, databaseTargetId, d
   const denied = catalog?.observations?.filter(item => !item.available) || [];
   const download = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(catalog.document.snapshot)], {type: 'application/json'}));
-    const link = document.createElement('a'); link.href = url; link.download = 'postgresql-session-catalog.ddn-workspace.json'; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = engine+'-session-catalog.ddn-workspace.json'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <Box component="details" sx={{my: 1}}><summary>Session catalog</summary>
@@ -50,17 +50,19 @@ export default function SessionCatalog({post, ensureSession, databaseTargetId, d
     {catalog && <>
       {denied.length > 0 && <Alert severity="warning">Unavailable sections: {denied.map(item => item.section).join(', ')}</Alert>}
       {catalog.export_warning && <Alert severity="warning">{catalog.export_warning}</Alert>}
+      {catalog.warnings?.length>0 && <Box component="details"><summary>Native catalog coverage</summary><ul>
+        {catalog.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul></Box>}
       <TextField label="Filter session objects" size="small" value={filter} onChange={event => {setFilter(event.target.value); setPage(0);}} />
-      <Table size="small" aria-label="PostgreSQL session objects"><TableHead><TableRow>
+      <Table size="small" aria-label={(engine==='postgresql' ? 'PostgreSQL' : engine==='duckdb' ? 'DuckDB' : 'SQLite')+' session objects'}><TableHead><TableRow>
         {['Object', 'Kind', 'Scope', 'Properties'].map(label => <TableCell key={label}>{label}</TableCell>)}
       </TableRow></TableHead><TableBody>{objects.slice(page * 25, page * 25 + 25).map(item => <TableRow key={item.resource_id}>
         <TableCell>{item.display_path.join(' / ')}</TableCell><TableCell>{item.resource_kind}</TableCell>
-        <TableCell>{item.native.session_local ? 'Temporary' : 'Database'}</TableCell><TableCell>
+        <TableCell>{{temporary:'Temporary',connection:'Connection',runtime:'Runtime','attached-database':'Attached database',database:'Database'}[item.native.session_scope_kind] || (item.native.session_local ? 'Temporary' : 'Database')}</TableCell><TableCell>
           <Button onClick={() => setSelected(item.resource_id)} aria-label={`Inspect session object ${item.display_name}`}>Inspect</Button>
         </TableCell></TableRow>)}
       </TableBody></Table><TablePagination component="div" count={objects.length} page={page} rowsPerPage={25}
         rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} showFirstButton showLastButton />
-      {inspected && <Box component="pre" aria-label="PostgreSQL session object properties"
+      {inspected && <Box component="pre" aria-label={(engine==='postgresql' ? 'PostgreSQL' : engine==='duckdb' ? 'DuckDB' : 'SQLite')+' session object properties'}
         sx={{overflow: 'auto', maxHeight: 320, whiteSpace: 'pre-wrap'}}>{JSON.stringify(inspected.native, null, 2)}</Box>}
       <Button disabled={disabled || busy || !catalog.document} onClick={download}>Download session DDN</Button>
       {catalog.document && <>
@@ -75,4 +77,4 @@ export default function SessionCatalog({post, ensureSession, databaseTargetId, d
   </Box>;
 }
 SessionCatalog.propTypes = {post: PropTypes.func.isRequired, ensureSession: PropTypes.func.isRequired,
-  databaseTargetId: PropTypes.string, disabled: PropTypes.bool};
+  databaseTargetId: PropTypes.string, disabled: PropTypes.bool, engine:PropTypes.oneOf(['postgresql','duckdb','sqlite'])};

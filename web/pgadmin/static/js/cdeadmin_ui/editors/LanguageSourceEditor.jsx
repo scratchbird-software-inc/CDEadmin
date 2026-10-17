@@ -265,7 +265,8 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
         {plan && <Box component="pre" aria-label="Script progress" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({plan_id:plan.plan_id,state:plan.state,next_statement:plan.next_statement,statements:plan.statements?.map(s=>({ordinal:s.ordinal,source:s.source})),history:plan.history,stop_reason:plan.stop_reason},null,2)}</Box>}
       </FormReference>}
       {error && <Alert severity="error">{error}</Alert>}
-      {nativeProfile === 'postgresql-sql' && <SessionCatalog post={post} ensureSession={ensureSession} databaseTargetId={databaseTargetId}
+      {['postgresql-sql','duckdb-sql','sqlite-sql'].includes(nativeProfile) && <SessionCatalog post={post} ensureSession={ensureSession} databaseTargetId={databaseTargetId}
+        engine={nativeProfile.split('-')[0]}
         disabled={disabled || checking || running || Boolean(plan?.occurrence_id) || Boolean(plan?.unresolved)} />}
       {validation && <Box role="status">
         <Alert severity={validation.diagnostics?.length ? 'warning' : 'info'}>{validation.scope || validation.authority} SQL grammar: {validation.grammar_valid===true ? 'accepted by the reported parser' : validation.grammar_valid===false ? 'rejected' : 'not checked'}.</Alert>

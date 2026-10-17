@@ -546,7 +546,9 @@ class DataStudioService:
         session, binding = self._operational_session(context, session_id)
         if type(include_system) is not bool:
             raise DataStudioAccessError('Invalid system-object selection')
-        if session.language_profile != 'postgresql-sql' or not callable(
+        engines={'postgresql-sql':'postgresql','duckdb-sql':'duckdb','sqlite-sql':'sqlite'}
+        engine=engines.get(session.language_profile)
+        if engine is None or not callable(
                 getattr(type(binding.instance), 'capture_session_catalog', None)):
             raise DataStudioAccessError('Retained-session catalog is unavailable for this provider')
         result = binding.instance.capture_session_catalog({
@@ -555,12 +557,15 @@ class DataStudioService:
         from ..workspace.firebird_catalog_export import build_export
         try:
             result['document'] = build_export(result['resources'], endpoint_id=context.endpoint_id,
-                target_id='postgresql-database:' + str(result['database_oid']),
+                target_id='postgresql-database:' + str(result['database_oid']) if engine=='postgresql' else result['catalog_target_id'],
                 generation=result['generation'], include_system=include_system,
-                refreshed=True, engine='postgresql')
+                refreshed=True, engine=engine)
         except ValueError:
             result['document'] = None
             result['export_warning'] = 'This catalog exceeds the DDN export bounds. Native inspection remains available.'
+        result['engine']=engine
+        from .catalog_values import exact_native_integers
+        for resource in result['resources']:exact_native_integers(resource)
         return result
 
     @serialized_execution
