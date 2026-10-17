@@ -777,6 +777,14 @@ CURRENT_ROLE from the retained attachment. Native role changes invalidate the
 completion context. Metadata releases its own idle read transaction while
 preserving an existing interactive transaction and its pending writes.
 
+PostgreSQL observes the authenticated, session and effective principals, native
+current/selected role, raw and resolved search path, encodings and SQL string
+settings. These facts participate in the editor context revision. Observations
+use an owned read transaction or an observation savepoint inside pending work;
+cleanup restores the original transaction state. An aborted transaction is not
+queried or implicitly repaired. Unavailable observations do not supply assumed
+language settings; unconfirmed cleanup blocks reuse of the retained session.
+
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

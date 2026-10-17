@@ -121,17 +121,21 @@ def test_bounds():
     assert not check('SELECT 1;' * 1001, script=True)['script_ready']
 
 
-def test_provider_checks_retained_session_without_sql():
+def test_provider_checks_retained_session_without_executing_submitted_sql(monkeypatch):
+    from pgadmin.cdeadmin.providers.postgresql import editor_context
     provider = PostgreSQLProvider(endpoint(), FakePermissions(), FakeDriver())
     session = provider.open_session({'route': {'server_id': 7}})
     connection = provider._sessions[session['session_id']].connection
     connection.info = SimpleNamespace(parameter_status=Mock(return_value='on'), server_version=180003)
+    observation = Mock(return_value={'standard_conforming_strings': 'on', 'backslash_quote': 'safe_encoding'})
+    monkeypatch.setattr(editor_context, 'observe', observation)
     result = provider.validate_source_without_execution({
         'session_id': session['session_id'], 'language_profile': 'postgresql-sql',
         'source': 'DROP TABLE does_not_exist',
     })
     assert result['grammar_valid'] and result['server_version'] == 180003
     assert connection.executions == [] and connection.connect_calls == []
+    observation.assert_called_once_with(provider._sessions[session['session_id']])
     provider._sessions[session['session_id']].uncertain = True
     with pytest.raises(RuntimeError, match='unknown'):
         provider.validate_source_without_execution({

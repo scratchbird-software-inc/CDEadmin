@@ -17,7 +17,6 @@ transaction payload as opaque.
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import uuid
 import threading
@@ -1180,37 +1179,11 @@ class PostgreSQLProvider:
 
     @staticmethod
     def _editor_context(state, source):
-        connection = state.connection.conn
-        strings = connection.info.parameter_status('standard_conforming_strings')
-        quote = None
-        if isinstance(source, str) and '\\' in source:
-            # backslash_quote is not a ParameterStatus value. Observe this
-            # session without parsing/executing any submitted SQL, preserving
-            # an existing transaction (including an aborted transaction).
-            from psycopg.pq import TransactionStatus
-            status = connection.info.transaction_status
-            if status == TransactionStatus.INERROR:
-                strings = None
-            else:
-                owned = status == TransactionStatus.IDLE and not connection.autocommit
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute("SELECT current_setting('backslash_quote')")
-                        quote = cursor.fetchone()[0]
-                except Exception:
-                    strings = None
-                    if connection.closed or connection.broken:
-                        state.uncertain = True
-                finally:
-                    if owned and not connection.closed:
-                        try: connection.rollback()
-                        except Exception:
-                            state.uncertain = True
-                            raise PostgreSQLProviderError('Editor observation outcome is unknown; close this session') from None
-        context = {'engine': 'postgresql', 'standard_conforming_strings': strings,
-                   'backslash_quote': quote, 'version': connection.info.server_version}
-        context['context_revision'] = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
-        return context
+        from .editor_context import observe
+        try:
+            return observe(state)
+        except RuntimeError as error:
+            raise PostgreSQLProviderError(str(error)) from None
 
     def _require_idle_session(self, session_id):
         state = self._sessions.get(session_id)
