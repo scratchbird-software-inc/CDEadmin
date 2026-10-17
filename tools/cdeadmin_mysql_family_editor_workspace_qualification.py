@@ -136,6 +136,12 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                             rows, result = execute('SELECT %(value)s AS value,HEX(CONVERT(%(value)s USING utf8mb4)) AS codepoints', {'value':text})
                             assert rows == [[text,text.encode('utf8').hex().upper()]] and not result.get('error'), result
                         checks.append({'name':'native-HTTP-live-charset-named-parameters-and-codepoints','passed':True})
+                        rows, result = execute("SET NAMES latin1;SELECT %(euro)s;SET NAMES utf8mb4;SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';SELECT %(unicode)s",
+                            {'euro':'€','unicode':"雪😀 quote' slash\\"})
+                        assert rows == [['€'],["雪😀 quote' slash\\"]] and not result.get('error'),result
+                        rows, result = execute('SELECT %s;SELECT %s',[17])
+                        assert rows == [[17]] and result['error']['query_dispatch']=='partially_started' and not result['session_reuse_blocked'],result
+                        checks.append({'name':'native-HTTP-mixed-settings-exact-parameters-and-explicit-partial-dispatch','passed':True})
                         checks.append({'name':'native-HTTP-literal-bindings-execution-refusal-and-session-reuse','passed':True})
                     post('close_session', session_id=session_id)
                     if browser_binary and pure is not False:
@@ -194,6 +200,22 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
         assert complete_endpoint_prompt(driver, password, timeout=15)
         summary = wait.until(lambda d: next((n for n in d.find_elements(By.TAG_NAME, 'summary') if n.is_displayed() and n.text == 'Source tools'), None))
         summary.click(); checks = []
+        def run_batch(source, observed):
+            _set_query(driver,wait,source)
+            def control(browser,label):
+                return next((node for node in browser.find_elements(By.CSS_SELECTOR,
+                    'button[title="'+label+'"],button[aria-label="'+label+'"]')
+                    if node.is_displayed() and node.is_enabled()),None)
+            wait.until(lambda browser:control(browser,'Run')).click()
+            seen=False
+            def completed(browser):
+                nonlocal seen
+                seen=seen or observed(browser)
+                if control(browser,'Run'):return seen
+                poll=control(browser,'Poll')
+                if poll:poll.click()
+                return False
+            wait.until(completed)
         cases = [
             ('valid-body', 'CREATE PROCEDURE not_created() BEGIN SELECT 1; END', 'accepted by the reported parser'),
             ('invalid-body', 'CREATE PROCEDURE not_created() BEGIN SELEC 1; END', 'rejected'),
@@ -261,6 +283,23 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
             wait.until(lambda browser:any(node.is_displayed() and node.text=='é £ €'.encode('utf8').hex().upper()
                 for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
             checks.append({'name':'native-browser-live-latin1-named-parameters-and-codepoints','passed':True})
+            options = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            value="mixed UI 雪😀 quote' slash\\"
+            fill_fields(wait,['Query parameters (JSON object or array)='+json.dumps({'value':value})])
+            data = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Data Output"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            run_batch("SET NAMES utf8mb4;SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';SELECT %(value)s AS value",
+                lambda browser:any(node.is_displayed() and node.text==value for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-mode-and-charset-changing-parameterized-batch','passed':True})
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            fill_fields(wait,['Query parameters (JSON object or array)=[17]'])
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            run_batch('SELECT %s AS earlier;SELECT %s AS refused',
+                lambda browser:any(node.is_displayed() and 'Earlier commands ran. The next command was not sent.' in node.text
+                    for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="MySQL partial execution"]')))
+            wait.until(lambda browser:any(node.is_displayed() and node.text=='17' for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-partial-dispatch-notice-and-completed-result','passed':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors

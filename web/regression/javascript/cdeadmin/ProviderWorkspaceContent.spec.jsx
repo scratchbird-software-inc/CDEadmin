@@ -1034,6 +1034,26 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByLabelText('Statement metrics')).toHaveTextContent('Plan used: Unavailable');
   });
 
+  it('shows partial MySQL dispatch without retrying or deciding the transaction', async () => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT 1;SELECT %s',
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-partial'}, execute: {occurrence_id: 'mysql-partial-execution'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {mysql: {payload: {
+        has_page: false, error: {type:'MySQLParameterAdmissionError', query_dispatch:'partially_started',
+          commands_dispatched:1, message_primary:'Earlier commands ran.'}, session_reuse_blocked:false,
+      }}}}}, rendered_result:null},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio" />);
+    const run=await screen.findByRole('button',{name:'Run',exact:true});
+    await waitFor(() => expect(run).toBeEnabled()); fireEvent.click(run);
+    expect(await screen.findByLabelText('MySQL partial execution')).toHaveTextContent('Earlier commands ran. The next command was not sent.');
+    await waitFor(() => expect(run).toBeEnabled());
+    expect(api.post.mock.calls.filter(([,value]) => value.action==='execute')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([,value]) => value.action==='transaction_action')).toBe(false);
+  });
+
   it.each(['[42,null]', '{"id":42}'])('submits MySQL native parameter shape %s', async (parameters) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'mysql-sql', title: 'MySQL SQL',

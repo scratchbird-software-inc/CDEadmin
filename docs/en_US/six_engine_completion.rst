@@ -227,7 +227,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        shared preflight/execution parameter boundaries, with SQL suggestions
        suppressed inside opaque bodies. Shared native parameter conversion
        preserves live client character sets, including MySQL latin1's Euro
-       mapping, through retained-session and pooled reuse.
+       mapping, through retained-session and pooled reuse. Parameterized batches
+       reobserve SQL mode and character sets at each framed command boundary;
+       later local refusals preserve completed results and report partial dispatch.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.
@@ -1562,5 +1564,9 @@ session and pending transaction. Cancellation is checked again after conversion.
 Native qualification covers both client implementations, source/literal
 boundaries, exact values, bound result batches, client-delimited programs,
 native refusal, cancellation, pending savepoints and independent observations.
-This does not close the remaining session-charset and mode-changing parameterized
-script reconciliation or broader native operational/product acceptance.
+Parameterized execution now advances one framed native command at a time,
+observing the successor's SQL mode and character sets after prior results are
+consumed. Exact values survive native mode/charset changes, and a later local
+refusal reports partial dispatch without replay. Undelimited compound programs
+retain their native whole-command port. Future-state source preflight, wider
+procedural scopes and broader native operational/product acceptance remain open.

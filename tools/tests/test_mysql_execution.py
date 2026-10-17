@@ -95,7 +95,8 @@ def test_parameter_admission_failure_does_not_quarantine_or_replay_user_sql():
     native.execute = Mock(side_effect=MySQLParameterAdmissionError('private input'))
     pages = drain(owner, owner.execute(connection, {'source':'native query'}, {}))
     assert pages[-1]['payload']['error'] == {
-        'type':'MySQLParameterAdmissionError','query_dispatch':'not_started'}
+        'type':'MySQLParameterAdmissionError','query_dispatch':'not_started',
+        'commands_dispatched':0}
     assert not pages[-1]['payload']['session_reuse_blocked']
     assert id(connection) not in owner.client._uncertain_sessions
     assert native.execute.call_count == 1 and native.closed

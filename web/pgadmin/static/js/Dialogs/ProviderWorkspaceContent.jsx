@@ -8179,6 +8179,10 @@ export default function ProviderWorkspaceContent({
           {nativePage?.native?.bulk_errors && <Alert severity="warning">
             {gettext('Some bulk items failed. Other items may have succeeded; inspect each item before retrying.')}
           </Alert>}
+          {languageProfile==='mysql-sql' && nativePage?.error?.query_dispatch==='partially_started' &&
+            <Alert severity="warning" aria-label="MySQL partial execution">
+              {gettext('Earlier commands ran. The next command was not sent. Review the completed results and transaction state before running the script again.')}
+            </Alert>}
           {fetchObservation && <Alert severity={fetchObservation.limit_reached ? 'warning' : 'info'}
             sx={{mt: 1}} aria-label={gettext('Firebird fetch observation')}>
             {fetchObservation.limit_reached ?

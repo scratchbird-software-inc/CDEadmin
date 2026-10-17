@@ -124,8 +124,9 @@ without changing native settings or deciding the caller's transaction.
 Converted query bytes and unbound SQL containing DELIMITER text use the native command port with the existing driver's
 result ownership. Its client script preprocessor cannot rewrite DELIMITER words
 inside values. Actual client directives have native-mode-aware framing. Local
-binding refusals report that user SQL was not dispatched and preserve the usable
-session. Cancellation is checked again after conversion and before dispatch.
+binding refusals identify whether prior commands ran and preserve a usable
+session after confirmed native boundaries. Cancellation is checked again after
+conversion and before dispatch.
 Quoted multiline text and opaque library bodies remain intact when there are no
 bindings. Native client command identities use ASCII case rules, and actual
 unbound client-delimited routines retain their own framing and result ownership.
@@ -133,6 +134,16 @@ Native qualification covers both interfaces, pending data/savepoints, exact
 values, multiple results, native refusals, cancellation and lost commit replies::
 
     python tools/cdeadmin_mysql_parameter_boundary_qualification.py --evidence /work/mysql-parameter-boundaries
+
+Parameterized batches now consume each command's results before observing its
+successor's native SQL mode and character sets. Values and identifiers are
+encoded with those observations, including changes made by preceding commands
+and client-delimited stored procedures. Named and positional bindings retain
+their own lexical markers; a later admission failure reports prior dispatch
+without replay or an implicit transaction decision. Cancellation before a later
+dispatch retains completed results and pending work. Undelimited compound native
+programs retain their whole-command port; future-state source preflight and
+wider procedural/contextual coverage retain separate acceptance.
 
 Pure-client text escaping now represents NUL as a native backslash escape when
 that language mode permits it, preserving loadable stored SQL definitions.

@@ -190,7 +190,8 @@ def parameters(items):
 
 
 class MySQLParameterAdmissionError(RelationalClientError):
-    """The native metadata reply was complete; user SQL was not dispatched."""
+    """The current command was refused after complete native metadata replies."""
+    commands_dispatched = 0
 
 
 def observed_language(connection):
@@ -229,7 +230,9 @@ def framed_source(source, version, mode):
 def unbound_source(connection, source):
     if CLIENT_DELIMITER.search(source):
         source = framed_source(source, *observed_language(connection))
-    return source.encode(connection.python_charset)
+    try: return source.encode(connection.python_charset)
+    except (UnicodeError, LookupError):
+        raise MySQLParameterAdmissionError('MySQL command encoding failed before dispatch') from None
 
 
 def bound_source(connection, cursor, source, params):
@@ -279,15 +282,87 @@ class Cursor:
         self.native = connection.cursor(raw=True)
         self.encoding = connection.python_charset
         self._native_c_api = getattr(connection, '_cmysql', None)
+        self._script = None
+        self._commands_dispatched = 0
 
     def execute(self, operation, params=None, *args, **kwargs):
+        self._script = None
+        self._commands_dispatched = 0
+        if (bool(params) and isinstance(operation, str) and not args and
+                not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False)):
+            from .mysql_script import Statements
+            if not isinstance(params, (Mapping, list, tuple)):
+                raise MySQLParameterAdmissionError('MySQL parameters must be an object or array')
+            self._script = Statements(operation)
+            self._parameters = params
+            self._parameter_position = 0
+            self._next_command()
+            return None
+        return self._execute(operation, params, *args, **kwargs)
+
+    def _next_command(self):
+        from .mysql_script import MySQLScriptFramingError
+        try:
+            if self.cancel_requested is not None and self.cancel_requested():
+                raise MySQLParameterAdmissionError('MySQL query cancelled before command dispatch')
+            from ...data_studio.mysql_quoting import available, parameter_spans
+            version, mode = observed_language(self.connection)
+            source = self._script.next(version, mode)
+            if source is None:
+                if not isinstance(self._parameters, Mapping) and self._parameter_position != len(self._parameters):
+                    raise MySQLParameterAdmissionError('Unused MySQL query parameters remain after the dispatched commands')
+                self._script = None
+                return False
+            spans = list(parameter_spans(source, set(mode.split(',')), dollar_quotes=available(version)))
+            if isinstance(self._parameters, Mapping):
+                if any(name is None or name not in self._parameters for _start, _end, name in spans):
+                    raise MySQLParameterAdmissionError('MySQL parameters do not match this native command')
+                selected = {name:self._parameters[name] for _start, _end, name in spans}
+            else:
+                count = len(spans)
+                remaining = self._parameters[self._parameter_position:]
+                selected = remaining[:count] if self._script.has_next(version, mode) else remaining
+                self._parameter_position += len(selected)
+                if len(selected) != count:
+                    raise MySQLParameterAdmissionError('MySQL parameters do not match this native command')
+            # Empty selections still require lexical admission: a later command
+            # can contain a named marker missing from the supplied mapping.
+            if isinstance(selected, Mapping) or selected:
+                self._execute(source, selected)
+            else:
+                self._execute(source)
+            self.encoding = self.connection.python_charset
+            return True
+        except MySQLParameterAdmissionError as error:
+            self._script = None
+            error.commands_dispatched = self._commands_dispatched
+            raise
+        except MySQLScriptFramingError:
+            self._script = None
+            error = MySQLParameterAdmissionError('MySQL client command framing failed before this command was dispatched')
+            error.commands_dispatched = self._commands_dispatched
+            raise error from None
+        except BaseException:
+            self._script = None
+            raise
+
+    def nextset(self):
+        try: value = self.native.nextset()
+        except BaseException:
+            self._script = None
+            raise
+        if value or self._script is None: return value
+        if self.cancel_requested is not None and self.cancel_requested(): return None
+        return True if self._next_command() else None
+
+    def _execute(self, operation, params=None, *args, **kwargs):
         if self.cancel_requested is not None and self.cancel_requested():
             raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
         native_bound = (bool(params) and isinstance(operation, str) and not args and
             not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False))
         native_direct = native_bound or (not params and isinstance(operation, str) and not args and
             not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False) and
-            re.search(r'DELIMITER', operation, re.I | re.A) is not None)
+            (self._script is not None or re.search(r'DELIMITER', operation, re.I | re.A) is not None))
         if native_bound:
             operation = bound_source(self.connection, self.native, operation, params)
             params = None
@@ -311,8 +386,10 @@ class Cursor:
             options = ({'raw':True,'buffered':False,'raw_as_string':False}
                 if self._native_c_api is not None else
                 {'read_timeout':self.native._read_timeout,'write_timeout':self.native._write_timeout})
+            self._commands_dispatched += 1
             self.native._handle_result(self.connection.cmd_query(operation, **options))
             return None
+        self._commands_dispatched += 1
         if params is None:
             return self.native.execute(operation, *args, **kwargs)
         return self.native.execute(operation, params, *args, **kwargs)

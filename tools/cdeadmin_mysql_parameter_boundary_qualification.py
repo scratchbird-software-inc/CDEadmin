@@ -103,6 +103,39 @@ def qualify(output):
                                 oracle.execute('SELECT COUNT(*) FROM `' + database + '`.pending'); assert oracle.fetchone() == (1,)
                                 work.execute('ROLLBACK TO SAVEPOINT sr_pending')
                             from pgadmin.cdeadmin.providers.mysql_family import mysql_values
+                            work.execute("SET SESSION sql_mode=''")
+                            mixed = [
+                                ("SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';SELECT %s", (text,), [(text,)]),
+                                ("SET SESSION sql_mode='';SELECT %s", (text,), [(text,)]),
+                                ("SET SESSION sql_mode='ANSI_QUOTES,NO_BACKSLASH_ESCAPES';SELECT 1 AS \"back\\\",%s", (text,), [(1,text)]),
+                                ("SET SESSION sql_mode='';SELECT %s;SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';SELECT %s", (text,text), [(text,),(text,)]),
+                                ("SET NAMES latin1;SELECT %s AS `€`;SET NAMES utf8mb4;SELECT %s AS `雪`", ('€','雪😀'), [('€',),('雪😀',)]),
+                                ("SET NAMES latin1;SELECT %(euro)s;SET NAMES utf8mb4;SELECT %(unicode)s", {'euro':'€','unicode':'雪😀'}, [('€',),('雪😀',)]),
+                                ("/*!90700 SET SESSION sql_mode='NO_BACKSLASH_ESCAPES' */;SELECT %s", (text,), [(text,)]),
+                                ("/*!99999 SET SESSION sql_mode='' */;SELECT %s", (text,), [(text,)]),
+                                *[("DELIMITER "+delimiter+"\nSELECT %s"+delimiter+"\nDELIMITER ;\nSELECT %s;", (17,18), [(17,),(18,)])
+                                  for delimiter in ('#','--','/*','$$','//')],
+                            ]
+                            for source, params, expected in mixed:
+                                rows, result = sql(source, params)
+                                assert rows == expected and not result['error'], (source,result,rows)
+                                checks.append({'name':'observed-language-at-native-command-boundary','source':source})
+                                work.execute('ROLLBACK TO SAVEPOINT sr_pending')
+                                oracle.execute('SELECT COUNT(*) FROM `' + database + '`.pending'); assert oracle.fetchone() == (1,)
+                            _rows, partial = sql('INSERT INTO pending VALUES(%s);SELECT %s', (31,))
+                            assert partial['error']['query_dispatch'] == 'partially_started' and partial['error']['commands_dispatched'] == 1, partial
+                            assert not partial['session_reuse_blocked']
+                            rows, result = sql('SELECT COUNT(*) FROM pending')
+                            assert rows == [(3,)] and not result['error']
+                            work.execute('ROLLBACK TO SAVEPOINT sr_pending')
+                            work.execute("SET SESSION sql_mode=''"); work.execute('SET NAMES utf8mb4')
+                            checks.append({'name':'later-binding-refusal-reports-partial-dispatch-and-preserves-pending-work'})
+                            _rows, refused_encoding = sql("SET NAMES latin1;SELECT '雪';SELECT %s", (17,))
+                            assert refused_encoding['error']['query_dispatch'] == 'partially_started' and not refused_encoding['session_reuse_blocked'],refused_encoding
+                            work.execute('SET NAMES utf8mb4')
+                            rows, following = sql('SELECT COUNT(*) FROM pending')
+                            assert rows == [(2,)] and not following['error']
+                            checks.append({'name':'later-source-encoding-refusal-preserves-complete-native-command-boundary'})
                             original = mysql_values.bound_source; entered = threading.Event(); release = threading.Event()
                             def pause_after_conversion(*args, **kwargs):
                                 encoded = original(*args, **kwargs); entered.set()
@@ -121,6 +154,28 @@ def qualify(output):
                             assert rows == [(2,)] and not following['error']
                             work.execute('ROLLBACK TO SAVEPOINT sr_pending')
                             checks.append({'name':'native-cancel-after-conversion-prevents-user-dispatch','pending_work_preserved':True})
+                            entered.clear(); release.clear(); conversions = 0
+                            def pause_second_conversion(*args, **kwargs):
+                                nonlocal conversions
+                                encoded = original(*args, **kwargs); conversions += 1
+                                if conversions == 2:
+                                    entered.set()
+                                    if not release.wait(10): raise TimeoutError('Owned later-command cancellation fence')
+                                return encoded
+                            with patch.object(mysql_values, 'bound_source', pause_second_conversion):
+                                try:
+                                    token = client.execute(handle, {'source':'SELECT %s;INSERT INTO pending VALUES(%s)','parameters':(17,99)})
+                                    assert entered.wait(10)
+                                    assert client.cancel(token) is True
+                                    release.set(); pages = collect(client, token); cancelled = pages[-1]['payload']
+                                    assert cancelled['cancelled'] and cancelled['error']['query_dispatch'] == 'partially_started'
+                                    assert cancelled['error']['commands_dispatched'] == 1 and not cancelled['session_reuse_blocked']
+                                    assert [row for page in pages for row in page['payload']['rows']] == [(17,)]
+                                finally: release.set()
+                            rows, following = sql('SELECT COUNT(*) FROM pending')
+                            assert rows == [(2,)] and not following['error']
+                            work.execute('ROLLBACK TO SAVEPOINT sr_pending')
+                            checks.append({'name':'native-cancel-before-later-command-preserves-earlier-result-and-pending-work'})
                             helper = client.open_session({'route':{**selected,'autocommit':True}})
                             try:
                                 source = ('DELIMITER //\nCREATE PROCEDURE bound_program() BEGIN SELECT %s AS bound_value; END//\n'
@@ -145,6 +200,12 @@ def qualify(output):
                                 assert [row for page in pages for row in page['payload']['rows']]==[('DELIMITER //',)]
                                 pages=collect(client,client.execute(helper,{'source':'DROP PROCEDURE unbound_program'}))
                                 assert not pages[-1]['payload']['error']
+                                source=('DELIMITER //\nCREATE PROCEDURE charset_program() BEGIN SET NAMES latin1; END//\n'
+                                        'DELIMITER ;\nCALL charset_program();SELECT %(euro)s;SET NAMES utf8mb4;'
+                                        'DROP PROCEDURE charset_program;SELECT %(unicode)s;')
+                                pages=collect(client,client.execute(helper,{'source':source,'parameters':{'euro':'€','unicode':'雪😀'}}))
+                                assert not pages[-1]['payload']['error'],pages[-1]['payload']
+                                assert [row for page in pages for row in page['payload']['rows']]==[('€',),('雪😀',)]
                             finally: client.close_session(helper)
                             work.execute('ROLLBACK TO SAVEPOINT sr_pending')
                             oracle.execute('SELECT COUNT(*) FROM `' + database + '`.pending'); assert oracle.fetchone() == (1,)

@@ -80,7 +80,12 @@ class Executions:
         }.items() if isinstance(item, (str, int))}
         errno, sqlstate = result.get('errno'), result.get('sqlstate')
         if isinstance(exc, MySQLParameterAdmissionError):
-            result['query_dispatch'] = 'not_started'
+            commands = exc.commands_dispatched
+            result['query_dispatch'] = 'partially_started' if commands else 'not_started'
+            result['commands_dispatched'] = commands
+            if commands:
+                result['message_primary'] = ('Earlier commands ran. This command was not sent because its '
+                    'parameters or script framing could not be admitted. Review completed results before running the script again.')
         if (isinstance(errno, int) and errno >= 1000 and
                 not 2000 <= errno < 3000 and isinstance(sqlstate, str) and
                 len(sqlstate) == 5 and isinstance(getattr(exc, 'msg', None), str)):
