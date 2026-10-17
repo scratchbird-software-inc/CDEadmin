@@ -785,6 +785,16 @@ cleanup restores the original transaction state. An aborted transaction is not
 queried or implicitly repaired. Unavailable observations do not supply assumed
 language settings; unconfirmed cleanup blocks reuse of the retained session.
 
+DuckDB context revisions include the full native search path and installed/loaded
+extension identities, versions and install modes. Changing a later search-path
+entry invalidates context even if the default schema and visible symbols stay
+the same. Installation paths and repository locations are not exported.
+SQLite observes native connection flags through the client library, including
+double-quoted string handling, trusted schema, defensive mode and foreign-key/
+trigger enablement. Missing client bindings are explicit unavailable sections.
+Flag changes invalidate context without replacing the retained connection or
+finishing its pending work. These observations are read-only.
+
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

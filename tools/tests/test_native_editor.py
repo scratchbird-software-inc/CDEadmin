@@ -118,6 +118,50 @@ def test_duckdb_metadata_uses_original_session_and_retains_pending_work(tmp_path
         connection.close()
 
 
+def test_duckdb_full_search_path_and_extension_identity_invalidate_native_context():
+    import duckdb
+    with duckdb.connect() as connection:
+        for schema in ('first', 'Second ü', 'third'):
+            connection.execute('CREATE SCHEMA "' + schema + '"')
+        connection.execute("SET search_path='first,\"Second ü\"'")
+        first = metadata(connection, 'duckdb')
+        connection.execute("SET search_path='first,third,\"Second ü\"'")
+        changed = metadata(connection, 'duckdb')
+        assert changed['context']['default_schema'] == first['context']['default_schema']
+        assert changed['resources'] == first['resources']
+        assert changed['context']['search_path'] == connection.execute("SELECT current_setting('search_path')").fetchone()[0]
+        assert changed['context']['context_revision'] != first['context']['context_revision']
+        native = connection.execute('SELECT extension_name,loaded,installed,extension_version,install_mode FROM duckdb_extensions() ORDER BY extension_name').fetchall()
+        assert changed['context']['extensions'] == [dict(zip(('name','loaded','installed','version','install_mode'),row)) for row in native]
+        assert not any('install_path' in extension or 'installed_from' in extension for extension in changed['context']['extensions'])
+        connection.execute("SET search_path='first,\"Second ü\"'")
+        assert metadata(connection, 'duckdb')['context']['context_revision'] == first['context']['context_revision']
+
+
+def test_sqlite_native_quoting_flags_invalidate_context_without_finishing_pending_work(tmp_path):
+    path = tmp_path / 'quoting.sqlite'
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute('CREATE TABLE owned(value INTEGER)')
+        connection.execute('INSERT INTO owned VALUES(1)'); connection.commit()
+        connection.execute('BEGIN'); connection.execute('INSERT INTO owned VALUES(2)')
+        connection.setconfig(sqlite3.SQLITE_DBCONFIG_DQS_DML, True)
+        first = metadata(connection, 'sqlite')
+        assert connection.execute('SELECT "native literal"').fetchone()[0] == 'native literal'
+        connection.setconfig(sqlite3.SQLITE_DBCONFIG_DQS_DML, False)
+        changed = metadata(connection, 'sqlite')
+        assert first['context']['database_config']['DQS_DML'] is True
+        assert changed['context']['database_config']['DQS_DML'] is False
+        assert changed['resources'] == first['resources']
+        assert changed['context']['context_revision'] != first['context']['context_revision']
+        with pytest.raises(sqlite3.OperationalError): connection.execute('SELECT "native literal"')
+        assert connection.in_transaction and connection.execute('SELECT count(*) FROM owned').fetchone() == (2,)
+        with closing(sqlite3.connect(path)) as observer:
+            assert observer.execute('SELECT count(*) FROM owned').fetchone() == (1,)
+        connection.setconfig(sqlite3.SQLITE_DBCONFIG_DQS_DML, True)
+        assert metadata(connection, 'sqlite')['context']['context_revision'] == first['context']['context_revision']
+        connection.rollback()
+
+
 def test_sqlite_hidden_generated_and_rowid_columns_follow_native_star_projection():
     connection = sqlite3.connect(':memory:')
     try:

@@ -142,7 +142,19 @@ def metadata(handle, engine, transaction=None, dialect=None):
             for database, routine, kind, native_type in query('routines', 'SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,DTD_IDENTIFIER FROM information_schema.ROUTINES ORDER BY (ROUTINE_SCHEMA=DATABASE()) DESC,ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE LIMIT 25001'):
                 add(kind.lower(), [database, routine], native_type or kind)
         elif engine == 'sqlite':
+            import sqlite3
             context.update(version=query('version', 'SELECT sqlite_version()')[0][0], default_schema='main')
+            context['database_config'] = {}
+            for option in ('DEFENSIVE', 'DQS_DDL', 'DQS_DML', 'ENABLE_FKEY',
+                           'ENABLE_QPSG', 'ENABLE_TRIGGER', 'LEGACY_ALTER_TABLE',
+                           'TRUSTED_SCHEMA', 'WRITABLE_SCHEMA'):
+                code = getattr(sqlite3, 'SQLITE_DBCONFIG_' + option, None)
+                if code is None or not callable(getattr(handle, 'getconfig', None)):
+                    observations.append({'section': 'database-config:' + option,
+                        'available': False, 'reason': 'native-client-binding-unavailable'})
+                else:
+                    context['database_config'][option] = handle.getconfig(code)
+                    observations.append({'section': 'database-config:' + option, 'available': True})
             databases = query('databases', 'PRAGMA database_list')
             for _ordinal, schema, _path in databases:
                 add('schema', [schema])
@@ -172,6 +184,9 @@ def metadata(handle, engine, transaction=None, dialect=None):
         elif engine == 'duckdb':
             version, database, schema = query('session', 'SELECT version(), current_database(), current_schema()')[0]
             context.update(version=version, default_schema=f'{database}.{schema}', catalog=database, schema=schema)
+            context['search_path'] = query('search-path', "SELECT current_setting('search_path')")[0][0]
+            context['extensions'] = [dict(zip(('name', 'loaded', 'installed', 'version', 'install_mode'), row))
+                for row in query('extensions', 'SELECT extension_name,loaded,installed,extension_version,install_mode FROM duckdb_extensions() ORDER BY extension_name LIMIT 25001')]
             for database, schema in query('schemas', 'SELECT database_name,schema_name FROM duckdb_schemas() ORDER BY database_name,schema_name LIMIT 25001'):
                 add('schema', [database, schema])
             storage = {name: kind for name, kind in query('databases', 'SELECT database_name,type FROM duckdb_databases()')}
