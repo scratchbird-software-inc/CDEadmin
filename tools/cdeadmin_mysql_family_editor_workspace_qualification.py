@@ -130,6 +130,12 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                         assert rows == [[1]] and not result.get('error')
                         rows, result = execute("SELECT 'DELIMITER $$\nnative unbound HTTP' AS value", {})
                         assert rows == [['DELIMITER $$\nnative unbound HTTP']] and not result.get('error')
+                        for charset, text in (('latin1','é £ €'),('utf8mb4','雪😀')):
+                            _rows, result = execute('SET NAMES '+charset, {})
+                            assert not result.get('error'), result
+                            rows, result = execute('SELECT %(value)s AS value,HEX(CONVERT(%(value)s USING utf8mb4)) AS codepoints', {'value':text})
+                            assert rows == [[text,text.encode('utf8').hex().upper()]] and not result.get('error'), result
+                        checks.append({'name':'native-HTTP-live-charset-named-parameters-and-codepoints','passed':True})
                         checks.append({'name':'native-HTTP-literal-bindings-execution-refusal-and-session-reuse','passed':True})
                     post('close_session', session_id=session_id)
                     if browser_binary and pure is not False:
@@ -241,6 +247,20 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
             wait.until(lambda browser:any(node.is_displayed() and node.text=='DELIMITER $$\nnative unbound UI'
                 for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
             checks.append({'name':'native-browser-unbound-delimiter-literal-preserved','passed':True})
+            _set_query(driver,wait,'SET NAMES latin1')
+            run=wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'button[title="Run"],button[aria-label="Run"]')
+                if node.is_displayed() and node.is_enabled()),None));run.click()
+            wait.until(lambda browser:any(node.is_displayed() and 'Query completed without rows.' in node.text
+                for node in browser.find_elements(By.CSS_SELECTOR,'[role="grid"]')))
+            options = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            fill_fields(wait,['Query parameters (JSON object or array)='+json.dumps({'value':'é £ €'})])
+            data = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Data Output"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            _run_query(driver,wait,'SELECT %(value)s AS value,HEX(CONVERT(%(value)s USING utf8mb4)) AS codepoints','é £ €','MySQL',output)
+            wait.until(lambda browser:any(node.is_displayed() and node.text=='é £ €'.encode('utf8').hex().upper()
+                for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-live-latin1-named-parameters-and-codepoints','passed':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors

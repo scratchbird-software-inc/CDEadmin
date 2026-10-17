@@ -245,12 +245,18 @@ def bound_source(connection, cursor, source, params):
                             any(name is not None for _start, _end, name in spans)))):
         raise MySQLParameterAdmissionError('MySQL parameter bindings do not match the native source markers')
     try:
+        # This lexical port bypasses native cursor.execute(), including the
+        # charset adapter used there. Keep both entry points on the same exact
+        # MySQL latin1 mapping before asking the driver to escape its values.
+        from .mysql_charsets import parameter_values
+        native_params = parameter_values(dict(params) if named else params,
+                                         connection.charset)
         if getattr(connection, '_cmysql', None) is not None:
-            converted = connection.prepare_for_mysql(dict(params) if named else params)
+            converted = connection.prepare_for_mysql(native_params)
         elif named:
-            converted = cursor._process_params_dict(dict(params))
+            converted = cursor._process_params_dict(native_params)
         else:
-            converted = cursor._process_params(params)
+            converted = cursor._process_params(native_params)
         pieces = []; previous = 0
         for index, (start, end, name) in enumerate(spans):
             pieces.append(source[previous:start].encode(connection.python_charset))

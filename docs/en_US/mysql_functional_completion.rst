@@ -278,6 +278,15 @@ automatically. Native utility return and GTID/log-position observations do not
 verify recovered application data. Cross-platform utility provisioning and full
 PITR/cutover acceptance remain separate.
 
+The query editor's lexical parameter path and ordinary native cursors share
+live character-set conversion. MySQL latin1 uses its native Windows-1252/C1
+mapping, including the Euro sign; Python's narrower latin1 codec must not reject
+or alter those parameters. Native qualification covers positional and named
+values, source/result character-set differences, SQL-mode escaping, independent
+Unicode code-point checks, pending transactions/savepoints and pooled reuse on
+both Connector/Python implementations. This does not qualify changes of
+character set or SQL mode within a parameterized multi-statement batch.
+
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are

@@ -225,7 +225,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        checking for stored programs, administrative and transaction commands;
        native quoted-identifier and dollar-body framing, formatting and
        shared preflight/execution parameter boundaries, with SQL suggestions
-       suppressed inside opaque bodies.
+       suppressed inside opaque bodies. Shared native parameter conversion
+       preserves live client character sets, including MySQL latin1's Euro
+       mapping, through retained-session and pooled reuse.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.

@@ -44,6 +44,19 @@ def codec(name):
     return aliases.get(name,name)
 
 
+def parameter_values(values, charset):
+    """Retain native values while encoding MySQL's non-Python latin1 text."""
+    if charset != 'latin1':
+        return values
+    def encoded(value):
+        return value.encode(codec(charset)) if isinstance(value, str) else value
+    if isinstance(values, dict):
+        return {key: encoded(value) for key, value in values.items()}
+    if isinstance(values, (tuple, list)):
+        return type(values)(encoded(value) for value in values)
+    return values
+
+
 def install(native):
     if not type(native).__module__.startswith('mysql.connector.'):return
     reference=weakref.ref(native);factory=type(native).cursor
@@ -177,11 +190,7 @@ def install(native):
                 if c_api is not None:refresh_c_variables()
                 name=sync()
                 if isinstance(operation,str) and not many:operation=operation.encode(codec(name))
-                def latin(value):return value.encode(codec(name)) if name=='latin1' and isinstance(value,str) else value
-                def row(value):
-                    if isinstance(value,dict):return {key:latin(item) for key,item in value.items()}
-                    if isinstance(value,(tuple,list)):return type(value)(latin(item) for item in value)
-                    return value
+                def row(value):return parameter_values(value,name)
                 def parameters(value):
                     if not many:return row(value)
                     return type(value)(row(item) for item in value) if isinstance(value,(tuple,list)) else (row(item) for item in value)

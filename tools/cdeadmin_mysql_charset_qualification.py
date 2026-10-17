@@ -51,6 +51,7 @@ def qualify(output):
                 try:
                     instance,native_route=provider('mysql',{**route,'use_pure':pure});connection=instance.client._connect({'route':native_route})
                     cursor=Cursor(connection);cursor.execute('INSERT INTO sr_charsets.pending VALUES(%s)',(1,))
+                    cursor.execute('SAVEPOINT charset_boundary')
                     for charset,text in [('latin1','é £ €'),('cp1251','Ж Ю'),('gb18030','雪😀'),('utf8mb4','雪😀')]:
                         for mode in ('NO_BACKSLASH_ESCAPES',''):
                             cursor.execute('SET SESSION sql_mode=%s',(mode,));cursor.execute('SET NAMES '+charset)
@@ -60,6 +61,9 @@ def qualify(output):
                             assert row[0]==value,(charset,mode,row[0]);assert base64.b64decode(row[1]['data'])==binary,row
                             assert cursor.description[0][0]==text.replace('😀',''),cursor.description
                             proof['checks'].append({'interface':label,'charset':charset,'mode':mode,'operation':'retained-native-mode-literals-parameters-and-result-names','passed':True})
+                            cursor.execute('SELECT HEX(CONVERT(%(value)s USING utf8mb4)),CHAR_LENGTH(%(value)s)',{'value':value})
+                            assert cursor.fetchone()==(value.encode('utf8').hex().upper(),len(value))
+                            proof['checks'].append({'interface':label,'charset':charset,'mode':mode,'operation':'named-parameters-have-native-unicode-code-points','passed':True})
                         cursor.execute('SET character_set_results=NULL')
                         cursor.execute('SELECT _latin1 0x80e9 AS a,_utf8mb4 0xe99baaf09f9880 AS b')
                         assert cursor.fetchone()==('€é','雪😀')
@@ -69,6 +73,8 @@ def qualify(output):
                         assert cursor.description[0][0]==text.replace('😀',''),cursor.description
                         proof['checks'].append({'interface':label,'charset':charset,'operation':'different-native-source-and-result-charsets','passed':True})
                         oracle.execute('SELECT COUNT(*) FROM sr_charsets.pending');assert oracle.fetchone()[0]==0
+                        cursor.execute('ROLLBACK TO SAVEPOINT charset_boundary')
+                        cursor.execute('SELECT COUNT(*) FROM sr_charsets.pending');assert cursor.fetchone()[0]==1
                     cursor.execute('SET NAMES utf8mb4')
                     all_bytes=bytes(range(256))
                     cursor.execute('SELECT CONVERT(_latin1 0x'+all_bytes.hex()+' USING utf8mb4) AS native_latin1')
