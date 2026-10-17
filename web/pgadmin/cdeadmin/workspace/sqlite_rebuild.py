@@ -2,7 +2,6 @@
 
 import re
 import sqlite3
-import uuid
 
 from .firebird_schema_plan import digest
 from .sqlite_schema_plan import _quote, _source
@@ -72,7 +71,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         if row['kind'] == 'view' or
         (row['kind'] == 'trigger' and row['path'][:2] != before['path'])}
     if temp_name is None:
-        temp_name = '__cde_rebuild_' + uuid.uuid4().hex
+        temp_name = '__cde_rebuild_' + digest({'resource_id':before['resource_id'],
+            'before':old.get('ddl'),'after':source})[:32]
     elif not re.fullmatch(r'__cde_rebuild_[0-9a-f]{32}', temp_name):
         raise ValueError('SQLite rebuild temporary identity is invalid')
     prefix = re.compile(r'^(\s*CREATE\s+TABLE\s+)"main"\.' +

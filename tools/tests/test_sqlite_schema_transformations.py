@@ -36,6 +36,7 @@ def reviewed(tmp_path, initial, target, *, extra=()):
         desired['rows'][identity]['native']['ddl'] = target
         with sqlite3.connect(path) as connection:
             preview = plan(baseline, desired, baseline, connection, rebuilds=[identity])
+            assert plan(baseline, desired, baseline, connection, rebuilds=[identity])['execution_sha256'] == preview['execution_sha256']
         assert preview['ready_for_review'], preview
         info = path.stat()
         store = SQLiteSchemaApplications(tmp_path / 'receipts.json')

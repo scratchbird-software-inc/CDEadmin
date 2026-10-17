@@ -240,8 +240,15 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             if row['kind'] in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                 continue
             if not _equal(_definition(old), _definition(row)) and identity not in rebuilds and not rebuilding_child:
-                blockers.append({'resource_id': identity, 'name': row['name'],
-                    'reason': 'Changing an existing native definition requires a separately qualified SQLite migration'})
+                if row['kind'] in {'index', 'trigger'} and observed is not None:
+                    try:
+                        from .sqlite_replace import plan_replace
+                        operations.append(plan_replace(old, row, baseline, connection))
+                    except (ValueError, sqlite3.Error) as error:
+                        blockers.append({'resource_id': identity, 'name': row['name'], 'reason': str(error)[:400]})
+                else:
+                    blockers.append({'resource_id': identity, 'name': row['name'],
+                        'reason': 'Changing an existing native definition requires a separately qualified SQLite migration'})
             continue
         if row['kind'] in {'column', 'constraint', 'index'} and len(row['path']) == 3:
             parents = {_resource_id(kind, row['path'][:1], row['path'][1])
@@ -368,6 +375,9 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
     if any(item['operation'] == 'rebuild' for item in operations) and len(operations) > 1:
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
             'reason': 'Review one isolated table rebuild per batch'})
+    if any(item['operation'] == 'replace' for item in operations) and len(operations) > 1:
+        blockers.append({'resource_id': '', 'name': 'SQLite design batch',
+            'reason': 'Review one isolated index or trigger replacement per batch'})
     operations.sort(key=lambda item: (
         0 if item['operation'] == 'drop' else 1,
         {'trigger': 0, 'index': 1, 'view': 2, 'table': 3, 'fts-table': 3,

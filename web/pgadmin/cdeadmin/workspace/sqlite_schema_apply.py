@@ -29,11 +29,20 @@ def _validate_dependencies(connection, observed):
         if row['resource_kind'] == 'trigger' and row['display_path'][0] == 'main'}
     for owner in owners:
         target = '"main".' + _quote(owner)
+        relation = connection.execute('SELECT type FROM main.sqlite_schema WHERE name=?', (owner,)).fetchone()
+        events = {'INSERT', 'UPDATE', 'DELETE'}
+        if relation and relation[0] == 'view':
+            from .sqlite_replace import trigger_event
+            # A view is writable only for events with INSTEAD OF triggers.
+            # Prepare those events, rather than inventing unsupported writes.
+            events = {trigger_event(row['native']['ddl']) for row in observed.values()
+                if row['resource_kind'] == 'trigger' and row['display_path'][:2] == ['main', owner]}
         columns = [row[1] for row in connection.execute(
             'PRAGMA main.table_xinfo(' + _quote(owner) + ')') if not row[6]]
-        statements = ['INSERT INTO ' + target + ' DEFAULT VALUES',
-                      'DELETE FROM ' + target]
-        if columns:
+        statements = []
+        if 'INSERT' in events: statements.append('INSERT INTO ' + target + ' DEFAULT VALUES')
+        if 'DELETE' in events: statements.append('DELETE FROM ' + target)
+        if columns and 'UPDATE' in events:
             statements.append('UPDATE ' + target + ' SET ' + ', '.join(
                 _quote(name) + '=' + _quote(name) for name in columns))
         for source in statements:
@@ -54,6 +63,15 @@ class SQLiteSchemaApplications(SchemaApplications):
             raise SchemaApplyError('SQLite file identity must be an exact device/inode pair')
         for operation in operations:
             identity = operation['resource_id']
+            if operation.get('operation') == 'replace':
+                from .sqlite_replace import plan_replace
+                old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
+                if old is None or wanted is None or len(operations) != 1:
+                    raise SchemaApplyError('SQLite replacement requires one retained index or trigger')
+                expected = plan_replace(old, wanted, baseline, probe_name=operation.get('probe_name'))
+                if digest(expected) != digest(operation):
+                    raise SchemaApplyError('SQLite replacement differs from the reviewed native design')
+                continue
             if operation.get('operation') == 'rebuild':
                 from .sqlite_rebuild import plan_rebuild
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
@@ -164,6 +182,22 @@ def apply_review(provider, route, record):
         baseline = record['baseline']['rows']
         for operation in record['plan']['operations']:
             identity = operation['resource_id']
+            if operation['operation'] == 'replace':
+                from .sqlite_replace import dependencies, plan_replace
+                modeled = {key:{'resource_id':key,'kind':row['resource_kind'],'path':row['display_path'],
+                    'name':row['display_name'],'system':'false','native':row['native']} for key,row in observed.items()}
+                old, wanted, now = baseline.get(identity), record['desired']['rows'].get(identity), modeled.get(identity)
+                if (old is None or wanted is None or now is None or
+                        digest(_definition(old)) != digest(_definition(now)) or
+                        dependencies(modeled, identity) != operation['dependency_sha256']):
+                    connection.rollback()
+                    return {'state':'not_dispatched','reason':'SQLite replacement target or dependency changed'}
+                expected = plan_replace(old, wanted, record['baseline'], connection,
+                                        probe_name=operation.get('probe_name'))
+                if digest(expected) != digest(operation):
+                    connection.rollback()
+                    return {'state':'not_dispatched','reason':'Reviewed SQLite replacement changed'}
+                continue
             if operation['operation'] == 'rebuild':
                 from .sqlite_rebuild import plan_rebuild
                 old = baseline.get(identity)
@@ -298,7 +332,19 @@ def apply_review(provider, route, record):
             _compile_exact(connection, row, operation['source'])
         for operation in record['plan']['operations']:
             dispatched = True
-            if operation['operation'] == 'rebuild':
+            if operation['operation'] == 'replace':
+                from .sqlite_replace import matches
+                for stage in operation['stages']:
+                    connection.execute(stage)
+                actual_objects = {row['resource_id']:row for row in _resources(connection, {})
+                                  if row['native'].get('system_object') is not True}
+                _validate_dependencies(connection, actual_objects)
+                actual = actual_objects.get(operation['resource_id'])
+                if actual is None or not matches(record['desired']['rows'][operation['resource_id']],
+                        {'resource_id':actual['resource_id'],'kind':actual['resource_kind'],'path':actual['display_path'],
+                         'name':actual['display_name'],'system':'false','native':actual['native']}):
+                    raise _PreservationRefused('SQLite replacement differs from desired native metadata')
+            elif operation['operation'] == 'rebuild':
                 name = _quote(operation['name'])
                 old_count = connection.execute('SELECT count(*) FROM "main".' + name).fetchone()[0]
                 for stage in operation['stages']:
@@ -369,6 +415,12 @@ def apply_review(provider, route, record):
             return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:TABLE|VIRTUAL\s+TABLE|VIEW|INDEX|TRIGGER)\s+)"main"\.',
                           r'\1', source.strip().rstrip(';'), count=1, flags=re.I)
         def matches(operation):
+            if operation['operation'] == 'replace':
+                from .sqlite_replace import matches as replacement_matches
+                row = by_id.get(operation['resource_id'])
+                return row is not None and replacement_matches(record['desired']['rows'][operation['resource_id']],
+                    {'resource_id':row['resource_id'],'kind':row['resource_kind'],'path':row['display_path'],
+                     'name':row['display_name'],'system':'true' if row['native'].get('system_object') else 'false','native':row['native']})
             if operation['operation'] == 'rebuild':
                 row = by_id.get(operation['resource_id'])
                 if row is None or row['resource_kind'] != 'table' or any(

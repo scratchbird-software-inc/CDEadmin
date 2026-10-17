@@ -619,3 +619,24 @@ patched wheel into owned environments, then checks direct AST structure access,
 Unicode and repeated SQL/PLpgSQL string-setting transitions. It runs through the
 existing GitHub workflow's targeted stage selection and does not qualify the
 full application environment or start any database server.
+
+SQLite index and trigger replacement
+===================================
+
+Changed explicit indexes and triggers now produce an isolated reviewed native
+replacement. Preview prepares a declaration under a uniquely owned probe name
+without executing its CREATE VM. The write worker rechecks the original object
+and native schema dependency fingerprints, then performs DROP/CREATE inside one
+owned SQLite transaction. Native unique-index constraints, trigger bindings and
+desired native catalog facts are checked before commit. Failure rolls back the
+replacement; durable receipts never replay it. Fresh independent catalog
+discovery verifies acknowledged commits.
+Temporary names are derived from the exact plan inputs, so recomputing a table
+rebuild or replacement during review preserves the displayed execution digest.
+
+INSTEAD OF triggers on views are checked for their actual defining write events.
+Changing a trigger event does not require unsupported INSERT/UPDATE/DELETE
+operations on that view. Multiple simultaneous replacements, replacements
+combined with a table rebuild and column renames requiring rewritten index or
+trigger sources remain separate migration work. Human form validation and
+ScratchBird history qualification retain their existing ownership/deferral.
