@@ -15,6 +15,24 @@ function suggestions(source, data, previous=data, position=source.length) {
   return nativeSchemaCompletion(observed.config,observed.context);
 }
 
+(process.env.CDEADMIN_SQLITE_TABLE_FUNCTION_FIXTURE ? describe : describe.skip)('native SQLite table-function result columns', () => {
+  test('binds native function aliases, hidden arguments, CTE projections and real schema masking', () => {
+    const fixture = JSON.parse(fs.readFileSync(process.env.CDEADMIN_SQLITE_TABLE_FUNCTION_FIXTURE, 'utf8'));
+    expect(fixture.groups).toHaveLength(2);
+    for(const group of fixture.groups) {
+      for(const example of group.cases) {
+        const source = example.marked.replace('|', ''), position = example.marked.indexOf('|');
+        const result = suggestions(source, group.metadata, group.metadata, position);
+        if(!result) throw new Error('No native table-function completion: ' + example.marked);
+        expect(result.options.map(({label, apply, type}) => ({label, apply, type}))).toEqual(example.expected);
+        expect(result.options.map(option => source.slice(0, result.from) + option.apply + source.slice(result.to))).toEqual(example.native_inserted_sql);
+      }
+      for(const marked of group.negative_cases)
+        expect(suggestions(marked.replace('|', ''), group.metadata, group.metadata, marked.indexOf('|'))).toBeNull();
+    }
+  });
+});
+
 (process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE ? describe : describe.skip)('DuckDB native observed editor fixture',()=> {
   test('inserts exactly the members independently bound and executed by DuckDB',()=> {
     const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE,'utf8'));

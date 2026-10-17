@@ -254,7 +254,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        independent installed-extension/feature and platform reconciliation.
    * - SQLite 3.53.0
      - Native schema/function/collation/flag observations, compiled keyword
-       roles, retained completion and guarded nonexecuting compilation.
+       roles, lazy builtin table-function columns/arguments, retained completion
+       with native schema priority and guarded nonexecuting compilation.
      - Native file/data workflows, typed imports, durable recipes, coordinated
        rebuilds, view/index/trigger replacement and atomic creation of ordinary
        relations with their explicitly declared indexes and triggers; native

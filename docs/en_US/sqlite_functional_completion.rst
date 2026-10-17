@@ -60,6 +60,16 @@ SQLITE-COMP-03: Shared SQL editor
   unbound-parameter cases, for which grammar remains unconfirmed. A lexical
   result alone is not reported as a successful native parse.
 
+  Native table-valued functions include the lazily registered JSON/JSONB,
+  compiled array/storage functions and result-producing PRAGMA wrappers.
+  Their native columns and hidden arguments are observed without executing
+  the result-producing function or wrapped PRAGMA. Catalog and DDN retain
+  those observations and denied scopes. Completion resolves function aliases
+  and projected columns, with hidden arguments excluded from star projections.
+  Native temp/main/attachment lookup and real-table name masking are distinct
+  from module registration. An engine version/source observation does not call
+  user-replaced functions on the retained connection.
+
 SQLITE-COMP-04: Data and file workflows
   Provide native table/view data browsing with bounded pages and exact values.
   Enable row edits only when a stable row identity is proved, preserving

@@ -42,6 +42,7 @@ export function nativeSQLConfig(metadata) {
         ['table', 'view', 'type', 'domain', 'collation'].includes(kind) ? 'type' : 'namespace', item.detail);
     if(engine==='duckdb' && item.native_type)Object.assign(entry,duckdbTypedEntry(item.native_type,quoted,entry.self));
     if (item.hidden_from_star) entry.self.nativeHiddenFromStar = true;
+    if (item.table_valued) entry.self.nativeTableValued = true;
     if (path.length === 1 && ['function', 'type'].includes(kind) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(path[0]))
       entry.self.apply = path[0];
     if (engine === 'duckdb' && kind === 'function' && path[0] === 'system') {
@@ -53,12 +54,21 @@ export function nativeSQLConfig(metadata) {
     const catalog = schema[key(context.catalog)]?.children;
     for (const [name, entry] of Object.entries(catalog || {})) schema[name] ||= entry;
   }
+  const nativeRelationBindings = Object.create(null);
+  if(engine === 'sqlite') {
+    // Native lookup searches all real schemas before resolving an eponymous
+    // module. A builtin in temp must not mask an attached real table.
+    for(const tableValued of [false, true])
+      for(const scope of context.search_path || ['temp', context.default_schema || 'main'])
+        for(const [name, entry] of Object.entries(schema[key(scope)]?.children || {}))
+          if(tableValued ? entry.self.nativeTableValued : entry.self.type === 'type') nativeRelationBindings[name] ||= entry;
+  }
   return {dialect: SQLDialect.define({...base.spec, keywords: (context.keywords || base.spec.keywords || '').toLowerCase(),
     ...(mysql ? {backslashEscapes: !modes.has('NO_BACKSLASH_ESCAPES'), doubleQuotedStrings: !modes.has('ANSI_QUOTES'),
       identifierQuotes: modes.has('ANSI_QUOTES') ? '`"' : '`', plsqlQuotingMechanism: false} : {}),
     ...(engine === 'postgresql' ? {backslashEscapes: context.standard_conforming_strings === 'off'} : {}),
     ...(engine === 'duckdb' ? {identifierQuotes: '"', doubleDollarQuotedStrings: true, backslashEscapes: false} : {})}),
-  schema, nativeEngine: engine, nativeIdentifierQuote: quote,
+  schema, nativeEngine: engine, nativeIdentifierQuote: quote, nativeRelationBindings,
   nativeLanguageContext: context,
   nativeRelationCaseSensitive: mysql && context.lower_case_table_names === 0,
   defaultSchema: (engine === 'duckdb' ? context.schema : context.default_schema) || undefined, upperCaseKeywords: true};

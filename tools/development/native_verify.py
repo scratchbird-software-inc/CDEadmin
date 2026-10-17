@@ -69,8 +69,13 @@ def child(name, evidence, port):
             connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, True)
             connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, False)
             connection.execute('CREATE VIRTUAL TABLE f USING fts5(value)')
+            connection.execute('CREATE VIRTUAL TABLE f3 USING fts3(value)')
+            connection.execute('CREATE VIRTUAL TABLE f4 USING fts4(value)')
             connection.execute('CREATE VIRTUAL TABLE r USING rtree(id, lo, hi)')
+            connection.execute('CREATE VIRTUAL TABLE g USING geopoly(label)')
             assert connection.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone() == (1,)
+            for name in ('json_each', 'jsonb_each', 'dbstat', 'sqlite_dbpage', 'carray'):
+                assert connection.execute('SELECT * FROM pragma_table_xinfo(?)', (name,)).fetchall(), name
         return 0
     if name == 'http':
         import config

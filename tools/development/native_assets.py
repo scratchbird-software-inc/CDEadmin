@@ -235,8 +235,12 @@ def build_sqlite(evidence, env):
         with zipfile.ZipFile(download('sqlite')) as archive:
             for name in ('sqlite3.c', 'sqlite3.h', 'sqlite3ext.h'):
                 (sqlite / name).write_bytes(archive.read('sqlite-amalgamation-3530000/' + name))
-    defines = ['SQLITE_THREADSAFE=1', 'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_RTREE',
-               'SQLITE_ENABLE_COLUMN_METADATA']
+    defines = ['SQLITE_THREADSAFE=1', 'SQLITE_ENABLE_FTS3', 'SQLITE_ENABLE_FTS4',
+               'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_RTREE', 'SQLITE_ENABLE_GEOPOLY',
+               'SQLITE_ENABLE_COLUMN_METADATA', 'SQLITE_ENABLE_DBSTAT_VTAB',
+               'SQLITE_ENABLE_DBPAGE_VTAB', 'SQLITE_ENABLE_MATH_FUNCTIONS',
+               'SQLITE_ENABLE_PERCENTILE', 'SQLITE_ENABLE_CARRAY',
+               'SQLITE_ENABLE_PREUPDATE_HOOK', 'SQLITE_ENABLE_SESSION']
     inputs = {'source': ASSETS['sqlite'][1], 'defines': defines,
               'system': platform.system(), 'machine': platform.machine()}
     target = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')

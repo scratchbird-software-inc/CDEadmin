@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')]
 from tools.sqlite_extension_fixture import build  # noqa: E402
 
 
-def qualify(output, headers, binary=None, driver_binary=None):
+def qualify(output, headers, binary=None, driver_binary=None, table_functions=False):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Evidence belongs outside source')
@@ -24,7 +24,11 @@ def qualify(output, headers, binary=None, driver_binary=None):
     source = ROOT / 'tools/fixtures/sqlite_loadable_probe.c'
     for path in [source, Path(__file__), ROOT / 'tools/sqlite_extension_fixture.py', ROOT / 'web/pgadmin/cdeadmin/providers/sqlite/extensions.py',
                  ROOT / 'web/pgadmin/cdeadmin/providers/sqlite/driver.py', ROOT / 'web/pgadmin/cdeadmin/data_studio/studio.py',
-                 ROOT / 'web/pgadmin/static/js/Dialogs/SQLiteExtensions.jsx']:
+                 ROOT / 'web/pgadmin/static/js/Dialogs/SQLiteExtensions.jsx',
+                 ROOT / 'web/pgadmin/cdeadmin/providers/sqlite/table_functions.py',
+                 ROOT / 'web/pgadmin/cdeadmin/providers/native_editor.py',
+                 ROOT / 'web/pgadmin/static/js/cdeadmin_ui/editors/nativeCompletion.js',
+                 ROOT / 'web/pgadmin/static/js/cdeadmin_ui/editors/nativeScopes.js']:
         proof['source_sha256'][str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE = None
     import config
@@ -89,23 +93,25 @@ def qualify(output, headers, binary=None, driver_binary=None):
         post('close_session', session_id=session_id)
         proof['checks'].append('authenticated-approved-file-review-load-receipt-no-replay-retained-catalog-and-native-checking')
         if binary:
-            proof['browser'] = browser(app, output, sid, binary, driver_binary)
+            proof['browser'] = browser(app, output, sid, binary, driver_binary, table_functions=table_functions)
             proof['checks'].append('browser-query-context-review-confirm-load-and-native-function-result')
-        proof.update(complete=True, library_sha256=digest)
+        proof.update(complete=True, library_sha256=digest, table_function_completion=table_functions)
     finally:
         (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
     return proof
 
 
-def browser(app, output, sid, binary, driver_binary):
+def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.common.exceptions import StaleElementReferenceException
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from cdeadmin_ui_evidence import ensure_data_explorer, expand, wait_for_tree_item, invoke_context_action
-    from cdeadmin_sqlite_query_ui_gate import _run_query
+    from cdeadmin_sqlite_query_ui_gate import _run_query, _set_query
+    from cdeadmin_firebird_query_ui_gate import _query_editor
     http = make_server('127.0.0.1', 0, app, threaded=True)
     thread = threading.Thread(target=http.serve_forever, daemon=True); thread.start(); driver = None
     try:
@@ -143,10 +149,24 @@ def browser(app, output, sid, binary, driver_binary):
         click('Load native library')
         wait.until(lambda browser: any(node.text.endswith(': loaded') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         _run_query(driver, wait, 'SELECT cde_native_probe() AS native_value', 'native extension: 雪', 'SQLite', output)
+        if table_functions:
+            source = 'SELECT j. FROM json_each(\'{"snow":7}\') AS j'
+            _set_query(driver, wait, source)
+            editor = wait.until(lambda browser: _query_editor(browser))
+            editor.send_keys(Keys.CONTROL, Keys.HOME)
+            editor.send_keys(Keys.ARROW_RIGHT * len('SELECT j.'))
+            editor.send_keys(Keys.CONTROL, Keys.SPACE)
+            option = wait.until(lambda browser: next((node for node in browser.find_elements(
+                By.CSS_SELECTOR, '.cm-tooltip-autocomplete .cm-completionLabel') if node.is_displayed() and node.text == 'value'), None))
+            option.click()
+            inserted = driver.execute_script('return [...arguments[0].querySelectorAll(".cm-line")].map(n=>n.textContent).join("\\n");', _query_editor(driver))
+            assert inserted == source.replace('j.', 'j."value"', 1), inserted
+            _run_query(driver, wait, inserted, '7', 'SQLite', output)
+            (output / 'native-table-function-insertion.json').write_text(json.dumps({'source': inserted, 'column': 'value'}, indent=2))
         driver.save_screenshot(str(output / 'native-sqlite-extension.png'))
         errors = [row for row in driver.get_log('browser') if row.get('level') == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2)); assert not errors
-        return {'complete': True, 'console_errors': 0}
+        return {'complete': True, 'console_errors': 0, 'table_function_completion': table_functions}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output / 'browser-failure.png'))
@@ -160,5 +180,5 @@ def browser(app, output, sid, binary, driver_binary):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', type=Path, required=True); parser.add_argument('--sqlite-headers', type=Path, required=True)
-    parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary'); args = parser.parse_args()
-    qualify(args.evidence, args.sqlite_headers, args.browser_binary, args.driver_binary)
+    parser.add_argument('--browser-binary'); parser.add_argument('--driver-binary'); parser.add_argument('--table-functions', action='store_true'); args = parser.parse_args()
+    qualify(args.evidence, args.sqlite_headers, args.browser_binary, args.driver_binary, args.table_functions)

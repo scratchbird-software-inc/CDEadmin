@@ -138,7 +138,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
@@ -148,6 +148,8 @@ def metadata(handle, engine, transaction=None, dialect=None):
             row['native_identifier_token'] = True
         if native_type is not None:
             row['native_type']=native_type
+        if table_valued:
+            row['table_valued'] = True
         total += 1
         count = len(json.dumps(row, ensure_ascii=False).encode())
         if len(symbols) < MAX_SYMBOLS and size + count <= MAX_BYTES:
@@ -186,11 +188,15 @@ def metadata(handle, engine, transaction=None, dialect=None):
                     context['database_config'][option] = handle.getconfig(code)
                     observations.append({'section': 'database-config:' + option, 'available': True})
             databases = query('databases', 'PRAGMA database_list')
+            context['search_path'] = ([row[1] for row in databases if row[1]=='temp'] +
+                [row[1] for row in databases if row[1]!='temp'])
+            native_relations = set()
             for _ordinal, schema, _path in databases:
                 add('schema', [schema])
                 quoted = '"' + schema.replace('"', '""') + '"'
                 table_flags = {row[1]: row for row in query('table-flags:' + schema, f'PRAGMA {quoted}.table_list')}
                 for name, kind in query('relations:' + schema, f'SELECT name,type FROM {quoted}.sqlite_schema WHERE type IN (\'table\',\'view\') ORDER BY name LIMIT 25001'):
+                    native_relations.add((schema, name))
                     add(kind, [schema, name])
                     table = '"' + name.replace('"', '""') + '"'
                     columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})',unavailable_view=kind=='view')
@@ -208,6 +214,21 @@ def metadata(handle, engine, transaction=None, dialect=None):
                                     hidden_from_star=True)
             for name, builtin, kind, encoding, arity, flags in query('functions', 'PRAGMA function_list'):
                 add('function', [name], f'{kind}({arity}); {encoding}; flags={flags}; builtin={builtin}')
+            from .sqlite.table_functions import discover
+            table_functions = discover(cursor, [row[1] for row in databases], native_relations)
+            for function in table_functions:
+                observations.append({'section': 'table-function:' + function['name'],
+                    'available': function['observation_complete'], 'native_scopes': function['scopes']})
+                for scope in function['scopes']:
+                    if not scope['available']:
+                        continue
+                    paths = [[scope['schema'], function['name']]]
+                    if function['unqualified_available'] and scope is function['scopes'][0]:
+                        paths.append([function['name']])
+                    for path in paths:
+                        add('function', path, 'Native table-valued function', table_valued=True)
+                        for column in scope['columns']:
+                            add('column', [*path, column['name']], column['data_type'], hidden_from_star=column['hidden']==1)
             for _ordinal, name in query('collations', 'PRAGMA collation_list'):
                 add('collation', [name])
             context['compile_options'] = [row[0] for row in query('compile-options', 'PRAGMA compile_options')]

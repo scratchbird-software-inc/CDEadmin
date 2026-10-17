@@ -63,10 +63,27 @@ def reconcile_sets(expected, actual, resources, engine, facts):
 
 
 def sqlite(connection):
+    import sqlite3
     from pgadmin.cdeadmin.providers.sqlite.provider import _resources
     quote = lambda value: '"' + value.replace('"', '""') + '"'
     expected, facts = {}, []
     def add(kind, path): expected.setdefault(kind, []).append(tuple(path))
+    # sqlite3LocateTable registers JSON/C array/PRAGMA modules lazily. Prime
+    # their native declarations before asking the provider, so a missing
+    # provider adapter cannot shrink this independent expected inventory.
+    candidates = {'json_each', 'json_tree', 'jsonb_each', 'jsonb_tree', 'carray',
+                  'dbstat', 'sqlite_dbpage', 'sqlite_stmt', 'fts3tokenize'}
+    candidates.update('pragma_' + row[0] for row in connection.execute('PRAGMA pragma_list'))
+    table_functions = {}
+    for _ordinal, schema, _path in list(connection.execute('PRAGMA database_list')):
+        for name in sorted(candidates):
+            if connection.execute('SELECT 1 FROM ' + quote(schema) + '.sqlite_schema WHERE '
+                    'type IN (\'table\',\'view\') AND name=? COLLATE NOCASE', (name,)).fetchone(): continue
+            try:
+                columns = list(connection.execute('PRAGMA ' + quote(schema) + '.table_xinfo(' + quote(name) + ')'))
+            except sqlite3.Error:
+                continue
+            if columns: table_functions.setdefault(name, {})[schema] = columns
     resources = _resources(connection, {})
     by_path = {(row['resource_kind'], tuple(row['display_path'])): row for row in resources}
     def module(source):
@@ -136,6 +153,16 @@ def sqlite(connection):
     for _, name in connection.execute('PRAGMA collation_list'): add('collation', [name])
     for name, builtin, kind, encoding, arity, _ in connection.execute('PRAGMA function_list'):
         add('native-function', [json.dumps([name, builtin, kind, encoding, arity], ensure_ascii=False, separators=(',', ':'))])
+    for name, scopes in table_functions.items():
+        path = (json.dumps([name, 'table-function'], ensure_ascii=False, separators=(',', ':')),)
+        add('native-function', path)
+        observed = by_path.get(('native-function', path), {}).get('native', {}).get('table_function_observation', {})
+        for schema, raw in scopes.items():
+            scope = next((row for row in observed.get('scopes', []) if row.get('schema') == schema), {})
+            actual_columns = [(row['ordinal_position'], row['name'], row['data_type'], int(not row['nullable']),
+                row['default'], row['primary_key_position'], row['hidden']) for row in scope.get('columns', [])]
+            facts.append({'section': canonical([schema, name, 'native-table-function-columns']),
+                'equal': scope.get('available') is True and Counter(raw) == Counter(actual_columns)})
     actual = {}
     for row in resources:
         if row['resource_kind'] in {'constraint', 'metric'}: continue
@@ -267,7 +294,8 @@ def qualify(engine, output):
     result['source_sha256'] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in [Path(__file__), ROOT / 'web/pgadmin/cdeadmin/navigator.py',
             ROOT / f'web/pgadmin/cdeadmin/providers/{engine}/provider.py',
-            *([ROOT/'web/pgadmin/cdeadmin/providers/sqlite/modules.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py'] if engine=='sqlite' else [])]}
+            *([ROOT/'web/pgadmin/cdeadmin/providers/sqlite/modules.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py',
+               ROOT/'web/pgadmin/cdeadmin/providers/sqlite/table_functions.py'] if engine=='sqlite' else [])]}
     (output / 'summary.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
 

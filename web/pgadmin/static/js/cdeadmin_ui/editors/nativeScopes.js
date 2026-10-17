@@ -45,9 +45,15 @@ export function scopedSQLConfig(config, state, position) {
       for (const part of parts) {entry = lookup(branch, part, exactCase); if (!entry) return undefined; branch = entry.children;}
       return entry;
     };
+    if(config.nativeEngine === 'sqlite' && parts.length === 1) {
+      const local = lookup(schema, parts[0], exactCase);
+      if(local?.self.nativeSourceScope) return local;
+      const native = lookup(config.nativeRelationBindings || {}, parts[0], exactCase);
+      if(native) return native;
+    }
     return follow(schema) || follow(lookup(schema, config.defaultSchema || '')?.children);
   };
-  const relation = (label, columns) => ({self: {label, apply: quote(label), type: 'type', detail: 'Source scope'},
+  const relation = (label, columns) => ({self: {label, apply: quote(label), type: 'type', detail: 'Source scope', nativeSourceScope: true},
     children: Object.fromEntries(columns.map(column => {
       const name=typeof column==='string' ? column : column.label, native=column.native;
       const self={...(native?.self || {}),label:name,apply:quote(name),type:'property'};
@@ -76,6 +82,10 @@ export function scopedSQLConfig(config, state, position) {
       const parts = path(target,true);
       const entry = target.name === 'Parens' ? relation('', project(target, depth + 1)) : resolve(parts);
       at++;
+      if (config.nativeEngine === 'sqlite' && target.name !== 'Parens' && nodes[at]?.name === 'Parens') {
+        if (!entry?.self.nativeTableValued) {index = at; continue;}
+        at++;
+      }
       const explicitAlias=nodes[at] && word(nodes[at]) === 'AS';
       if (explicitAlias) at++;
       const hasAlias=identifier(nodes[at],explicitAlias ? 'nm' : config.nativeEngine==='sqlite' ? 'ids' : 'nm',true);
@@ -134,7 +144,7 @@ export function scopedSQLConfig(config, state, position) {
           const entry=(qualifier.length===1 && bindings.get(bindingKey(qualifier[0]))) || nativeColumn(qualifier);
           // DuckDB expands a native STRUCT star. UNION members remain dot
           // expressions and must not be invented as a star projection.
-          entries=entry && (entry.self.type==='type' || /^STRUCT\s*\(/i.test(entry.self.detail || '')) ? [entry] : [];
+          entries=entry && (entry.self.type==='type' || entry.self.nativeTableValued || /^STRUCT\s*\(/i.test(entry.self.detail || '')) ? [entry] : [];
         } else entries=[...bindings.values()];
         result.push(...entries.flatMap(columns));
       }

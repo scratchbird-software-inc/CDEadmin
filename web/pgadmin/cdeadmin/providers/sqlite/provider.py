@@ -230,7 +230,8 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 if (row['native'].get('column_observation',{}).get('available') is False or
                         row['native'].get('view_binding_observation',{}).get('available') is False or
                         row['native'].get('module_observation',{}).get('available') is False or
-                        row['native'].get('fts_configuration',{}).get('available') is False):
+                        row['native'].get('fts_configuration',{}).get('available') is False or
+                        row['native'].get('table_function_observation',{}).get('observation_complete') is False):
                     unavailable.append(row)
             for item in resources:
                 if item['resource_kind'] in {'database',
@@ -239,7 +240,7 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         item['native']['registered_file_identity'] = [
                             file_info.st_dev, file_info.st_ino]
                     item['native']['catalog_observations'] = [{
-                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list/function_list/collation_list/compile_options/pragma_list',
+                        'source': 'sqlite_schema/table_list/table_xinfo/index_list/index_xinfo/foreign_key_list/function_list/native-table-functions/collation_list/compile_options/pragma_list',
                         'available': True,
                     }]
                     item['native']['coverage_complete'] = False
@@ -247,11 +248,12 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         'CHECK expressions and all table options remain in exact native CREATE SQL; they are not separately decomposed.',
                         'Connection-local objects and uncommitted changes on other handles are outside this capture.',
                     ]
-                    missing=[row['resource_id'] for row in unavailable if row['display_path'][0]==item['display_name']]
+                    missing=[row['resource_id'] for row in unavailable if row['display_path'][0]==item['display_name'] or
+                             row['native'].get('scope')=='connection']
                     if missing:
                         item['native']['catalog_observations'].append({'source':'native-relation-columns-binding-and-fts-settings',
                             'available':False,'unavailable_resource_ids':missing})
-                        item['native']['catalog_warnings'].append('Some relation columns, bindings or FTS settings are unavailable. Their native definitions and identities are retained; inspect the affected observations before migration.')
+                        item['native']['catalog_warnings'].append('Some relation columns, bindings, FTS settings or table-function observations are unavailable. Their native definitions and identities are retained; inspect the affected observations before migration.')
             if len(resources) > 20_000:
                 raise RelationalClientError(
                     'SQLite catalog exceeds the 20,000-resource limit')
@@ -364,8 +366,8 @@ def _resources(connection, request):
             physical_bytes = None
             if database_path and os.path.isfile(database_path):
                 physical_bytes = os.path.getsize(database_path)
-            cursor.execute('SELECT sqlite_version(), sqlite_source_id()')
-            runtime = cursor.fetchone()
+            from .table_functions import native_runtime
+            runtime = native_runtime()
             return {
                 'database_name': database_path,
                 'schema_name': schema_name,
@@ -696,6 +698,13 @@ def _resources(connection, request):
                 'loaded_in_connection': True, 'scope': 'connection',
                 'system_object': bool(builtin)})
             item['display_name'] = f'{name} ({arity}; {encoding}; {kind})'
+        from .table_functions import discover
+        for function in discover(cursor, [str(row[1]) for row in databases], relation_kinds):
+            name = function['name']
+            identity = json.dumps([name, 'table-function'], ensure_ascii=False, separators=(',', ':'))
+            item = add('native-function', [], identity, {'name': name, 'function_type': 'table',
+                'scope': 'connection', 'system_object': True, 'table_function_observation': function})
+            item['display_name'] = name + ' (table function)'
         cursor.execute('PRAGMA collation_list')
         for ordinal, name in cursor.fetchall():
             add('collation', [], name, {'native_name': name, 'ordinal': ordinal,
@@ -703,8 +712,8 @@ def _resources(connection, request):
         cursor.execute('PRAGMA compile_options')
         for (option,) in cursor.fetchall():
             add('compile-option', [], option, {'native_option': option, 'scope': 'runtime'})
-        cursor.execute('SELECT name FROM pragma_module_list ORDER BY name')
-        module_names=[row[0] for row in cursor.fetchall()]
+        cursor.execute('PRAGMA module_list')
+        module_names=sorted(row[0] for row in cursor.fetchall())
         fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
         registered={name.translate(fold) for name in module_names}
         for resource in resources.values():

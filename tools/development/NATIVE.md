@@ -144,7 +144,11 @@ successful screenshots.
 
 Native downloads are pinned by URL and SHA-256 in `native_assets.py`:
 
-- SQLite 3.53.0 with FTS5, R-tree, column metadata and threading.
+- SQLite 3.53.0 with FTS3/4/5, R-tree/Geopoly, DBSTAT/DBPAGE, math/percentile,
+  C array, session/preupdate facilities, column metadata and threading.
+  Runtime checks observe the native modules as well as the version. A changed
+  library fingerprint requires a fresh owned runtime. Enabling native C APIs
+  records engine availability; it does not certify every application adapter.
 - Firebird 5.0.4, including its native client and embedded engine runtime.
 - MariaDB Connector/C 3.4.8 and the project's patched Connector/Python 1.1.14.
 - PostgreSQL 18.3 Windows SDK and command-line tools; macOS uses native libpq.
