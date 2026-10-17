@@ -1271,3 +1271,28 @@ This closes the application archived-log replay gap in its recorded native
 scope. Physical base recovery, continuous collection/retention, production
 cutover, remote execution hosts and platform-team qualification remain separate
 acceptance work. Persistent history qualification remains owner-deferred.
+
+MySQL text cursor charset reconciliation
+---------------------------------------
+
+Connector/Python 26.7 text cursors now reconcile SQL character-set changes for
+native source encoding, typed binding, result names and per-column text. Pure
+connections negotiate native session tracking and consume the native system-
+variable observations in OK packets. C connections use the native client charset
+and a fixed session-variable observation before text dispatch; that observation
+reads settings and never sends a replacement ``SET NAMES``. Pending work,
+autocommit, savepoints and the selected character-set settings remain native.
+
+The native MySQL Latin1 mapping is distinct from Python Latin1. Input and result
+names preserve its Windows-1252 code points and undefined C1 positions. Pure
+catalog conversions and C field/row conversion preserve the observed result
+charset separately from the source charset. Raw result cells retain per-column
+charset identity, including ``character_set_results=NULL``. Binary prepared
+cursors retain the native driver path; this text-cursor work does not qualify
+all binary prepared-statement charset combinations.
+
+The fixed C metadata read is an additional native statement. Preservation of
+native diagnostic state across application metadata reads remains a separate
+requirement. Session-tracking-disabled pure connections, mixed-charset/mixed-mode
+multi-statement parameter batches, the complete native charset denominator and
+all optional protocol/parser components retain separate acceptance work.

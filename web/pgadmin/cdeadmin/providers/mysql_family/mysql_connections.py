@@ -189,8 +189,15 @@ class Connector:
             return pool.checkout(options)
 
     def _native_connect(self,*args,**options):
+        if options.get('use_pure') is True and getattr(self.module,'__name__','').startswith('mysql.connector'):
+            from mysql.connector.constants import ClientFlag
+            flags=options.get('client_flags')
+            options['client_flags']=[*flags,ClientFlag.SESSION_TRACK] if isinstance(flags,(tuple,list)) else (ClientFlag.get_default() if flags is None else flags)|ClientFlag.SESSION_TRACK
         native=self.module.connect(*args,**options)
-        try:live_sql_mode_conversion(native)
+        try:
+            live_sql_mode_conversion(native)
+            from .mysql_charsets import install
+            install(native)
         except BaseException:
             _close(native)
             raise
