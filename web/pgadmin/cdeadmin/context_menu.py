@@ -738,6 +738,9 @@ def endpoint_context_actions(
             'open_duckdb_dashboard_editor', icon='action.edit', group='availability', mutation='write',
             enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'sqlite':
+        actions.append(_action('endpoint.sqlite.recovery', 'Recover SQLite file...',
+            'open_workspace', icon='action.restore', group='database', arguments={'tab':'sqlite-recovery'},
+            mutation='admin', enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can recover its files.'))
         actions.append(_action('endpoint.sqlite.monitoring', 'SQLite registered-file dashboard...',
             'open_workspace', icon='tool.dashboard', group='availability', arguments={'tab': 'monitoring'},
             enabled=ready and can_manage, disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
@@ -991,6 +994,9 @@ def database_target_context_actions(
         arguments={**base, 'tab': tab},
     ) for index, (tab, label, icon) in enumerate(rows)]
     if engine_id == 'sqlite':
+        actions.append(_action('database.sqlite.recovery', 'Recover SQLite file...',
+            'open_workspace', icon='action.restore', group='database', mutation='admin',
+            arguments={**base,'tab':'sqlite-recovery'}))
         actions.append(_action(
             'database.sqlite.catalog_ddn', 'SQLite metadata and DDN diagrams...',
             'open_workspace', icon='action.export', group='database',

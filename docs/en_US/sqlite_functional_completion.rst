@@ -97,6 +97,19 @@ SQLITE-COMP-04: Data and file workflows
   changing their storage class. Import remains a reviewed script execution in
   the shared Query Tool, under that tool's transaction controls.
 
+  The registration/file recovery workspace uses SQLite's public recovery API
+  in an isolated worker on private main/WAL/journal images. It is available
+  without a successful SQL attachment and keeps endpoint/file authorization.
+  Exact native values are transferred without shell SQL serialization. Reviews
+  bind source/file identities, output directory, runtime/source provenance and
+  options. Durable claims precede dispatch; progress, cancellation, timeout,
+  exclusive new-file publication and lost-reply reconciliation are separate
+  observations. Native integrity does not establish complete application-data
+  recovery. Recovered copies can be registered and activated through normal
+  native verification; staged-image removal retains the published file and
+  receipt. Original files and interactive transactions are not modified.
+  See ``tools/development/NATIVE.md`` for the native dependency and host policy.
+
 SQLITE-COMP-05: DDN design exchange
   Capture one selected registered file's visible catalog and selected data in
   public DDN views, with exact endpoint/file provenance and capture bounds.

@@ -2667,6 +2667,7 @@ class ServerNode(PGChildNodeView):
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
+                        'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
                         'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
                         'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
                         'postgresql_recipe_read', 'postgresql_recipe_save',
@@ -2937,6 +2938,8 @@ class ServerNode(PGChildNodeView):
                 elif action in {'duckdb_catalog_export', 'duckdb_catalog_compare'}:
                     payload = service.duckdb_catalog(server, data.get('request'),
                         compare=action == 'duckdb_catalog_compare')
+                elif action in {'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate'}:
+                    payload = service.sqlite_recovery(server, action.removeprefix('sqlite_recovery_'), data.get('request'))
                 elif action in {'sqlite_catalog_export', 'sqlite_catalog_compare'}:
                     payload = service.sqlite_catalog(server, data.get('request'),
                         compare=action == 'sqlite_catalog_compare')

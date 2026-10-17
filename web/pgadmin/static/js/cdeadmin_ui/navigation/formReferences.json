@@ -5705,6 +5705,10 @@
     "postgresql-continuity": {
       "reference": "SR-F-010009",
       "title": "PostgreSQL physical backup, verification and chain reconstruction"
+    },
+    "sqlite-recovery": {
+      "reference": "SR-F-010010",
+      "title": "SQLite native file recovery and recovered-copy activation"
     }
   }
 }

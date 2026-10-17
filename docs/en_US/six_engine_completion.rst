@@ -277,6 +277,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        ordinary dependent views, maintenance triggers and native index settings.
        FTS4 language-column and selected FTS hidden MATCH-column mappings
        preserve native language-specific searches and dependent code.
+       Offline native file recovery uses private WAL/journal images, exact
+       typed transfer, reviewed new-file publication, durable outcomes and
+       registration/activation of recovered copies.
      - Remaining attached/FTS table-function-view/row-identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4

@@ -31,6 +31,7 @@ import PostgresqlContinuity from './PostgresqlContinuity';
 import MySQLClone from './MySQLClone';
 import MySQLBinlogArchives from './MySQLBinlogArchives';
 import MySQLBinlogReplay from './MySQLBinlogReplay';
+import SQLiteRecovery from './SQLiteRecovery';
 import MySQLMonitoring from './MySQLMonitoring';
 import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
@@ -290,7 +291,9 @@ export function showProviderWorkspace(
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const onClose = () => workspace.close(panelId);
-  const serverTool=['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?
+  const serverTool=initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
+    onTargetCatalogChanged={() => nodeObj.callbacks.refresh.call(nodeObj,null,itemNodeData)}
+    post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?
     <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
         <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?

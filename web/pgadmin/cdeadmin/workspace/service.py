@@ -1756,6 +1756,13 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_recovery(self, server, operation, request):
+        from .sqlite_recovery_service import action
+        try:
+            return action(self, server, operation, request)
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_data_capture(self, server, request):
         from .sqlite_catalog_service import data
         try:

@@ -149,6 +149,10 @@ Native downloads are pinned by URL and SHA-256 in `native_assets.py`:
   Runtime checks observe the native modules as well as the version. A changed
   library fingerprint requires a fresh owned runtime. Enabling native C APIs
   records engine availability; it does not certify every application adapter.
+  The clients stage also builds the public SQLite recovery API from the pinned
+  full source archive and links it to this same owned SQLite runtime. Its
+  library and adjacent provenance manifest are retained together. Native launch
+  environments set `CDEADMIN_SQLITE_RECOVERY_LIBRARY` to that platform library.
 - Firebird 5.0.4, including its native client and embedded engine runtime.
 - MariaDB Connector/C 3.4.8 and the project's patched Connector/Python 1.1.14.
 - PostgreSQL 18.3 Windows SDK and command-line tools; macOS uses native libpq.
@@ -350,3 +354,55 @@ See `docs/en_US/firebird_platform_release.rst` for the four-host release reconci
 source/artifact integrity rules and separately owned human/package/history gates.
 GitHub captures the DDN revision recorded by the candidate and disables Git line
 ending conversion on both checkouts so native source hashes can be reconciled.
+
+## SQLite native file recovery
+
+The SQLite registration and file context menus provide **Recover SQLite file**.
+This opens an offline filesystem workspace and can inspect retained receipts
+without attaching to the damaged database. Endpoint ownership and filesystem,
+backup and restore permissions still apply. Recovering a file does not mark its
+SQL runtime as verified. Registering and activating the completed copy performs
+the normal native connection verification against that new file.
+
+The recovery dependency uses `sqlite3_recover_init` and typed native values.
+Replaying the shell's `.recover` SQL is not used: the qualified shell path
+truncates embedded NUL text. The direct API preserves that text, native BLOBs,
+64-bit keys, storage classes and applicable native schema features. Recovered
+schema text is guarded against external database attachments, extension loading
+and temporary-directory redirection in the isolated worker.
+
+For a separately managed native installation, supply the complete unmodified
+SQLite 3.53.0 source distribution and matching headers/library, then build in an
+owned output directory:
+
+```text
+cmake -S tools/native/sqlite_recovery -B <owned-build-directory> -DCMAKE_BUILD_TYPE=Release -DSCRATCHROBIN_SQLITE_SOURCE=<sqlite-source-directory> -DSQLite3_INCLUDE_DIR=<sqlite-header-directory> -DSQLite3_LIBRARY=<sqlite-library-or-import-library>
+cmake --build <owned-build-directory> --config Release
+```
+
+Use the native `.dll`, `.dylib` or `.so` and its adjacent `.json` manifest.
+Windows requires the matching SQLite DLL; the C adapter keeps every handle on
+the runtime linked to the recovery library. Python's verification binding must
+also match the qualified SQLite source. The worker checks both identities.
+Set `CDEADMIN_SQLITE_RECOVERY_LIBRARY` in the launch environment or application
+configuration. Standard interpreter `bin`, `lib`, `DLLs` and the packaged
+`cdeadmin/native` directory are also searched. `CDEADMIN_SQLITE_RECOVERY_ROOT`
+selects private staged-image storage; `CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS`
+sets the host's job ceiling (one day by default).
+
+Choose a new output filename within the registration's filesystem root and
+confirm that writers are stopped or isolated. The application copies the main
+file and observed WAL/journal into private storage, rechecks identities and
+retains their hashes. SHM is recreated privately. This is salvage, not the online
+backup contract. The original is never opened by the native recovery API.
+Recovery and verification run independently of the viewer, with native-step and
+copy-byte observations, cancellation, deadlines and once-only durable claims.
+Publication refuses an existing destination. Missing publication replies remain
+unknown and can be reconciled by the expected artifact hash without replay.
+
+Native integrity and foreign-key observations are reported separately from
+application-data verification. A recovered copy may omit damaged records;
+freelist recovery can include deleted records. Inspect the copy before adopting
+its data. The workspace can register and activate a verified recovered file and
+remove its staged images while retaining the receipt and published copy.
+Windows/macOS build and workflow acceptance remain with the platform teams.

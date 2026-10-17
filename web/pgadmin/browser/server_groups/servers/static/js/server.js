@@ -412,7 +412,8 @@ define('pgadmin.node.server', [
           const data = item ? tree.itemData(item) : undefined;
           const providerReady = providerEndpointSessionReady(data);
           const localProfile = data?.cde_endpoint &&
-            isProviderRegistrationWorkspace(initialTab, initialContext);
+            (isProviderRegistrationWorkspace(initialTab, initialContext) ||
+              initialTab === 'sqlite-recovery' && data.cde_profile_id === 'sqlite-native');
           const postgresReady = ['semantic', 'studio'].includes(initialTab) &&
             !data?.cde_endpoint && data?.connected;
           if (!providerReady && !postgresReady && !localProfile) {

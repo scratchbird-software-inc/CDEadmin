@@ -23,6 +23,8 @@ ASSETS = {
                'c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73'),
     'sqlite': ('https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip',
                'bf3733d7c71b3ab0f6fd8a9ea0052ad87fa037d94333e14ce09878ba3492c3b0'),
+    'sqlite-recovery': ('https://www.sqlite.org/2026/sqlite-src-3530000.zip',
+                        'fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65'),
     'mariadb-c': ('https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.4.8.tar.gz',
                   'ced7e5063c91fe2bfafd9d63a759490fe53e81df80599a9abad01c570c202f0c'),
     'mariadb-python': ('https://files.pythonhosted.org/packages/c4/ba/cedef19833be88e07bfff11964441cda8a998f1628dd3b2fa3e7751d36e0/mariadb-1.1.14.tar.gz',
@@ -135,6 +137,10 @@ def paths(env):
             'BINLOG': 'mariadb-binlog', 'ADMIN': 'mariadb-admin'}.items():
         selected.setdefault('CDEADMIN_MARIADB_' + variable + '_BINARY', str(STATE / 'mariadb/bin' / (executable + extension)))
     selected.setdefault('CDEADMIN_MYSQLSH_BINARY', str(STATE / 'mysql-shell/bin' / ('mysqlsh' + extension)))
+    recovery_name = ('cdeadmin_sqlite_recovery.dll' if os.name == 'nt' else
+                     'libcdeadmin_sqlite_recovery.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_recovery.so')
+    recovery_library = STATE / 'sqlite' / recovery_name
+    if recovery_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_RECOVERY_LIBRARY', str(recovery_library))
     candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
                 STATE/'mysql-shell/libexec/mysqlsh'/('mysqlbinlog'+extension)]
     available_binlog=next((path for path in candidates if path.is_file()),None)
@@ -223,6 +229,7 @@ def clients(evidence, env):
                 env=env, log=evidence / 'connector-install.log')
         (prefix / '.cdeadmin-complete').write_text(ASSETS['mariadb-c'][1], encoding='utf-8')
     build_sqlite(evidence, env)
+    build_sqlite_recovery(evidence, env)
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
         build_macos_python(evidence, env)
@@ -268,6 +275,50 @@ def build_sqlite(evidence, env):
     with target.open('rb') as source:
         actual = hashlib.file_digest(source, 'sha256').hexdigest()
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': actual}, indent=2), encoding='utf-8')
+
+
+def build_sqlite_recovery(evidence, env):
+    """Link the public recovery API to the same owned native SQLite runtime."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_recovery.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_recovery.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_recovery.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_recovery'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'source': ASSETS['sqlite-recovery'][1], 'core': sha(core),
+        'cmake': sha(project / 'CMakeLists.txt'), 'provenance': sha(project / 'provenance.cmake'),
+        'adapter': sha(project / 'api.c'),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'recovery-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite recovery build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite recovery library')
+    source = STATE / 'sqlite-recovery-source'; recovery = source / 'ext/recover'
+    recovery.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(download('sqlite-recovery')) as archive:
+        for filename in ('sqlite3recover.c', 'sqlite3recover.h', 'dbdata.c'):
+            destination = recovery / filename
+            value = archive.read('sqlite-src-3530000/ext/recover/' + filename)
+            if destination.exists() and destination.read_bytes() != value:
+                raise RuntimeError('Preserved a modified native SQLite recovery source')
+            if not destination.exists(): destination.write_bytes(value)
+    build = STATE / 'sqlite-recovery-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSCRATCHROBIN_SQLITE_SOURCE=' + str(source), '-DSQLite3_INCLUDE_DIR=' + str(sqlite),
+        '-DSQLite3_LIBRARY=' + str(library), *(['-A', 'x64'] if os.name == 'nt' else [])],
+        env=env, log=evidence / 'sqlite-recovery-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-recovery-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native recovery build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
 
 
 def build_macos_python(evidence, env):

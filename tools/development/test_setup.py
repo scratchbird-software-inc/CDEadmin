@@ -4,6 +4,8 @@ import io
 from pathlib import Path
 import runpy
 import shlex
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -30,6 +32,9 @@ class SetupTests(unittest.TestCase):
                                        return_value='Linux'))
         self.enterContext(patch.object(manage.platform, 'machine',
                                        return_value='x86_64'))
+        self.environment_version = self.enterContext(patch.object(
+            manage.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                [], 0, f'{sys.version_info.major} {sys.version_info.minor}\n')))
         self.enterContext(contextlib.redirect_stdout(io.StringIO()))
         self.enterContext(contextlib.redirect_stderr(io.StringIO()))
 
@@ -100,6 +105,13 @@ class SetupTests(unittest.TestCase):
         with patch.object(manage, 'run') as run:
             with self.assertRaises(SystemExit):
                 manage.main(['start', 'postgresql'])
+            run.assert_not_called()
+
+    def test_mismatched_venv_blocks_application_before_dispatch(self):
+        self.environment_version.return_value.stdout = '3 13\n'
+        with patch.object(manage, 'run') as run:
+            with self.assertRaises(SystemExit):
+                manage.main(['run'])
             run.assert_not_called()
 
     def test_incomplete_venv_is_not_overwritten(self):

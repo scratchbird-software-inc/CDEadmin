@@ -347,6 +347,12 @@ SQLITE_PATH = env('SQLITE_PATH') or \
 CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
     os.path.join(DATA_DIR, 'cdeadmin-operations.json')
 
+# Qualified SQLite recovery library on the application host. Jobs cannot supply
+# executable/library paths; recovered output stays in the registered file root.
+CDEADMIN_SQLITE_RECOVERY_LIBRARY = env('CDEADMIN_SQLITE_RECOVERY_LIBRARY') or ''
+CDEADMIN_SQLITE_RECOVERY_ROOT = env('CDEADMIN_SQLITE_RECOVERY_ROOT') or ''
+CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS') or 86400)
+
 # Application-host PostgreSQL physical backup artifacts and trusted native tools.
 # These paths are configured by the application operator, never by a job request.
 CDEADMIN_POSTGRESQL_CONTINUITY_ROOT = env('CDEADMIN_POSTGRESQL_CONTINUITY_ROOT') or ''
