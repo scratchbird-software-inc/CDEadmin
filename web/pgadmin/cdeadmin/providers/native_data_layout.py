@@ -89,7 +89,9 @@ def inspect_relation(connection, engine, resource_id, route):
         from .embedded_route import contained_database
         filename = contained_database(route)
         info = os.stat(filename)
-        database_identity = {'registered_file': [info.st_dev, info.st_ino]}
+        # Windows file IDs can span uint64. These are identities, never JSON
+        # numbers: DDN import and browser transport must preserve every digit.
+        database_identity = {'registered_file': [str(info.st_dev), str(info.st_ino)]}
         if engine == 'sqlite':
             schema, name = path
             row = connection.execute('SELECT type,sql FROM ' + quote(schema) + '.sqlite_schema WHERE name=?', (name,)).fetchone()

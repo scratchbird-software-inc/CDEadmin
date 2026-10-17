@@ -9,7 +9,14 @@ from pgadmin.cdeadmin.workspace.native_data_import import preview, apply, Native
 
 
 @pytest.mark.parametrize('engine', ['sqlite', 'duckdb'])
-def test_native_capture_import_exact_types_generated_values_and_durable_receipt(tmp_path, engine):
+@pytest.mark.parametrize('wide_file_identity', [False, True])
+def test_native_capture_import_exact_types_generated_values_and_durable_receipt(tmp_path, engine, monkeypatch, wide_file_identity):
+    if wide_file_identity:
+        from pgadmin.cdeadmin.providers import native_data_layout
+        # Native Windows failure evidence carries uint64 file IDs. Simulate
+        # that stat observation without changing the actual owned data files.
+        monkeypatch.setattr(native_data_layout, 'os', SimpleNamespace(stat=lambda _path:
+            SimpleNamespace(st_dev=18446744073709551615, st_ino=17594508763472084922)))
     if engine == 'sqlite':
         import sqlite3
         from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider as Provider, _create_client, _resource_id
@@ -37,6 +44,13 @@ def test_native_capture_import_exact_types_generated_values_and_durable_receipt(
         plan = preview(provider, route, engine, source, target_id, endpoint_id='destination', target_id='destination-file')
         assert plan['columns'][-1] != 'calculated'
         assert plan['row_count'] == 1
+        if wide_file_identity:
+            with monkeypatch.context() as changed:
+                changed.setattr(native_data_layout, 'os', SimpleNamespace(stat=lambda _path:
+                    SimpleNamespace(st_dev=18446744073709551615, st_ino=17594508763472084923)))
+                refused = apply(provider, route, engine, {'plan':plan})
+                assert refused['state'] == 'not_dispatched' and refused['rows_completed'] == 0
+                assert native.execute('SELECT count(*) FROM destination').fetchone()[0] == 0
         store_path = tmp_path / 'imports.json'
         applications = NativeDataApplications(store_path, engine)
         reviewed = applications.review(plan, 7, 'owned-target')
@@ -50,6 +64,9 @@ def test_native_capture_import_exact_types_generated_values_and_durable_receipt(
         original_metadata, original_rows = read(source, engine=engine)
         restored_metadata, restored_rows = read(json.dumps(restored['snapshot']), engine=engine)
         assert original_rows == restored_rows
+        identity = original_metadata['acquisition']['native_layout']['database_identity']['registered_file']
+        assert all(isinstance(part,str) for part in identity)
+        if wide_file_identity: assert identity == ['18446744073709551615','17594508763472084922']
         assert restored_rows[0][-1] == 2
         assert provider.client._connections == []
         replay = Mock(side_effect=AssertionError('Committed data must never replay'))

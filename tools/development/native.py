@@ -328,6 +328,20 @@ def stage(name, evidence):
                 log=evidence / 'pip-check.log')
         command([PYTHON, '-m', 'pip', 'freeze', '--all'], env=env,
                 log=evidence / 'packages.log')
+    elif name == 'postgresql-parser':
+        # Targeted native repair gate, independent of the full application
+        # dependency installation and network server fixtures.
+        ddn(evidence)
+        from native_assets import msvc, download
+        env = msvc(env)
+        directory = evidence / 'owned-postgresql-parser-env'
+        command([sys.executable, '-m', 'venv', directory], env=env,
+                log=evidence / 'postgresql-parser-env.log')
+        interpreter = directory / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        command([interpreter, '-m', 'tools.cdeadmin_build_postgresql_parser',
+                 '--archive', download('pglast'), '--library-archive', download('libpg-query'),
+                 '--output', evidence / 'postgresql-parser', '--qualify'], env=env,
+                log=evidence / 'postgresql-parser.log')
     elif name == 'host-contracts':
         ddn(evidence)
         directory = evidence / 'owned-host-contract-env'
@@ -436,7 +450,7 @@ def sysconfig_free_threaded():
 def ci(evidence, stages=None):
     """Run independent stages after failures; blocked work never counts as pass."""
     selected = tuple(stages) if stages is not None else FULL_STAGES
-    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi')):
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set((*FULL_STAGES, 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'postgresql-parser')):
         raise ValueError('Select unique, supported CI stages')
     steps = []
     for name in selected:
@@ -484,7 +498,7 @@ def main():
             output.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('stage', choices=('prerequisites', 'doctor', 'clients', 'servers', 'fixtures', 'python', 'ddn', 'frontend',
-                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'ci'))
+                                         'desktop', 'run-desktop', 'configure', 'init', 'run', 'verify', 'network', 'host-contracts', 'mariadb-configure', 'desktop-probe', 'javascript-contracts', 'quality-contracts', 'firebird-platform', 'firebird-codecs', 'frontend-install', 'firebird-abi', 'postgresql-parser', 'ci'))
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--stages', help='Comma-separated CI stages; subsets are targeted runs')
     args = parser.parse_args()

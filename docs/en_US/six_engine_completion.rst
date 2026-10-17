@@ -596,3 +596,26 @@ do not acquire system fields. Foreign tables are included, with universal
 remain a separate capability inventory. PostgreSQL completion preserves native
 insertion text and UTF-16 replacement starts at the shared editor boundary,
 including expanded column lists and quoted identifier spans.
+
+Windows qualification repairs
+=============================
+
+Native Windows evidence identified a PostgreSQL parser build failure caused by
+including Python's CRT headers before PostgreSQL's internal Windows port
+headers. The pinned parser patch now forces the PostgreSQL/Python include order
+for the MSVC extension build. The native libpg_query library still uses its
+separate native build, and the SQL/PLpgSQL string-context patch remains required.
+The ScratchBird client installation follows this parser build; no ScratchBird
+server or history tests are introduced by the repair.
+
+DuckDB/SQLite typed data layouts encode registered file device/inode identities
+as decimal strings. Windows can supply file IDs outside JavaScript's exact
+integer range; treating them as numeric data made DDN imports reject otherwise
+valid native captures. Review and dispatch compare the exact textual identities.
+These repairs require a new native Windows receipt before platform completion
+can be asserted; Linux simulation and parser build evidence have narrower scope.
+The ``postgresql-parser`` native development stage builds and installs the
+patched wheel into owned environments, then checks direct AST structure access,
+Unicode and repeated SQL/PLpgSQL string-setting transitions. It runs through the
+existing GitHub workflow's targeted stage selection and does not qualify the
+full application environment or start any database server.

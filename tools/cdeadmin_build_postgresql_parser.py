@@ -67,10 +67,28 @@ def build(archive, library_archive, output):
     return wheels[0]
 
 
+def qualify(wheel, output):
+    """Install the built wheel into an owned environment and exercise its ABI."""
+    output.mkdir(parents=True, exist_ok=False)
+    environment = output / 'environment'
+    with (output / 'qualification.log').open('wb') as log:
+        subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True,
+                       stdout=log, stderr=subprocess.STDOUT)
+        interpreter = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        subprocess.run([str(interpreter), '-m', 'pip', 'install', '--no-deps', str(wheel)], check=True,
+                       stdout=log, stderr=subprocess.STDOUT)
+        subprocess.run([str(interpreter), '-B', str(Path(__file__).with_name('cdeadmin_postgresql_parser_runtime_gate.py')),
+                        '--output', str(output / 'summary.json')], check=True, stdout=log, stderr=subprocess.STDOUT)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--library-archive', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--qualify', action='store_true', help='Qualify the built wheel in a new owned Python environment')
     args = parser.parse_args()
-    print(build(args.archive, args.library_archive, args.output))
+    wheel = build(args.archive, args.library_archive, args.output)
+    if args.qualify:
+        qualify(wheel, args.output.resolve() / 'qualification')
+    print(wheel)

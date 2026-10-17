@@ -8,7 +8,7 @@
  from setuptools.command.build_ext import build_ext
  
  
-@@ -39,13 +40,13 @@
+@@ -39,13 +40,15 @@
  
  setup(
      cmdclass={'build_ext': BuildLibPgQueryFirst},
@@ -20,11 +20,34 @@
 +            sources=['pglast/parser.pyx'],
              libraries=['pg_query'],
              include_dirs=[fspath(p) for p in include_dirs],
-             library_dirs=[fspath(libpg_query_dir)]
+-            library_dirs=[fspath(libpg_query_dir)]
++            library_dirs=[fspath(libpg_query_dir)],
++            extra_compile_args=['/FI' + fspath(here / 'cdeadmin_pglast_python.h')]
++            if sys.platform == 'win32' else [],
          ),
 -    ],
 +    ], language_level=3),
  )
+--- /dev/null
++++ b/cdeadmin_pglast_python.h
+@@ -0,0 +1,17 @@
++/* MSVC: PostgreSQL's internal headers must precede Python's CRT headers.
++ * The library keeps its native build; only the Cython translation unit uses
++ * this forced include, following PostgreSQL's PL/Python include ordering.
++ */
++#ifndef CDEADMIN_PGLAST_PYTHON_H
++#define CDEADMIN_PGLAST_PYTHON_H
++#include "postgres.h"
++#ifdef _MSC_VER
++#pragma push_macro("errcode")
++#undef errcode
++#define errcode cdeadmin_python_errcode
++#endif
++#include <Python.h>
++#ifdef _MSC_VER
++#pragma pop_macro("errcode")
++#endif
++#endif
 --- a/pglast/parser.pyx
 +++ b/pglast/parser.pyx
 @@ -128,12 +128,14 @@
