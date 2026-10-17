@@ -106,7 +106,12 @@ export function nativeSourceStructure(source, context, position) {
         const path=[first];
         while (children[index + 1]?.name === '.') {
           path.push(children[++index]);
-          if (!['Identifier','QuotedIdentifier'].includes(children[index + 1]?.name)) break;
+          const next=children[index+1];
+          // A dangling dot at the caret must not consume the following
+          // FROM/WHERE clause as a keyword-named member of that expression.
+          const keywordMember=context.engine==='duckdb' && next?.name==='Keyword' &&
+            !(children[index].from<position && next.from>=position);
+          if (!['Identifier','QuotedIdentifier'].includes(next?.name) && !keywordMember) break;
           path.push(children[++index]);
         }
         grouped.push({name:'CompositeIdentifier', from:first.from, to:path.at(-1).to, children:path});

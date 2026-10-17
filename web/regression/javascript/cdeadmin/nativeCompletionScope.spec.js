@@ -19,7 +19,7 @@ function suggestions(source, data, previous=data, position=source.length) {
   test('inserts exactly the members independently bound and executed by DuckDB',()=> {
     const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE,'utf8'));
     expect(fixture.metadata.context.engine).toBe('duckdb');
-    expect(fixture.cases).toHaveLength(13);
+    expect(fixture.cases).toHaveLength(17);
     for(const example of fixture.cases) {
       const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
       const result=suggestions(source,fixture.metadata,fixture.metadata,position);
@@ -69,6 +69,26 @@ test('DuckDB does not guess an ambiguous unqualified indexed column',()=> {
   const marked='SELECT items[1].| FROM one a JOIN two b ON true';
   expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
 });
+
+test.each([false,true])('DuckDB column resolution respects builtin-name collisions and ambiguity=%s',ambiguous=> {
+  const data=containerMetadata(),item=data.resources.find(row=>row.display_path.at(-1)==='items');
+  data.resources.push({...item,display_path:['owned','main','one','array_extract']},
+    {resource_kind:'function',display_path:['system','main','array_extract'],detail:'native function'});
+  if(ambiguous)data.resources.push({...item,display_path:['owned','main','two','array_extract']});
+  const marked='SELECT array_extract[1].| FROM one a'+(ambiguous?' JOIN two b ON true':'');
+  const result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+  if(ambiguous)expect(result).toBeNull();
+  else expect(result.options).toEqual([expect.objectContaining({label:'Field ü',detail:'BIGINT'})]);
+});
+
+test.each(['SELECT n.select.| FROM one n',
+  'WITH q AS (SELECT n.select AS part FROM one n) SELECT q.part.| FROM q'])(
+  'DuckDB native keyword column labels resolve after a dot in %s',marked=> {
+    const data=metadata('duckdb');
+    data.resources.push({resource_kind:'column',display_path:['owned','main','one','select'],native_type:memberShape});
+    expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|')).options).toEqual([
+      expect.objectContaining({label:'Field ü',detail:'BIGINT'})]);
+  });
 
 test('DuckDB unknown prototype-named members remain unresolved',()=> {
   const data=containerMetadata(),marked='SELECT n.items[1].__proto__.| FROM one n';

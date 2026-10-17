@@ -3,6 +3,7 @@ import {nativeTokenSpans} from './nativeLexing';
 const key=name=>name.replaceAll('.','\\.');
 const lower=value=>value.replace(/[A-Z]/g,character=>character.toLowerCase());
 const isName=token=>['Identifier','QuotedIdentifier'].includes(token?.name);
+const isFieldName=token=>isName(token) || token?.name==='Keyword';
 const name=(token,source)=>token.name==='QuotedIdentifier' ? source.slice(token.from+1,token.to-1).replaceAll('""','"') : source.slice(token.from,token.to);
 const field=(entry,label)=> {
   const exact=entry?.children && Object.hasOwn(entry.children,key(label)) ? entry.children[key(label)] : undefined;
@@ -25,13 +26,13 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
   const parts=[];
   if(!isName(tokens[at]))return undefined;
   parts.push(name(tokens[at++],source));
-  while(tokens[at] && source.slice(tokens[at].from,tokens[at].to)==='.' && isName(tokens[at+1])) {
+  while(tokens[at] && source.slice(tokens[at].from,tokens[at].to)==='.' && isFieldName(tokens[at+1])) {
     at++;parts.push(name(tokens[at++],source));
   }
   let entry=resolve(parts);
   while(entry && at<tokens.length) {
     const token=tokens[at++],text=source.slice(token.from,token.to);
-    if(text==='.' && isName(tokens[at])) {entry=field(entry,name(tokens[at++],source));continue;}
+    if(text==='.' && isFieldName(tokens[at])) {entry=field(entry,name(tokens[at++],source));continue;}
     if(text!=='[')return undefined;
     const body=[];let depth=1;
     while(at<tokens.length && depth) {
@@ -87,7 +88,7 @@ export function duckdbCompletionTarget(config,state,dot) {
       }
       if(depth)return undefined;
       start=token.from;token=before(token);
-    } else if(isName(token)) {
+    } else if(isName(token) || token.name==='Keyword' && before(token)?.name==='.') {
       start=token.from;token=before(token);
       if(token?.name!=='.')break;
       token=before(token);

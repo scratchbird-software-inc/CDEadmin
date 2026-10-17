@@ -22,7 +22,7 @@ export function scopedSQLConfig(config, state, position) {
     const end = value[0] === '[' ? ']' : value[0];
     return value.slice(1, value.endsWith(end) ? -1 : undefined).replaceAll(end + end, end);
   };
-  const path = node => node.name === 'CompositeIdentifier' ? children(node).filter(identifier).map(name) : identifier(node) ? [name(node)] : [];
+  const path = node => node.name === 'CompositeIdentifier' ? children(node).filter(child=>identifier(child) || config.nativeEngine==='duckdb' && child.name==='Keyword').map(name) : identifier(node) ? [name(node)] : [];
   const quote = value => {
     const delimiter = config.nativeIdentifierQuote ?? config.dialect.spec.identifierQuotes?.[0] ?? '"';
     if (!delimiter) return value;
@@ -165,9 +165,9 @@ export function scopedSQLConfig(config, state, position) {
       let entry=bindings.get(bindingKey(parts[0]));
       if (!entry) {
         const direct=resolve(parts);
-        if(direct || config.nativeEngine!=='duckdb')return direct;
+        if(config.nativeEngine!=='duckdb' || direct && direct.self.type!=='function')return direct;
         const candidates=[...bindings.values()].map(owner=>lookup(owner.children,parts[0],exactCase)).filter(Boolean);
-        if(candidates.length!==1)return undefined;
+        if(candidates.length!==1)return candidates.length ? undefined : direct;
         entry=candidates[0];
       }
       for (const part of parts.slice(1)) {

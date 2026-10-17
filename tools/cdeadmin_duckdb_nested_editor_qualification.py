@@ -25,6 +25,8 @@ def qualify(output):
             connection.execute('CREATE TABLE one(items STRUCT("Field ü" BIGINT)[], fixed STRUCT("Field ü" BIGINT)[2], lookup MAP(VARCHAR,STRUCT("Field ü" BIGINT)), matrix STRUCT("Field ü" BIGINT)[][])')
             connection.execute('INSERT INTO one VALUES ([struct_pack("Field ü":=7)], [struct_pack("Field ü":=8),struct_pack("Field ü":=9)], map([\'key\'],[struct_pack("Field ü":=10)]), [[struct_pack("Field ü":=11)]])')
             connection.execute('CREATE VIEW tuple_values AS SELECT row(42::BIGINT,struct_pack("Field ü":=12::BIGINT),[struct_pack("Field ü":=13::BIGINT)]) AS "positional"')
+            connection.execute('CREATE TABLE native_names("select" STRUCT("Field ü" BIGINT),array_extract STRUCT("Field ü" BIGINT)[],"value" STRUCT("Field ü" BIGINT))')
+            connection.execute('INSERT INTO native_names VALUES(struct_pack("Field ü":=17),[struct_pack("Field ü":=18)],struct_pack("Field ü":=19))')
             connection.execute('BEGIN');connection.execute('INSERT INTO one DEFAULT VALUES')
             observed=metadata(connection,'duckdb')
             cases=[]
@@ -38,6 +40,10 @@ def qualify(output):
                 'SELECT n."positional"[2].| FROM tuple_values n',
                 'SELECT n."positional"[3][1].| FROM tuple_values n',
                 'WITH q AS (SELECT n."positional"[2] AS part FROM tuple_values n) SELECT q.part.| FROM q',
+                'SELECT array_extract[1].| FROM native_names',
+                'SELECT n.select.| FROM native_names n',
+                'WITH q AS (SELECT n.select AS part FROM native_names n) SELECT q.part.| FROM q',
+                'SELECT n.value.| FROM native_names n',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

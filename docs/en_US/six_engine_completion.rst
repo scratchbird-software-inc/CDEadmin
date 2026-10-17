@@ -985,6 +985,12 @@ Ordinal access does not invent dot-field names. A session-local or changed type
 that the companion cannot confirm remains explicitly unavailable. Dynamic and
 computed tuple ordinals retain separate acceptance.
 
+DuckDB completion also respects its native identifier keyword classes and
+keyword column labels after a dot. An unqualified source column can shadow a
+built-in function name; ambiguous source columns are not guessed. These rules
+apply to retained member types and direct CTE/derived projections as well as
+ordinary alias paths.
+
 PostgreSQL exact dialect and statistics contracts
 =================================================
 
