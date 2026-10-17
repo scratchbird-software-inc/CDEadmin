@@ -23,11 +23,8 @@ def capture(connection):
         raise BinlogArchiveError('Select native MariaDB12.2.2')
     identity={key:observed[key] for key in ('version','server_uid','server_id','authenticated_principal','active_role')}
     enabled=observed['log_bin'] in (1,True,'ON')
-    current=rows(connection,'SHOW MASTER STATUS')[0] if enabled else None
-    logs=rows(connection,'SHOW BINARY LOGS') if enabled else []
-    for row in logs:
-        row['File_size']=str(row['File_size']);row['closed']=current is not None and row['Log_name']!=current['File']
-    if current is not None:current['Position']=str(current['Position'])
+    from .closed_binlog_catalog import observe
+    current,logs=observe(connection,'SHOW MASTER STATUS') if enabled else (None,[])
     return {'identity':identity,'state':{key:observed[key] for key in ('log_bin','gtid_binlog_pos','encrypt_binlog')},
         'current':current,'logs':logs,'status':'available' if enabled else 'native_binary_logging_disabled'}
 
@@ -97,13 +94,16 @@ def verify(directory,expected_source,*,cancel=None):
     if metadata.get('format')!='mariadb-binlog@12.2.2' or metadata.get('source')!=expected_source:
         raise BinlogArchiveError('Native MariaDB archive source or format differs')
     native=metadata.get('logs')
-    if not isinstance(native,list) or not native:raise BinlogArchiveError('Native archive log inventory is missing')
+    if not isinstance(native,list) or not native or any(not isinstance(row,dict) or not {'name','decoded_bytes','event_count','last_event_type'}.issubset(row) for row in native):raise BinlogArchiveError('Native archive log inventory is missing or invalid')
+    parser=metadata.get('native_parser_verification')
+    if not isinstance(parser,dict) or parser.get('tool_version')!='12.2.2-MariaDB' or not isinstance(parser.get('executable_sha256'),str) or not re.fullmatch('[0-9a-f]{64}',parser['executable_sha256']):
+        raise BinlogArchiveError('Native parser verification receipt is missing or invalid')
     names=options({'log_names':[row['name'] for row in native]})['log_names']
     if set(row['path'] for row in files)!={'archive.json',*names}:raise BinlogArchiveError('Native archive has missing or unrecorded files')
     integrity=[]
     for row in native:
         path=directory/row['name'];size,count,last=framing(path,cancel=cancel)
-        if str(size)!=row['decoded_bytes'] or str(count)!=row['event_count'] or last!=row['last_event_type']:
+        if str(size)!=row.get('server_file_bytes') or str(size)!=row['decoded_bytes'] or str(count)!=row['event_count'] or last!=row['last_event_type']:
             raise BinlogArchiveError('Native archive event/byte postimage differs')
         integrity.append({'binlog':row['name'],**verify_frames(path,'none',size,count,cancel=cancel)})
     if manifest(directory,cancel=cancel)!=files:raise BinlogArchiveError('Native archive changed during verification')
@@ -143,6 +143,7 @@ class ArchiveTransport:
                 last={key:value for key,value in result.items() if key not in {'stdout','stderr'}};tools.append(last)
                 if result['return_code']!=0:raise BinlogArchiveError('Native MariaDB raw retrieval did not return successfully')
                 path=archive/selected['Log_name'];private_file(path);size,count,last_kind=framing(path,cancel=cancel)
+                if str(size)!=selected['File_size']:raise BinlogArchiveError('Native raw log length differs from the complete closed server file')
                 integrity=verify_frames(path,'none',size,count,cancel=cancel)
                 native.append({'name':selected['Log_name'],'decoded_bytes':str(size),'event_count':str(count),
                     'server_file_bytes':selected['File_size'],'native_integrity':integrity,'last_event_type':last_kind})
@@ -163,6 +164,7 @@ class ArchiveTransport:
             metadata={'format':'mariadb-binlog@12.2.2','source':record['source'],'logs':native,
                 'source_observation_scope':'native_server_uid_before_and_after_utility_retrieval_with_registered_transport_policy',
                 'native_parser_verification':{'tool_version':program['tool_version'],'executable_sha256':program['executable_sha256'],
+                    'native_closed_file_length_verified':True,
                     'scope':'original_native_parser_postimages_bound_to_sealed_archive_bytes'}}
             path=archive/'archive.json'
             with path.open('x',encoding='utf8') as stream:

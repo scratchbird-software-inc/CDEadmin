@@ -402,6 +402,12 @@ observer checks source identity and the selected closed range again after
 retrieval. The native server UID observation is distinct from a cryptographic
 provenance claim about a binary-log file.
 
+Current-file observations now bracket native catalog reads, with bounded retries
+when rotation makes the observed range inconsistent. Complete retrieved lengths
+must match the selected closed server files independently from valid event
+framing. Stronger verification preserves existing sealed postimages and their
+original native utility receipts.
+
 Retrieval preserves the registered transport policy and delegates credentials
 in a private native defaults file. Native parser verification covers each
 retrieved file; streaming event framing/CRC32 and complete SHA256 byte

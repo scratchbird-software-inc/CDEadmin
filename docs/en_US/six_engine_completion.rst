@@ -1045,7 +1045,7 @@ Private temporary JSON credentials preserve native password characters and the
 registered utility TLS policy. Authenticated downloads, paged file inventories,
 offline receipts and explicitly confirmed application-artifact removal are
 integrated into the workspace. Unknown writers cannot authorize removal or
-continuation. Raw GTID-disabled retrieval, complete PITR, continuous
+continuation. Complete PITR, continuous
 collection/retention remain open requirements.
 
 MariaDB native closed binary-log archives
@@ -1109,3 +1109,34 @@ qualify physical base recovery, end-to-end PITR, production restore or cutover.
 Application-host replay storage uses ``CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT`` or the
 operation store's ``mysql-binary-log-replays`` sibling directory. Operators can
 limit utility runtime with ``CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS``.
+
+MySQL native raw closed-log archives
+=====================================
+
+The MySQL server backup menu also provides native raw closed-log archives using
+mysqlbinlog9.7.0, including GTID-disabled sources. The native raw format and
+verifier remain separate from MySQL Shell dumps and MariaDB archives. Each
+review selects a contiguous native closed-log range, source UUID and principal,
+native utility identity, registered transport policy and application-host scope.
+MySQL and MariaDB closed-log discovery both retry rotating or inconsistent
+catalog observations before classifying an active file as closed.
+
+The workspace owns private credentials, asynchronous durable claims, native
+progress/cancellation, sealed file/event/checksum verification, native parser
+verification, authenticated downloads, offline receipts and explicitly confirmed
+artifact removal. Native parser LOAD DATA fragments remain inside a private
+disposable execution scope. Local login-path files cannot override the reviewed
+native connection policy. The raw utility accepts a single password factor;
+additional password-factor bindings are explicitly refused rather than dropped.
+
+Complete native file lengths are checked separately from event framing. MySQL
+accounts for its native v1 encryption header when the replication stream
+delivers decrypted bytes. Raw archives contain plaintext events even when the
+source files are encrypted; keep these private artifacts protected.
+
+Raw archives do not establish successful replay, base recovery or PITR. The
+Shell replay workflow selects Shell archives; it does not treat a raw archive as
+the Shell dump format. Continuous collection, retention and raw replay retain
+separate acceptance. Storage uses ``CDEADMIN_MYSQL_RAW_BINLOG_ROOT`` or the
+operation store's ``mysql-raw-binary-log-archives`` sibling directory; native
+runtime policy uses ``CDEADMIN_MYSQL_RAW_BINLOG_MAX_RUNTIME_SECONDS``.

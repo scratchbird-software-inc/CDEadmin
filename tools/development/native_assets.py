@@ -132,6 +132,10 @@ def paths(env):
             'BINLOG': 'mariadb-binlog', 'ADMIN': 'mariadb-admin'}.items():
         selected.setdefault('CDEADMIN_MARIADB_' + variable + '_BINARY', str(STATE / 'mariadb/bin' / (executable + extension)))
     selected.setdefault('CDEADMIN_MYSQLSH_BINARY', str(STATE / 'mysql-shell/bin' / ('mysqlsh' + extension)))
+    candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
+                STATE/'mysql-shell/libexec/mysqlsh'/('mysqlbinlog'+extension)]
+    available_binlog=next((path for path in candidates if path.is_file()),None)
+    if available_binlog is not None:selected.setdefault('CDEADMIN_MYSQL_BINLOG_BINARY',str(available_binlog))
     if platform.system() == 'Windows':
         selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'fbclient.dll'))
     else:

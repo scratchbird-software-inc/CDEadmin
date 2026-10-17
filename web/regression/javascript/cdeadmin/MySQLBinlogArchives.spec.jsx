@@ -10,6 +10,18 @@ afterAll(() => {window.innerHeight=viewportHeight;});
 const review={job_id:'owned-job',review_digest:'digest',state:'reviewed',warnings:['Native whole-server archive'],
   source:{server_uuid:'native-source'},options:{start_file:'mysql-bin.000004',start_position:'9007199254740993'},execution_host:{kind:'application-host'}};
 
+it('uses native closed-log selection for MySQL raw archives without Shell GTID options',async () => {
+  const post=jest.fn().mockResolvedValue({status:'available',state:{gtid_mode:'OFF'},logs:[{Log_name:'native.1',File_size:'9007199254740993',closed:true},{Log_name:'native.2',File_size:'99',closed:false}]});
+  render(<Component post={post} endpointUrl="/workspace" raw />);
+  expect(screen.queryByLabelText('Native compression')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Inspect native binary logs'}));await screen.findByText('Native source, GTID state and available logs: available');
+  fireEvent.mouseDown(screen.getByLabelText('Native closed binary logs'));fireEvent.click(await screen.findByRole('option',{name:'native.1 (9007199254740993 bytes)'}));
+  fireEvent.keyDown(screen.getByRole('listbox'),{key:'Escape',code:'Escape'});
+  expect(screen.queryByRole('option',{name:'native.2 (99 bytes)'})).not.toBeInTheDocument();
+  post.mockResolvedValue({...review,options:{log_names:['native.1']}});fireEvent.click(screen.getByRole('button',{name:'Review archive'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_raw_binlog_review',request:{options:{log_names:['native.1'],timeout_seconds:3600}}}));
+});
+
 it('preserves a wide native position and reviews before confirming execution',async () => {
   const post=jest.fn().mockResolvedValue(review);render(<Component post={post} endpointUrl="/workspace" />);
   expect(post).not.toHaveBeenCalled();

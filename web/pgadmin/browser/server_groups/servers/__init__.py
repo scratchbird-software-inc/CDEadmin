@@ -2628,12 +2628,12 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
-                if request.form.get('action') in {'mysql_binlog_download','mariadb_binlog_download'}:
+                if request.form.get('action') in {'mysql_binlog_download','mariadb_binlog_download','mysql_raw_binlog_download'}:
                     from pgadmin.cdeadmin.workspace.mysql_binlog_service import download
                     from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
                     body=request.form.get('payload','')
                     if len(body)>4096:return bad_request('File delivery request is too large')
-                    try:return download(service,server,json.loads(body),family='mariadb' if request.form['action']=='mariadb_binlog_download' else 'mysql')
+                    try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw'}.get(request.form['action'],'mysql'))
                     except (ValueError,TypeError,KeyError,OSError) as error:
                         return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
                 if request.form.get('action') == 'postgresql_large_object_download':
@@ -2985,6 +2985,10 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_binlog_catalog','mysql_binlog_review','mysql_binlog_start','mysql_binlog_status',
                                 'mysql_binlog_list','mysql_binlog_cancel','mysql_binlog_reconcile','mysql_binlog_files','mysql_binlog_remove_artifact'}:
                     try:payload=service.mysql_binlog(server,action.removeprefix('mysql_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_raw_binlog_catalog','mysql_raw_binlog_review','mysql_raw_binlog_start','mysql_raw_binlog_status',
+                                'mysql_raw_binlog_list','mysql_raw_binlog_cancel','mysql_raw_binlog_reconcile','mysql_raw_binlog_files','mysql_raw_binlog_remove_artifact'}:
+                    try:payload=service.mysql_raw_binlog(server,action.removeprefix('mysql_raw_binlog_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_inspect',
                                 'mysql_binlog_replay_review','mysql_binlog_replay_start','mysql_binlog_replay_status',

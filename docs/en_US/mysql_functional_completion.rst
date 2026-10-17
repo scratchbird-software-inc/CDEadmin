@@ -171,10 +171,30 @@ downloads verify retained bytes; explicit identity-confirmed removal keeps the
 receipt. ``CDEADMIN_MYSQL_BINLOG_ROOT`` and
 ``CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS`` are operator settings.
 
-This closes the scoped GTID-enabled Shell archive workflow. Raw GTID-disabled
-MySQL archives, native replay/PITR and continuous collection/retention remain
-separate product requirements. MariaDB's native archive workflow is documented
-in :doc:`mariadb_functional_completion`.
+The separate raw archive workspace uses native mysqlbinlog9.7.0 for contiguous
+closed-log ranges with GTIDs enabled or disabled. Native current-file observations
+bracket catalog reads, and full file lengths are checked independently from
+framing, CRC and native parser verification. MySQL's native v1 encryption header
+is accounted for when the replication stream delivers decrypted bytes. These
+private raw archives contain plaintext events even when the source files were
+encrypted. The raw utility's single-password-factor limitation is explicit;
+additional factor bindings are refused. It has its own format, verifier, durable
+storage and authenticated file-delivery scope.
+
+Native MySQL Shell replay is also integrated through the restore menu. It selects
+a sealed Shell archive and a separately confirmed target UUID, checks native
+GTID lineage and supports complete, stop-before and stop-after GTID boundaries.
+Durable target fences, native locks and final GTID checks protect dispatch.
+Missing acknowledgements retain unknown outcomes without automatic replay;
+current target observations and exact acknowledgement have separate receipts.
+Utility return, native GTID coverage and independent recovered-data verification
+remain distinct. The source can be offline after the archive has been sealed.
+
+These are scoped archive/replay workflows. A compatible restored base is required;
+raw replay, complete end-to-end PITR, physical continuity, production cutover and
+continuous collection/retention retain separate product acceptance. MariaDB's
+distinct native archive workflow is documented in
+:doc:`mariadb_functional_completion`.
 
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for

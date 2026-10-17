@@ -1604,6 +1604,18 @@ class ProviderWorkspaceService:
         except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
         except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
 
+    def mysql_raw_binlog(self,server,operation,request):
+        from .mysql_raw_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,CloneError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except RelationalClientError:raise ProviderWorkspaceError('Native raw archive client or credential binding is unavailable') from None
+        except OSError:raise ProviderWorkspaceError('Native raw archive storage is unavailable') from None
+
     def mysql_binlog_replay(self,server,operation,request):
         from .mysql_binlog_replay_service import action
         from ..sdk.tooling import ProviderToolError

@@ -1024,6 +1024,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             'mysql-shell': os.environ.get(
                 'CDEADMIN_MYSQLSH_BINARY', 'mysqlsh'
             ),
+            'mysql-binlog': os.environ.get('CDEADMIN_MYSQL_BINLOG_BINARY','mysqlbinlog'),
         })
 
     def open_session(self, request):
