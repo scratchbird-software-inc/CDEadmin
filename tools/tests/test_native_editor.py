@@ -170,6 +170,41 @@ def test_duckdb_unnamed_tuple_binding_is_explicitly_partial_without_aborting_pen
         assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==1
 
 
+def test_duckdb_container_shapes_retain_native_element_types_and_pending_work():
+    import duckdb
+    with duckdb.connect() as connection:
+        connection.execute('CREATE TABLE containers(items STRUCT("inner.dot" BIGINT)[], fixed STRUCT(label VARCHAR)[2], lookup MAP(VARCHAR, STRUCT(amount DECIMAL(20,4))), matrix STRUCT(value INT)[][])')
+        connection.execute('BEGIN');connection.execute('INSERT INTO containers DEFAULT VALUES')
+        result=metadata(connection,'duckdb')
+        columns={row['display_name']:row for row in result['resources'] if row['resource_kind']=='column' and row['display_path'][2]=='containers'}
+        for name,expression,expected in [('items','n.items[1]',('child','inner.dot')),('fixed','n.fixed[1]',('child','label')),
+                ('lookup',"n.lookup['key']",('value','amount')),('matrix','n.matrix[1][1]',('child','value'))]:
+            shape=columns[name]['native_type']
+            if name=='matrix':shape=shape['child']
+            field=shape[expected[0]]['fields'][0]
+            assert field['name']==expected[1]
+            source='SELECT ('+expression+')."'+field['name'].replace('"','""')+'" FROM containers n LIMIT 0'
+            assert str(connection.execute(source).description[0][1])==field['type']['sql']
+        assert columns['fixed']['native_type']['size']==2
+        assert not any(row['resource_kind']=='field' and row['display_path'][2]=='containers' for row in result['resources'])
+        assert connection.execute('SELECT count(*) FROM containers').fetchone()[0]==1
+        connection.execute('ROLLBACK')
+        assert connection.execute('SELECT count(*) FROM containers').fetchone()[0]==0
+
+
+def test_duckdb_type_shape_limits_are_explicit_and_preserve_the_column(monkeypatch):
+    import duckdb
+    from pgadmin.cdeadmin.providers import native_editor
+    with duckdb.connect() as connection:
+        connection.execute('CREATE TABLE containers(items STRUCT(x BIGINT)[])')
+        def limited(*_args):raise native_editor.NativeTypeShapeLimit()
+        monkeypatch.setattr(native_editor,'duckdb_type_shape',limited)
+        result=metadata(connection,'duckdb')
+        assert any(row['display_name']=='items' and row['resource_kind']=='column' for row in result['resources'])
+        assert result['truncated'] is True
+        assert any(row.get('reason')=='native-type-observation-limit' and row['available'] is False for row in result['observations'])
+
+
 def test_duckdb_type_parser_resource_failure_is_not_hidden_as_an_unavailable_member(monkeypatch):
     import duckdb
     with duckdb.connect() as connection:

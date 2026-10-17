@@ -3,6 +3,7 @@ import {EditorState} from '@codemirror/state';
 import {CompletionContext} from '@codemirror/autocomplete';
 import {firebirdSQLConfig} from './firebirdSyntax';
 import {scopedSQLConfig, nativeSchemaCompletion} from './nativeScopes';
+import {duckdbTypedEntry} from './duckdbNestedTypes';
 
 const key = name => name.replaceAll('.', '\\.');
 
@@ -39,6 +40,7 @@ export function nativeSQLConfig(metadata) {
     const entry = ensure(path, ['column','field'].includes(kind) ? 'property' :
       ['function', 'procedure', 'package', 'package body'].includes(kind) ? 'function' :
         ['table', 'view', 'type', 'domain', 'collation'].includes(kind) ? 'type' : 'namespace', item.detail);
+    if(engine==='duckdb' && item.native_type)Object.assign(entry,duckdbTypedEntry(item.native_type,quoted,entry.self));
     if (item.hidden_from_star) entry.self.nativeHiddenFromStar = true;
     if (path.length === 1 && ['function', 'type'].includes(kind) && /^[A-Za-z_][A-Za-z_0-9]*$/.test(path[0]))
       entry.self.apply = path[0];

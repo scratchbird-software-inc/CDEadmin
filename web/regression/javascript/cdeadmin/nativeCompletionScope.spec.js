@@ -4,6 +4,7 @@ import {sql} from '@codemirror/lang-sql';
 import {nativeSQLConfig, nativeCompletionContext, registerNativeCompletion} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeCompletion';
 import {nativeSchemaCompletion} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeScopes';
 import {nativeTokens} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeLexing';
+import fs from 'fs';
 
 const metadata = (engine, extra={}) => ({context:{engine, catalog:'owned', schema:'main', default_schema:'main', keywords:'WITH SELECT FROM WHERE AS JOIN ON', ...extra},
   resources:[['table',['main','one']],['column',['main','one','first']],['table',['main','two']],['column',['main','two','second']]]
@@ -13,6 +14,66 @@ function suggestions(source, data, previous=data, position=source.length) {
   const observed=nativeCompletionContext(data,new CompletionContext(state,position,true));
   return nativeSchemaCompletion(observed.config,observed.context);
 }
+
+(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE ? describe : describe.skip)('DuckDB native observed editor fixture',()=> {
+  test('inserts exactly the members independently bound and executed by DuckDB',()=> {
+    const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE,'utf8'));
+    expect(fixture.metadata.context.engine).toBe('duckdb');
+    expect(fixture.cases).toHaveLength(10);
+    for(const example of fixture.cases) {
+      const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
+      const result=suggestions(source,fixture.metadata,fixture.metadata,position);
+      if(!result)throw new Error('No completion for native fixture: '+example.marked);
+      expect(result.options.map(({label,apply,detail})=>({label,apply,detail}))).toEqual(example.expected);
+      expect(source.slice(0,result.from)+result.options[0].apply+source.slice(result.to)).toBe(example.native_sql);
+    }
+  });
+});
+
+const memberShape={kind:'struct',sql:'STRUCT("Field ü" BIGINT)',fields:[{name:'Field ü',type:{kind:'bigint',sql:'BIGINT'}}]};
+const containerMetadata=()=> {
+  const data=metadata('duckdb');
+  for(const [label,shape] of Object.entries({items:{kind:'list',child:memberShape,sql:memberShape.sql+'[]'},
+    fixed:{kind:'array',child:memberShape,size:2,sql:memberShape.sql+'[2]'},
+    lookup:{kind:'map',key:{kind:'varchar',sql:'VARCHAR'},value:memberShape,sql:'MAP(VARCHAR, '+memberShape.sql+')'},
+    matrix:{kind:'list',sql:memberShape.sql+'[][]',child:{kind:'list',sql:memberShape.sql+'[]',child:memberShape}}}))
+    data.resources.push({resource_kind:'column',display_path:['owned','main','one',label],detail:shape.sql,native_type:shape});
+  return data;
+};
+
+test.each([
+  'SELECT n.items[1].| FROM one n', 'SELECT n.fixed[1].| FROM one n',
+  'SELECT n.lookup[\'key\'].| FROM one n', 'SELECT n.matrix[1][2].| FROM one n',
+  'SELECT n.items[1:2][1].| FROM one n', 'SELECT n.fixed[:][1].| FROM one n',
+  'SELECT items[1].| FROM one', 'SELECT n.items[index + 1].| FROM one n',
+  'WITH q AS (SELECT n.items[1] AS item FROM one n) SELECT q.item.| FROM q',
+  'WITH q AS (SELECT n.items AS renamed FROM one n) SELECT q.renamed[1].| FROM q',
+  'SELECT q.item.| FROM (SELECT n.fixed[1] AS item FROM one n) q',
+  'SELECT n.items[1]."F|" FROM one n',
+  'WITH "__proto__" AS (SELECT * FROM one) SELECT "__proto__".items[1].| FROM "__proto__"',
+])('DuckDB observed container members resolve %s',marked=> {
+  const data=containerMetadata(),result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+  expect(result.options).toEqual([expect.objectContaining({label:marked.includes('"F')?'"Field ü"':'Field ü',apply:'"Field ü"',detail:'BIGINT'})]);
+});
+
+test.each(['SELECT n.items.| FROM one n','SELECT n.fixed.| FROM one n','SELECT n.lookup.| FROM one n'])(
+  'DuckDB container elements are not fabricated as dot fields in %s',marked=> {
+    const data=containerMetadata();
+    expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|')).options).toEqual([]);
+  });
+
+test('DuckDB does not guess an ambiguous unqualified indexed column',()=> {
+  const data=containerMetadata();
+  const item=data.resources.find(row=>row.display_path.at(-1)==='items');
+  data.resources.push({...item,display_path:['owned','main','two','items']});
+  const marked='SELECT items[1].| FROM one a JOIN two b ON true';
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
+
+test('DuckDB unknown prototype-named members remain unresolved',()=> {
+  const data=containerMetadata(),marked='SELECT n.items[1].__proto__.| FROM one n';
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
 
 test.each(['SELECT a.info. FROM one a','SELECT a.info."outer ü". FROM one a'])('DuckDB native nested members resolve alias paths in %s', source => {
   const data=metadata('duckdb');

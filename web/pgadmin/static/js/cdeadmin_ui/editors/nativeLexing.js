@@ -3,6 +3,7 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
   const mysql = ['mysql', 'mariadb'].includes(context.engine);
   const modes = new Set((context.sql_mode || '').split(','));
   const words = new Set((context.keywords || '').toUpperCase().split(/\s+/));
+  const identifierWords=new Set(context.engine==='duckdb' ? (context.identifier_keywords || []).map(word=>word.toUpperCase()) : []);
   const result = [];
   let i = 0;
   while (i < source.length) {
@@ -63,7 +64,7 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
     } else {
       const token = source.slice(i).match(/^(?:[A-Za-z_0-9$\u0080-\u{10ffff}]+|>=|<=|<>|!=|:=|::|\|\||->>|->|=>|[^ \t\n\r\f\v])/u)[0];
       i += token.length;
-      name = /^[A-Za-z_$\u0080-\u{10ffff}][A-Za-z_0-9$\u0080-\u{10ffff}]*$/u.test(token) ? words.has(token.toUpperCase()) ? 'Keyword' : 'Identifier' :
+      name = /^[A-Za-z_$\u0080-\u{10ffff}][A-Za-z_0-9$\u0080-\u{10ffff}]*$/u.test(token) ? words.has(token.toUpperCase()) && !identifierWords.has(token.toUpperCase()) ? 'Keyword' : 'Identifier' :
         /^\p{N}/u.test(token) ? 'Number' : ['.', '(', ')', ';', ','].includes(token) ? token : 'Operator';
     }
     result.push({name, from: start, to: i});

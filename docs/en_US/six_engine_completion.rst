@@ -955,8 +955,27 @@ The companion shares the native database installation and committed type
 catalogs; it does not replace the retained catalog/session observation. Parsing
 failures cannot abort the user's transaction. Session-local type resolution
 that the companion cannot observe remains explicitly unavailable.
-Indexed tuple/list expression completion and wider procedural scopes remain
-separate obligations.
+Positional tuple completion and wider procedural scopes remain separate
+obligations.
+
+DuckDB indexed collection members
+---------------------------------
+
+Native editor observations retain recursive LIST, ARRAY and MAP element types,
+including array lengths and named STRUCT/UNION members. Container elements do
+not become fictitious dot fields. Completion resolves native member types after
+balanced indexing, repeated indexing and list/array slicing, with exact quoted
+insertion names. Direct indexed projections with explicit aliases retain their
+observed types in CTEs and derived tables. Unqualified columns require one
+unambiguous source binding.
+
+Type traversal has explicit node, depth and response-byte limits. A limited or
+unbound type preserves its owning column and reports incomplete observation.
+Type parsing continues to use the companion connection; pending editor work is
+neither committed nor rolled back. Index expressions are not evaluated by
+completion, and suggestions do not establish grammar/binding acceptance of an
+arbitrary index expression. Positional tuples and computed-expression inference
+retain separate acceptance.
 
 PostgreSQL exact dialect and statistics contracts
 =================================================

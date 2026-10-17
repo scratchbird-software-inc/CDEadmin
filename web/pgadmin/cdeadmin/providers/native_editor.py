@@ -19,6 +19,25 @@ MAX_SYMBOLS = 25000
 MAX_BYTES = 4 * 1024 * 1024
 
 
+class NativeTypeShapeLimit(ValueError):
+    """A visible type exceeds this observation's bounded traversal."""
+
+
+def duckdb_type_shape(native_type, budget, depth=0):
+    if depth>32 or budget[0]<=0:
+        raise NativeTypeShapeLimit('Native type observation limit')
+    budget[0]-=1
+    shape={'kind':native_type.id,'sql':str(native_type)}
+    if native_type.id in {'struct','union'}:
+        shape['fields']=[{'name':name,'type':duckdb_type_shape(child,budget,depth+1)}
+            for name,child in native_type.children if name]
+    elif native_type.id in {'list','array','map'}:
+        for name,child in native_type.children:
+            if name=='size':shape['size']=child
+            else:shape[name]=duckdb_type_shape(child,budget,depth+1)
+    return shape
+
+
 def diagnostic_position(error, statement, start, source):
     """Use only numeric native positions; never return source-bearing messages."""
     matches = list(re.finditer(r'\b(?:at\s+)?line\s+(\d+)(?:,?\s+column\s+(\d+))?', str(error), re.I))
@@ -111,7 +130,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
@@ -119,6 +138,8 @@ def metadata(handle, engine, transaction=None, dialect=None):
             row['hidden_from_star'] = True
         if native_identifier_token:
             row['native_identifier_token'] = True
+        if native_type is not None:
+            row['native_type']=native_type
         total += 1
         count = len(json.dumps(row, ensure_ascii=False).encode())
         if len(symbols) < MAX_SYMBOLS and size + count <= MAX_BYTES:
@@ -197,35 +218,39 @@ def metadata(handle, engine, transaction=None, dialect=None):
             rowid_owners = {(database, schema, name) for database, schema, name, kind in relations
                             if kind == 'table' and storage.get(database) == 'duckdb'}
             nested_fields = 0
+            type_budget=[MAX_SYMBOLS]
             native_columns=query('columns', 'SELECT database_name,schema_name,table_name,column_name,data_type FROM duckdb_columns() ORDER BY database_name,schema_name,table_name,column_index LIMIT 25001')
             columns_truncated=observations[-1]['truncated']
             for database, schema, table, name, data_type in native_columns:
-                add('column', [database, schema, table, name], data_type)
-                if str(data_type).lstrip().upper().startswith(('STRUCT(', 'UNION(')):
+                shape=None
+                if str(data_type).lstrip().upper().startswith(('STRUCT(', 'UNION(', 'MAP(')) or str(data_type).rstrip().endswith(']'):
                     import duckdb
                     try:
                         # A failed DuckDB type-parser API call can abort its
                         # connection's transaction. Catalog facts remain on
                         # the retained session; parsing owns this companion.
                         if type_parser is None:type_parser=handle.cursor()
-                        pending=[([database,schema,table,name],duckdb.sqltype(data_type,connection=type_parser))]
-                        while pending:
-                            parent,native_type=pending.pop()
-                            if native_type.id not in {'struct','union'}:continue
-                            for field,field_type in native_type.children:
-                                # Native UNION has an internal unnamed tag;
-                                # it is not a user-visible dot member.
-                                if not field:continue
-                                if nested_fields>=MAX_SYMBOLS:
-                                    observations.append({'section':'nested-fields','available':True,'truncated':True})
-                                    pending.clear();break
-                                field_path=[*parent,field]
-                                add('field',field_path,str(field_type));nested_fields+=1
-                                if field_type.id in {'struct','union'}:pending.append((field_path,field_type))
+                        shape=duckdb_type_shape(duckdb.sqltype(data_type,connection=type_parser),type_budget)
+                    except NativeTypeShapeLimit:
+                        observations.append({'section':'nested-types:'+database+':'+schema+':'+table+':'+name,
+                            'available':False,'truncated':True,'reason':'native-type-observation-limit'})
                     except (duckdb.InvalidInputException,duckdb.ParserException,duckdb.CatalogException,duckdb.BinderException):
                         if type_parser is not None:type_parser.close();type_parser=None
                         observations.append({'section':'nested-fields:'+database+':'+schema+':'+table+':'+name,
                             'available':False,'reason':'native-type-binding'})
+                add('column', [database, schema, table, name], data_type,native_type=shape)
+                if shape is not None:
+                    pending=[([database,schema,table,name],shape)]
+                    while pending:
+                        parent,native_type=pending.pop()
+                        for field_entry in native_type.get('fields',[]):
+                            field,field_type=field_entry['name'],field_entry['type']
+                            if nested_fields>=MAX_SYMBOLS:
+                                observations.append({'section':'nested-fields','available':True,'truncated':True})
+                                pending.clear();break
+                            field_path=[*parent,field]
+                            add('field',field_path,field_type['sql'],native_type=field_type);nested_fields+=1
+                            if field_type.get('fields'):pending.append((field_path,field_type))
                 if str(name).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) == 'rowid':
                     rowid_owners.discard((database, schema, table))
             # Do not invent rowids on foreign extension storage or views.
@@ -276,7 +301,12 @@ def metadata(handle, engine, transaction=None, dialect=None):
                         add(kind, [row['native_name']], 'native ' + kind)
         context['keywords'] = ' '.join(words)
         context['reserved_words'] = [row['native_name'] for row in inv['lexical_rules']
-                                     if row.get('reserved') or row.get('non_reserved') is False]
+                                     if row.get('reserved') or row.get('non_reserved') is False or row.get('category')=='reserved']
+        if engine=='duckdb':
+            # Native ColId admits unreserved and column-name keyword classes.
+            # Preserve keyword display separately from identifier resolution.
+            context['identifier_keywords']=[row['native_name'] for row in inv['lexical_rules']
+                if row.get('category') in {'unreserved','column_name'}]
         context['context_revision'] = hashlib.sha256(json.dumps({'context':context,'resources':symbols,
             'observations':observations,'visible_resource_count':total}, sort_keys=True, default=str).encode()).hexdigest()
         return {'context': context, 'resources': symbols, 'visible_resource_count': total,

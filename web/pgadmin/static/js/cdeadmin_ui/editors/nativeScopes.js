@@ -1,4 +1,5 @@
 import {nativeSourceStructure} from './nativeLexing';
+import {duckdbAccessEntry,duckdbCompletionTarget} from './duckdbNestedTypes';
 
 const key = name => name.replaceAll('.', '\\.');
 const identifier = node => ['Identifier', 'QuotedIdentifier'].includes(node?.name);
@@ -27,7 +28,7 @@ export function scopedSQLConfig(config, state, position) {
     if (!delimiter) return value;
     return delimiter + value.replaceAll(delimiter, delimiter + delimiter) + delimiter;
   };
-  const schema = {...config.schema};
+  const schema = Object.assign(Object.create(null),config.schema);
   const asEntry = entry => entry.self ? entry : {self:entry,children:Object.create(null)};
   const lookup = (branch, part, exact=false) => {
     if (branch && !Array.isArray(branch) && Object.hasOwn(branch,key(part)))return asEntry(branch[key(part)]);
@@ -51,7 +52,7 @@ export function scopedSQLConfig(config, state, position) {
       // An explicitly projected hidden/pseudo column is an ordinary visible
       // column of the CTE/derived relation. Its nested native members survive.
       delete self.nativeHiddenFromStar;
-      return [key(name),{self,children:native?.children || Object.create(null)}];
+      return [key(name),{self,children:native?.children || Object.create(null),nativeType:native?.nativeType}];
     }))});
   const columns = entry => Object.values(entry?.children || {}).map(asEntry)
     .filter(child => child.self?.type === 'property' && !child.self.nativeHiddenFromStar)
@@ -104,6 +105,9 @@ export function scopedSQLConfig(config, state, position) {
       }
       return entry;
     };
+    const expressionColumn = expression => config.nativeEngine==='duckdb' && expression.length ?
+      duckdbAccessEntry(state.sliceDoc(expression[0].from,expression.at(-1).to),config.nativeLanguageContext,nativeColumn,quote) :
+      expression.length===1 ? nativeColumn(path(expression[0])) : undefined;
     for (let group of groups) {
       group = group.filter(node => !['DISTINCT', 'ALL'].includes(word(node)));
       if (!group.length) continue;
@@ -112,7 +116,7 @@ export function scopedSQLConfig(config, state, position) {
         (previous.name !== 'Keyword' || word(previous) === 'END');
       if (identifier(last) && previous && (word(previous) === 'AS' || implicitAlias)) {
         const expression=group.slice(0,word(previous)==='AS' ? -2 : -1);
-        result.push({label:name(last),native:expression.length===1 ? nativeColumn(path(expression[0])) : undefined});
+        result.push({label:name(last),native:expressionColumn(expression)});
       } else if (group.length === 1 && path(last).length) result.push({label:path(last).at(-1),native:nativeColumn(path(last))});
       else if (word(last) === '*') {
         const qualifier = previous && path(previous);
@@ -159,7 +163,13 @@ export function scopedSQLConfig(config, state, position) {
   return {...config, schema, nativeScopeBindings: bindings,
     nativeResolve: parts => {
       let entry=bindings.get(bindingKey(parts[0]));
-      if (!entry)return resolve(parts);
+      if (!entry) {
+        const direct=resolve(parts);
+        if(direct || config.nativeEngine!=='duckdb')return direct;
+        const candidates=[...bindings.values()].map(owner=>lookup(owner.children,parts[0],exactCase)).filter(Boolean);
+        if(candidates.length!==1)return undefined;
+        entry=candidates[0];
+      }
       for (const part of parts.slice(1)) {
         entry=lookup(entry.children,part,exactCase);
         if (!entry)return undefined;
@@ -188,7 +198,8 @@ export function nativeSchemaCompletion(config, context) {
     node = null;
   }
   const parents = [];
-  while (node?.name === '.') {
+  const duckDot=config.nativeEngine==='duckdb' && node?.name==='.' ? node : null;
+  while (!duckDot && node?.name === '.') {
     const parent = before(node);
     if (!identifier(parent)) return null;
     parents.unshift(config.nativeName(parent));
@@ -201,7 +212,11 @@ export function nativeSchemaCompletion(config, context) {
   const addBranch = branch => {
     for (const entry of Object.values(branch || {})) add(entry.self || entry);
   };
-  if (parents.length) {
+  if(duckDot) {
+    const target=duckdbCompletionTarget(config,state,duckDot);
+    if(!target)return null;
+    addBranch(target.children);
+  } else if (parents.length) {
     const target = config.nativeResolve(parents);
     if (!target) return null;
     addBranch(target.children);
