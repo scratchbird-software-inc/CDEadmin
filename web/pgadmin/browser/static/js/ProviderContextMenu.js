@@ -17,7 +17,7 @@ const SAFE_HANDLERS = new Set([
   'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
-  'open_mysql_local_clone',
+  'open_mysql_local_clone', 'open_mysql_binlogs',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -93,6 +93,8 @@ function dispatch(action, args, context) {
   switch(action.handler) {
   case 'open_mysql_local_clone':
     return serverNode.callbacks.open_mysql_local_clone.call(serverNode,{item:endpoint.item});
+  case 'open_mysql_binlogs':
+    return serverNode.callbacks.open_mysql_binlogs.call(serverNode,{item:endpoint.item});
   case 'open_firebird_dashboard_editor':
     return import('sources/Dialogs').then(({showFirebirdDashboardEditor}) =>
       showFirebirdDashboardEditor(endpoint.data ? Number(endpoint.data._id ?? endpoint.data.id) : undefined,

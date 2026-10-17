@@ -254,6 +254,11 @@ define('pgadmin.node.server', [
           label: gettext('MySQL physical clone...'), priority: 9,
           enable: node => node.cde_profile_id === 'mysql-native',
         }, {
+          name: 'mysql_binlogs', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_binlogs',
+          label: gettext('MySQL binary-log archives...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
           name: 'copy_server', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'show_obj_properties',
           label: gettext('Copy Server...'), data: {action: 'copy'},
@@ -453,6 +458,12 @@ define('pgadmin.node.server', [
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);
           showProviderWorkspace(gettext('MySQL physical clone'),this,data,item,'mysql-clone');
+          return false;
+        },
+        open_mysql_binlogs: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL binary-log archives'),this,data,item,'mysql-binlogs');
           return false;
         },
         open_postgresql_server_catalog: function(args) {

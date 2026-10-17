@@ -354,6 +354,11 @@ CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH = env('CDEADMIN_POSTGRESQL_CONTINUITY
 CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS') or 0) or None
 CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT = env('CDEADMIN_POSTGRESQL_WAL_ARCHIVE_ROOT') or ''
 
+# Native MySQL9.7 Shell archives on the application host. The operator chooses
+# storage and any mandatory deadline; browser requests cannot supply paths.
+CDEADMIN_MYSQL_BINLOG_ROOT = env('CDEADMIN_MYSQL_BINLOG_ROOT') or ''
+CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS') or 0) or None
+
 # SQLITE_TIMEOUT will define how long to wait before throwing the error -
 # OperationError due to database lock. On slower system, you may need to change
 # this to some higher value.

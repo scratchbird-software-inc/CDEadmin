@@ -2628,6 +2628,14 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'mysql_binlog_download':
+                    from pgadmin.cdeadmin.workspace.mysql_binlog_service import download
+                    from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:return download(service,server,json.loads(body))
+                    except (ValueError,TypeError,KeyError,OSError) as error:
+                        return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
                 if request.form.get('action') == 'postgresql_large_object_download':
                     from pgadmin.cdeadmin.workspace.postgresql_large_object_service import download
                     from pgadmin.cdeadmin.providers.postgresql.large_object_files import LargeObjectFileError
@@ -2974,6 +2982,10 @@ class ServerNode(PGChildNodeView):
                         payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_binlog_catalog','mysql_binlog_review','mysql_binlog_start','mysql_binlog_status',
+                                'mysql_binlog_list','mysql_binlog_cancel','mysql_binlog_reconcile','mysql_binlog_files','mysql_binlog_remove_artifact'}:
+                    try:payload=service.mysql_binlog(server,action.removeprefix('mysql_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
                     payload = service.postgresql_schema_application(server, action, data.get('request'))
                 elif action == 'postgresql_relational_review':

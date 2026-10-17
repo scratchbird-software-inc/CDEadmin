@@ -1025,3 +1025,25 @@ per page. It retains all native columns and exposes coverage and permission
 results. Family selection belongs to collector policy; viewing does not start
 collection or alter policy. Optional extension views require their own inventory
 and acceptance. ScratchBird history qualification remains owner-deferred.
+
+MySQL native binary-log archives
+================================
+
+The server's backup menu exposes native MySQL Shell9.7 binary-log archives,
+with independent source/GTID observation, explicit execution-host and filesystem
+scope, reviewed file/position or retained-archive continuation, native
+compression and runtime options. Jobs claim durable identities before dispatch,
+never replay after restart, retain progress/cancellation observations and keep
+unknown process finality explicit. A no-op does not create a fictional archive
+or advance the continuation cursor.
+
+Verification reconciles native completion sidecars, source UUID, complete file
+inventories, streaming decoded lengths/event counts and native v4 CRC32 where
+present. Every file retains size/SHA256. Reconciliation preserves a prior sealed
+postimage; application file verification is distinct from replay/recovery.
+Private temporary JSON credentials preserve native password characters and the
+registered utility TLS policy. Authenticated downloads, paged file inventories,
+offline receipts and explicitly confirmed application-artifact removal are
+integrated into the workspace. Unknown writers cannot authorize removal or
+continuation. Raw GTID-disabled retrieval, native replay/PITR, continuous
+collection/retention and MariaDB archives remain open requirements.

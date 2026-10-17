@@ -150,6 +150,31 @@ allowlist and privilege admission. Native completion, file verification and
 independent recovery remain separate outcomes. Active-directory replacement,
 production cutover and the wider physical continuity surface remain open.
 
+The binary-log archive workspace integrates native MySQL Shell9.7
+``util.dumpBinlogs`` on the explicitly recorded application host. It inspects
+available logs and GTID lineage, reviews a native file/position or verified
+previous archive, and records a durable claim before dispatch. New archives use
+private owner/endpoint/job directories. Native none, gzip and Zstandard
+compression, thread count and bounded or operator-permitted unbounded runtime
+are exposed. The registered TLS policy and multi-factor credentials apply to
+the utility's independent session; credentials travel in a private temporary
+JSON file that preserves newline and Unicode passwords and is erased afterward.
+
+Completed archives reconcile native completion metadata, source UUID, every
+file's size/SHA256, streaming v4 event framing and CRC32 where the native log
+contains checksums. Native checksum-disabled logs are identified explicitly.
+Continuation stages an independent immutable input. A native no-op records no
+new archive and never advances a continuation cursor. Restart/lost workers stay
+unknown without replay; artifact verification does not assert process finality.
+Receipts and paged file inventories remain available offline. Authenticated file
+downloads verify retained bytes; explicit identity-confirmed removal keeps the
+receipt. ``CDEADMIN_MYSQL_BINLOG_ROOT`` and
+``CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS`` are operator settings.
+
+This closes the scoped GTID-enabled Shell archive workflow. Raw GTID-disabled
+MySQL archives, native replay/PITR, continuous collection/retention and the
+MariaDB binary-log workflow remain separate product requirements.
+
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are
