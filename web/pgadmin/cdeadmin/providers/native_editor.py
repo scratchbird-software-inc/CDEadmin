@@ -389,27 +389,34 @@ def validate_mysql(client, handle, source, engine, script=False):
                       sql_mode=str(mode), scope='Native PREPARE only; no submitted SQL is executed. Context and permission failures leave grammar unconfirmed.')
         if result['diagnostics']: return result
         statements = result['statements'] if script else [{'source': source, 'start': 0, 'end': len(source), 'ordinal': 1}]
-        valid = True
+        valid = True if statements else None
+        observations=[]
         for item in statements:
             name = 'sr_check_' + uuid.uuid4().hex
             acquired = False
+            preparing=False
             marker = '%s' if engine == 'mysql' else '?'
             try:
                 encoded = mysql_bind_markers(item['source'], modes).encode('utf8')
                 cursor.execute(f'SET @{name} = CONVERT({marker} USING utf8mb4)', (encoded,))
+                preparing=True
                 cursor.execute(f'PREPARE {name} FROM @{name}')
                 acquired = True
+                observations.append({'ordinal':item['ordinal'],'native_preparation':'prepared','grammar_valid':True})
             except Exception as error:
                 code = getattr(error, 'errno', None)
                 if code is None or code in {2006, 2013, 2055}:
                     client._uncertain_sessions.add(id(handle))
                     raise RelationalClientError('Native editor connection state is unknown; close this session') from None
-                # These exact MySQL routine/view/database paths have independently
-                # qualified post-parse 1295 refusals in the schema adapter.
-                parsed = engine == 'mysql' and code == 1295 and re.match(
-                    r'^\s*(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION|TRIGGER|VIEW|DATABASE)\b', item['source'], re.I)
+                from .mysql_family.prepare_classification import post_parse_family
+                family=post_parse_family(item['source'],modes,version) if preparing and engine=='mysql' and code==1295 else None
+                parsed=family is not None
+                syntax=preparing and code in {1064,1149}
+                observations.append({'ordinal':item['ordinal'],'native_preparation':'not_started' if not preparing else 'unsupported' if code==1295 else 'rejected',
+                    'native_stage':'preparation' if preparing else 'source_binding',
+                    'native_code':code,'grammar_valid':True if parsed else False if syntax else None,
+                    **({'qualified_post_parse_family':family,'catalog_binding_validated':False} if parsed else {})})
                 if not parsed:
-                    syntax = code in {1064, 1149}
                     valid = False if syntax else (None if valid is not False else False)
                     result['diagnostics'].append({'code': 'NATIVE_SYNTAX' if syntax else 'NATIVE_CONTEXT',
                         'native_code': code, 'message': 'Native parser rejected the SQL syntax.' if syntax else 'Native preparation requires valid catalog context and privileges.',
@@ -423,7 +430,8 @@ def validate_mysql(client, handle, source, engine, script=False):
                     client._uncertain_sessions.add(id(handle))
                     raise RelationalClientError('Native prepared-statement release is unconfirmed; close this session') from None
         result['grammar_valid'] = valid
-        result['syntax_valid'] = valid is not False
+        result['syntax_valid'] = valid
+        result['native_statements']=observations
         result['statements'] = statements
         result['script_ready'] = script and valid is not False and bool(statements)
         return result

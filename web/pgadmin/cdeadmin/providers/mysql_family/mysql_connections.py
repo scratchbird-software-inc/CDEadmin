@@ -4,6 +4,7 @@ import hmac
 import json
 import secrets
 import threading
+import weakref
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
 
@@ -18,6 +19,42 @@ def _close(connection):
         connection.close()
     except Exception:
         pass
+
+
+def live_sql_mode_conversion(native):
+    """Use native OK/EOF status for escaping after SQL changes session mode.
+
+    The pure client caches sql_mode while arbitrary SET SQL updates protocol
+    status without refreshing that cache. Preserve the native converter's
+    types/charset and choose escaping from live status. C clients already do
+    this. Only a fixed initial metadata read is sent; no session setting changes.
+    """
+    converter=getattr(native,'converter',None)
+    handler=getattr(type(native),'_handle_server_status',None)
+    if converter is None or getattr(native,'_cmysql',None) is not None or not callable(handler):return
+    from mysql.connector.constants import ServerFlag
+    reference=weakref.ref(native)
+    def observe_status(flags):
+        connection=reference()
+        if connection is None:raise RelationalClientError('MySQL protocol connection is unavailable')
+        connection._cdeadmin_server_status=flags
+        return handler(connection,flags)
+    # The pure driver keeps only selected flags itself. Observe the complete
+    # decoded status while preserving its native transaction/result handling.
+    native._handle_server_status=observe_status
+    cursor=native.cursor()
+    try:
+        cursor.execute('SELECT @@SESSION.sql_mode');cursor.fetchall()
+    finally:cursor.close()
+    if not isinstance(getattr(native,'_cdeadmin_server_status',None),int):
+        raise RelationalClientError('Native MySQL SQL-mode status is unavailable')
+    class LiveSQLModeConverter(type(converter)):
+        def escape(self,value,sql_mode=None):
+            connection=reference()
+            if connection is None:raise RelationalClientError('MySQL parameter connection is unavailable')
+            sql_mode='NO_BACKSLASH_ESCAPES' if connection._cdeadmin_server_status & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES else ''
+            return super().escape(value,sql_mode)
+    native.set_converter_class(LiveSQLModeConverter)
 
 
 class Lease:
@@ -132,7 +169,7 @@ class Connector:
             if self._closed:
                 raise RelationalClientError('MySQL connector is closed')
             if size is None:
-                return self.module.connect(*args, **options)
+                return self._native_connect(*args, **options)
             if args:
                 raise RelationalClientError(
                     'MySQL pooled connections require named arguments')
@@ -145,11 +182,19 @@ class Connector:
             if previous is None or previous[0] != signature:
                 if previous is not None:
                     previous[1].close()
-                pool = _Pool(self.module.connect, size, reset)
+                pool = _Pool(self._native_connect, size, reset)
                 self._pools[name] = (signature, pool)
             else:
                 pool = previous[1]
             return pool.checkout(options)
+
+    def _native_connect(self,*args,**options):
+        native=self.module.connect(*args,**options)
+        try:live_sql_mode_conversion(native)
+        except BaseException:
+            _close(native)
+            raise
+        return native
 
     def close(self):
         with self._lock:

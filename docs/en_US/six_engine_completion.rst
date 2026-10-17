@@ -202,6 +202,74 @@ Separate implementation, native qualification, platform qualification and human
 form signoff in reports. Do not publish an overall completion percentage until
 the complete native feature denominator has been reconciled.
 
+Current implementation matrix, 2026-10-17
+=========================================
+
+All six engines now have catalog-backed completion, native nonexecuting
+preflight, engine-specific formatting and implemented native administration,
+data and design workflows. The implementations and scoped receipts below
+supersede the initial findings about absent wiring. Full product acceptance
+remains open for every engine; a scoped workflow is not the full denominator.
+
+.. list-table:: Current implementation and remaining acceptance
+   :header-rows: 1
+   :widths: 14 29 30 27
+
+   * - Engine
+     - Catalog and editor
+     - Implemented workflow scope
+     - Remaining full-product acceptance
+   * - MySQL 9.7.0
+     - Independent native category/DDN reconciliation; retained catalog and
+       mode/role-aware completion; native PREPARE and scoped post-parse checking.
+     - Native administration, data/DDN work, local/registered remote clone,
+       Shell archives, raw closed logs with GTIDs on/off and Shell GTID replay.
+     - Raw replay, complete base/PITR/cutover, continuous archive/retention,
+       wider procedural scopes and complete installed-capability/lifecycle/HA
+       workflows and evidence.
+   * - MariaDB 12.2.2
+     - Independent native category/DDN reconciliation; retained catalog and
+       mode/role-aware completion; native normal/Oracle-mode preparation.
+     - Native administration, data/DDN work and independently verified closed
+       raw logs with native checksum, compressed-event and GTID-domain semantics.
+     - Native replay/PITR/physical continuity, active/continuous logs and
+       retention, wider procedural/package scopes and full native operational
+       and installed-capability acceptance.
+   * - PostgreSQL 18.3
+     - Independent server/retained-session catalog work; native completion,
+       context/savepoint preservation and qualified SQL/SQL-body/PLpgSQL checks.
+     - Typed imports and durable recipes; native large objects/whole-file
+       transfer; physical/incremental/compressed reconstruction and WAL-target
+       recovery drills; additional native statistics collectors.
+     - Production restore/cutover, continuous archive/retention, remote-host
+       lifecycle/upgrades and complete installed-extension/language/HA coverage.
+   * - DuckDB 1.5.2
+     - Native attached/session catalogs, functions/types/macros, retained
+       completion, native parsing and nested/indexed/positional member binding.
+     - Native administration, typed data/DDN imports, durable recipes and
+       qualified schema transformations and retained-session workflows.
+     - Remaining native transformations, computed/contextual binding and full
+       independent installed-extension/feature and platform reconciliation.
+   * - SQLite 3.53.0
+     - Native schema/function/collation/flag observations, compiled keyword
+       roles, retained completion and guarded nonexecuting compilation.
+     - Native file/data workflows, typed imports, durable recipes, coordinated
+       rebuilds and view/index/trigger replacements with native preservation.
+     - Remaining coordinated dependency transformations and complete native
+       module/extension/feature and platform reconciliation.
+   * - Firebird 5.0.4
+     - Independent network/embedded category/navigator work, native DSQL/PSQL
+       preparation, exact dialect context and native catalog completion.
+     - Existing native administration, data/DDN, diagnostic, collector/dashboard
+       and desktop/lifecycle workflows retain their own acceptance scopes.
+     - Complete independent native feature/installed-capability reconciliation
+       and current platform/release evidence beyond the declared task receipts.
+
+Persistent ScratchBird history clients and all six collector integrations remain
+wired. History testing is owner-deferred. Human form validation and native
+Windows/macOS qualification remain with their assigned teams. Those obligations
+are distinct from remaining backend implementations and native qualification.
+
 Source audit baseline, 2026-10-16
 =================================
 
@@ -211,7 +279,7 @@ to existing scoped receipts, not a new native qualification run. All six engines
 have implemented administration, data and DDN work; none yet has evidence closing
 all four product requirements above.
 
-.. list-table:: Current evidence and open product coverage
+.. list-table:: Initial audit evidence and open product coverage
    :header-rows: 1
    :widths: 14 28 28 30
 
@@ -262,11 +330,13 @@ all four product requirements above.
      - Open. Existing FlameRobin parity receipts retain their scope. Native
        ScratchBird history acceptance and full platform/release acceptance remain.
 
-Concrete open work
-------------------
+Initial work ledger
+-------------------
 
-These are confirmed gaps or unclosed acceptance obligations, not an exhaustive
-native feature denominator. Further inventory may add work.
+These were the initial gaps and acceptance obligations. The current matrix and
+subsequent implementation sections supersede statements about missing wiring
+in this historical ledger. The complete native denominator still requires
+independent reconciliation; further inventory may add work.
 
 * PRODUCT-GAP-01, MySQL/MariaDB/SQLite: implement catalog-backed predictive
   completion. ``LanguageSourceEditor.jsx`` binds the native completion callback
@@ -1140,3 +1210,24 @@ the Shell dump format. Continuous collection, retention and raw replay retain
 separate acceptance. Storage uses ``CDEADMIN_MYSQL_RAW_BINLOG_ROOT`` or the
 operation store's ``mysql-raw-binary-log-archives`` sibling directory; native
 runtime policy uses ``CDEADMIN_MYSQL_RAW_BINLOG_MAX_RUNTIME_SECONDS``.
+
+MySQL-family procedural preflight and live binding mode
+=======================================================
+
+MySQL9.7 preflight recognizes qualified native post-parse refusals for routine,
+trigger, view, database and transactional-table headers, including comments,
+DEFINER clauses and applicable native version comments. The native server must
+have returned the recorded preparation refusal; lexical header classification
+alone never validates source. Binding/preparation stages and native statement
+observations remain separate, and post-parse acceptance does not establish
+catalog binding or permission to execute. Context or permission failures retain
+null grammar/syntax results instead of a positive syntax flag.
+
+The MySQL pure client now observes decoded native OK/EOF status for parameter
+escaping after SQL changes NO_BACKSLASH_ESCAPES. It preserves the native
+converter's types and charset, performs one initial fixed metadata read and
+never changes session mode for conversion. C clients retain their native
+escaping path. Typed quote, backslash, NUL, Unicode and binary values retain
+their original representations across tested mode changes. Full character-set
+switching, mixed-mode parameterized batches and additional parser/rewrite
+components retain separate reconciliation and qualification.

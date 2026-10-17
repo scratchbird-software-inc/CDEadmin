@@ -384,7 +384,50 @@ def test_native_syntax_context_permission_and_unsupported_are_distinct(code, exp
     cursor.execute.side_effect = lambda sql, *args: (_ for _ in ()).throw(NativeError('literal must not leak')) if sql.startswith('PREPARE ') else None
     result = validate_mysql(SimpleNamespace(_uncertain_sessions=set()), SimpleNamespace(cursor=lambda: cursor), 'SELECT * FROM missing', 'mysql')
     assert result['grammar_valid'] is expected
+    assert result['syntax_valid'] is expected
     assert 'literal must not leak' not in str(result)
+
+
+@pytest.mark.parametrize('source,family',[
+    ('# Comment\rCREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ('CREATE /* header */ DEFINER=CURRENT_USER() PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ("CREATE DEFINER='odd\\\'user'@'host.example' FUNCTION f() RETURNS INT RETURN 1",'function'),
+    ('CREATE DEFINER=`odd``user`@`host` TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET @v=1','trigger'),
+    ('ALTER ALGORITHM=MERGE DEFINER=CURRENT_USER SQL SECURITY INVOKER VIEW v AS SELECT 1','view'),
+    ("CREATE AGGREGATE FUNCTION f RETURNS INTEGER SONAME 'missing.so'",'function'),
+    ('CREATE TABLE t(v INT) START TRANSACTION','table'),
+    ('CREATE /*!90700 DEFINER=CURRENT_USER() */ PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ('/*!99999 SELECT invalid */ CREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+])
+def test_qualified_post_parse_headers_retain_native_refusal_and_binding_scope(source,family):
+    class NativeError(Exception):errno=1295
+    cursor=Mock();cursor.fetchone.return_value=('9.7.0','',60)
+    cursor.execute.side_effect=lambda sql,*_args:(_ for _ in ()).throw(NativeError('private native text')) if sql.startswith('PREPARE ') else None
+    result=validate_mysql(SimpleNamespace(_uncertain_sessions=set()),SimpleNamespace(cursor=lambda:cursor),source,'mysql')
+    assert result['grammar_valid'] is True and result['syntax_valid'] is True
+    assert result['native_statements']==[{'ordinal':1,'native_preparation':'unsupported','native_stage':'preparation','native_code':1295,
+        'grammar_valid':True,'qualified_post_parse_family':family,'catalog_binding_validated':False}]
+    assert 'private native text' not in str(result)
+    assert not any(call.args[0].startswith(('EXECUTE ','COMMIT','ROLLBACK')) for call in cursor.execute.call_args_list)
+
+
+@pytest.mark.parametrize('code',[1064,1295])
+def test_failed_source_binding_does_not_claim_user_source_was_parsed(code):
+    class NativeError(Exception):errno=code
+    cursor=Mock();cursor.fetchone.return_value=('9.7.0','',60)
+    cursor.execute.side_effect=lambda sql,*_args:(_ for _ in ()).throw(NativeError('private binding text')) if 'CONVERT(' in sql else None
+    result=validate_mysql(SimpleNamespace(_uncertain_sessions=set()),SimpleNamespace(cursor=lambda:cursor),
+        'CREATE PROCEDURE p() BEGIN SELECT 1; END','mysql')
+    assert result['grammar_valid'] is None and result['syntax_valid'] is None
+    assert result['native_statements'][0]['native_preparation']=='not_started'
+    assert result['native_statements'][0]['native_stage']=='source_binding'
+    assert not any(call.args[0].startswith('PREPARE ') for call in cursor.execute.call_args_list)
+    assert 'private binding text' not in str(result)
+
+
+def test_unqualified_parser_revision_cannot_inherit_post_parse_refusal_acceptance():
+    from pgadmin.cdeadmin.providers.mysql_family.prepare_classification import post_parse_family
+    assert post_parse_family('CREATE PROCEDURE p() BEGIN SELECT 1; END',set(),'9.7.1') is None
 
 
 def test_editor_metadata_cannot_use_an_active_native_execution():
