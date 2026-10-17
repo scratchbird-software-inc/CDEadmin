@@ -22,6 +22,7 @@ def qualify(engine,output):
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
     paths=['web/pgadmin/cdeadmin/providers/native_editor.py','web/pgadmin/cdeadmin/providers/mysql_family/prepare_classification.py',
         'web/pgadmin/cdeadmin/data_studio/language_tools.py',
+        'web/pgadmin/cdeadmin/data_studio/mysql_quoting.py',
         'tools/mysql_qualification_support.py','tools/mariadb_qualification_support.py',str(Path(__file__).relative_to(ROOT))]
     proof={'complete':False,'engine':engine,'interfaces':[],'failures':[],'history_testing':'not run',
         'qualification_scope':'native core profile and recorded modes; not additional parser/rewrite plugins or all procedural completion',
@@ -116,6 +117,22 @@ def qualify(engine,output):
                                         ('clone',"CLONE LOCAL DATA DIRECTORY='/tmp/sr-do-not-create'"),
                                         ('alter-database','ALTER DATABASE '+q(database)+' READ ONLY=1')]
                                     cases += controls+[(name+'-invalid',source+' SR_TRAILING_INVALID +') for name,source in controls]
+                                    for tag in ('','tag','123','雪','🦆'):
+                                        marker='$'+tag+'$'
+                                        body='// %s %(name)s\nexport const value="quotes \' ; FROM hidden";\n'
+                                        if tag=='tag':body+='export const overlap="$$tag$";\n'
+                                        library='CREATE LIBRARY '+p+' LANGUAGE JAVASCRIPT AS '+marker+body+marker
+                                        routine='CREATE PROCEDURE '+p+'() LANGUAGE JAVASCRIPT AS '+marker+body+marker
+                                        cases.extend([('dollar-library-'+tag,library),('dollar-routine-'+tag,routine),
+                                            ('dollar-unterminated-'+tag,library[:-1])])
+                                        for delimiter in (';','//'):
+                                            script=(('DELIMITER //\n' if delimiter=='//' else '')+
+                                                library+delimiter+'\nSELECT 2'+delimiter)
+                                            checked=instance.validate_source_without_execution({'session_id':session['session_id'],
+                                                'language_profile':'mysql-sql','source':script,'script':True})
+                                            assert checked['script_ready'] and checked['grammar_valid'] is True and len(checked['statements'])==2, checked
+                                            checks.append({'name':'native-dollar-library-script','tag':tag,'client_delimiter':delimiter,
+                                                'mode':mode,'native_statement_count':2,'grammar_valid':True,'external_body_language_validated':False})
                                 elif mode=='ORACLE':cases += [
                                     ('oracle-procedure','CREATE OR REPLACE PROCEDURE '+p+' AS v INTEGER := 1; BEGIN NULL; END'),
                                     ('oracle-anonymous','BEGIN NULL; END')]
@@ -157,6 +174,8 @@ def qualify(engine,output):
                                 work.execute('SELECT COUNT(*) FROM pending');assert work.fetchone()[0]==2
                                 oracle.execute('SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=%s',(database,));assert oracle.fetchone()[0]==0
                                 oracle.execute('SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s',(database,));assert oracle.fetchone()[0]==0
+                                if engine=='mysql':
+                                    oracle.execute('SELECT COUNT(*) FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA=%s',(database,));assert oracle.fetchone()[0]==0
                                 oracle.execute('SET SESSION sql_mode=%s',(original_mode,))
                                 oracle.execute('SHOW CREATE VIEW original_view');assert oracle.fetchone()==view_before
                                 oracle.execute("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME IN ('sr_not_created','not_created')",(database,));assert oracle.fetchone()[0]==0

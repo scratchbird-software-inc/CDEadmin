@@ -23,6 +23,9 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
     for name in ('web/pgadmin/cdeadmin/providers/native_editor.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/prepare_classification.py',
                  'web/pgadmin/cdeadmin/data_studio/language_tools.py',
+                 'web/pgadmin/cdeadmin/data_studio/mysql_quoting.py',
+                 'web/pgadmin/static/js/cdeadmin_ui/editors/nativeLexing.js',
+                 'web/pgadmin/static/js/cdeadmin_ui/editors/nativeFormatting.js',
                  str(Path(__file__).relative_to(ROOT))):
         proof['source_sha256'][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     builtins.SERVER_MODE = None
@@ -95,6 +98,8 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                                   ('transaction', 'START TRANSACTION', True),
                                   ('component', "INSTALL COMPONENT 'file://sr_absent'", True),
                                   ('commented-invalid-body', '# comment\rCREATE PROCEDURE p() BEGIN SELEC 1; END', None)]
+                        cases += [('dollar-library', 'CREATE LIBRARY not_created LANGUAGE JAVASCRIPT AS $tag$// %s;\nexport const value=1;$tag$', True),
+                                  ('unterminated-dollar-library', 'CREATE LIBRARY not_created LANGUAGE JAVASCRIPT AS $tag$export const value=1;', False)]
                     for name, source, expected in cases:
                         result = post('source_validate', session_id=session_id, source=source)
                         assert result['grammar_valid'] is expected, result
@@ -111,6 +116,8 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                     assert query.fetchone() == (0,)
                     if engine == 'mysql':
                         query.execute("SELECT COUNT(*) FROM mysql.user WHERE User='sr_not_created'")
+                        assert query.fetchone() == (0,)
+                        query.execute("SELECT COUNT(*) FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA='sr_workspace'")
                         assert query.fetchone() == (0,)
                     proof['interfaces'].append({'use_pure': pure, 'checks': checks,
                         'native_two_statement_script_checked': True, 'submitted_ddl_not_executed': True})
@@ -132,6 +139,7 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
     from selenium.webdriver.support.ui import WebDriverWait
     from cdeadmin_ui_evidence import ensure_data_explorer, expand, wait_for_tree_item, invoke_context_action, complete_endpoint_prompt
     from cdeadmin_sqlite_query_ui_gate import _set_query
+    from cdeadmin_firebird_query_ui_gate import _query_editor
     http = make_server('127.0.0.1', 0, app, threaded=True)
     thread = threading.Thread(target=http.serve_forever, daemon=True); thread.start(); driver = None
     try:
@@ -157,21 +165,36 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
         assert complete_endpoint_prompt(driver, password, timeout=15)
         summary = wait.until(lambda d: next((n for n in d.find_elements(By.TAG_NAME, 'summary') if n.is_displayed() and n.text == 'Source tools'), None))
         summary.click(); checks = []
-        for name, source, expected in [
+        cases = [
             ('valid-body', 'CREATE PROCEDURE not_created() BEGIN SELECT 1; END', 'accepted by the reported parser'),
             ('invalid-body', 'CREATE PROCEDURE not_created() BEGIN SELEC 1; END', 'rejected'),
             ('valid-control', 'START TRANSACTION', 'accepted by the reported parser'),
-            ('invalid-control', 'START TRANSACTION TRAILING_INVALID +', 'rejected')]:
+            ('invalid-control', 'START TRANSACTION TRAILING_INVALID +', 'rejected')]
+        literal='$tag$// %s;\nexport const value=1;$tag$'
+        if engine=='mysql':
+            cases += [('dollar-library','CREATE  LIBRARY not_created LANGUAGE JAVASCRIPT AS '+literal,'accepted by the reported parser'),
+                      ('unterminated-dollar-library','CREATE LIBRARY not_created LANGUAGE JAVASCRIPT AS $tag$export const value=1;','rejected')]
+        for name, source, expected in cases:
             _set_query(driver, wait, source)
-            def check(browser):
+            def click(browser, label):
                 for node in browser.find_elements(By.TAG_NAME, 'button'):
-                    if node.is_displayed() and node.is_enabled() and node.text == 'Check source':
+                    if node.is_displayed() and node.is_enabled() and node.text == label:
                         browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});', node)
                         node.click(); return True
                 return False
-            wait.until(check)
+            wait.until(lambda browser:click(browser,'Check source'))
             wait.until(lambda d: any('SQL grammar: ' + expected + '.' in n.text for n in d.find_elements(By.CSS_SELECTOR, '[role="status"]')))
             checks.append({'name': name, 'displayed_native_result': expected})
+            if name=='dollar-library':
+                wait.until(lambda browser:click(browser,'Format native source'))
+                def formatted(browser):
+                    editor=_query_editor(browser)
+                    if editor is None:return False
+                    value=browser.execute_script('return [...arguments[0].querySelectorAll(".cm-line")].map(n=>n.textContent).join("\\n");',editor)
+                    return value if value!=source and literal in value else False
+                value=wait.until(formatted)
+                assert literal in value
+                checks.append({'name':'dollar-library-format','native_literal_bytes_preserved':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors

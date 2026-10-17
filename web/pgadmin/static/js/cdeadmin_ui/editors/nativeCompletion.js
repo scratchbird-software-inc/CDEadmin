@@ -4,6 +4,7 @@ import {CompletionContext} from '@codemirror/autocomplete';
 import {firebirdSQLConfig} from './firebirdSyntax';
 import {scopedSQLConfig, nativeSchemaCompletion} from './nativeScopes';
 import {duckdbTypedEntry} from './duckdbNestedTypes';
+import {nativeTokenSpans} from './nativeLexing';
 
 const key = name => name.replaceAll('.', '\\.');
 
@@ -103,6 +104,12 @@ export function registerNativeCompletion(editor, current) {
       if (!applicable()) return null;
       const metadata = result.editor_context;
       if (metadata?.context?.engine + '-sql' !== initial.nativeProfile) throw new Error('Native completion language changed');
+      const token=metadata.context.engine==='mysql' ? nativeTokenSpans(source,metadata.context,{incomplete:true})
+        .findLast(item=>item.from<context.pos && item.to>=context.pos) : null;
+      if(token?.name==='String' && source[token.from]==='$') {
+        initial.onMetadata(metadata);
+        return null;
+      }
       const observed = nativeCompletionContext(metadata, context);
       const schema = nativeSchemaCompletion(observed.config, observed.context);
       const words = keywordCompletionSource(observed.config.dialect, true)(observed.context);

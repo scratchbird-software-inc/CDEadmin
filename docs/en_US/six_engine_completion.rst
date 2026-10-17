@@ -223,7 +223,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Independent native category/DDN reconciliation; retained catalog and
        mode/role-aware completion; native PREPARE and qualified post-parse
        checking for stored programs, administrative and transaction commands;
-       native quoted-identifier framing and parameter boundaries.
+       native quoted-identifier and dollar-body framing, formatting and
+       parameter boundaries, with SQL suggestions suppressed inside opaque bodies.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.
@@ -1514,3 +1515,22 @@ do not authorize invented columns or row identifiers. Physical relation aliases
 are checked with the native nonexecuting compiler and preserve the caller's
 authorization and pending transaction. A real unloaded-module fixture qualifies
 healthy completion and native checking separately from the unavailable object.
+
+MySQL native dollar-quoted source
+----------------------------------
+
+The pinned MySQL9.7 SQL boundary now recognizes dollar-quoted routine/library
+text with native numeric and Unicode tags and consumed delimiter mismatches.
+Semicolons, comments, client directives and placeholder-like text inside those
+literals remain body text. Script framing uses the observed native revision;
+unconfirmed revisions do not inherit this admission. Existing explicit dollar
+client delimiters remain separate from SQL literal delimiters.
+
+Formatting treats each literal as one opaque token and restores its exact bytes
+before comparing the complete native token sequence. Retained SQL completion
+does not offer SQL keywords inside complete or incomplete opaque bodies. Native
+qualification checks original and malformed source through MySQL's nonexecuting
+parser in each recorded SQL mode and both connector implementations, while
+pending work/savepoints and the absence of created routines/libraries are checked
+independently. This scope confirms SQL boundaries and SQL grammar; external body
+languages still require their own validation and installed-capability evidence.

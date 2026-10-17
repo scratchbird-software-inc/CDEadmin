@@ -198,6 +198,22 @@ def analyze(source, language, *, script=False, settings=None):
             clean[i] = ' '
             i += 1
             continue
+        if c == '$' and language == 'mysql-sql' and not source.startswith(delimiter, i):
+            from .mysql_quoting import marker_at, end_of_quote
+            marker = marker_at(source, i)
+            if marker and settings.get('mysql_dollar_quotes') is not False:
+                if settings.get('mysql_dollar_quotes') is not True:
+                    issue('NATIVE_VERSION_REQUIRED',
+                          'Dollar-quoted source requires the observed native MySQL parser revision.', i)
+                end = end_of_quote(source, i, marker)
+                if end is None:
+                    issue('UNTERMINATED', 'Unterminated native dollar-quoted text.', i)
+                    end = len(source)
+                # Retain a meaningful marker even if this literal is the whole
+                # statement. Only its contents hide client/script boundaries.
+                clean[i + 1:end] = [' '] * (end - i - 1)
+                i = end
+                continue
         if c == '$' and language in DOLLAR:
             match = re.match(r'\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$', source[i:])
             if match:

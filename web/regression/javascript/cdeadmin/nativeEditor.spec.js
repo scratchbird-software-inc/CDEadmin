@@ -5,6 +5,7 @@ import {nativeSQLConfig, registerNativeCompletion} from '../../../pgadmin/static
 import {formatNative, nativeTokens} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeFormatting';
 import {scopedSQLConfig} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeScopes';
 import {diagnosticRanges} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeDiagnostics';
+import {nativeTokenSpans, nativeSourceStructure} from '../../../pgadmin/static/js/cdeadmin_ui/editors/nativeLexing';
 
 function metadata(engine, modes='') {
   return {context: {engine, sql_mode: modes, default_schema: 'main', catalog: 'owned', schema: 'main', keywords: 'SELECT FROM WHERE AS'}, resources: [
@@ -70,6 +71,50 @@ test('formatting preserves driver parameter markers and quoted PostgreSQL bodies
   const postgres = {engine: 'postgresql'};
   const source = 'CREATE FUNCTION f() RETURNS text LANGUAGE sql AS $$ SELECT \'x; y\' $$';
   expect(nativeTokens(formatNative(source, postgres), postgres)).toEqual(nativeTokens(source, postgres));
+});
+
+test.each(['', 'tag', '123', '雪', '🦆'])('MySQL9.7 preserves dollar body tag %s through formatting and source scopes', tag => {
+  const context={engine:'mysql',version:'9.7.0',sql_mode:'ANSI_QUOTES',keywords:'CREATE LIBRARY LANGUAGE AS SELECT FROM'};
+  const marker='$'+tag+'$';
+  const body='// %s %(value)s\nexport const x="quotes \' ; FROM hidden";\n';
+  const source='CREATE LIBRARY lib LANGUAGE JAVASCRIPT AS '+marker+body+marker+'; SELECT 2;';
+  const spans=nativeTokenSpans(source,context);
+  const literal=spans.find(token=>token.name==='String');
+  expect(source.slice(literal.from,literal.to)).toBe(marker+body+marker);
+  expect(nativeSourceStructure(source,context,source.indexOf('hidden')).at.name).toBe('String');
+  const formatted=formatNative(source,context);
+  expect(formatted).toContain(marker+body+marker);
+  expect(nativeTokens(formatted,context)).toEqual(nativeTokens(source,context));
+});
+
+test('MySQL9.7 consumed mismatch, identifier dollars, incomplete bodies and literal marker collisions stay distinct',()=>{
+  const context={engine:'mysql',version:'9.7.0',sql_mode:''};
+  const literal='$tag$export const x="$$tag$"; // %(__scratchrobin_literal_0)s\n$tag$';
+  const source='CREATE LIBRARY lib LANGUAGE JAVASCRIPT AS '+literal;
+  expect(nativeTokenSpans(source,context).filter(token=>token.name==='String')).toHaveLength(1);
+  expect(formatNative(source,context)).toContain(literal);
+  expect(()=>nativeTokens('$tag$"$$tag$";',context)).toThrow('Unterminated');
+  expect(nativeTokenSpans('$tag$"$$tag$";',context,{incomplete:true})).toEqual([{name:'String',from:0,to:14}]);
+  expect(nativeTokenSpans('SELECT db.$tag$, name$tag$',context).some(token=>token.name==='String')).toBe(false);
+  expect(nativeTokenSpans('$$body$$',{...context,engine:'mariadb'}).some(token=>token.name==='String')).toBe(false);
+  expect(nativeTokenSpans('$$body$$',{...context,version:'9.7.1'}).some(token=>token.name==='String')).toBe(false);
+});
+
+test.each([true,false])('MySQL9.7 opaque body does not receive SQL keyword completions, closed=%s',async closed=>{
+  let callback;
+  const source='CREATE LIBRARY lib LANGUAGE JAVASCRIPT AS $tag$SELECT '+(closed ? '$tag$' : '');
+  const position=source.indexOf('SELECT ')+7;
+  const state=EditorState.create({doc:source,selection:{anchor:position},extensions:sql()});
+  const editor={state,registerAutocomplete:fn=>{callback=fn;}};
+  const observed=metadata('mysql');observed.context.version='9.7.0';
+  const settings={active:true,blocked:false,scope:'mysql:first',nativeProfile:'mysql-sql',databaseTargetId:'first',
+    ensureSession:async()=>'retained',onMetadata:jest.fn(),onError:jest.fn(),post:jest.fn(async()=>({editor_context:observed}))};
+  registerNativeCompletion(editor,()=>settings);
+  const available=jest.fn();
+  expect(await callback(new CompletionContext(state,position,true),available)).toBeNull();
+  expect(settings.onError).not.toHaveBeenCalled();
+  expect(settings.onMetadata).toHaveBeenCalledWith(observed);
+  expect(available).toHaveBeenCalledTimes(1);
 });
 
 test('MariaDB Oracle formatting preserves native quoting and comment boundaries', () => {

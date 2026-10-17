@@ -1,4 +1,18 @@
 // Token boundaries for source tools, not a SQL grammar or execution authority.
+export function mysqlDollarQuoteEnd(source, start, marker) {
+  let position=start+marker.length;
+  while(position<source.length) {
+    const candidate=source.indexOf('$',position);
+    if(candidate<0)break;
+    let matched=1;
+    while(matched<marker.length && source[candidate+matched]===marker[matched])matched++;
+    if(matched===marker.length)return candidate+matched;
+    // MySQL9.7 consumes the mismatched character before seeking another '$'.
+    position=candidate+matched+1;
+  }
+  return -1;
+}
+
 export function nativeTokenSpans(source, context, {incomplete=false}={}) {
   const upper=value=>value.replace(/[a-z]/g,character=>character.toUpperCase());
   const mysql = ['mysql', 'mariadb'].includes(context.engine);
@@ -27,6 +41,13 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
       }
       if (depth && !incomplete) throw new Error('Unterminated native comment');
       name = 'BlockComment';
+    } else if (context.engine==='mysql' && /^9\.7\.0(?:[-\s]|$)/.test(context.version || '') && source[i-1]!=='.' &&
+      /^\$[A-Za-z0-9_\u0080-\u{10ffff}]*\$/u.test(source.slice(i))) {
+      const marker=source.slice(i).match(/^\$[A-Za-z0-9_\u0080-\u{10ffff}]*\$/u)[0];
+      const end=mysqlDollarQuoteEnd(source,i,marker);
+      if(end<0 && !incomplete)throw new Error('Unterminated native MySQL dollar-quoted text');
+      i=end<0 ? source.length : end;
+      name='String';
     } else if (['postgresql', 'duckdb'].includes(context.engine) && /^\$(?:[A-Za-z_\u0080-\u{10ffff}][A-Za-z_0-9\u0080-\u{10ffff}]*)?\$/u.test(source.slice(i))) {
       const marker = source.slice(i).match(/^\$(?:[A-Za-z_\u0080-\u{10ffff}][A-Za-z_0-9\u0080-\u{10ffff}]*)?\$/u)[0];
       const end = source.indexOf(marker, i + marker.length);

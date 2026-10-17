@@ -398,7 +398,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             cursor.close()
 
 
-def mysql_bind_markers(source, modes):
+def mysql_bind_markers(source, modes, *, dollar_quotes=False):
     """Replace driver placeholders outside quoted/comment spans without values."""
     output, i, quote, comment = list(source), 0, None, None
     while i < len(source):
@@ -411,6 +411,14 @@ def mysql_bind_markers(source, modes):
             elif c == quote:
                 if source[i + 1:i + 2] == quote: i += 1
                 else: quote = None
+        elif c == '$' and dollar_quotes:
+            from ..data_studio.mysql_quoting import marker_at, end_of_quote
+            marker = marker_at(source, i)
+            if marker:
+                end = end_of_quote(source, i, marker)
+                # Native preparation owns the unterminated-source diagnostic.
+                i = len(source) if end is None else end
+                continue
         elif c in "'\"`": quote = c
         elif c == '#' or pair == '--' and (i + 2 == len(source) or source[i + 2].isspace()): comment = 'line'
         elif pair == '/*': comment = 'block'; i += 1
@@ -431,9 +439,12 @@ def validate_mysql(client, handle, source, engine, script=False):
         version, mode, previous_lock_timeout = cursor.fetchone()
         cursor.execute('SET SESSION lock_wait_timeout=2')
         modes = set(str(mode).upper().split(','))
+        from ..data_studio.mysql_quoting import available
+        dollar_quotes = engine == 'mysql' and available(version)
         result = analyze(source, engine + '-sql', script=script,
                          settings={'no_backslash_escapes': 'NO_BACKSLASH_ESCAPES' in modes,
-                                   'ansi_quotes': 'ANSI_QUOTES' in modes})
+                                   'ansi_quotes': 'ANSI_QUOTES' in modes,
+                                   'mysql_dollar_quotes': dollar_quotes})
         if not script:
             # One native statement may contain compound/procedural semicolons
             # and mode-specific quoting that the client script framer rejects.
@@ -442,7 +453,7 @@ def validate_mysql(client, handle, source, engine, script=False):
                 result['diagnostics'] = [{'code': 'INVALID_SOURCE', 'message': 'SQL source contains NUL.',
                                           'severity': 'error', 'offset': source.index('\x00'), 'line': 1, 'column': 1}]
         result.update(authority=engine + '-native-prepare', parser_version=str(version),
-                      sql_mode=str(mode), scope='Native PREPARE only; no submitted SQL is executed. Context and permission failures leave grammar unconfirmed.')
+                      sql_mode=str(mode), scope='Native SQL PREPARE only; no submitted SQL is executed. Quoted external-language bodies are not parsed by this SQL check. Context and permission failures leave grammar unconfirmed.')
         if result['diagnostics']: return result
         statements = result['statements'] if script else [{'source': source, 'start': 0, 'end': len(source), 'ordinal': 1}]
         valid = True if statements else None
@@ -453,7 +464,7 @@ def validate_mysql(client, handle, source, engine, script=False):
             preparing=False
             marker = '%s' if engine == 'mysql' else '?'
             try:
-                encoded = mysql_bind_markers(item['source'], modes).encode('utf8')
+                encoded = mysql_bind_markers(item['source'], modes, dollar_quotes=dollar_quotes).encode('utf8')
                 cursor.execute(f'SET @{name} = CONVERT({marker} USING utf8mb4)', (encoded,))
                 preparing=True
                 cursor.execute(f'PREPARE {name} FROM @{name}')

@@ -99,7 +99,13 @@ native server, and other context refusals remain unconfirmed.
 Script framing and parameter markers use the observed ANSI_QUOTES and
 NO_BACKSLASH_ESCAPES modes. Backslashes do not escape backtick or ANSI-quoted
 identifier delimiters. Native line comments end at LF; a bare CR cannot expose
-commented-out SQL to header classification. The retained native qualification
+commented-out SQL to header classification. On the qualified MySQL9.7 parser,
+dollar-quoted routine/library text preserves native numeric/Unicode tags,
+consumed delimiter mismatches, comments, semicolons and placeholder-like text.
+Native formatting preserves these literal bytes, and SQL completion does not
+offer SQL keywords inside an external-language body. This SQL check does not
+validate JavaScript or other opaque external-language code. MariaDB retains its
+own native quoting rules. The retained native qualification
 checks both connector implementations while preserving pending data/savepoints,
 and the workspace qualifier checks authenticated HTTP and visible source-check
 results without executing submitted SQL. Reproduce these scoped checks with::
