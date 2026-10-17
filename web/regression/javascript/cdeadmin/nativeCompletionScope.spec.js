@@ -51,6 +51,22 @@ function suggestions(source, data, previous=data, position=source.length) {
   });
 });
 
+(process.env.CDEADMIN_SQLITE_IDENTIFIER_FIXTURE ? describe : describe.skip)('native SQLite identifier roles',()=> {
+  test('inserts every independently bound SQLite name without executing metadata functions',()=> {
+    const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_SQLITE_IDENTIFIER_FIXTURE,'utf8'));
+    expect(fixture.metadata.context.engine).toBe('sqlite');expect(fixture.cases).toHaveLength(20);
+    for(const example of fixture.cases) {
+      const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
+      const result=suggestions(source,fixture.metadata,fixture.metadata,position);
+      if(!result)throw new Error('No SQLite completion for '+example.marked);
+      expect(result.options.map(({label,apply,type})=>({label,apply,type}))).toEqual(example.expected);
+      expect(result.options.map(option=>source.slice(0,result.from)+option.apply+source.slice(result.to))).toEqual(example.native_inserted_sql);
+    }
+    for(const marked of fixture.negative_cases)
+      expect(suggestions(marked.replace('|',''),fixture.metadata,fixture.metadata,marked.indexOf('|'))).toBeNull();
+  });
+});
+
 const memberShape={kind:'struct',sql:'STRUCT("Field ü" BIGINT)',fields:[{name:'Field ü',type:{kind:'bigint',sql:'BIGINT'}}]};
 const containerMetadata=()=> {
   const data=metadata('duckdb');

@@ -162,3 +162,23 @@ cross-platform completion claim. Persistent SQL history, DDN design/dashboard
 definitions and recipes remain in scope. The additional catalog, language and
 complete management-workflow requirements and current gaps are recorded in
 :doc:`six_engine_completion`.
+
+Native keyword identifiers
+---------------------------
+
+Editor metadata enumerates keywords through the loaded SQLite runtime's public
+keyword API and records its source identity. Constant SELECT binding probes use
+``EXPLAIN`` to distinguish native name, implicit-alias, qualifier, bare-column
+and window-lookahead roles. They never execute user functions or finish pending
+interactive work. Denied/unavailable probes remain explicit incomplete
+observations. Compiled-out keywords are not silently advertised as active syntax.
+
+Completion preserves SQLite's Lemon fallback and ``nm``/``ids`` differences,
+contextual WINDOW/OVER/FILTER token rules, quoted string names in native name
+positions, native CTE/projection aliases and ASCII keyword folding. Keyword-named
+tables or aliases do not accidentally terminate FROM/JOIN discovery. Native
+CURRENT_DATE/TIME/TIMESTAMP expression literals are distinct from quoted columns
+and valid qualifiers. SQLite's blob/string prefixes retain their native rules.
+Insertion and binding qualification uses exact SQLite3.53.0 observations and the
+real CodeMirror completion context; wider computed/procedural scopes retain
+their separate acceptance.

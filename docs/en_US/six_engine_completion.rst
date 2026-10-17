@@ -1068,3 +1068,14 @@ data before atomic archive-name publication. Archive verification does not
 establish successful replay/recovery. Active/continuous collection, retention,
 native replay/PITR, physical continuity and production cutover remain separate
 open requirements.
+
+SQLite native keyword-name completion
+======================================
+
+SQLite completion now observes its loaded runtime's compiled keyword list and
+native identifier roles using nonexecuting constant SELECT plans. Native
+fallback names, implicit-alias restrictions, qualifier restrictions, contextual
+WINDOW/OVER/FILTER handling and quoted string names retain their own semantics.
+Source binding preserves keyword table/alias names through CTEs, projections and
+joins, and uses ASCII keyword folding. Metadata probes do not call overridden
+user functions or settle pending work. Denied observations remain incomplete.

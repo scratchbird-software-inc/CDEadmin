@@ -173,7 +173,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 add(kind.lower(), [database, routine], native_type or kind)
         elif engine == 'sqlite':
             import sqlite3
-            context.update(version=query('version', 'SELECT sqlite_version()')[0][0], default_schema='main')
+            context.update(version=sqlite3.sqlite_version, default_schema='main')
             context['database_config'] = {}
             for option in ('DEFENSIVE', 'DQS_DDL', 'DQS_DML', 'ENABLE_FKEY',
                            'ENABLE_QPSG', 'ENABLE_TRIGGER', 'LEGACY_ALTER_TABLE',
@@ -328,6 +328,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
             # Preserve keyword display separately from identifier resolution.
             context['identifier_keywords']=[row['native_name'] for row in inv['lexical_rules']
                 if row.get('category') in {'unreserved','column_name'}]
+        elif engine=='sqlite':
+            from .sqlite.identifier_keywords import observe
+            native_keywords,native_observations=observe(handle,words)
+            context.update(native_keywords);observations.extend(native_observations)
         context['context_revision'] = hashlib.sha256(json.dumps({'context':context,'resources':symbols,
             'observations':observations,'visible_resource_count':total}, sort_keys=True, default=str).encode()).hexdigest()
         return {'context': context, 'resources': symbols, 'visible_resource_count': total,

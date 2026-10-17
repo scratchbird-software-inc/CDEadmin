@@ -1,5 +1,6 @@
 // Token boundaries for source tools, not a SQL grammar or execution authority.
 export function nativeTokenSpans(source, context, {incomplete=false}={}) {
+  const upper=value=>value.replace(/[a-z]/g,character=>character.toUpperCase());
   const mysql = ['mysql', 'mariadb'].includes(context.engine);
   const modes = new Set((context.sql_mode || '').split(','));
   const words = new Set((context.keywords || '').toUpperCase().split(/\s+/));
@@ -10,7 +11,8 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
     if (/[ \t\r\n\f\v]/.test(source[i])) {i++; continue;}
     const start = i;
     let name;
-    const prefix = source.slice(i).match(/^(?:[eEbBxXnN]|[uU]&|_[A-Za-z0-9_]+)(?=['"])/)?.[0];
+    const prefix = context.engine==='sqlite' ? source.slice(i).match(/^[xX](?=')/)?.[0] :
+      source.slice(i).match(/^(?:[eEbBxXnN]|[uU]&|_[A-Za-z0-9_]+)(?=['"])/)?.[0];
     if (prefix) i += prefix.length;
     if (source.startsWith('--', i) && (!mysql || !source[i + 2] || /\s/.test(source[i + 2])) || mysql && source[i] === '#') {
       while (i < source.length && source[i] !== '\n') i++;
@@ -64,13 +66,30 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
     } else {
       const token = source.slice(i).match(/^(?:[A-Za-z_0-9$\u0080-\u{10ffff}]+|>=|<=|<>|!=|:=|::|\|\||->>|->|=>|[^ \t\n\r\f\v])/u)[0];
       i += token.length;
-      name = /^[A-Za-z_$\u0080-\u{10ffff}][A-Za-z_0-9$\u0080-\u{10ffff}]*$/u.test(token) ? words.has(token.toUpperCase()) && !identifierWords.has(token.toUpperCase()) ? 'Keyword' : 'Identifier' :
+      name = /^[A-Za-z_$\u0080-\u{10ffff}][A-Za-z_0-9$\u0080-\u{10ffff}]*$/u.test(token) ? words.has(upper(token)) && !identifierWords.has(upper(token)) ? 'Keyword' : 'Identifier' :
         /^\p{N}/u.test(token) ? 'Number' : ['.', '(', ')', ';', ','].includes(token) ? token : 'Operator';
       // Both native MySQL-family lexers enter IDENT_START for an
       // immediately adjacent identifier after a qualifying dot.
       if(mysql && name==='Keyword' && result.at(-1)?.name==='.' && result.at(-1).to===start)name='Identifier';
     }
     result.push({name, from: start, to: i});
+  }
+  if(context.engine==='sqlite') {
+    const roles=Object.fromEntries(Object.entries(context.identifier_keyword_roles || {}).map(([role,names])=>[role,new Set(names)]));
+    const visible=result.filter(token=>!/Comment/.test(token.name));
+    const word=token=>token && upper(source.slice(token.from,token.to));
+    const lookahead=token=>token && (['Identifier','QuotedIdentifier','String'].includes(token.name) || roles.lookahead?.has(word(token)));
+    for(const [index,token] of visible.entries()) {
+      if(token.name==='String' && source[token.from]==='\'')token.nativeIdentifierRoles=['nm','ids','qualifier'];
+      if(token.name!=='Keyword')continue;
+      token.nativeIdentifierRoles=Object.entries(roles).filter(([_role,names])=>names.has(word(token))).map(([role])=>role);
+      if(!(context.sqlite_contextual_keywords || []).includes(word(token)))continue;
+      const previous=visible[index-1],next=visible[index+1];
+      const keyword=word(token)==='WINDOW' ? lookahead(next) && word(visible[index+2])==='AS' :
+        word(token)==='OVER' ? previous?.name===')' && (next?.name==='(' || lookahead(next)) : previous?.name===')' && next?.name==='(';
+      if(keyword)token.nativeIdentifierRoles=[];
+      else token.name='Identifier';
+    }
   }
   return result;
 }
@@ -105,7 +124,8 @@ export function nativeSourceStructure(source, context, position) {
     for (let index=0; index<children.length; index++) {
       const first=children[index];
       if (first.children) combine(first);
-      if (['Identifier','QuotedIdentifier'].includes(first.name) && children[index + 1]?.name === '.') {
+      const nativeName=node=>['Identifier','QuotedIdentifier'].includes(node?.name) || node?.nativeIdentifierRoles?.includes('nm');
+      if (nativeName(first) && children[index + 1]?.name === '.') {
         const path=[first];
         while (children[index + 1]?.name === '.') {
           path.push(children[++index]);
@@ -114,7 +134,7 @@ export function nativeSourceStructure(source, context, position) {
           // FROM/WHERE clause as a keyword-named member of that expression.
           const keywordMember=context.engine==='duckdb' && next?.name==='Keyword' &&
             !(children[index].from<position && next.from>=position);
-          if (!['Identifier','QuotedIdentifier'].includes(next?.name) && !keywordMember) break;
+          if (!nativeName(next) && !keywordMember) break;
           path.push(children[++index]);
         }
         grouped.push({name:'CompositeIdentifier', from:first.from, to:path.at(-1).to, children:path});

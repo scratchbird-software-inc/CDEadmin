@@ -2,7 +2,8 @@ import {nativeSourceStructure} from './nativeLexing';
 import {duckdbAccessEntry,duckdbCompletionTarget} from './duckdbNestedTypes';
 
 const key = name => name.replaceAll('.', '\\.');
-const identifier = node => ['Identifier', 'QuotedIdentifier'].includes(node?.name);
+const identifier = (node,role='nm',stringName=false) => ['Identifier', 'QuotedIdentifier'].includes(node?.name) ||
+  (node?.name!=='String' || stringName) && node?.nativeIdentifierRoles?.includes(role);
 
 // Context suggestions use native mode-aware token boundaries. They never claim
 // SQL grammar validity or infer column names from arbitrary expressions.
@@ -12,17 +13,19 @@ export function scopedSQLConfig(config, state, position) {
   const exactCase = ['postgresql', 'firebird'].includes(config.nativeEngine) || config.nativeRelationCaseSensitive;
   const bindingKey = value => exactCase ? value : lower(value);
   const text = node => state.sliceDoc(node.from, node.to);
-  const word = node => text(node).toUpperCase();
+  const word = node => node ? upper(text(node)) : '';
   const structure = nativeSourceStructure(state.doc.toString(), config.nativeLanguageContext, position);
   const children = node => node.children || [];
   const name = node => {
     const value = text(node);
-    if (node.name !== 'QuotedIdentifier') return config.nativeEngine === 'postgresql' ? lower(value) :
+    if (node.name !== 'QuotedIdentifier' && !(node.name==='String' && node.nativeIdentifierRoles?.includes('nm'))) return config.nativeEngine === 'postgresql' ? lower(value) :
       config.nativeEngine === 'firebird' ? upper(value) : value;
     const end = value[0] === '[' ? ']' : value[0];
     return value.slice(1, value.endsWith(end) ? -1 : undefined).replaceAll(end + end, end);
   };
-  const path = node => node.name === 'CompositeIdentifier' ? children(node).filter(child=>identifier(child) || config.nativeEngine==='duckdb' && child.name==='Keyword').map(name) : identifier(node) ? [name(node)] : [];
+  const path = (node,stringName=false,bare=false) => node.name === 'CompositeIdentifier' ?
+    children(node).filter(child=>identifier(child,'nm',true) || config.nativeEngine==='duckdb' && child.name==='Keyword').map(name) :
+    identifier(node,'nm',stringName) && (!bare || node.name!=='Keyword' || node.nativeIdentifierRoles?.includes('bare')) ? [name(node)] : [];
   const quote = value => {
     const delimiter = config.nativeIdentifierQuote ?? config.dialect.spec.identifierQuotes?.[0] ?? '"';
     if (!delimiter) return value;
@@ -67,15 +70,18 @@ export function scopedSQLConfig(config, state, position) {
       if (['WHERE', 'GROUP', 'HAVING', 'ORDER', 'UNION', 'INTERSECT', 'EXCEPT', 'LIMIT', 'OFFSET', 'FETCH', 'FOR', 'RETURNING', 'WINDOW', 'QUALIFY'].includes(word(nodes[index]))) break;
       if (!['FROM', 'JOIN', ','].includes(word(nodes[index]))) continue;
       let at = index + 1;
-      if (word(nodes[at]) === 'LATERAL') at++;
+      if (config.nativeEngine!=='sqlite' && word(nodes[at]) === 'LATERAL') at++;
       const target = nodes[at];
       if (!target) continue;
-      const parts = path(target);
+      const parts = path(target,true);
       const entry = target.name === 'Parens' ? relation('', project(target, depth + 1)) : resolve(parts);
       at++;
-      if (nodes[at] && word(nodes[at]) === 'AS') at++;
-      const alias = identifier(nodes[at]) ? name(nodes[at]) : parts.at(-1);
+      const explicitAlias=nodes[at] && word(nodes[at]) === 'AS';
+      if (explicitAlias) at++;
+      const hasAlias=identifier(nodes[at],explicitAlias ? 'nm' : config.nativeEngine==='sqlite' ? 'ids' : 'nm',true);
+      const alias = hasAlias ? name(nodes[at++]) : parts.at(-1);
       if (alias && entry) bindings.set(bindingKey(alias), entry);
+      index=at-1;
     }
     return bindings;
   };
@@ -107,17 +113,20 @@ export function scopedSQLConfig(config, state, position) {
     };
     const expressionColumn = expression => config.nativeEngine==='duckdb' && expression.length ?
       duckdbAccessEntry(state.sliceDoc(expression[0].from,expression.at(-1).to),config.nativeLanguageContext,nativeColumn,quote) :
-      expression.length===1 ? nativeColumn(path(expression[0])) : undefined;
+      expression.length===1 ? nativeColumn(path(expression[0],false,true)) : undefined;
     for (let group of groups) {
       group = group.filter(node => !['DISTINCT', 'ALL'].includes(word(node)));
       if (!group.length) continue;
       const last = group.at(-1), previous = group.at(-2);
-      const implicitAlias = previous && previous.to < last.from && previous.name !== 'Operator' &&
-        (previous.name !== 'Keyword' || word(previous) === 'END');
-      if (identifier(last) && previous && (word(previous) === 'AS' || implicitAlias)) {
+      const delimiterBoundary=config.nativeEngine==='sqlite' &&
+        (['QuotedIdentifier','String'].includes(last.name) || previous?.name==='QuotedIdentifier');
+      const implicitAlias = previous && (previous.to < last.from || delimiterBoundary) && previous.name !== 'Operator' &&
+        (previous.name !== 'Keyword' || word(previous) === 'END' || previous.nativeIdentifierRoles?.includes('nm'));
+      if (identifier(last,word(previous)==='AS' ? 'nm' : config.nativeEngine==='sqlite' ? 'ids' : 'nm',true) && previous && (word(previous) === 'AS' || implicitAlias)) {
         const expression=group.slice(0,word(previous)==='AS' ? -2 : -1);
         result.push({label:name(last),native:expressionColumn(expression)});
-      } else if (group.length === 1 && path(last).length) result.push({label:path(last).at(-1),native:nativeColumn(path(last))});
+      } else if (group.length === 1 && path(last,false,true).length) result.push({label:path(last).at(-1),native:nativeColumn(path(last))});
+      else if(group.length===1 && last.nativeIdentifierRoles?.includes('nm'))result.push({label:text(last)});
       else if (word(last) === '*') {
         const qualifier = previous && path(previous);
         let entries;
@@ -143,10 +152,10 @@ export function scopedSQLConfig(config, state, position) {
     at++;
     const recursive = nodes[at] && word(nodes[at]) === 'RECURSIVE';
     if (recursive) at++;
-    while (identifier(nodes[at])) {
+    while (identifier(nodes[at],'nm',true)) {
       const cte = nodes[at++], label = name(cte);
       let explicit;
-      if (nodes[at]?.name === 'Parens') explicit = children(nodes[at++]).filter(identifier).map(name);
+      if (nodes[at]?.name === 'Parens') explicit = children(nodes[at++]).filter(node=>identifier(node,'nm',true)).map(name);
       if (!nodes[at] || word(nodes[at++]) !== 'AS') break;
       while (nodes[at] && ['NOT', 'MATERIALIZED'].includes(word(nodes[at]))) at++;
       const body = nodes[at++];
@@ -185,13 +194,14 @@ export function scopedSQLConfig(config, state, position) {
 export function nativeSchemaCompletion(config, context) {
   const {state, pos} = context;
   let node = config.nativeStructure.at, from = pos, to = pos;
-  if (node && /Comment|String/.test(node.name)) return null;
   const before = current => current && config.nativeStructure.before(current);
+  const stringMember=node?.name==='String' && node.nativeIdentifierRoles?.includes('nm') && before(node)?.name==='.';
+  if (node && /Comment|String/.test(node.name) && !stringMember) return null;
   let quoted;
-  if (identifier(node) || node?.name === 'Keyword') {
+  if (identifier(node,'nm',stringMember) || node?.name === 'Keyword') {
     from = node.from;
     to = node.to;
-    quoted = node.name === 'QuotedIdentifier' ? state.sliceDoc(from, from + 1) : undefined;
+    quoted = node.name === 'QuotedIdentifier' || stringMember ? state.sliceDoc(from, from + 1) : undefined;
     node = before(node);
   } else if (node?.name !== '.') {
     if (!context.explicit) return null;
@@ -201,7 +211,7 @@ export function nativeSchemaCompletion(config, context) {
   const duckDot=config.nativeEngine==='duckdb' && node?.name==='.' ? node : null;
   while (!duckDot && node?.name === '.') {
     const parent = before(node);
-    if (!identifier(parent)) return null;
+    if (!identifier(parent,'qualifier',true)) return null;
     parents.unshift(config.nativeName(parent));
     node = before(parent);
   }

@@ -53,6 +53,38 @@ def test_sqlite_symbols_include_attached_identifiers_functions_and_compile_ident
         connection.close()
 
 
+def test_sqlite_keyword_binding_observation_never_executes_overridden_functions_or_pending_work(tmp_path):
+    connection=sqlite3.connect(tmp_path/'native-keywords.sqlite');calls=[]
+    try:
+        connection.execute('CREATE TABLE "key"(key INTEGER,current_date TEXT)')
+        connection.execute('INSERT INTO "key" VALUES(1,\'owned column\')');connection.commit()
+        connection.create_function('current_date',0,lambda:calls.append('current_date') or 'overridden')
+        connection.create_function('sqlite_version',0,lambda:calls.append('sqlite_version') or 'overridden')
+        connection.execute('BEGIN');connection.execute('INSERT INTO "key" VALUES(2,\'pending\')')
+        observed=metadata(connection,'sqlite');context=observed['context'];roles=context['identifier_keyword_roles']
+        assert context['version']==sqlite3.sqlite_version and context['keyword_observation_complete'] and not calls
+        assert 'KEY' in roles['nm'] and 'LEFT' in roles['nm'] and 'LEFT' not in roles['ids']
+        assert 'INDEXED' in roles['nm'] and 'INDEXED' not in roles['ids']
+        assert 'CURRENT_DATE' in roles['nm'] and 'CURRENT_DATE' not in roles['bare']
+        assert 'CURRENT_DATE' not in roles['qualifier']
+        assert 'SELECT' not in roles['nm'] and 'FILTER' not in roles['lookahead']
+        assert connection.in_transaction
+        with sqlite3.connect(tmp_path/'native-keywords.sqlite') as observer:assert observer.execute('SELECT count(*) FROM "key"').fetchone()[0]==1
+    finally:connection.rollback();connection.close()
+
+
+def test_sqlite_denied_keyword_probes_remain_incomplete_and_preserve_the_authorizer():
+    from pgadmin.cdeadmin.providers.sqlite.identifier_keywords import observe
+    connection=sqlite3.connect(':memory:')
+    try:
+        def deny(action,*_args):return sqlite3.SQLITE_DENY if action==sqlite3.SQLITE_SELECT else sqlite3.SQLITE_OK
+        connection.set_authorizer(deny);context,observations=observe(connection,['KEY','SELECT'])
+        assert context['keyword_observation_complete'] is False and context['identifier_keyword_roles']['nm']==[]
+        assert next(row for row in observations if row['section']=='identifier-keyword-bindings')['unavailable']
+        with pytest.raises(sqlite3.DatabaseError):connection.execute('SELECT 1')
+    finally:connection.close()
+
+
 def test_sqlite_invalid_view_does_not_hide_other_symbols_or_finish_pending_work(tmp_path):
     path=tmp_path/'editor.sqlite'
     connection=sqlite3.connect(path)
