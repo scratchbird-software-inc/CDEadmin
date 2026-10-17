@@ -1,4 +1,5 @@
 """Native editor ownership, exact identifiers and nonexecuting preparation."""
+from contextlib import closing
 from types import SimpleNamespace
 from unittest.mock import Mock
 import sqlite3
@@ -50,6 +51,51 @@ def test_sqlite_symbols_include_attached_identifiers_functions_and_compile_ident
         assert connection.execute('SELECT count(*) FROM "odd.table"').fetchone() == (0,)
     finally:
         connection.close()
+
+
+def test_sqlite_invalid_view_does_not_hide_other_symbols_or_finish_pending_work(tmp_path):
+    path=tmp_path/'editor.sqlite'
+    connection=sqlite3.connect(path)
+    try:
+        connection.execute('CREATE TABLE owned(value INTEGER)')
+        connection.execute('CREATE VIEW "broken.😀" AS SELECT value FROM missing_relation')
+        connection.execute('INSERT INTO owned VALUES(1)');connection.commit()
+        connection.execute('BEGIN');connection.execute('INSERT INTO owned VALUES(2)')
+        first=metadata(connection,'sqlite')
+        assert any(row['display_path']==['main','owned','value'] for row in first['resources'])
+        assert any(row['resource_kind']=='view' and row['display_name']=='broken.😀' for row in first['resources'])
+        failed=next(item for item in first['observations'] if item['section']=='columns:main:broken.😀')
+        assert failed['available'] is False and failed['error_code']==sqlite3.SQLITE_ERROR
+        assert any(row['resource_kind']=='function' for row in first['resources'])
+        assert connection.in_transaction
+        with closing(sqlite3.connect(path)) as observer:assert observer.execute('SELECT count(*) FROM owned').fetchone()==(1,)
+        connection.execute('DROP VIEW "broken.😀"')
+        connection.execute('CREATE VIEW "broken.😀" AS SELECT value FROM owned')
+        repaired=metadata(connection,'sqlite')
+        assert repaired['context']['context_revision']!=first['context']['context_revision']
+        assert any(row['display_path']==['main','broken.😀','value'] for row in repaired['resources'])
+        assert connection.in_transaction
+        connection.rollback()
+        assert metadata(connection,'sqlite')['context']['context_revision']==first['context']['context_revision']
+    finally:connection.close()
+
+
+def test_sqlite_denied_view_metadata_retains_native_authorizer():
+    connection=sqlite3.connect(':memory:')
+    try:
+        connection.execute('CREATE TABLE owned(value INTEGER)')
+        connection.execute('CREATE VIEW protected_view AS SELECT value FROM owned')
+        def authorize(action,name,_column,_database,_origin):
+            denied=(action==sqlite3.SQLITE_READ and name=='owned' or
+                action==sqlite3.SQLITE_PRAGMA and name=='table_xinfo' and _column=='protected_view')
+            return sqlite3.SQLITE_DENY if denied else sqlite3.SQLITE_OK
+        connection.set_authorizer(authorize)
+        result=metadata(connection,'sqlite')
+        assert any(row['display_path']==['main','owned','value'] for row in result['resources'])
+        failed=next(item for item in result['observations'] if item['section']=='columns:main:protected_view')
+        assert failed['available'] is False and failed['error_code']==sqlite3.SQLITE_AUTH
+        with pytest.raises(sqlite3.DatabaseError):connection.execute('SELECT value FROM owned')
+    finally:connection.close()
 
 
 def test_duckdb_metadata_uses_original_session_and_retains_pending_work(tmp_path):

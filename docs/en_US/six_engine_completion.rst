@@ -758,6 +758,14 @@ must provide complete native columns and child facts. Native final bindings and
 metadata are verified before commit, with independent rediscovery afterward.
 Existing INSTEAD OF triggers retain their definitions, and repeated requests
 return their durable receipt without replaying the repair.
+
+Editor metadata also retains other native symbols when a SQLite view's column
+binding is invalid or denied, with an explicit unavailable observation. Its
+retained transaction and native authorizer remain owned by the user session.
+Native editor context revisions include the observed symbols and section
+availability, so repairs, rollback and observed catalog changes invalidate the
+previous completion context.
+
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

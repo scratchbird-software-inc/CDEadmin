@@ -86,7 +86,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
     cursor = handle if engine == 'duckdb' else (
         transaction.cursor() if engine == 'firebird' else handle.cursor())
 
-    def query(name, sql):
+    def query(name, sql, *, unavailable_view=False):
         try:
             cursor.execute(sql)
             rows = cursor.fetchmany(MAX_SYMBOLS + 1)
@@ -95,6 +95,13 @@ def metadata(handle, engine, transaction=None, dialect=None):
             return rows[:MAX_SYMBOLS]
         except Exception as error:
             code = getattr(error, 'errno', None)
+            if engine=='sqlite' and unavailable_view:
+                import sqlite3
+                native_code=getattr(error,'sqlite_errorcode',None)
+                if isinstance(error,sqlite3.Error) and type(native_code) is int and native_code & 255 in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}:
+                    observations.append({'section':name,'available':False,'error_code':native_code,
+                        'error_name':getattr(error,'sqlite_errorname',None),'reason':'native-view-binding'})
+                    return []
             # Only native permission failures are incomplete metadata. A broken
             # transport/transaction or invalid query is never an empty section.
             if (code not in {1044, 1045, 1142, 1143, 1227} and
@@ -141,7 +148,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 for name, kind in query('relations:' + schema, f'SELECT name,type FROM {quoted}.sqlite_schema WHERE type IN (\'table\',\'view\') ORDER BY name LIMIT 25001'):
                     add(kind, [schema, name])
                     table = '"' + name.replace('"', '""') + '"'
-                    columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})')
+                    columns = query('columns:' + schema + ':' + name, f'PRAGMA {quoted}.table_xinfo({table})',unavailable_view=kind=='view')
                     for column in columns:
                         # Virtual-table hidden fields are excluded from star;
                         # generated columns (flags 2/3) remain in the projection.
@@ -220,10 +227,11 @@ def metadata(handle, engine, transaction=None, dialect=None):
         context['keywords'] = ' '.join(words)
         context['reserved_words'] = [row['native_name'] for row in inv['lexical_rules']
                                      if row.get('reserved') or row.get('non_reserved') is False]
-        context['context_revision'] = hashlib.sha256(json.dumps(context, sort_keys=True, default=str).encode()).hexdigest()
+        context['context_revision'] = hashlib.sha256(json.dumps({'context':context,'resources':symbols,
+            'observations':observations,'visible_resource_count':total}, sort_keys=True, default=str).encode()).hexdigest()
         return {'context': context, 'resources': symbols, 'visible_resource_count': total,
                 'observations': observations, 'truncated': total > len(symbols) or any(row.get('truncated') for row in observations),
-                'coverage': 'Native visible metadata on the retained session; denied or truncated sections are incomplete.'}
+                'coverage': 'Native visible metadata on the retained session; denied, unavailable or truncated sections are incomplete.'}
     finally:
         if cursor is not handle:
             cursor.close()
