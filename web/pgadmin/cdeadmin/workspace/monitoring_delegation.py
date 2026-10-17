@@ -215,7 +215,9 @@ class MonitoringGrant:
                 SimpleNamespace(acquire_secret=self._acquire),
                 copy.deepcopy(self._route),
                 scope='database' if policy.target_id is not None else 'server',
-                metadata_interval_seconds=policy.metadata_interval_seconds)
+                metadata_interval_seconds=policy.metadata_interval_seconds,
+                **({'native_metric_sources':policy.native_metric_sources}
+                   if self.engine=='postgresql' and policy.native_metric_sources else {}))
             return _GrantedSource(self, source)
 
 

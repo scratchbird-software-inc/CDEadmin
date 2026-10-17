@@ -957,3 +957,28 @@ failures cannot abort the user's transaction. Session-local type resolution
 that the companion cannot observe remains explicitly unavailable.
 Indexed tuple/list expression completion and wider procedural scopes remain
 separate obligations.
+
+PostgreSQL exact dialect and statistics contracts
+=================================================
+
+The PostgreSQL 18.3 activation descriptor now includes native SQL/PLpgSQL grammar,
+keyword, diagnostic, type, function, operator and setting inventories. Its task
+acceptance covers the 37 provider-generated SQL administration operations, with
+native execution receipts bound to the exact compiler sources. Preserved HTTP
+forms and full product/platform acceptance retain their separate obligations.
+
+An independent reconciliation of the release's core statistics/diagnostic view
+definitions with the running native catalog identifies 52 view families and 604
+columns. Collector policy can select these additional families. Collection uses
+an independently owned read-only attachment, per-family savepoints, native
+privilege checks, a 200-row limit per source and a shared 512 KiB row-byte budget.
+Denial, native visibility, scope and truncation are explicit. Query/credential
+text and string setting values are redacted; native numeric values retain their
+exact textual representation. Collector-session views describe that collector's
+session rather than the user's editor connection.
+
+The dashboard's additional-statistics display uses the DDN viewer with ten rows
+per page. It retains all native columns and exposes coverage and permission
+results. Family selection belongs to collector policy; viewing does not start
+collection or alter policy. Optional extension views require their own inventory
+and acceptance. ScratchBird history qualification remains owner-deferred.

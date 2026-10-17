@@ -31,8 +31,14 @@ class MonitoringPolicy:
     max_backup_state_seconds: int = 0
     require_wire_encryption: bool = False
     expected_encryption_state: int | None = None
+    native_metric_sources: tuple[str,...] = ()
 
     def __post_init__(self):
+        sources=self.native_metric_sources
+        if (not isinstance(sources,(list,tuple)) or len(sources)>128 or
+            any(not isinstance(value,str) or not value or len(value)>63 for value in sources) or len(set(sources))!=len(sources)):
+            raise ValueError('Invalid native metric source selection')
+        object.__setattr__(self,'native_metric_sources',tuple(sources))
         if type(self.owner_id) is not int or self.owner_id <= 0:
             raise ValueError('Monitoring policy requires an owner')
         if not isinstance(self.endpoint_id, str) or not self.endpoint_id:

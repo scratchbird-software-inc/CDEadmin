@@ -548,7 +548,8 @@ def test_provider_manifests_record_activation_without_promoting_experiments():
             activated.append(path.relative_to(WEB).as_posix())
         elif document['identity']['profile_id'] == 'postgresql-native':
             assert document['support_state'] == 'implemented'
-            assert gate == 'pending_exact_dialect_metrics_and_full_native_form_qualification'
+            assert gate == 'pending_full_native_form_and_platform_qualification'
+            assert document['provenance']['exact_engine_contracts']['state']=='qualified'
             incomplete.append(path.relative_to(WEB).as_posix())
         elif document['identity']['profile_id'] == 'firebird-embedded':
             assert document['support_state'] == 'experimental'

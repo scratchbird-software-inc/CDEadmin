@@ -14,7 +14,7 @@ class PostgreSQLMonitoringHost(MonitoringHost):
     engine = 'postgresql'
     policy_fields = frozenset({'interval_seconds', 'retain_samples', 'lease_seconds',
                               'heartbeat_enabled', 'heartbeat_timeout_seconds',
-                              'metadata_interval_seconds'})
+                              'metadata_interval_seconds','native_metric_sources'})
 
     def __init__(self, app, shared_host):
         super().__init__(app, shared_host.endpoints)
@@ -223,6 +223,9 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         database_oid(target)
         if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
             raise ValueError('Unsupported PostgreSQL monitoring fields')
+        if 'native_metric_sources' in body:
+            from ..providers.postgresql.metrics import select_sources
+            select_sources(body['native_metric_sources'])
         key = owner, sid, target
         with self._lock:
             if key not in self._grants:
@@ -357,6 +360,16 @@ def init_app(app, shared_host):
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
     api = Blueprint('cdeadmin_postgresql_monitoring', __name__)
+
+    @api.route('/cdeadmin/api/monitoring/postgresql/sources',methods=['GET'])
+    @pga_login_required
+    def sources():
+        if not current_user.is_authenticated:
+            return jsonify(success=0,errormsg='Native metric sources require authentication'),403
+        from ..providers.postgresql.metrics import source_catalog
+        response=jsonify(success=1,data=source_catalog())
+        response.headers['Cache-Control']='no-store'
+        return response
 
     @api.route('/cdeadmin/api/monitoring/postgresql/<int:sid>/history', methods=['GET'])
     @pga_login_required

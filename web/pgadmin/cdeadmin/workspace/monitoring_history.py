@@ -195,6 +195,7 @@ class MonitoringHistory:
         provenance = {'metadata_revision': hashlib.sha256(encoded(metadata).encode()).hexdigest(),
                       'collection_interval_seconds': policy.interval_seconds,
                       'metadata_interval_seconds': policy.metadata_interval_seconds,
+                      'native_metric_sources': list(policy.native_metric_sources),
                       'schema_version': 1, 'engine': engine, 'owner_id': policy.owner_id,
                       'endpoint_id': policy.endpoint_id, 'target_id': policy.target_id,
                       'namespace': self.namespace, 'policy_revision': revision,

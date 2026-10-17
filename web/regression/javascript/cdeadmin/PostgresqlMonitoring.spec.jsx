@@ -4,7 +4,7 @@ import getApiInstance from 'sources/api_instance';
 import {withTheme} from '../fake_theme';
 
 jest.mock('sources/api_instance');
-jest.mock('sources/url_for', () => jest.fn(() => '/monitoring/postgresql/7'));
+jest.mock('sources/url_for', () => jest.fn(name => name.endsWith('.sources') ? '/monitoring/postgresql/sources' : '/monitoring/postgresql/7'));
 jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: (props) => <div data-testid="viewer" data-read-only={props.presentation} />,
 }));
@@ -84,7 +84,7 @@ describe('PostgreSQL monitoring controls', () => {
     api.post.mockRejectedValue({response: {data: {errormsg: 'Refused'}}});
     const {unmount} = render(<Component serverId={7} policyMode />);
     await waitFor(() => expect(screen.getByRole('button', {name: 'Start collection'})).toBeEnabled());
-    fireEvent.mouseDown(screen.getByRole('combobox'));
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Monitoring credentials'}));
     fireEvent.click(await screen.findByRole('option', {name: 'Dedicated monitoring account'}));
     fireEvent.change(screen.getByLabelText('Monitoring username'), {target: {value: 'collector'}});
     fireEvent.change(screen.getByLabelText('Monitoring password'), {target: {value: 'private-test'}});
@@ -92,6 +92,30 @@ describe('PostgreSQL monitoring controls', () => {
     await screen.findByText('Refused');
     expect(screen.getByLabelText('Monitoring password')).toHaveValue('');
     expect(api.post.mock.calls[0][1].credentials.username).toBe('collector');
+    unmount();
+  });
+  it('selects native statistics only through collector policy and preserves the selection in the request', async () => {
+    api.get.mockImplementation(async url => ({data:{data:url.endsWith('/sources') ? {
+      state:'available',sources:[{source_id:'pg_stat_wal',scope:'server'},{source_id:'pg_stat_io',scope:'server'}],
+    } : {state:'disabled',samples:[]}}}));
+    const {unmount}=render(<Component serverId={7} policyMode />);
+    fireEvent.mouseDown(await screen.findByRole('combobox',{name:'Additional native statistics families'}));
+    fireEvent.click(await screen.findByRole('option',{name:'pg_stat_wal · server'}));
+    fireEvent.keyDown(screen.getByRole('listbox'),{key:'Escape'});
+    fireEvent.click(screen.getByRole('button',{name:'Start collection'}));
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(api.post.mock.calls[0][1].native_metric_sources).toEqual(['pg_stat_wal']);
+    unmount();
+  });
+  it('opens collected native statistics in the read-only DDN viewer without fetching policy choices', async () => {
+    const {unmount}=render(<Component serverId={7} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'Display'}));
+    fireEvent.click(await screen.findByRole('option',{name:'Additional native statistics'}));
+    expect(screen.getByRole('combobox',{name:'Native statistics family'})).toBeInTheDocument();
+    expect(screen.getByTestId('viewer')).toHaveAttribute('data-read-only','true');
+    expect(api.get.mock.calls.some(([url]) => url.endsWith('/sources'))).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
     unmount();
   });
 });

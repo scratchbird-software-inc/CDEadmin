@@ -328,6 +328,12 @@ class PostgreSQLProvider:
         )
 
     @staticmethod
+    def engine_contract_descriptor():
+        from ...engine_contracts import contract_descriptor
+        from .contracts import PROFILE,dialect_task_ids
+        return contract_descriptor(PROFILE,__name__,dialect_task_ids())
+
+    @staticmethod
     def visual_admin_catalog(catalog):
         """Expose only operations routed to the preserved PostgreSQL UI."""
         return adapt_catalog(catalog)

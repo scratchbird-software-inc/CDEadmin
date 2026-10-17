@@ -6,6 +6,8 @@ import secrets
 import hashlib
 import subprocess
 import time
+import os
+import socket
 
 
 @contextmanager
@@ -63,3 +65,56 @@ def server(output, *, server_options=(), initdb_options=()):
         (output / 'fixture.json').write_text(json.dumps(proof, indent=2) + '\n')
         if started and not proof['owned_server_stopped']:
             raise RuntimeError('Owned PostgreSQL server cleanup is unconfirmed')
+
+
+@contextmanager
+def local_server(output,binary_path):
+    """Owned native host fixture for optional, exactly built server modules."""
+    import psycopg
+    import psutil
+    output=Path(output).resolve();output.mkdir(parents=True,exist_ok=False,mode=0o700)
+    binary_path=Path(binary_path).resolve();suffix='.exe' if os.name=='nt' else ''
+    binaries={name:binary_path/(name+suffix) for name in ('postgres','initdb','pg_ctl')}
+    if any(not path.is_file() for path in binaries.values()):raise ValueError('Select a complete native PostgreSQL binary directory')
+    proof={'owned_server_stopped':False,'native_binary_sha256':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in binaries.items()}}
+    password=secrets.token_urlsafe(32);password_file=output/'initial-password';process=None;created=None
+    descriptor=os.open(password_file,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+    with os.fdopen(descriptor,'w') as stream:stream.write(password+'\n')
+    data=output/'database'
+    try:
+        with (output/'initdb.log').open('wb') as log:
+            subprocess.run([str(binaries['initdb']),'-D',str(data),'--username=postgres','--encoding=UTF8','--locale=C',
+                '--auth-local=reject','--auth-host=scram-sha-256','--pwfile='+str(password_file),'--no-instructions'],
+                stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
+        password_file.unlink()
+        while True:
+            with socket.socket() as probe:probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
+            if port not in {5432,5434,5435,5436}:break
+        with (output/'server.log').open('wb') as log:
+            process=subprocess.Popen([str(binaries['postgres']),'-D',str(data),'-h','127.0.0.1','-p',str(port),'-k','',
+                '-c','max_connections=30'],stdout=log,stderr=subprocess.STDOUT)
+        created=psutil.Process(process.pid).create_time()
+        route={'host':'127.0.0.1','port':port,'user':'postgres','database':'postgres','connection_params':{'sslmode':'disable'}}
+        deadline=time.monotonic()+45
+        while True:
+            if process.poll() is not None:raise RuntimeError('Owned native PostgreSQL process stopped during startup')
+            try:
+                with psycopg.connect(host=route['host'],port=port,user='postgres',dbname='postgres',password=password,autocommit=True,connect_timeout=2) as connection:
+                    if str(connection.execute('SHOW server_version_num').fetchone()[0])!='180003':raise RuntimeError('Native PostgreSQL18.3 version mismatch')
+                break
+            except psycopg.OperationalError:
+                if time.monotonic()>deadline:raise RuntimeError('Owned native PostgreSQL startup deadline') from None
+                time.sleep(.2)
+        proof.update(version='18.3',owned_pid=process.pid,owned_create_time=created)
+        yield route,password,proof
+    finally:
+        if password_file.exists():password_file.unlink()
+        if process is not None:
+            if process.poll() is None:
+                if psutil.Process(process.pid).create_time()!=created:raise RuntimeError('Owned native PostgreSQL process identity changed')
+                with (output/'stop.log').open('wb') as log:
+                    stopped=subprocess.run([str(binaries['pg_ctl']),'-D',str(data),'stop','-m','fast','-w','-t','30'],stdout=log,stderr=subprocess.STDOUT,timeout=45)
+                process.wait(timeout=15);proof['owned_server_stopped']=stopped.returncode==0
+            else:proof['owned_server_stopped']=True
+        (output/'fixture.json').write_text(json.dumps(proof,indent=2)+'\n')
+        if process is not None and not proof['owned_server_stopped']:raise RuntimeError('Owned native PostgreSQL shutdown is unconfirmed')
