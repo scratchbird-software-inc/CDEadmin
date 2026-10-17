@@ -148,9 +148,9 @@ catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are
 separate from broader product, browser and platform acceptance.
 
-Persistent-history implementation is included, not deferred. Native acceptance
-remains open: the October 16 rebuilt ScratchBird runtime still fails its durable
-agent catalog seed with ``SECURITY.CONTEXT.EXPIRED`` / ``CATALOG_MUTATE`` before
+Persistent-history integration is wired. The owner correction of October 16
+defers ScratchBird history testing until explicitly resumed. The earlier native
+startup attempt failed its durable agent catalog seed with ``SECURITY.CONTEXT.EXPIRED`` / ``CATALOG_MUTATE`` before
 archive SQL. No fallback database or security bypass is used. Windows/macOS
 evidence remains with the platform teams and must match the final source before
 cross-platform completion is claimed. Signing/release approvals remain separate.

@@ -36,7 +36,7 @@ export function nativeSQLConfig(metadata) {
     const path = item.display_path;
     if (!Array.isArray(path) || !path.length || path.some(name => typeof name !== 'string' || !name)) continue;
     const kind = item.resource_kind;
-    const entry = ensure(path, kind === 'column' ? 'property' :
+    const entry = ensure(path, ['column','field'].includes(kind) ? 'property' :
       ['function', 'procedure', 'package', 'package body'].includes(kind) ? 'function' :
         ['table', 'view', 'type', 'domain', 'collation'].includes(kind) ? 'type' : 'namespace', item.detail);
     if (item.hidden_from_star) entry.self.nativeHiddenFromStar = true;

@@ -138,6 +138,50 @@ def test_duckdb_full_search_path_and_extension_identity_invalidate_native_contex
         assert metadata(connection, 'duckdb')['context']['context_revision'] == first['context']['context_revision']
 
 
+def test_duckdb_nested_members_follow_native_type_parser_and_bind_without_internal_union_tag():
+    import duckdb
+    with duckdb.connect() as connection:
+        connection.execute('CREATE TABLE nested (info STRUCT("outer ü" STRUCT("inner.dot" BIGINT), items INTEGER[]), choice UNION(num BIGINT, "text ü" VARCHAR))')
+        connection.execute('BEGIN');connection.execute("INSERT INTO nested VALUES (NULL,union_value(num:=42))")
+        result=metadata(connection,'duckdb')
+        fields={tuple(row['display_path'][3:]):row for row in result['resources'] if row['resource_kind']=='field' and row['display_path'][2]=='nested'}
+        assert set(fields)=={('info','outer ü'),('info','outer ü','inner.dot'),('info','items'),('choice','num'),('choice','text ü')}
+        for path,item in fields.items():
+            expression='.'.join('"'+part.replace('"','""')+'"' for part in ('n',*path))
+            native=connection.execute('SELECT '+expression+' FROM nested n LIMIT 0').description
+            assert str(native[0][1])==item['detail']
+        assert connection.execute('SELECT count(*) FROM nested').fetchone()[0]==1
+        connection.execute('ROLLBACK')
+        assert connection.execute('SELECT count(*) FROM nested').fetchone()[0]==0
+
+
+def test_duckdb_unnamed_tuple_binding_is_explicitly_partial_without_aborting_pending_work():
+    import duckdb
+    with duckdb.connect() as connection:
+        connection.execute('CREATE VIEW tuples AS SELECT row(1,2) AS positional')
+        connection.execute('CREATE TABLE owned(value INTEGER)');connection.execute('INSERT INTO owned VALUES(1)')
+        connection.execute('BEGIN');connection.execute('INSERT INTO owned VALUES(2)')
+        result=metadata(connection,'duckdb')
+        assert any(row['resource_kind']=='column' and row['display_name']=='positional' for row in result['resources'])
+        assert any(item.get('reason')=='native-type-binding' and item['available'] is False for item in result['observations'])
+        assert not any(row['resource_kind']=='field' and row['display_path'][2]=='tuples' for row in result['resources'])
+        assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==2
+        connection.execute('ROLLBACK')
+        assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==1
+
+
+def test_duckdb_type_parser_resource_failure_is_not_hidden_as_an_unavailable_member(monkeypatch):
+    import duckdb
+    with duckdb.connect() as connection:
+        connection.execute('CREATE TABLE owned(value STRUCT(field INTEGER))')
+        connection.execute('BEGIN');connection.execute('INSERT INTO owned VALUES(NULL)')
+        def exhausted(*_args,**_kw):raise duckdb.OutOfMemoryException('owned resource failure')
+        monkeypatch.setattr(duckdb,'sqltype',exhausted)
+        with pytest.raises(duckdb.OutOfMemoryException):metadata(connection,'duckdb')
+        assert connection.execute('SELECT count(*) FROM owned').fetchone()[0]==1
+        connection.execute('ROLLBACK')
+
+
 def test_sqlite_native_quoting_flags_invalidate_context_without_finishing_pending_work(tmp_path):
     path = tmp_path / 'quoting.sqlite'
     with closing(sqlite3.connect(path)) as connection:

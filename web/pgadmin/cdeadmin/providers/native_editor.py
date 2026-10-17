@@ -82,6 +82,7 @@ def inventory(engine):
 
 def metadata(handle, engine, transaction=None, dialect=None):
     symbols, observations, total, size = [], [], 0, 0
+    type_parser = None
     context = {'engine': engine}
     cursor = handle if engine == 'duckdb' else (
         transaction.cursor() if engine == 'firebird' else handle.cursor())
@@ -195,12 +196,40 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 add(kind, [database, schema, name])
             rowid_owners = {(database, schema, name) for database, schema, name, kind in relations
                             if kind == 'table' and storage.get(database) == 'duckdb'}
-            for database, schema, table, name, data_type in query('columns', 'SELECT database_name,schema_name,table_name,column_name,data_type FROM duckdb_columns() ORDER BY database_name,schema_name,table_name,column_index LIMIT 25001'):
+            nested_fields = 0
+            native_columns=query('columns', 'SELECT database_name,schema_name,table_name,column_name,data_type FROM duckdb_columns() ORDER BY database_name,schema_name,table_name,column_index LIMIT 25001')
+            columns_truncated=observations[-1]['truncated']
+            for database, schema, table, name, data_type in native_columns:
                 add('column', [database, schema, table, name], data_type)
+                if str(data_type).lstrip().upper().startswith(('STRUCT(', 'UNION(')):
+                    import duckdb
+                    try:
+                        # A failed DuckDB type-parser API call can abort its
+                        # connection's transaction. Catalog facts remain on
+                        # the retained session; parsing owns this companion.
+                        if type_parser is None:type_parser=handle.cursor()
+                        pending=[([database,schema,table,name],duckdb.sqltype(data_type,connection=type_parser))]
+                        while pending:
+                            parent,native_type=pending.pop()
+                            if native_type.id not in {'struct','union'}:continue
+                            for field,field_type in native_type.children:
+                                # Native UNION has an internal unnamed tag;
+                                # it is not a user-visible dot member.
+                                if not field:continue
+                                if nested_fields>=MAX_SYMBOLS:
+                                    observations.append({'section':'nested-fields','available':True,'truncated':True})
+                                    pending.clear();break
+                                field_path=[*parent,field]
+                                add('field',field_path,str(field_type));nested_fields+=1
+                                if field_type.id in {'struct','union'}:pending.append((field_path,field_type))
+                    except (duckdb.InvalidInputException,duckdb.ParserException,duckdb.CatalogException,duckdb.BinderException):
+                        if type_parser is not None:type_parser.close();type_parser=None
+                        observations.append({'section':'nested-fields:'+database+':'+schema+':'+table+':'+name,
+                            'available':False,'reason':'native-type-binding'})
                 if str(name).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) == 'rowid':
                     rowid_owners.discard((database, schema, table))
             # Do not invent rowids on foreign extension storage or views.
-            if not observations[-1]['truncated']:
+            if not columns_truncated:
                 for owner in sorted(rowid_owners):
                     add('column', [*owner, 'rowid'], 'BIGINT; native row identifier, not a durable application key',
                         hidden_from_star=True)
@@ -254,6 +283,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 'observations': observations, 'truncated': total > len(symbols) or any(row.get('truncated') for row in observations),
                 'coverage': 'Native visible metadata on the retained session; denied, unavailable or truncated sections are incomplete.'}
     finally:
+        if type_parser is not None:type_parser.close()
         if cursor is not handle:
             cursor.close()
 

@@ -881,3 +881,25 @@ records reviewed archive matching, the selected target and recovered heap row
 counts. Duplicate starts observe the durable job and do not replay recovery.
 Production cutover, continuous archive collection/retention and remote execution
 host integration remain separate obligations.
+
+DuckDB native nested editor members
+====================================
+
+Editor metadata uses a separately owned native type-parser connection to expose
+named STRUCT
+and UNION members, including recursively nested structures and exact quoted
+field names. UNION's internal unnamed tag is not a dot member. Named aliases
+resolve through their native child paths. Direct CTE/derived-table projections,
+renamed columns, explicit CTE column lists and STRUCT star projections retain
+known native member types; computed expressions do not receive guessed types.
+UNION members are not fabricated as a STRUCT star projection.
+
+Native type binding that cannot represent an observed type, including unnamed
+positional tuples, produces an explicit unavailable member observation while
+retaining other symbols and pending interactive work.
+The companion shares the native database installation and committed type
+catalogs; it does not replace the retained catalog/session observation. Parsing
+failures cannot abort the user's transaction. Session-local type resolution
+that the companion cannot observe remains explicitly unavailable.
+Indexed tuple/list expression completion and wider procedural scopes remain
+separate obligations.

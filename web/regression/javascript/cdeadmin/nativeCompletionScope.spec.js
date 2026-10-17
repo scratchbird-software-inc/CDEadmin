@@ -14,6 +14,40 @@ function suggestions(source, data, previous=data, position=source.length) {
   return nativeSchemaCompletion(observed.config,observed.context);
 }
 
+test.each(['SELECT a.info. FROM one a','SELECT a.info."outer ü". FROM one a'])('DuckDB native nested members resolve alias paths in %s', source => {
+  const data=metadata('duckdb');
+  data.resources.push({resource_kind:'column',display_path:['owned','main','one','info'],detail:'STRUCT'},
+    {resource_kind:'field',display_path:['owned','main','one','info','outer ü'],detail:'STRUCT'},
+    {resource_kind:'field',display_path:['owned','main','one','info','outer ü','inner.dot'],detail:'BIGINT'});
+  const position=source.indexOf(' FROM');
+  const result=suggestions(source,data,data,position);
+  const label=source.includes('outer ü') ? 'inner.dot' : 'outer ü';
+  expect(result.options).toEqual([expect.objectContaining({label,apply:'"'+label+'"',type:'property'})]);
+});
+
+test.each([
+  'WITH q AS (SELECT * FROM one) SELECT q.info.| FROM q',
+  'WITH q AS (SELECT o.info AS renamed FROM one o) SELECT q.renamed.| FROM q',
+  'WITH q(renamed) AS (SELECT info FROM one) SELECT q.renamed.| FROM q',
+  'SELECT q.renamed.| FROM (SELECT o.info AS renamed FROM one o) q',
+])('DuckDB nested native fields survive direct CTE/derived projection in %s', marked => {
+  const data=metadata('duckdb');
+  data.resources.push({resource_kind:'column',display_path:['owned','main','one','info'],detail:'STRUCT'},
+    {resource_kind:'field',display_path:['owned','main','one','info','Field ü'],detail:'BIGINT'});
+  const result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+  expect(result.options).toEqual([expect.objectContaining({label:'Field ü',apply:'"Field ü"',type:'property',detail:'BIGINT'})]);
+});
+
+test('DuckDB native STRUCT star retains nested member types in a CTE', () => {
+  const data=metadata('duckdb');
+  data.resources.push({resource_kind:'column',display_path:['owned','main','one','info'],detail:'STRUCT("outer ü" STRUCT("inner.dot" BIGINT))'},
+    {resource_kind:'field',display_path:['owned','main','one','info','outer ü'],detail:'STRUCT("inner.dot" BIGINT)'},
+    {resource_kind:'field',display_path:['owned','main','one','info','outer ü','inner.dot'],detail:'BIGINT'});
+  const marked='WITH q AS (SELECT info.* FROM one) SELECT q."outer ü".| FROM q';
+  const result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+  expect(result.options).toEqual([expect.objectContaining({label:'inner.dot',apply:'"inner.dot"',detail:'BIGINT'})]);
+});
+
 test.each(['mysql','mariadb'])('%s completion reparses newly observed ANSI_QUOTES before CTE/alias resolution', engine => {
   const source='WITH c AS (SELECT t.* FROM "one" t) SELECT * FROM c WHERE c.';
   const result=suggestions(source,metadata(engine,{sql_mode:'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'}),metadata(engine));

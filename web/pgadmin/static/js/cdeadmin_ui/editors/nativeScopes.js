@@ -28,8 +28,13 @@ export function scopedSQLConfig(config, state, position) {
     return delimiter + value.replaceAll(delimiter, delimiter + delimiter) + delimiter;
   };
   const schema = {...config.schema};
-  const lookup = (branch, part, exact=false) => branch?.[key(part)] || (!exact && Object.entries(branch || {}).filter(([candidate]) =>
-    lower(candidate) === lower(key(part))).map(([, entry]) => entry).filter((_, index, all) => all.length === 1)[0]);
+  const asEntry = entry => entry.self ? entry : {self:entry,children:Object.create(null)};
+  const lookup = (branch, part, exact=false) => {
+    if (branch && !Array.isArray(branch) && Object.hasOwn(branch,key(part)))return asEntry(branch[key(part)]);
+    const candidates=Object.values(branch || {}).map(asEntry).filter(entry =>
+      exact ? entry.self.label===part : lower(entry.self.label)===lower(part));
+    return candidates.length===1 ? candidates[0] : undefined;
+  };
   const resolve = parts => {
     const follow = branch => {
       let entry;
@@ -39,10 +44,18 @@ export function scopedSQLConfig(config, state, position) {
     return follow(schema) || follow(lookup(schema, config.defaultSchema || '')?.children);
   };
   const relation = (label, columns) => ({self: {label, apply: quote(label), type: 'type', detail: 'Source scope'},
-    children: Object.fromEntries([...new Set(columns)].map(column => [key(column),
-      {self: {label: column, apply: quote(column), type: 'property', detail: 'Source scope'}, children: Object.create(null)}]))});
-  const columns = entry => Object.values(entry?.children || {}).map(child => child.self || child)
-    .filter(child => child.type === 'property' && !child.nativeHiddenFromStar).map(child => child.label);
+    children: Object.fromEntries(columns.map(column => {
+      const name=typeof column==='string' ? column : column.label, native=column.native;
+      const self={...(native?.self || {}),label:name,apply:quote(name),type:'property'};
+      if (!self.detail)self.detail='Source scope';
+      // An explicitly projected hidden/pseudo column is an ordinary visible
+      // column of the CTE/derived relation. Its nested native members survive.
+      delete self.nativeHiddenFromStar;
+      return [key(name),{self,children:native?.children || Object.create(null)}];
+    }))});
+  const columns = entry => Object.values(entry?.children || {}).map(asEntry)
+    .filter(child => child.self?.type === 'property' && !child.self.nativeHiddenFromStar)
+    .map(child => ({label:child.self.label,native:child}));
 
   const sourceBindings = (body, depth=0) => {
     const nodes = children(body).filter(node => !['(', ')'].includes(node.name));
@@ -77,17 +90,39 @@ export function scopedSQLConfig(config, state, position) {
       if (word(node) === ',') groups.push([]); else groups.at(-1).push(node);
     }
     const result = [];
+    const nativeColumn = parts => {
+      if (!parts.length)return undefined;
+      if (parts.length===1) {
+        const candidates=[...bindings.values()].map(entry => lookup(entry.children,parts[0],exactCase)).filter(Boolean);
+        return candidates.length===1 ? candidates[0] : undefined;
+      }
+      let entry=bindings.get(bindingKey(parts[0]));
+      if (!entry)return resolve(parts);
+      for (const part of parts.slice(1)) {
+        entry=lookup(entry.children,part,exactCase);
+        if (!entry)return undefined;
+      }
+      return entry;
+    };
     for (let group of groups) {
       group = group.filter(node => !['DISTINCT', 'ALL'].includes(word(node)));
       if (!group.length) continue;
       const last = group.at(-1), previous = group.at(-2);
       const implicitAlias = previous && previous.to < last.from && previous.name !== 'Operator' &&
         (previous.name !== 'Keyword' || word(previous) === 'END');
-      if (identifier(last) && previous && (word(previous) === 'AS' || implicitAlias)) result.push(name(last));
-      else if (group.length === 1 && path(last).length) result.push(path(last).at(-1));
+      if (identifier(last) && previous && (word(previous) === 'AS' || implicitAlias)) {
+        const expression=group.slice(0,word(previous)==='AS' ? -2 : -1);
+        result.push({label:name(last),native:expression.length===1 ? nativeColumn(path(expression[0])) : undefined});
+      } else if (group.length === 1 && path(last).length) result.push({label:path(last).at(-1),native:nativeColumn(path(last))});
       else if (word(last) === '*') {
-        const qualifier = previous && path(previous).at(-1);
-        const entries = qualifier ? [bindings.get(bindingKey(qualifier))] : [...bindings.values()];
+        const qualifier = previous && path(previous);
+        let entries;
+        if (qualifier?.length) {
+          const entry=(qualifier.length===1 && bindings.get(bindingKey(qualifier[0]))) || nativeColumn(qualifier);
+          // DuckDB expands a native STRUCT star. UNION members remain dot
+          // expressions and must not be invented as a star projection.
+          entries=entry && (entry.self.type==='type' || /^STRUCT\s*\(/i.test(entry.self.detail || '')) ? [entry] : [];
+        } else entries=[...bindings.values()];
         result.push(...entries.flatMap(columns));
       }
     }
@@ -112,14 +147,25 @@ export function scopedSQLConfig(config, state, position) {
       while (nodes[at] && ['NOT', 'MATERIALIZED'].includes(word(nodes[at]))) at++;
       const body = nodes[at++];
       if (body?.name !== 'Parens') break;
-      if (recursive || position >= body.to) schema[key(label)] = relation(label, explicit || project(body));
+      if (recursive || position >= body.to) {
+        const projected=project(body);
+        schema[key(label)] = relation(label,explicit ? explicit.map((name,index) => ({label:name,native:projected[index]?.native})) : projected);
+      }
       if (!nodes[at] || word(nodes[at++]) !== ',') break;
     }
   }
   const bindings = new Map();
   for (const container of containers) for (const [alias, entry] of sourceBindings(container)) bindings.set(alias, entry);
   return {...config, schema, nativeScopeBindings: bindings,
-    nativeResolve: parts => parts.length === 1 && bindings.get(bindingKey(parts[0])) || resolve(parts),
+    nativeResolve: parts => {
+      let entry=bindings.get(bindingKey(parts[0]));
+      if (!entry)return resolve(parts);
+      for (const part of parts.slice(1)) {
+        entry=lookup(entry.children,part,exactCase);
+        if (!entry)return undefined;
+      }
+      return entry;
+    },
     nativeName: name, nativeStructure: structure, nativeQuote: quote};
 }
 
