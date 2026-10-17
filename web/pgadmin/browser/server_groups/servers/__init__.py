@@ -2986,6 +2986,11 @@ class ServerNode(PGChildNodeView):
                                 'mysql_binlog_list','mysql_binlog_cancel','mysql_binlog_reconcile','mysql_binlog_files','mysql_binlog_remove_artifact'}:
                     try:payload=service.mysql_binlog(server,action.removeprefix('mysql_binlog_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_inspect',
+                                'mysql_binlog_replay_review','mysql_binlog_replay_start','mysql_binlog_replay_status',
+                                'mysql_binlog_replay_list','mysql_binlog_replay_cancel','mysql_binlog_replay_reconcile','mysql_binlog_replay_acknowledge'}:
+                    try:payload=service.mysql_binlog_replay(server,action.removeprefix('mysql_binlog_replay_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mariadb_binlog_catalog','mariadb_binlog_review','mariadb_binlog_start','mariadb_binlog_status',
                                 'mariadb_binlog_list','mariadb_binlog_cancel','mariadb_binlog_reconcile','mariadb_binlog_files','mariadb_binlog_remove_artifact'}:
                     try:payload=service.mariadb_binlog(server,action.removeprefix('mariadb_binlog_'),data.get('request'))

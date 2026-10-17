@@ -1045,7 +1045,7 @@ Private temporary JSON credentials preserve native password characters and the
 registered utility TLS policy. Authenticated downloads, paged file inventories,
 offline receipts and explicitly confirmed application-artifact removal are
 integrated into the workspace. Unknown writers cannot authorize removal or
-continuation. Raw GTID-disabled retrieval, native replay/PITR, continuous
+continuation. Raw GTID-disabled retrieval, complete PITR, continuous
 collection/retention remain open requirements.
 
 MariaDB native closed binary-log archives
@@ -1079,3 +1079,33 @@ WINDOW/OVER/FILTER handling and quoted string names retain their own semantics.
 Source binding preserves keyword table/alias names through CTEs, projections and
 joins, and uses ASCII keyword folding. Metadata probes do not call overridden
 user functions or settle pending work. Denied observations remain incomplete.
+
+MySQL native binary-log replay
+================================
+
+The native MySQL server restore menu selects a retained verified archive from
+an owned source registration and a separately confirmed target UUID. Review
+captures target identity, principal/role, exact GTID state, sealed input identity,
+native utility identity, execution host and runtime policy. Dispatch independently
+verifies and stages the archive, rechecks the target, and uses MySQL Shell's
+native loader with GTID-gap and version checks enabled. Full archive replay and
+stop-before/stop-after one exact native GTID have separate native semantics.
+The source can be offline once the sealed archive exists.
+
+Durable owner/endpoint claims prevent automatic replay, and target UUID fences
+coordinate registrations and application workers. A native named lock and GTID
+comparison guard the final utility boundary. Cancellation cannot undo committed
+transactions. A missing acknowledgement remains unknown, including when current
+GTID observations show archived transactions. Reconciliation records current
+facts separately; exact acknowledgement can release a fence only after the
+owned worker stops and native process/lock termination is observed. It does not
+change the original unknown outcome or dispatch that job again.
+
+Receipts distinguish native utility return, process termination, native GTID
+coverage and independent recovered-data verification. These workflows require a
+compatible restored base. Native replay qualification on independently initialized
+servers with equivalent empty user schemas and explicit GTID seeds does not
+qualify physical base recovery, end-to-end PITR, production restore or cutover.
+Application-host replay storage uses ``CDEADMIN_MYSQL_BINLOG_REPLAY_ROOT`` or the
+operation store's ``mysql-binary-log-replays`` sibling directory. Operators can
+limit utility runtime with ``CDEADMIN_MYSQL_BINLOG_REPLAY_MAX_RUNTIME_SECONDS``.

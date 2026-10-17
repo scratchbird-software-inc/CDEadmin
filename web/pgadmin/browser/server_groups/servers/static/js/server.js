@@ -259,6 +259,11 @@ define('pgadmin.node.server', [
           label: gettext('MySQL binary-log archives...'), priority: 9,
           enable: node => node.cde_profile_id === 'mysql-native',
         }, {
+          name: 'mysql_binlog_replay', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_binlog_replay',
+          label: gettext('MySQL binary-log replay...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
           name: 'mariadb_binlogs', node: 'server', module: this,
           applies: ['object','context'], callback: 'open_mariadb_binlogs',
           label: gettext('MariaDB binary-log archives...'), priority: 9,
@@ -469,6 +474,12 @@ define('pgadmin.node.server', [
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);
           showProviderWorkspace(gettext('MySQL binary-log archives'),this,data,item,'mysql-binlogs');
+          return false;
+        },
+        open_mysql_binlog_replay: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL binary-log replay'),this,data,item,'mysql-binlog-replay');
           return false;
         },
         open_mariadb_binlogs: function(args) {

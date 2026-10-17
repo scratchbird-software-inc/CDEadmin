@@ -60,6 +60,9 @@ class MySQLBinlogJobs:
     _maps={};_maps_lock=threading.RLock()
     operation='mysql_binary_log_dump'
     native_verify=staticmethod(verify)
+    remote_database_mutation=False
+    review_warnings=('Binary-log archives include changes from the whole server and require private storage.',
+        'The native utility records the execution snapshot. Archive completion and successful database recovery have separate receipts.')
 
     def __init__(self,path,root):
         self.path,self.root=Path(path),Path(root).resolve();self.lock=threading.RLock()
@@ -147,9 +150,8 @@ class MySQLBinlogJobs:
             'operation':self.operation,'options':deepcopy(selected),'source':deepcopy(capture['identity']),
             'source_state':deepcopy(capture['state']),'program':deepcopy(program),'continuation':deepcopy(continuation),
             'created_at':time.time(),'expires_at':time.time()+600,'state':'reviewed','cancel_requested':False,
-            'execution_host':{**program['execution_host'],'filesystem_scope':str(scope)},'remote_database_mutation':False,
-            'warnings':['Binary-log archives include changes from the whole server and require private storage.',
-                'The native utility records the execution snapshot. Archive completion and successful database recovery have separate receipts.']}
+            'execution_host':{**program['execution_host'],'filesystem_scope':str(scope)},'remote_database_mutation':self.remote_database_mutation,
+            'warnings':list(self.review_warnings)}
         record['review_digest']=review_digest(record)
         directory=self.directory(record);directory.mkdir(mode=0o700);private_directory(directory)
         with self.store(record['job_id']) as store:
