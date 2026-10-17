@@ -83,7 +83,7 @@ it('sends a reviewed column rename mapping with its selected table rebuild', asy
   file.text = jest.fn().mockResolvedValue(JSON.stringify(snapshot));
   fireEvent.change(screen.getByLabelText('SQLite catalog DDN file'), {target: {files: [file]}});
   await waitFor(() => expect(screen.getByRole('button', {name: 'Preview native changes'})).toBeEnabled());
-  fireEvent.click(screen.getByText('Isolated table rebuild (0)'));
+  fireEvent.click(screen.getByText('Table rebuilds (0)'));
   fireEvent.click(screen.getByRole('checkbox', {name: 'Rebuild SQLite table owned'}));
   fireEvent.click(screen.getByText('Retained column renames (0)'));
   fireEvent.click(screen.getByRole('button', {name: 'Map column rename'}));
@@ -97,4 +97,25 @@ it('sends a reviewed column rename mapping with its selected table rebuild', asy
     database_target_id: 'file-1', baseline: JSON.stringify(snapshot), desired: JSON.stringify(snapshot),
     deletions: [], rebuilds: ['table-1'], column_renames: [
       {table: 'table-1', from: 'old_note', to: 'new_note'}]}});
+});
+
+it('selects related tables for one coordinated native rebuild review', async () => {
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[{resource_id:'parent',kind:'table',name:'parent',path:['main','parent']},
+      {resource_id:'child',kind:'table',name:'child',path:['main','child']}],provenance:{objects:2,coverage:'partial'}})
+    .mockResolvedValueOnce({operations:[],blockers:[],conflicts:[],application_supported:false});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));
+  await screen.findByText('SQLite DDN viewer');
+  const file=new File([JSON.stringify(snapshot)],'desired.json',{type:'application/json'});
+  file.text=jest.fn().mockResolvedValue(JSON.stringify(snapshot));
+  fireEvent.change(screen.getByLabelText('SQLite catalog DDN file'),{target:{files:[file]}});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
+  fireEvent.click(screen.getByText('Table rebuilds (0)'));
+  fireEvent.click(screen.getByRole('checkbox',{name:'Rebuild SQLite table parent'}));
+  fireEvent.click(screen.getByRole('checkbox',{name:'Rebuild SQLite table child'}));
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  await screen.findByText(/Native preview only; no SQL was executed/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_plan',request:{database_target_id:'file-1',
+    baseline:JSON.stringify(snapshot),desired:JSON.stringify(snapshot),deletions:[],rebuilds:['parent','child'],column_renames:[]}});
 });

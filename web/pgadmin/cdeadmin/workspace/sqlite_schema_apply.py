@@ -75,8 +75,8 @@ class SQLiteSchemaApplications(SchemaApplications):
             if operation.get('operation') == 'rebuild':
                 from .sqlite_rebuild import plan_rebuild
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
-                if old is None or wanted is None or len(operations) != 1:
-                    raise SchemaApplyError('SQLite rebuild requires one exact retained table')
+                if old is None or wanted is None or any(item['operation'] != 'rebuild' for item in operations):
+                    raise SchemaApplyError('SQLite rebuild batches require exact retained tables only')
                 expected = plan_rebuild(old, wanted, baseline, None,
                     temp_name=operation.get('temp_name'),
                     column_renames=operation.get('column_renames'))
@@ -360,11 +360,12 @@ def apply_review(provider, route, record):
                 new_count = connection.execute('SELECT count(*) FROM "main".' + name).fetchone()[0]
                 if new_count != old_count:
                     raise _PreservationRefused('SQLite rebuild row count differs before commit')
-                if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
-                    raise _PreservationRefused('SQLite rebuild failed native foreign-key check')
-                _validate_dependencies(connection, observed)
             else:
                 connection.execute(operation['source'])
+        if any(operation['operation'] == 'rebuild' for operation in record['plan']['operations']):
+            if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
+                raise _PreservationRefused('SQLite rebuild batch failed native foreign-key check')
+            _validate_dependencies(connection, observed)
         replacements = [operation for operation in record['plan']['operations'] if operation['operation'] == 'replace']
         if replacements:
             from .sqlite_replace import matches

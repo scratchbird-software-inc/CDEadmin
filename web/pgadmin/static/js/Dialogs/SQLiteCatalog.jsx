@@ -194,16 +194,16 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
           {key: 'path', name: 'Exact path', minWidth: 250, renderCell: ({row}) => row.path.join('.')},
         ]} /></Box>
     </Box>}
-    {result && <Box component="details" sx={{my: 1}}><summary>Isolated table rebuild ({rebuilds.length})</summary>
-      <Alert severity="warning">A rebuild copies retained columns and row identities in one SQLite write transaction. Select one ordinary table only after editing its desired CREATE TABLE definition. Unchanged indexes, owning triggers and foreign keys are preserved; views and changed keys or dependencies need a separate review.</Alert>
+    {result && <Box component="details" sx={{my: 1}}><summary>Table rebuilds ({rebuilds.length})</summary>
+      <Alert severity="warning">Selected tables are rebuilt together in one SQLite write transaction. Edit each desired CREATE TABLE definition before selecting it. Unchanged indexes and owning triggers are preserved; native foreign keys and retained view/trigger bindings are checked against the final batch schema before commit.</Alert>
       <Box sx={{height: 200, overflow: 'auto'}}><PagedDataGrid readOnly gridId="sqlite/rebuild-targets"
         aria-label="SQLite table rebuild targets" rows={(result.objects || []).filter(item => item.kind === 'table')}
         rowKeyGetter={row => row.resource_id} columns={[
           {key: 'select', name: 'Rebuild', width: 95, renderCell: ({row}) =>
             <Checkbox size="small" checked={rebuilds.includes(row.resource_id)}
-              disabled={busy || (!rebuilds.includes(row.resource_id) && !!rebuilds.length)}
+              disabled={busy || (!rebuilds.includes(row.resource_id) && rebuilds.length >= 32)}
               inputProps={{'aria-label': `Rebuild SQLite table ${row.name}`}}
-              onChange={event => {setRebuilds(event.target.checked ? [row.resource_id] : []); setColumnRenames([]);
+              onChange={event => {setRebuilds(current => event.target.checked ? [...current, row.resource_id] : current.filter(identity => identity !== row.resource_id)); setColumnRenames([]);
                 setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);}} />},
           {key: 'name', name: 'Native table', minWidth: 170},
           {key: 'path', name: 'Exact path', minWidth: 250, renderCell: ({row}) => row.path.join('.')},

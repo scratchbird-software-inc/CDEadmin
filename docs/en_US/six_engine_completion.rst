@@ -643,3 +643,21 @@ commit. A later failure rolls back every earlier replacement in that batch.
 Replacements combined with a table rebuild and column renames requiring rewritten index or
 trigger sources remain separate migration work. Human form validation and
 ScratchBird history qualification retain their existing ownership/deferral.
+
+Coordinated SQLite table transformations
+======================================
+
+The catalog workspace accepts up to 32 selected ordinary-table rebuilds in one
+reviewed native transaction. Every original table, child definition, inbound
+foreign key and retained dependency is checked before dispatch. Each table's
+rows and applicable physical rowids/AUTOINCREMENT high-water mark are preserved
+under its reviewed native conversion rules. Native foreign-key and retained
+view/trigger binding checks run on the complete resulting schema before commit,
+so coordinated parent/child key conversions can be reviewed together. Failure
+in any copy or final constraint check rolls back the whole batch. Independent
+rediscovery verifies every acknowledged table transformation.
+
+Table rebuilds remain separate from index/trigger replacement or other DDL
+operations in the same review. The current rename editor maps columns on a
+single selected table; broader coordinated dependency source rewriting remains
+separate implementation work.

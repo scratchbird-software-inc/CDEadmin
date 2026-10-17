@@ -372,9 +372,9 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             item['operation'] != 'drop' for item in operations):
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
             'reason': 'Review deletion separately from additions'})
-    if any(item['operation'] == 'rebuild' for item in operations) and len(operations) > 1:
+    if any(item['operation'] == 'rebuild' for item in operations) and any(item['operation'] != 'rebuild' for item in operations):
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
-            'reason': 'Review one isolated table rebuild per batch'})
+            'reason': 'Review table rebuilds separately from other schema changes'})
     if any(item['operation'] == 'replace' for item in operations) and any(item['operation'] != 'replace' for item in operations):
         blockers.append({'resource_id': '', 'name': 'SQLite design batch',
             'reason': 'Review index and trigger replacements separately from other schema changes'})
