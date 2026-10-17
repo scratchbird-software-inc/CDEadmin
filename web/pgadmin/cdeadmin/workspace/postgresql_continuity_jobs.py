@@ -14,6 +14,7 @@ import psutil
 from ..operations.fileio import durable_replace, exclusive_file_lock, private_file, private_directory
 from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
+from ..providers.postgresql.continuity_recovery import recovery_options, independent_copy, recovery_command, read_result
 from ..sdk.tooling import ProviderToolError
 
 
@@ -151,17 +152,19 @@ class PostgreSQLContinuityJobs:
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
-        if operation not in {'full_backup','incremental_backup','verify','combine'}:
+        if operation not in {'full_backup','incremental_backup','verify','combine','recovery_drill'}:
             raise ContinuityError('Native continuity operation is unavailable')
-        options = combine_options(request.get('options',{})) if operation=='combine' else backup_options(request.get('options',{}))
+        options = (recovery_options if operation=='recovery_drill' else combine_options if operation=='combine' else backup_options)(request.get('options',{}))
+        if operation=='recovery_drill' and hasattr(os,'geteuid') and os.geteuid()==0:
+            raise ContinuityError('Native PostgreSQL recovery requires an application host account other than root')
         if runtime_limit is not None:
             if type(runtime_limit) is not int or not 1<=runtime_limit<=2147483647:
                 raise ContinuityError('Invalid application native-tool runtime policy')
             if options['timeout_seconds'] is None or options['timeout_seconds']>runtime_limit:
                 raise ContinuityError('Application policy limits each native utility to '+str(runtime_limit)+' seconds')
         inputs = []
-        ids = request.get('chain') if operation=='combine' else [request.get('base_job_id')] if operation in {'incremental_backup','verify'} else []
-        if not isinstance(ids,list) or operation=='combine' and not 2<=len(ids)<=64 or operation in {'incremental_backup','verify'} and len(ids)!=1:
+        ids = request.get('chain') if operation=='combine' else [request.get('base_job_id')] if operation in {'incremental_backup','verify','recovery_drill'} else []
+        if not isinstance(ids,list) or operation=='combine' and not 2<=len(ids)<=64 or operation in {'incremental_backup','verify','recovery_drill'} and len(ids)!=1:
             raise ContinuityError('Select the native backup inputs')
         for job_id in ids:
             previous=self.load(job_id,owner,endpoint)
@@ -173,6 +176,8 @@ class PostgreSQLContinuityJobs:
             self.require_stopped_writer(previous)
             if previous['operation'] not in {'full_backup','incremental_backup','combine'}:
                 raise ContinuityError('Select a native physical backup artifact')
+            if operation=='recovery_drill' and (previous['operation']=='incremental_backup' or previous['options']['format']!='plain' or previous.get('artifact_wal_method',previous['options'].get('wal_method','stream'))=='none'):
+                raise ContinuityError('A recovery drill requires a plain full or reconstructed backup with locally collected WAL')
             if proof is None:
                 if not (self.directory(previous)/'backup/backup_manifest').is_file():
                     raise ContinuityError('Native backup manifest is unavailable')
@@ -189,26 +194,30 @@ class PostgreSQLContinuityJobs:
             raise ContinuityError('The selected server must enable native WAL summarization before an incremental backup')
         if operation=='combine' and any(value['format']!='plain' for value in inputs):
             raise ContinuityError('Native reconstruction requires materialized plain backup inputs')
-        if operation=='verify':
+        if operation in {'verify','recovery_drill'}:
             options.update({key:inputs[0][key] for key in ('format','wal_method','manifest_checksums')})
         record = {'job_id':str(uuid.uuid4()), 'owner':owner, 'endpoint_id':endpoint, 'configuration':configuration,
             'operation':operation, 'options':options, 'source':deepcopy(source), 'paths':deepcopy(paths),
             'inputs':inputs, 'state':'reviewed', 'created_at':time.time(), 'expires_at':time.time()+600,'runtime_limit':runtime_limit,
+            'recovery_drill_complete':False,
             'cancel_requested':False, 'execution_host':{'kind':'application-host','platform':os.name},
             'warnings':['Physical backups include the complete native cluster, not only the selected database.',
                 'Artifacts are written on the application host. The database server may be on another host.',
                 'A utility exit does not establish a usable recovery. Native verification and recovery drills have distinct receipts.']}
         artifact_record=self.load(inputs[0]['job_id'],owner,endpoint) if operation=='verify' else record
-        record['artifact_location']={'host':'application-host','path':str(self.directory(artifact_record)/'backup'),
+        record['artifact_location']={'host':'application-host','path':str(self.directory(artifact_record)/('recovered-clone' if operation=='recovery_drill' else 'backup')),
                                      'format':options['format']}
         record['artifact_wal_method']=inputs[-1]['wal_method'] if operation=='combine' else options['wal_method']
         self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         private_directory(self.root)
         tools=PhysicalTools(paths)
-        needed={'pg_verifybackup'}|({'pg_basebackup'} if operation in {'full_backup','incremental_backup'} else {'pg_combinebackup'} if operation=='combine' else set())
+        needed={'pg_verifybackup'}|({'pg_basebackup'} if operation in {'full_backup','incremental_backup'} else {'pg_combinebackup'} if operation=='combine' else {'postgres'} if operation=='recovery_drill' else set())
         record['tool_identities']={name:tools.identify(name,self.root) for name in sorted(needed)}
         if not all(value['available'] for value in record['tool_identities'].values()):
             raise ContinuityError('Install the selected PostgreSQL 18 native continuity utilities on the application host')
+        if operation=='recovery_drill':
+            record['warnings'].append('The drill copies the artifact and managed tablespaces into private application-host storage, then runs a standalone native backend without a network listener. It requires the source build dependencies and sufficient space for an independent copy.')
+            record['warnings'].append('The drill discards configuration and recovery commands on its copy. It verifies native recovery and only the selected heap row counts; production restore, extension availability and point-in-time recovery require separate qualification.')
         if options.get('create_slot'):record['warnings'].append('This operation creates a persistent native replication slot. A refused or cancelled backup can leave that slot retaining WAL; inspect its native state before changing it.')
         if not options['sync']:record['warnings'].append('Native file synchronization is disabled. Verification does not assert that the files are durable after power loss.')
         if options.get('write_recovery_conf'):record['warnings'].append('PostgreSQL writes replication connection settings, including authentication material, into the protected backup. Host paths and temporary SSH routes must be reviewed before a standby uses these files.')
@@ -349,6 +358,9 @@ class PostgreSQLContinuityJobs:
                 self.update(record,state='cancelled',artifact_complete=False)
                 return
             self.update(record,state='active')
+            if operation=='recovery_drill':
+                self.run_recovery(record,tools,paths[0],progress,file_progress,signal)
+                return
             if operation in {'full_backup','incremental_backup'}:
                 tablespaces=[(item['location'],directory/'tablespaces'/str(item['oid'])) for item in record['source'].get('tablespaces',[]) if item['location']]
                 with transport.parameters() as parameters:
@@ -417,6 +429,36 @@ class PostgreSQLContinuityJobs:
         finally:
             transport.close()
             with self._worker_maps_lock:self.workers.pop(record['job_id'],None)
+
+    def run_recovery(self, record, tools, source, progress, file_progress, signal):
+        directory=self.directory(record);options=record['options'];clone=directory/'recovered-clone'
+        def verify(path,field):
+            result=tools.verify(directory,path,timeout=options['timeout_seconds'],progress=progress,cancel_signal=signal)
+            self.update(record,**{field:result})
+            if signal.is_set() or result['return_code']!=0 or result['process_observation'].get('cleanup_confirmed') is not True:
+                raise ContinuityError('Native recovery input verification did not complete')
+            return result
+        self.update(record,state='verifying_inputs',phase='verifying_recovery_source')
+        verify(source,'input_verification')
+        self.update(record,state='active',phase='copying_recovery_artifact')
+        copied=independent_copy(source,clone,record['source'].get('tablespaces',[]),progress=file_progress,cancel_signal=signal)
+        self.update(record,copy_observation=copied,phase='verifying_recovery_copy')
+        verified=verify(clone,'copy_verification')
+        # Verification and copied manifest identity precede any clone edits.
+        identity=manifest(clone,progress=file_progress,cancel_signal=signal)
+        if identity['manifest_sha256']!=record['inputs'][0]['manifest_sha256'] or identity['system_identifier']!=record['source']['system_identifier']:
+            raise ContinuityError('Independent recovery copy differs from the reviewed backup')
+        arguments,sql,output=recovery_command(directory,options,record['job_id'])
+        self.update(record,phase='native_recovery')
+        result=tools.execute('postgres',directory,arguments,input_bytes=sql,timeout=options['timeout_seconds'],progress=progress,cancel_signal=signal)
+        self.update(record,tool_observation=result)
+        if signal.is_set() or result['return_code']!=0 or result['process_observation'].get('cleanup_confirmed') is not True:
+            raise ContinuityError('Native recovery process did not complete with confirmed termination')
+        receipt=read_result(output,options,record['job_id'],record['source']['system_identifier'])
+        self.update(record,state='recovered',phase='complete',recovery_observation=receipt,
+                    recovery_drill_complete=True,artifact_complete=True,finished_at=time.time(),
+                    source_artifact_job_id=record['inputs'][0]['job_id'],
+                    verification_scope={**verified['verification_scope'],'independent_copy':True,'selected_heap_counts':len(receipt['checks'])})
 
     def close(self):
         with self._worker_maps_lock:workers=list(self.workers.values())

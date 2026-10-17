@@ -683,3 +683,28 @@ with the disposable cluster. External route qualifications leave those tests
 disabled unless explicitly requested on a disposable estate with teardown.
 Continuous browser/client whole-file streaming remains separate implementation
 work; these native server paths are not application-host upload/download paths.
+
+PostgreSQL application recovery drills
+=====================================
+
+The continuity workspace can review and run an offline recovery drill against a
+verified plain full or reconstructed physical backup with locally collected WAL.
+It verifies the input, copies file bytes and managed tablespaces into private
+application-host storage, verifies that copy, and runs a supervised PostgreSQL
+18 standalone backend. It opens no network listener or source connection. The
+source backup is never started or modified, including hard-linked reconstructed
+inputs. Configuration includes, auto-conf credentials, preload libraries,
+archive/restore commands and standby routing are discarded on the copy.
+
+A successful receipt requires confirmed native process termination and a fresh
+SQL result matching the reviewed cluster and database. Up to 64 exact native
+heap tables or materialized views can have row counts recorded or compared with
+reviewed int64 decimal expectations. A zero exit with a SQL error, missing
+result, wrong identity or mismatched count does not qualify recovery. Dispatch
+is durable and never automatically replayed; cancellation retains its receipt.
+
+This qualifies native WAL recovery and the selected counts on that execution
+host. It does not qualify every database or extension in a cluster, production
+restore, point-in-time recovery, archived-WAL retrieval, standby provisioning or
+TAR materialization. Source-build dependencies must exist on the execution host.
+History testing remains deferred by owner direction.

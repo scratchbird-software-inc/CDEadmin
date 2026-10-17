@@ -11,11 +11,13 @@ const defaults = () => ({format:'plain', wal_method:'stream', checkpoint:'fast',
 export default function PostgresqlContinuity({post}) {
   const [operation,setOperation]=useState('full_backup'), [options,setOptions]=useState(defaults);
   const [copyMode,setCopyMode]=useState('copy'), [inputs,setInputs]=useState([]);
+  const [recoveryDatabase,setRecoveryDatabase]=useState('postgres'), [checks,setChecks]=useState([]);
   const [page,setPage]=useState(0), [catalog,setCatalog]=useState(null), [review,setReview]=useState(null), [receipt,setReceipt]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
   const generation=useRef(0);
   useEffect(() => {
     generation.current++;setOperation('full_backup');setOptions(defaults());setCopyMode('copy');setInputs([]);
+    setRecoveryDatabase('postgres');setChecks([]);
     setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');
     return () => {generation.current++;};
   },[post]);
@@ -45,6 +47,7 @@ export default function PostgresqlContinuity({post}) {
   const prepare=() => {
     let nativeOptions;
     if(operation==='combine')nativeOptions={format:'plain',copy_mode:copyMode,...Object.fromEntries(['manifest_checksums','sync','sync_method','timeout_seconds'].map(key => [key,options[key]]))};
+    else if(operation==='recovery_drill')nativeOptions={database:recoveryDatabase,checks:checks.map(check => ({schema:check.schema,table:check.table,...(check.expected_rows==='' ? {} : {expected_rows:check.expected_rows})})),timeout_seconds:options.timeout_seconds};
     else if(operation==='verify')nativeOptions={timeout_seconds:options.timeout_seconds};
     else nativeOptions={...options,max_rate_kib:options.max_rate_kib==='' ? null : Number(options.max_rate_kib)};
     run('review',{operation,options:nativeOptions,...(operation==='combine' ? {chain:inputs} : operation==='full_backup' ? {} : {base_job_id:inputs[0]})},setReview);
@@ -61,7 +64,7 @@ export default function PostgresqlContinuity({post}) {
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);}}>
-        {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['verify','Verify existing backup'],['combine','Reconstruct backup chain']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+        {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['verify','Verify existing backup'],['combine','Reconstruct backup chain'],['recovery_drill','Recover isolated backup copy']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
       </TextField>
       <Button disabled={busy} onClick={() => load(page)}>Load backup jobs</Button>
     </Box>
@@ -86,10 +89,20 @@ export default function PostgresqlContinuity({post}) {
       {operation==='combine' && <TextField disabled={busy} select size="small" label="Native copy method" value={copyMode} onChange={event => {setCopyMode(event.target.value);setReview(null);}}>
         {['copy','clone','copy-file-range','link'].map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>}
       <TextField disabled={busy} size="small" type="number" label="Timeout seconds (blank: no limit)" value={options.timeout_seconds ?? ''} onChange={event => edit('timeout_seconds',event.target.value==='' ? null : Number(event.target.value))} />
-      {operation!=='verify' && <>{select('manifest_checksums',['NONE','CRC32C','SHA224','SHA256','SHA384','SHA512'])}{select('sync_method',['fsync','syncfs'])}
+      {!['verify','recovery_drill'].includes(operation) && <>{select('manifest_checksums',['NONE','CRC32C','SHA224','SHA256','SHA384','SHA512'])}{select('sync_method',['fsync','syncfs'])}
         {(backup ? ['create_slot','no_slot','write_recovery_conf','verify_page_checksums','progress','estimate_size','sync'] : ['sync']).map(name => <FormControlLabel key={name} label={name.replaceAll('_',' ')}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>
+    {operation==='recovery_drill' && <Box sx={{my:1}}>
+      <TextField disabled={busy} size="small" label="Recovery database" value={recoveryDatabase} onChange={event => {setRecoveryDatabase(event.target.value);setReview(null);}} />
+      <Alert severity="info">The private recovery copy runs without a network listener. Optional checks count rows in the selected native heap tables or materialized views. Names are exact; leave the expected count blank to record the observed count.</Alert>
+      {checks.map((check,index) => <Box key={index} sx={{display:'flex',gap:1,my:1}}>
+        {['schema','table','expected_rows'].map(name => <TextField key={name} disabled={busy} size="small" label={`${name.replaceAll('_',' ')} ${index+1}`} value={check[name]}
+          onChange={event => {setChecks(current => current.map((value,position) => position===index ? {...value,[name]:event.target.value} : value));setReview(null);}} />)}
+        <Button disabled={busy} onClick={() => {setChecks(current => current.filter((_value,position) => position!==index));setReview(null);}}>Remove check {index+1}</Button>
+      </Box>)}
+      <Button disabled={busy || checks.length>=64} onClick={() => {setChecks(current => [...current,{schema:'public',table:'',expected_rows:''}]);setReview(null);}}>Add recovery table check</Button>
+    </Box>}
     <Button disabled={busy || (operation==='combine' ? inputs.length<2 : operation!=='full_backup' && !inputs.length)} onClick={prepare}>Review native operation</Button>
     {review && <Box sx={{my:1}}>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
@@ -97,9 +110,10 @@ export default function PostgresqlContinuity({post}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},result => {setReceipt(result);setReview(current => ({...current,state:result.state}));})}>Confirm and start reviewed operation</Button>
     </Box>}
     {receipt && <Box sx={{my:1}}>
-      <Alert severity={receipt.state==='verified' ? 'success' : ['failed','unknown','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>
+      <Alert severity={['verified','recovered'].includes(receipt.state) ? 'success' : ['failed','unknown','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>
         Job {receipt.job_id}: {receipt.state}. {receipt.observation_blocker}
         {receipt.state==='verified' && ` Native file verification: ${receipt.verification_scope?.files ? 'yes' : 'no'}; WAL verification: ${receipt.verification_scope?.wal ? 'yes' : 'no'}. Recovery drill: ${receipt.recovery_drill_complete ? 'complete' : 'not completed'}.`}
+        {receipt.state==='recovered' && ` Isolated native recovery completed. Selected heap row counts: ${receipt.verification_scope?.selected_heap_counts}. Production restore and point-in-time recovery have separate receipts.`}
       </Alert>
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh receipt</Button>
       <Button onClick={download}>Download receipt</Button>

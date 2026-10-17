@@ -4,6 +4,9 @@ import {withTheme} from '../fake_theme';
 const Component=withTheme(PostgresqlContinuity);
 const reviewed={job_id:'native-job',review_digest:'native-digest',state:'reviewed',operation:'full_backup',
   source:{system_identifier:'18446744073709551615'},options:{format:'plain'},inputs:[],tool_identities:{},warnings:['Complete cluster backup']};
+let originalHeight;
+beforeEach(() => {originalHeight=window.innerHeight;window.innerHeight=1200;});
+afterEach(() => {window.innerHeight=originalHeight;});
 
 describe('PostgreSQL native continuity jobs',() => {
   it('does not start a backup until the displayed review is explicitly confirmed',async () => {
@@ -50,4 +53,24 @@ it('preserves an explicit no-deadline selection in native review',async () => {
   fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
   await screen.findByText('Complete cluster backup');
   expect(post.mock.calls[0][0].request.options.timeout_seconds).toBeNull();
+});
+
+it('reviews structured recovery counts without rounding int64 text',async () => {
+  const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'verified'}],total:1,unavailable_job_ids:[]});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Recover isolated backup copy'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Select input'}));
+  fireEvent.click(screen.getByRole('button',{name:'Add recovery table check'}));
+  fireEvent.change(screen.getByLabelText('table 1'),{target:{value:'Exact "😀"'}});
+  fireEvent.change(screen.getByLabelText('expected rows 1'),{target:{value:'9007199254740993'}});
+  post.mockResolvedValue({...reviewed,operation:'recovery_drill'});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'recovery_drill',base_job_id:'native-job',options:{database:'postgres',checks:[{schema:'public',table:'Exact "😀"',expected_rows:'9007199254740993'}],timeout_seconds:3600}}});
+  post.mockResolvedValue({...reviewed,state:'recovered',recovery_drill_complete:true,verification_scope:{selected_heap_counts:1}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Isolated native recovery completed/);
+  expect(screen.getByRole('button',{name:'Cancel native job'})).toBeDisabled();
 });

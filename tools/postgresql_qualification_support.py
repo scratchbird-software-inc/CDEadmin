@@ -9,18 +9,21 @@ import time
 
 
 @contextmanager
-def server(output, *, server_options=()):
+def server(output, *, server_options=(), initdb_options=()):
     import psycopg
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     if (not isinstance(server_options, (tuple, list)) or len(server_options) > 32 or
             any(not isinstance(value, str) or '\x00' in value or len(value) > 4096 for value in server_options)):
         raise ValueError('Owned PostgreSQL fixture options must be bounded native arguments')
+    if not isinstance(initdb_options,(tuple,list)) or len(initdb_options)>16 or any(not isinstance(value,str) or not value or any(char.isspace() for char in value) or '\x00' in value for value in initdb_options):
+        raise ValueError('Owned PostgreSQL initdb options must be individual native arguments')
     name = 'scratchrobin-postgresql-' + secrets.token_hex(8)
     password = secrets.token_urlsafe(32)
     proof = {'image': 'postgres:18.3', 'owned_server_stopped': False,
         'owned_container_name': name,
         'server_options_sha256': hashlib.sha256(json.dumps(server_options).encode()).hexdigest()}
+    proof['initdb_options']=list(initdb_options)
     started = False
     try:
         image = subprocess.run(['docker', 'image', 'inspect', 'postgres:18.3', '--format', '{{.Id}}'],
@@ -28,6 +31,7 @@ def server(output, *, server_options=()):
         proof['image_id'] = image.stdout.strip()
         subprocess.run(['docker', 'run', '-d', '--rm', '--name', name,
             '--publish', '127.0.0.1::5432', '--env', 'POSTGRES_PASSWORD=' + password,
+            '--env','POSTGRES_INITDB_ARGS='+' '.join(initdb_options),
             'postgres:18.3', *server_options], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
         started = True
         port = subprocess.run(['docker', 'port', name, '5432/tcp'], check=True,

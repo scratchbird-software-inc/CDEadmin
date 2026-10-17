@@ -52,7 +52,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
     restored_started=False;restored_stopped=False
     restored=output/'restored-clone'
     try:
-        with owned_server(output/'fixture',server_options=('-c','summarize_wal=on')) as (route,password,fixture):
+        with owned_server(output/'fixture',server_options=('-c','summarize_wal=on'),initdb_options=('--locale=C','--encoding=UTF8')) as (route,password,fixture):
             with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
                                  dbname=route['database'],autocommit=True) as native:
                 hba=native.execute('SHOW hba_file').fetchone()[0]
@@ -63,6 +63,19 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                 native.execute("CREATE TABLESPACE sr_continuity_space LOCATION '/var/lib/postgresql/sr_continuity_space'")
                 native.execute('CREATE TABLE sr_continuity_data (id bigint PRIMARY KEY,body text,payload bytea) TABLESPACE sr_continuity_space')
                 native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740993,'Unicode 😀',decode('0080ff','hex'))")
+                from psycopg import sql
+                exact_schema,exact_table='s $$😀\n','t "😀\n'
+                native.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(exact_schema)))
+                native.execute(sql.SQL('CREATE TABLE {}.{} (id bigint)').format(sql.Identifier(exact_schema),sql.Identifier(exact_table)))
+                native.execute(sql.SQL('INSERT INTO {}.{} VALUES (9007199254740993)').format(sql.Identifier(exact_schema),sql.Identifier(exact_table)))
+                native.execute("CREATE DATABASE sr_recovery_latin1 TEMPLATE template0 ENCODING 'LATIN1' LOCALE 'C'")
+                latin_schema,latin_table='é'*40+'\n$$','t "ñ\n'
+                with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
+                        dbname='sr_recovery_latin1',autocommit=True) as latin:
+                    latin.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(latin_schema)))
+                    latin.execute(sql.SQL('CREATE TABLE {}.{} (id bigint)').format(sql.Identifier(latin_schema),sql.Identifier(latin_table)))
+                    latin.execute(sql.SQL('INSERT INTO {}.{} VALUES (9007199254740993)').format(sql.Identifier(latin_schema),sql.Identifier(latin_table)))
+                native.execute("ALTER SYSTEM SET shared_preload_libraries='scratchrobin_must_not_load'")
                 with app.test_request_context('/'):
                     user=User.query.first()
                     group=ServerGroup.query.filter_by(user_id=user.id).order_by(ServerGroup.id).first()
@@ -87,7 +100,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                         (output/'http-failure.json').write_text(json.dumps(value,indent=2)+'\n')
                         raise RuntimeError('Native continuity HTTP '+operation+' failed')
                     return value['data']
-                def submit(operation,options=None,**inputs):
+                def submit(operation,options=None,expected_state='verified',**inputs):
                     review=http('review',{'operation':operation,'options':options or {},**inputs})
                     assert review['source']['server_version']==180003
                     request={'job_id':review['job_id'],'review_digest':review['review_digest'],'confirmed':True}
@@ -98,10 +111,10 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                     while result['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}:
                         if time.monotonic()>deadline:http('cancel',{'job_id':result['job_id']});raise TimeoutError('Native backup job deadline')
                         time.sleep(.1);result=http('status',{'job_id':result['job_id']})
-                    if result['state']!='verified':
+                    if result['state']!=expected_state:
                         (output/(operation+'-failure.json')).write_text(json.dumps(result,indent=2)+'\n')
                         raise RuntimeError(operation+' returned '+result['state'])
-                    print(operation+' verified through application HTTP',flush=True)
+                    print(operation+' '+result['state']+' through application HTTP',flush=True)
                     return result
                 full=submit('full_backup',{'timeout_seconds':None})
                 proof['checks'].append('authenticated-http-full-physical-backup-relocated-tablespaces-native-files-and-wal-verification')
@@ -118,6 +131,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                 combined_record=jobs.load(combined['job_id'],uid,endpoint)
                 combined_path=jobs.directory(combined_record)
                 shutil.copytree(combined_path,restored,symlinks=True)
+                (restored/'backup/postgresql.auto.conf').write_bytes(b'')
                 for link in (restored/'backup/pg_tblspc').iterdir():
                     assert link.is_symlink()
                     oid=link.name;link.unlink();link.symlink_to('/owned/tablespaces/'+oid)
@@ -152,12 +166,38 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
         verified=submit('verify',base_job_id=full['job_id'])
         assert verified['verification_scope']['wal']
         proof['checks'].append('offline-authenticated-http-native-artifact-verification-after-source-server-stopped')
-        page=http('list',{'offset':0,'limit':2});assert page['total']==5 and len(page['jobs'])==2 and page['more']
+        def artifact_facts(job):
+            path=jobs.directory(jobs.load(job['job_id'],uid,endpoint))
+            return {str(item.relative_to(path)):os.readlink(item) if item.is_symlink() else hashlib.sha256(item.read_bytes()).hexdigest()
+                    for item in path.rglob('*') if item.is_file() or item.is_symlink()}
+        before={job['job_id']:artifact_facts(job) for job in (full,combined)}
+        exact_check={'schema':exact_schema,'table':exact_table,'expected_rows':'1'}
+        drill_options={'database':'postgres','checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'2'},exact_check],'timeout_seconds':120}
+        recovered=submit('recovery_drill',drill_options,base_job_id=combined['job_id'],expected_state='recovered')
+        assert recovered['recovery_drill_complete'] is True
+        assert recovered['recovery_observation']['network_listener_started'] is False
+        assert recovered['recovery_observation']['system_identifier']==combined['source']['system_identifier']
+        assert recovered['tool_observation']['process_observation']['cleanup_confirmed'] is True
+        proof['checks'].append('offline-authenticated-http-independent-combined-backup-single-user-recovery-with-relocated-tablespace-count-and-no-listener')
+        full_recovery=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'1'},exact_check]},base_job_id=verified['job_id'],expected_state='recovered')
+        assert full_recovery['recovery_drill_complete']
+        proof['checks'].append('offline-native-full-backup-recovery-from-verification-receipt-excludes-later-source-changes')
+        latin_recovery=submit('recovery_drill',{'database':'sr_recovery_latin1','checks':[{'schema':latin_schema,'table':latin_table,'expected_rows':'1'}]},base_job_id=full['job_id'],expected_state='recovered')
+        assert latin_recovery['recovery_observation']['checks'][0]['schema']==latin_schema
+        proof['checks'].append('offline-native-latin1-database-recovery-with-exact-non-ascii-newline-names-longer-than-63-utf8-bytes')
+        wrong_count=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'999'}]},base_job_id=full['job_id'],expected_state='failed')
+        assert wrong_count['recovery_drill_complete'] is False and 'row count' in wrong_count['error_reason']
+        no_result=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'missing_recovery_table'}]},base_job_id=full['job_id'],expected_state='failed')
+        assert no_result['tool_observation']['return_code']==0 and no_result['recovery_drill_complete'] is False
+        proof['checks'].append('native-zero-exit-with-sql-error-and-incorrect-row-count-do-not-qualify-recovery')
+        for job in (full,combined):assert artifact_facts(job)==before[job['job_id']]
+        proof['checks'].append('source-backup-bytes-and-tablespace-links-unchanged-after-successful-and-refused-drills')
+        page=http('list',{'offset':0,'limit':2});assert page['total']==10 and len(page['jobs'])==2 and page['more']
         for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
         if browser_binary:
             proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary)
             proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
-        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,tar,verified)],
+        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,tar,verified,recovered,full_recovery,latin_recovery,wrong_count,no_result)],
                      source=combined['source'],native_artifact_password_absent_from_receipts=True)
     finally:
         if jobs is not None:jobs.close()
@@ -235,15 +275,41 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
                         if cancel is not None:cancel.click()
                         return False
                     control=next((item for item in browser.find_elements(By.TAG_NAME,'button')
-                        if item.is_displayed() and item.is_enabled() and item.text.strip()==name),None)
+                        if item.is_enabled() and item.get_attribute('textContent').strip()==name),None)
                     if control is None:return False
+                    browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',control)
+                    if not control.is_displayed():return False
                     control.click();return True
                 except (ElementClickInterceptedException,StaleElementReferenceException):return False
             wait.until(attempt)
         click('Load backup jobs')
         wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Native physical backup jobs"]'))
         wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+job_id+'"]')).click()
-        wait.until(lambda browser:any('Recovery drill: not completed' in element.text for element in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        def receipt_message(text):
+            for element in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'):
+                if text in element.get_attribute('textContent'):
+                    driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',element)
+                    return text in element.text
+            return False
+        wait.until(lambda _browser:receipt_message('Recovery drill: not completed'))
+        label=driver.find_element(By.XPATH,'//label[normalize-space()="Continuity operation"]')
+        operation=driver.find_element(By.ID,label.get_attribute('for'))
+        driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',operation)
+        operation.click()
+        wait.until(lambda browser:next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
+            if item.text.strip()=='Recover isolated backup copy'),None)).click()
+        row=driver.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+job_id+'"]').find_element(By.XPATH,'ancestor::tr')
+        next(item for item in row.find_elements(By.TAG_NAME,'button') if item.get_attribute('textContent').strip()=='Select input').click()
+        click('Add recovery table check')
+        for label,value in (('table 1','sr_continuity_data'),('expected rows 1','1')):
+            control=driver.find_element(By.XPATH,'//label[normalize-space()="'+label+'"]')
+            field=driver.find_element(By.ID,control.get_attribute('for'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
+            field.send_keys(value)
+        click('Review native operation')
+        wait.until(lambda browser:'recovery_drill' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+        click('Confirm and start reviewed operation')
+        wait.until(lambda _browser:receipt_message('Isolated native recovery completed'))
         assert not driver.find_elements(By.CSS_SELECTOR,'[role="alert"] .MuiAlert-icon svg[data-testid="ErrorOutlineIcon"]')
         driver.save_screenshot(str(output/'offline-continuity.png'))
         messages=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE']
@@ -251,9 +317,15 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary):
         errors=[item for item in messages if not expected(item)]
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n')
         assert not errors
-        return {'complete':True,'source_server_stopped':True,'console_errors':0,
+        return {'complete':True,'source_server_stopped':True,'console_errors':0,'reviewed_native_recovery_drill':True,
                 'console_scope':'offline-continuity-workspace-after-shell-startup',
                 'expected_native_password_admission_errors':sum(map(expected,messages)),'screenshot':'offline-continuity.png'}
+    except Exception:
+        if driver is not None:
+            driver.save_screenshot(str(output/'browser-failure.png'))
+            (output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text,encoding='utf8')
+            (output/'browser-failure-console.json').write_text(json.dumps(driver.get_log('browser'),indent=2)+'\n')
+        raise
     finally:
         if driver is not None:driver.quit()
         http.shutdown();http.server_close();thread.join(timeout=5)

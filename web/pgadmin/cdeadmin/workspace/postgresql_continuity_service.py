@@ -63,7 +63,7 @@ def action(service, server, operation, request):
     try:
         if operation=='review':
             native_operation=request.get('operation')
-            if native_operation in {'verify','combine'}:
+            if native_operation in {'verify','combine','recovery_drill'}:
                 ids=request.get('chain') if native_operation=='combine' else [request.get('base_job_id')]
                 if not isinstance(ids,list) or not ids:raise ContinuityError('Select backup artifacts')
                 source=jobs.load(ids[-1],owner,endpoint)['source']

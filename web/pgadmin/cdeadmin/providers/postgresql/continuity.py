@@ -137,7 +137,7 @@ class PhysicalTools:
                 'reason':None if available else 'PostgreSQL 18 native utility required'}
 
     def execute(self, name, workspace, arguments, *, parameters=None, password=None,
-                timeout=3600, progress=None, cancel_signal=None):
+                timeout=3600, progress=None, cancel_signal=None, input_bytes=b''):
         from psycopg import pq
         if self.identify(name,workspace)['available'] is not True:
             raise ContinuityError('Selected PostgreSQL 18 native utility is unavailable')
@@ -167,6 +167,7 @@ class PhysicalTools:
         host, port = parameters.get('host','127.0.0.1'), int(parameters.get('port',5432))
         granted = (*environment.keys(), *(('PGSERVICEFILE',) if config is not None else ()))
         return self.runner.run(self.grant(name,workspace,host=host,port=port,timeout=timeout,environment=granted),arguments,
+            input_bytes=input_bytes,
             secret_environment=environment, secret_config=config, secret_argument=None if config is not None else '--config={path}',
             secret_environment_name='PGSERVICEFILE' if config is not None else None,
             secret_suffix='.pg-service',redact_values=redactions,progress=progress,cancel_signal=cancel_signal)
