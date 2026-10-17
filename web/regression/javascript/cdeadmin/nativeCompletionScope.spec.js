@@ -37,7 +37,7 @@ function suggestions(source, data, previous=data, position=source.length) {
   test('inserts exactly the members independently bound and executed by DuckDB',()=> {
     const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE,'utf8'));
     expect(fixture.metadata.context.engine).toBe('duckdb');
-    expect(fixture.cases).toHaveLength(17);
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(17);
     for(const example of fixture.cases) {
       const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
       const result=suggestions(source,fixture.metadata,fixture.metadata,position);
@@ -116,6 +116,35 @@ test.each(['SELECT n.items.| FROM one n','SELECT n.fixed.| FROM one n','SELECT n
     const data=containerMetadata();
     expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|')).options).toEqual([]);
   });
+
+test.each([
+  'SELECT (n.items[1]).| FROM one n', 'SELECT ((n.items)[1]).| FROM one n',
+  'SELECT (((n.items)))[1].| FROM one n', 'SELECT (n.fixed)[1].| FROM one n',
+  "SELECT (n.lookup)['key'].| FROM one n", 'SELECT ((n.matrix)[1])[1].| FROM one n',
+  'SELECT (n.items[:])[1].| FROM one n', 'SELECT (items[1]).| FROM one',
+  'SELECT (/* receiver */ n.items[1]).| FROM one n',
+  'SELECT (n.items[1])."F|" FROM one n',
+  'WITH q AS (SELECT (n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
+  'WITH q(part) AS (SELECT ((n.items))[1] FROM one n) SELECT (q.part).| FROM q',
+  'WITH q(ignored,part) AS (SELECT typeof(n.items),((n.items))[1] FROM one n) SELECT q.part.| FROM q',
+  'SELECT q.part.| FROM (SELECT ((n.fixed)[1]) AS part FROM one n) q',
+])('DuckDB grouping preserves observed member types in %s',marked=> {
+  const data=containerMetadata(),result=suggestions(marked.replace('|',''),data,data,marked.indexOf('|'));
+  expect(result?.options).toEqual([expect.objectContaining({
+    label:marked.includes('"F')?'"Field ü"':'Field ü',apply:'"Field ü"',detail:'BIGINT'})]);
+});
+
+test.each([
+  'SELECT typeof(n.items[1]).| FROM one n', 'SELECT to_json (n.items[1]).| FROM one n',
+  'SELECT main.to_json(n.items[1]).| FROM one n', 'SELECT "to_json"(n.items[1]).| FROM one n',
+  'SELECT max(n.items[1]).| FROM one n', 'SELECT CAST(n.items[1] AS VARCHAR).| FROM one n',
+  'SELECT (n.items[1] IS NOT NULL).| FROM one n', 'SELECT (SELECT n.items[1]).| FROM one n',
+  'SELECT (n.items[1], n.items[1]).| FROM one n', 'SELECT (n.items[1]::VARCHAR).| FROM one n',
+  'SELECT (n.items[1]).missing.| FROM one n', 'SELECT (missing.items[1]).| FROM one n',
+])('DuckDB grouping does not invent computed result fields in %s',marked=> {
+  const data=containerMetadata();
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
 
 test('DuckDB does not guess an ambiguous unqualified indexed column',()=> {
   const data=containerMetadata();

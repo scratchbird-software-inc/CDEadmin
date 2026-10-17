@@ -92,6 +92,12 @@ DUCK-COMP-03: Shared SQL editor and native language
   column completions in the shared editor. Identifier insertion quotes and
   escapes exact native names. This page-scoped completion never claims a
   truncated or inaccessible catalog is empty or complete.
+  Observed STRUCT, UNION, list, array, map and positional-STRUCT member types
+  survive grouping parentheses and chained native element access. Explicit CTE
+  column lists retain projection positions, including preceding computed
+  expressions with unobserved result types. Completion does not treat a function
+  argument, cast, scalar subquery or arbitrary expression as its result type;
+  those computed-result bindings retain separate acceptance.
 
 DUCK-COMP-04: Data and file workflows
   Implement native row editing with qualified identity, paging, commit/rollback,

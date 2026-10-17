@@ -95,7 +95,7 @@ export function scopedSQLConfig(config, state, position) {
     }
     return bindings;
   };
-  const project = (body, depth=0) => {
+  const project = (body, depth=0, positional=false) => {
     if (depth > 12) return [];
     const nodes = children(body).filter(node => !['(', ')'].includes(node.name));
     const select = nodes.findIndex(node => word(node) === 'SELECT');
@@ -147,7 +147,7 @@ export function scopedSQLConfig(config, state, position) {
           entries=entry && (entry.self.type==='type' || entry.self.nativeTableValued || /^STRUCT\s*\(/i.test(entry.self.detail || '')) ? [entry] : [];
         } else entries=[...bindings.values()];
         result.push(...entries.flatMap(columns));
-      }
+      } else if(positional) result.push({native:expressionColumn(group)});
     }
     return result;
   };
@@ -171,7 +171,7 @@ export function scopedSQLConfig(config, state, position) {
       const body = nodes[at++];
       if (body?.name !== 'Parens') break;
       if (recursive || position >= body.to) {
-        const projected=project(body);
+        const projected=project(body,0,Boolean(explicit));
         schema[key(label)] = relation(label,explicit ? explicit.map((name,index) => ({label:name,native:projected[index]?.native})) : projected);
       }
       if (!nodes[at] || word(nodes[at++]) !== ',') break;

@@ -44,6 +44,22 @@ def qualify(output):
                 'SELECT n.select.| FROM native_names n',
                 'WITH q AS (SELECT n.select AS part FROM native_names n) SELECT q.part.| FROM q',
                 'SELECT n.value.| FROM native_names n',
+                'SELECT (n.items[1]).| FROM one n',
+                'SELECT ((n.items)[1]).| FROM one n',
+                'SELECT (((n.items)))[1].| FROM one n',
+                'SELECT (n.fixed)[1].| FROM one n',
+                "SELECT (n.lookup)['key'].| FROM one n",
+                'SELECT ((n.matrix)[1])[1].| FROM one n',
+                'SELECT (n.items[:])[1].| FROM one n',
+                'SELECT (items[1]).| FROM one',
+                'SELECT (/* receiver */ n.items[1]).| FROM one n',
+                'WITH q AS (SELECT (n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
+                'WITH q(part) AS (SELECT ((n.items))[1] FROM one n) SELECT (q.part).| FROM q',
+                'WITH q(ignored,part) AS (SELECT typeof(n.items),((n.items))[1] FROM one n) SELECT q.part.| FROM q',
+                'SELECT q.part.| FROM (SELECT ((n.fixed)[1]) AS part FROM one n) q',
+                'SELECT (n."positional")[2].| FROM tuple_values n',
+                'SELECT ((n."positional")[3])[1].| FROM tuple_values n',
+                'WITH q(part) AS (SELECT (n."positional")[2] FROM tuple_values n) SELECT q.part.| FROM q',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

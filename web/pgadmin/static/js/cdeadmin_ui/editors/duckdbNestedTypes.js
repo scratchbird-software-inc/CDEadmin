@@ -22,72 +22,97 @@ export function duckdbTypedEntry(shape,quote,self={}) {
 // grammar acceptance, and never evaluates an index expression or user SQL.
 export function duckdbAccessEntry(source,language,resolve,quote) {
   const tokens=nativeTokenSpans(source,language,{incomplete:true}).filter(token=>!/Comment/.test(token.name));
+  if(tokens.length>2048)return undefined;
   let at=0;
-  const parts=[];
-  if(!isName(tokens[at]))return undefined;
-  parts.push(name(tokens[at++],source));
-  while(tokens[at] && source.slice(tokens[at].from,tokens[at].to)==='.' && isFieldName(tokens[at+1])) {
-    at++;parts.push(name(tokens[at++],source));
-  }
-  let entry=resolve(parts);
-  while(entry && at<tokens.length) {
-    const token=tokens[at++],text=source.slice(token.from,token.to);
-    if(text==='.' && isFieldName(tokens[at])) {entry=field(entry,name(tokens[at++],source));continue;}
-    if(text!=='[')return undefined;
-    const body=[];let depth=1;
-    while(at<tokens.length && depth) {
-      const next=tokens[at++],value=source.slice(next.from,next.to);
-      if(value==='[')depth++;
-      if(value===']')depth--;
-      if(depth)body.push(next);
+  const access=depth=> {
+    if(depth>32)return undefined;
+    let entry;
+    if(tokens[at]?.name==='(') {
+      at++;entry=access(depth+1);
+      if(!entry || tokens[at]?.name!==')')return undefined;
+      at++;
+    } else {
+      const parts=[];
+      if(!isName(tokens[at]))return undefined;
+      parts.push(name(tokens[at++],source));
+      while(tokens[at] && source.slice(tokens[at].from,tokens[at].to)==='.' && isFieldName(tokens[at+1])) {
+        at++;parts.push(name(tokens[at++],source));
+      }
+      entry=resolve(parts);
     }
-    if(depth || !body.length)return undefined;
-    const shape=entry.nativeType;
-    let nesting=0,sliced=false;
-    for(const item of body) {
-      const value=source.slice(item.from,item.to);
-      if(['[','('].includes(value))nesting++;
-      if([']',')'].includes(value))nesting--;
-      if(value===':' && nesting===0)sliced=true;
+    while(entry && at<tokens.length && source.slice(tokens[at].from,tokens[at].to)!==')') {
+      const token=tokens[at++],text=source.slice(token.from,token.to);
+      if(text==='.' && isFieldName(tokens[at])) {entry=field(entry,name(tokens[at++],source));continue;}
+      if(text!=='[')return undefined;
+      const body=[];let depth=1;
+      while(at<tokens.length && depth) {
+        const next=tokens[at++],value=source.slice(next.from,next.to);
+        if(value==='[')depth++;
+        if(value===']')depth--;
+        if(depth)body.push(next);
+      }
+      if(depth || !body.length)return undefined;
+      const shape=entry.nativeType;
+      let nesting=0,sliced=false;
+      for(const item of body) {
+        const value=source.slice(item.from,item.to);
+        if(['[','('].includes(value))nesting++;
+        if([']',')'].includes(value))nesting--;
+        if(value===':' && nesting===0)sliced=true;
+      }
+      if(['list','array'].includes(shape?.kind)) {
+        if(!shape.child)return undefined;
+        entry=duckdbTypedEntry(sliced ? {kind:'list',sql:shape.child.sql+'[]',child:shape.child} : shape.child,quote);
+      } else if(shape?.kind==='map' && !sliced && shape.value)entry=duckdbTypedEntry(shape.value,quote);
+      else if(shape?.kind==='struct' && shape.positions && body.length===1 && body[0].name==='Number') {
+        const value=source.slice(body[0].from,body[0].to);
+        if(!/^\d+$/.test(value))return undefined;
+        const ordinal=Number(value);
+        if(!Number.isInteger(ordinal) || ordinal<1 || ordinal>shape.positions.length)return undefined;
+        entry=duckdbTypedEntry(shape.positions[ordinal-1],quote);
+      }
+      else if(shape?.kind==='struct' && body.length===1 && body[0].name==='String') {
+        const literal=source.slice(body[0].from,body[0].to);
+        if(!/^'(?:[^']|'')*'$/.test(literal))return undefined;
+        entry=field(entry,literal.slice(1,-1).replaceAll('\'\'','\''));
+      } else return undefined;
     }
-    if(['list','array'].includes(shape?.kind)) {
-      if(!shape.child)return undefined;
-      entry=duckdbTypedEntry(sliced ? {kind:'list',sql:shape.child.sql+'[]',child:shape.child} : shape.child,quote);
-    } else if(shape?.kind==='map' && !sliced && shape.value)entry=duckdbTypedEntry(shape.value,quote);
-    else if(shape?.kind==='struct' && shape.positions && body.length===1 && body[0].name==='Number') {
-      const value=source.slice(body[0].from,body[0].to);
-      if(!/^\d+$/.test(value))return undefined;
-      const ordinal=Number(value);
-      if(!Number.isInteger(ordinal) || ordinal<1 || ordinal>shape.positions.length)return undefined;
-      entry=duckdbTypedEntry(shape.positions[ordinal-1],quote);
-    }
-    else if(shape?.kind==='struct' && body.length===1 && body[0].name==='String') {
-      const literal=source.slice(body[0].from,body[0].to);
-      if(!/^'(?:[^']|'')*'$/.test(literal))return undefined;
-      entry=field(entry,literal.slice(1,-1).replaceAll('\'\'','\''));
-    } else return undefined;
-  }
-  return entry;
+    return entry;
+  };
+  const entry=access(0);
+  return at===tokens.length ? entry : undefined;
 }
 
 export function duckdbCompletionTarget(config,state,dot) {
   const before=config.nativeStructure.before;
   let token=before(dot),start;
   // The receiver is a chain of observed identifiers and balanced subscripts.
-  // Parenthesized/computed expressions need their own native type authority.
+  // Parentheses retain the observed type. Calls/computed expressions still
+  // require separate native result-type authority.
   let count=0;
   while(token && ++count<512) {
     const text=state.sliceDoc(token.from,token.to);
-    if(text===']') {
+    if(text===']' || text===')') {
+      const close=text,open=text===']' ? '[' : '(';
       let depth=1;
       while(depth && (token=before(token))) {
         if(++count>=512)return undefined;
         const value=state.sliceDoc(token.from,token.to);
-        if(value===']')depth++;
-        if(value==='[')depth--;
+        if(value===close)depth++;
+        if(value===open)depth--;
       }
       if(depth)return undefined;
       start=token.from;token=before(token);
+      if(close===')') {
+        // A function argument is not its result. Refuse a possible call name
+        // before the grouping expression. Expression
+        // boundary keywords cannot be unquoted scalar function names here.
+        const boundary=new Set(['SELECT','DISTINCT','ALL','WHERE','HAVING','QUALIFY','ON','AND','OR','NOT',
+          'WHEN','THEN','ELSE','RETURNING','BY']);
+        if(isName(token) || token?.name==='Keyword' && !boundary.has(state.sliceDoc(token.from,token.to).toUpperCase()))
+          return undefined;
+        break;
+      }
     } else if(isName(token) || token.name==='Keyword' && before(token)?.name==='.') {
       start=token.from;token=before(token);
       if(token?.name!=='.')break;

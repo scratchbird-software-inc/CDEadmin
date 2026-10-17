@@ -253,7 +253,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        lifecycle/upgrades and complete installed-extension/language/HA coverage.
    * - DuckDB 1.5.2
      - Native attached/session catalogs, functions/types/macros, retained
-       completion, native parsing and nested/indexed/positional member binding.
+       completion, native parsing and nested/indexed/positional member binding,
+       including grouped receivers and explicitly named CTE projection positions.
      - Native administration, typed data/DDN imports, durable recipes and
        qualified schema transformations and retained-session workflows.
      - Remaining native transformations, computed/contextual binding and full
