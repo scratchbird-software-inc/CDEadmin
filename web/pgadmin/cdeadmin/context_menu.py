@@ -33,6 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
+    'open_mysql_local_clone',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
@@ -762,6 +763,9 @@ def endpoint_context_actions(
             icon='action.edit', group='availability', mutation='write', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
+        actions.append(_action('endpoint.mysql.local_clone', 'MySQL local physical clone...', 'open_mysql_local_clone',
+            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native clone jobs.'))
         for tab, label in (('monitoring', 'MySQL server dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
             actions.append(_action(f'endpoint.mysql.{tab}', label, 'open_workspace',

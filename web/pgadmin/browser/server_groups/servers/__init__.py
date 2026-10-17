@@ -2950,6 +2950,11 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_clone_review','mysql_clone_start','mysql_clone_status','mysql_clone_list','mysql_clone_cancel','mysql_clone_reconcile'}:
+                    try:
+                        payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
                     payload = service.postgresql_schema_application(server, action, data.get('request'))
                 elif action == 'postgresql_relational_review':

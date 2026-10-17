@@ -741,3 +741,29 @@ and WAL verification then checks the materialized copy before PostgreSQL starts.
 The recovery receipt retains both scopes; TAR file checks alone do not establish
 WAL availability or recovery. Materialization for incremental chain reconstruction
 and production restore remains separate work.
+
+MySQL native local physical clone
+================================
+
+The native MySQL server menu provides reviewed local cloning through the
+installed clone plugin. It copies the plugin-supported InnoDB data and data
+dictionary into a new database-server directory. Configuration, binary logs,
+external encryption keys and other storage engines need their applicable
+workflows. The server's native BACKUP_ADMIN and filesystem rules remain the
+execution authority; a missing plugin is reported as unavailable.
+
+Durable jobs own separate native worker and observer connections. Dispatch
+rechecks server UUID, version, principal, plugin/settings and filesystem path
+conversion. Native performance-schema status is correlated by clone ID,
+connection ID, operation start time, source and destination. Local clone IDs
+can be reused; the operation identity is frozen while its connection is owned.
+Cancellation additionally checks the
+current native PFS thread identity before KILL QUERY. Client timeout or lost
+connection does not prove server termination or filesystem rollback. Unknown
+jobs can inspect native state again without replaying the clone. Terminal
+receipts remain available while the source is offline.
+
+Native clone completion, independent file verification and a recovery drill
+retain separate receipt fields. Server-host restore/provisioning, remote clone,
+the remaining native physical backup utilities, PITR and archive management
+remain separate product requirements.

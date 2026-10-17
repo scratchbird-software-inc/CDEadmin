@@ -1589,6 +1589,12 @@ class ProviderWorkspaceService:
         except ContinuityError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def mysql_clone(self, server, operation, request):
+        from .mysql_clone_service import action
+        from ..providers.mysql_family.mysql_clone import CloneError
+        try:return action(self,server,operation,request)
+        except CloneError as error:raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_server_catalog(self, server, request):
         from ..providers.postgresql.provider import PostgreSQLProvider
         from ..providers.postgresql.server_catalog import inventory, bundle, export_inventory
