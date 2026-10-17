@@ -273,7 +273,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        Structured native virtual-table constructors and retained-session FTS
        maintenance preserve transaction ownership; partial module/metadata
        observations retain healthy editor completion and explicit coverage.
-     - Remaining attached/public-FTS-column and installed-module transformations and
+       Reviewed external-content FTS4/FTS5 public-column renames preserve
+       ordinary dependent views, maintenance triggers and native index settings.
+     - Remaining attached/FTS table-function-view/row-language and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL

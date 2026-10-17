@@ -15,6 +15,8 @@ from copy import deepcopy
 
 CASES=[(module,'owner',failure) for module in ('fts4','fts5') for failure in (None,'stale','rollback','denied','lost_commit')]
 CASES += [(module,mode,None) for module in ('fts4','fts5') for mode in ('chain','rowid','unrelated')]
+CASES += [(module,mode,failure) for module in ('fts4','fts5') for mode in ('public','public-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit')]
 
 
 @pytest.mark.parametrize('module,mode,failure',CASES)
@@ -31,16 +33,21 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
                 connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+',rank) VALUES(?,?)',(key,value))
         else:connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('automerge=4')")
         connection.execute('CREATE VIEW projection AS SELECT rowid,body FROM '+quote(search));connection.commit()
+        if mode.startswith('public'):
+            connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON '+quote(owner)+' BEGIN INSERT INTO '+quote(search)+'(rowid,body) VALUES(new.id,new.body);END')
+            connection.commit()
         original=connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()
         saved=configuration(connection,'main',search,module)
     provider=SQLiteProvider(Context(),SimpleNamespace(require=Mock()),_create_client());route={'database':str(path),'filesystem_root':str(tmp_path)}
     try:
         service=workspace(tmp_path,provider,route)
         baseline=json.dumps(build_export(provider.capture_catalog(route,include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
-        renames=([{'kind':'table','table':owner,'to':new_owner}] if mode in {'owner','chain'} else
+        renames=([{'kind':'column','table':owner,'from':'body','to':'text:雪'}] if mode.startswith('public') else
+            [{'kind':'table','table':owner,'to':new_owner}] if mode in {'owner','chain'} else
             [{'kind':'column','table':owner,'from':'id' if mode=='rowid' else 'extra','to':'new_id' if mode=='rowid' else 'new_extra'}])
         if mode=='chain':renames.append({'kind':'table','table':search,'to':new_search})
-        required=mode in {'owner','chain'} or module=='fts5' and mode=='rowid'
+        if mode=='public-chain':renames.extend([{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
+        required=mode in {'owner','chain'} or mode.startswith('public') or module=='fts5' and mode=='rowid'
         selected=[_resource_id('fts-table',['main'],search)] if required else []
         request={'database_target_id':'file','baseline':baseline,'renames':renames,'fts_rebindings':selected}
         generated=service.sqlite_schema_rename_design('owned',request)
@@ -79,17 +86,55 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
         assert service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)['state']==expected
         provider.client._connect.assert_not_called()
         applied=failure in {None,'lost_commit'}
-        actual_owner=new_owner if applied and mode in {'owner','chain'} else owner
-        actual_search=new_search if applied and mode=='chain' else search
+        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain'} else owner
+        actual_search=new_search if applied and mode in {'chain','public-chain'} else search
+        actual_field='text:雪' if applied and mode.startswith('public') else 'body'
         with closing(sqlite3.connect(path)) as observer:
             assert observer.execute('SELECT rowid,* FROM '+quote(actual_owner)+' ORDER BY rowid').fetchall()==[(1,1,'native token','one'),(wide,wide,'native 雪 token','two')]
-            assert observer.execute('SELECT rowid,body FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native' ORDER BY rowid").fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            assert observer.execute('SELECT rowid,'+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native' ORDER BY rowid").fetchall()==[(1,'native token'),(wide,'native 雪 token')]
             assert observer.execute('SELECT * FROM projection ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
             assert configuration(observer,'main',actual_search,module)['commands']==saved['commands']
             if not applied:assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==original
             else:
                 observer.execute('INSERT INTO '+quote(actual_search)+'('+quote(actual_search)+(',rank) VALUES(\'integrity-check\',1)' if module=='fts5' else ") VALUES('integrity-check')"))
                 assert observer.execute('SELECT seq FROM sqlite_sequence WHERE name=?',(actual_owner,)).fetchone()==(wide,)
+                if mode.startswith('public'):
+                    observer.execute('INSERT INTO '+quote(actual_owner)+'('+quote(actual_field)+") VALUES('fresh native term')")
+                    assert observer.execute('SELECT '+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'fresh'").fetchall()==[('fresh native term',)]
+    finally:provider.close()
+
+
+@pytest.mark.parametrize('module',['fts4','fts5'])
+def test_public_fts_rename_preserves_quoted_columns_and_unindexed_options(tmp_path,module):
+    path=tmp_path/'options.sqlite';former="Body '雪";renamed='renamed:雪'
+    quote=lambda value:'"'+value.replace('"','""')+'"'
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute('CREATE TABLE docs(id INTEGER PRIMARY KEY,'+quote(former)+',tag)')
+        constructor=(quote(former)+' TEXT,tag,notindexed='+quote(former) if module=='fts4'
+                     else quote(former)+' UNINDEXED,tag')
+        connection.execute('CREATE VIRTUAL TABLE search USING '+module+'('+constructor+",content='docs')")
+        connection.execute('CREATE VIEW projected AS SELECT '+quote(former)+' FROM search')
+        connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON docs BEGIN INSERT INTO search(rowid,'+quote(former)+',tag) VALUES(new.id,new.'+quote(former)+',new.tag);END')
+        connection.execute('INSERT INTO docs VALUES(1,?,?)',('unindexedvalue','indexedvalue'));connection.commit()
+    provider=SQLiteProvider(Context(),SimpleNamespace(require=Mock()),_create_client());route={'database':str(path),'filesystem_root':str(tmp_path)}
+    try:
+        service=workspace(tmp_path,provider,route)
+        baseline=json.dumps(build_export(provider.capture_catalog(route,include_system=False)['resources'],endpoint_id='endpoint',target_id='file',generation='g',engine='sqlite')['snapshot'])
+        request={'database_target_id':'file','baseline':baseline,
+                 'renames':[{'kind':'column','table':'docs','from':former,'to':renamed}],
+                 'fts_rebindings':[_resource_id('fts-table',['main'],'search')]}
+        generated=service.sqlite_schema_rename_design('owned',request)
+        documents={**request,'desired':json.dumps(generated['snapshot'])}
+        displayed=service.sqlite_schema_plan('owned',documents);assert displayed['ready_for_review'],displayed
+        reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
+        result=service.sqlite_schema_application('owned','sqlite_schema_apply',{'database_target_id':'file',**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True})
+        assert result['state']=='committed',result
+        with closing(sqlite3.connect(path)) as observer:
+            assert observer.execute("SELECT rowid FROM search WHERE search MATCH 'indexedvalue'").fetchall()==[(1,)]
+            assert observer.execute("SELECT rowid FROM search WHERE search MATCH 'unindexedvalue'").fetchall()==[]
+            assert observer.execute('SELECT * FROM projected').fetchall()==[('unindexedvalue',)]
+            observer.execute('INSERT INTO docs VALUES(2,?,?)',('secondbody','secondtag'))
+            assert observer.execute("SELECT "+quote(renamed)+" FROM search WHERE search MATCH 'secondtag'").fetchall()==[('secondbody',)]
     finally:provider.close()
 
 

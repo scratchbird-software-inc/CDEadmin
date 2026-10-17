@@ -86,6 +86,8 @@ def generate(baseline,renames,fts_rebindings=()):
         if schema(model(probe,baseline))!=schema(baseline):
             raise ValueError('The empty native rename schema cannot reproduce all baseline facts')
         stages=[]
+        for rebind in rebindings:
+            for source in rebind['before']:probe.execute(source);stages.append(source)
         for item in selected:
             if probe.execute('SELECT type FROM main.sqlite_schema WHERE name=?',(item['table'],)).fetchone()!=('table',):
                 raise ValueError('Select an observed native table for each rename')
@@ -114,7 +116,7 @@ def plan(baseline,desired,live,renames,fts_rebindings=()):
     if schema(generated)!=schema(desired):blockers.append({'resource_id':'','name':'SQLite rename','reason':'Desired DDN differs from the native rewritten schema; generate the rename design again'})
     operation={'operation':'rename-batch','kind':'table','resource_id':'sqlite-native-rename-batch',
         'name':'Native table/column renames','renames':selected,'fts_rebindings':list(fts_rebindings),'stages':stages,
-        'fts_rebuilds':[{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration')} for item in rebuilds],
+        'fts_rebuilds':[{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration','column_renames')} for item in rebuilds],
         'source':'\n'.join(stage+';' for stage in stages),'baseline_schema_sha256':digest(schema(baseline)),
         'desired_schema_sha256':digest(schema(generated))}
     ready=not conflicts and not blockers

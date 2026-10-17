@@ -156,8 +156,8 @@ SQLITE-COMP-05: DDN design exchange
   verified. The operation copies no rows and preserves native row IDs and
   AUTOINCREMENT state. Contention refuses dispatch; a missing commit reply stays
   unknown without replay. Native FTS3/4/5, RTree/RTree_i32 and Geopoly table
-  renames are also admitted. Generation for attached environments, external-
-  content column rewriting and additional installed module/function/collation adapters
+  renames are also admitted. Generation for attached environments and
+  additional installed module/function/collation adapters
   remains open.
 
   Virtual-table catalog families and module identities are resolved with the
@@ -168,9 +168,13 @@ SQLITE-COMP-05: DDN design exchange
   owner rename selects the exact FTS4/FTS5 indexes to reconstruct in the same
   transaction. Native settings survive the reconstruction and native integrity
   checks verify the rebuilt index against its content rows. FTS5 content-row
-  identity changes have a corresponding constructor adapter. Public FTS content
-  column and FTS4 row/language mappings retain separate acceptance. Native ALTER
-  alone can leave an external-content search table unusable.
+  identity changes have a corresponding constructor adapter. Public FTS4/FTS5
+  content-column changes reconstruct selected indexes and use native schema
+  rewriting for dependent ordinary views and maintenance triggers. Quoted
+  column names and native UNINDEXED/notindexed settings survive the change.
+  Native table-function views and FTS4 row/language mappings retain separate
+  adapter acceptance. Native ALTER alone can leave an external-content search
+  table unusable.
 
   The explorer's virtual-table creation form provides structured native
   constructors for FTS3/4/5, RTree/RTree integer, Geopoly, FTS4 auxiliary,
