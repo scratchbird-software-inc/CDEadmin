@@ -163,6 +163,24 @@ def browser(app, output, sid, binary, driver_binary, *, table_functions=False):
             assert inserted == source.replace('j.', 'j."value"', 1), inserted
             _run_query(driver, wait, inserted, '7', 'SQLite', output)
             (output / 'native-table-function-insertion.json').write_text(json.dumps({'source': inserted, 'column': 'value'}, indent=2))
+            for source, prefix, column in [
+                ("SELECT 'native row alias:' || j. FROM json_each('{\"snow\":7}') AS j", "SELECT 'native row alias:' || j.", '_rowid_'),
+                ("WITH q AS (SELECT j._rowid_ FROM json_each('{\"snow\":7}') j) SELECT 'native CTE alias:' || q. FROM q",
+                 "WITH q AS (SELECT j._rowid_ FROM json_each('{\"snow\":7}') j) SELECT 'native CTE alias:' || q.", '_rowid_'),
+            ]:
+                _set_query(driver, wait, source)
+                editor = wait.until(lambda browser: _query_editor(browser))
+                editor.send_keys(Keys.CONTROL, Keys.HOME); editor.send_keys(Keys.ARROW_RIGHT * len(prefix))
+                editor.send_keys(Keys.CONTROL, Keys.SPACE)
+                option = wait.until(lambda browser: next((node for node in browser.find_elements(
+                    By.CSS_SELECTOR, '.cm-tooltip-autocomplete .cm-completionLabel') if node.is_displayed() and node.text == column), None))
+                option.click()
+                inserted = driver.execute_script('return [...arguments[0].querySelectorAll(".cm-line")].map(n=>n.textContent).join("\\n");', _query_editor(driver))
+                assert inserted == prefix + '"' + column + '"' + source[len(prefix):], inserted
+                from contextlib import closing
+                with closing(sqlite3.connect(':memory:')) as oracle:
+                    expected = str(oracle.execute(inserted).fetchone()[0])
+                _run_query(driver, wait, inserted, expected, 'SQLite', output)
         driver.save_screenshot(str(output / 'native-sqlite-extension.png'))
         errors = [row for row in driver.get_log('browser') if row.get('level') == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2)); assert not errors

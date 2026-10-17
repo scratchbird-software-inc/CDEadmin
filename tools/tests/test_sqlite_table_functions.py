@@ -77,6 +77,51 @@ def test_real_relation_masking_and_schema_priority_do_not_invent_function_column
     finally: connection.close()
 
 
+def test_native_table_function_physical_aliases_are_observed_and_hidden_from_star(tmp_path):
+    connection=sqlite3.connect(tmp_path/'aliases.sqlite',factory=SQLiteConnection)
+    try:
+        connection.execute('CREATE TABLE pending(value)');connection.execute('INSERT INTO pending VALUES(42)')
+        connection.execute('SAVEPOINT caller');calls=[]
+        connection.create_function('sqlite_version',0,lambda:calls.append('version') or 'poisoned')
+        observed=discover(connection.cursor(),['main'],set())
+        assert len(observed)==len(inventory())
+        for function in observed:
+            scope=function['scopes'][0]
+            physical={row['name'] for row in scope['rowid_observations'] if row['available']}
+            declared={row['name'].lower() for row in scope['columns']}
+            assert physical | (declared & {'rowid','_rowid_','oid'})=={'rowid','_rowid_','oid'}
+            assert not physical & declared
+            if function['name']=='pragma_foreign_key_check':assert 'rowid' not in physical
+        symbols=metadata(connection,'sqlite')['resources']
+        aliases=[row for row in symbols if row['display_path'][:-1]==['main','json_each'] and row['display_name'] in {'rowid','_rowid_','oid'}]
+        assert len(aliases)==3 and all(row['hidden_from_star'] and row['detail'].startswith('INTEGER;') for row in aliases)
+        assert not calls and connection.in_transaction
+        connection.execute('ROLLBACK TO caller')
+        assert connection.execute('SELECT * FROM pending').fetchall()==[(42,)]
+    finally:connection.close()
+
+
+def test_native_rowid_denial_keeps_visible_function_columns_and_partial_evidence(tmp_path):
+    connection=sqlite3.connect(tmp_path/'denied-rowid.sqlite',factory=SQLiteConnection)
+    reads=[]
+    def policy(action,name,column,*_):
+        if action==sqlite3.SQLITE_READ and name=='json_each':
+            reads.append(column)
+            if str(column).upper()=='ROWID':return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+    try:
+        connection.set_authorizer(policy)
+        observed=discover(connection.cursor(),['main'],set())
+        native=next(row for row in observed if row['name']=='json_each')
+        assert native['available'] and not native['observation_complete']
+        assert all(not row['available'] and row['native_error_code']==sqlite3.SQLITE_AUTH for row in native['scopes'][0]['rowid_observations'])
+        symbols=metadata(connection,'sqlite')['resources']
+        names={row['display_name'] for row in symbols if row['resource_kind']=='column' and row['display_path'][:-1]==['main','json_each']}
+        assert {'key','value'}<=names and not names & {'rowid','_rowid_','oid'}
+        assert reads and connection._cdeadmin_authorizer is policy
+    finally:connection.close()
+
+
 def test_denied_table_function_observation_is_retained_and_marks_catalog_incomplete(tmp_path):
     path = tmp_path / 'denied.sqlite'
     with closing(sqlite3.connect(path)) as seed: seed.execute('CREATE TABLE owned(id INTEGER)')

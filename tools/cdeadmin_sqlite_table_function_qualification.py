@@ -45,11 +45,13 @@ def qualify(output):
                 if native_function:
                     schema, function = native_function[:2] if isinstance(native_function, tuple) else ('main', native_function)
                     names = [row[1] for row in handle.execute('PRAGMA ' + quote(schema) + '.table_xinfo(' + quote(function) + ')')]
-                    if isinstance(native_function, tuple) and len(native_function) == 3:
-                        # These fixtures are ordinary ROWID tables. Explicit
-                        # member completion includes their native pseudo names,
-                        # while SELECT * deliberately excludes those names.
-                        names += [alias for alias in ('rowid', '_rowid_', 'oid') if alias not in names]
+                    for alias in ('rowid', '_rowid_', 'oid'):
+                        if alias not in names:
+                            # Native acceptance of the actual completed source
+                            # is independent from the adapter's module probes.
+                            try:handle.execute('EXPLAIN '+marked.replace('|',quote(alias))).fetchone()
+                            except sqlite3.Error:pass
+                            else:names.append(alias)
                 else:
                     oracle = handle.execute(marked.replace('|', '*')); names = [column[0] for column in oracle.description]
                     assert oracle.fetchall()
@@ -73,6 +75,10 @@ def qualify(output):
             ("SELECT j.| FROM \"attached.schema\".json_each('{\"snow\":7}') j", 'json_each'),
             ("WITH q AS (SELECT j.* FROM json_each('{\"snow\":7}') j) SELECT q.| FROM q", None),
             ("WITH q AS (SELECT j.key FROM json_each('{\"snow\":7}') j) SELECT q.| FROM q", None),
+            ("WITH q AS (SELECT j.rowid FROM json_each('{\"snow\":7}') j) SELECT q.| FROM q", None),
+            ("WITH q AS (SELECT j._rowid_ FROM json_each('{\"snow\":7}') j) SELECT q.| FROM q", None),
+            ("WITH q AS (SELECT j.oid FROM json_each('{\"snow\":7}') j) SELECT q.| FROM q", None),
+            ("WITH q AS (SELECT j._rowid_ AS renamed FROM json_each('{\"snow\":7}') j), r AS (SELECT renamed FROM q) SELECT r.| FROM r", None),
             ("WITH json_each AS (SELECT id AS local_value FROM owned) SELECT q.| FROM json_each q", None),
         ])
         handle.execute('CREATE TEMP TABLE json_each(owned_temp TEXT)')

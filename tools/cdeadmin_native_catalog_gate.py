@@ -74,7 +74,7 @@ def sqlite(connection):
     candidates = {'json_each', 'json_tree', 'jsonb_each', 'jsonb_tree', 'carray',
                   'dbstat', 'sqlite_dbpage', 'sqlite_stmt', 'fts3tokenize'}
     candidates.update('pragma_' + row[0] for row in connection.execute('PRAGMA pragma_list'))
-    table_functions = {}
+    table_functions = {}; physical_aliases = {}
     for _ordinal, schema, _path in list(connection.execute('PRAGMA database_list')):
         for name in sorted(candidates):
             if connection.execute('SELECT 1 FROM ' + quote(schema) + '.sqlite_schema WHERE '
@@ -83,7 +83,20 @@ def sqlite(connection):
                 columns = list(connection.execute('PRAGMA ' + quote(schema) + '.table_xinfo(' + quote(name) + ')'))
             except sqlite3.Error:
                 continue
-            if columns: table_functions.setdefault(name, {})[schema] = columns
+            if columns:
+                table_functions.setdefault(name, {})[schema] = columns
+                declared = {str(row[1]).translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')) for row in columns}
+                arguments = ','.join('?' for row in columns if row[6] == 1)
+                source = quote(schema) + '.' + quote(name) + ('(' + arguments + ')' if arguments else '') + ' AS native_rows'
+                accepted = []
+                for alias in ('rowid', '_rowid_', 'oid'):
+                    if alias in declared: continue
+                    try:
+                        connection.execute('EXPLAIN SELECT native_rows.' + quote(alias) + ' FROM ' + source,
+                                           [None for row in columns if row[6] == 1]).fetchone()
+                    except sqlite3.Error: pass
+                    else: accepted.append(alias)
+                physical_aliases[schema, name] = accepted
     resources = _resources(connection, {})
     by_path = {(row['resource_kind'], tuple(row['display_path'])): row for row in resources}
     def module(source):
@@ -163,6 +176,9 @@ def sqlite(connection):
                 row['default'], row['primary_key_position'], row['hidden']) for row in scope.get('columns', [])]
             facts.append({'section': canonical([schema, name, 'native-table-function-columns']),
                 'equal': scope.get('available') is True and Counter(raw) == Counter(actual_columns)})
+            actual_aliases = [row['name'] for row in scope.get('rowid_observations', []) if row.get('available') is True]
+            facts.append({'section': canonical([schema, name, 'native-table-function-physical-aliases']),
+                'equal': Counter(physical_aliases[schema, name]) == Counter(actual_aliases)})
     actual = {}
     for row in resources:
         if row['resource_kind'] in {'constraint', 'metric'}: continue

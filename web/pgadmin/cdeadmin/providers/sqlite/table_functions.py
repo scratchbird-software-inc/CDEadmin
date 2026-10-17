@@ -41,6 +41,40 @@ def inventory():
         probe.close()
 
 
+def rowid_observations(cursor, schema, name, columns):
+    """Compile physical row aliases; never step the virtual-table result VM."""
+    names = {row['name'].translate(FOLD) for row in columns}
+    aliases = [alias for alias in ('rowid', '_rowid_', 'oid') if alias not in names]
+    placeholders = ','.join('?' for row in columns if row['hidden'] == 1)
+    source = quote(schema) + '.' + quote(name) + ('(' + placeholders + ')' if placeholders else '') + ' AS j'
+    parameters = [None for row in columns if row['hidden'] == 1]
+    def compile_aliases(selected):
+        cursor.execute('EXPLAIN SELECT ' + ','.join('j.' + quote(alias) for alias in selected) + ' FROM ' + source, parameters)
+        cursor.fetchone()
+    if not aliases:
+        return []
+    try:
+        compile_aliases(aliases)
+        return [{'name': alias, 'available': True} for alias in aliases]
+    except sqlite3.Error as error:
+        code = getattr(error, 'sqlite_errorcode', None)
+        if type(code) is not int or code & 255 not in {sqlite3.SQLITE_ERROR, sqlite3.SQLITE_AUTH}:
+            raise
+        # A policy may deny one physical alias while allowing the others.
+        result = []
+        for alias in aliases:
+            try:
+                compile_aliases([alias])
+                result.append({'name': alias, 'available': True})
+            except sqlite3.Error as error:
+                code = getattr(error, 'sqlite_errorcode', None)
+                if type(code) is not int or code & 255 not in {sqlite3.SQLITE_ERROR, sqlite3.SQLITE_AUTH}:
+                    raise
+                result.append({'name': alias, 'available': False, 'native_error_code': code,
+                               'native_error_name': getattr(error, 'sqlite_errorname', None)})
+        return result
+
+
 def discover(cursor, schemas, relations):
     """Respect live authorization and name masking on the original connection.
 
@@ -66,13 +100,17 @@ def discover(cursor, schemas, relations):
                 scopes.append({'schema': schema, 'available': False, 'native_error_code': code,
                                'native_error_name': getattr(error, 'sqlite_errorname', None)})
             else:
-                scopes.append({'schema': schema, 'available': bool(columns),
+                scope = {'schema': schema, 'available': bool(columns),
                     'columns': [{'ordinal_position': row[0], 'name': row[1], 'data_type': row[2],
                                  'nullable': not bool(row[3]), 'default': row[4],
-                                 'primary_key_position': row[5], 'hidden': row[6]} for row in columns]})
+                                 'primary_key_position': row[5], 'hidden': row[6]} for row in columns]}
+                if columns:
+                    scope['rowid_observations'] = rowid_observations(cursor, schema, name, scope['columns'])
+                scopes.append(scope)
         result.append({'name': name, 'scopes': scopes,
             'available': any(scope['available'] for scope in scopes),
-            'observation_complete': all(scope['available'] or scope.get('masked_by_relation') for scope in scopes),
-            'authority': 'native table_xinfo; result-producing virtual-table VM and wrapped PRAGMA not executed',
+            'observation_complete': all(scope.get('masked_by_relation') or scope['available'] and all(
+                row['available'] for row in scope.get('rowid_observations', [])) for scope in scopes),
+            'authority': 'native table_xinfo and EXPLAIN row-alias compilation; result-producing virtual-table VM and wrapped PRAGMA not executed',
             'unqualified_available': bool(scopes) and all(scope['available'] for scope in scopes)})
     return result

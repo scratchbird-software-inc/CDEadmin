@@ -229,6 +229,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
                         add('function', path, 'Native table-valued function', table_valued=True)
                         for column in scope['columns']:
                             add('column', [*path, column['name']], column['data_type'], hidden_from_star=column['hidden']==1)
+                        for alias in scope.get('rowid_observations', []):
+                            if alias['available']:
+                                add('column', [*path, alias['name']], 'INTEGER; native virtual-table row identifier',
+                                    hidden_from_star=True)
             for _ordinal, name in query('collations', 'PRAGMA collation_list'):
                 add('collation', [name])
             context['compile_options'] = [row[0] for row in query('compile-options', 'PRAGMA compile_options')]

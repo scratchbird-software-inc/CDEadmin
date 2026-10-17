@@ -1482,3 +1482,17 @@ busy policies; a lost caller savepoint after native interruption blocks session
 reuse. A lost commit reply remains unknown and never authorizes replay. These
 controls cover the recorded FTS operations; they do not qualify unrelated
 extension APIs or remaining schema transformations.
+
+SQLite table-function row identifiers
+---------------------------------------
+
+Native table-function metadata now compiles the physical ``rowid``, ``_rowid_``
+and ``oid`` aliases through the retained connection, with its original native
+authorization. It does not run the result-producing virtual-table program or a
+wrapped PRAGMA. Explicit same-named columns keep their native identity; physical
+aliases are excluded from star expansion and remain available for explicit
+selection. Denied observations retain the visible declared columns and mark
+coverage partial. Native fixture queries qualify direct aliases, CTE projections,
+explicit renaming and real relation masking separately from the parser's own
+declarations. Direct result labels and CTE column names need not be identical;
+the actual native CTE observations determine the completion expectation.
