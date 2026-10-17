@@ -121,11 +121,14 @@ The selected connector converts values into native literals; the application
 does not quote values itself. A fixed metadata read observes current SQL mode
 without changing native settings or deciding the caller's transaction.
 
-Converted query bytes use the native command port with the existing driver's
+Converted query bytes and unbound SQL containing DELIMITER text use the native command port with the existing driver's
 result ownership. Its client script preprocessor cannot rewrite DELIMITER words
 inside values. Actual client directives have native-mode-aware framing. Local
 binding refusals report that user SQL was not dispatched and preserve the usable
 session. Cancellation is checked again after conversion and before dispatch.
+Quoted multiline text and opaque library bodies remain intact when there are no
+bindings. Native client command identities use ASCII case rules, and actual
+unbound client-delimited routines retain their own framing and result ownership.
 Native qualification covers both interfaces, pending data/savepoints, exact
 values, multiple results, native refusals, cancellation and lost commit replies::
 

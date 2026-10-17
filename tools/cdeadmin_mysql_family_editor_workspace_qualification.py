@@ -128,6 +128,8 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                         assert result['error']['query_dispatch'] == 'not_started' and not result['session_reuse_blocked']
                         rows, result = execute('SELECT COUNT(*) FROM pending', {})
                         assert rows == [[1]] and not result.get('error')
+                        rows, result = execute("SELECT 'DELIMITER $$\nnative unbound HTTP' AS value", {})
+                        assert rows == [['DELIMITER $$\nnative unbound HTTP']] and not result.get('error')
                         checks.append({'name':'native-HTTP-literal-bindings-execution-refusal-and-session-reuse','passed':True})
                     post('close_session', session_id=session_id)
                     if browser_binary and pure is not False:
@@ -230,6 +232,15 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
             wait.until(lambda browser:any(node.is_displayed() and node.text=='DELIMITER $$\nnative UI binding'
                 for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
             checks.append({'name':'native-browser-JSON-bindings-and-literal-placeholder-execution','passed':True})
+            options = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            fill_fields(wait,['Query parameters (JSON object or array)={}'])
+            data = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Data Output"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            _run_query(driver,wait,"SELECT 'unbound marker' AS marker, 'DELIMITER $$\nnative unbound UI' AS value",'unbound marker','MySQL',output)
+            wait.until(lambda browser:any(node.is_displayed() and node.text=='DELIMITER $$\nnative unbound UI'
+                for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-unbound-delimiter-literal-preserved','passed':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors

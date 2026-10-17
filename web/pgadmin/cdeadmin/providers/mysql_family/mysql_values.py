@@ -193,9 +193,8 @@ class MySQLParameterAdmissionError(RelationalClientError):
     """The native metadata reply was complete; user SQL was not dispatched."""
 
 
-def bound_source(connection, cursor, source, params):
-    """Bind only lexical markers, using the selected driver's native literals."""
-    from ...data_studio.mysql_quoting import available, parameter_spans
+def observed_language(connection):
+    """Read the retained native language without changing session policy."""
     observation = connection.cursor()
     try:
         observation.execute('SELECT VERSION(), @@SESSION.sql_mode')
@@ -206,8 +205,16 @@ def bound_source(connection, cursor, source, params):
     if isinstance(version, bytes): version = version.decode('ascii')
     # Synchronize the client's cache only. No native language setting changes.
     connection._sql_mode = mode
+    return version, mode
+
+
+CLIENT_DELIMITER = re.compile(r'^[ \t]*DELIMITER[ \t]+', re.I | re.M | re.A)
+
+
+def framed_source(source, version, mode):
+    from ...data_studio.mysql_quoting import available
     modes = set(mode.split(','))
-    if re.search(r'(?im)^[ \t]*DELIMITER[ \t]+', source):
+    if CLIENT_DELIMITER.search(source):
         from ...data_studio.language_tools import analyze
         framed = analyze(source, 'mysql-sql', script=True, settings={
             'ansi_quotes':'ANSI_QUOTES' in modes, 'no_backslash_escapes':'NO_BACKSLASH_ESCAPES' in modes,
@@ -216,6 +223,21 @@ def bound_source(connection, cursor, source, params):
             if not framed['script_ready']:
                 raise MySQLParameterAdmissionError('MySQL client script framing is unconfirmed before query dispatch')
             source = ';\n'.join(item['source'] for item in framed['statements'])
+    return source
+
+
+def unbound_source(connection, source):
+    if CLIENT_DELIMITER.search(source):
+        source = framed_source(source, *observed_language(connection))
+    return source.encode(connection.python_charset)
+
+
+def bound_source(connection, cursor, source, params):
+    """Bind only lexical markers, using the selected driver's native literals."""
+    from ...data_studio.mysql_quoting import available, parameter_spans
+    version, mode = observed_language(connection)
+    source = framed_source(source, version, mode)
+    modes = set(mode.split(','))
     spans = list(parameter_spans(source, modes, dollar_quotes=available(version)))
     named = isinstance(params, Mapping)
     if ((named and any(name is None or name not in params for _start, _end, name in spans)) or
@@ -257,9 +279,14 @@ class Cursor:
             raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
         native_bound = (bool(params) and isinstance(operation, str) and not args and
             not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False))
+        native_direct = native_bound or (not params and isinstance(operation, str) and not args and
+            not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False) and
+            re.search(r'DELIMITER', operation, re.I | re.A) is not None)
         if native_bound:
             operation = bound_source(self.connection, self.native, operation, params)
             params = None
+        elif native_direct:
+            operation = unbound_source(self.connection, operation)
         if self.cancel_requested is not None and self.cancel_requested():
             raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
         if self._native_c_api is not None:
@@ -268,7 +295,7 @@ class Cursor:
             # batch would otherwise inherit the last catalog cursor's mode.
             # This changes client conversion only; no SQL is dispatched here.
             self._native_c_api.raw(True)
-        if native_bound:
+        if native_direct:
             # The native COM_QUERY port retains result ownership in the same
             # driver cursor. Its client script preprocessor must not interpret
             # DELIMITER words inside already converted values or native bodies.

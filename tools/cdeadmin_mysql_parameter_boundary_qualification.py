@@ -78,6 +78,12 @@ def qualify(output):
                                     rows, result = sql(source, params)
                                     assert rows == expected and not result.get('error'), (name, result.get('error'))
                                     checks.append({'name':name,'mode':mode,'preflight_and_native_execution_agree':True})
+                                for source, expected in (
+                                    ("SELECT 'DELIMITER //\nquoted value' AS v", 'DELIMITER //\nquoted value'),
+                                    ("SELECT 'line one\nDELIMITER $$\nline three' AS v", 'line one\nDELIMITER $$\nline three')):
+                                    rows, result = sql(source)
+                                    assert rows == [(expected,)] and not result['error']
+                                    checks.append({'name':'unbound-delimiter-text-keeps-native-bytes','mode':mode})
                                 for params in ((1, 2), {'wrong': 1}):
                                     source = 'INSERT INTO pending VALUES(' + ('%s' if isinstance(params,tuple) else '%(required)s') + ')'
                                     _rows, result = sql(source, params)
@@ -124,10 +130,26 @@ def qualify(output):
                                 assert [row for page in pages for row in page['payload']['rows']] == [(text,)]
                                 pages = collect(client,client.execute(helper,{'source':'DROP PROCEDURE bound_program'}))
                                 assert not pages[-1]['payload']['error']
+                                body='// native opaque body\nDELIMITER //\nexport const value="%s";'
+                                source='CREATE LIBRARY unbound_library LANGUAGE JAVASCRIPT AS $tag$'+body+'$tag$'
+                                pages=collect(client,client.execute(helper,{'source':source}))
+                                assert not pages[-1]['payload']['error'],pages[-1]['payload']
+                                oracle.execute('SELECT LIBRARY_DEFINITION FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA=%s AND LIBRARY_NAME=%s',(database,'unbound_library'))
+                                assert oracle.fetchone()==(body,)
+                                pages=collect(client,client.execute(helper,{'source':'DROP LIBRARY unbound_library'}))
+                                assert not pages[-1]['payload']['error']
+                                source=('DELIMITER $$\nCREATE PROCEDURE unbound_program() BEGIN SELECT \'DELIMITER //\' AS v; END$$\n'
+                                        'DELIMITER ;\nCALL unbound_program();')
+                                pages=collect(client,client.execute(helper,{'source':source}))
+                                assert not pages[-1]['payload']['error']
+                                assert [row for page in pages for row in page['payload']['rows']]==[('DELIMITER //',)]
+                                pages=collect(client,client.execute(helper,{'source':'DROP PROCEDURE unbound_program'}))
+                                assert not pages[-1]['payload']['error']
                             finally: client.close_session(helper)
                             work.execute('ROLLBACK TO SAVEPOINT sr_pending')
                             oracle.execute('SELECT COUNT(*) FROM `' + database + '`.pending'); assert oracle.fetchone() == (1,)
                             checks.append({'name':'native-client-delimiter-bound-program-and-call-on-independent-session'})
+                            checks.append({'name':'native-unbound-opaque-library-and-delimited-program-preserve-body'})
                             client.control_transaction(handle, 'rollback')
                             rows, result = sql('SELECT COUNT(*) FROM pending'); assert rows == [(1,)] and not result['error']
                         finally: work.close()

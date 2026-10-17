@@ -148,7 +148,7 @@ def analyze(source, language, *, script=False, settings=None):
         if script and (i == 0 or source[i - 1] == '\n'):
             line = source[i:source.find(
                 '\n', i) if '\n' in source[i:] else len(source)]
-            directive = re.fullmatch(r'\s*DELIMITER\s+(\S+)\s*', line, re.I)
+            directive = re.fullmatch(r'\s*DELIMITER\s+(\S+)\s*', line, re.I | re.A)
             if directive and language in MYSQL:
                 if ''.join(clean[start:i]).strip():
                     issue(

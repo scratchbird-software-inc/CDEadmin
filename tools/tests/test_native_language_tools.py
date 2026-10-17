@@ -48,6 +48,11 @@ def test_mysql_carriage_return_does_not_terminate_native_line_comment():
     assert not result['script_ready'] and not result['statements'], result
 
 
+def test_mysql_client_directive_keywords_use_ascii_case_rules():
+    checked = analyze('DELıMıTER //\nSELECT 1;', 'mysql-sql', script=True)
+    assert not checked['client_directives']
+
+
 @pytest.mark.parametrize('language,source,code', [
     ('mysql-sql', "SELECT 'a\\\'b';", 'SESSION_MODE_REQUIRED'),
     ('postgresql-sql', 'SELECT `column`;', 'QUOTE_DIALECT'),
