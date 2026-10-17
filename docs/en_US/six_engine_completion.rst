@@ -729,9 +729,12 @@ bindings and desired child metadata are checked before commit. Unique-index or
 trigger-binding failure rolls back the entire batch. Rowids and AUTOINCREMENT
 continuation retain their applicable preservation contracts.
 
-Adding/removing a rebuilt table's index or trigger identities and rewriting other
-dependent object definitions remain separate work. Explicit deletions remain a
-separate destructive review; a filtered-out child is not deletion intent.
+The same rebuild can create new indexes/triggers and remove children selected by
+exact explicit deletion identity. Native compilation must agree with every
+desired child record; a filtered-out child is not deletion intent. Reviewed
+warnings identify discarded child identities, and precommit checks verify their
+absence. Deletions outside selected rebuilt tables remain separate reviews.
+Rewriting other dependent object definitions remains separate work.
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

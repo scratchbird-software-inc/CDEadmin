@@ -220,7 +220,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         try:
             from .sqlite_rebuild import plan_rebuild
             operation = plan_rebuild(old, wanted, baseline, connection,
-                column_renames=rename_maps.get(identity),desired=desired)
+                column_renames=rename_maps.get(identity),desired=desired,
+                child_deletions=sorted(child_id for child_id in deletions if child_id in baseline_children and baseline_children[child_id]['kind'] in {'index','trigger'}))
             expected_ids = {_resource_id('column', old['path'], item['name'])
                 for item in operation['target_columns']}
             present = {row_id for row_id, row in after.items()
@@ -263,6 +264,9 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     blockers.append({'resource_id': identity, 'name': row['name'],
                         'reason': 'Changing an existing native definition requires a separately qualified SQLite migration'})
             continue
+        if (row['kind'] in {'index','trigger'} and len(row['path'])==3 and row['path'][0]=='main' and
+                _resource_id('table',['main'],row['path'][1]) in rebuilds):
+            continue  # The coordinated rebuild compiles and creates this child.
         if row['kind'] in {'column', 'constraint', 'index'} and len(row['path']) == 3:
             parents = {_resource_id(kind, row['path'][:1], row['path'][1])
                        for kind in ('table', 'view', 'fts-table', 'virtual-table')}
@@ -304,7 +308,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         except (ValueError, sqlite3.Error) as error:
             blockers.append({'resource_id': identity, 'name': row['name'],
                 'reason': str(error)[:400]})
-    covered_deletions = set()
+    covered_deletions = {identity for operation in operations if operation['operation']=='rebuild'
+        for identity in operation.get('child_deletions',[])}
     planned_deleted_ids = set(deletions)
     for deleted_id in deletions:
         parent = before.get(deleted_id)
@@ -313,6 +318,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                 if child_id != deleted_id and
                 child['path'][:len(parent['path'])] == parent['path'])
     for identity in sorted(deletions):
+        if identity in covered_deletions:continue
         row = before.get(identity)
         if (row is None or row['kind'] not in CREATABLE or row['system'] != 'false' or
                 row['native'].get('system_object') is not False or
@@ -395,4 +401,4 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         'operations': operations, 'blockers': blockers, 'conflicts': conflicts,
         'execution_sha256': digest(operations), 'native_grammar_validated': True,
         'ready_for_review': executable, 'application_supported': executable,
-        'warnings': ['Deletions require exact explicit identities and a separate review; missing DDN rows alone never delete. Table rebuilds require explicit selection and their native preservation checks.']}
+        'warnings': ['Deletions require exact explicit identities; missing DDN rows alone never delete. Deletions outside selected rebuilt tables require a separate review. Table rebuilds require explicit selection and their native preservation checks.']}

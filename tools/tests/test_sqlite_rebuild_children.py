@@ -17,7 +17,8 @@ from pgadmin.cdeadmin.operations.store import JsonOperationStore
 
 
 @pytest.mark.parametrize('failure',[None,'unique','trigger','stale','metadata','filtered'])
-def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,failure):
+@pytest.mark.parametrize('change_identities',[False,True])
+def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,failure,change_identities):
     @dataclass(frozen=True)
     class Context:
         endpoint_id:str='endpoint'
@@ -34,6 +35,9 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
         'touch':'CREATE TRIGGER "main"."touch" AFTER DELETE ON "owned" BEGIN INSERT INTO audit VALUES(old.renamed || \':gone\'); END',
         'projection':'CREATE VIEW "main"."projection" AS SELECT id,renamed FROM owned'}
     if failure=='trigger':target['touch']=target['touch'].replace('INTO audit','INTO missing_relation')
+    if change_identities:
+        target['new_by_value']=target.pop('by_value').replace('."by_value"','."new_by_value"')
+        target['new_touch']=target.pop('touch').replace('."touch"','."new_touch"')
     for file,definitions in ((path,original),(target_path,target)):
         with closing(sqlite3.connect(file)) as connection:
             for source in definitions.values():connection.execute(source)
@@ -46,6 +50,7 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
     route={'database':str(path),'filesystem_root':str(tmp_path)}
     owner=_resource_id('table',['main'],'owned')
     renamed=[{'table':owner,'from':'value','to':'renamed'}]
+    deletions=[_resource_id('index',['main','owned'],'by_value'),_resource_id('trigger',['main','owned'],'touch')] if change_identities else []
     try:
         def capture(file):
             return build_export(provider.capture_catalog({**route,'database':str(file)})['resources'],
@@ -58,11 +63,15 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
             if row['path'][:2]==['main','owned'] or row['name']=='projection':desired['rows'][identity]=deepcopy(row)
         for row in desired['rows'].values():
             if row['kind'] in {'table','view','index','trigger'} and row['name'] in target and row['name']!='audit':row['native']['ddl']=target[row['name']]
-        index_id=_resource_id('index',['main','owned'],'by_value')
+        index_name='new_by_value' if change_identities else 'by_value'
+        index_id=_resource_id('index',['main','owned'],index_name)
         if failure=='metadata':desired['rows'][index_id]['native']['catalog_metadata']['unique']=False
         if failure=='filtered':del desired['rows'][index_id]
         with closing(sqlite3.connect(path)) as connection:
-            preview=plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed)
+            if change_identities and failure is None:
+                missing_intent=plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed)
+                assert not missing_intent['ready_for_review'] and any('explicit deletion' in item['reason'] for item in missing_intent['blockers'])
+            preview=plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed,deletions=deletions)
             assert connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before
             assert not connection.in_transaction
             if failure in {'metadata','filtered'}:
@@ -72,8 +81,9 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
             assert {item['operation'] for item in preview['operations']}=={'create','rebuild'}
             rebuilt=next(item for item in preview['operations'] if item['operation']=='rebuild')
             assert rebuilt['coordinated_children'] and len(rebuilt['target_child_sources'])==3
+            assert rebuilt['child_deletions']==sorted(deletions)
             assert rebuilt['preserve_rowid'] and rebuilt['preserve_autoincrement']
-            assert plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed)['execution_sha256']==preview['execution_sha256']
+            assert plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed,deletions=deletions)['execution_sha256']==preview['execution_sha256']
         def document(model):
             resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_path':row['path'],
                 'display_name':row['name'],'native':row['native']} for row in model['rows'].values()]
@@ -83,7 +93,7 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
         service.endpoint_service.provider_registry.resolve.return_value=SimpleNamespace(instance=provider)
         service.operation_bus=SimpleNamespace(store=JsonOperationStore(tmp_path/'operations.json'))
         service.resource_service=Mock();service._principal_id=lambda _server:'owner'
-        documents={'database_target_id':'file','baseline':document(baseline),'desired':document(desired),'rebuilds':[owner],'column_renames':renamed}
+        documents={'database_target_id':'file','baseline':document(baseline),'desired':document(desired),'rebuilds':[owner],'column_renames':renamed,'deletions':deletions}
         displayed=service.sqlite_schema_plan('owned',documents)
         assert displayed['ready_for_review'] and displayed['execution_sha256']==preview['execution_sha256']
         reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
@@ -107,7 +117,8 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
                 assert observer.execute('SELECT rowid,id,renamed,typeof(renamed),added FROM owned ORDER BY id').fetchall()==[(7,7,7,'integer','kept'),(8,8,8,'integer','kept')]
                 assert observer.execute('SELECT * FROM projection ORDER BY id').fetchall()==[(7,7),(8,8)]
                 assert observer.execute('SELECT seq FROM sqlite_sequence WHERE name=\'owned\'').fetchone()==(80,)
-                assert any(row[1]=='by_value' and row[2]==1 and row[4]==1 for row in observer.execute('PRAGMA index_list(owned)'))
+                assert any(row[1]==index_name and row[2]==1 and row[4]==1 for row in observer.execute('PRAGMA index_list(owned)'))
+                if change_identities:assert not observer.execute("SELECT name FROM sqlite_schema WHERE name IN ('by_value','touch')").fetchall()
                 observer.execute('DELETE FROM owned WHERE id=7')
                 assert observer.execute('SELECT * FROM audit').fetchall()==[('7:gone',)]
     finally:provider.client.close()

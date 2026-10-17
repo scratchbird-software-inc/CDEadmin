@@ -35,7 +35,7 @@ def _implicit_indexes(connection, table):
 
 
 def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
-                 column_renames=None, desired=None):
+                 column_renames=None, desired=None, child_deletions=()):
     if (before['kind'] != 'table' or after['kind'] != 'table' or
             before['resource_id'] != after['resource_id'] or
             before['path'] != after['path'] or
@@ -71,8 +71,14 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         selected=[*target_explicit_indexes,*target_triggers]
         declared={identity for identity,row in desired['rows'].items()
             if row['kind'] in {'index','trigger'} and row['system']=='false' and row['path'][:2]==before['path']}
-        if (len(selected)!=len(retained) or {item.get('resource_id') for item in selected}!=retained or declared!=retained):
-            raise ValueError('Coordinated SQLite rebuild requires the same retained index and trigger identities; additions and deletions need separate intent')
+        targets={item.get('resource_id') for item in selected}
+        if (not isinstance(child_deletions,(list,tuple)) or len(child_deletions)>32 or
+                any(not isinstance(identity,str) for identity in child_deletions) or
+                len(set(child_deletions))!=len(child_deletions) or
+                set(child_deletions)!=retained-targets):
+            raise ValueError('Removing a rebuilt SQLite index or trigger requires its exact explicit deletion identity')
+        if len(selected)!=len(targets) or declared!=targets:
+            raise ValueError('Desired rebuilt SQLite table must contain every index and trigger record; filtered rows are not deletion intent')
         for kind,items in (('index',target_explicit_indexes),('trigger',target_triggers)):
             for item in items:
                 identity=item['resource_id'];row=desired['rows'].get(identity)
@@ -239,8 +245,9 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         'rowid_alias': rowid_alias,
         'target_columns': [{'name': name, **facts} for name, facts in new.items()],
         'expected_ddl': expected_ddl,
-        'preserved_child_ids': [item['resource_id'] for item in explicit_indexes + triggers],
-        **({'coordinated_children':True,'target_child_sources':child_sources} if coordinated else {}),
+        'preserved_child_ids': [item['resource_id'] for item in explicit_indexes + triggers
+            if not coordinated or item['resource_id'] in child_sources],
+        **({'coordinated_children':True,'target_child_sources':child_sources,'child_deletions':sorted(child_deletions)} if coordinated else {}),
         'baseline_sha256': digest({'ddl': before['native'].get('ddl'),
             'columns': before['native'].get('columns'),
             'indexes': before['native'].get('indexes'),
@@ -251,7 +258,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         'warnings': ['Rebuild copies rows under one SQLite write transaction; writers wait for the native lock.',
             'The desired native types apply SQLite affinity and STRICT conversion rules during copying. Generated columns are recomputed. New constraints must accept all copied rows.',
             'All native foreign keys and retained view/trigger bindings are checked before commit.',
-            *(['Retained index and trigger definitions are recreated from the complete desired design after copying rows; triggers do not fire during the copy.'] if coordinated and child_sources else []),
+            *(['Desired indexes and triggers are created from the complete design after copying rows; triggers do not fire during the copy.'] if coordinated and child_sources else []),
+            *(['This rebuild explicitly discards these index/trigger identities: '+', '.join(sorted(child_deletions))] if child_deletions else []),
             'Removed columns and constraints are explicitly discarded by this selected rebuild.',
             *(['Physical rowids are not preserved when changing storage mode or primary-key identity.'] if not preserve_rowid else []),
             *(['The live AUTOINCREMENT high-water mark is preserved.'] if source_autoincrement and target_autoincrement else []),

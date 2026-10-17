@@ -81,7 +81,8 @@ class SQLiteSchemaApplications(SchemaApplications):
                     raise SchemaApplyError('SQLite rebuilds require exact retained tables')
                 expected = plan_rebuild(old, wanted, baseline, None,
                     temp_name=operation.get('temp_name'),
-                    column_renames=operation.get('column_renames'),desired=desired)
+                    column_renames=operation.get('column_renames'),desired=desired,
+                    child_deletions=operation.get('child_deletions',[]))
                 if digest(expected) != digest(operation):
                     raise SchemaApplyError('SQLite rebuild stages differ from reviewed design')
                 continue
@@ -245,7 +246,8 @@ def apply_review(provider, route, record):
                     return {'state': 'not_dispatched', 'reason': 'SQLite rebuild child or foreign key changed'}
                 expected = plan_rebuild(old, wanted, record['baseline'], connection,
                     temp_name=operation['temp_name'],
-                    column_renames=operation.get('column_renames'),desired=record['desired'])
+                    column_renames=operation.get('column_renames'),desired=record['desired'],
+                    child_deletions=operation.get('child_deletions',[]))
                 if digest(expected) != digest(operation):
                     connection.rollback()
                     return {'state': 'not_dispatched', 'reason': 'SQLite rebuild stages changed'}
@@ -383,6 +385,8 @@ def apply_review(provider, route, record):
                     raise _PreservationRefused('SQLite replacement differs from desired native metadata')
             for operation in record['plan']['operations']:
                 if operation.get('coordinated_children'):
+                    if any(identity in actual_objects for identity in operation.get('child_deletions',[])):
+                        raise _PreservationRefused('SQLite rebuilt child deletion differs from review')
                     for identity in operation['target_child_sources']:
                         actual=actual_objects.get(identity)
                         if actual is None or not matches(record['desired']['rows'][identity],
