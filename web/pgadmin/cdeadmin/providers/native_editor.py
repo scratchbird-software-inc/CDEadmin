@@ -407,7 +407,7 @@ def mysql_bind_markers(source, modes):
             if comment == 'line' and c == '\n': comment = None
             elif comment == 'block' and pair == '*/': comment = None; i += 1
         elif quote:
-            if c == '\\' and 'NO_BACKSLASH_ESCAPES' not in modes: i += 1
+            if c == '\\' and quote != '`' and not (quote == '"' and 'ANSI_QUOTES' in modes) and 'NO_BACKSLASH_ESCAPES' not in modes: i += 1
             elif c == quote:
                 if source[i + 1:i + 2] == quote: i += 1
                 else: quote = None
@@ -432,7 +432,8 @@ def validate_mysql(client, handle, source, engine, script=False):
         cursor.execute('SET SESSION lock_wait_timeout=2')
         modes = set(str(mode).upper().split(','))
         result = analyze(source, engine + '-sql', script=script,
-                         settings={'no_backslash_escapes': 'NO_BACKSLASH_ESCAPES' in modes})
+                         settings={'no_backslash_escapes': 'NO_BACKSLASH_ESCAPES' in modes,
+                                   'ansi_quotes': 'ANSI_QUOTES' in modes})
         if not script:
             # One native statement may contain compound/procedural semicolons
             # and mode-specific quoting that the client script framer rejects.

@@ -447,7 +447,7 @@ def test_native_syntax_context_permission_and_unsupported_are_distinct(code, exp
 
 
 @pytest.mark.parametrize('source,family',[
-    ('# Comment\rCREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ('# Comment\r\nCREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
     ('CREATE /* header */ DEFINER=CURRENT_USER() PROCEDURE p() BEGIN SELECT 1; END','procedure'),
     ("CREATE DEFINER='odd\\\'user'@'host.example' FUNCTION f() RETURNS INT RETURN 1",'function'),
     ('CREATE DEFINER=`odd``user`@`host` TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET @v=1','trigger'),
@@ -456,6 +456,29 @@ def test_native_syntax_context_permission_and_unsupported_are_distinct(code, exp
     ('CREATE TABLE t(v INT) START TRANSACTION','table'),
     ('CREATE /*!90700 DEFINER=CURRENT_USER() */ PROCEDURE p() BEGIN SELECT 1; END','procedure'),
     ('/*!99999 SELECT invalid */ CREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ('CREATE RESOURCE GROUP rg TYPE=USER VCPU=0','resource_group'),
+    ('ALTER LOGFILE GROUP lg ADD UNDOFILE \'undo.dat\' ENGINE=NDB','logfile_group'),
+    ('DROP UNDO TABLESPACE ts ENGINE=InnoDB','tablespace'),
+    ('CREATE ROLE r','role'),
+    ('DROP SPATIAL REFERENCE SYSTEM 999999','spatial_reference_system'),
+    ('INSTALL COMPONENT \'file://absent\'','component'),
+    ('START TRANSACTION READ ONLY','transaction'),
+    ('BEGIN WORK','begin'),
+    ('SAVEPOINT sp','savepoint'),
+    ('ROLLBACK WORK TO SAVEPOINT sp','savepoint'),
+    ('RELEASE SAVEPOINT sp','savepoint'),
+    ('XA START \'transaction\'','xa'),
+    ('UNLOCK TABLES','table_locks'),
+    ('USE db','use'),
+    ('HELP \'SELECT\'','help'),
+    ('GET CURRENT DIAGNOSTICS @n=NUMBER','diagnostics'),
+    ('SIGNAL SQLSTATE \'45000\'','signal'),
+    ('RESIGNAL','resignal'),
+    ('PREPARE nested FROM \'SELECT 1\'','prepare'),
+    ('EXECUTE nested','execute'),
+    ('DROP PREPARE nested','prepare'),
+    ('IMPORT TABLE FROM \'absent.sdi\'','table_import'),
+    ('CLONE LOCAL DATA DIRECTORY=\'/tmp/absent\'','clone'),
 ])
 def test_qualified_post_parse_headers_retain_native_refusal_and_binding_scope(source,family):
     class NativeError(Exception):errno=1295
@@ -486,6 +509,26 @@ def test_failed_source_binding_does_not_claim_user_source_was_parsed(code):
 def test_unqualified_parser_revision_cannot_inherit_post_parse_refusal_acceptance():
     from pgadmin.cdeadmin.providers.mysql_family.prepare_classification import post_parse_family
     assert post_parse_family('CREATE PROCEDURE p() BEGIN SELECT 1; END',set(),'9.7.1') is None
+
+
+@pytest.mark.parametrize('source', ['SELECT 1', '`BEGIN`', 'CREATE `ROLE` r',
+    'START REPLICA', 'DROP SOMETHING', 'INSTALL PLUGIN p SONAME \'p.so\'',
+    '# Comment\rCREATE PROCEDURE p() BEGIN SELEC 1; END',
+    '-- Comment\rCREATE ROLE r'])
+def test_unqualified_commands_do_not_inherit_native_refusal_acceptance(source):
+    from pgadmin.cdeadmin.providers.mysql_family.prepare_classification import post_parse_family
+    assert post_parse_family(source, set(), '9.7.0') is None
+
+
+@pytest.mark.parametrize('quote,modes', [('`', set()), ('"', {'ANSI_QUOTES'}),
+    ('`', {'NO_BACKSLASH_ESCAPES'}), ('"', {'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES'})])
+def test_mysql_parameter_markers_after_backslash_ending_identifiers(quote, modes):
+    source = 'SELECT 1 AS '+quote+'back\\'+quote+', %s, %(value)s'
+    assert mysql_bind_markers(source, modes) == source.replace('%s', '? ').replace('%(value)s', '?        ')
+
+
+def test_mysql_parameter_markers_follow_native_line_comment_termination():
+    assert mysql_bind_markers('# %s\rSELECT %s\nSELECT %s', set()) == '# %s\rSELECT %s\nSELECT ? '
 
 
 def test_editor_metadata_cannot_use_an_active_native_execution():

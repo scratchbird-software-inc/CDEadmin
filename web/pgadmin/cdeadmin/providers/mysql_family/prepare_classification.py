@@ -7,7 +7,8 @@ the caller must have observed the native 1295 response from that preparation.
 import re
 
 
-FAMILIES={'PROCEDURE','FUNCTION','TRIGGER','VIEW','DATABASE','TABLE'}
+FAMILIES={'PROCEDURE','FUNCTION','TRIGGER','VIEW','DATABASE','SCHEMA','TABLE',
+          'TABLESPACE','ROLE'}
 
 
 def header_tokens(source,modes,version_id):
@@ -20,8 +21,8 @@ def header_tokens(source,modes,version_id):
             char=text[i];pair=text[i:i+2]
             if char.isspace():i+=1;continue
             if char=='#' or pair=='--' and i+2<len(text) and ord(text[i+2])<=32:
-                ends=[position for position in (text.find('\r',i),text.find('\n',i)) if position>=0]
-                i=min(ends) if ends else len(text);continue
+                end=text.find('\n',i)
+                i=end if end>=0 else len(text);continue
             if pair=='/*':
                 end=text.find('*/',i+2)
                 if end<0:return
@@ -57,6 +58,22 @@ def post_parse_family(source,modes,version):
     tokens=header_tokens(source,modes,90700);i=0
     def value(at):return tokens[at][1] if at<len(tokens) else None
     def name(at):return at<len(tokens) and tokens[at][0] in {'word','quoted'}
+    # These identities describe the native command only. The complete source,
+    # including every trailing token, must already have reached prepare_query's
+    # ER_UNSUPPORTED_PS path on the qualified native release.
+    first=value(0);second=value(1)
+    if first in {'INSTALL','UNINSTALL'} and second=='COMPONENT':return 'component'
+    if first in {'BEGIN','SAVEPOINT','SIGNAL','RESIGNAL','USE','HELP','PREPARE','EXECUTE','CLONE'}:
+        return first.lower()
+    if first=='START' and second=='TRANSACTION':return 'transaction'
+    if first=='RELEASE' and second=='SAVEPOINT':return 'savepoint'
+    if first=='ROLLBACK' and second in {'TO','WORK'}:return 'savepoint'
+    if first=='XA' and second in {'START','BEGIN','END','PREPARE','COMMIT','ROLLBACK','RECOVER'}:return 'xa'
+    if first in {'LOCK','UNLOCK'} and second=='TABLES':return 'table_locks'
+    if first=='GET' and (second=='DIAGNOSTICS' or second in {'CURRENT','STACKED'} and value(2)=='DIAGNOSTICS'):
+        return 'diagnostics'
+    if first=='DEALLOCATE' and second=='PREPARE' or first=='DROP' and second=='PREPARE':return 'prepare'
+    if first=='IMPORT' and second=='TABLE':return 'table_import'
     if value(i) not in {'CREATE','ALTER','DROP'}:return None
     operation=value(i);i+=1
     if value(i)=='OR' and value(i+1)=='REPLACE':i+=2
@@ -78,5 +95,9 @@ def post_parse_family(source,modes,version):
                 while value(i)=='.' and name(i+1):i+=2
     if value(i)=='SQL' and value(i+1)=='SECURITY' and value(i+2) in {'DEFINER','INVOKER'}:i+=3
     if operation=='CREATE' and value(i)=='AGGREGATE':i+=1
+    if value(i)=='RESOURCE' and value(i+1)=='GROUP':return 'resource_group'
+    if value(i)=='LOGFILE' and value(i+1)=='GROUP':return 'logfile_group'
+    if value(i)=='UNDO' and value(i+1)=='TABLESPACE':return 'tablespace'
+    if value(i)=='SPATIAL' and value(i+1)=='REFERENCE' and value(i+2)=='SYSTEM':return 'spatial_reference_system'
     family=value(i)
     return family.lower() if family in FAMILIES else None

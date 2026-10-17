@@ -21,6 +21,7 @@ def qualify(engine,output):
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside application source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
     paths=['web/pgadmin/cdeadmin/providers/native_editor.py','web/pgadmin/cdeadmin/providers/mysql_family/prepare_classification.py',
+        'web/pgadmin/cdeadmin/data_studio/language_tools.py',
         'tools/mysql_qualification_support.py','tools/mariadb_qualification_support.py',str(Path(__file__).relative_to(ROOT))]
     proof={'complete':False,'engine':engine,'interfaces':[],'failures':[],'history_testing':'not run',
         'qualification_scope':'native core profile and recorded modes; not additional parser/rewrite plugins or all procedural completion',
@@ -47,6 +48,7 @@ def qualify(engine,output):
                         instance.client.control_transaction(handle,'autocommit_off');work=handle.cursor()
                         try:
                             work.execute('INSERT INTO pending VALUES(2)');checks=[]
+                            work.execute('SAVEPOINT sr_pending')
                             modes=['','ANSI_QUOTES','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES',''] if engine=='mysql' else ['', 'ORACLE']
                             for mode in modes:
                                 work.execute('SET SESSION sql_mode=%s',(mode,));oracle.execute('SET SESSION sql_mode=%s',(mode,))
@@ -62,7 +64,8 @@ def qualify(engine,output):
                                 checks.append({'name':'live-mode-typed-parameter-values','mode':mode,'unicode_quote_backslash_nul_and_binary_preserved':True})
                                 p=q(database)+'.'+q('not_created');body='() BEGIN DECLARE v INT DEFAULT 1; SELECT v; END'
                                 cases=[('plain-procedure','CREATE PROCEDURE '+p+body),
-                                    ('line-comment-cr','# Native comment\rCREATE PROCEDURE '+p+body),
+                                    ('line-comment-crlf','# Native comment\r\nCREATE PROCEDURE '+p+body),
+                                    ('commented-out-invalid-body','# Native comment\rCREATE PROCEDURE '+p+'() BEGIN SELEC 1; END'),
                                     ('header-comment','CREATE /* native header */ PROCEDURE '+p+body),
                                     ('current-definer','CREATE DEFINER=CURRENT_USER() PROCEDURE '+p+body),
                                     ('quoted-definer',"CREATE DEFINER='odd''user'@'host.example' PROCEDURE "+p+body),
@@ -78,6 +81,41 @@ def qualify(engine,output):
                                     ('ignored-version-header','/*!99999 SELECT invalid */ CREATE PROCEDURE '+p+body),
                                     ('aggregate-udf',"CREATE AGGREGATE FUNCTION "+q('sr_missing_udf')+" RETURNS INTEGER SONAME 'sr-do-not-load.so'"),
                                     ('transactional-ddl','CREATE TABLE '+q('sr_not_created')+'(v INT) START TRANSACTION')]
+                                if engine=='mysql':
+                                    controls=[
+                                        ('create-resource-group','CREATE RESOURCE GROUP sr_rg TYPE=USER VCPU=0 THREAD_PRIORITY=0 DISABLE'),
+                                        ('alter-resource-group','ALTER RESOURCE GROUP sr_rg THREAD_PRIORITY=0'),
+                                        ('drop-resource-group','DROP RESOURCE GROUP sr_rg'),
+                                        ('create-tablespace',"CREATE TABLESPACE sr_ts ADD DATAFILE 'sr_ts.ibd' ENGINE=InnoDB"),
+                                        ('alter-tablespace','ALTER TABLESPACE sr_ts AUTOEXTEND_SIZE=1048576'),
+                                        ('drop-tablespace','DROP TABLESPACE sr_ts ENGINE=InnoDB'),
+                                        ('create-undo-tablespace',"CREATE UNDO TABLESPACE sr_undo ADD DATAFILE 'sr_undo.ibu'"),
+                                        ('alter-undo-tablespace','ALTER UNDO TABLESPACE sr_undo SET INACTIVE'),
+                                        ('drop-undo-tablespace','DROP UNDO TABLESPACE sr_undo'),
+                                        ('create-logfile-group',"CREATE LOGFILE GROUP sr_lg ADD UNDOFILE 'sr_undo.dat' ENGINE=NDB"),
+                                        ('alter-logfile-group',"ALTER LOGFILE GROUP sr_lg ADD UNDOFILE 'sr_undo2.dat' ENGINE=NDB"),
+                                        ('drop-logfile-group','DROP LOGFILE GROUP sr_lg ENGINE=NDB'),
+                                        ('create-role',"CREATE ROLE 'sr_role'"),('drop-role',"DROP ROLE 'sr_role'"),
+                                        ('create-srs',"CREATE SPATIAL REFERENCE SYSTEM 999999 NAME 'sr_srs' DEFINITION 'invalid-wkt'"),
+                                        ('drop-srs','DROP SPATIAL REFERENCE SYSTEM 999999'),
+                                        ('install-component',"INSTALL COMPONENT 'file://sr_absent'"),
+                                        ('uninstall-component',"UNINSTALL COMPONENT 'file://sr_absent'"),
+                                        ('begin','START TRANSACTION'),('begin-work','BEGIN WORK'),
+                                        ('savepoint','SAVEPOINT sr_probe'),('release-savepoint','RELEASE SAVEPOINT sr_probe'),
+                                        ('rollback-savepoint','ROLLBACK TO SAVEPOINT sr_probe'),
+                                        ('xa-start',"XA START 'sr_xa'"),('xa-begin',"XA BEGIN 'sr_xa'"),
+                                        ('xa-end',"XA END 'sr_xa'"),('xa-prepare',"XA PREPARE 'sr_xa'"),
+                                        ('xa-commit',"XA COMMIT 'sr_xa'"),('xa-rollback',"XA ROLLBACK 'sr_xa'"),('xa-recover','XA RECOVER'),
+                                        ('lock-tables','LOCK TABLES pending READ'),('unlock-tables','UNLOCK TABLES'),
+                                        ('use','USE information_schema'),('help',"HELP 'SELECT'"),
+                                        ('get-diagnostics','GET CURRENT DIAGNOSTICS @sr_count=NUMBER'),
+                                        ('signal',"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='probe'"),('resignal','RESIGNAL'),
+                                        ('prepare',"PREPARE sr_nested FROM 'SELECT 1'"),('execute','EXECUTE sr_nested'),
+                                        ('deallocate','DEALLOCATE PREPARE sr_nested'),('drop-prepare','DROP PREPARE sr_nested'),
+                                        ('import-table',"IMPORT TABLE FROM 'sr_missing.sdi'"),
+                                        ('clone',"CLONE LOCAL DATA DIRECTORY='/tmp/sr-do-not-create'"),
+                                        ('alter-database','ALTER DATABASE '+q(database)+' READ ONLY=1')]
+                                    cases += controls+[(name+'-invalid',source+' SR_TRAILING_INVALID +') for name,source in controls]
                                 elif mode=='ORACLE':cases += [
                                     ('oracle-procedure','CREATE OR REPLACE PROCEDURE '+p+' AS v INTEGER := 1; BEGIN NULL; END'),
                                     ('oracle-anonymous','BEGIN NULL; END')]
@@ -92,7 +130,7 @@ def qualify(engine,output):
                                     finally:
                                         if prepared:oracle.execute('DEALLOCATE PREPARE sr_oracle')
                                         oracle.execute('SET @sr_oracle_source=NULL')
-                                    expected=False if native_code in {1064,1149} else True if native_code==0 or engine=='mysql' and native_code==1295 and name!='missing-catalog' else None
+                                    expected=False if native_code in {1064,1149} else True if native_code==0 or engine=='mysql' and native_code==1295 and name not in {'missing-catalog','commented-out-invalid-body'} else None
                                     if name in {'oracle-procedure','oracle-anonymous'} and expected is not True:
                                         raise AssertionError('Native Oracle-mode fixture did not prepare its valid procedural source: '+name+' '+str(native_code))
                                     result=instance.validate_source_without_execution({'session_id':session['session_id'],'language_profile':engine+'-sql','source':source})
@@ -102,6 +140,19 @@ def qualify(engine,output):
                                     checks.append(checked)
                                     if result['grammar_valid'] is not expected or result.get('syntax_valid') is not expected:
                                         proof['failures'].append({'interface':label,'name':name,'mode':mode,'expected':expected,'observed':checked})
+                                # Identifiers never use backslash escaping. ANSI
+                                # double quotes follow the observed native mode.
+                                for quote in (['`','"'] if 'ANSI_QUOTES' in mode or mode=='ORACLE' else ['`']):
+                                    source='SELECT 1 AS '+quote+'back\\'+quote+'; # ignored ;\r\nSELECT 2;'
+                                    framed=instance.validate_source_without_execution({'session_id':session['session_id'],
+                                        'language_profile':engine+'-sql','source':source,'script':True})
+                                    assert framed['script_ready'] and framed['grammar_valid'] is True and len(framed['statements'])==2, framed
+                                    marker_source='SELECT 1 AS '+quote+'back\\'+quote+', %s'
+                                    marked=instance.validate_source_without_execution({'session_id':session['session_id'],
+                                        'language_profile':engine+'-sql','source':marker_source})
+                                    assert marked['grammar_valid'] is True, marked
+                                    checks.append({'name':'native-backslash-identifier-script-and-parameter','mode':mode,
+                                        'quote':quote,'native_statement_count':2,'grammar_valid':True})
                                 oracle.execute('SELECT COUNT(*) FROM pending');assert oracle.fetchone()[0]==1
                                 work.execute('SELECT COUNT(*) FROM pending');assert work.fetchone()[0]==2
                                 oracle.execute('SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=%s',(database,));assert oracle.fetchone()[0]==0
@@ -109,6 +160,9 @@ def qualify(engine,output):
                                 oracle.execute('SET SESSION sql_mode=%s',(original_mode,))
                                 oracle.execute('SHOW CREATE VIEW original_view');assert oracle.fetchone()==view_before
                                 oracle.execute("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME IN ('sr_not_created','not_created')",(database,));assert oracle.fetchone()[0]==0
+                                work.execute('SELECT DATABASE()');assert work.fetchone()==(database,)
+                                work.execute('ROLLBACK TO SAVEPOINT sr_pending')
+                                work.execute('SELECT COUNT(*) FROM pending');assert work.fetchone()[0]==2
                             instance.client.control_transaction(handle,'rollback');work.execute('SELECT COUNT(*) FROM pending');assert work.fetchone()[0]==1
                             denied_instance=None
                             try:

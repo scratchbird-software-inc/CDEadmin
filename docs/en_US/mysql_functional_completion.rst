@@ -86,6 +86,27 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Native editor preparation also checks the qualified MySQL9.7 post-parse refusal
+paths for resource groups, tablespaces (including undo/logfile groups), roles,
+spatial reference systems, components, transaction/savepoint/XA control, table
+locks, diagnostics, signals, dynamic statement commands, table import and clone.
+This confirms SQL grammar only; it does not confirm installed capabilities,
+catalog binding, authorization or a non-SQL body language. A native 1295 reply
+and the exact qualified server revision are required. Header recognition alone
+cannot accept source. Malformed variants are checked independently by the
+native server, and other context refusals remain unconfirmed.
+
+Script framing and parameter markers use the observed ANSI_QUOTES and
+NO_BACKSLASH_ESCAPES modes. Backslashes do not escape backtick or ANSI-quoted
+identifier delimiters. Native line comments end at LF; a bare CR cannot expose
+commented-out SQL to header classification. The retained native qualification
+checks both connector implementations while preserving pending data/savepoints,
+and the workspace qualifier checks authenticated HTTP and visible source-check
+results without executing submitted SQL. Reproduce these scoped checks with::
+
+    python tools/cdeadmin_mysql_family_prepare_qualification.py --engine mysql --evidence /work/mysql-prepare
+    python tools/cdeadmin_mysql_family_editor_workspace_qualification.py --engine mysql --evidence /work/mysql-editor --browser-binary /path/to/chrome --driver-binary /path/to/chromedriver
+
 The October 16 implementation adds native server/security/storage DDN review
 and application, typed relation-data DDN import, named durable test-data recipes
 and MySQL persistent monitoring history. These complement the existing editor,

@@ -115,13 +115,18 @@ def analyze(source, language, *, script=False, settings=None):
             continue
         if quote:
             clean[i] = ' '
-            if c == '\\' and language in MYSQL and settings.get(
+            mysql_string = quote != '`' and not (
+                quote == '"' and settings.get('ansi_quotes') is True)
+            if c == '\\' and language in MYSQL and mysql_string and settings.get(
                     'no_backslash_escapes') is not True:
                 if settings.get('no_backslash_escapes') is None:
                     issue(
                         'SESSION_MODE_REQUIRED',
                         'Backslash quoting requires the observed NO_BACKSLASH_ESCAPES setting.',
                         i)
+                if quote == '"' and settings.get('ansi_quotes') is None:
+                    issue('SESSION_MODE_REQUIRED',
+                          'Double-quote framing requires the observed ANSI_QUOTES setting.', i)
                 if i + 1 < len(source):
                     clean[i + 1] = ' '
                 i += 2

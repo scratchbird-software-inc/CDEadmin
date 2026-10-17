@@ -221,7 +221,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Remaining full-product acceptance
    * - MySQL 9.7.0
      - Independent native category/DDN reconciliation; retained catalog and
-       mode/role-aware completion; native PREPARE and scoped post-parse checking.
+       mode/role-aware completion; native PREPARE and qualified post-parse
+       checking for stored programs, administrative and transaction commands;
+       native quoted-identifier framing and parameter boundaries.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.
@@ -264,6 +266,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        reviewed approved-library loading into retained query sessions, native
        symbol refresh and explicit uncertain initialization outcomes; reviewed
        native FTS configuration changes with preserved content and durable receipts.
+       Structured native virtual-table constructors and retained-session FTS
+       maintenance preserve transaction ownership; partial module/metadata
+       observations retain healthy editor completion and explicit coverage.
      - Remaining attached/public-FTS-column and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4

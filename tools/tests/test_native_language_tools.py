@@ -23,6 +23,31 @@ def test_native_boundaries(language, source, count):
     assert result['grammar_valid'] is None
 
 
+@pytest.mark.parametrize('language', ['mysql-sql', 'mariadb-sql'])
+@pytest.mark.parametrize('quote,settings', [
+    ('`', {}), ('`', {'no_backslash_escapes': False}),
+    ('"', {'ansi_quotes': True, 'no_backslash_escapes': False}),
+    ('"', {'ansi_quotes': True, 'no_backslash_escapes': True})])
+def test_native_identifier_backslash_does_not_escape_its_closing_quote(language, quote, settings):
+    source = 'SELECT 1 AS '+quote+'back\\'+quote+'; SELECT 2;'
+    result = analyze(source, language, script=True, settings=settings)
+    assert result['script_ready'], result
+    assert [row['source'] for row in result['statements']] == source.rstrip(';').split('; ')
+
+
+@pytest.mark.parametrize('language', ['mysql-sql', 'mariadb-sql'])
+def test_unknown_ansi_quote_mode_refuses_ambiguous_backslash_framing(language):
+    result = analyze('SELECT "back\\"; SELECT 2;', language, script=True,
+                     settings={'no_backslash_escapes': False})
+    assert not result['script_ready']
+    assert any('ANSI_QUOTES' in row['message'] for row in result['diagnostics'])
+
+
+def test_mysql_carriage_return_does_not_terminate_native_line_comment():
+    result = analyze('# ignored ;\rSELECT 1; -- ignored ;\rSELECT 2;', 'mysql-sql', script=True)
+    assert not result['script_ready'] and not result['statements'], result
+
+
 @pytest.mark.parametrize('language,source,code', [
     ('mysql-sql', "SELECT 'a\\\'b';", 'SESSION_MODE_REQUIRED'),
     ('postgresql-sql', 'SELECT `column`;', 'QUOTE_DIALECT'),
