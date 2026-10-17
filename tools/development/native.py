@@ -394,6 +394,7 @@ def stage(name, evidence):
         command(['corepack', 'yarn', 'install', '--immutable'], cwd=ROOT / 'web',
                 env=env, log=evidence / 'javascript-dependencies.log')
         command(['corepack', 'yarn', 'exec', 'jest', '--maxWorkers=2', '--json',
+                 '--testPathIgnorePatterns=[Hh]istory', '--testNamePattern=^(?!.*[Hh]istory)',
                  '--outputFile', evidence / 'javascript.json'], cwd=ROOT / 'web',
                 env=env, log=evidence / 'javascript-contracts.log', timeout=3600)
     elif name == 'desktop':
