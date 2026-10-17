@@ -224,6 +224,14 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         'CHECK expressions and all table options remain in exact native CREATE SQL; they are not separately decomposed.',
                         'Connection-local objects and uncommitted changes on other handles are outside this capture.',
                     ]
+                    unavailable=[row['resource_id'] for row in resources if row['resource_kind']=='view' and
+                        row['display_path'][0]==item['display_name'] and
+                        (row['native'].get('column_observation',{}).get('available') is False or
+                         row['native'].get('view_binding_observation',{}).get('available') is False)]
+                    if unavailable:
+                        item['native']['catalog_observations'].append({'source':'native-view-columns-and-binding',
+                            'available':False,'unavailable_resource_ids':unavailable})
+                        item['native']['catalog_warnings'].append('Some view columns or bindings are unavailable. Their native definitions and identities are retained; inspect the affected view observations before migration.')
             if len(resources) > 20_000:
                 raise RelationalClientError(
                     'SQLite catalog exceeds the 20,000-resource limit')
@@ -469,11 +477,27 @@ def _resources(connection, request):
                     relation_system[(schema_name, name)] = system_object
                     relation_names.append((name, resource['resource_id']))
             for table_name, relation_id in relation_names:
-                cursor.execute(
-                    f'PRAGMA {quote(schema_name)}.table_xinfo('
-                    f'{quote(table_name)})'
-                )
-                columns = cursor.fetchall()
+                relation=resources[relation_id]
+                is_view=relation['resource_kind']=='view'
+                def view_error(error):
+                    code=getattr(error,'sqlite_errorcode',None)
+                    if not is_view or type(code) is not int or code & 255 not in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}:
+                        raise error
+                    return {'available':False,'native_error_code':code,'native_error_name':getattr(error,'sqlite_errorname',None)}
+                try:
+                    cursor.execute(f'PRAGMA {quote(schema_name)}.table_xinfo({quote(table_name)})')
+                    columns = cursor.fetchall()
+                    if is_view:relation['native']['column_observation']={'available':True}
+                except sqlite3.Error as error:
+                    relation['native']['column_observation']=view_error(error)
+                    columns=[]
+                if is_view:
+                    try:
+                        cursor.execute('EXPLAIN SELECT * FROM '+quote(schema_name)+'.'+quote(table_name)+' LIMIT 0')
+                        cursor.fetchone()
+                        relation['native']['view_binding_observation']={'available':True,'authority':'native-nonexecuting-prepare'}
+                    except sqlite3.Error as error:
+                        relation['native']['view_binding_observation']={**view_error(error),'authority':'native-nonexecuting-prepare'}
                 primary = []
                 for _cid, name, data_type, not_null, default, pk, hidden in (
                     columns

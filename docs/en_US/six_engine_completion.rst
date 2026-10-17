@@ -742,6 +742,22 @@ INSTEAD OF triggers before later admitted trigger changes. Native final-schema
 binding, complete view-column metadata and trigger definitions are verified
 before commit; a broken dependency rolls back every earlier stage. Other
 dependent object rewrites remain subject to their applicable native adapters.
+
+SQLite invalid-view discovery and repair
+=======================================
+
+Native view definitions, identities and trigger associations remain discoverable
+when columns or query bindings cannot be observed. Separate native observations
+record column availability and nonexecuting EXPLAIN binding, including native
+error codes. The containing catalog identifies affected views; an unavailable
+observation is never reported as an empty complete set of columns. File/transport
+and other failures still propagate rather than being hidden as binding errors.
+
+An invalid view can be selected for reviewed DDN replacement. The desired design
+must provide complete native columns and child facts. Native final bindings and
+metadata are verified before commit, with independent rediscovery afterward.
+Existing INSTEAD OF triggers retain their definitions, and repeated requests
+return their durable receipt without replaying the repair.
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

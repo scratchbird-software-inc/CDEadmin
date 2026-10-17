@@ -23,6 +23,9 @@ def _validate_dependencies(connection, observed):
     """Prepare retained view/trigger uses without stepping their mutation VMs."""
     for row in observed.values():
         if row['resource_kind'] == 'view':
+            if (row['native'].get('column_observation',{}).get('available') is False or
+                    row['native'].get('view_binding_observation',{}).get('available') is False):
+                raise _PreservationRefused('SQLite final view columns or native bindings are unavailable')
             connection.execute('EXPLAIN SELECT * FROM "main".' +
                 _quote(row['display_name']) + ' LIMIT 0').fetchone()
     owners = {row['display_path'][1] for row in observed.values()
