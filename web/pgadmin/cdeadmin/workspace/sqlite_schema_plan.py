@@ -220,7 +220,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         try:
             from .sqlite_rebuild import plan_rebuild
             operation = plan_rebuild(old, wanted, baseline, connection,
-                column_renames=rename_maps.get(identity))
+                column_renames=rename_maps.get(identity),desired=desired)
             expected_ids = {_resource_id('column', old['path'], item['name'])
                 for item in operation['target_columns']}
             present = {row_id for row_id, row in after.items()
@@ -245,7 +245,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             observed = current.get(identity)
             rebuilding_child = (len(row['path']) > 2 and
                 _resource_id('table', ['main'], row['path'][1]) in rebuilds and
-                row['kind'] in {'column', 'constraint'})
+                row['kind'] in {'column', 'constraint', 'index', 'trigger'})
             if observed is None or not _equal(_definition(old), _definition(observed)):
                 if row['kind'] not in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                     conflicts.append({'resource_id': identity, 'name': row['name'],

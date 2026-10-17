@@ -81,7 +81,7 @@ class SQLiteSchemaApplications(SchemaApplications):
                     raise SchemaApplyError('SQLite rebuilds require exact retained tables')
                 expected = plan_rebuild(old, wanted, baseline, None,
                     temp_name=operation.get('temp_name'),
-                    column_renames=operation.get('column_renames'))
+                    column_renames=operation.get('column_renames'),desired=desired)
                 if digest(expected) != digest(operation):
                     raise SchemaApplyError('SQLite rebuild stages differ from reviewed design')
                 continue
@@ -245,7 +245,7 @@ def apply_review(provider, route, record):
                     return {'state': 'not_dispatched', 'reason': 'SQLite rebuild child or foreign key changed'}
                 expected = plan_rebuild(old, wanted, record['baseline'], connection,
                     temp_name=operation['temp_name'],
-                    column_renames=operation.get('column_renames'))
+                    column_renames=operation.get('column_renames'),desired=record['desired'])
                 if digest(expected) != digest(operation):
                     connection.rollback()
                     return {'state': 'not_dispatched', 'reason': 'SQLite rebuild stages changed'}
@@ -381,6 +381,14 @@ def apply_review(provider, route, record):
                         {'resource_id':actual['resource_id'],'kind':actual['resource_kind'],'path':actual['display_path'],
                          'name':actual['display_name'],'system':'false','native':actual['native']}):
                     raise _PreservationRefused('SQLite replacement differs from desired native metadata')
+            for operation in record['plan']['operations']:
+                if operation.get('coordinated_children'):
+                    for identity in operation['target_child_sources']:
+                        actual=actual_objects.get(identity)
+                        if actual is None or not matches(record['desired']['rows'][identity],
+                                {'resource_id':actual['resource_id'],'kind':actual['resource_kind'],'path':actual['display_path'],
+                                 'name':actual['display_name'],'system':'false','native':actual['native']}):
+                            raise _PreservationRefused('SQLite rebuilt child differs from desired native metadata')
         connection.commit()
         committed = True
     except Exception as error:
@@ -443,12 +451,15 @@ def apply_review(provider, route, record):
                 if actual != expected or row['native'].get('ddl') != operation['expected_ddl']:
                     return False
                 old = record['baseline']['rows'][operation['resource_id']]
+                wanted = record['desired']['rows'][operation['resource_id']] if operation.get('coordinated_children') else old
                 def indexed_keys(items):
-                    return [{**item, 'keys': [key for key in item.get('keys', [])
-                        if key.get('is_key')]} for item in items if item.get('ddl')]
+                    return sorted([{**item,'ddl':normalized(item['ddl']), 'keys': [key for key in item.get('keys', [])
+                        if key.get('is_key')]} for item in items if item.get('ddl')],key=lambda item:item['resource_id'])
+                def trigger_definitions(items):
+                    return sorted([{**item,'ddl':normalized(item['ddl'])} for item in items],key=lambda item:item['resource_id'])
                 if (indexed_keys(row['native'].get('indexes', [])) !=
-                        indexed_keys(old['native'].get('indexes', [])) or
-                        row['native'].get('triggers') != old['native'].get('triggers')):
+                        indexed_keys(wanted['native'].get('indexes', [])) or
+                        trigger_definitions(row['native'].get('triggers',[])) != trigger_definitions(wanted['native'].get('triggers',[]))):
                     return False
                 # The fresh catalog connection has already closed. Derive the
                 # same native signatures from its captured PRAGMA facts.

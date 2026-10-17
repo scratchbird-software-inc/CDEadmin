@@ -640,8 +640,8 @@ operations on that view. Batches of up to 32 index/trigger replacements share
 one native transaction. All baseline guards run before dispatch; dependency
 binding and desired catalog verification use the final batch schema before
 commit. A later failure rolls back every earlier replacement in that batch.
-Replacements that rewrite a rebuilt table's own children, and column renames
-requiring rewritten index or trigger sources, remain separate migration work. Human form validation and
+Retained children of a rebuilt table use the coordinated rebuild path described
+below, including desired index/trigger sources for renamed columns. Human form validation and
 ScratchBird history qualification retain their existing ownership/deferral.
 
 Coordinated SQLite table transformations
@@ -721,8 +721,17 @@ and changed trigger events. A later failure rolls back all preceding stages.
 Acknowledged commits receive independent catalog rediscovery; durable receipts
 never replay the migration.
 
-Changes to a rebuilt table's own child definitions still require coordinated
-dependency rewriting. Explicit deletions remain a separate destructive review.
+Rebuilds also coordinate changed definitions for their retained explicit indexes
+and triggers, including definitions using an explicitly renamed column. The
+table's child facts and individual DDN records must agree with native compilation
+of the desired table. Those children are recreated after copying rows; final
+bindings and desired child metadata are checked before commit. Unique-index or
+trigger-binding failure rolls back the entire batch. Rowids and AUTOINCREMENT
+continuation retain their applicable preservation contracts.
+
+Adding/removing a rebuilt table's index or trigger identities and rewriting other
+dependent object definitions remain separate work. Explicit deletions remain a
+separate destructive review; a filtered-out child is not deletion intent.
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

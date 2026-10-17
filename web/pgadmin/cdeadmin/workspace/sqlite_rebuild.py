@@ -4,7 +4,7 @@ import re
 import sqlite3
 
 from .firebird_schema_plan import digest
-from .sqlite_schema_plan import _quote, _source
+from .sqlite_schema_plan import _quote, _source, _compile_exact
 
 
 def _metadata(row):
@@ -35,7 +35,7 @@ def _implicit_indexes(connection, table):
 
 
 def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
-                 column_renames=None):
+                 column_renames=None, desired=None):
     if (before['kind'] != 'table' or after['kind'] != 'table' or
             before['resource_id'] != after['resource_id'] or
             before['path'] != after['path'] or
@@ -51,14 +51,51 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     target_autoincrement = _autoincrement_table(source)
     indexes, triggers = old.get('indexes', []), old.get('triggers', [])
     explicit_indexes = [item for item in indexes if item.get('ddl')]
-    if ([item for item in after['native'].get('indexes', []) if item.get('ddl')] != explicit_indexes or
-            after['native'].get('triggers') != triggers):
+    target_explicit_indexes=[item for item in after['native'].get('indexes',[]) if item.get('ddl')]
+    target_triggers=after['native'].get('triggers',[])
+    coordinated=desired is not None
+    if not coordinated and (target_explicit_indexes != explicit_indexes or target_triggers != triggers):
         raise ValueError('SQLite rebuild must retain exact index and trigger definitions')
     if any((not item.get('ddl') and not item['name'].startswith('sqlite_autoindex_')) or
            (item.get('ddl') and not isinstance(item['ddl'], str))
            for item in indexes) or any(not isinstance(item.get('ddl'), str) or
                                       not item['ddl'] for item in triggers):
         raise ValueError('SQLite index or trigger definition cannot be preserved')
+    child_sources={}
+    if coordinated:
+        from ..providers.sqlite.provider import _resource_id
+        def normalized(ddl):
+            return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:INDEX|TRIGGER)\s+)"main"\.',
+                r'\1',ddl.strip().rstrip(';'),count=1,flags=re.I)
+        retained={item['resource_id'] for item in explicit_indexes+triggers}
+        selected=[*target_explicit_indexes,*target_triggers]
+        declared={identity for identity,row in desired['rows'].items()
+            if row['kind'] in {'index','trigger'} and row['system']=='false' and row['path'][:2]==before['path']}
+        if (len(selected)!=len(retained) or {item.get('resource_id') for item in selected}!=retained or declared!=retained):
+            raise ValueError('Coordinated SQLite rebuild requires the same retained index and trigger identities; additions and deletions need separate intent')
+        for kind,items in (('index',target_explicit_indexes),('trigger',target_triggers)):
+            for item in items:
+                identity=item['resource_id'];row=desired['rows'].get(identity)
+                if (not isinstance(item.get('name'),str) or identity!=_resource_id(kind,before['path'],item['name']) or
+                        row is None or row['kind']!=kind or row['path']!=[*before['path'],item['name']] or
+                        row['system']!='false' or row['native'].get('system_object') is not False or
+                        not isinstance(item.get('ddl'),str) or not item['ddl']):
+                    raise ValueError('Desired SQLite rebuild child identity is inconsistent')
+                source_child=row['native'].get('ddl')
+                # Retained sqlite_schema definitions omit schema qualification.
+                # Native authorizer facts below bind both those definitions and
+                # revised DDN sources to the exact main-file child and owner.
+                if (not isinstance(source_child,str) or '\x00' in source_child or
+                        len(source_child.encode('utf8'))>1024*1024 or
+                        not sqlite3.complete_statement(source_child.rstrip()+';' if not source_child.rstrip().endswith(';') else source_child) or
+                        not re.match(r'^\s*CREATE\s+'+(r'(?:UNIQUE\s+)?INDEX' if kind=='index' else 'TRIGGER')+r'\b',source_child,re.I)):
+                    raise ValueError('One bounded native rebuilt-child CREATE statement is required')
+                if normalized(item['ddl'])!=normalized(source_child):
+                    raise ValueError('Desired SQLite table and child definitions disagree')
+                if kind=='index' and any(item.get(key)!=row['native'].get('catalog_metadata',{}).get(key)
+                        for key in ('unique','origin','partial','keys')):
+                    raise ValueError('Desired SQLite table and index facts disagree')
+                child_sources[identity]=source_child
     inbound = {row['resource_id']: digest({
         'ddl': row['native'].get('ddl'),
         'dependencies': row['native'].get('dependencies')})
@@ -93,6 +130,22 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
                       ' RENAME TO ' + _quote(before['name']))
         expected_ddl = probe.execute('SELECT sql FROM main.sqlite_schema WHERE name=?',
                                      (before['name'],)).fetchone()[0]
+        if coordinated:
+            for kind,items in (('index',target_explicit_indexes),('trigger',target_triggers)):
+                for item in items:
+                    _compile_exact(probe,desired['rows'][item['resource_id']],child_sources[item['resource_id']])
+                    probe.execute(child_sources[item['resource_id']])
+                    bound=probe.execute('SELECT type,tbl_name FROM main.sqlite_schema WHERE name=?',(item['name'],)).fetchone()
+                    if bound!=(kind,before['name']):
+                        raise ValueError('Native rebuilt child targets a different owner')
+                    if kind=='index':
+                        index=next(row for row in probe.execute('PRAGMA main.index_list('+_quote(before['name'])+')') if row[1]==item['name'])
+                        keys=[{'sequence':int(row[0]),'column_id':int(row[1]),'name':row[2],
+                            'descending':bool(row[3]),'collation':row[4],'is_key':bool(row[5])}
+                            for row in probe.execute('PRAGMA main.index_xinfo('+_quote(item['name'])+')')]
+                        if (bool(index[2])!=item.get('unique') or str(index[3])!=item.get('origin') or
+                                bool(index[4])!=item.get('partial') or keys!=item.get('keys')):
+                            raise ValueError('Desired rebuilt index facts differ from native compilation')
     finally:
         probe.close()
     old_probe = sqlite3.connect(':memory:')
@@ -121,7 +174,7 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
                 renamed not in new or renamed in previous or
                 new[renamed]['hidden']):
             raise ValueError('SQLite column rename needs an exact source and writable target')
-    if column_renames and (indexes or triggers):
+    if column_renames and (indexes or triggers) and not coordinated:
         raise ValueError('SQLite column rename with indexes or triggers needs a dependency review')
     removed = [name for name in previous
                if name not in new and name not in column_renames]
@@ -165,8 +218,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     copy_sql = f'INSERT INTO {temp} ({target_projection}) SELECT {source_projection} FROM {qualified}'
     stages = [temporary, copy_sql, f'DROP TABLE {qualified}',
               f'ALTER TABLE {temp} RENAME TO {_quote(before["name"])}']
-    stages.extend(item['ddl'] for item in explicit_indexes)
-    stages.extend(item['ddl'] for item in triggers)
+    stages.extend(child_sources[item['resource_id']] if coordinated else item['ddl'] for item in target_explicit_indexes)
+    stages.extend(child_sources[item['resource_id']] if coordinated else item['ddl'] for item in target_triggers)
     if any(len(statement.encode('utf8')) > 1024 * 1024 for statement in stages):
         raise ValueError('SQLite rebuild statement exceeds 1 MiB')
     return {'operation': 'rebuild', 'resource_id': before['resource_id'],
@@ -187,15 +240,18 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         'target_columns': [{'name': name, **facts} for name, facts in new.items()],
         'expected_ddl': expected_ddl,
         'preserved_child_ids': [item['resource_id'] for item in explicit_indexes + triggers],
+        **({'coordinated_children':True,'target_child_sources':child_sources} if coordinated else {}),
         'baseline_sha256': digest({'ddl': before['native'].get('ddl'),
             'columns': before['native'].get('columns'),
             'indexes': before['native'].get('indexes'),
             'triggers': before['native'].get('triggers')}),
         'desired_sha256': digest({'ddl': after['native'].get('ddl'),
-            'columns': after['native'].get('columns')}),
+            'columns': after['native'].get('columns'),
+            **({'indexes':after['native'].get('indexes'),'triggers':after['native'].get('triggers')} if coordinated else {})}),
         'warnings': ['Rebuild copies rows under one SQLite write transaction; writers wait for the native lock.',
             'The desired native types apply SQLite affinity and STRICT conversion rules during copying. Generated columns are recomputed. New constraints must accept all copied rows.',
             'All native foreign keys and retained view/trigger bindings are checked before commit.',
+            *(['Retained index and trigger definitions are recreated from the complete desired design after copying rows; triggers do not fire during the copy.'] if coordinated and child_sources else []),
             'Removed columns and constraints are explicitly discarded by this selected rebuild.',
             *(['Physical rowids are not preserved when changing storage mode or primary-key identity.'] if not preserve_rowid else []),
             *(['The live AUTOINCREMENT high-water mark is preserved.'] if source_autoincrement and target_autoincrement else []),
