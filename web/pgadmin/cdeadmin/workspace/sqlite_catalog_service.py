@@ -48,6 +48,7 @@ def catalog(service, server, request, *, compare=False):
     if compare:
         return compare_catalogs(document, result)
     result['generation'] = captured['generation']
+    result['capture_complete']=captured['complete']
     result['objects'] = [{
         'resource_id': item['resource_id'], 'name': item['display_name'],
         'kind': item['resource_kind'], 'path': item['display_path'],

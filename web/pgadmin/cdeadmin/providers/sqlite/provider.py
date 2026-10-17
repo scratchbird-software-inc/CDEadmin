@@ -210,6 +210,13 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                     (file_info.st_dev, file_info.st_ino) !=
                     (initial_info.st_dev, initial_info.st_ino)):
                 raise RelationalClientError('SQLite registered file changed during capture')
+            unavailable=[]
+            for row in resources:
+                if (row['native'].get('column_observation',{}).get('available') is False or
+                        row['native'].get('view_binding_observation',{}).get('available') is False or
+                        row['native'].get('module_observation',{}).get('available') is False or
+                        row['native'].get('fts_configuration',{}).get('available') is False):
+                    unavailable.append(row)
             for item in resources:
                 if item['resource_kind'] in {'database',
                                              'attached-database'}:
@@ -225,14 +232,11 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         'CHECK expressions and all table options remain in exact native CREATE SQL; they are not separately decomposed.',
                         'Connection-local objects and uncommitted changes on other handles are outside this capture.',
                     ]
-                    unavailable=[row['resource_id'] for row in resources if row['resource_kind']=='view' and
-                        row['display_path'][0]==item['display_name'] and
-                        (row['native'].get('column_observation',{}).get('available') is False or
-                         row['native'].get('view_binding_observation',{}).get('available') is False)]
-                    if unavailable:
-                        item['native']['catalog_observations'].append({'source':'native-view-columns-and-binding',
-                            'available':False,'unavailable_resource_ids':unavailable})
-                        item['native']['catalog_warnings'].append('Some view columns or bindings are unavailable. Their native definitions and identities are retained; inspect the affected view observations before migration.')
+                    missing=[row['resource_id'] for row in unavailable if row['display_path'][0]==item['display_name']]
+                    if missing:
+                        item['native']['catalog_observations'].append({'source':'native-relation-columns-binding-and-fts-settings',
+                            'available':False,'unavailable_resource_ids':missing})
+                        item['native']['catalog_warnings'].append('Some relation columns, bindings or FTS settings are unavailable. Their native definitions and identities are retained; inspect the affected observations before migration.')
             if len(resources) > 20_000:
                 raise RelationalClientError(
                     'SQLite catalog exceeds the 20,000-resource limit')
@@ -242,7 +246,7 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
             return {'resources': resources,
                     'generation': resources[0]['generation'] if resources else str(uuid.uuid4()),
                     'consistency': 'owned-native-read-transaction',
-                    'complete': True}
+                    'complete': not unavailable}
         except BaseException:
             if connection.in_transaction:
                 try:
@@ -484,13 +488,14 @@ def _resources(connection, request):
                 is_view=relation['resource_kind']=='view'
                 def view_error(error):
                     code=getattr(error,'sqlite_errorcode',None)
-                    if not is_view or type(code) is not int or code & 255 not in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}:
+                    virtual=relation['resource_kind'] in {'fts-table','virtual-table'}
+                    if type(code) is not int or not (virtual or code & 255 in {sqlite3.SQLITE_ERROR,sqlite3.SQLITE_AUTH}):
                         raise error
                     return {'available':False,'native_error_code':code,'native_error_name':getattr(error,'sqlite_errorname',None)}
                 try:
                     cursor.execute(f'PRAGMA {quote(schema_name)}.table_xinfo({quote(table_name)})')
                     columns = cursor.fetchall()
-                    if is_view:relation['native']['column_observation']={'available':True}
+                    relation['native']['column_observation']={'available':True}
                 except sqlite3.Error as error:
                     relation['native']['column_observation']=view_error(error)
                     columns=[]
@@ -558,7 +563,7 @@ def _resources(connection, request):
                             'ddl': item['native'].get('ddl'),
                         })
                 # Views expose columns but do not admit table-only PRAGMAs.
-                if resources[relation_id]['resource_kind'] == 'view':
+                if resources[relation_id]['resource_kind'] == 'view' or relation['native'].get('column_observation',{}).get('available') is False:
                     continue
                 cursor.execute(
                     f'PRAGMA {quote(schema_name)}.foreign_key_list('
@@ -684,7 +689,15 @@ def _resources(connection, request):
         for (option,) in cursor.fetchall():
             add('compile-option', [], option, {'native_option': option, 'scope': 'runtime'})
         cursor.execute('SELECT name FROM pragma_module_list ORDER BY name')
-        for (name,) in cursor.fetchall():
+        module_names=[row[0] for row in cursor.fetchall()]
+        fold=str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')
+        registered={name.translate(fold) for name in module_names}
+        for resource in resources.values():
+            observation=resource['native'].get('module_observation')
+            if observation is not None:
+                module=observation.get('module')
+                observation['registered_in_session']=module is not None and module.translate(fold) in registered
+        for name in module_names:
             add('extension', [], name, {
                 'extension_kind': 'virtual-table-module',
                 'loaded_in_connection': True,

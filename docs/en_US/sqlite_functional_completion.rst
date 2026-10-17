@@ -19,6 +19,13 @@ SQLITE-COMP-01: File and catalog identity
   PRAGMA facts, generated/hidden columns, and native limitations. Do not imply
   that a PRAGMA value is a persisted schema object.
 
+  An unloaded virtual-table module or unavailable column/binding observation
+  does not erase its native object or block the healthy catalog. Keep the exact
+  definition and navigator destination, report native refusal and incomplete
+  capture explicitly, and preserve those facts in DDN. Module declaration and
+  registration in the inspecting session are separate observations. Native
+  module installation/loading remains a separate management requirement.
+
 SQLITE-COMP-02: Native connection and transaction ownership
   Keep each SQLite handle on its owning worker. Explorer, editor, monitoring
   and design capture use independently owned connections and must never

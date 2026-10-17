@@ -1419,3 +1419,22 @@ FTS3's ``content=...`` spelling is a column declaration, not FTS4's external-
 content option. It retains its native behavior. Renaming public FTS content
 columns or FTS4 language/row mappings still needs coordinated column and
 dependency rewriting; those remaining adapters are not claimed complete.
+
+SQLite unavailable module and child observations
+-------------------------------------------------
+
+A native schema object remains discoverable when its virtual-table module is
+not loaded in the inspecting connection or its column metadata is denied or
+unavailable. The catalog preserves the exact definition and identity, records
+the native error separately from an empty column list, and continues observing
+healthy relations. Module declarations and actual session registration have
+separate facts. Database observations, production catalog responses and DDN
+carry explicit incomplete coverage and the affected native identities.
+
+Native qualification creates a real virtual table through SQLite3.53's module
+API, closes that owning process and inspects the valid database without the
+module registered. Navigator reachability and production DDN roundtrip are
+checked independently from native column refusal. Additional native cases cover
+authorizer denial and damaged FTS configuration while another connection keeps
+pending work and a savepoint. This does not install the missing component or
+claim that the inspecting client exposes every extension-management API.
