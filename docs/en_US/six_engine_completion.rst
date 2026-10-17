@@ -1046,4 +1046,25 @@ registered utility TLS policy. Authenticated downloads, paged file inventories,
 offline receipts and explicitly confirmed application-artifact removal are
 integrated into the workspace. Unknown writers cannot authorize removal or
 continuation. Raw GTID-disabled retrieval, native replay/PITR, continuous
-collection/retention and MariaDB archives remain open requirements.
+collection/retention remain open requirements.
+
+MariaDB native closed binary-log archives
+==========================================
+
+MariaDB12.2.2 now has a separate raw closed-log archive adapter and native parser
+verification, exposed through the server's backup menu. Selection preserves a
+contiguous native catalog range. The native server UID, authenticated principal,
+log closure/order and file-size observations are checked at admission and on an
+owned observer after retrieval. MySQL and MariaDB retain distinct archive
+formats and verifiers while sharing owner/endpoint durable job infrastructure.
+
+The archive workspace supplies review/confirmation, progress, cancellation,
+uncertain-worker handling, offline receipts, byte verification, authenticated
+downloads and explicit artifact removal. Native checksums-disabled streams,
+compressed row events and native GTID domains retain their own semantics.
+Native utility dependencies use explicit application-host execution grants and
+registered transport/credential policy. Both MySQL and MariaDB now flush file
+data before atomic archive-name publication. Archive verification does not
+establish successful replay/recovery. Active/continuous collection, retention,
+native replay/PITR, physical continuity and production cutover remain separate
+open requirements.

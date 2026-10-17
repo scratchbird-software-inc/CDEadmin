@@ -55,3 +55,19 @@ it('keeps uncertain termination explicit and exposes verification without replay
   fireEvent.click(screen.getByRole('button',{name:'Verify archive again'}));
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_reconcile',request:{job_id:'owned-job'}}));
 });
+
+it('uses native closed-log identities in server order for MariaDB without MySQL dump options',async () => {
+  const post=jest.fn().mockResolvedValue({status:'available',logs:[{Log_name:'native.1',File_size:'600',closed:true},
+    {Log_name:'native.2',File_size:'700',closed:true},{Log_name:'native.3',File_size:'800',closed:false}]});
+  render(<Component engine="mariadb" post={post} endpointUrl="/workspace" />);
+  expect(screen.queryByLabelText('Native compression')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Inspect native binary logs'}));await screen.findByText('Native source, GTID state and available logs: available');
+  fireEvent.mouseDown(screen.getByLabelText('Native closed binary logs'));
+  expect(screen.queryByRole('option',{name:'native.3 (800 bytes)'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option',{name:'native.2 (700 bytes)'}));
+  fireEvent.click(screen.getByRole('option',{name:'native.1 (600 bytes)'}));
+  fireEvent.keyDown(screen.getByRole('listbox'),{key:'Escape'});
+  post.mockResolvedValue({...review,source:{server_uid:'mariadb-native-uid'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review archive'}));await screen.findByLabelText('Native archive review');
+  expect(post).toHaveBeenLastCalledWith({action:'mariadb_binlog_review',request:{options:{log_names:['native.1','native.2'],timeout_seconds:3600}}});
+});

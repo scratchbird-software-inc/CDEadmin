@@ -58,6 +58,8 @@ class DurableCancellation:
 
 class MySQLBinlogJobs:
     _maps={};_maps_lock=threading.RLock()
+    operation='mysql_binary_log_dump'
+    native_verify=staticmethod(verify)
 
     def __init__(self,path,root):
         self.path,self.root=Path(path),Path(root).resolve();self.lock=threading.RLock()
@@ -142,7 +144,7 @@ class MySQLBinlogJobs:
     def review(self,owner,endpoint,selected,capture,configuration,program,continuation=None):
         scope=self.prepare_scope(owner,endpoint)
         record={'job_id':str(uuid.uuid4()),'owner':owner,'endpoint_id':endpoint,'configuration':configuration,
-            'operation':'mysql_binary_log_dump','options':deepcopy(selected),'source':deepcopy(capture['identity']),
+            'operation':self.operation,'options':deepcopy(selected),'source':deepcopy(capture['identity']),
             'source_state':deepcopy(capture['state']),'program':deepcopy(program),'continuation':deepcopy(continuation),
             'created_at':time.time(),'expires_at':time.time()+600,'state':'reviewed','cancel_requested':False,
             'execution_host':{**program['execution_host'],'filesystem_scope':str(scope)},'remote_database_mutation':False,
@@ -234,7 +236,7 @@ class MySQLBinlogJobs:
         with self._maps_lock:
             known=self.workers.get(job_id)
             if known and known[0].is_alive():raise BinlogArchiveError('The archive worker is still active')
-        result=verify(self.directory(record)/'archive',record['source'])
+        result=self.native_verify(self.directory(record)/'archive',record['source'])
         sealed=record.get('result',{}).get('artifact')
         if sealed is not None and digest(result)!=digest(sealed):
             raise BinlogArchiveError('Native archive differs from its durable verification receipt')
@@ -289,7 +291,7 @@ class MySQLBinlogJobs:
                 if known and known[0].is_alive():raise BinlogArchiveError('Stop the native archive worker before removing files')
                 if record['state'] in ACTIVE or record['state'] not in {'reviewed','cancelled','not_dispatched'} and record.get('native_process_termination_confirmed') is not True:
                     raise BinlogArchiveError('Native archive process termination has not been confirmed')
-                for name in ('archive','continuation'):
+                for name in ('archive','archive.incoming','continuation','verification-load'):
                     path=self.directory(record)/name
                     if path.exists() or path.is_symlink():
                         info=path.lstat()

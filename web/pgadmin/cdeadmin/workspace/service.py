@@ -1604,6 +1604,15 @@ class ProviderWorkspaceService:
         except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
         except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
 
+    def mariadb_binlog(self,server,operation,request):
+        from .mariadb_binlog_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..providers.mysql_family.mysql_binlog_integrity import BinlogIntegrityError
+        try:return action(self,server,operation,request)
+        except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
+
     def postgresql_large_object_file(self,server,operation,request):
         from .postgresql_large_object_service import action
         from ..providers.postgresql.large_object_files import LargeObjectFileError

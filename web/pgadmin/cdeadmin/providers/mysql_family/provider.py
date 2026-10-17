@@ -312,6 +312,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._executions = Executions(self)
         self._session_requests = {}
         self._tool_runner = tool_runner or ProviderToolRunner({
+            'mariadb-binlog': os.environ.get('CDEADMIN_MARIADB_BINLOG_BINARY', 'mariadb-binlog'),
             'mariadb-dump': os.environ.get(
                 'CDEADMIN_MARIADB_DUMP_BINARY', 'mariadb-dump'
             ),

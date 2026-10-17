@@ -385,9 +385,38 @@ for privileged and restricted accounts, and checks navigator reachability, exact
 identities, orphan grants and explicit denied observations. These receipts are
 separate from broader browser, platform and archive acceptance.
 
-The persistent-history implementation is included. Native archive acceptance is
-blocked externally: the October 16 ScratchBird runtime fails its durable agent
-catalog seed with SECURITY.CONTEXT.EXPIRED / CATALOG_MUTATE before archive SQL.
-There is no fallback database or authorization bypass. Current-source native
+Persistent-history drivers and integration remain wired. The owner's October16
+correction defers ScratchBird history qualification until explicitly resumed;
+no history tests run as part of the six-engine implementation work. Current-source native
 Windows/macOS receipts remain necessary before claiming cross-platform completion.
 Human form validation and signing/release approval remain separate.
+
+Native binary-log archives
+---------------------------
+
+The server's backup menu exposes native ``mariadb-binlog12.2.2`` retrieval of
+an explicitly selected contiguous closed-log range. The active log remains on
+the server. Review and dispatch revalidate native catalog order, closure,
+physical file sizes, ``server_uid`` and the authenticated principal. An owned
+observer checks source identity and the selected closed range again after
+retrieval. The native server UID observation is distinct from a cryptographic
+provenance claim about a binary-log file.
+
+Retrieval preserves the registered transport policy and delegates credentials
+in a private native defaults file. Native parser verification covers each
+retrieved file; streaming event framing/CRC32 and complete SHA256 byte
+inventories bind its postimage to the durable receipt. Native checksum-disabled
+and compressed event streams retain their own semantics. Complete events in a
+crash-closed log do not require an invented STOP/ROTATE event. Native GTID
+domains are preserved in the raw event bytes. File data is flushed before
+atomic application-archive publication.
+
+Shared owner/endpoint job infrastructure supplies durable claims, offline
+receipts, cancellation, uncertain-process handling, paged file inventories,
+authenticated downloads and exact-identity-confirmed artifact removal. Native
+archive formats and verifiers remain separate for MySQL and MariaDB. Configure
+``CDEADMIN_MARIADB_BINLOG_BINARY``, ``CDEADMIN_MARIADB_BINLOG_ROOT`` and the
+optional ``CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS`` at the application host.
+The native development provisioner already includes the platform's vendor
+binary. Continuous/active-log collection, retention automation, native replay,
+PITR and physical continuity retain separate product acceptance.

@@ -33,7 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
-    'open_mysql_local_clone', 'open_mysql_binlogs',
+    'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mariadb_binlogs',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
@@ -750,6 +750,9 @@ def endpoint_context_actions(
             'open_sqlite_dashboard_editor', icon='action.edit', group='availability', mutation='write',
             enabled=can_manage, disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mariadb':
+        actions.append(_action('endpoint.mariadb.binlogs', 'MariaDB binary-log archives...', 'open_mariadb_binlogs',
+            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native archive jobs.'))
         for tab, label in (('monitoring', 'MariaDB server dashboard...'),
                            ('monitoring_policy', 'Configure monitoring collection...')):
             actions.append(_action(f'endpoint.mariadb.{tab}', label, 'open_workspace',

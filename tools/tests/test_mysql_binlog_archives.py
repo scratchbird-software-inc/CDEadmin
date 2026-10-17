@@ -94,11 +94,10 @@ def test_failed_worker_start_is_durable_not_dispatched_and_closes_credentials(ma
 
 
 def test_artifact_reconciliation_preserves_tool_receipt_and_uncertain_process_finality(manager,monkeypatch):
-    import pgadmin.cdeadmin.workspace.mysql_binlog_jobs as module
     jobs,endpoint,review,_request,_current=manager
     record=jobs.load(review['job_id'],1,endpoint)
     jobs.update(record,state='unknown',result={'tool':{'return_code':0}},native_process_termination_confirmed=False)
-    monkeypatch.setattr(module,'verify',lambda *_args:{'files':[],'event_integrity':[],'total_bytes':9007199254740993})
+    monkeypatch.setattr(jobs,'native_verify',lambda *_args:{'files':[],'event_integrity':[],'total_bytes':9007199254740993})
     value=jobs.reconcile(review['job_id'],1,endpoint)
     assert value['state']=='artifact_verified' and value['native_process_termination_confirmed'] is False
     assert value['result']['tool']=={'return_code':0} and value['result']['artifact']['total_bytes']=='9007199254740993'

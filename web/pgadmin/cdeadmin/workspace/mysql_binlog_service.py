@@ -49,25 +49,30 @@ def _public_capture(captured):
     return result
 
 
-def manager(service,server):
+def manager(service,server,family='mysql'):
     from flask import current_app
     endpoint=server.endpoint_profile
-    if endpoint is None or endpoint.profile_id!='mysql-native' or endpoint.provider_id!='org.cdeadmin.mysql':
-        raise BinlogArchiveError('Select a native MySQL registration')
-    context=EndpointContext(endpoint_id=endpoint.id,mode='legacy_native',experience_family='mysql',
+    if family not in {'mysql','mariadb'}:raise BinlogArchiveError('Native archive family is unavailable')
+    if endpoint is None or endpoint.profile_id!=family+'-native' or endpoint.provider_id!='org.cdeadmin.'+family:
+        raise BinlogArchiveError('Select a native '+family+' registration')
+    context=EndpointContext(endpoint_id=endpoint.id,mode='legacy_native',experience_family=family,
         provider_id=endpoint.provider_id,provider_version=endpoint.provider_version or '0.1.0',
-        profile_id=endpoint.profile_id,profile_version=endpoint.profile_version or '9.7.0',
-        target_adapter_id='mysql-wire-client',target_adapter_version='26.7.0',
+        profile_id=endpoint.profile_id,profile_version=endpoint.profile_version or ('9.7.0' if family=='mysql' else '12.2.2'),
+        target_adapter_id=endpoint.target_adapter_id,target_adapter_version=endpoint.target_adapter_version or '0.1.0',
         **{name:getattr(endpoint,name) for name in ('pool_namespace','session_namespace','cache_namespace','diagnostic_namespace')})
     if 'backup_admin' not in service.endpoint_service.provider_registry.admitted_permissions(context):
         raise BinlogArchiveError('Native archive administration permission is unavailable')
     owner=service._principal_id(server);store=getattr(service.operation_bus,'store',None)
     if not isinstance(store,JsonOperationStore):raise BinlogArchiveError('Native archives require durable application storage')
     with service._semantic_lock:
-        jobs=getattr(service,'mysql_binlog_jobs',None)
+        attribute=family+'_binlog_jobs';jobs=getattr(service,attribute,None)
         if jobs is None:
-            root=current_app.config.get('CDEADMIN_MYSQL_BINLOG_ROOT') or str(store.path.parent/'mysql-binary-log-archives')
-            jobs=service.mysql_binlog_jobs=MySQLBinlogJobs(str(store.path)+'.mysql-binlogs',root)
+            cls=MySQLBinlogJobs
+            if family=='mariadb':
+                from .mariadb_binlog_service import MariaDBBinlogJobs
+                cls=MariaDBBinlogJobs
+            root=current_app.config.get('CDEADMIN_'+family.upper()+'_BINLOG_ROOT') or str(store.path.parent/(family+'-binary-log-archives'))
+            jobs=cls(str(store.path)+'.'+family+'-binlogs',root);setattr(service,attribute,jobs)
             import atexit
             atexit.register(jobs.close)
     return jobs,owner,endpoint,context
@@ -148,10 +153,10 @@ def action(service,server,operation,request):
         if transport is not None:transport.close()
 
 
-def download(service,server,request):
+def download(service,server,request,*,family='mysql'):
     from flask import send_file
     if not isinstance(request,dict) or set(request)!={'job_id','path'}:raise BinlogArchiveError('Select one native archive file')
-    jobs,owner,endpoint,_context=manager(service,server)
+    jobs,owner,endpoint,_context=manager(service,server,family)
     opened=jobs.download(request['job_id'],owner,endpoint.id,request['path'])
     try:stream,selected=opened.__enter__()
     except OSError:raise BinlogArchiveError('The native archive file is unavailable') from None

@@ -289,8 +289,8 @@ export function showProviderWorkspace(
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const onClose = () => workspace.close(panelId);
-  const serverTool=initialTab === 'mysql-binlogs' ?
-    <MySQLBinlogArchives endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
+  const serverTool=['mysql-binlogs','mariadb-binlogs'].includes(initialTab) ?
+    <MySQLBinlogArchives engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
       <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
         <PostgresqlContinuity post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
   const panel = {

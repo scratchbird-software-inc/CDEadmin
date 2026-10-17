@@ -4,20 +4,22 @@ import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,T
 import {startBrowserFileDownload} from './browserFileDownload';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
-export default function MySQLBinlogArchives({post,endpointUrl}) {
+export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql'}) {
+  const maria=engine==='mariadb',prefix=maria ? 'mariadb_binlog_' : 'mysql_binlog_',engineLabel=maria ? 'MariaDB' : 'MySQL';
   const [catalog,setCatalog]=useState(null),[jobs,setJobs]=useState(null),[page,setPage]=useState(0);
   const [source,setSource]=useState('position'),[filename,setFilename]=useState(''),[position,setPosition]=useState('4'),[since,setSince]=useState('');
   const [compression,setCompression]=useState('zstd;level=1'),[threads,setThreads]=useState(4),[timeout,setTimeoutValue]=useState(3600);
+  const [logNames,setLogNames]=useState([]);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[files,setFiles]=useState(null),[confirmation,setConfirmation]=useState('');
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const generation=useRef(0),downloads=useRef([]);
   useEffect(() => {
-    generation.current++;setCatalog(null);setJobs(null);setPage(0);setReview(null);setReceipt(null);setFiles(null);setConfirmation('');setBusy(false);setError('');
+    generation.current++;setCatalog(null);setJobs(null);setPage(0);setReview(null);setReceipt(null);setFiles(null);setLogNames([]);setConfirmation('');setBusy(false);setError('');
     return () => {generation.current++;downloads.current.splice(0).forEach(close => close());};
-  },[post,endpointUrl]);
+  },[post,endpointUrl,engine]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
-    try {const value=await post({action:'mysql_binlog_'+action,request});if(token===generation.current)accept(value);}
+    try {const value=await post({action:prefix+action,request});if(token===generation.current)accept(value);}
     catch(failure) {if(token===generation.current)setError(failure.response?.data?.errormsg || failure.message || 'Native archive request failed');}
     finally {if(token===generation.current)setBusy(false);}
   };
@@ -26,28 +28,28 @@ export default function MySQLBinlogArchives({post,endpointUrl}) {
     let live=true,pending=false;
     const timer=setInterval(async () => {
       if(pending)return;pending=true;
-      try {const value=await post({action:'mysql_binlog_status',request:{job_id:receipt.job_id}});if(live)setReceipt(value);}
+      try {const value=await post({action:prefix+'status',request:{job_id:receipt.job_id}});if(live)setReceipt(value);}
       catch(failure) {if(live)setError(failure.response?.data?.errormsg || failure.message);}
       finally {pending=false;}
     },1000);
     return () => {live=false;clearInterval(timer);};
-  },[post,receipt?.job_id,receipt?.state]);
+  },[post,prefix,receipt?.job_id,receipt?.state]);
   const change=setter => event => {setter(event.target.value);setReview(null);};
   const load=next => run('list',{offset:next*25,limit:25},value => {setJobs(value);setPage(next);});
   const inspect=job => run('status',{job_id:job.job_id},value => {setReceipt(value);setFiles(null);setConfirmation('');});
   const loadFiles=offset => run('files',{job_id:receipt.job_id,offset,limit:100},setFiles);
   const download=row => {
     try {downloads.current.push(startBrowserFileDownload(endpointUrl,{job_id:receipt.job_id,path:row.path},
-      {action:'mysql_binlog_download',prefix:'mysql-binlog',title:'Native binary-log archive download'}));}
+      {action:prefix+'download',prefix:engine+'-binlog',title:'Native binary-log archive download'}));}
     catch(failure) {setError(failure.message);}
   };
   const saveReceipt=() => {
     const url=URL.createObjectURL(new Blob([JSON.stringify(receipt,null,2)],{type:'application/json'}));
-    const link=document.createElement('a');link.href=url;link.download='mysql-binlog-'+receipt.job_id+'.json';link.click();
+    const link=document.createElement('a');link.href=url;link.download=engine+'-binlog-'+receipt.job_id+'.json';link.click();
     window.setTimeout(() => URL.revokeObjectURL(url),1000);
   };
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
-    <Alert severity="info">Archive native binary logs on the application host using MySQL Shell. Logs include changes from the whole server. Keep downloaded files private and preserve their relative paths. Archive verification and successful database recovery have separate receipts.</Alert>
+    <Alert severity="info">{maria ? 'Archive a contiguous range of closed native MariaDB binary logs on the application host using mariadb-binlog. The active log remains on the server.' : 'Archive native binary logs on the application host using MySQL Shell.'} Logs include changes from the whole server. Keep downloaded files private and preserve their relative paths. Archive verification and successful database recovery have separate receipts.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       <Button disabled={busy} onClick={() => run('catalog',{},setCatalog)}>Inspect native binary logs</Button>
@@ -55,15 +57,19 @@ export default function MySQLBinlogArchives({post,endpointUrl}) {
     </Box>
     {catalog && <Box component="details"><summary>Native source, GTID state and available logs: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
-      <TextField select size="small" label="Archive starting point" value={source} onChange={change(setSource)}><MenuItem value="position">Native file and position</MenuItem><MenuItem value="continuation">Completed archive</MenuItem></TextField>
-      {source==='position' ? <>
-        <TextField size="small" label="Native binary-log filename" value={filename} onChange={change(setFilename)} />
-        <TextField size="small" label="Native position" value={position} onChange={change(setPosition)} />
-      </> : <TextField size="small" label="Previous archive job identity" value={since} onChange={change(setSince)} />}
-      <TextField size="small" label="Native compression" value={compression} onChange={change(setCompression)} helperText="none, gzip;level=0–9, zstd;level=1–22" />
-      <TextField size="small" type="number" label="Native dump threads" value={threads} onChange={event => {setThreads(Number(event.target.value));setReview(null);}} />
+      {maria ? <TextField select size="small" label="Native closed binary logs" value={logNames} SelectProps={{multiple:true}} sx={{minWidth:280}} onChange={event => {setLogNames((catalog?.logs || []).filter(row => event.target.value.includes(row.Log_name)).map(row => row.Log_name));setReview(null);}}>
+        {(catalog?.logs || []).filter(row => row.closed).map(row => <MenuItem key={row.Log_name} value={row.Log_name}>{row.Log_name} ({row.File_size} bytes)</MenuItem>)}
+      </TextField> : <>
+        <TextField select size="small" label="Archive starting point" value={source} onChange={change(setSource)}><MenuItem value="position">Native file and position</MenuItem><MenuItem value="continuation">Completed archive</MenuItem></TextField>
+        {source==='position' ? <>
+          <TextField size="small" label="Native binary-log filename" value={filename} onChange={change(setFilename)} />
+          <TextField size="small" label="Native position" value={position} onChange={change(setPosition)} />
+        </> : <TextField size="small" label="Previous archive job identity" value={since} onChange={change(setSince)} />}
+        <TextField size="small" label="Native compression" value={compression} onChange={change(setCompression)} helperText="none, gzip;level=0–9, zstd;level=1–22" />
+        <TextField size="small" type="number" label="Native dump threads" value={threads} onChange={event => {setThreads(Number(event.target.value));setReview(null);}} />
+      </>}
       <TextField size="small" type="number" label="Runtime seconds (blank: no deadline)" value={timeout ?? ''} onChange={event => {setTimeoutValue(event.target.value==='' ? null : Number(event.target.value));setReview(null);}} />
-      <Button disabled={busy} onClick={() => run('review',{options:{...(source==='position' ? {start_file:filename,start_position:position} : {since_job_id:since}),compression,threads,timeout_seconds:timeout}},setReview)}>Review archive</Button>
+      <Button disabled={busy} onClick={() => run('review',{options:maria ? {log_names:logNames,timeout_seconds:timeout} : {...(source==='position' ? {start_file:filename,start_position:position} : {since_job_id:since}),compression,threads,timeout_seconds:timeout}},setReview)}>Review archive</Button>
     </Box>
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
@@ -71,8 +77,8 @@ export default function MySQLBinlogArchives({post,endpointUrl}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setFiles(null);setReview(current => ({...current,state:value.state}));})}>Confirm and start archive</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label="Native MySQL archive jobs"><TableHead><TableRow>{['Job','Starting point','State','Receipt'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.options.since_job_id || job.options.start_file+':'+job.options.start_position}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect archive '+job.job_id} onClick={() => inspect(job)}>Inspect</Button></TableCell></TableRow>)}
+      <Table size="small" aria-label={'Native '+engineLabel+' archive jobs'}><TableHead><TableRow>{['Job','Starting point','State','Receipt'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>
+        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{maria ? job.options.log_names.join(' → ') : job.options.since_job_id || job.options.start_file+':'+job.options.start_position}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect archive '+job.job_id} onClick={() => inspect(job)}>Inspect</Button></TableCell></TableRow>)}
       </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
       {jobs.unavailable_job_ids?.length>0 && <Alert severity="warning">Some archive receipts could not be read: {jobs.unavailable_job_ids.join(', ')}</Alert>}
     </>}
@@ -100,4 +106,4 @@ export default function MySQLBinlogArchives({post,endpointUrl}) {
     </Box>}
   </Box>;
 }
-MySQLBinlogArchives.propTypes={post:PropTypes.func.isRequired,endpointUrl:PropTypes.string.isRequired};
+MySQLBinlogArchives.propTypes={post:PropTypes.func.isRequired,endpointUrl:PropTypes.string.isRequired,engine:PropTypes.oneOf(['mysql','mariadb'])};

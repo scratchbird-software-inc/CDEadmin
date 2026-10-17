@@ -172,8 +172,9 @@ receipt. ``CDEADMIN_MYSQL_BINLOG_ROOT`` and
 ``CDEADMIN_MYSQL_BINLOG_MAX_RUNTIME_SECONDS`` are operator settings.
 
 This closes the scoped GTID-enabled Shell archive workflow. Raw GTID-disabled
-MySQL archives, native replay/PITR, continuous collection/retention and the
-MariaDB binary-log workflow remain separate product requirements.
+MySQL archives, native replay/PITR and continuous collection/retention remain
+separate product requirements. MariaDB's native archive workflow is documented
+in :doc:`mariadb_functional_completion`.
 
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for

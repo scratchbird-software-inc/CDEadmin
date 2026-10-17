@@ -106,6 +106,8 @@ def run_dump(client,route,credentials,source,selected,directory,workspace,*,sinc
              dry_run=False,cancel=None,progress=None):
     directory,workspace=Path(directory),Path(workspace)
     if directory.exists() and not dry_run:raise BinlogArchiveError('A native dump destination must be new')
+    published=directory;directory=directory.with_name(directory.name+'.incoming')
+    if directory.exists() and not dry_run:raise BinlogArchiveError('A native dump staging destination must be new')
     # Both the new archive and any continuation must be inside the explicit
     # owner/endpoint filesystem grant, without following a caller's path.
     for path in (directory,since_directory):
@@ -134,10 +136,39 @@ def run_dump(client,route,credentials,source,selected,directory,workspace,*,sinc
     if not dry_run and not directory.exists():
         return {'tool':observation,'program':identity,'native_operation_returned':True,'artifact':None,
             'new_snapshot_produced':False,'continuation_cursor_advanced':False}
-    try:artifact=None if dry_run else verify(directory,source,cancel=cancel)
+    try:
+        artifact=None if dry_run else verify(directory,source,cancel=cancel)
+        if not dry_run:
+            seal(directory,published,cancel=cancel)
+            if verify(published,source,cancel=cancel)!=artifact:raise BinlogArchiveError('Native archive changed during durable publication')
     except BaseException as error:error.observation=observation;raise
     return {'tool':observation,'program':identity,'native_operation_returned':True,
         'new_snapshot_produced':not dry_run,'artifact':artifact}
+
+
+def seal(directory,published,*,cancel=None):
+    """Flush private file bytes before atomically publishing the archive name."""
+    from ...operations.fileio import durable_replace,private_directory,private_file
+    directory,published=Path(directory),Path(published)
+    if published.exists() or published.is_symlink():raise BinlogArchiveError('Native archive publication destination already exists')
+    directories={directory}
+    for row in manifest(directory,cancel=cancel):
+        if cancel is not None and cancel.is_set():raise InterruptedError('Native archive publication cancelled')
+        path=directory/row['path'];directories.update(parent for parent in path.parents if parent==directory or directory in parent.parents)
+        private_file(path)
+        descriptor=os.open(path,os.O_RDWR|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+        try:
+            info=os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:raise BinlogArchiveError('Native archive file identity changed before publication')
+            os.fsync(descriptor)
+        finally:os.close(descriptor)
+    for path in sorted(directories,key=lambda path:len(path.parts),reverse=True):
+        private_directory(path)
+        if os.name!='nt':
+            descriptor=os.open(path,os.O_RDONLY|os.O_DIRECTORY|getattr(os,'O_NOFOLLOW',0))
+            try:os.fsync(descriptor)
+            finally:os.close(descriptor)
+    durable_replace(directory,published)
 
 
 def options(value):
