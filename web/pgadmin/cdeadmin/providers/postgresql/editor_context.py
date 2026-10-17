@@ -2,10 +2,42 @@
 import hashlib
 import json
 import uuid
+from contextlib import contextmanager
 
 from psycopg import Cursor, sql
 from psycopg.pq import TransactionStatus
 from psycopg.rows import tuple_row
+
+
+@contextmanager
+def read_scope(state):
+    connection = state.connection.conn
+    original = connection.info.transaction_status
+    if original not in {TransactionStatus.IDLE, TransactionStatus.INTRANS}:
+        raise ValueError('Editor observation requires an idle or healthy pending transaction')
+    owned = original == TransactionStatus.IDLE
+    savepoint = sql.Identifier('sr_editor_' + uuid.uuid4().hex)
+    attempted = False
+    try:
+        with Cursor(connection, row_factory=tuple_row) as cursor:
+            attempted = True
+            cursor.execute('BEGIN READ ONLY' if owned else sql.SQL('SAVEPOINT {}').format(savepoint))
+        yield connection
+    finally:
+        if attempted:
+            try:
+                if owned:
+                    connection.rollback()
+                else:
+                    with Cursor(connection, row_factory=tuple_row) as cursor:
+                        cursor.execute(sql.SQL('ROLLBACK TO SAVEPOINT {}').format(savepoint))
+                        cursor.execute(sql.SQL('RELEASE SAVEPOINT {}').format(savepoint))
+                if (connection.closed or connection.broken or
+                        connection.info.transaction_status != original):
+                    raise RuntimeError('Native editor transaction state was not restored')
+            except BaseException:
+                state.uncertain = True
+                raise RuntimeError('Editor observation cleanup is unconfirmed; close this session without replay') from None
 
 
 def observe(state):
@@ -27,14 +59,8 @@ def observe(state):
         if original == TransactionStatus.UNKNOWN:
             state.uncertain = True
     else:
-        owned = original == TransactionStatus.IDLE
-        savepoint = sql.Identifier('sr_editor_' + uuid.uuid4().hex)
-        attempted = False
         try:
-            with Cursor(connection, row_factory=tuple_row) as cursor:
-                attempted = True
-                cursor.execute('BEGIN READ ONLY' if owned else
-                               sql.SQL('SAVEPOINT {}').format(savepoint))
+            with read_scope(state), Cursor(connection, row_factory=tuple_row) as cursor:
                 cursor.execute("SELECT CURRENT_USER, SESSION_USER, CURRENT_ROLE, "
                                "pg_catalog.current_setting('role'), "
                                "pg_catalog.current_setting('search_path'), "
@@ -50,24 +76,11 @@ def observe(state):
                     'backslash_quote'), row))
                 context['observation'] = {'available': True}
         except Exception as error:
+            if state.uncertain:
+                raise
             context['observation'] = {'available': False,
                 'reason': 'native-observation-failed',
                 'sqlstate': getattr(error, 'sqlstate', None)}
-        finally:
-            if attempted:
-                try:
-                    if owned:
-                        connection.rollback()
-                    else:
-                        with Cursor(connection, row_factory=tuple_row) as cursor:
-                            cursor.execute(sql.SQL('ROLLBACK TO SAVEPOINT {}').format(savepoint))
-                            cursor.execute(sql.SQL('RELEASE SAVEPOINT {}').format(savepoint))
-                    if (connection.closed or connection.broken or
-                            connection.info.transaction_status != original):
-                        raise RuntimeError('Native editor transaction state was not restored')
-                except BaseException:
-                    state.uncertain = True
-                    raise RuntimeError('Editor observation cleanup is unconfirmed; close this session without replay') from None
     context['context_revision'] = hashlib.sha256(
         json.dumps(context, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return context

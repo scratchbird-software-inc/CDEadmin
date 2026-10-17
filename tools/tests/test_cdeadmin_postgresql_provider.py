@@ -597,17 +597,22 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         )
 
     def test_data_studio_completion_uses_session_bound_adapter(self):
+        from contextlib import nullcontext
+        from psycopg.pq import TransactionStatus
         session = self.provider.open_session({
             'route': {'server_id': 7, 'database_id': 10},
         })
         adapter = Mock()
         adapter.get_completions.return_value = [{'label': 'orders'}]
         self.provider._completion_adapters[session['session_id']] = adapter
-        actual = self.provider.complete({
-            'session_id': session['session_id'],
-            'full_source': 'SELECT * FROM ord',
-            'source_before_cursor': 'ord',
-        })
+        self.provider._sessions[session['session_id']].connection.info = SimpleNamespace(
+            transaction_status=TransactionStatus.INTRANS)
+        with patch('pgadmin.cdeadmin.providers.postgresql.editor_context.read_scope', return_value=nullcontext()):
+            actual = self.provider.complete({
+                'session_id': session['session_id'],
+                'full_source': 'SELECT * FROM ord',
+                'source_before_cursor': 'ord',
+            })
         self.assertEqual([{'label': 'orders'}], actual)
         adapter.get_completions.assert_called_once_with(
             'SELECT * FROM ord', 'ord'

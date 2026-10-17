@@ -679,10 +679,11 @@ class PostgreSQLProvider:
     @staticmethod
     def _studio_complete(binding, request):
         provider = binding.instance
-        completions = provider.complete(request)
-        state = provider._require_idle_session(request.get('session_id'))
-        with state.lock:
-            context = provider._editor_context(state, request.get('full_source', ''))
+        with provider._state_lock:
+            state = provider._require_idle_session(request.get('session_id'))
+            with state.lock:
+                completions = provider.complete(request)
+                context = provider._editor_context(state, request.get('full_source', ''))
         return {'completions': dict(list(completions.items())[:1000]), 'editor_context': {
             'context': context, 'truncated': len(completions) > 1000,
             'coverage': 'Authorized PostgreSQL session completion', 'completion_count': len(completions)}}
@@ -1364,27 +1365,36 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
         self._require_idle_session(session_id)
         self._ensure_native_connection(state)
-        adapter = self._completion_adapters.get(session_id)
-        if adapter is None:
-            # Import lazily so provider registration does not make the legacy
-            # Query Tool completion dependency part of common app startup.
-            from pgadmin.utils.sqlautocomplete.autocomplete import (
-                SQLAutoComplete,
-            )
-            adapter = SQLAutoComplete(
-                sid=state.server_id,
-                did=state.database_id,
-                conn=state.connection,
-                manager=state.manager,
-            )
-            # Rebuild native metadata for each request. The legacy adapter
-            # extends cached objects and can retain dropped objects, revoked
-            # visibility or a previous search_path when reused indefinitely.
-            # Session ownership remains cached; catalog suggestions do not.
-        return adapter.get_completions(
-            str(payload.get('full_source', '')),
-            str(payload.get('source_before_cursor', '')),
-        )
+        from .editor_context import read_scope
+        from psycopg.pq import TransactionStatus
+        try:
+            with read_scope(state):
+                adapter = self._completion_adapters.get(session_id)
+                if adapter is None:
+                    # Import lazily so provider registration does not make the legacy
+                    # Query Tool completion dependency part of common app startup.
+                    from pgadmin.utils.sqlautocomplete.autocomplete import (
+                        SQLAutoComplete,
+                    )
+                    adapter = SQLAutoComplete(
+                        sid=state.server_id,
+                        did=state.database_id,
+                        conn=state.connection,
+                        manager=state.manager,
+                    )
+                    # Rebuild native metadata for each request. The legacy adapter
+                    # extends cached objects and can retain dropped objects, revoked
+                    # visibility or a previous search_path when reused indefinitely.
+                    # Session ownership remains cached; catalog suggestions do not.
+                result = adapter.get_completions(
+                    str(payload.get('full_source', '')),
+                    str(payload.get('source_before_cursor', '')),
+                )
+                if state.connection.conn.info.transaction_status != TransactionStatus.INTRANS:
+                    raise PostgreSQLProviderError('Native completion metadata is unavailable')
+                return result
+        except (ValueError, RuntimeError) as error:
+            raise PostgreSQLProviderError(str(error)) from None
 
     @_session_serialized
     def execute(self, request):

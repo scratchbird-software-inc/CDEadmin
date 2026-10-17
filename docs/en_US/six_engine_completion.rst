@@ -784,6 +784,11 @@ use an owned read transaction or an observation savepoint inside pending work;
 cleanup restores the original transaction state. An aborted transaction is not
 queried or implicitly repaired. Unavailable observations do not supply assumed
 language settings; unconfirmed cleanup blocks reuse of the retained session.
+The native PostgreSQL completion queries use the same transaction guards. A
+failed catalog query cannot leave an enclosing user transaction aborted or be
+reported as a complete suggestion set. Completion and its context observation
+hold the retained-session lock together; role/settings changes cannot interleave
+between those two parts of the reply.
 
 DuckDB context revisions include the full native search path and installed/loaded
 extension identities, versions and install modes. Changing a later search-path
