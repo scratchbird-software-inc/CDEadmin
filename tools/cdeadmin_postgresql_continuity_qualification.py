@@ -118,12 +118,29 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                     return result
                 full=submit('full_backup',{'timeout_seconds':None})
                 proof['checks'].append('authenticated-http-full-physical-backup-relocated-tablespaces-native-files-and-wal-verification')
+                tar_base=submit('full_backup',{'format':'tar','compression':'client-gzip','timeout_seconds':120})
                 native.execute("INSERT INTO sr_continuity_data VALUES (9007199254740994,'incremental change',decode('aabb','hex'))")
                 native.execute('SELECT pg_switch_wal()')
                 incremental=submit('incremental_backup',{'timeout_seconds':120},base_job_id=full['job_id'])
                 proof['checks'].append('authenticated-http-native-incremental-backup-against-selected-manifest')
                 combined=submit('combine',{'timeout_seconds':120},chain=[full['job_id'],incremental['job_id']])
                 proof['checks'].append('native-input-verification-chain-reconstruction-and-output-verification')
+                tar_incremental=submit('incremental_backup',{'format':'tar','compression':'client-zstd','timeout_seconds':120},base_job_id=tar_base['job_id'])
+                jobs=service_for_app(app).postgresql_continuity_jobs
+                def artifact_facts(job):
+                    path=jobs.directory(jobs.load(job['job_id'],uid,endpoint))
+                    return {str(item.relative_to(path)):os.readlink(item) if item.is_symlink() else hashlib.sha256(item.read_bytes()).hexdigest()
+                            for item in path.rglob('*') if item.is_file() or item.is_symlink()}
+                chain_before={job['job_id']:artifact_facts(job) for job in (tar_base,tar_incremental)}
+                tar_combined=submit('combine',{'timeout_seconds':120},chain=[tar_base['job_id'],tar_incremental['job_id']])
+                plain_incremental=submit('incremental_backup',{'timeout_seconds':120},base_job_id=tar_base['job_id'])
+                mixed_combined=submit('combine',{'timeout_seconds':120},chain=[tar_base['job_id'],plain_incremental['job_id']])
+                wrong_chain=submit('combine',{'timeout_seconds':120},chain=[tar_incremental['job_id'],tar_base['job_id']],expected_state='failed')
+                assert wrong_chain['artifact_complete'] is False and wrong_chain['tool_observation']['return_code']!=0
+                for job in (tar_base,tar_incremental):assert artifact_facts(job)==chain_before[job['job_id']]
+                assert len(tar_combined['input_materializations'])==2 and len(mixed_combined['input_materializations'])==1
+                assert all(item['verification_observation']['verification_scope']['wal'] for item in tar_combined['input_materializations'])
+                proof['checks'].append('native-gzip-full-zstd-incremental-and-mixed-tar-plain-chain-materialization-input-wal-verification-and-reconstruction')
                 tar=submit('full_backup',{'format':'tar','compression':'client-gzip','timeout_seconds':120})
                 assert tar['verification_scope']['files'] and not tar['verification_scope']['wal']
                 proof['checks'].append('compressed-tar-native-format-verification-and-explicit-wal-exclusion')
@@ -132,10 +149,13 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                     tar_jobs.append(submit('full_backup',{'format':'tar','compression':compression,
                         'wal_method':'stream' if compression else 'fetch','timeout_seconds':120}))
                 jobs=service_for_app(app).postgresql_continuity_jobs
-                combined_record=jobs.load(combined['job_id'],uid,endpoint)
+                combined_record=jobs.load(tar_combined['job_id'],uid,endpoint)
                 combined_path=jobs.directory(combined_record)
                 shutil.copytree(combined_path,restored,symlinks=True)
                 (restored/'backup/postgresql.auto.conf').write_bytes(b'')
+                # Native TAR maps retain source-host paths. This independent
+                # recovery copy uses the explicitly relocated links below.
+                (restored/'backup/tablespace_map').unlink(missing_ok=True)
                 for link in (restored/'backup/pg_tblspc').iterdir():
                     assert link.is_symlink()
                     oid=link.name;link.unlink();link.symlink_to('/owned/tablespaces/'+oid)
@@ -163,18 +183,14 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
                     assert actual==expected and len(actual)==2
                     assert recovered.info.server_version==180003
                     assert recovered.execute('SELECT system_identifier::text FROM pg_control_system()').fetchone()[0]==combined['source']['system_identifier']
-                proof['checks'].append('independent-postgresql18.3-recovery-of-reconstructed-chain-exact-int64-unicode-binary-and-tablespace-data')
+                proof['checks'].append('independent-postgresql18.3-recovery-of-compressed-reconstructed-chain-exact-int64-unicode-binary-and-tablespace-data')
                 assert combined['recovery_drill_complete'] is False  # Evidence is separate from the product job.
             # Release the source fixture before exercising offline verification.
         assert fixture['owned_server_stopped']
         verified=submit('verify',base_job_id=full['job_id'])
         assert verified['verification_scope']['wal']
         proof['checks'].append('offline-authenticated-http-native-artifact-verification-after-source-server-stopped')
-        def artifact_facts(job):
-            path=jobs.directory(jobs.load(job['job_id'],uid,endpoint))
-            return {str(item.relative_to(path)):os.readlink(item) if item.is_symlink() else hashlib.sha256(item.read_bytes()).hexdigest()
-                    for item in path.rglob('*') if item.is_file() or item.is_symlink()}
-        before={job['job_id']:artifact_facts(job) for job in (full,combined,*tar_jobs)}
+        before={job['job_id']:artifact_facts(job) for job in (full,combined,tar_combined,mixed_combined,*tar_jobs)}
         exact_check={'schema':exact_schema,'table':exact_table,'expected_rows':'1'}
         drill_options={'database':'postgres','checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'2'},exact_check],'timeout_seconds':120}
         recovered=submit('recovery_drill',drill_options,base_job_id=combined['job_id'],expected_state='recovered')
@@ -183,6 +199,9 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
         assert recovered['recovery_observation']['system_identifier']==combined['source']['system_identifier']
         assert recovered['tool_observation']['process_observation']['cleanup_confirmed'] is True
         proof['checks'].append('offline-authenticated-http-independent-combined-backup-single-user-recovery-with-relocated-tablespace-count-and-no-listener')
+        chain_recoveries=[submit('recovery_drill',drill_options,base_job_id=job['job_id'],expected_state='recovered') for job in (tar_combined,mixed_combined)]
+        assert all(job['recovery_drill_complete'] for job in chain_recoveries)
+        proof['checks'].append('offline-native-recovery-of-all-tar-and-mixed-input-reconstructed-chains-and-native-refusal-of-reversed-chain-with-unchanged-source-archives')
         full_recovery=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'sr_continuity_data','expected_rows':'1'},exact_check]},base_job_id=verified['job_id'],expected_state='recovered')
         assert full_recovery['recovery_drill_complete']
         proof['checks'].append('offline-native-full-backup-recovery-from-verification-receipt-excludes-later-source-changes')
@@ -201,14 +220,15 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None):
         no_result=submit('recovery_drill',{**drill_options,'checks':[{'schema':'public','table':'missing_recovery_table'}]},base_job_id=full['job_id'],expected_state='failed')
         assert no_result['tool_observation']['return_code']==0 and no_result['recovery_drill_complete'] is False
         proof['checks'].append('native-zero-exit-with-sql-error-and-incorrect-row-count-do-not-qualify-recovery')
-        for job in (full,combined,*tar_jobs):assert artifact_facts(job)==before[job['job_id']]
+        for job in (full,combined,tar_combined,mixed_combined,*tar_jobs):assert artifact_facts(job)==before[job['job_id']]
         proof['checks'].append('source-backup-bytes-and-tablespace-links-unchanged-after-successful-and-refused-drills')
-        page=http('list',{'offset':0,'limit':2});assert page['total']==17 and len(page['jobs'])==2 and page['more']
+        qualified_jobs=(full,incremental,combined,tar_base,tar_incremental,tar_combined,plain_incremental,mixed_combined,wrong_chain,*tar_jobs,verified,recovered,*chain_recoveries,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result)
+        page=http('list',{'offset':0,'limit':2});assert page['total']==len(qualified_jobs) and len(page['jobs'])==2 and page['more']
         for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
         if browser_binary:
             proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary)
             proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
-        proof.update(complete=True,job_ids=[value['job_id'] for value in (full,incremental,combined,*tar_jobs,verified,recovered,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result)],
+        proof.update(complete=True,job_ids=[value['job_id'] for value in qualified_jobs],
                      source=combined['source'],native_artifact_password_absent_from_receipts=True)
     finally:
         if jobs is not None:jobs.close()

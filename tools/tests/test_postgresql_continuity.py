@@ -124,13 +124,14 @@ def test_stopped_worker_is_unknown_and_never_relabelled_as_a_new_review(jobs):
 
 def test_reconstruction_has_its_own_options_and_preserves_order(jobs,monkeypatch):
     manager,source,endpoint=jobs
-    records=[review(jobs),review(jobs)]
+    records=[manager.review({'operation':'full_backup','options':{'format':'tar','compression':'client-zstd'}},1,endpoint,source,'configuration',{}),review(jobs)]
     for item in records:
         manager.update(manager.load(item['job_id'],1,endpoint),state='verified',manifest={'manifest_sha256':item['job_id']})
     combined=manager.review({'operation':'combine','chain':[item['job_id'] for item in records],
         'options':{'copy_mode':'clone'}},1,endpoint,source,'configuration',{})
     assert combined['options']['copy_mode']=='clone'
     assert [item['job_id'] for item in combined['inputs']]==[item['job_id'] for item in records]
+    assert [item['format'] for item in combined['inputs']]==['tar','plain']
     assert 'create_slot' not in combined['options']
 
 

@@ -739,8 +739,20 @@ checksums, refuses unsafe paths/links/special entries and supports cancellation.
 Native compressed-file verification precedes materialization. Native plain-file
 and WAL verification then checks the materialized copy before PostgreSQL starts.
 The recovery receipt retains both scopes; TAR file checks alone do not establish
-WAL availability or recovery. Materialization for incremental chain reconstruction
-and production restore remains separate work.
+WAL availability or recovery. Production restore remains separate work.
+
+Reconstruction also accepts reviewed TAR and mixed TAR/plain chains. It verifies
+each source in its native format, materializes each archive into a distinct
+private input scope with that artifact's tablespaces, checks the copied manifest
+identity, and verifies the plain files and applicable WAL before combining.
+The native combine utility remains the authority for incremental ancestry and
+chain order. The output receives its own native verification and can be selected
+for a recovery drill. Receipts retain source-format and materialized-input
+verification separately. Original archives are unchanged; intermediate copies
+remain with the reconstruction job and need additional application-host space.
+Native TAR tablespace maps retain source-host paths. Recovery preparation removes
+or replaces that map on the independent copy before starting PostgreSQL; the
+application recovery drill removes it and uses its managed relocated links.
 
 MySQL native local physical clone
 ================================

@@ -190,11 +190,10 @@ class PostgreSQLContinuityJobs:
             inputs.append({'job_id':previous['job_id'], 'manifest_sha256':proof['manifest_sha256'],
                            'format':previous['options']['format'], 'operation':previous['operation'],
                            'wal_method':previous.get('artifact_wal_method',previous['options'].get('wal_method','stream')),
-                           'manifest_checksums':previous['options']['manifest_checksums']})
+                           'manifest_checksums':previous['options']['manifest_checksums'],
+                           'tablespaces':deepcopy(previous['source'].get('tablespaces',[]))})
         if operation=='incremental_backup' and source.get('summarize_wal')!='on':
             raise ContinuityError('The selected server must enable native WAL summarization before an incremental backup')
-        if operation=='combine' and any(value['format']!='plain' for value in inputs):
-            raise ContinuityError('Native reconstruction requires materialized plain backup inputs')
         if operation in {'verify','recovery_drill'}:
             options.update({key:inputs[0][key] for key in (('wal_method','manifest_checksums') if operation=='recovery_drill' else ('format','wal_method','manifest_checksums'))})
         record = {'job_id':str(uuid.uuid4()), 'owner':owner, 'endpoint_id':endpoint, 'configuration':configuration,
@@ -219,6 +218,9 @@ class PostgreSQLContinuityJobs:
         if operation=='recovery_drill':
             record['warnings'].append('The drill copies the artifact and managed tablespaces into private application-host storage, then runs a standalone native backend without a network listener. It requires the source build dependencies and sufficient space for an independent copy.')
             record['warnings'].append('The drill discards configuration and recovery commands on its copy. It verifies native recovery and only the selected heap row counts; production restore, extension availability and point-in-time recovery require separate qualification.')
+        if operation=='combine' and any(item['format']=='tar' for item in inputs):
+            record['warnings'].append('TAR chain inputs are copied into private plain-file storage and verified before reconstruction. Keep space for the source archives, materialized inputs and output; intermediate copies remain with this job.')
+            record['warnings'].append('The native output can retain a TAR tablespace_map with source-host paths. Recovery preparation must replace or remove that map on an independent copy before startup. The application recovery drill does this.')
         if options.get('create_slot'):record['warnings'].append('This operation creates a persistent native replication slot. A refused or cancelled backup can leave that slot retaining WAL; inspect its native state before changing it.')
         if not options['sync']:record['warnings'].append('Native file synchronization is disabled. Verification does not assert that the files are durable after power loss.')
         if options.get('write_recovery_conf'):record['warnings'].append('PostgreSQL writes replication connection settings, including authentication material, into the protected backup. Host paths and temporary SSH routes must be reviewed before a standby uses these files.')
@@ -371,14 +373,31 @@ class PostgreSQLContinuityJobs:
             elif operation=='combine':
                 self.update(record,state='verifying_inputs')
                 input_receipts=[]
-                for path,item in zip(paths,record['inputs']):
-                    checked=tools.verify(directory,path,parse_wal=item['wal_method']!='none',timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
-                    if checked['return_code']!=0 or signal.is_set():
+                materializations=[]
+                for index,(path,item) in enumerate(zip(paths,record['inputs'])):
+                    checked=tools.verify(directory,path,format=item['format'],parse_wal=item['wal_method']!='none',timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
+                    if checked['return_code']!=0 or signal.is_set() or checked['process_observation'].get('cleanup_confirmed') is not True:
                         self.update(record,state='cancelled' if signal.is_set() else 'failed',input_verification=checked)
                         return
-                    input_receipts.append({'manifest_sha256':read_proof(path)['manifest_sha256'],
+                    input_receipts.append({'job_id':item['job_id'],'format':item['format'],
+                                           'manifest_sha256':read_proof(path)['manifest_sha256'],
                                            'return_code':checked['return_code'],'verification_scope':checked['verification_scope'],
                                            'executable_sha256':checked['executable_sha256']})
+                    if item['format']=='tar':
+                        plain=directory/'materialized-inputs'/item['job_id']/'backup'
+                        previous=self.load(item['job_id'],record['owner'],record['endpoint_id'])
+                        copied=materialize(path,plain,item.get('tablespaces',previous['source'].get('tablespaces',[])),item['wal_method'],progress=file_progress,cancel_signal=signal)
+                        identity=read_proof(plain)
+                        if identity['manifest_sha256']!=item['manifest_sha256'] or identity['system_identifier']!=record['source']['system_identifier']:
+                            raise ContinuityError('Materialized chain input differs from the reviewed backup')
+                        verified=tools.verify(directory,plain,parse_wal=item['wal_method']!='none',timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
+                        receipt={'job_id':item['job_id'],'copy_observation':copied,'verification_observation':verified}
+                        materializations.append(receipt)
+                        self.update(record,input_materializations=materializations)
+                        if verified['return_code']!=0 or signal.is_set() or verified['process_observation'].get('cleanup_confirmed') is not True:
+                            self.update(record,state='cancelled' if signal.is_set() else 'failed',artifact_complete=False)
+                            return
+                        paths[index]=plain
                 self.update(record,input_verifications=input_receipts)
                 self.update(record,state='active')
                 tablespaces=[]
