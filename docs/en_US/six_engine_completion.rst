@@ -734,7 +734,14 @@ exact explicit deletion identity. Native compilation must agree with every
 desired child record; a filtered-out child is not deletion intent. Reviewed
 warnings identify discarded child identities, and precommit checks verify their
 absence. Deletions outside selected rebuilt tables remain separate reviews.
-Rewriting other dependent object definitions remains separate work.
+Retained views can be replaced in the same reviewed batch, including chains
+depending on renamed table columns. CREATE VIEW column lists remain native
+grammar. The defining view facts and individual column/trigger records must
+agree. DROP VIEW's implicit trigger removal is handled by recreating observed
+INSTEAD OF triggers before later admitted trigger changes. Native final-schema
+binding, complete view-column metadata and trigger definitions are verified
+before commit; a broken dependency rolls back every earlier stage. Other
+dependent object rewrites remain subject to their applicable native adapters.
 Native grammar/binding refusals remain visible and do not certify the full
 SQLite migration denominator.
 

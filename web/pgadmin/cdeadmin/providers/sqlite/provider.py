@@ -518,6 +518,18 @@ def _resources(connection, request):
                         'name': f'pk_{table_name}',
                         **constraint['native']['catalog_metadata'],
                     })
+                for item in resources.values():
+                    if (
+                        item['resource_kind'] == 'trigger' and
+                        item['display_path'][0] == schema_name and
+                        item['native']['catalog_metadata']['table_name'] ==
+                        table_name
+                    ):
+                        resources[relation_id]['native']['triggers'].append({
+                            'resource_id': item['resource_id'],
+                            'name': item['display_name'],
+                            'ddl': item['native'].get('ddl'),
+                        })
                 # Views expose columns but do not admit table-only PRAGMAs.
                 if resources[relation_id]['resource_kind'] == 'view':
                     continue
@@ -624,18 +636,6 @@ def _resources(connection, request):
                                 'name': constraint_name,
                                 **constraint['native']['catalog_metadata'],
                             })
-                for item in resources.values():
-                    if (
-                        item['resource_kind'] == 'trigger' and
-                        item['display_path'][0] == schema_name and
-                        item['native']['catalog_metadata']['table_name'] ==
-                        table_name
-                    ):
-                        resources[relation_id]['native']['triggers'].append({
-                            'resource_id': item['resource_id'],
-                            'name': item['display_name'],
-                            'ddl': item['native'].get('ddl'),
-                        })
         cursor.execute('PRAGMA pragma_list')
         for (name,) in cursor.fetchall():
             add('pragma', [], name, {'native_name': name, 'scope': 'connection',

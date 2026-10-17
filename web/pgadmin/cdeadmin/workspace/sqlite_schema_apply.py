@@ -66,10 +66,13 @@ class SQLiteSchemaApplications(SchemaApplications):
         for operation in operations:
             identity = operation['resource_id']
             if operation.get('operation') == 'replace':
-                from .sqlite_replace import plan_replace
+                from .sqlite_replace import plan_replace,validate_view_children
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
                 if old is None or wanted is None:
-                    raise SchemaApplyError('SQLite replacements require exact retained indexes and triggers')
+                    raise SchemaApplyError('SQLite replacements require exact retained views, indexes and triggers')
+                if wanted['kind']=='view':
+                    try:validate_view_children(wanted,desired)
+                    except ValueError as error:raise SchemaApplyError(str(error)) from None
                 expected = plan_replace(old, wanted, baseline, probe_name=operation.get('probe_name'))
                 if digest(expected) != digest(operation):
                     raise SchemaApplyError('SQLite replacement differs from the reviewed native design')
@@ -326,6 +329,7 @@ def apply_review(provider, route, record):
             if row['kind'] in {'index', 'trigger', 'column'}:
                 from ..providers.sqlite.provider import _resource_id
                 parent = _resource_id('table', ['main'], row['path'][1])
+                if parent not in baseline and row['kind']=='trigger':parent=_resource_id('view',['main'],row['path'][1])
                 old, now = baseline.get(parent), observed.get(parent)
                 if old is None or now is None or digest(_definition(old)) != digest(_definition({
                         'kind': now['resource_kind'], 'path': now['display_path'],

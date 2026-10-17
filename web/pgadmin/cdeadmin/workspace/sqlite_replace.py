@@ -1,4 +1,4 @@
-"""Native index/trigger replacement without executing preview DDL."""
+"""Native view/index/trigger replacement without executing preview DDL."""
 from copy import deepcopy
 import re
 
@@ -32,25 +32,47 @@ def dependencies(rows, excluded):
 
 
 def normalized(source):
-    return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:INDEX|TRIGGER)\s+)"main"\.',
+    return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:VIEW|INDEX|TRIGGER)\s+)"main"\.',
                   r'\1', source.strip().rstrip(';'), count=1, flags=re.I)
 
 
 def matches(wanted, observed):
     return (all(wanted.get(key) == observed.get(key) for key in ('resource_id', 'kind', 'path', 'name', 'system')) and
             normalized(wanted['native']['ddl']) == normalized(observed['native'].get('ddl') or '') and
-            _equal(wanted['native'].get('catalog_metadata'), observed['native'].get('catalog_metadata')))
+            _equal(wanted['native'].get('catalog_metadata'), observed['native'].get('catalog_metadata')) and
+            (wanted['kind']!='view' or (_equal(wanted['native'].get('columns'),observed['native'].get('columns')) and
+                sorted((item['resource_id'],normalized(item['ddl'])) for item in wanted['native'].get('triggers',[]))==
+                sorted((item['resource_id'],normalized(item['ddl'])) for item in observed['native'].get('triggers',[])))))
+
+
+def validate_view_children(view,desired):
+    """The defining SELECT and every individual desired child must agree."""
+    for kind,field in (('column','columns'),('trigger','triggers')):
+        items=view['native'].get(field)
+        if not isinstance(items,list):raise ValueError('Desired SQLite view child facts are unavailable')
+        ids={item.get('resource_id') for item in items}
+        rows={identity:row for identity,row in desired['rows'].items() if row['kind']==kind and row['path'][:2]==view['path']}
+        if len(ids)!=len(items) or ids!=set(rows):raise ValueError('Desired SQLite view must retain every defined child record')
+        for item in items:
+            row=rows[item['resource_id']]
+            if (row['path']!=[*view['path'],item.get('name')] or row['system']!='false' or
+                    item['resource_id']!=_resource_id(kind,view['path'],item.get('name'))):
+                raise ValueError('Desired SQLite view child identity is inconsistent')
+            if kind=='column' and not _equal({key:value for key,value in item.items() if key not in {'resource_id','name'}},row['native'].get('catalog_metadata')):
+                raise ValueError('Desired SQLite view column facts disagree')
+            if kind=='trigger' and normalized(item.get('ddl') or '')!=normalized(row['native'].get('ddl') or ''):
+                raise ValueError('Desired SQLite view trigger definitions disagree')
 
 
 def plan_replace(before, after, baseline, connection=None, *, probe_name=None):
     kind, path, identity = before['kind'], before['path'], before['resource_id']
-    if (kind not in {'index', 'trigger'} or after['kind'] != kind or
+    if (kind not in {'view','index', 'trigger'} or after['kind'] != kind or
             before['system'] != 'false' or before['native'].get('system_object') is not False or
-            len(path) != 3 or path[0] != 'main' or path[-1] != before['name'] or
+            len(path) != (2 if kind=='view' else 3) or path[0] != 'main' or path[-1] != before['name'] or
             after['resource_id'] != identity or after['path'] != path or
             after['name'] != before['name'] or identity != _resource_id(kind, path[:-1], path[-1]) or
             not isinstance(before['native'].get('ddl'), str) or not before['native']['ddl']):
-        raise ValueError('SQLite replacement requires an observed explicit user index or trigger')
+        raise ValueError('SQLite replacement requires an observed explicit user view, index or trigger')
     source = _source(after)
     if normalized(source) == normalized(before['native']['ddl']):
         raise ValueError('SQLite replacement requires a changed native definition')
@@ -78,10 +100,16 @@ def plan_replace(before, after, baseline, connection=None, *, probe_name=None):
         _compile_exact(connection, probe, _source(probe))
     drop = 'DROP ' + kind.upper() + ' "main".' + _quote(before['name'])
     stages = [drop, source]
+    if kind=='view':
+        # DROP VIEW also drops its native INSTEAD OF triggers. Restore their
+        # observed definitions before later admitted trigger replacements run.
+        # No view DML is stepped between these schema stages.
+        stages.extend(item['ddl'] for item in before['native'].get('triggers',[]))
     return {'operation':'replace', 'resource_id':identity, 'name':before['name'], 'kind':kind,
             'source':'\n'.join(stage.rstrip(';') + ';' for stage in stages),
             'stages':stages, 'probe_name':probe_name,
             'baseline_sha256':digest(_definition(before)), 'desired_sha256':digest(_definition(after)),
             'dependency_sha256':dependencies(baseline['rows'], identity),
             'warnings':['Native DROP and CREATE run in one owned SQLite write transaction.',
+                        *(['Existing view triggers are recreated before later trigger changes. Final view columns and all view/trigger bindings are checked before commit.'] if kind=='view' else []),
                         'Native unique-index checks and trigger binding checks can refuse the change; rollback restores the original definition.']}

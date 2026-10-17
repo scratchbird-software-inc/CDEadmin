@@ -74,7 +74,7 @@ def _source(row):
         pattern = (r'^\s*CREATE\s+VIRTUAL\s+TABLE\s+' + re.escape(exact) +
                    r'\s+USING\s+' + module + r'\s*\(')
     elif kind == 'view':
-        pattern = r'^\s*CREATE\s+VIEW\s+' + re.escape(exact) + r'\s+AS\s+'
+        pattern = r'^\s*CREATE\s+VIEW\s+' + re.escape(exact) + r'(?=\s|\()'
     elif kind == 'index':
         owner = _quote(path[1])
         if row['native'].get('catalog_metadata', {}).get('table_name') != path[1]:
@@ -197,6 +197,11 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         raise ValueError('SQLite design exceeds 20,000 native facts')
     created_relations = {row['resource_id'] for row in after.values()
         if row['kind'] in {'table', 'view', 'fts-table', 'virtual-table'} and row['resource_id'] not in before}
+    replaced_views={identity for identity,row in after.items() if row['kind']=='view' and identity in before and
+        not _equal(_definition(before[identity]),_definition(row))}
+    def derived_view_column(row):
+        return (row['kind']=='column' and len(row['path'])==3 and row['path'][0]=='main' and
+            _resource_id('view',['main'],row['path'][1]) in replaced_views)
     for identity in sorted(rebuilds):
         old, wanted = before.get(identity), after.get(identity)
         if old is None or wanted is None or old['kind'] != 'table':
@@ -247,6 +252,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             rebuilding_child = (len(row['path']) > 2 and
                 _resource_id('table', ['main'], row['path'][1]) in rebuilds and
                 row['kind'] in {'column', 'constraint', 'index', 'trigger'})
+            rebuilding_child = rebuilding_child or derived_view_column(row)
             if observed is None or not _equal(_definition(old), _definition(observed)):
                 if row['kind'] not in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                     conflicts.append({'resource_id': identity, 'name': row['name'],
@@ -254,9 +260,10 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             if row['kind'] in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                 continue
             if not _equal(_definition(old), _definition(row)) and identity not in rebuilds and not rebuilding_child:
-                if row['kind'] in {'index', 'trigger'} and observed is not None:
+                if row['kind'] in {'view','index', 'trigger'} and observed is not None:
                     try:
-                        from .sqlite_replace import plan_replace
+                        from .sqlite_replace import plan_replace,validate_view_children
+                        if row['kind']=='view':validate_view_children(row,desired)
                         operations.append(plan_replace(old, row, baseline, connection))
                     except (ValueError, sqlite3.Error) as error:
                         blockers.append({'resource_id': identity, 'name': row['name'], 'reason': str(error)[:400]})
@@ -264,6 +271,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     blockers.append({'resource_id': identity, 'name': row['name'],
                         'reason': 'Changing an existing native definition requires a separately qualified SQLite migration'})
             continue
+        if derived_view_column(row):continue  # The defining SELECT owns its columns.
         if (row['kind'] in {'index','trigger'} and len(row['path'])==3 and row['path'][0]=='main' and
                 _resource_id('table',['main'],row['path'][1]) in rebuilds):
             continue  # The coordinated rebuild compiles and creates this child.
@@ -295,8 +303,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     raise ValueError('SQLite ADD COLUMN requires an observed existing table')
                 parent_baseline_sha256 = digest(_definition(parent))
             if row['kind'] in {'index', 'trigger'}:
-                owner = _resource_id('table', ['main'], row['path'][1])
-                if owner not in before or owner in created_relations:
+                owners={_resource_id(kind,['main'],row['path'][1]) for kind in ({'table','view'} if row['kind']=='trigger' else {'table'})}
+                if not owners & set(before) or owners & created_relations:
                     raise ValueError('Create the owning table in a separate reviewed batch')
             _compile_exact(connection, row, source)
             operations.append({'operation': 'add-column' if row['kind'] == 'column' else 'create', 'resource_id': identity,
@@ -379,6 +387,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         covered_deletions.update(descendant_ids)
     for identity, row in sorted(before.items()):
         if identity not in after and row['kind'] not in {'metric', 'pragma', 'extension', 'native-function', 'collation', 'compile-option'}:
+            if derived_view_column(row):continue
             if (len(row['path']) > 2 and row['kind'] in {'column', 'constraint'} and
                     _resource_id('table', ['main'], row['path'][1]) in rebuilds):
                 continue
