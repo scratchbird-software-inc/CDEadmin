@@ -186,7 +186,7 @@ def qualify(output,executable,*,browser_binary=None,driver_binary=None,use_c=Fal
 def deepcopy_request(value):return json.loads(json.dumps(value))
 
 
-def browser(app,output,target_id,source_id,archive_id,target_uuid,binary,driver_binary):
+def browser(app,output,target_id,source_id,archive_id,target_uuid,binary,driver_binary,*,raw=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -221,6 +221,7 @@ def browser(app,output,target_id,source_id,archive_id,target_uuid,binary,driver_
             node=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="'+label+'"]'));control=wait.until(lambda browser:browser.find_element(By.ID,node.get_attribute('for')))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',control);control.click()
             wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if text in node.text),None)).click()
+        if raw:select('Archive format','MySQL raw closed logs')
         click('Inspect replay target');click('Load archive sources')
         select('Owned archive source','Owned replay archive source ('+str(source_id)+')');click('Load sealed archives');select('Sealed native archive',archive_id)
         label=driver.find_element(By.XPATH,'//label[normalize-space()="Confirm target server UUID"]');control=driver.find_element(By.ID,label.get_attribute('for'))

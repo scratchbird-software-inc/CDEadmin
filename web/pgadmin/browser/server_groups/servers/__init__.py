@@ -2990,7 +2990,7 @@ class ServerNode(PGChildNodeView):
                                 'mysql_raw_binlog_list','mysql_raw_binlog_cancel','mysql_raw_binlog_reconcile','mysql_raw_binlog_files','mysql_raw_binlog_remove_artifact'}:
                     try:payload=service.mysql_raw_binlog(server,action.removeprefix('mysql_raw_binlog_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
-                elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_inspect',
+                elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_boundaries','mysql_binlog_replay_inspect',
                                 'mysql_binlog_replay_review','mysql_binlog_replay_start','mysql_binlog_replay_status',
                                 'mysql_binlog_replay_list','mysql_binlog_replay_cancel','mysql_binlog_replay_reconcile','mysql_binlog_replay_acknowledge'}:
                     try:payload=service.mysql_binlog_replay(server,action.removeprefix('mysql_binlog_replay_'),data.get('request'))

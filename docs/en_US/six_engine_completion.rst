@@ -223,8 +223,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
      - Independent native category/DDN reconciliation; retained catalog and
        mode/role-aware completion; native PREPARE and scoped post-parse checking.
      - Native administration, data/DDN work, local/registered remote clone,
-       Shell archives, raw closed logs with GTIDs on/off and Shell GTID replay.
-     - Raw replay, complete base/PITR/cutover, continuous archive/retention,
+       Shell/raw closed archives and reviewed native replay with GTIDs on/off,
+       exact transaction boundaries and shared target fencing.
+     - Complete base/PITR/cutover, continuous archive/retention,
        wider procedural scopes and complete installed-capability/lifecycle/HA
        workflows and evidence.
    * - MariaDB 12.2.2
@@ -1206,9 +1207,10 @@ delivers decrypted bytes. Raw archives contain plaintext events even when the
 source files are encrypted; keep these private artifacts protected.
 
 Raw archives do not establish successful replay, base recovery or PITR. The
-Shell replay workflow selects Shell archives; it does not treat a raw archive as
-the Shell dump format. Continuous collection, retention and raw replay retain
-separate acceptance. Storage uses ``CDEADMIN_MYSQL_RAW_BINLOG_ROOT`` or the
+restore workspace selects Shell or raw format with separate native adapters;
+it does not treat a raw archive as the Shell dump format. Continuous collection,
+retention and full base/PITR acceptance remain separate. Storage uses
+``CDEADMIN_MYSQL_RAW_BINLOG_ROOT`` or the
 operation store's ``mysql-raw-binary-log-archives`` sibling directory; native
 runtime policy uses ``CDEADMIN_MYSQL_RAW_BINLOG_MAX_RUNTIME_SECONDS``.
 

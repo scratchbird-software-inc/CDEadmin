@@ -136,6 +136,8 @@ def paths(env):
                 STATE/'mysql-shell/libexec/mysqlsh'/('mysqlbinlog'+extension)]
     available_binlog=next((path for path in candidates if path.is_file()),None)
     if available_binlog is not None:selected.setdefault('CDEADMIN_MYSQL_BINLOG_BINARY',str(available_binlog))
+    mysql_client=STATE/'mysql/bin'/('mysql'+extension)
+    if mysql_client.is_file():selected.setdefault('CDEADMIN_MYSQL_CLIENT_BINARY',str(mysql_client))
     if platform.system() == 'Windows':
         selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'fbclient.dll'))
     else:

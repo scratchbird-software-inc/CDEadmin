@@ -60,3 +60,31 @@ it('discards an in-flight reply when the registered target changes',async () => 
   await waitFor(() => expect(screen.queryByText('Native replay target: '+target)).not.toBeInTheDocument());
   expect(newPost).not.toHaveBeenCalled();
 });
+
+it('selects native raw boundaries and keeps wide positions exact in review',async () => {
+  const groups=[{file:'native.000001',position:'9007199254740993',event_type:34,event_time_utc:'2026-10-17T12:00:00Z'},
+    {file:'native.000001',position:'18446744073709551600',event_type:34,event_time_utc:'2026-10-17T12:00:01Z'}];
+  const post=jest.fn(async ({action}) => ({
+    mysql_binlog_replay_inspect:{identity:{server_uuid:target},state:{gtid_mode:'OFF'}},
+    mysql_binlog_replay_sources:{sources:[{server_id:7,name:'Registered source'}],offset:0,total:1},
+    mysql_binlog_replay_archives:{jobs:[{job_id:'raw-archive',state:'completed',native_process_termination_confirmed:true,result:{artifact:{total_bytes:'9007199254740993'}}}],offset:0,total:1},
+    mysql_binlog_replay_boundaries:{groups,offset:0,total:2,limit:100},
+    mysql_binlog_replay_review:item,
+  }[action]));
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Archive format'));fireEvent.click(await screen.findByRole('option',{name:'MySQL raw closed logs'}));
+  fireEvent.click(screen.getByRole('button',{name:'Inspect replay target'}));await screen.findByText('Native replay target: '+target);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_inspect',request:{archive_family:'raw'}});
+  fireEvent.click(screen.getByRole('button',{name:'Load archive sources'}));await screen.findByLabelText('Owned archive source');
+  fireEvent.mouseDown(screen.getByLabelText('Owned archive source'));fireEvent.click(await screen.findByRole('option',{name:'Registered source (7)'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load sealed archives'}));await screen.findByLabelText('Sealed native archive');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_archives',request:{source_server_id:7,offset:0,limit:25,archive_family:'raw'}});
+  fireEvent.mouseDown(screen.getByLabelText('Sealed native archive'));fireEvent.click(await screen.findByRole('option',{name:'raw-archive (9007199254740993 bytes)'}));
+  fireEvent.click(screen.getByRole('button',{name:'Inspect native transaction groups'}));await screen.findByRole('table',{name:'Native raw transaction groups'});
+  fireEvent.click(screen.getByRole('button',{name:'Start raw replay at native.000001@9007199254740993'}));
+  fireEvent.click(screen.getByRole('button',{name:'Stop raw replay after native.000001@18446744073709551600'}));
+  fireEvent.change(screen.getByLabelText('Confirm target server UUID'),{target:{value:target}});
+  fireEvent.click(screen.getByRole('button',{name:'Review replay'}));await screen.findByText('Native commits are independent');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_replay_review',request:{source_server_id:7,archive_job_id:'raw-archive',archive_family:'raw',
+    options:{target_confirmation:target,timeout_seconds:3600,stop_mode:'after',start_file:'native.000001',start_position:'9007199254740993',stop_file:'native.000001',stop_position:'18446744073709551600'}}});
+});

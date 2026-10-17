@@ -191,10 +191,36 @@ Utility return, native GTID coverage and independent recovered-data verification
 remain distinct. The source can be offline after the archive has been sealed.
 
 These are scoped archive/replay workflows. A compatible restored base is required;
-raw replay, complete end-to-end PITR, physical continuity, production cutover and
+complete end-to-end PITR, physical continuity, production cutover and
 continuous collection/retention retain separate product acceptance. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
+
+Raw archives also have a native replay adapter in the restore workspace. It
+uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an
+independently confirmed target. Select full replay or exact native transaction
+group boundaries. Native file positions remain decimal strings, including values
+above JavaScript's safe integer range. Event-header times are displayed separately
+from commit-time recovery targets.
+
+GTID-enabled replay checks the starting lineage and skips native GTIDs already
+present. GTID-disabled recovery can resume at an explicitly reviewed group start;
+the operator must independently verify the corresponding recovered base. Native
+target log-file/position, UUID, principal, role and configuration are checked
+again inside the applying client. Inspection needs SELECT on
+``performance_schema.log_status`` and native ``BACKUP_ADMIN``. Replay requires
+the native privileges for the archived operations. The mysql client has its own
+version/hash admission through ``CDEADMIN_MYSQL_CLIENT_BINARY``; mysqlbinlog uses
+``CDEADMIN_MYSQL_BINLOG_BINARY``. Both execute on the recorded application host.
+
+Raw and Shell replay share durable target fences and the same native lock.
+Native LOAD DATA fragments stay inside a private execution directory; the client
+does not receive unrestricted local-file loading. Credentials use a private
+native option file with their original factor positions. Lost replies remain
+unknown, require fresh reconciliation before acknowledgement and never replay
+automatically. Native utility return and GTID/log-position observations do not
+verify recovered application data. Cross-platform utility provisioning and full
+PITR/cutover acceptance remain separate.
 
 The consolidated administration gate covers all 105 declared tasks. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for
