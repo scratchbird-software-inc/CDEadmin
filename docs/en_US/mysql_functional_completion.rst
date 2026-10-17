@@ -113,6 +113,32 @@ results without executing submitted SQL. Reproduce these scoped checks with::
     python tools/cdeadmin_mysql_family_prepare_qualification.py --engine mysql --evidence /work/mysql-prepare
     python tools/cdeadmin_mysql_family_editor_workspace_qualification.py --engine mysql --evidence /work/mysql-editor --browser-binary /path/to/chrome --driver-binary /path/to/chromedriver
 
+Interactive query execution uses the same native lexical parameter boundaries
+as preflight. Placeholder-like text inside strings, identifiers, ordinary or
+inactive comments and dollar bodies remains text. Active MySQL version comments
+use the selected release. Named bindings preserve Unicode and punctuation keys.
+The selected connector converts values into native literals; the application
+does not quote values itself. A fixed metadata read observes current SQL mode
+without changing native settings or deciding the caller's transaction.
+
+Converted query bytes use the native command port with the existing driver's
+result ownership. Its client script preprocessor cannot rewrite DELIMITER words
+inside values. Actual client directives have native-mode-aware framing. Local
+binding refusals report that user SQL was not dispatched and preserve the usable
+session. Cancellation is checked again after conversion and before dispatch.
+Native qualification covers both interfaces, pending data/savepoints, exact
+values, multiple results, native refusals, cancellation and lost commit replies::
+
+    python tools/cdeadmin_mysql_parameter_boundary_qualification.py --evidence /work/mysql-parameter-boundaries
+
+Pure-client text escaping now represents NUL as a native backslash escape when
+that language mode permits it, preserving loadable stored SQL definitions.
+NO_BACKSLASH_ESCAPES keeps its native behavior. On the selected MySQL9.7 server,
+a routine containing a raw NUL can be created but its subsequent CALL fails with
+native error 3512; independent stock C and pure clients reproduce that refusal
+in NO_BACKSLASH_ESCAPES mode. The adapter does not silently change SQL mode or
+replace literal values with expressions having different grammar/collation rules.
+
 The October 16 implementation adds native server/security/storage DDN review
 and application, typed relation-data DDN import, named durable test-data recipes
 and MySQL persistent monitoring history. These complement the existing editor,

@@ -7,6 +7,7 @@ import pytest
 from tools.tests.test_cdeadmin_relational_providers import MYSQL_PROFILE  # noqa
 from pgadmin.cdeadmin.providers.mysql_family.mysql_execution import Executions
 from pgadmin.cdeadmin.sdk import RelationalClientError
+from pgadmin.cdeadmin.providers.mysql_family.mysql_values import MySQLParameterAdmissionError
 from mysql.connector.constants import FieldType
 
 
@@ -87,6 +88,18 @@ def test_multiple_results_keep_metadata_and_empty_set():
     assert native.closed
     with pytest.raises(RelationalClientError):
         owner.describe(token)
+
+
+def test_parameter_admission_failure_does_not_quarantine_or_replay_user_sql():
+    owner, connection, native = harness([[1]])
+    native.execute = Mock(side_effect=MySQLParameterAdmissionError('private input'))
+    pages = drain(owner, owner.execute(connection, {'source':'native query'}, {}))
+    assert pages[-1]['payload']['error'] == {
+        'type':'MySQLParameterAdmissionError','query_dispatch':'not_started'}
+    assert not pages[-1]['payload']['session_reuse_blocked']
+    assert id(connection) not in owner.client._uncertain_sessions
+    assert native.execute.call_count == 1 and native.closed
+    connection.ping.assert_not_called()
 
 
 def test_backpressure_blocks_native_fetch_and_second_execution():

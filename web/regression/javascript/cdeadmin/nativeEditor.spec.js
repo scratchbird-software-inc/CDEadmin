@@ -68,6 +68,8 @@ test.each(['mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'])('formatting se
 test('formatting preserves driver parameter markers and quoted PostgreSQL bodies', () => {
   const mysql = {engine: 'mysql', sql_mode: ''};
   expect(formatNative('select %s, %(name)s', mysql)).toContain('%(name)s');
+  expect(formatNative('select %(雪 value)s, %(punctuation.key)s', mysql)).toContain('%(雪 value)s');
+  expect(nativeTokens('select %(雪 value)s, %(punctuation.key)s',mysql)).toEqual(['select','%(雪 value)s',',','%(punctuation.key)s']);
   const postgres = {engine: 'postgresql'};
   const source = 'CREATE FUNCTION f() RETURNS text LANGUAGE sql AS $$ SELECT \'x; y\' $$';
   expect(nativeTokens(formatNative(source, postgres), postgres)).toEqual(nativeTokens(source, postgres));

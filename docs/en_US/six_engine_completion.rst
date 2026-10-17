@@ -224,7 +224,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        mode/role-aware completion; native PREPARE and qualified post-parse
        checking for stored programs, administrative and transaction commands;
        native quoted-identifier and dollar-body framing, formatting and
-       parameter boundaries, with SQL suggestions suppressed inside opaque bodies.
+       shared preflight/execution parameter boundaries, with SQL suggestions
+       suppressed inside opaque bodies.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.
@@ -1534,3 +1535,22 @@ parser in each recorded SQL mode and both connector implementations, while
 pending work/savepoints and the absence of created routines/libraries are checked
 independently. This scope confirms SQL boundaries and SQL grammar; external body
 languages still require their own validation and installed-capability evidence.
+
+MySQL lexical query parameters
+--------------------------------
+
+The retained editor now uses one lexical parameter inventory for checking and
+query execution. Quoted placeholder text remains literal; active and inactive
+native version comments retain different roles. Native connector conversion
+preserves value types and SQL-mode escaping. Converted statement bytes use the
+native command interface with the existing result cursor, preventing the client
+script preprocessor from rewriting DELIMITER words inside parameter values.
+Actual client directives have their own observed-mode-aware framing.
+
+Local binding refusals report no user-query dispatch and preserve the retained
+session and pending transaction. Cancellation is checked again after conversion.
+Native qualification covers both client implementations, source/literal
+boundaries, exact values, bound result batches, client-delimited programs,
+native refusal, cancellation, pending savepoints and independent observations.
+This does not close the remaining session-charset and mode-changing parameterized
+script reconciliation or broader native operational/product acceptance.

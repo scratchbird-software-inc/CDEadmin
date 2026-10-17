@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 import test_cdeadmin_provider_navigator  # noqa: F401
-from pgadmin.cdeadmin.data_studio.mysql_quoting import available, marker_at, end_of_quote
+from pgadmin.cdeadmin.data_studio.mysql_quoting import available, marker_at, end_of_quote, parameter_spans
 from pgadmin.cdeadmin.providers.native_editor import mysql_bind_markers, validate_mysql
 from pgadmin.cdeadmin.data_studio.language_tools import analyze
 
@@ -65,3 +65,10 @@ def test_bound_native_library_source_is_not_rewritten_inside_dollar_quoted_body(
     bindings = [call for call in cursor.execute.call_args_list if 'CONVERT(' in call.args[0]]
     assert bindings[0].args[1] == (source.encode(),)
     assert not any(call.args[0].startswith(('EXECUTE ', 'COMMIT', 'ROLLBACK')) for call in cursor.execute.call_args_list)
+
+
+def test_parameter_spans_distinguish_executed_and_ignored_native_version_comments():
+    source = 'SELECT /*!90700 %s */ /* ordinary %s */ /*!99999 %s */ %(雪 value)s'
+    spans = list(parameter_spans(source, set(), dollar_quotes=True))
+    assert [source[start:end] for start,end,_name in spans] == ['%s', '%(雪 value)s']
+    assert [name for _start,_end,name in spans] == [None, '雪 value']

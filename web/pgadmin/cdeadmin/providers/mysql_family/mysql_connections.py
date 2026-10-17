@@ -53,7 +53,13 @@ def live_sql_mode_conversion(native):
             connection=reference()
             if connection is None:raise RelationalClientError('MySQL parameter connection is unavailable')
             sql_mode='NO_BACKSLASH_ESCAPES' if connection._cdeadmin_server_status & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES else ''
-            return super().escape(value,sql_mode)
+            escaped=super().escape(value,sql_mode)
+            # Connector/Python26.7 leaves raw NUL in this text-protocol path.
+            # Native routine definitions cannot retain that source byte.
+            if not sql_mode:
+                if isinstance(escaped,(bytes,bytearray)) and b'\x00' in escaped:return escaped.replace(b'\x00',b'\\0')
+                if isinstance(escaped,str) and '\x00' in escaped:return escaped.replace('\x00','\\0')
+            return escaped
     native.set_converter_class(LiveSQLModeConverter)
 
 

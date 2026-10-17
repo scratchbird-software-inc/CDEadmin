@@ -7,6 +7,7 @@ from pathlib import Path
 import secrets
 import sys
 import threading
+import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +109,26 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                     framed = post('source_validate', session_id=session_id, script=True,
                                   source='SELECT 1 AS `back\\`; SELECT 2;')
                     assert framed['script_ready'] and framed['grammar_valid'] is True and len(framed['statements']) == 2
+                    if engine == 'mysql':
+                        def execute(source, parameters):
+                            started = post('execute', session_id=session_id, source=source,
+                                           parameters=parameters, history_sensitive=True)
+                            deadline = time.monotonic() + 20; rows = []
+                            while time.monotonic() < deadline:
+                                observed = post('poll', occurrence_id=started['occurrence_id'])['occurrence']
+                                payload = (observed.get('result') or {}).get('extensions', {}).get('mysql', {}).get('payload', {})
+                                rows.extend(payload.get('rows') or [])
+                                if observed['operation']['terminal']: return rows, payload
+                                time.sleep(.05)
+                            raise TimeoutError('Native parameter workspace execution')
+                        text = 'DELIMITER $$\nnative HTTP binding'
+                        rows, result = execute("SELECT '%s' AS literal, %(value)s AS bound_value", {'value':text})
+                        assert rows == [['%s',text]] and not result.get('error'), result
+                        rows, result = execute('INSERT INTO pending VALUES(%s)', [99,100])
+                        assert result['error']['query_dispatch'] == 'not_started' and not result['session_reuse_blocked']
+                        rows, result = execute('SELECT COUNT(*) FROM pending', {})
+                        assert rows == [[1]] and not result.get('error')
+                        checks.append({'name':'native-HTTP-literal-bindings-execution-refusal-and-session-reuse','passed':True})
                     post('close_session', session_id=session_id)
                     if browser_binary and pure is not False:
                         proof['browser'] = browser(app, output, engine, sid, browser_binary, driver_binary, password)
@@ -137,8 +158,8 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
     from selenium.common.exceptions import StaleElementReferenceException
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
-    from cdeadmin_ui_evidence import ensure_data_explorer, expand, wait_for_tree_item, invoke_context_action, complete_endpoint_prompt
-    from cdeadmin_sqlite_query_ui_gate import _set_query
+    from cdeadmin_ui_evidence import ensure_data_explorer, expand, wait_for_tree_item, invoke_context_action, complete_endpoint_prompt, fill_fields
+    from cdeadmin_sqlite_query_ui_gate import _set_query, _run_query
     from cdeadmin_firebird_query_ui_gate import _query_editor
     http = make_server('127.0.0.1', 0, app, threaded=True)
     thread = threading.Thread(target=http.serve_forever, daemon=True); thread.start(); driver = None
@@ -195,6 +216,20 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
                 value=wait.until(formatted)
                 assert literal in value
                 checks.append({'name':'dollar-library-format','native_literal_bytes_preserved':True})
+        if engine == 'mysql':
+            options = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            fill_fields(wait, ['Query parameters (JSON object or array)=' + json.dumps({'value':'DELIMITER $$\nnative UI binding'})])
+            sensitive = wait.until(lambda browser: browser.find_element(By.XPATH,
+                '//label[contains(.,"Omit this sensitive source from SQL history")]'))
+            if not sensitive.find_element(By.CSS_SELECTOR,'input').is_selected():
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',sensitive); sensitive.click()
+            data = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Data Output"]'))
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            _run_query(driver,wait,"SELECT '%s' AS literal, %(value)s AS bound_value",'%s','MySQL',output)
+            wait.until(lambda browser:any(node.is_displayed() and node.text=='DELIMITER $$\nnative UI binding'
+                for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-JSON-bindings-and-literal-placeholder-execution','passed':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors

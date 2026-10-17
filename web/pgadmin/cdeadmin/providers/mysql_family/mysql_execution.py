@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
-from .mysql_values import Cursor, columns, parameters
+from .mysql_values import Cursor, columns, parameters, MySQLParameterAdmissionError
 
 
 @dataclass(eq=False)
@@ -79,6 +79,8 @@ class Executions:
             'sqlstate': getattr(exc, 'sqlstate', None),
         }.items() if isinstance(item, (str, int))}
         errno, sqlstate = result.get('errno'), result.get('sqlstate')
+        if isinstance(exc, MySQLParameterAdmissionError):
+            result['query_dispatch'] = 'not_started'
         if (isinstance(errno, int) and errno >= 1000 and
                 not 2000 <= errno < 3000 and isinstance(sqlstate, str) and
                 len(sqlstate) == 5 and isinstance(getattr(exc, 'msg', None), str)):
@@ -98,7 +100,7 @@ class Executions:
                 identity_cursor.close()
             if token.cancelled:
                 return  # Shutdown before dispatch is not a native SQL outcome.
-            cursor = Cursor(token.connection)
+            cursor = Cursor(token.connection, cancel_requested=lambda: token.cancelled)
             started = time.perf_counter()
             try:
                 if bound:
@@ -152,7 +154,9 @@ class Executions:
             server_error = (isinstance(errno, int) and errno >= 1000 and
                             not 2000 <= errno < 3000 and
                             isinstance(sqlstate, str) and len(sqlstate) == 5)
-            if not server_error:
+            if isinstance(exc, MySQLParameterAdmissionError):
+                pass  # Binding failed after a complete metadata response.
+            elif not server_error:
                 token.cleanup_failed = True
             else:
                 try:

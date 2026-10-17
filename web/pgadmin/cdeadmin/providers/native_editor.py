@@ -400,34 +400,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
 
 def mysql_bind_markers(source, modes, *, dollar_quotes=False):
     """Replace driver placeholders outside quoted/comment spans without values."""
-    output, i, quote, comment = list(source), 0, None, None
-    while i < len(source):
-        c, pair = source[i], source[i:i + 2]
-        if comment:
-            if comment == 'line' and c == '\n': comment = None
-            elif comment == 'block' and pair == '*/': comment = None; i += 1
-        elif quote:
-            if c == '\\' and quote != '`' and not (quote == '"' and 'ANSI_QUOTES' in modes) and 'NO_BACKSLASH_ESCAPES' not in modes: i += 1
-            elif c == quote:
-                if source[i + 1:i + 2] == quote: i += 1
-                else: quote = None
-        elif c == '$' and dollar_quotes:
-            from ..data_studio.mysql_quoting import marker_at, end_of_quote
-            marker = marker_at(source, i)
-            if marker:
-                end = end_of_quote(source, i, marker)
-                # Native preparation owns the unterminated-source diagnostic.
-                i = len(source) if end is None else end
-                continue
-        elif c in "'\"`": quote = c
-        elif c == '#' or pair == '--' and (i + 2 == len(source) or source[i + 2].isspace()): comment = 'line'
-        elif pair == '/*': comment = 'block'; i += 1
-        elif c == '%':
-            match = re.match(r'%(?:s|\([A-Za-z_][A-Za-z0-9_]*\)s)', source[i:])
-            if match:
-                output[i:i + len(match[0])] = '?' + ' ' * (len(match[0]) - 1)
-                i += len(match[0]) - 1
-        i += 1
+    from ..data_studio.mysql_quoting import parameter_spans
+    output = list(source)
+    for start, end, _name in parameter_spans(source, modes, dollar_quotes=dollar_quotes):
+        output[start:end] = '?' + ' ' * (end - start - 1)
     return ''.join(output)
 
 

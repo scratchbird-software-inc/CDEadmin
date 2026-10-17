@@ -60,8 +60,8 @@ export function nativeTokenSpans(source, context, {incomplete=false}={}) {
       if (end < 0 && !incomplete) throw new Error('Unterminated native quoted value');
       i = end < 0 ? source.length : end + 2;
       name = 'String';
-    } else if (source[i] === '%' && /^%(?:s|\([A-Za-z_][A-Za-z_0-9]*\)s)/.test(source.slice(i))) {
-      i += source.slice(i).match(/^%(?:s|\([A-Za-z_][A-Za-z_0-9]*\)s)/)[0].length;
+    } else if (source[i] === '%' && /^%(?:s|\([^)]+\)s)/.test(source.slice(i))) {
+      i += source.slice(i).match(/^%(?:s|\([^)]+\)s)/)[0].length;
       name = 'SpecialVar';
     } else if (context.engine === 'sqlite' && /^(?:\?[0-9]+|[:@$][\p{L}_][\p{L}\p{N}\p{M}_]*)/u.test(source.slice(i))) {
       i += source.slice(i).match(/^(?:\?[0-9]+|[:@$][\p{L}_][\p{L}\p{N}\p{M}_]*)/u)[0].length;

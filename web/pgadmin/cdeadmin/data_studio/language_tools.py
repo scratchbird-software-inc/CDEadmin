@@ -41,6 +41,7 @@ def analyze(source, language, *, script=False, settings=None):
     settings = dict(settings or {})
     diagnostics = []
     statements = []
+    client_directives = []
 
     def issue(code, message, at=0):
         diagnostics.append({'code': code, 'message': message, 'severity': 'error',
@@ -49,7 +50,7 @@ def analyze(source, language, *, script=False, settings=None):
     digest = hashlib.sha256(source.encode()).hexdigest()
     result = {'language_profile': language, 'source_sha256': digest, 'diagnostics': diagnostics,
               'statements': statements, 'authority': capabilities(language)['validation_authority'],
-              'grammar_valid': None, 'script_ready': False}
+              'grammar_valid': None, 'script_ready': False, 'client_directives': client_directives}
     if language in COMBINED:
         issue('LANGUAGE_SELECTION_REQUIRED',
               'Select one exact language, not a combined profile.')
@@ -155,6 +156,7 @@ def analyze(source, language, *, script=False, settings=None):
                         'DELIMITER must occur between statements.',
                         i)
                 delimiter = directive.group(1)
+                client_directives.append({'command':'DELIMITER','offset':i,'delimiter':delimiter})
                 if len(delimiter) > 16 or any(
                         x in delimiter for x in "'\"`\\"):
                     issue('DELIMITER_INVALID', 'Unsupported delimiter.', i)

@@ -22,7 +22,7 @@ export function formatNative(source, context) {
   }
   let formatted = format(input, {language: context.engine,
     keywordCase: 'preserve', identifierCase: 'preserve', dataTypeCase: 'preserve', functionCase: 'preserve',
-    paramTypes: {custom: [{regex: '%(?:s|\\([A-Za-z_][A-Za-z_0-9]*\\)s)'}]}});
+    paramTypes: {custom: [{regex: '%(?:s|\\([^)]+\\)s)'}]}});
   for(const [marker,literal] of literals) {
     const parts=formatted.split(marker);
     if(parts.length!==2)throw new Error('The formatter changed a native literal; the source was preserved');
