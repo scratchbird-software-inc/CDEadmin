@@ -202,7 +202,7 @@ Separate implementation, native qualification, platform qualification and human
 form signoff in reports. Do not publish an overall completion percentage until
 the complete native feature denominator has been reconciled.
 
-Current implementation matrix, 2026-10-17
+Current implementation matrix, 2026-10-18
 =========================================
 
 All six engines now have catalog-backed completion, native nonexecuting
@@ -264,11 +264,13 @@ remains open for every engine; a scoped workflow is not the full denominator.
        retained temporary physical/logical slot create/copy/advance/drop and
        text/binary peek/get with independently verified retained artifacts,
        paged owner-backend inventory, explicit resource release and independent
-       cleanup observation; additional native statistics collectors.
+       cleanup observation; managed permanent-slot native logical receivers with
+       exact output, cancellation and offline sealing recovery; additional
+       native statistics collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
-       extension/language/HA coverage. Native replication-protocol streams
-       require their remaining retained adapters.
+       extension/language/HA coverage. Temporary replication-protocol streams
+       and replication-only credential admission require their remaining adapters.
    * - DuckDB 1.5.2
      - Native attached/session catalogs, functions/types/macros, retained
        completion, native parsing and nested/indexed/positional member binding,
@@ -2138,3 +2140,17 @@ metadata values returned as bytes are normalized strictly. Native permanent-slot
 comparisons cover text/binary peek/get across SQL_ASCII database and client
 modes. Arbitrarily encoded catalog identities still require their remaining
 adapters; this payload qualification does not close that catalog gap.
+
+PostgreSQL native logical replication capture
+---------------------------------------------
+
+The continuity workspace now manages a native permanent-slot logical receiver,
+including exact source-position review, utility-version admission, native
+text/binary plugin output, progress, cancellation and retained files. Native
+return is recorded before byte sealing; recovery does not reconnect, consume
+again or alter an uncertain original outcome. Offline inspection/download uses
+exact byte ranges and checksums. Client quoting revisions remain explicit;
+new-file output cannot adopt or append an earlier capture. Native comparisons,
+API and browser receipts qualify this workflow. Temporary protocol resources,
+replication-only admission, resumable retention/HA and the broader product matrix
+remain open. History testing stays deferred.

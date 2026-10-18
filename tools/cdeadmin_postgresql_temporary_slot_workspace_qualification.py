@@ -25,11 +25,13 @@ def qualify(output,*,browser_binary=None,driver_binary=None):
     from pgadmin.model import db,User,ServerGroup,Server
     from pgadmin.cdeadmin.workspace import service_for_app
     from flask import url_for
-    app=create_app('ScratchRobin-native-temporary-http');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start();client=app.test_client();jobs=None;proof={'complete':False,'history_testing':'not run','full_product_complete':False,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in [Path(__file__),ROOT/'web/pgadmin/cdeadmin/providers/postgresql/temporary_slots.py',ROOT/'web/pgadmin/cdeadmin/providers/postgresql/large_object_files.py',*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('postgresql_temporary_slot*.py')),ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_slot_changes.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlTemporarySlots.jsx',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlContinuity.jsx']}}
+    app=create_app('ScratchRobin-native-temporary-http');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start();client=app.test_client();jobs=None;proof={'complete':False,'history_testing':'not run','full_product_complete':False,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in [Path(__file__),ROOT/'web/pgadmin/cdeadmin/providers/postgresql/temporary_slots.py',ROOT/'web/pgadmin/cdeadmin/providers/postgresql/large_object_files.py',*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('postgresql_temporary_slot*.py')),ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_slot_changes.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlTemporarySlots.jsx',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlContinuity.jsx',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlLogicalStream.jsx',ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_logical_stream.py',ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_continuity_service.py',ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_continuity_jobs.py',ROOT/'web/pgadmin/cdeadmin/providers/postgresql/continuity.py']}}
     try:
-     with server(out/'fixture',server_options=('-c','wal_level=logical')) as (route,password,fixture):
+     with server(out/'fixture',server_options=('-c','wal_level=logical','-c','wal_sender_timeout=5s')) as (route,password,fixture):
       args={'host':route['host'],'port':route['port'],'user':route['user'],'dbname':route['database'],'password':password,'autocommit':True}
       with psycopg.connect(**args) as observer:
+       from psycopg.types.string import ByteaLoader
+       observer.adapters.register_loader(17,ByteaLoader)
        target='postgresql-database:'+str(observer.execute("SELECT oid FROM pg_database WHERE datname=current_database()").fetchone()[0])
        with app.test_request_context('/'):
         user=User.query.first();group=ServerGroup.query.filter_by(user_id=user.id).first()
@@ -129,6 +131,35 @@ def qualify(output,*,browser_binary=None,driver_binary=None):
        assert response.status_code==400;response.close()
        refused=client.post(url,json={'action':'postgresql_temporary_slots_change_reconcile','request':request})
        assert refused.status_code<500 and (refused.status_code!=200 or not refused.get_json().get('success'))
+       def continuity(action,**fields):
+        response=client.post(url,json={'action':'postgresql_continuity_'+action,'request':fields});value=response.get_json()
+        assert response.status_code==200 and value.get('success'),(action,response.status_code,value)
+        return value['data']
+       observer.execute("SELECT * FROM pg_create_logical_replication_slot('sr_http_stream','test_decoding')")
+       observer.execute("INSERT INTO sr_http_data VALUES(10,'HTTP logical receiver 😀',NULL)")
+       end=observer.execute('SELECT pg_current_wal_insert_lsn()::text').fetchone()[0]
+       expected=b''.join(bytes(row[0])+b'\n' for row in observer.execute("SELECT data FROM pg_logical_slot_peek_binary_changes('sr_http_stream',NULL,NULL,'include-xids','0','skip-empty-xacts','1')").fetchall())
+       logical=continuity('review',operation='logical_stream_capture',database_target_id=target,options={'slot':'sr_http_stream','end_lsn':end,'status_interval_seconds':1,'timeout_seconds':30,'plugin_options':[{'name':'include-xids','value':'0'},{'name':'skip-empty-xacts','value':'1'}]})
+       admission={'job_id':logical['job_id'],'review_digest':logical['review_digest'],'confirmed':True}
+       continuity('start',**admission);deadline=time.monotonic()+40
+       while True:
+        logical=continuity('status',job_id=logical['job_id'])
+        if logical['state']=='captured' and (logical.get('logical_stream_artifact') or {}).get('state')=='sealed':break
+        assert time.monotonic()<deadline,logical;time.sleep(.03)
+       assert logical['native_receiver_returned'] and logical['worker_io_closed']
+       response=client.post(url,data={'action':'postgresql_continuity_logical_stream_download','payload':json.dumps({'job_id':logical['job_id']})})
+       assert response.status_code==200 and response.get_data()==expected and response.headers['X-Transaction-Completeness']=='not-inferred';response.close()
+       assert continuity('start',**admission)['logical_stream_artifact']['sha256']==hashlib.sha256(expected).hexdigest()
+       assert continuity('logical_stream_reconcile',job_id=logical['job_id'])['state']=='captured'
+       page=continuity('logical_stream_preview',job_id=logical['job_id'],offset='0',limit=17)
+       import base64
+       assert base64.b64decode(page['data_base64'])==expected[:17]
+       response=client.post(url+'?database_target_id='+other,data={'action':'postgresql_continuity_logical_stream_download','payload':json.dumps({'job_id':logical['job_id']})})
+       assert response.status_code==400;response.close()
+       deadline=time.monotonic()+10
+       while observer.execute("SELECT active FROM pg_replication_slots WHERE slot_name='sr_http_stream'").fetchone()[0]:assert time.monotonic()<deadline;time.sleep(.03)
+       observer.execute("SELECT pg_drop_replication_slot('sr_http_stream')")
+       proof['authenticated_native_logical_stream_capture_and_download']=True
        proof.update(native_logical_text_and_binary_independently_compared=True,offline_artifact_download_and_confirmed_removal=True,duplicate_native_get_not_replayed=True)
        proof.update(complete=not bool(browser_binary),authenticated_native_resource_and_command_workflow=True,confirmation_and_database_scope_refusals=True,native_inventory_paging=True,independent_native_temporary_slot_verified=True,separate_local_close_and_backend_cleanup=True,original_command_outcomes_inferred=observed['backend_cleanup_observation']['original_command_outcomes_inferred'])
        if browser_binary:proof['browser']=browser(app,out,server_id,password,observer,browser_binary,driver_binary)
@@ -263,10 +294,30 @@ def browser(app,output,server_id,password,observer,binary,driver_binary):
         verified=receipt('Native temporary slot resource receipt',lambda r:(r.get('backend_cleanup_observation') or {}).get('temporary_slot_cleanup_observed'))
         assert verified['backend_cleanup_observation']['original_command_outcomes_inferred'] is False
         assert int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_browser_temporary'").fetchone()[0])==0
+        observer.execute("SELECT * FROM pg_create_logical_replication_slot('sr_browser_stream','test_decoding')")
+        observer.execute("INSERT INTO sr_http_data VALUES(11,'browser replication stream 😀',NULL)")
+        end=observer.execute('SELECT pg_current_wal_insert_lsn()::text').fetchone()[0]
+        click('PostgreSQL logical replication streams','summary');click('Load logical stream databases')
+        control=field('Logical stream database');control.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.get_attribute('textContent').strip()=='postgres'),None)).click()
+        replace_field('Logical receiver slot','sr_browser_stream');replace_field('Logical receiver end lsn',end);replace_field('Logical receiver timeout seconds','30');replace_field('Logical receiver status interval seconds','1')
+        click('Add ordered logical receiver option');replace_field('Logical receiver option 1 name','include-xids');replace_field('Logical receiver option 1 value','0')
+        click('Review logical replication stream');checked('Confirm native logical stream consumption');click('Start reviewed logical stream')
+        captured=receipt('Native logical stream receipt',lambda r:r['state']=='captured' and (r.get('logical_stream_artifact') or {}).get('state')=='sealed')
+        click('Preview native logical bytes')
+        receipt('Native logical byte preview',lambda r:'browser replication stream' in (r.get('utf8_preview') or ''))
+        click('Download native logical stream')
+        def stream_downloaded(browser):
+            paths=list((output/'downloads').glob('postgresql-logical-stream-*.native'))
+            return paths[0] if paths and not list((output/'downloads').glob('*.crdownload')) else False
+        path=wait.until(stream_downloaded);assert hashlib.sha256(path.read_bytes()).hexdigest()==captured['logical_stream_artifact']['sha256']
+        deadline=time.monotonic()+10
+        while observer.execute("SELECT active FROM pg_replication_slots WHERE slot_name='sr_browser_stream'").fetchone()[0]:assert time.monotonic()<deadline;time.sleep(.03)
+        observer.execute("SELECT pg_drop_replication_slot('sr_browser_stream')")
         console=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(console,indent=2)+'\n');assert not console,console
         return {'complete':True,'resource_id':resource['job_id'],'command_id':command['job_id'],'console_errors':0,
-            'native_temporary_slot_lifetime_verified':True,'native_inventory_verified':True,'logical_text_preview_download_and_remove_verified':True,'independent_backend_cleanup_verified':True}
+            'native_temporary_slot_lifetime_verified':True,'native_inventory_verified':True,'logical_text_preview_download_and_remove_verified':True,'native_replication_stream_preview_download_verified':True,'independent_backend_cleanup_verified':True}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

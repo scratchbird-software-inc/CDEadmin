@@ -80,6 +80,7 @@ class PostgreSQLContinuityJobs:
         result={**deepcopy({key:value for key,value in record.items() if key not in {'owner','configuration'}}),
                 'automatic_retry':False}
         if result.get('change_artifact'):result['change_artifact'].pop('file_identity',None)
+        if result.get('logical_stream_artifact'):result['logical_stream_artifact'].pop('file_identity',None)
         if summary:
             result['source']['tablespace_count']=len(result['source'].pop('tablespaces',[]))
             for name in ('tool_observation','verification_observation','process_observation','input_verifications'):
@@ -136,7 +137,8 @@ class PostgreSQLContinuityJobs:
         active=record['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}
         pending_slot=record.get('slot_observation_state')=='pending'
         pending_changes=(record.get('change_artifact') or {}).get('state')=='publishing'
-        if active or pending_slot or pending_changes:
+        pending_stream=(record.get('logical_stream_artifact') or {}).get('state')=='sealing'
+        if active or pending_slot or pending_changes or pending_stream:
             pid, created = record.get('worker_identity',(None,None))
             try:alive = pid is not None and psutil.Process(pid).create_time()==created
             except psutil.Error:alive=False
@@ -147,6 +149,7 @@ class PostgreSQLContinuityJobs:
                 if active:result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
                 if pending_slot:result.update(slot_observation_state='unavailable',slot_observation_blocker='The later slot observation is unavailable from this worker; refresh the native slot catalog. The recorded native acknowledgement is unchanged.')
                 if pending_changes:result['change_artifact']={'state':'unavailable','blocker':'The worker stopped before artifact publication; the native acknowledgement is unchanged.'}
+                if pending_stream:result['logical_stream_artifact']={'state':'unavailable','writer_closed':record.get('worker_io_closed') is True,'blocker':'The worker stopped before file sealing; the recorded native receiver outcome is unchanged.'}
         return result
 
     def require_stopped_writer(self, record):
@@ -292,6 +295,9 @@ class PostgreSQLContinuityJobs:
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain','database_target_id'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
+        if operation=='logical_stream_capture':
+            from .postgresql_logical_stream import review
+            return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
         from .postgresql_continuity_slot_sql import OPERATIONS as SQL_SLOTS
         if operation in SQL_SLOTS:
             from .postgresql_continuity_slot_sql import review
@@ -506,6 +512,9 @@ class PostgreSQLContinuityJobs:
                 return run(self,record,tools,directory,transport,progress,signal)
             if record['operation']=='wal_capture':
                 from .postgresql_continuity_capture import run
+                return run(self,record,tools,directory,transport,progress,signal)
+            if record['operation']=='logical_stream_capture':
+                from .postgresql_logical_stream import run
                 return run(self,record,tools,directory,transport,progress,signal)
             next_manifest_progress=0
             def file_progress(event):

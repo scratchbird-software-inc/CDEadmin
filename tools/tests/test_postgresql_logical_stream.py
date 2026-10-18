@@ -1,0 +1,106 @@
+"""Native receiver admission and exact retained bytes do not imply replication finality."""
+import base64
+import threading
+import uuid
+
+import pytest
+
+from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
+from pgadmin.cdeadmin.workspace import postgresql_logical_stream as stream
+from pgadmin.cdeadmin.workspace.postgresql_continuity_jobs import PostgreSQLContinuityJobs
+
+
+@pytest.mark.parametrize('change',[
+    {'slot':'UPPER'},{'slot':'../escape'},{'start_lsn':'0/1;SELECT 1'},{'end_lsn':'100000000/0'},
+    {'status_interval_seconds':True},{'fsync_interval_seconds':-1},{'fsync_interval_seconds':2147484},
+    {'timeout_seconds':0},{'timeout_seconds':True},{'plugin_options':[{'name':'x=y','value':'z'}]},
+    {'plugin_options':[{'name':'x','value':'\ud800'}]},{'unsafe_arguments':['--create-slot']},
+])
+def test_native_receiver_refuses_ambiguous_options_before_dispatch(change):
+    with pytest.raises(ContinuityError):stream.options({'slot':'owned',**change})
+
+
+def source():
+    return {'sql_identity':{'database':'native','authenticated_principal':'owner','effective_principal':'owner'},
+            'slot_snapshot':{'slot_name':'owned','slot_type':'logical','temporary':False,'active':False,'database':'native'}}
+
+
+@pytest.mark.parametrize('change',[
+    {'temporary':True},{'slot_type':'physical'},{'database':'other'},{'active':True},{'slot_name':'other'},
+])
+def test_only_existing_idle_permanent_logical_slots_are_admitted(change):
+    native=source();native['slot_snapshot'].update(change)
+    with pytest.raises(ContinuityError):stream.require_source(native,{'slot':'owned'})
+
+
+def test_receiver_does_not_silently_change_effective_principal():
+    native=source();native['sql_identity']['effective_principal']='selected_role'
+    with pytest.raises(ContinuityError,match='authenticates directly'):stream.require_source(native,{'slot':'owned'})
+
+
+@pytest.mark.parametrize('version,expected',[('(PostgreSQL) 18.3','adapter'),('(PostgreSQL) 18.4','adapter'),('(PostgreSQL) 18.6','utility')])
+def test_native_client_quoting_revision_is_explicit(version,expected):
+    assert stream.option_quoting({'version':version})==expected
+
+
+def test_unqualified_native_quoting_revision_is_not_guessed():
+    with pytest.raises(ContinuityError,match='requires qualification'):stream.option_quoting({'version':'(PostgreSQL) 18.5'})
+
+
+@pytest.fixture
+def captured(tmp_path):
+    jobs=PostgreSQLContinuityJobs(tmp_path/'jobs.json',tmp_path/'output');endpoint=str(uuid.uuid4())
+    record={'job_id':str(uuid.uuid4()),'owner':1,'endpoint_id':endpoint,'operation':stream.OPERATION,
+            'state':'unknown','options':{},'source':{},'created_at':1,'cancel_requested':False,
+            'tool_observation':{'process_observation':{'cleanup_confirmed':True,'return_code':-15}}}
+    jobs.save_review(record);directory=jobs.directory(record);directory.mkdir(parents=True)
+    data=b"\x00\x80\xff\r\n"+'native 😀'.encode();(directory/stream.FILENAME).write_bytes(data)
+    try:yield jobs,record,data
+    finally:jobs.close()
+
+
+def test_sealing_interrupted_bytes_preserves_unknown_outcome_and_exact_ranges(captured):
+    jobs,record,data=captured
+    result=stream.reconcile(jobs,record)
+    assert result['state']=='unknown' and result['logical_stream_artifact']['state']=='sealed'
+    assert not result['logical_stream_artifact']['native_receiver_returned']
+    assert not result['logical_stream_artifact']['transaction_completeness_inferred']
+    assert 'file_identity' not in result['logical_stream_artifact']
+    saved=jobs.load(record['job_id'],1,record['endpoint_id'])
+    preview=stream.preview(jobs,saved,{'job_id':record['job_id'],'limit':3})
+    assert base64.b64decode(preview['data_base64'])==data[:3] and preview['utf8_preview'] is None
+    next_page=stream.preview(jobs,saved,{'offset':preview['next_offset'],'limit':65536})
+    assert base64.b64decode(next_page['data_base64'])==data[3:] and next_page['next_offset'] is None
+    with stream.payload(jobs,saved) as native:assert native.read()==data
+    assert jobs.get(record['job_id'],1,record['endpoint_id'])['state']=='unknown'
+
+
+def test_active_or_changed_native_files_are_never_offered_as_sealed_output(captured):
+    jobs,record,_data=captured;jobs.update(record,state='active',worker_identity=jobs.worker_identity)
+    jobs.workers[record['job_id']]=(threading.current_thread(),threading.Event())
+    try:
+        with pytest.raises(ContinuityError,match='active worker'):stream.reconcile(jobs,record)
+    finally:jobs.workers.pop(record['job_id'])
+    jobs.update(record,state='failed');stream.reconcile(jobs,record)
+    saved=jobs.load(record['job_id'],1,record['endpoint_id'])
+    with (jobs.directory(record)/stream.FILENAME).open('ab') as output:output.write(b'changed')
+    with pytest.raises(ContinuityError,match='changed'):
+        with stream.payload(jobs,saved):pass
+    with pytest.raises(ContinuityError,match='Previously sealed'):stream.reconcile(jobs,saved)
+
+
+@pytest.mark.parametrize('selected',[{'offset':1},{'offset':'01'},{'offset':'-1'},{'limit':True},{'limit':65537},{'offset':'99999999999999999999'}])
+def test_byte_preview_bounds_do_not_coerce_native_positions(captured,selected):
+    jobs,record,_data=captured;stream.reconcile(jobs,record)
+    with pytest.raises(ContinuityError):stream.preview(jobs,jobs.load(record['job_id'],1,record['endpoint_id']),selected)
+
+
+def test_dead_sealing_worker_preserves_native_utility_outcome_for_offline_recovery(captured):
+    jobs,record,_data=captured
+    jobs.update(record,state='captured',worker_io_closed=True,native_receiver_returned=True,
+                logical_stream_artifact={'state':'sealing','writer_closed':True})
+    value=jobs.get(record['job_id'],1,record['endpoint_id'])
+    assert value['state']=='captured' and value['native_receiver_returned']
+    assert value['logical_stream_artifact']['state']=='unavailable'
+    recovered=stream.reconcile(jobs,jobs.load(record['job_id'],1,record['endpoint_id']))
+    assert recovered['state']=='captured' and recovered['logical_stream_artifact']['state']=='sealed'

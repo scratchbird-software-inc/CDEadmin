@@ -8,7 +8,7 @@ import shutil
 from ...sdk.tooling import ProviderToolGrant, ProviderToolRunner
 
 
-TOOLS = ('pg_basebackup', 'pg_verifybackup', 'pg_combinebackup', 'pg_receivewal',
+TOOLS = ('pg_basebackup', 'pg_verifybackup', 'pg_combinebackup', 'pg_receivewal', 'pg_recvlogical',
          'pg_waldump', 'pg_controldata', 'pg_ctl', 'postgres', 'pg_amcheck')
 CHECKSUMS = {'NONE', 'CRC32C', 'SHA224', 'SHA256', 'SHA384', 'SHA512'}
 
@@ -164,6 +164,12 @@ class PhysicalTools:
                 raise ContinuityError('Standby configuration cannot retain this temporary native service alias; encrypted-key standby credential provisioning is required')
             config = ('[scratchrobin_native]\n'+''.join(key+'='+value+'\n' for key,value in service.items())).encode('utf8')
             arguments = ['--dbname=service=scratchrobin_native',*arguments]
+        elif name=='pg_recvlogical':
+            if not parameters.get('dbname'):raise ContinuityError('Select an explicit native logical receiver database')
+            # pg_recvlogical requires a -d argument before libpq admission.
+            # Empty -d retains the exact protected PGDATABASE environment,
+            # including database names that look like connection strings.
+            arguments = ['--dbname=',*arguments]
         host, port = parameters.get('host','127.0.0.1'), int(parameters.get('port',5432))
         granted = (*environment.keys(), *(('PGSERVICEFILE',) if config is not None else ()))
         return self.runner.run(self.grant(name,workspace,host=host,port=port,timeout=timeout,environment=granted),arguments,

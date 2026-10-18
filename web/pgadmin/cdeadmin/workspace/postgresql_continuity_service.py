@@ -67,6 +67,15 @@ def action(service, server, operation, request):
     if operation=='slot_databases':
         if request:raise ContinuityError('Invalid native slot database selection')
         return service.endpoint_service.database_catalog(server)
+    if operation in {'logical_stream_preview','logical_stream_reconcile'}:
+        from . import postgresql_logical_stream as stream
+        record=jobs.load(request.get('job_id'),owner,endpoint)
+        try:
+            if operation=='logical_stream_reconcile':
+                if set(request)!={'job_id'}:raise ContinuityError('Select one owned native logical stream')
+                return stream.reconcile(jobs,record)
+            return stream.preview(jobs,record,request)
+        except OSError:raise ContinuityError('The owned native logical stream bytes are unavailable') from None
     if operation in {'change_preview','change_reconcile'}:
         from . import postgresql_slot_changes as changes
         if operation=='change_reconcile' and set(request)!={'job_id'}:
@@ -88,17 +97,23 @@ def action(service, server, operation, request):
             return catalog(source,transport,request)
         if operation=='review':
             native_operation=request.get('operation')
-            if native_operation in sql_slots.OPERATIONS:
+            if native_operation in sql_slots.OPERATIONS or native_operation=='logical_stream_capture':
                 from ..providers.postgresql.connection_target import database_oid
                 target=request.get('database_target_id')
                 if not isinstance(target,str) or not 1<=len(target)<=256:
                     raise ContinuityError('Select an explicit PostgreSQL database target')
-                selected=sql_slots.options(native_operation,request.get('options',{}))
+                if native_operation=='logical_stream_capture':
+                    from .postgresql_logical_stream import options
+                    selected=options(request.get('options',{}))
+                else:selected=sql_slots.options(native_operation,request.get('options',{}))
                 try:selected_oid=database_oid(target)
                 except ValueError as error:raise ContinuityError(str(error)) from None
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=sql_slots.capture(provider,payload['route'],server,selected,selected_oid)
+                if native_operation=='logical_stream_capture':
+                    from .postgresql_logical_stream import bind_source
+                    source=bind_source(source)
                 return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
             slot=None
             if native_operation in {'wal_slot_create','wal_slot_drop'}:
@@ -119,11 +134,14 @@ def action(service, server, operation, request):
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            if reviewed['state']=='reviewed' and reviewed['operation'] in sql_slots.OPERATIONS:
+            if reviewed['state']=='reviewed' and (reviewed['operation'] in sql_slots.OPERATIONS or reviewed['operation']=='logical_stream_capture'):
                 from ..providers.postgresql.connection_target import database_oid
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=sql_slots.capture(provider,payload['route'],server,reviewed['options'],database_oid(reviewed['database_target_id']))
+                if reviewed['operation']=='logical_stream_capture':
+                    from .postgresql_logical_stream import bind_source
+                    source=bind_source(source)
             elif reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop'}:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
@@ -164,3 +182,23 @@ def change_download(service,server,request):
         response.call_on_close(lambda:owned.__exit__(None,None,None))
         return response
     except BaseException:owned.__exit__(None,None,None);raise
+
+
+def logical_stream_download(service,server,request,*,database_target_id=None):
+    from flask import send_file
+    from . import postgresql_logical_stream as stream
+    if not isinstance(request,dict) or set(request)!={'job_id'}:raise ContinuityError('Select one owned native logical output file')
+    action(service,server,'status',request)
+    jobs=service.postgresql_continuity_jobs;record=jobs.load(request['job_id'],service._principal_id(server),server.endpoint_profile.id)
+    if database_target_id is not None and record.get('database_target_id')!=database_target_id:
+        raise ContinuityError('Native logical output belongs to another database workspace')
+    opened=stream.payload(jobs,record);source=opened.__enter__();artifact=record['logical_stream_artifact']
+    try:
+        response=send_file(source,mimetype='application/octet-stream',as_attachment=True,
+                           download_name='postgresql-logical-stream-'+record['job_id']+'.native',conditional=False,max_age=0)
+        response.content_length=int(artifact['bytes']);response.direct_passthrough=False
+        response.headers.update({'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff',
+            'X-Content-SHA256':artifact['sha256'],'X-Native-Receiver-Returned':'yes' if artifact['native_receiver_returned'] else 'unconfirmed',
+            'X-Transaction-Completeness':'not-inferred'})
+        response.call_on_close(lambda:opened.__exit__(None,None,None));return response
+    except BaseException:opened.__exit__(None,None,None);raise

@@ -1356,3 +1356,33 @@ native refusal of invalid UTF-8 bytes is preserved separately, including its
 removal of owned temporary slots. Uninterpreted payload bytes are preserved without
 guessing a character set. Identity metadata that is itself not representable
 as UTF-8 remains an explicit admission refusal and an open catalog limitation.
+
+Native logical replication receiver
+-----------------------------------
+
+The continuity workspace runs an independently owned ``pg_recvlogical`` receiver
+for an existing permanent logical slot in an explicit database. Review binds the
+native slot, confirmed position, authenticated principal, application host and
+utility/adapter hashes. Native start/end positions, ordered plugin options,
+status/fsync intervals and deadlines are preserved. Direct native authentication
+is required; an effective role is not silently replaced. Separate SQL slot
+controls create or remove slots. Temporary-slot protocol ownership remains open.
+
+The receiver always disables its reconnect loop. Cancellation supervises its
+owned process and preserves stopped output. Native return, file sealing and
+remote consumption are separate receipts; unknown outcomes are not replayed.
+Failed sealing can be reconciled offline without starting another receiver.
+A sealed file cannot silently acquire a replacement identity or checksum.
+Native newline-delimited payload files have exact byte previews and streamed
+browser downloads, without claiming transaction framing, replication apply or
+production recoverability. Native feedback is independently checked in tests.
+
+Plugin quoting follows the admitted native client revision: the 18.3/18.4
+adapter supplies quoting, while 18.6 performs it in the utility. Unqualified
+quoting revisions are refused explicitly. PostgreSQL 18.3 and 18.6 client checks
+compare complete text/binary output with independent SQL slots, including quoted
+Unicode database/publication names, cancellation, failed sealing and changed
+consumer positions. Authenticated API/browser checks cover review, start,
+preview and download. Replication-only credentials without SQL admission,
+retained temporary protocol streams, resumable archives and broader HA remain
+open. History and platform qualification retain their existing ownership.

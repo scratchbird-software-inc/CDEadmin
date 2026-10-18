@@ -2736,6 +2736,12 @@ class ServerNode(PGChildNodeView):
                         if target is not None and (not isinstance(selected,dict) or selected.get('database_target_id')!=target):raise ValueError('File delivery database scope does not match this workspace')
                         return change_download(service,server,selected)
                     except (ValueError,TypeError,KeyError,OSError):return bad_request('Invalid owned logical capture delivery request')
+                if request.form.get('action') == 'postgresql_continuity_logical_stream_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_continuity_service import logical_stream_download
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:return logical_stream_download(service,server,json.loads(body),database_target_id=request.args.get('database_target_id'))
+                    except (ValueError,TypeError,KeyError,OSError):return bad_request('Invalid native logical stream delivery request')
                 if request.form.get('action') == 'postgresql_continuity_change_download':
                     from pgadmin.cdeadmin.workspace.postgresql_continuity_service import change_download
                     from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
@@ -3104,7 +3110,7 @@ class ServerNode(PGChildNodeView):
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
                                 'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',
                                 'postgresql_continuity_slot_databases','postgresql_continuity_change_preview',
-                                'postgresql_continuity_change_reconcile'}:
+                                'postgresql_continuity_change_reconcile','postgresql_continuity_logical_stream_preview','postgresql_continuity_logical_stream_reconcile'}:
                     try:
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
