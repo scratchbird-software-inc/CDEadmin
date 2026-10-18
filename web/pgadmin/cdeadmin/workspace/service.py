@@ -3157,6 +3157,9 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action=='sqlite_native_arrays':
+                if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite array request')
+                return self.studio_service.sqlite_native_array_action(context,data.get('session_id'),data['request'])
             if action=='sqlite_native_sessions':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite capture request')
                 return self.studio_service.sqlite_native_session_action(context,data.get('session_id'),data['request'])

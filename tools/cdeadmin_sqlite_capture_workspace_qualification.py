@@ -49,7 +49,7 @@ def independent_rebase(core,local,buffer):
     finally:native.sqlite3_free(result);native.sqlite3rebaser_delete(handle)
 
 
-def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
+def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,array_library=None):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
@@ -68,6 +68,8 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
                  ROOT/'web/pgadmin/cdeadmin/data_studio/studio.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',
                  ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [*list((ROOT/'web/pgadmin/cdeadmin/providers/sqlite').glob('array*.py')),ROOT/'tools/native/sqlite_arrays/api.c',ROOT/'tools/native/sqlite_arrays/CMakeLists.txt',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeArrays.jsx']:
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -77,6 +79,7 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
             'CDEADMIN_OPERATION_STORE_PATH':'app/operations.json','CDEADMIN_SQLITE_CAPTURE_ROOT':'capture-jobs'}.items():
         setattr(config,name,str(output/filename))
     config.CDEADMIN_SQLITE_SESSION_LIBRARY=str(Path(library).resolve(strict=True))
+    if array_library:config.CDEADMIN_SQLITE_ARRAY_LIBRARY=str(Path(array_library).resolve(strict=True))
     source=output/'native.sqlite';schema='CREATE TABLE "native\n雪"(id INTEGER PRIMARY KEY,body TEXT,payload BLOB)'
     assert sqlite3.sqlite_version=='3.53.0'
     with sqlite3.connect(source) as connection:
@@ -127,6 +130,23 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
                     return rows,payload
                 time.sleep(.02)
             raise TimeoutError('Native SQLite query worker')
+        if array_library:
+            def array(operation,**fields):return post('sqlite_native_arrays',session_id=session_id,request={'operation':operation,**fields})
+            inventory=array('inventory');assert inventory['helper_available'] and not inventory['native_context_initialized']
+            proof['native_array_program']=inventory['program']
+            for kind,values,expected in [
+                ('int32',[-2147483648,2147483647],[[-2147483648,'integer'],[2147483647,'integer']]),
+                ('int64',['9007199254740993','9223372036854775807'],[['9007199254740993','integer'],['9223372036854775807','integer']]),
+                ('double',['0.1','inf','nan'],[['0.1','real'],['inf','real'],[None,'null']]),
+                ('text',['雪😀','',None],[['雪😀','text'],['','text'],[None,'null']]),
+                ('blob',[{'encoding':'base64','data':'AP8='},None,{'encoding':'base64','data':''}],[[{'encoding':'base64','data':'AP8=','byte_length':2},'blob'],[None,'null'],[{'encoding':'base64','data':'','byte_length':0},'blob']])]:
+                created=array('create',type=kind,values=values)['array'];binding=created['binding']
+                observed,_payload=execute('SELECT value,typeof(value) FROM carray(:items)',{'items':binding});assert observed==expected,(kind,observed)
+                refused=client.post(url,json={'action':'sqlite_native_arrays','database_target_id':other,'session_id':session_id,'request':{'operation':'status','array_id':created['array_id']}})
+                assert refused.status_code!=200 or not refused.get_json().get('success')
+                assert array('close',array_id=created['array_id'],confirmed=True)['closed']
+            assert array('inventory')['total']==0
+            proof['checks'].append('authenticated-retained-native-array-bindings-all-five-types-wide-int64-null-empty-binary-and-target-ownership')
         assert capture('inventory')['helper_available']
         opened=capture('open',database='main',estimate_size=True,track_rowids=False)['capture'];capture_id=opened['capture_id']
         capture('attach',capture_id=capture_id,table_name='native\n雪')
@@ -404,12 +424,31 @@ def browser(app,output,server_id,binary,driver_binary):
         transformed_apply=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
         assert transformed_apply['commit_returned'] and transformed_apply['source']['source_kind']=='transform'
         with sqlite3.connect(output/'another.sqlite') as independent:assert independent.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        native_arrays=False
+        if app.config.get('CDEADMIN_SQLITE_ARRAY_LIBRARY'):
+            engine_options();click('SQLite native arrays','summary');click('Inspect native arrays');click('Create native array')
+            click('Use native array in editor')
+            def sensitive_label(browser):
+                for label in browser.find_elements(By.XPATH,'//label[contains(.,"Omit this sensitive source from SQL history")]'):
+                    expose(label)
+                    if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+                return False
+            sensitive=wait.until(sensitive_label)
+            if not sensitive.find_element(By.TAG_NAME,'input').is_selected():sensitive.click()
+            _run_query(driver,wait,'SELECT value, typeof(value) AS storage_class FROM carray(:items)','9007199254740993','SQLite',output)
+            engine_options()
+            def close_confirmation(browser):
+                for node in browser.find_elements(By.XPATH,'//label[contains(.,"Release this array and its parameter bindings")]'):
+                    expose(node)
+                    if node.is_displayed() and node.find_element(By.TAG_NAME,'input').is_enabled():return node
+                return False
+            wait.until(close_confirmation).click();click('Close native array');native_arrays=True
         driver.save_screenshot(str(output/'native-sqlite-capture.png'))
         errors=[row for row in driver.get_log('browser') if row.get('level')=='SEVERE'];(output/'browser-console.json').write_text(json.dumps(errors,indent=2));assert not errors
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
@@ -422,5 +461,5 @@ def browser(app,output,server_id,binary,driver_binary):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True)
     parser.add_argument('--library',type=Path,required=True);parser.add_argument('--sqlite-core',type=Path,required=True);parser.add_argument('--sqlite-cli',type=Path,required=True)
-    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    args=parser.parse_args();qualify(args.evidence,args.library,args.sqlite_core,args.sqlite_cli,browser_binary=args.browser_binary,driver_binary=args.driver_binary)
+    parser.add_argument('--array-library',type=Path);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+    args=parser.parse_args();qualify(args.evidence,args.library,args.sqlite_core,args.sqlite_cli,browser_binary=args.browser_binary,driver_binary=args.driver_binary,array_library=args.array_library)

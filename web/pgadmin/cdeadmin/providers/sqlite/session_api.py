@@ -46,17 +46,17 @@ def installed_library():
     return next((str(path) for path in candidates if path.is_file() and Path(str(path)+'.json').is_file()),'')
 
 
-def identity(filename):
-    if not filename:raise SessionAPIError('The native SQLite session helper is not installed')
+def identity(filename,component='session'):
+    if not filename:raise SessionAPIError('The native SQLite '+component+' helper is not installed')
     path=Path(filename).resolve(strict=True);metadata=Path(str(path)+'.json')
-    if not path.is_file() or metadata.stat().st_size>65536:raise SessionAPIError('Native SQLite session helper metadata is unavailable')
+    if not path.is_file() or metadata.stat().st_size>65536:raise SessionAPIError('Native SQLite '+component+' helper metadata is unavailable')
     value=json.loads(metadata.read_text(encoding='utf8'))
     if not isinstance(value,dict) or value.get('adapter_abi')!=1 or value.get('sqlite_version')!='3.53.0':
-        raise SessionAPIError('Native SQLite session helper ABI or version differs')
+        raise SessionAPIError('Native SQLite '+component+' helper ABI or version differs')
     digest=hashlib.sha256()
     with path.open('rb') as source:
         while block:=source.read(1048576):digest.update(block)
-    if digest.hexdigest()!=value.get('library_sha256'):raise SessionAPIError('Native SQLite session helper differs from its provenance')
+    if digest.hexdigest()!=value.get('library_sha256'):raise SessionAPIError('Native SQLite '+component+' helper differs from its provenance')
     return path,{'adapter_abi':1,'sqlite_version':'3.53.0','library_sha256':digest.hexdigest()}
 
 

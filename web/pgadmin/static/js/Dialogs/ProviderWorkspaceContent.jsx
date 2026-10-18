@@ -34,6 +34,7 @@ import DuckDBCatalog from './DuckDBCatalog';
 import SQLiteCatalog from './SQLiteCatalog';
 import SQLiteExtensions from './SQLiteExtensions';
 import SQLiteNativeSessions from './SQLiteNativeSessions';
+import SQLiteNativeArrays from './SQLiteNativeArrays';
 import SQLiteSessionFTS from './SQLiteSessionFTS';
 import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
@@ -8150,6 +8151,13 @@ export default function ProviderWorkspaceContent({
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
             onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteNativeArrays
+            key={'native-arrays:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onLoad={({source: renderedSource,parameters}) => {
+              setSource(renderedSource);setParameterSource(JSON.stringify(parameters));setTab('studio');
+            }} />}
           {languageProfile === 'sqlite-sql' && <SQLiteNativeSessions
             key={'native-captures:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl}

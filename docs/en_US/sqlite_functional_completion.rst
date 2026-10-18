@@ -448,3 +448,42 @@ with the independent public rebaser API. Browser qualification transforms an
 uploaded native file and applies the result, with independent database-row
 verification. This scope does not close per-row conflict decisions, standalone
 preupdate/carray or the broader product matrix. History tests remain deferred.
+
+
+Connection-owned typed native arrays
+-----------------------------------
+
+The SQLite query workspace now creates, inspects and releases native CARRAY
+parameters for int32, int64, double, TEXT and BLOB arrays. Queries use ordinary
+``carray(:items)`` SQL with an opaque ``encoding: carray`` parameter envelope.
+Bindings belong to the exact retained query connection and become invalid when
+the array or connection closes. Array lifecycle actions refuse active query
+workers and leave pending user transactions untouched.
+
+The separately provisioned CARRAY bridge uses public ``sqlite3_carray_bind_v2``
+and protected value APIs. It admits the exact connection library, SQLite source
+identity and compiled CARRAY capability; it accesses no private CPython layouts.
+The controlled extension loader closes before returning. Internal control tokens
+and array payloads are omitted from query tracing. Native values and ownership
+remain inside the application host. Windows/macOS provisioning builds the bridge
+against the same native SQLite core; platform qualification remains with those
+teams.
+
+Element counts and measured native data bytes are decimal strings at the browser
+boundary. Integer envelopes/decimal strings retain signed 64-bit values. TEXT
+and BLOB arrays preserve NULL versus empty values; BLOBs support base64 input,
+and invalid UTF-8 TEXT has an explicit byte envelope. Native CARRAY TEXT uses
+terminated strings and cannot represent embedded zero bytes. Doubles retain
+native floating-point behavior, including SQLite's NaN-to-NULL conversion.
+``CDEADMIN_SQLITE_ARRAY_LIBRARY`` selects the operator-provisioned bridge;
+``CDEADMIN_SQLITE_ARRAY_MAX_BYTES`` optionally limits aggregate native data on
+one connection (zero/unset means no application limit). This measures array data,
+not total process memory or SQLite object overhead.
+
+Native qualification checks all five types, exact values, empty arrays, native
+parameter slots, repeated names, quoted text/comments, ownership, explicit
+release and pending-transaction preservation. Authenticated HTTP and browser
+checks exercise the workspace-to-native binding path. This closes the scoped
+typed array workflow; standalone preupdate, interactive changeset decisions and
+broader installed-module/product coverage remain open. History tests remain
+deferred by owner direction.

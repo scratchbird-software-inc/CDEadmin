@@ -45,13 +45,17 @@ class SQLiteConnection(sqlite3.Connection):
         self._cdeadmin_extension_directories = []
         self._cdeadmin_internal_sql = threading.local()
         self._cdeadmin_session_api = None
+        self._cdeadmin_array_api = None
         self._cdeadmin_trace_callback = None
 
     def close(self):
+        if self._cdeadmin_array_api is not None:
+            self._cdeadmin_array_api.close_all()
         if self._cdeadmin_session_api is not None:
             self._cdeadmin_session_api.close_all()
         super().close()
         self._cdeadmin_session_api = None
+        self._cdeadmin_array_api = None
         for directory in self._cdeadmin_extension_directories:
             shutil.rmtree(directory, ignore_errors=True)
         self._cdeadmin_extension_directories.clear()
@@ -61,7 +65,7 @@ class SQLiteConnection(sqlite3.Connection):
             raise TypeError('SQLite trace callback must be callable or None')
         self._cdeadmin_trace_callback = callback
         def trace(source):
-            if not getattr(self._cdeadmin_internal_sql, 'session_api', False):
+            if not getattr(self._cdeadmin_internal_sql, 'session_api', False) and not getattr(self._cdeadmin_internal_sql, 'array_api', False):
                 return callback(source)
         super().set_trace_callback(None if callback is None else trace)
 
@@ -303,6 +307,8 @@ class SQLiteClient(RelationalDBAPIClient):
         bound = parameters(request.get('parameters'))
         with self._lock:
             self._require_idle(handle)
+            from .array_bindings import bind_arrays
+            source,bound=bind_arrays(handle,source,bound)
             token = Execution(handle, source, bound)
             token.worker.start()
             self._executions.append(token)

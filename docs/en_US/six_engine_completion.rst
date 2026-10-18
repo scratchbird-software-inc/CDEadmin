@@ -2004,3 +2004,18 @@ to the renamed owner fields while the FTS view's public names remain stable.
 New implicit-alias shadowing through content views, distinct document/language
 bindings and wider attached/installed-module reconciliation remain separate
 acceptance.
+
+
+SQLite native typed array parameters
+-----------------------------------
+
+SQLite's workspace now exposes connection-owned CARRAY creation, inventory,
+query parameter binding and explicit release for all five native types. The
+bridge preserves exact int64 values and NULL/empty TEXT/BLOB distinctions using
+public protected-value APIs. Standard numbered/named SQLite variables retain
+their native slot identities. Operator library provenance, connection ownership,
+query-worker exclusion, transaction preservation and configurable native-data
+policy accompany the workflow. See :doc:`sqlite_functional_completion` for
+scope and native limitations. This evidence does not close the remaining
+SQLite workflows or the full six-engine matrix; history qualification remains
+deferred.

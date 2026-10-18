@@ -2849,7 +2849,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'sqlite_extensions', 'sqlite_native_sessions', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
+                elif action in {'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)
