@@ -209,7 +209,8 @@ def plan(baseline,desired,live,renames,fts_rebindings=()):
     if schema(generated)!=schema(desired):blockers.append({'resource_id':'','name':'SQLite rename','reason':'Desired DDN differs from the native rewritten schema; generate the rename design again'})
     operation={'operation':'rename-batch','kind':'table','resource_id':'sqlite-native-rename-batch',
         'name':'Native table/column renames','renames':selected,'fts_rebindings':list(fts_rebindings),'stages':stages,
-        'fts_rebuilds':[{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration','column_renames')} for item in rebuilds],
+        'fts_rebuilds':[{**{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration','column_renames')},
+            **({'row_identity_mapping':item['row_identity_mapping']} if 'row_identity_mapping' in item else {})} for item in rebuilds],
         'source':'\n'.join(stage+';' for stage in stages),'baseline_schema_sha256':digest(schema(baseline)),
         'desired_schema_sha256':digest(schema(generated))}
     if runtime:operation['rewrite_runtime']=runtime
@@ -218,7 +219,8 @@ def plan(baseline,desired,live,renames,fts_rebindings=()):
         'operations':[operation],'blockers':blockers,'conflicts':conflicts,'execution_sha256':digest([operation]),
         'native_grammar_validated':True,'ready_for_review':ready,'application_supported':ready,
         'warnings':['SQLite rewrites table/column references using its native ALTER TABLE implementation. All original schema facts are rechecked before dispatch; the complete rewritten schema and bindings are checked before commit. Owner rows are not copied and trigger DML is not executed by this operation.',
-            *(['The explicitly selected external-content FTS indexes are dropped, recreated and rebuilt from current content rows in this same transaction. Existing index drift is repaired. Native settings are preserved; index file formats remain engine-owned.'] if rebuilds else [])]}
+            *(['The explicitly selected external-content FTS indexes are dropped, recreated and rebuilt from current content rows in this same transaction. Existing index drift is repaired. Native settings are preserved; index file formats remain engine-owned.'] if rebuilds else []),
+            *(['Native document identities are preserved with the reviewed content mapping. FTS4 may create a content view; FTS5 uses its native content_rowid option.'] if any('row_identity_mapping' in item for item in rebuilds) else [])]}
 
 
 def apply(provider,route,record):

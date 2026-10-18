@@ -197,8 +197,12 @@ SQLITE-COMP-05: DDN design exchange
   or changed runtime refuses dispatch. Native rename dependencies also follow
   inferred ordinary/FTS view column labels through downstream views and INSTEAD
   OF triggers, including star and expression projections. Explicit output names
-  remain stable. FTS4 row-identity mappings and attached environments retain
-  separate adapter acceptance. Native ALTER alone can leave an external-content search table
+  remain stable. Ordinary-content row identity changes use native expression
+  observations, FTS4 content mapping views and FTS5 content_rowid rebinding.
+  Generated row identifiers and new alias shadowing preserve document keys;
+  harmless primary-key aliases avoid unnecessary FTS4 reconstruction. Content
+  views, unavailable native identities and attached environments retain separate
+  adapter acceptance. Native ALTER alone can leave an external-content search table
   unusable.
 
   The explorer's virtual-table creation form provides structured native

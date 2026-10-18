@@ -36,7 +36,9 @@ def plans(baseline,renames,selected):
     if (not isinstance(selected,(list,tuple)) or len(selected)>16 or
             any(not isinstance(item,str) or not item for item in selected) or len(set(selected))!=len(selected)):
         raise ValueError('Select exact distinct external-content FTS rebuild identities')
-    result=[]
+    result=[];names={row['name'].translate(FOLD) for row in baseline['rows'].values()
+        if row['kind'] in {'table','view','index','fts-table','virtual-table'} and row['path'][0]=='main'}
+    names.update(item['to'].translate(FOLD) for item in renames if item['kind']=='table')
     for row in baseline['rows'].values():
         if row['kind']!='fts-table' or row['path'][0]!='main' or row['system']!='false':continue
         native=declaration(row['native'].get('ddl'))
@@ -62,8 +64,34 @@ def plans(baseline,renames,selected):
                     former=observed[0] if new_language==language else new_language
                     field_renames.append((former,item['to']));new_language=item['to']
                 if module=='fts5' and equal(item['from'],new_rowid):new_rowid=item['to']
-                elif module=='fts4' and item['from'].translate(FOLD) in {'rowid','oid','_rowid_'}:
-                    raise ValueError('Native FTS4 row identity renames require a dedicated mapping')
+        row_mapping=None;bridge=[]
+        if any(item['kind']=='column' and ({item['from'].translate(FOLD),item['to'].translate(FOLD)} &
+                {'rowid','oid','_rowid_',rowid.translate(FOLD)}) for item in renames):
+            from .sqlite_fts_rowid import mapping
+            observed=mapping(baseline,original_content,renames,before_name='rowid' if module=='fts4' else rowid,
+                after_name='rowid' if module=='fts4' else new_rowid)
+            if observed and observed['changed']:
+                row_mapping=observed
+                if module=='fts5':new_rowid=observed['expression']
+                else:
+                    from .firebird_schema_plan import digest
+                    fields_final=list(fields.values())
+                    if new_language and not any(equal(new_language,field) for field in fields_final):fields_final.append(new_language)
+                    if new_language and equal(new_language,'rowid') and not (language and equal(language,'rowid')):
+                        raise ValueError('Native FTS4 document and language identities require separate content bindings')
+                    # A public FTS4 rowid field originally reads the same
+                    # content expression as the document key. One native view
+                    # column preserves both bindings without a duplicate name.
+                    projected=[field for field in fields_final if not equal(field,'rowid')]
+                    prefix='__scratchrobin_fts4_content_'+digest({'resource_id':row['resource_id'],
+                        'owner':observed['owner'],'expression':observed['expression'],'fields':fields_final})[:24]
+                    content=next((prefix+suffix for suffix in ['',*(str(index) for index in range(1,17))]
+                        if (prefix+suffix).translate(FOLD) not in names),None)
+                    if content is None:raise ValueError('Native FTS4 content mapping view names are occupied')
+                    names.add(content.translate(FOLD))
+                    bridge=['CREATE VIEW "main".'+quote(content)+'('+','.join(quote(field) for field in ['rowid',*projected])+') AS SELECT '+
+                        ','.join(quote(field) for field in [observed['expression'],*projected])+' FROM "main".'+quote(observed['owner'])]
+                    row_mapping={**observed,'content_view':content}
         if (content==original_content and new_rowid==rowid and not field_renames and
                 not (control_renames and row['resource_id'] in selected)):continue
         constructor=arguments(source)
@@ -99,7 +127,8 @@ def plans(baseline,renames,selected):
         result.append({'resource_id':row['resource_id'],'source_name':row['name'],'name':name,'module':module,
             'original_content':original_content,'content':content,'configuration':configuration,
             'column_renames':[{'from':former,'to':renamed} for former,renamed in field_renames],'before':before,
-            'stages':['DROP TABLE "main".'+quote(name),ddl,*(restore if module=='fts5' else []),rebuild,*restore,integrity]})
+            'stages':['DROP TABLE "main".'+quote(name),*bridge,ddl,*(restore if module=='fts5' else []),rebuild,*restore,integrity],
+            **({'row_identity_mapping':row_mapping} if row_mapping else {})})
     required={item['resource_id'] for item in result}
     if set(selected)!=required:
         raise ValueError('Select exactly the required native FTS rebinding adapter rebuild identities: '+', '.join(sorted(required)))

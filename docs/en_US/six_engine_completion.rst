@@ -287,10 +287,12 @@ remains open for every engine; a scoped workflow is not the full denominator.
        native view/trigger checks. Ordinary and FTS rename dependencies follow
        native inferred projection labels through downstream views and view
        triggers; explicit output aliases remain stable.
+       Ordinary-content row identity changes preserve native FTS document keys
+       through FTS4 mapping views or FTS5 content_rowid rebinding.
        Offline native file recovery uses private WAL/journal images, exact
        typed transfer, reviewed new-file publication, durable outcomes and
        registration/activation of recovered copies.
-     - Remaining attached/FTS4 row-identity and installed-module transformations and
+     - Remaining attached/content-view row-identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1636,3 +1638,23 @@ stale-review refusal, rollback and uncertain commit outcomes. Attached contexts,
 FTS4 row-identity and installed-module transformations remain separate work.
 Final dependency checks force fresh native EXPLAIN preparation, preventing a
 cached pre-change program from accepting invalid post-change view/trigger SQL.
+
+SQLite ordinary-content FTS row identity mappings
+------------------------------------------------
+
+Renaming a physical rowid column or introducing an alias that shadows an
+implicit rowid now preserves the original document identity for ordinary FTS
+content tables. The independent empty-schema probe compares native content
+SELECT programs before and after the requested renames. Schema cookie and
+generation counters are excluded; expression, cursor and result instructions
+must agree. Candidate content expressions are accepted only when their native
+program preserves the original binding, including generated columns.
+
+FTS5 uses its native content_rowid option. FTS4 creates an explicitly named
+content mapping view in the reviewed migration transaction, then reconstructs
+and checks the selected index. Native settings and owner rows remain intact.
+The reviewed SQL and mapping observations identify the new view. Harmless
+INTEGER PRIMARY KEY alias renames require no FTS4 reconstruction. Names already
+used or selected for renaming are reserved before generating mapping views.
+Content-view row identity, unavailable native expressions and wider installed
+module/attachment transformations retain separate acceptance.
