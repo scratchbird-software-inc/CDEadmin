@@ -74,11 +74,13 @@ MySQL
 
 Native spatial-reference catalog and typed management operations are implemented;
 their wider server DDN integration remains open. The first native source
-comparison also identifies foreign-server definitions and component-backed
-masking policies as explicit adapter obligations. Masking-policy installation and its native
-management privilege require separate admission. Server-variable discovery must
-also be reconciled beyond the current curated selection; that selection cannot
-establish catalog completeness.
+comparison also identifies component-backed masking policies as an explicit
+adapter obligation. Masking-policy installation and its native management
+privilege require separate admission. Foreign-server catalog and typed native
+management are implemented; their wider server DDN migration generation remains
+open. Server capture now includes every visible global variable and its native
+provenance; this does not close all installed-component or persisted-only state
+reconciliation.
 
 MariaDB
 -------

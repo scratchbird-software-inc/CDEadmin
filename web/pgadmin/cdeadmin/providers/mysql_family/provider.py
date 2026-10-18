@@ -40,7 +40,7 @@ MYSQL_PROFILE = PilotProfile(
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
      'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
      'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric',
-     'character-set', 'collation', 'storage-engine', 'spatial-reference-system'),
+     'character-set', 'collation', 'storage-engine', 'spatial-reference-system', 'server-link'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
         'contract_complete': True,
@@ -185,6 +185,7 @@ def _administration(profile):
     }
     if profile is MYSQL_PROFILE:
         common['spatial-reference-system'] = frozenset({'inspect', 'create', 'alter', 'drop'})
+        common['server-link'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         for kind in ('character-set', 'collation', 'storage-engine'):
             common[kind] = frozenset({'inspect'})
         from ..mysql_events import OPERATIONS as event_operations
@@ -950,6 +951,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
+        if 'mysql_foreign_server' in planned.get('provider_payload', {}).get('compiled', {}):
+            from .foreign_servers import bind_review
+            return bind_review(self, planned)
         if 'mysql_spatial_reference' in planned.get('provider_payload', {}).get('compiled', {}):
             from .spatial_reference_systems import bind_review
             return bind_review(self, planned)
@@ -2433,6 +2437,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     if key in resources:
                         resources[key]['native'][observation] = record
         if profile is MYSQL_PROFILE:
+            from .foreign_servers import SELECT as foreign_select, normalized as foreign_normalized
+            for record in optional_records(foreign_select + ' ORDER BY Server_name'):
+                record = foreign_normalized(record)
+                record['server_uuid'] = resources.get('server:MySQL', {}).get('native', {}).get('server_uuid')
+                add('server-link', [], record['server_name'], record)
             for record in optional_records(
                 'SELECT t.THREAD_ID, t.PROCESSLIST_ID, t.PROCESSLIST_USER, t.PROCESSLIST_HOST, '
                 't.PROCESSLIST_DB, t.PROCESSLIST_COMMAND, t.PROCESSLIST_TIME, t.PROCESSLIST_STATE, '

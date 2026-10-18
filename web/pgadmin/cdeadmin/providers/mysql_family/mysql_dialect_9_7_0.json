@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 108,
+    "authoritative_task_count": 111,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -107,6 +107,9 @@
       "visual_admin.role.grant",
       "visual_admin.role.revoke",
       "visual_admin.role.set_default",
+      "visual_admin.server-link.alter",
+      "visual_admin.server-link.create",
+      "visual_admin.server-link.drop",
       "visual_admin.session.terminate_connection",
       "visual_admin.session.terminate_query",
       "visual_admin.spatial-reference-system.alter",
@@ -141,7 +144,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 108,
+    "implemented_task_count": 111,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44777,6 +44780,24 @@
       "format": "native spatial reference qualification JSON",
       "license_id": "PostgreSQL",
       "sha256": "26aaf48dd9391dfeec5fc593ff19e93aafdd61ffa40de1841742ac610e6385ec"
+    },
+    {
+      "artifact": "mysql-foreign611/proof.json",
+      "authority": "Native MySQL 9.7.0; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-foreign-server-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "native foreign-server and global-variable qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "762eba3cdf5f55fb929fb2229161234788db3e0162ec5f4e39cdb2c53e0778d3"
+    },
+    {
+      "artifact": "mysql-foreign611/proof.json",
+      "authority": "Native MySQL 9.7.0; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-foreign-server-execution",
+      "evidence_kind": "live_execution",
+      "format": "native foreign-server and global-variable qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "762eba3cdf5f55fb929fb2229161234788db3e0162ec5f4e39cdb2c53e0778d3"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -45929,6 +45950,58 @@
         "SET DEFAULT ROLE `sr_r_1d6fba77@``\\é`@`%` TO `sr_u_1d6fba77@'``\\`@`%`"
       ],
       "task_id": "visual_admin.role.set_default"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-foreign-server-parser",
+        "mysql-9.7.0-foreign-server-execution"
+      ],
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER SERVER `remote : . `` ü` OPTIONS (HOST %s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER SERVER `remote : . `` ü` OPTIONS (HOST %s)"
+      ],
+      "task_id": "visual_admin.server-link.alter"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-foreign-server-parser",
+        "mysql-9.7.0-foreign-server-execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4",
+        "parameter_5",
+        "parameter_6",
+        "parameter_7"
+      ],
+      "source": "CREATE SERVER `remote : . `` ü` FOREIGN DATA WRAPPER %s OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT 2147483647, SOCKET %s, OWNER %s)",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE SERVER `remote : . `` ü` FOREIGN DATA WRAPPER %s OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT 2147483647, SOCKET %s, OWNER %s)"
+      ],
+      "task_id": "visual_admin.server-link.create"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-foreign-server-parser",
+        "mysql-9.7.0-foreign-server-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP SERVER IF EXISTS `remote : . `` ü`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP SERVER IF EXISTS `remote : . `` ü`"
+      ],
+      "task_id": "visual_admin.server-link.drop"
     },
     {
       "task_id": "visual_admin.session.terminate_connection",

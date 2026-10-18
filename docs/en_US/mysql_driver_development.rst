@@ -1211,6 +1211,37 @@ comparing identity; newly emitted target names use escaped backticks, which rema
 valid under ANSI_QUOTES. Complete bodies and literals are retained under their
 recorded SQL mode. A change in SQL mode must never reinterpret a stored identifier
 as a string literal or discard a native body.
+Native foreign-server definitions
+---------------------------------
+
+MySQL discovers all visible ``mysql.servers`` definitions independently of
+whether the FEDERATED storage engine is loaded. The Server links navigator
+branch exposes native create, partial alter and drop, including IF EXISTS.
+Typed controls preserve wrapper, host, database, user, socket, owner and exact
+native port. Names containing punctuation and backticks retain their identity.
+The catalog and documentary server DDN exclude passwords. Creating a definition
+does not establish a remote connection or enable a storage engine.
+
+Review and dispatch use independent attachments and verify exact version,
+server UUID, authenticated/effective principal and active roles. Existing-target
+operations compare all visible definition fields. A private, per-review salted
+credential comparison also refuses an external password change; neither the
+password nor that comparison value appears in previews or receipts. Alter only
+changes explicitly selected options, preserving omitted credentials and native
+fields. Native errors, warnings, dispatch and acknowledgement remain separate;
+an observation failure after acknowledgement never authorizes replay. Catalog
+and review require visibility of ``mysql.servers``; mutation requires native
+SUPER authority. Wider server DDN migration generation remains open.
+
+Server capture now discovers every visible global variable, with persisted value,
+source, file, bounds and last-set provenance where MySQL exposes them. It retains
+the existing fact, byte and time bounds and reports privilege denial explicitly.
+``tools/cdeadmin_mysql_foreign_server_qualification.py`` independently compares
+the full runtime variable set and all foreign-server fields with both connector
+implementations and SQL modes, exercises credential changes and omitted-option
+preservation, and verifies native refusal without SUPER. These receipts qualify
+their installed runtime and scope.
+
 Native spatial reference systems
 --------------------------------
 
