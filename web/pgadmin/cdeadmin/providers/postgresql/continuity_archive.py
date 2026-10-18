@@ -73,9 +73,11 @@ def _publish_exclusive(source,target):
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-def publish_file(path, archive, source, *, cancel_signal=None):
+def publish_file(path, archive, source, *, cancel_signal=None, check_cancel=None):
     """Decode one closed receiver file and exclusively publish its raw bytes."""
     path,archive=Path(path),Path(archive)
+    if check_cancel is not None:check_cancel()
+    if cancel_signal is not None and cancel_signal.is_set():raise ContinuityError('Native WAL publication was cancelled')
     match=COMPLETE.fullmatch(path.name)
     history=HISTORY.fullmatch(path.name)
     if match is None and history is None:raise ContinuityError('Select a completed native receiver file')
@@ -100,6 +102,7 @@ def publish_file(path, archive, source, *, cancel_signal=None):
                 incoming=stack.enter_context(lz4.frame.open(raw,'rb'))
             outgoing=stack.enter_context(temporary.open('xb'));private_file(temporary)
             while chunk:=incoming.read(1024*1024):
+                if check_cancel is not None:check_cancel()
                 if cancel_signal is not None and cancel_signal.is_set():raise ContinuityError('Native WAL publication was cancelled')
                 count+=len(chunk)
                 if count>maximum:raise ContinuityError('Completed native receiver file exceeds its native size')
@@ -124,14 +127,24 @@ def publish_file(path, archive, source, *, cancel_signal=None):
     finally:temporary.unlink(missing_ok=True)
 
 
-def publish_completed(staging,archive,source,*,observed=None,cancel_signal=None):
+def iter_completed(staging,archive,source,*,observed=None,cancel_signal=None,check_cancel=None):
     """Inspect closed native names only; partial files remain with their job."""
-    results=[]
-    for path in sorted(Path(staging).iterdir()):
-        if TRANSIENT.fullmatch(path.name):continue
-        if COMPLETE.fullmatch(path.name) is None and HISTORY.fullmatch(path.name) is None:
-            raise ContinuityError('The native receiver workspace contains an unexpected file')
-        if observed is not None and path.name in observed:continue
-        results.append(publish_file(path,archive,source,cancel_signal=cancel_signal))
-        if observed is not None:observed.add(path.name)
-    return results
+    if check_cancel is not None:check_cancel()
+    if cancel_signal is not None and cancel_signal.is_set():
+        raise ContinuityError('Native WAL publication was cancelled')
+    with os.scandir(staging) as entries:
+        for entry in entries:
+            if check_cancel is not None:check_cancel()
+            if cancel_signal is not None and cancel_signal.is_set():
+                raise ContinuityError('Native WAL publication was cancelled')
+            if TRANSIENT.fullmatch(entry.name):continue
+            if COMPLETE.fullmatch(entry.name) is None and HISTORY.fullmatch(entry.name) is None:
+                raise ContinuityError('The native receiver workspace contains an unexpected file')
+            if observed is not None and entry.name in observed:continue
+            receipt=publish_file(Path(entry.path),archive,source,cancel_signal=cancel_signal,check_cancel=check_cancel)
+            if observed is not None:observed.add(entry.name)
+            yield receipt
+
+
+def publish_completed(staging,archive,source,*,observed=None,cancel_signal=None,check_cancel=None):
+    return list(iter_completed(staging,archive,source,observed=observed,cancel_signal=cancel_signal,check_cancel=check_cancel))

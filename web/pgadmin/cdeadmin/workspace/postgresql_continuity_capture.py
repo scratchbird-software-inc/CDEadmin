@@ -1,6 +1,7 @@
 """Owned native WAL receiver jobs and source-bound append-only archives."""
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from copy import deepcopy
+import errno
 import os
 from pathlib import Path
 import re
@@ -12,7 +13,7 @@ import uuid
 from ..operations.fileio import exclusive_file_lock, private_directory
 from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools
-from ..providers.postgresql.continuity_archive import geometry, publish_completed, SEGMENT
+from ..providers.postgresql.continuity_archive import geometry, iter_completed, SEGMENT
 from ..providers.postgresql.continuity_wal import ARCHIVE_NAME, _regular
 
 
@@ -68,7 +69,25 @@ def review(jobs, request, owner, endpoint, source, configuration, paths, runtime
 
 
 @contextmanager
-def archive_claim(jobs,record):
+def claim_lock(descriptor,cancel_signal,check_cancel=None):
+    with ExitStack() as stack:
+        while True:
+            if check_cancel is not None:check_cancel()
+            if cancel_signal is not None and cancel_signal.is_set():
+                raise ContinuityError('Native WAL archive claim was cancelled')
+            try:
+                stack.enter_context(exclusive_file_lock(descriptor,blocking=False))
+                break
+            except OSError as error:
+                contention=(getattr(error,'winerror',None)==33 if os.name=='nt' else error.errno in {errno.EAGAIN,errno.EACCES})
+                if not contention:raise
+                if cancel_signal is None:time.sleep(.1)
+                else:cancel_signal.wait(.1)
+        yield
+
+
+@contextmanager
+def archive_claim(jobs,record,*,cancel_signal=None,progress=None):
     root=jobs.archive_directory(record['owner'],record['endpoint_id'])
     root.mkdir(parents=True,exist_ok=True,mode=0o700)
     private_directory(root.parent);private_directory(root)
@@ -78,7 +97,16 @@ def archive_claim(jobs,record):
             raise ContinuityError('Native WAL archive ownership cannot contain links or reparse points')
     descriptor=os.open(str(metadata)+'.lock',os.O_RDWR|os.O_CREAT,0o600)
     try:
-        with exclusive_file_lock(descriptor):
+        next_cancel_check=0
+        def check_cancel():
+            nonlocal next_cancel_check
+            if time.monotonic()<next_cancel_check:return
+            current=jobs.load(record['job_id'],record['owner'],record['endpoint_id'])
+            if current['cancel_requested']:
+                if cancel_signal is not None:cancel_signal.set()
+                raise ContinuityError('Native WAL archive claim was cancelled')
+            next_cancel_check=time.monotonic()+.25
+        with claim_lock(descriptor,cancel_signal,check_cancel):
             store=JsonOperationStore(metadata);state=store.read();binding=state.get('wal_archive')
             size,block,identity=geometry(record['source'])
             source={'system_identifier':str(identity),'wal_segment_bytes':size,'wal_block_bytes':block,'server_version':record['source']['server_version']}
@@ -93,8 +121,15 @@ def archive_claim(jobs,record):
                 jobs.require_stopped_writer(prior)
                 staging=jobs.directory(prior)/'wal-capture'
                 if staging.is_dir():
-                    recovered=publish_completed(staging,archive,prior['source'])
-                    jobs.update(prior,archive_reconciliation={'completed_files':recovered,'artifact_verified':False,'observed_at':time.time()})
+                    recent=[];count=total=0;next_progress=0
+                    for receipt in iter_completed(staging,archive,prior['source'],cancel_signal=cancel_signal,check_cancel=check_cancel):
+                        count+=1;total+=receipt['bytes'];recent.append(receipt);del recent[:-10]
+                        if progress is not None and time.monotonic()>=next_progress:
+                            progress({'phase':'reconciling_native_wal','completed_files':count,'bytes':str(total)})
+                            next_progress=time.monotonic()+.25
+                    jobs.update(prior,archive_reconciliation={'completed_files':recent,'completed_file_count':count,
+                        'completed_files_truncated':count>len(recent),'bytes':str(total),
+                        'artifact_verified':False,'observed_at':time.time()})
             archive.mkdir(mode=0o700,exist_ok=True);private_directory(archive)
             binding={**binding,'writer_job_id':record['job_id'],'writer_hostname':socket.gethostname(),'updated_at':time.time()}
             store.change(lambda current:current.update(wal_archive=binding))
@@ -115,7 +150,7 @@ def arguments(selected,staging):
 
 def run(jobs,record,tools,directory,transport,progress,signal):
     staging=directory/'wal-capture';staging.mkdir(mode=0o700);private_directory(staging)
-    with archive_claim(jobs,record) as archive:
+    with archive_claim(jobs,record,cancel_signal=signal,progress=progress) as archive:
         segments=[]
         for path in archive.iterdir():
             if SEGMENT.fullmatch(path.name):_regular(path);segments.append(path)
@@ -126,25 +161,36 @@ def run(jobs,record,tools,directory,transport,progress,signal):
             private_file(staging/seed.name)
         seen=set();last_files=[];publication_error=[]
         completed_count=new_count=total_bytes=0
+        def archive_observation():
+            return {'completed_files':completed_count,'new_files':new_count,'bytes':str(total_bytes),
+                    'last_files':last_files,'native_record_verification':False,
+                    'resumed_after_segment':seed.name if seed is not None else None}
         def publish():
             nonlocal completed_count,new_count,total_bytes
-            receipts=publish_completed(staging,archive,record['source'],observed=seen)
-            completed_count+=len(receipts);new_count+=sum(item['published'] for item in receipts)
-            total_bytes+=sum(item['bytes'] for item in receipts)
-            last_files.extend(receipts);del last_files[:-10]
+            next_check=0
+            def check():
+                nonlocal next_check
+                if time.monotonic()<next_check:return
+                current=jobs.load(record['job_id'],record['owner'],record['endpoint_id'])
+                if current['cancel_requested']:signal.set()
+                jobs.update(record,archive_observation=archive_observation())
+                next_check=time.monotonic()+.25
+            check()
+            for receipt in iter_completed(staging,archive,record['source'],observed=seen,cancel_signal=signal,check_cancel=check):
+                completed_count+=1;new_count+=receipt['published'];total_bytes+=receipt['bytes']
+                last_files.append(receipt);del last_files[:-10]
+                check()
             # Retain the newest closed segment for native reconnect start
             # selection. Published older files live only in the archive.
             closed=[name for name in seen if re.fullmatch(r'[0-9A-F]{24}(?:\.gz|\.lz4)?',name)]
             latest=max(closed,key=lambda name:name[:24]) if closed else None
             for name in closed:
                 if name!=latest:(staging/name).unlink();seen.remove(name)
-            jobs.update(record,archive_observation={'completed_files':completed_count,
-                'new_files':new_count,'bytes':str(total_bytes),
-                'last_files':last_files,'native_record_verification':False,
-                'resumed_after_segment':seed.name if seed is not None else None})
+            jobs.update(record,archive_observation=archive_observation())
         def tick(event):
             try:progress(event);publish()
             except Exception as error:
+                if isinstance(error,ContinuityError) and signal.is_set():return
                 # observe_process disables a failing callback. Signal the tool
                 # first so publication errors cannot leave an unobserved writer.
                 publication_error.append(error);signal.set()
@@ -157,7 +203,7 @@ def run(jobs,record,tools,directory,transport,progress,signal):
             jobs.update(record,state='failed' if result['process_observation'].get('cleanup_confirmed') is True else 'unknown',error_type=type(publication_error[0]).__name__,
                         error_reason='Native WAL archive publication failed; reconcile the writer before resuming')
             return
-        publish()
+        if not signal.is_set():publish()
         observation=result['process_observation']
         if observation.get('cleanup_confirmed') is not True:state='unknown'
         elif observation.get('cancel_requested') or signal.is_set():state='cancelled'

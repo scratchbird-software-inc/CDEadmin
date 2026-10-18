@@ -7,10 +7,10 @@ import stat
 
 
 @contextmanager
-def exclusive_file_lock(descriptor):
+def exclusive_file_lock(descriptor, *, blocking=True):
     if os.name != 'nt':
         import fcntl
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
             yield
         finally:
@@ -34,9 +34,10 @@ def exclusive_file_lock(descriptor):
     kernel.UnlockFileEx.restype = wintypes.BOOL
     handle = msvcrt.get_osfhandle(descriptor)
     overlap = Overlapped()
-    # A synchronous exclusive lock waits for the preceding receipt writer.
+    # Receipt writers wait by default; job admission can request immediate
+    # contention reporting so its owner can cancel while waiting.
     # The stable lock file is separate from the atomically replaced JSON file.
-    if not kernel.LockFileEx(handle, 2, 0, 1, 0, ctypes.byref(overlap)):
+    if not kernel.LockFileEx(handle, 2 | (0 if blocking else 1), 0, 1, 0, ctypes.byref(overlap)):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
         yield

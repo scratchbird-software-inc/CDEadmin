@@ -106,3 +106,18 @@ def test_windows_publication_requests_exclusive_write_through_without_cross_volu
     monkeypatch.setattr(module,'os',SimpleNamespace(name='nt',fspath=actual_os.fspath))
     module._publish_exclusive(tmp_path/'source',tmp_path/'target')
     assert calls==[(str(tmp_path/'source'),str(tmp_path/'target'),8)]
+
+
+def test_publication_polls_cancellation_between_large_file_chunks_and_removes_the_partial_output(tmp_path):
+    archive=tmp_path/'archive';archive.mkdir();path=tmp_path/NAME
+    source={**SOURCE,'wal_segment_bytes':2*1024**2}
+    content=native_shaped(wal_segment_bytes=2*1024**2)
+    content=content[:8]+struct.pack('<Q',3*2*1024**2)+content[16:]+b'\0'*1024**2
+    path.write_bytes(content);signal=threading.Event();checks=[]
+    def check():
+        checks.append(True)
+        if len(checks)==3:signal.set()
+    with pytest.raises(ContinuityError,match='publication was cancelled'):
+        publish_file(path,archive,source,cancel_signal=signal,check_cancel=check)
+    assert len(checks)==3 and not list(archive.iterdir())
+    assert path.read_bytes()==content and not list(tmp_path.glob('.scratchrobin-wal-*'))

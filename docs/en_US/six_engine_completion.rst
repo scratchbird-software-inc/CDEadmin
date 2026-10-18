@@ -675,6 +675,12 @@ timeline-continuity and recovery-target verification. Completed older staging
 segments are removed after publication while the latest reconnect segment is
 retained. Progress receipts keep bounded recent file details and cumulative
 counts. Cancellation stops the receiver and retains the completed archive.
+Reconciliation streams closed-file observations rather than retaining every
+receipt in memory. It keeps total counts/bytes and ten recent details, with an
+explicit truncation flag. Archive lock waits and file publication observe
+cancellation, including cancellation written by another application worker.
+Cancelled publication leaves already completed archive files intact for a later
+reviewed resume.
 A publication failure requests native cancellation even if the generic process
 observer disables a failing progress callback.
 

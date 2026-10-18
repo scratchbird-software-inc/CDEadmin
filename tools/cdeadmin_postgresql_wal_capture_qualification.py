@@ -25,6 +25,9 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
            'source_sha256':{}}
     for directory in ('web/pgadmin/cdeadmin/providers/postgresql','web/pgadmin/cdeadmin/workspace','web/pgadmin/cdeadmin/sdk'):
         for path in (ROOT/directory).glob('*.py'):proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for name in ('fileio.py','store.py'):
+        path=ROOT/'web/pgadmin/cdeadmin/operations'/name
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False

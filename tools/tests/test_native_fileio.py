@@ -5,6 +5,9 @@ import queue
 import importlib.util
 from pathlib import Path
 import subprocess
+import threading
+
+import pytest
 
 # The helper is stdlib-only; exercise actual host APIs without importing the app.
 _spec = importlib.util.spec_from_file_location('native_receipt_fileio',
@@ -95,3 +98,26 @@ def test_private_policy_detects_additional_reader(tmp_path):
     assert not has_private_file_permissions(path)
     private_file(path)
     assert has_private_file_permissions(path)
+
+
+def test_nonblocking_native_lock_reports_contention_without_waiting_for_the_owner(tmp_path):
+    context=multiprocessing.get_context('spawn');messages=context.Queue();release=context.Event()
+    path=tmp_path/'nonblocking.lock';process=context.Process(target=lock_worker,args=(str(path),messages,release))
+    descriptor=None;timer=None
+    try:
+        process.start();assert messages.get(timeout=15)=='started';assert messages.get(timeout=15)=='locked'
+        descriptor=os.open(path,os.O_RDWR)
+        # If a regression blocks, release its owned fixture so the test fails
+        # instead of leaving a child or locked test process behind.
+        timer=threading.Timer(3,release.set);timer.start()
+        with pytest.raises(OSError):
+            with exclusive_file_lock(descriptor,blocking=False):pytest.fail('A contended native lock was acquired')
+    finally:
+        if timer is not None:timer.cancel()
+        if descriptor is not None:os.close(descriptor)
+        release.set()
+        if process.pid is not None:
+            process.join(timeout=15)
+            if process.is_alive():process.terminate();process.join(timeout=5)
+        messages.close();messages.join_thread()
+    assert process.exitcode==0
