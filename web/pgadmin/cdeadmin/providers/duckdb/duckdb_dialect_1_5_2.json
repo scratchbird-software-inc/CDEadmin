@@ -74788,22 +74788,22 @@
       "sha256": "3df1b67c01f59581c71ee8100aaefb7ce8e98f69000c3949dfac727a16e8e67b"
     },
     {
-      "artifact": "duckdb-metadata585/proof.json",
+      "artifact": "duckdb-metadata607/proof.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-native-comment-parser",
       "evidence_kind": "parser_acceptance",
       "format": "native DuckDB object-comment qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "4f2add380e234fb9dfc74113f115220f308f109d89b2f320b09cac2fce54685e"
+      "sha256": "d5300f8ed3d60b95fd9cd57b47de0f33d0a736aa5414c708e72a93c378d1811b"
     },
     {
-      "artifact": "duckdb-metadata585/proof.json",
+      "artifact": "duckdb-metadata607/proof.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-native-comment-execution",
       "evidence_kind": "live_execution",
       "format": "native DuckDB object-comment qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "4f2add380e234fb9dfc74113f115220f308f109d89b2f320b09cac2fce54685e"
+      "sha256": "d5300f8ed3d60b95fd9cd57b47de0f33d0a736aa5414c708e72a93c378d1811b"
     }
   ],
   "provider_id": "org.cdeadmin.duckdb",

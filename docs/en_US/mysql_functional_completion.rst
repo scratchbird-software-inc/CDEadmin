@@ -313,7 +313,9 @@ Unicode code-point checks, pending transactions/savepoints and pooled reuse on
 both Connector/Python implementations. This does not qualify changes of
 character set or SQL mode within a parameterized multi-statement batch.
 
-The consolidated administration gate covers all 105 declared tasks. Independent
+The existing consolidated administration receipt covers 105 declared tasks.
+Three additional spatial-reference-system tasks have separate native
+qualification; this does not expand the older receipt's recorded scope. Independent
 catalog reconciliation compares 30 categories plus native DDN child facts for
 privileged and restricted accounts and checks navigator reachability. These are
 separate from broader product, browser and platform acceptance.

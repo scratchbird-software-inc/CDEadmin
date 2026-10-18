@@ -72,9 +72,10 @@ MySQL
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
 
-The first native source comparison identifies spatial reference systems,
-foreign-server definitions and component-backed masking policies as explicit
-adapter obligations. Masking-policy service installation and its native
+Native spatial-reference catalog and typed management operations are implemented;
+their wider server DDN integration remains open. The first native source
+comparison also identifies foreign-server definitions and component-backed
+masking policies as explicit adapter obligations. Masking-policy installation and its native
 management privilege require separate admission. Server-variable discovery must
 also be reconciled beyond the current curated selection; that selection cannot
 establish catalog completeness.

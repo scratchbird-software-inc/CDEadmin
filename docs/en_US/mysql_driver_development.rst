@@ -1211,3 +1211,29 @@ comparing identity; newly emitted target names use escaped backticks, which rema
 valid under ANSI_QUOTES. Complete bodies and literals are retained under their
 recorded SQL mode. A change in SQL mode must never reinterpret a stored identifier
 as a string literal or discard a native body.
+Native spatial reference systems
+--------------------------------
+
+MySQL 9.7 exposes a server-scoped spatial-reference-system catalog with exact
+SRIDs, names, organizations, organization coordinate-system IDs, native WKT and
+descriptions. Native catalog facts retain all six fields. SRIDs are object
+identities; equal human-readable names do not merge systems. This family is
+specific to the MySQL profile and is not advertised by the MariaDB adapter.
+
+Typed create, IF NOT EXISTS, complete replacement and drop operations use the
+existing provider review/apply interface. Text attributes use native driver
+bindings in the selected SQL mode. Both numeric IDs use the native unsigned
+32-bit range. Replacement preserves its exact target ID and requires explicit
+confirmation. Review binds the native version, instance UUID, authenticated and
+effective principals and active roles; application rechecks that identity and
+the reviewed definition before dispatch. Native in-use and privilege refusals
+remain failures. DDL executes on a dedicated connection because MySQL owns its
+implicit transaction decision. An interactive session is never repurposed.
+Native warnings are captured before subsequent catalog queries, including
+IF NOT EXISTS acknowledgement without replacement.
+
+``tools/cdeadmin_mysql_spatial_reference_qualification.py`` compares the full
+observed native catalog independently and exercises pure/C extension drivers,
+normal and ANSI/NO_BACKSLASH_ESCAPES modes, all attributes, changed reviews,
+in-use spatial columns and restricted-user refusal. The broader server DDN,
+recovery/lifecycle and product-inventory requirements remain separate.

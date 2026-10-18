@@ -105,3 +105,16 @@ def test_changed_compiled_statement_is_not_dispatched(fixture):
     with pytest.raises(RelationalClientError, match='operation changed'):
         ADMINISTRATION.apply(client, planned)
     assert client._connections == []
+
+
+def test_a_forged_path_cannot_redirect_a_native_resource_identity(fixture):
+    owner, client, route, target = fixture
+    owner.execute('CREATE TABLE other(id INT)')
+    redirected = deepcopy(target())
+    redirected['display_path'][-1] = 'other'
+    redirected['display_name'] = 'other'
+    planned = ADMINISTRATION.plan(request(redirected, route))
+    with pytest.raises(RelationalClientError, match='changed since review') as failure:
+        ADMINISTRATION.apply(client, planned)
+    assert failure.value.native_dispatched is False
+    assert owner.execute("SELECT table_name,comment FROM duckdb_tables() WHERE table_name IN ('t','other') ORDER BY table_name").fetchall() == [('other', None), ('t', None)]

@@ -30,7 +30,7 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 105,
+    "authoritative_task_count": 108,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
@@ -109,6 +109,9 @@
       "visual_admin.role.set_default",
       "visual_admin.session.terminate_connection",
       "visual_admin.session.terminate_query",
+      "visual_admin.spatial-reference-system.alter",
+      "visual_admin.spatial-reference-system.create",
+      "visual_admin.spatial-reference-system.drop",
       "visual_admin.system-variable.reset_persist",
       "visual_admin.system-variable.set_global",
       "visual_admin.system-variable.set_persist",
@@ -138,7 +141,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 105,
+    "implemented_task_count": 108,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44473,7 +44476,8 @@
     "mysql-9.7.0-replication-native-20261012",
     "mysql-9.7.0-object-changes-native-20261012",
     "mysql-9.7.0-views-native-20261012",
-    "mysql-9.7.0-checks-native-20261012"
+    "mysql-9.7.0-checks-native-20261012",
+    "mysql-9.7.0-spatial-reference-execution"
   ],
   "profile_id": "mysql-native",
   "proof_records": [
@@ -44755,6 +44759,24 @@
       "format": "scratchrobin.native-events-qualification.v1",
       "license_id": "PostgreSQL",
       "sha256": "8ae072d1ea8134c3c4b835b767f6a22f060c9b229e117d21d5628181ceff6dc3"
+    },
+    {
+      "artifact": "mysql-spatial607/proof.json",
+      "authority": "MySQL 9.7.0 runtime; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-spatial-reference-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "native spatial reference qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "26aaf48dd9391dfeec5fc593ff19e93aafdd61ffa40de1841742ac610e6385ec"
+    },
+    {
+      "artifact": "mysql-spatial607/proof.json",
+      "authority": "MySQL 9.7.0 runtime; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-spatial-reference-execution",
+      "evidence_kind": "live_execution",
+      "format": "native spatial reference qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "26aaf48dd9391dfeec5fc593ff19e93aafdd61ffa40de1841742ac610e6385ec"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -45935,6 +45957,58 @@
       "statements": [
         "KILL QUERY 185"
       ]
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-spatial-reference-parser",
+        "mysql-9.7.0-spatial-reference-execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4"
+      ],
+      "source": "CREATE OR REPLACE SPATIAL REFERENCE SYSTEM 4294967001 NAME %s DEFINITION %s ORGANIZATION %s IDENTIFIED BY 4294967295 DESCRIPTION %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE OR REPLACE SPATIAL REFERENCE SYSTEM 4294967001 NAME %s DEFINITION %s ORGANIZATION %s IDENTIFIED BY 4294967295 DESCRIPTION %s"
+      ],
+      "task_id": "visual_admin.spatial-reference-system.alter"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-spatial-reference-parser",
+        "mysql-9.7.0-spatial-reference-execution"
+      ],
+      "required_bindings": [
+        "parameter_1",
+        "parameter_2",
+        "parameter_3",
+        "parameter_4"
+      ],
+      "source": "CREATE SPATIAL REFERENCE SYSTEM 4294967001 NAME %s DEFINITION %s ORGANIZATION %s IDENTIFIED BY 4294967295 DESCRIPTION %s",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "CREATE SPATIAL REFERENCE SYSTEM 4294967001 NAME %s DEFINITION %s ORGANIZATION %s IDENTIFIED BY 4294967295 DESCRIPTION %s"
+      ],
+      "task_id": "visual_admin.spatial-reference-system.create"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-spatial-reference-parser",
+        "mysql-9.7.0-spatial-reference-execution"
+      ],
+      "required_bindings": [],
+      "source": "DROP SPATIAL REFERENCE SYSTEM 4294967001",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "DROP SPATIAL REFERENCE SYSTEM 4294967001"
+      ],
+      "task_id": "visual_admin.spatial-reference-system.drop"
     },
     {
       "task_id": "visual_admin.system-variable.reset_persist",

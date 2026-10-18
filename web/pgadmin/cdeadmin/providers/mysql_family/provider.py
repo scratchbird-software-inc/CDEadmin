@@ -29,6 +29,7 @@ from ..relational_admin import (
 from ..distributed_sql import mysql_route
 from ..form_contracts import provider_form_contract
 from .mariadb_connections import Connector as _MariaDBConnectorFacade
+from .administration import MySQLAdministration
 
 
 MYSQL_PROFILE = PilotProfile(
@@ -39,7 +40,7 @@ MYSQL_PROFILE = PilotProfile(
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
      'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
      'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric',
-     'character-set', 'collation', 'storage-engine'),
+     'character-set', 'collation', 'storage-engine', 'spatial-reference-system'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
     semantic_sql_dialect={
         'contract_complete': True,
@@ -183,6 +184,7 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        common['spatial-reference-system'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         for kind in ('character-set', 'collation', 'storage-engine'):
             common[kind] = frozenset({'inspect'})
         from ..mysql_events import OPERATIONS as event_operations
@@ -250,7 +252,8 @@ def _administration(profile):
         from ..mariadb_partitions import OPERATIONS as partition_operations
         for kind, operations in partition_operations.items():
             common[kind] = common[kind] | operations
-    return RelationalAdministration(RelationalAdminDialect(
+    adapter = MySQLAdministration if profile is MYSQL_PROFILE else RelationalAdministration
+    return adapter(RelationalAdminDialect(
         engine_id=profile.engine_id,
         quote_open='`',
         quote_close='`',
@@ -944,6 +947,13 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
                            'autocommit_off')
+
+    def plan_admin_operation(self, request):
+        planned = super().plan_admin_operation(request)
+        if 'mysql_spatial_reference' in planned.get('provider_payload', {}).get('compiled', {}):
+            from .spatial_reference_systems import bind_review
+            return bind_review(self, planned)
+        return planned
 
     _OPTION_NAMES = {
         'backup_logical': {
@@ -1870,7 +1880,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             if kind in {'user', 'role', 'tablespace', 'plugin', 'component',
                     'loadable-function', 'resource-group', 'system-variable', 'session', 'metric',
                     'character-set', 'collation', 'storage-engine', 'replication-channel',
-                    'group-replication', 'group-replication-member', 'server-link', 'lock', 'lock-wait',
+                    'group-replication', 'group-replication-member', 'server-link', 'spatial-reference-system', 'lock', 'lock-wait',
                     'binary-log', 'binary-log-status', 'binary-log-event', 'general-log-entry',
                     'slow-query', 'log-configuration', 'tls-configuration'}:
                 resource.setdefault('native', {})['navigator_scope'] = 'server'
@@ -2293,6 +2303,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             add('tablespace', [], name, {'engine': engine})
         plugin_rows = optional('SHOW PLUGINS')
         if profile is MYSQL_PROFILE:
+            from .spatial_reference_systems import SELECT as srs_select, normalized as srs_normalized
+            for row in optional(srs_select + ' ORDER BY SRS_ID'):
+                add('spatial-reference-system', [], str(row[1]), {
+                    **srs_normalized(row),
+                    'has_organization': row[2] is not None,
+                    'has_description': row[5] is not None,
+                    'server_uuid': resources.get('server:MySQL', {}).get('native', {}).get('server_uuid'),
+                })
             keyring_status = optional_records('SELECT STATUS_KEY, STATUS_VALUE FROM performance_schema.keyring_component_status')
             keyring_active = any(row.get('status_key') == 'Component_status' and row.get('status_value') == 'Active' for row in keyring_status) or any(
                 str(row[0]).startswith('keyring_') and str(row[1]).upper() == 'ACTIVE' for row in plugin_rows)
@@ -2609,7 +2627,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
-            'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'system-variable',
+            'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'spatial-reference-system', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {

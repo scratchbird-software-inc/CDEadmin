@@ -99,7 +99,9 @@ def apply(adapter, client, request, connection=None):
             return next((row for row in _resources(connection, {'session_catalog': True})
                          if row['resource_id'] == target['resource_id']), None)
         live = current()
-        if live is None or signature(live) != intent['baseline']:
+        if (live is None or live['resource_kind'] != target['resource_kind'] or
+                live['display_path'] != target['display_path'] or
+                signature(live) != intent['baseline']):
             raise RelationalClientError('DuckDB object identity or comment changed since review')
         dispatched = True
         connection.execute(compiled['statements'][0]['source'])
