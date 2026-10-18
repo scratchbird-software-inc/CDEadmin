@@ -142,6 +142,9 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
                         rows, result = execute('SELECT %s;SELECT %s',[17])
                         assert rows == [[17]] and result['error']['query_dispatch']=='partially_started' and not result['session_reuse_blocked'],result
                         checks.append({'name':'native-HTTP-mixed-settings-exact-parameters-and-explicit-partial-dispatch','passed':True})
+                        rows, result = execute("SET NAMES latin1;SELECT 'é €';SET NAMES utf8mb4;SELECT '雪😀'",{})
+                        assert rows == [['é €'],['雪😀']] and not result.get('error'),result
+                        checks.append({'name':'native-HTTP-unbound-charset-changing-batch','passed':True})
                         checks.append({'name':'native-HTTP-literal-bindings-execution-refusal-and-session-reuse','passed':True})
                     post('close_session', session_id=session_id)
                     if browser_binary and pure is not False:
@@ -182,8 +185,9 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
         for flag in ('--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1800,1200'):
             options.add_argument(flag)
         options.add_argument('--user-data-dir=' + str(output / 'browser-profile'))
-        options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+        options.set_capability('goog:loggingPrefs', {'browser': 'ALL', 'performance':'ALL'})
         driver = webdriver.Chrome(options=options, service=Service(driver_binary))
+        driver.execute_cdp_cmd('Network.enable',{})
         driver.get('http://127.0.0.1:' + str(http.server_port) + '/browser/')
         wait = WebDriverWait(driver, 90, ignored_exceptions=(StaleElementReferenceException,))
         title = 'MySQL' if engine == 'mysql' else 'MariaDB'
@@ -195,9 +199,14 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
                     node, sid)), None)
         label = wait.until(owned).text
         expand(wait, label, ('Connectors', title))
+        # A fresh browser may need its own verification even when the HTTP
+        # qualifier admitted the registration. Expansion deliberately yields
+        # control while that real prompt is open.
+        if complete_endpoint_prompt(driver, password, timeout=5):
+            expand(wait, label, ('Connectors', title))
         database = wait_for_tree_item(wait, 'sr_workspace', ('Connectors', title, label))
         invoke_context_action(wait, driver, database, ('Database workspace', 'Open ' + title + ' SQL editor...'), handle_endpoint_prompt=False)
-        assert complete_endpoint_prompt(driver, password, timeout=15)
+        complete_endpoint_prompt(driver, password, timeout=15)
         summary = wait.until(lambda d: next((n for n in d.find_elements(By.TAG_NAME, 'summary') if n.is_displayed() and n.text == 'Source tools'), None))
         summary.click(); checks = []
         def run_batch(source, observed):
@@ -300,10 +309,36 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
                     for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="MySQL partial execution"]')))
             wait.until(lambda browser:any(node.is_displayed() and node.text=='17' for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
             checks.append({'name':'native-browser-partial-dispatch-notice-and-completed-result','passed':True})
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()
+            fill_fields(wait,['Query parameters (JSON object or array)={}'])
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',data); data.click()
+            run_batch("SET NAMES latin1;SELECT 'é € unbound';SET NAMES utf8mb4;SELECT '雪😀 unbound'",
+                lambda browser:any(node.is_displayed() and node.text=='雪😀 unbound'
+                    for node in browser.find_elements(By.CSS_SELECTOR,'[role="gridcell"]')))
+            checks.append({'name':'native-browser-unbound-charset-changing-batch','passed':True})
         driver.save_screenshot(str(output / 'native-checking.png'))
         errors = [row for row in driver.get_log('browser') if row['level'] == 'SEVERE']
         assert not errors, errors
         return {'version': driver.capabilities['browserVersion'], 'checks': checks, 'console_errors': errors}
+    except Exception:
+        if driver is not None:
+            driver.save_screenshot(str(output / 'browser-failure.png'))
+            (output / 'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
+            replies=[]
+            for item in driver.get_log('performance'):
+                message=json.loads(item['message'])['message']
+                if message['method']!='Network.responseReceived':continue
+                response=message['params']['response']
+                if not any(path in response['url'] for path in ('/browser/engine_type/children/','/browser/server/children/')):continue
+                observed={'url':response['url'],'status':response['status']}
+                try:
+                    payload=json.loads(driver.execute_cdp_cmd('Network.getResponseBody',{'requestId':message['params']['requestId']})['body'])
+                    observed['nodes']=[{key:node.get(key) for key in ('_id','_type','label')} for node in payload.get('data',[])]
+                except Exception as error:observed['error_type']=type(error).__name__
+                replies.append(observed)
+            (output / 'browser-failure-tree-replies.json').write_text(json.dumps(replies,indent=2)+'\n')
+            (output / 'browser-failure-console.json').write_text(json.dumps(driver.get_log('browser'),indent=2)+'\n')
+        raise
     finally:
         if driver is not None: driver.quit()
         http.shutdown(); thread.join(timeout=10)

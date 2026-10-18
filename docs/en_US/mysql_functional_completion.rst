@@ -135,8 +135,9 @@ values, multiple results, native refusals, cancellation and lost commit replies:
 
     python tools/cdeadmin_mysql_parameter_boundary_qualification.py --evidence /work/mysql-parameter-boundaries
 
-Parameterized batches now consume each command's results before observing its
-successor's native SQL mode and character sets. Values and identifiers are
+Parameterized and explicit setting/call/client-delimited batches now consume
+each command's results before observing its successor's native SQL mode and
+character sets. Values, source literals and identifiers are
 encoded with those observations, including changes made by preceding commands
 and client-delimited stored procedures. Named and positional bindings retain
 their own lexical markers; a later admission failure reports prior dispatch

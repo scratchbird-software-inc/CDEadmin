@@ -136,6 +136,24 @@ def qualify(output):
                             rows, following = sql('SELECT COUNT(*) FROM pending')
                             assert rows == [(2,)] and not following['error']
                             checks.append({'name':'later-source-encoding-refusal-preserves-complete-native-command-boundary'})
+                            unbound_cases = [
+                                ("SET NAMES latin1;SELECT 'é €';SET NAMES utf8mb4;SELECT '雪😀'", [('é €',),('雪😀',)]),
+                                ("SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';SELECT 'literal'' slash\\'", [("literal' slash\\",)]),
+                                (r"SET SESSION sql_mode='';SELECT 'literal\' slash\\'", [("literal' slash\\",)]),
+                                ("SET SESSION sql_mode='ANSI_QUOTES,NO_BACKSLASH_ESCAPES';SELECT 1 AS \"back\\\"", [(1,)]),
+                                ("DELIMITER //\nSET SESSION sql_mode='NO_BACKSLASH_ESCAPES'//\nSELECT 'literal'' slash\\'//\nDELIMITER ;", [("literal' slash\\",)]),
+                                ("DELIMITER $$\nSET NAMES latin1$$\nSELECT 'é €'$$\nDELIMITER ;\nSET NAMES utf8mb4;SELECT '雪😀';", [('é €',),('雪😀',)]),
+                                ("SET NAMES latin1;SELECT '%s','%(value)s';SET NAMES utf8mb4", [('%s','%(value)s')]),
+                            ]
+                            for source, expected in unbound_cases:
+                                rows, result = sql(source)
+                                assert rows == expected and not result['error'],(source,rows,result)
+                                work.execute('ROLLBACK TO SAVEPOINT sr_pending')
+                                checks.append({'name':'unbound-native-command-language-and-exact-source-encoding','source':source})
+                            _rows, bad_source = sql("SET NAMES latin1;SELECT '雪';SET NAMES utf8mb4")
+                            assert bad_source['error']['query_dispatch']=='partially_started' and not bad_source['session_reuse_blocked'],bad_source
+                            work.execute('SET NAMES utf8mb4');work.execute("SET SESSION sql_mode=''")
+                            checks.append({'name':'unbound-encoding-refusal-preserves-session-with-explicit-prior-dispatch'})
                             original = mysql_values.bound_source; entered = threading.Event(); release = threading.Event()
                             def pause_after_conversion(*args, **kwargs):
                                 encoded = original(*args, **kwargs); entered.set()
@@ -206,6 +224,12 @@ def qualify(output):
                                 pages=collect(client,client.execute(helper,{'source':source,'parameters':{'euro':'€','unicode':'雪😀'}}))
                                 assert not pages[-1]['payload']['error'],pages[-1]['payload']
                                 assert [row for page in pages for row in page['payload']['rows']]==[('€',),('雪😀',)]
+                                source=('DELIMITER //\nCREATE PROCEDURE charset_unbound() BEGIN SET NAMES latin1; END//\n'
+                                        "DELIMITER ;\nCALL charset_unbound();SELECT 'é €';SET NAMES utf8mb4;"
+                                        "DROP PROCEDURE charset_unbound;SELECT '雪😀';")
+                                pages=collect(client,client.execute(helper,{'source':source}))
+                                assert not pages[-1]['payload']['error'],pages[-1]['payload']
+                                assert [row for page in pages for row in page['payload']['rows']]==[('é €',),('雪😀',)]
                             finally: client.close_session(helper)
                             work.execute('ROLLBACK TO SAVEPOINT sr_pending')
                             oracle.execute('SELECT COUNT(*) FROM `' + database + '`.pending'); assert oracle.fetchone() == (1,)

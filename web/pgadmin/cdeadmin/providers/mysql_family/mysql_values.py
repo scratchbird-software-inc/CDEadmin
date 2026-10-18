@@ -288,13 +288,15 @@ class Cursor:
     def execute(self, operation, params=None, *args, **kwargs):
         self._script = None
         self._commands_dispatched = 0
-        if (bool(params) and isinstance(operation, str) and not args and
+        changes_context = isinstance(operation, str) and re.search(
+            r'\b(?:SET|CALL)\b|^[ \t]*DELIMITER[ \t]+', operation, re.I | re.M | re.A) is not None
+        if ((bool(params) or changes_context) and isinstance(operation, str) and not args and
                 not (set(kwargs) - {'map_results'}) and not kwargs.get('map_results', False)):
             from .mysql_script import Statements
-            if not isinstance(params, (Mapping, list, tuple)):
+            if params and not isinstance(params, (Mapping, list, tuple)):
                 raise MySQLParameterAdmissionError('MySQL parameters must be an object or array')
             self._script = Statements(operation)
-            self._parameters = params
+            self._parameters = params if params else None
             self._parameter_position = 0
             self._next_command()
             return None
@@ -309,12 +311,14 @@ class Cursor:
             version, mode = observed_language(self.connection)
             source = self._script.next(version, mode)
             if source is None:
-                if not isinstance(self._parameters, Mapping) and self._parameter_position != len(self._parameters):
+                if self._parameters is not None and not isinstance(self._parameters, Mapping) and self._parameter_position != len(self._parameters):
                     raise MySQLParameterAdmissionError('Unused MySQL query parameters remain after the dispatched commands')
                 self._script = None
                 return False
-            spans = list(parameter_spans(source, set(mode.split(',')), dollar_quotes=available(version)))
-            if isinstance(self._parameters, Mapping):
+            spans = list(parameter_spans(source, set(mode.split(',')), dollar_quotes=available(version))) if self._parameters is not None else []
+            if self._parameters is None:
+                selected = None
+            elif isinstance(self._parameters, Mapping):
                 if any(name is None or name not in self._parameters for _start, _end, name in spans):
                     raise MySQLParameterAdmissionError('MySQL parameters do not match this native command')
                 selected = {name:self._parameters[name] for _start, _end, name in spans}

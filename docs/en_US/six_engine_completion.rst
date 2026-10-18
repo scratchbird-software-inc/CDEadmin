@@ -230,6 +230,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        mapping, through retained-session and pooled reuse. Parameterized batches
        reobserve SQL mode and character sets at each framed command boundary;
        later local refusals preserve completed results and report partial dispatch.
+       Unbound explicit setting/call and client-delimited batches use the same
+       observed command boundaries and preserve source-literal character sets.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing.
@@ -297,6 +299,11 @@ Persistent ScratchBird history clients and all six collector integrations remain
 wired. History testing is owner-deferred. Human form validation and native
 Windows/macOS qualification remain with their assigned teams. Those obligations
 are distinct from remaining backend implementations and native qualification.
+
+Navigator child requests are coalesced for the same parent and metadata state.
+A refresh, parent replacement or route change during a pending read discards
+the stale response and loads the current hierarchy. A detached empty parent
+cannot hide the replacement's children or publish facts from its prior route.
 
 Source audit baseline, 2026-10-16
 =================================
@@ -1570,3 +1577,16 @@ consumed. Exact values survive native mode/charset changes, and a later local
 refusal reports partial dispatch without replay. Undelimited compound programs
 retain their native whole-command port. Future-state source preflight, wider
 procedural scopes and broader native operational/product acceptance remain open.
+
+Unbound MySQL setting-changing source
+--------------------------------------
+
+Unbound explicit SET/CALL and client-delimited source now advances through
+observed native command contexts as well. Unicode source literals and identifiers
+use the selected command's client charset, and native quoting uses its actual
+SQL mode. Literal placeholder text remains unbound. Later source-encoding
+refusals identify earlier dispatch while retaining a confirmed usable session.
+Native qualification covers both connector implementations, independent pending
+work, stored-procedure charset changes, client delimiters and HTTP/browser flow.
+Wider computed/procedural contexts and future-state preflight retain separate
+acceptance.

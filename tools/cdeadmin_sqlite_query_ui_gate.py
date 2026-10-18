@@ -130,7 +130,13 @@ def _set_query(driver, wait, source):
         remaining = source
         actual = ''
         for _attempt in range(4):
-            editor.send_keys(remaining)
+            if any(ord(character)>0xffff for character in remaining):
+                # ChromeDriver send_keys rejects supplementary Unicode. The
+                # browser's real text-input port preserves the same selection
+                # replacement, including pasted SQL containing these scalars.
+                driver.execute_cdp_cmd('Input.insertText', {'text':remaining})
+            else:
+                editor.send_keys(remaining)
             actual = driver.execute_script('''
                 const editor = arguments[0];
                 const lines = [...editor.querySelectorAll('.cm-line')];
