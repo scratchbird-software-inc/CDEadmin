@@ -124,10 +124,13 @@ being reported as invalid SQL. Uncertain native failures block session reuse.
 expression-depth limits, pending rows, temporary objects and the unchanged native
 transaction identity for file and authorized memory sessions. Parsing CREATE,
 INSERT, DELETE, transaction commands, INSTALL, LOAD and SET does not submit those
-commands for execution. Invalid source is not echoed in diagnostics. Native
-PRAGMA expansion can prevent mapping generated statements back to the original
-script; such framing remains explicitly unavailable. Installed third-party
-parser callbacks retain their separate capability qualification obligations.
+commands for execution. Invalid source is not echoed in diagnostics. When native
+PRAGMA expansion produces generated SQL, DuckDB's own lexical tokens identify
+the original script units. UTF-8 byte boundaries are mapped to the exact original
+Unicode source; comments, quoted semicolons and dollar strings remain intact.
+Script execution submits the original PRAGMA once, preserving its native
+expansion and transaction behavior. Installed third-party parser callbacks
+retain separate capability qualification; unframed source remains unavailable.
 
 Native object comments
 ----------------------

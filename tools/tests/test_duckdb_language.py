@@ -43,7 +43,7 @@ def test_provider_requires_retained_idle_session_but_never_runs_sql():
         'source': 'SELECT 1', 'script': True})
     assert result['grammar_valid'] and result['script_ready']
     provider.client._require_idle.assert_called_once_with(handle)
-    handle.extract_statements.assert_called_once_with('SELECT 1')
+    assert handle.extract_statements.call_args_list[0].args==('SELECT 1',)
     handle.execute.assert_not_called()
     with pytest.raises(Exception, match='unavailable'):
         provider.validate_source_without_execution({
@@ -95,3 +95,37 @@ def test_native_pragma_catalog_refusal_is_not_reported_as_invalid_grammar():
     with duckdb.connect() as handle:
         result=analyze('PRAGMA deliberately_unknown_pragma',parser=handle.extract_statements)
         assert result['grammar_valid'] is None and result['diagnostics'][0]['code']=='DUCKDB_PARSE_CONTEXT'
+
+
+def test_native_pragma_expansion_keeps_original_unicode_comments_and_script_boundaries():
+    import duckdb
+    source="-- lead; é😀\nPRAGMA table_info('not;executed');\nSELECT 'é;😀', $$body; value$$; /* trailing; comment */"
+    with duckdb.connect() as handle:
+        result=analyze(source,script=True,parser=handle.extract_statements)
+        assert result['grammar_valid'] and result['script_ready'] and len(result['statements'])==2
+        first,second=result['statements']
+        assert first['source']=="-- lead; é😀\nPRAGMA table_info('not;executed');"
+        assert second['source']=="\nSELECT 'é;😀', $$body; value$$;"
+        assert first['native_expanded_types']==['SELECT']
+        for statement in result['statements']:
+            assert source[statement['start']:statement['end']]==statement['source']
+
+
+def test_native_framing_skips_empty_units_without_splitting_quoted_identifiers():
+    import duckdb
+    source=';; PRAGMA table_info(\'missing\');; SELECT 1 AS "semi; é"; -- tail;'
+    with duckdb.connect() as handle:
+        result=analyze(source,script=True,parser=handle.extract_statements)
+        assert result['grammar_valid'] and len(result['statements'])==2
+        assert result['statements'][1]['source']==' SELECT 1 AS "semi; é";'
+
+
+def test_generated_native_sql_in_a_comment_cannot_replace_the_original_command():
+    import duckdb
+    source="PRAGMA table_info('pending'); -- SELECT * FROM pragma_table_info('pending');"
+    with duckdb.connect() as handle:
+        result=analyze(source,script=True,parser=handle.extract_statements)
+        assert result['grammar_valid'] and result['script_ready']
+        assert len(result['statements'])==1
+        assert result['statements'][0]['source']=="PRAGMA table_info('pending');"
+        assert result['statements'][0]['start']==0

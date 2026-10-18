@@ -70,6 +70,12 @@ def test_native_script_sequences_and_stops_at_first_error(tmp_path):
         assert result['state'] == 'complete'
         assert len(studio.calls) == 3
         assert handle.execute('SELECT count(*) FROM facts').fetchone() == (1,)
+        pragmas=Studio()
+        original="-- original; é😀\nPRAGMA table_info('facts'); SELECT 'é;😀';"
+        expanded=run(pragmas,original)
+        assert expanded['state']=='complete' and len(pragmas.calls)==2
+        assert pragmas.calls[0]=="-- original; é😀\nPRAGMA table_info('facts');"
+        assert pragmas.calls[1]==" SELECT 'é;😀';"
         failed = run(studio, 'SELECT 1; SELECT absent_column; '
             'CREATE TABLE never_submitted(i INTEGER);')
         assert failed['state'] == 'stopped' and failed['stop_reason'] == 'error'

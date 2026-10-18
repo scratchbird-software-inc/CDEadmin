@@ -46,6 +46,13 @@ def qualify(output):
                 assert handle.execute("SELECT current_setting('max_expression_depth')").fetchone()==(200,)
                 assert handle.execute('SELECT current_transaction_id()').fetchone()[0]==transaction
                 unknown=validate('PRAGMA deliberately_unknown_pragma');assert unknown['grammar_valid'] is None and unknown['diagnostics'][0]['code']=='DUCKDB_PARSE_CONTEXT'
+                original="-- retained; é😀\nPRAGMA table_info('pending'); SELECT 'é;😀', $$body; text$$; /* tail; */"
+                expanded=validate(original,True)
+                assert expanded['grammar_valid'] and expanded['script_ready'] and len(expanded['statements'])==2
+                assert expanded['statements'][0]['source']=="-- retained; é😀\nPRAGMA table_info('pending');"
+                assert expanded['statements'][0]['native_expanded_types']==['SELECT']
+                for statement in expanded['statements']:assert original[statement['start']:statement['end']]==statement['source']
+                assert handle.execute('SELECT * FROM pending').fetchall()==[(42,)]
                 secret="SELECT 'do-not-echo-private-source' FROM ;";invalid=validate(secret)
                 assert invalid['grammar_valid'] is False and 'do-not-echo-private-source' not in json.dumps(invalid)
                 handle.rollback();assert handle.execute('SELECT * FROM pending').fetchall()==[]
@@ -53,6 +60,7 @@ def qualify(output):
                     'changed_native_parser_setting_observed':True,'submitted_mutations_and_transaction_commands_not_executed':True,
                     'pending_rows_temporary_objects_and_transaction_identity_preserved':True,
                     'native_catalog_refusal_not_reported_as_grammar_failure':True,'invalid_source_not_echoed':True})
+                proof['checks'][-1]['native_pragma_rewrite_and_unicode_original_framing_verified']=True
             finally:client.close()
         proof['complete']=True
     finally:(output/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
