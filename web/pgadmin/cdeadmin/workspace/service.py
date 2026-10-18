@@ -1628,6 +1628,13 @@ class ProviderWorkspaceService:
         except RelationalClientError:raise ProviderWorkspaceError('Native receiver client or credential binding is unavailable') from None
         except OSError:raise ProviderWorkspaceError('Native receiver storage is unavailable') from None
 
+    def sqlite_capture_export(self,server,operation,request):
+        from .sqlite_capture_service import action
+        from ..data_studio.models import DataStudioError
+        from ..sdk import RelationalClientError
+        try:return action(self,server,operation,request)
+        except (ValueError,OSError,DataStudioError,RelationalClientError) as error:raise ProviderWorkspaceError(str(error)) from None
+
     def mysql_binlog_replay(self,server,operation,request):
         from .mysql_binlog_replay_service import action
         from ..sdk.tooling import ProviderToolError
@@ -3142,6 +3149,9 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action=='sqlite_native_sessions':
+                if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite capture request')
+                return self.studio_service.sqlite_native_session_action(context,data.get('session_id'),data['request'])
             if action == 'sqlite_extensions':
                 if not isinstance(data.get('request'), dict):
                     raise ProviderWorkspaceError('Invalid native extension request')

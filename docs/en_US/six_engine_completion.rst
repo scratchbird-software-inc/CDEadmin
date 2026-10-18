@@ -1953,6 +1953,18 @@ used or selected for renaming are reserved before generating mapping views.
 Content-view row identity, unavailable native expressions and wider installed
 module/attachment transformations retain separate acceptance.
 
+SQLite native session capture and streamed artifacts
+----------------------------------------------------
+
+Connection-local session controls and reviewed changeset/patchset export jobs
+now use SQLite's public native APIs. They preserve pending SQL work, stream to
+private files, validate exported records with the native iterator and retain
+separate acknowledgement, seal and publication receipts. Owner/database-target
+authorization also applies to offline receipt inspection and browser downloads.
+Unsealed output remains diagnostic and retains its uncertain outcome even when
+its current bytes parse. See :doc:`sqlite_functional_completion` for the exact
+scope and remaining apply/conflict, transform/rebase, preupdate and carray work.
+
 SQLite FTS content-view projection contracts
 --------------------------------------------
 

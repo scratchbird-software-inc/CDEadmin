@@ -583,6 +583,33 @@ class DataStudioService:
             raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_native_session_action(self, context, session_id, request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.native_session_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},getattr(config,'CDEADMIN_SQLITE_SESSION_LIBRARY',None))
+        except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_capture_binding(self, context, session_id, capture_id):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        with provider.client._lock:
+            provider.client._require_idle(handle)
+            api=handle._cdeadmin_session_api
+            if api is None or capture_id not in api.captures:raise DataStudioAccessError('Native capture belongs to another or closed query connection')
+            observed=api.status(capture_id)
+            source={'studio_session_id':session_id,'capture_id':capture_id,'database':observed['database'],
+                'databases':[list(row) for row in handle.execute('PRAGMA database_list')]}
+            return {'client':provider.client,'handle':handle,'api':api,'source':source,'program':api.program}
+
+    @serialized_execution
     def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)

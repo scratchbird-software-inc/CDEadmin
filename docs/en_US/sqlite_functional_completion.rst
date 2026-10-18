@@ -312,3 +312,40 @@ and valid qualifiers. SQLite's blob/string prefixes retain their native rules.
 Insertion and binding qualification uses exact SQLite3.53.0 observations and the
 real CodeMirror completion context; wider computed/procedural scopes retain
 their separate acceptance.
+
+Native connection captures and exports
+---------------------------------------
+
+The SQL editor's Engine options expose connection-local native session captures.
+The application uses SQLite 3.53.0's public session APIs through a separately
+packaged bridge admitted against the actual connection library and source ID.
+Opening a capture, attaching exact tables or all current/future tables, native
+enable/indirect switches, size estimates, rowid tracking and explicit capture
+discard preserve the user's SQL transaction. Native object-configuration errors
+remain visible. Session memory ends with its owning query connection.
+
+Changeset and patchset exports have reviewed, target/owner-bound durable jobs.
+The native streaming API writes to private application-host files; cancellation
+interrupts that stream without settling SQL work. Native return acknowledgement,
+iterator validation, checksums and publication have separate receipts. Repeated
+start requests return the consumed receipt. Verified artifacts can be inspected
+and downloaded after the SQL connection closes. The browser download manager
+receives streamed file responses without a whole-file JavaScript buffer.
+
+Lost publication can be reconciled against an existing seal. Unsealed output
+can instead be inspected and downloaded as a diagnostic. A complete native
+iterator pass over current bytes does not establish that an interrupted export
+finished or bind those bytes to an unsealed original dispatch. Such inspections
+retain the uncertain/failed/cancelled outcome and never enable automatic replay.
+Explicit file removal retains the operation receipt.
+
+Native qualification applies both exported formats through the independent
+public C API to separate databases and compares exact 64-bit identifiers, large
+Unicode text and binary values with the pinned SQLite CLI. Pending source work,
+cross-target refusal and offline delivery are checked separately. Changeset
+apply/conflict resolution, transform/merge/rebase workflows, standalone
+preupdate/carray support and broader installed-module coverage remain open.
+These captures do not represent schema changes, virtual-table changes, a
+database backup or proven recovery. Independent preupdate hooks cannot share a
+connection with native sessions. Windows/macOS qualification remains with the
+platform teams; ScratchBird/history testing remains deferred.

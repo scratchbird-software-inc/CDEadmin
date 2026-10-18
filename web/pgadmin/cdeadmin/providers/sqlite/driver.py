@@ -43,12 +43,27 @@ class SQLiteConnection(sqlite3.Connection):
         self._cdeadmin_authorizer = None
         self._cdeadmin_progress_handler = (None, 0)
         self._cdeadmin_extension_directories = []
+        self._cdeadmin_internal_sql = threading.local()
+        self._cdeadmin_session_api = None
+        self._cdeadmin_trace_callback = None
 
     def close(self):
+        if self._cdeadmin_session_api is not None:
+            self._cdeadmin_session_api.close_all()
         super().close()
+        self._cdeadmin_session_api = None
         for directory in self._cdeadmin_extension_directories:
             shutil.rmtree(directory, ignore_errors=True)
         self._cdeadmin_extension_directories.clear()
+
+    def set_trace_callback(self, callback):
+        if callback is not None and not callable(callback):
+            raise TypeError('SQLite trace callback must be callable or None')
+        self._cdeadmin_trace_callback = callback
+        def trace(source):
+            if not getattr(self._cdeadmin_internal_sql, 'session_api', False):
+                return callback(source)
+        super().set_trace_callback(None if callback is None else trace)
 
     def set_authorizer(self, callback):
         super().set_authorizer(callback)

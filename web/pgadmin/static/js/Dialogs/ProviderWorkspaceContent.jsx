@@ -33,6 +33,7 @@ import MariaDBCatalog from './MariaDBCatalog';
 import DuckDBCatalog from './DuckDBCatalog';
 import SQLiteCatalog from './SQLiteCatalog';
 import SQLiteExtensions from './SQLiteExtensions';
+import SQLiteNativeSessions from './SQLiteNativeSessions';
 import SQLiteSessionFTS from './SQLiteSessionFTS';
 import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
@@ -8149,6 +8150,10 @@ export default function ProviderWorkspaceContent({
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
             onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'sqlite-sql' && <SQLiteNativeSessions
+            key={'native-captures:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy} />}
           {languageProfile === 'sqlite-sql' && <SQLiteSessionFTS
             key={'fts:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
