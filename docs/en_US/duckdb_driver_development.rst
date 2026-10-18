@@ -110,6 +110,25 @@ administration and editable-grid contracts retain their separately qualified
 forms and row-identity rules; this gate is not a claim that every GUI workflow
 or extension has been exercised on every receiving platform.
 
+Original native parser context
+------------------------------
+
+Editor validation uses the retained connection's native statement extractor,
+under the same session lock as execution. Native parser settings and installed
+parser callbacks therefore belong to the selected instance. An unrelated default
+Python connection cannot substitute its parser configuration. Native catalog or
+binding failures during parsing remain unknown grammar coverage, rather than
+being reported as invalid SQL. Uncertain native failures block session reuse.
+
+``tools/cdeadmin_duckdb_session_parser_qualification.py`` verifies changed native
+expression-depth limits, pending rows, temporary objects and the unchanged native
+transaction identity for file and authorized memory sessions. Parsing CREATE,
+INSERT, DELETE, transaction commands, INSTALL, LOAD and SET does not submit those
+commands for execution. Invalid source is not echoed in diagnostics. Native
+PRAGMA expansion can prevent mapping generated statements back to the original
+script; such framing remains explicitly unavailable. Installed third-party
+parser callbacks retain their separate capability qualification obligations.
+
 Native object comments
 ----------------------
 

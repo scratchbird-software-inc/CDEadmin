@@ -381,7 +381,8 @@ Six-engine native editor adapters
 
 MySQL/MariaDB use native preparation without executing the submitted statement.
 Firebird uses native DSQL/PSQL preparation, the selected statement dialect and
-its separate native script executor. DuckDB uses its pinned native parser;
+its separate native script executor. DuckDB uses its pinned native parser on
+the original retained session, including that instance's parser configuration;
 SQLite uses native compilation and reports unresolved binding errors honestly.
 SQLite compilation composes the connection's existing authorizer and suppresses
 PRAGMA preparation through native ``SQLITE_IGNORE``. PRAGMA syntax is parsed,

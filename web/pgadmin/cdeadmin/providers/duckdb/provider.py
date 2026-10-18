@@ -226,8 +226,16 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
         session = self._sessions.get(request.get('session_id'))
         if session is None:
             raise RelationalClientError('DuckDB session is unavailable')
-        self.client._require_idle(session.handle)
-        return analyze(request.get('source'), script=request.get('script', False))
+        from ..native_editor import session_access
+        from .driver import uncertain
+        def observed_error(error):
+            if uncertain(error):
+                self.client._observe(session.handle, blocked=True)
+        with session_access(self.client, session.handle, 'duckdb'):
+            result = analyze(request.get('source'), script=request.get('script', False),
+                parser=session.handle.extract_statements, on_native_error=observed_error)
+            result['session_reuse_blocked'] = bool(self.client._states.get(id(session.handle), {}).get('session_reuse_blocked'))
+            return result
 
     def capture_catalog(self, route, *, include_system=False,
                         include_macro_source=False):
