@@ -30,11 +30,13 @@
       "session_settings": 655,
       "statements": 143
     },
-    "authoritative_task_count": 111,
+    "authoritative_task_count": 113,
     "authoritative_task_ids": [
       "visual_admin.column.create",
       "visual_admin.column.drop",
+      "visual_admin.column.drop_masking_policy",
       "visual_admin.column.rename",
+      "visual_admin.column.set_masking_policy",
       "visual_admin.component.create",
       "visual_admin.component.drop",
       "visual_admin.constraint.create",
@@ -144,7 +146,7 @@
       "visual_admin.view.create",
       "visual_admin.view.drop"
     ],
-    "implemented_task_count": 111,
+    "implemented_task_count": 113,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -44480,7 +44482,8 @@
     "mysql-9.7.0-object-changes-native-20261012",
     "mysql-9.7.0-views-native-20261012",
     "mysql-9.7.0-checks-native-20261012",
-    "mysql-9.7.0-spatial-reference-execution"
+    "mysql-9.7.0-spatial-reference-execution",
+    "mysql-9.7.0-column-masking-execution"
   ],
   "profile_id": "mysql-native",
   "proof_records": [
@@ -44798,6 +44801,24 @@
       "format": "native foreign-server and global-variable qualification JSON",
       "license_id": "PostgreSQL",
       "sha256": "762eba3cdf5f55fb929fb2229161234788db3e0162ec5f4e39cdb2c53e0778d3"
+    },
+    {
+      "artifact": "mysql-column-masking630/proof.json",
+      "authority": "Native MySQL 9.7.0; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-column-masking-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "native column facts and masking reference qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "39c29f1e7aee60ecb8589d4bbcf662916049ddfb632be13c7bb1bb1a37d421c2"
+    },
+    {
+      "artifact": "mysql-column-masking630/proof.json",
+      "authority": "Native MySQL 9.7.0; pure and C extension connectors",
+      "evidence_id": "mysql-9.7.0-column-masking-execution",
+      "evidence_kind": "live_execution",
+      "format": "native column facts and masking reference qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "39c29f1e7aee60ecb8589d4bbcf662916049ddfb632be13c7bb1bb1a37d421c2"
     }
   ],
   "provider_id": "org.cdeadmin.mysql",
@@ -44879,6 +44900,20 @@
     {
       "binding_style": "pyformat_percent_s",
       "proof_ids": [
+        "mysql-9.7.0-column-masking-parser",
+        "mysql-9.7.0-column-masking-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER TABLE `owned_mask`.`table . `` é` ALTER COLUMN `value : . `` é` DROP MASKING POLICY",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `owned_mask`.`table . `` é` ALTER COLUMN `value : . `` é` DROP MASKING POLICY"
+      ],
+      "task_id": "visual_admin.column.drop_masking_policy"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
         "mysql-9.7.0-task-parser-acceptance",
         "mysql-9.7.0-task-live-execution"
       ],
@@ -44889,6 +44924,20 @@
         "ALTER TABLE `cde_live_f95bb4ef1e8e`.`qualification` RENAME COLUMN `editor_note` TO `editor_comment`"
       ],
       "task_id": "visual_admin.column.rename"
+    },
+    {
+      "binding_style": "pyformat_percent_s",
+      "proof_ids": [
+        "mysql-9.7.0-column-masking-parser",
+        "mysql-9.7.0-column-masking-execution"
+      ],
+      "required_bindings": [],
+      "source": "ALTER TABLE `owned_mask`.`table . `` é` ALTER COLUMN `value : . `` é` SET MASKING POLICY `policy . `` é`",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER TABLE `owned_mask`.`table . `` é` ALTER COLUMN `value : . `` é` SET MASKING POLICY `policy . `` é`"
+      ],
+      "task_id": "visual_admin.column.set_masking_policy"
     },
     {
       "task_id": "visual_admin.component.create",

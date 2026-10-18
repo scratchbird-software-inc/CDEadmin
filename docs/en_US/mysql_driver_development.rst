@@ -999,12 +999,12 @@ its owning lifecycle. No native library is downloaded, fabricated or silently
 substituted. A successful registration does not prove the library's own runtime
 services are configured; ordinary SQL exposes native execution diagnostics.
 
-The reference 9.7 source also parses masking policy statements, but its community
-runtime requires an unavailable object-policy component to implement policy DDL.
-Grammar presence alone must not expose a working masking-policy administration
-feature or claim successful policy deployment. Native SQL diagnostics remain
-available; support for an admitted policy component needs its exact native
-catalog/operation contract and qualification rather than a placeholder.
+The reference 9.7 source also parses global masking policy definitions. Their
+CREATE, DROP and definition lookup require an admitted object-policy component
+and native management privilege. That global policy administration remains an
+explicit adapter and qualification obligation. Column policy references have
+separate native support, described below; their successful assignment does not
+prove that policy execution is available.
 
 Reviewed DDN library deployment
 -------------------------------
@@ -1284,3 +1284,29 @@ observed native catalog independently and exercises pure/C extension drivers,
 normal and ANSI/NO_BACKSLASH_ESCAPES modes, all attributes, changed reviews,
 in-use spatial columns and restricted-user refusal. The broader server DDN,
 recovery/lifecycle and product-inventory requirements remain separate.
+
+Native column facts and masking references
+------------------------------------------
+
+MySQL column discovery retains every native INFORMATION_SCHEMA.COLUMNS field,
+alongside the existing display metadata and exact SHOW CREATE declaration.
+The masking-policy name is parsed from the native column clause, preserving
+quoted names, SQL mode, literal defaults and comments. A disagreement between
+the declaration and native EXTRA marker is reported as unavailable evidence.
+
+Typed assign/remove controls use ALTER COLUMN SET/DROP MASKING POLICY. Review
+records the exact column, all native fields, version, instance, principals,
+active roles and SQL mode. Apply rechecks that baseline on an independent
+connection, then verifies the resulting policy reference and preservation of
+every other column attribute. Native warnings, refusal, acknowledgement and
+post-acknowledgement observation failure remain distinct; mutations never replay
+automatically or decide the interactive session's transaction.
+
+The community fixture accepts column references while its policy component is
+unavailable. Review explicitly reports native error 6561 for definition lookup;
+reading the masked column also fails natively until the reference is removed.
+Removing it preserves the stored data. This state is not a successful masking
+deployment. ``tools/cdeadmin_mysql_column_masking_qualification.py`` verifies all
+22 observed column fields, quoted identities, both connectors and SQL modes,
+stale-review refusal, native ALTER authority and preserved data. Positive policy
+definition/execution qualification still requires the owning component.

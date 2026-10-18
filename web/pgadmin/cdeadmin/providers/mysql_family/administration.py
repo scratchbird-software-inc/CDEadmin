@@ -5,11 +5,20 @@ from ..relational_admin import RelationalAdministration
 from ...sdk import RelationalClientError
 from . import spatial_reference_systems as srs
 from . import foreign_servers
+from . import column_masking
 
 
 class MySQLAdministration(RelationalAdministration):
     def catalog(self, catalog):
         value = deepcopy(catalog)
+        for resource in value['objects']:
+            if resource['resource_kind'] == 'column':
+                resource['operations'] = [row for row in resource['operations']
+                    if row['operation_id'] not in column_masking.OPERATIONS] + [{
+                        'operation_id': operation,
+                        'title': 'Assign native masking policy' if operation == 'set_masking_policy' else 'Remove native masking policy reference',
+                        'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
+                    } for operation in sorted(column_masking.OPERATIONS)]
         value['objects'] = [row for row in value['objects'] if row['resource_kind'] != srs.KIND]
         value['objects'].append({'resource_kind': srs.KIND,
             'title': 'Spatial reference systems', 'operations': [{
@@ -30,6 +39,13 @@ class MySQLAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind == 'column' and operation in column_masking.OPERATIONS:
+            fields = []
+            if operation == 'set_masking_policy':
+                fields.append({**self._field('policy_name', 'Exact native masking policy name', 'text', True),
+                    'initial_value_path': ['masking_policy', 'name']})
+            fields.append(self._field('confirmation', 'Exact native column name', 'text', True))
+            return {'form_id': 'mysql.column.' + operation, 'title': 'Native column masking policy', 'fields': fields}
         if kind == srs.KIND and operation in srs.OPERATIONS:
             return srs.form(operation, self._field)
         if kind == foreign_servers.KIND and operation in foreign_servers.OPERATIONS:
@@ -37,12 +53,20 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'column' and operation in column_masking.OPERATIONS:
+            return deepcopy(draft)
         if ((kind == srs.KIND and operation in srs.OPERATIONS) or
                 (kind == foreign_servers.KIND and operation in foreign_servers.OPERATIONS)):
             return deepcopy(draft)
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
+            try:
+                column_masking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mysql_column_masking', 'message': str(error)}]}
         if request.get('resource_kind') == foreign_servers.KIND and request.get('operation_id') in foreign_servers.OPERATIONS:
             try:
                 foreign_servers.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
@@ -58,6 +82,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
+            return column_masking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind') == foreign_servers.KIND and request.get('operation_id') in foreign_servers.OPERATIONS:
             return foreign_servers.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind') == srs.KIND and request.get('operation_id') in srs.OPERATIONS:
@@ -65,6 +91,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_column_masking' in (request.get('provider_payload') or {}).get('compiled', {}):
+            return column_masking.apply(client, request, connection)
         if 'mysql_foreign_server' in (request.get('provider_payload') or {}).get('compiled', {}):
             return foreign_servers.apply(client, request, connection)
         if 'mysql_spatial_reference' in (request.get('provider_payload') or {}).get('compiled', {}):

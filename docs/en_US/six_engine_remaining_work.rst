@@ -74,9 +74,12 @@ MySQL
 
 Native spatial-reference catalog and typed management operations are implemented;
 their wider server DDN integration remains open. The first native source
-comparison also identifies component-backed masking policies as an explicit
-adapter obligation. Masking-policy installation and its native management
-privilege require separate admission. Foreign-server catalog, typed native
+comparison also identifies component-backed global masking-policy definitions as
+an explicit adapter obligation. Full native column facts and reviewed column
+policy assignment/removal are implemented, including the native distinction
+between a policy reference and an unavailable policy component. Global policy
+installation, definition management and positive execution qualification remain
+open and require separate native admission. Foreign-server catalog, typed native
 management and credential-free server DDN migration generation/application are
 implemented. Server capture now includes every visible global variable and its native
 provenance; this does not close all installed-component or persisted-only state

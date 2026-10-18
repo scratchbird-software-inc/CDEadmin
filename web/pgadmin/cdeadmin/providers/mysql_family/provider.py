@@ -184,6 +184,8 @@ def _administration(profile):
         'metric': frozenset({'inspect'}),
     }
     if profile is MYSQL_PROFILE:
+        from .column_masking import OPERATIONS as column_masking_operations
+        common['column'] = common['column'] | column_masking_operations
         common['spatial-reference-system'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         common['server-link'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         for kind in ('character-set', 'collation', 'storage-engine'):
@@ -951,6 +953,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
+        if 'mysql_column_masking' in planned.get('provider_payload', {}).get('compiled', {}):
+            from .column_masking import bind_review
+            return bind_review(self, planned)
         if 'mysql_foreign_server' in planned.get('provider_payload', {}).get('compiled', {}):
             from .foreign_servers import bind_review
             return bind_review(self, planned)
@@ -1936,14 +1941,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 '@@version_comment, @@version_compile_machine, '
                 '@@version_compile_os, @@lower_case_table_names, '
                 '@@default_storage_engine, @@transaction_isolation, '
-                'CURRENT_USER(), USER()'
+                'CURRENT_USER(), USER(), @@sql_mode'
             )
             server_names = (
                 'version', 'hostname', 'port', 'server_uuid',
                 'version_comment', 'version_compile_machine',
                 'version_compile_os', 'lower_case_table_names',
                 'default_storage_engine', 'transaction_isolation',
-                'current_user', 'session_user',
+                'current_user', 'session_user', 'sql_mode',
             )
         else:
             server_observation = optional(
@@ -2102,6 +2107,36 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     ],
                 })
         if profile is MYSQL_PROFILE:
+            from .column_masking import policy_clauses
+            from .mysql_catalog import _value as column_value
+            mode = resources.get('server:MySQL', {}).get('native', {}).get('sql_mode')
+            column_policy_cache = {}
+            for record in optional_records('SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN '
+                    "('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION"):
+                schema, table, column = (record.get(key) for key in ('table_schema', 'table_name', 'column_name'))
+                if not all(isinstance(value, str) for value in (schema, table, column)):
+                    continue
+                key = resource_key('column', [schema, table], column)
+                if key not in resources:
+                    continue
+                facts = {key: column_value(value) for key, value in record.items()}
+                value = resources[key].setdefault('native', {})
+                value['catalog_metadata'] = facts
+                value['extra'] = facts.get('extra')
+                table_resource = resources.get(resource_key('table', [schema], table), {})
+                ddl = table_resource.get('native', {}).get('ddl')
+                try:
+                    if not isinstance(mode, str) or not isinstance(ddl, str):
+                        raise ValueError('Native table definition context unavailable')
+                    if (schema, table) not in column_policy_cache:
+                        column_policy_cache[schema, table] = policy_clauses(ddl, mode)
+                    policy = column_policy_cache[schema, table][column]
+                    if bool(policy['name']) != ('MASKING POLICY' in str(facts.get('extra', '')).upper()):
+                        raise ValueError('Native column declaration and facts disagree')
+                    value['masking_policy'] = {'name': policy['name'], 'available': True}
+                except (ValueError, KeyError):
+                    value['masking_policy'] = {'name': None, 'available': False,
+                        'reason': 'Exact native column declaration unavailable'}
             for record in optional_records(
                 'SELECT DISTINCT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, INDEX_TYPE, IS_VISIBLE, INDEX_COMMENT '
                 'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA NOT IN '
