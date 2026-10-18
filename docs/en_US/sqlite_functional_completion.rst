@@ -525,3 +525,30 @@ privacy and mutual exclusion. Authenticated HTTP and browser workflows exercise
 start, observed changes, typed event inspection, stop and explicit reset.
 This scoped workflow leaves interactive changeset decisions, remaining module
 coverage and the broader product matrix open. History testing remains deferred.
+
+Native capture comparisons and automatic table filters
+-----------------------------------------------------
+
+The capture panel now compares an exact table in an attached source database
+against the capture database using native session diff. The operation adds
+changes to capture memory and implicitly attaches the table; it leaves both
+source/destination data and pending transactions intact. Native incompatibilities
+remain errors. The database selector comes from the retained connection's
+``PRAGMA database_list``; refresh inventory after changing attachments.
+
+Automatic table filtering uses SQLite's native case-sensitive GLOB matching,
+with include/exclude predicates scoped to one capture. The native filter API
+enables automatic attachment of eligible future table names. Already attached
+tables keep being tracked after filter changes; explicit attachments also remain
+eligible. Clearing the predicate tracks all future eligible tables and does not
+detach or discard anything. Recorded attachment names identify explicit attach
+and successful diff requests; the public SQLite API does not enumerate its
+internal automatic attachment list, and the response states this limitation.
+
+Native checks inspect exported changeset selections to verify case/Unicode,
+future tables, sticky attachments, explicit attachment, predicate changes,
+exclusion and independent captures. Diff checks preserve both databases and a
+pending transaction. Authenticated HTTP/browser workflows exercise filters and
+attached-source comparison. These tools do not close interactive changeset
+inspection/decisions, remaining module coverage or the broader product matrix.
+History tests remain deferred.

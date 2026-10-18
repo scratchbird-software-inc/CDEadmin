@@ -146,9 +146,25 @@ class SessionAPI:
         self.call('attach',session_id,table)
         if table not in self.captures[session_id]['tables']:self.captures[session_id]['tables'].append(table)
 
+    def table_filter(self,session_id,pattern,exclude=False):
+        if session_id not in self.captures:raise SessionAPIError('Native capture belongs to another or closed connection')
+        if self.program.get('native_session_revision',0)<5:raise SessionAPIError('The native session helper lacks table filter controls; reconnect with the current bridge')
+        if (pattern is not None and (not isinstance(pattern,str) or '\x00' in pattern)) or type(exclude) is not bool or (pattern is None and exclude):
+            raise SessionAPIError('Select a native SQLite GLOB filter or all future tables')
+        self.call('table_filter',session_id,pattern,int(exclude))
+        self.captures[session_id]['table_filter']={'pattern':pattern,'exclude':exclude,'automatic_attachment':True}
+
+    def diff(self,session_id,source_database,table_name):
+        if session_id not in self.captures:raise SessionAPIError('Native capture belongs to another or closed connection')
+        if any(not isinstance(value,str) or not value or '\x00' in value for value in (source_database,table_name)):
+            raise SessionAPIError('Select an attached native source database and exact table name')
+        self.call('diff',session_id,source_database,table_name)
+        if table_name not in self.captures[session_id]['tables']:self.captures[session_id]['tables'].append(table_name)
+
     def status(self,session_id):
         if session_id not in self.captures:raise SessionAPIError('Native capture belongs to another or closed connection')
-        return {**self.captures[session_id],**self.call('status',session_id)}
+        return {**self.captures[session_id],**self.call('status',session_id),
+            'table_attachment_scope':'Explicit attachment/diff requests; SQLite does not expose an iterator over automatic session attachments'}
 
     def export(self,session_id,kind,descriptor,cancel_descriptor=-1):
         if session_id not in self.captures:raise SessionAPIError('Native capture belongs to another or closed connection')

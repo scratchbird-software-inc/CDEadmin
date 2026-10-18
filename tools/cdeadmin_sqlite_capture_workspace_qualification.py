@@ -87,6 +87,9 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
     assert sqlite3.sqlite_version=='3.53.0'
     with sqlite3.connect(source) as connection:
         connection.execute('PRAGMA journal_mode=WAL');connection.execute(schema)
+    baseline=output/'baseline.sqlite'
+    with sqlite3.connect(baseline) as connection:
+        connection.execute(schema);connection.execute('INSERT INTO "native'+chr(10)+'雪" VALUES(44,?,?)',('baseline',b'\x01'))
     from pgadmin import create_app
     from pgadmin.model import db,User,ServerGroup,Server,EndpointDatabaseTarget
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
@@ -99,7 +102,7 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
             app.blueprints['NODE-engine_type'].connector_visibility['sqlite'].set(True,user_id=uid)
             server=Server(user_id=uid,servergroup_id=group.id,name='Owned SQLite native captures',host=None,port=1,username='',maintenance_db=str(source),save_password=0)
             server._cde_endpoint_registration=registration_profile('sqlite-native')
-            server._cde_endpoint_route_configuration={'database':str(source),'filesystem_root':str(output)}
+            server._cde_endpoint_route_configuration={'database':str(source),'filesystem_root':str(output),'attached_databases':[{'name':'baseline 雪','database':str(baseline)}]}
             db.session.add(server);db.session.commit();target=str(uuid.uuid4());other=str(uuid.uuid4())
             for identity,path in ((target,source),(other,output/'another.sqlite')):
                 if identity==other:
@@ -169,6 +172,19 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
             refused=client.post(url,json={'action':'sqlite_native_preupdate','database_target_id':target,'session_id':session_id,'request':{'operation':'events','run_id':run}})
             assert refused.status_code!=200 or not refused.get_json().get('success')
             proof['checks'].append('authenticated-native-preupdate-insert-update-delete-typed-data-rollback-observations-hook-exclusion-and-generation-refusal')
+        comparison=capture('open',database='main')['capture']['capture_id']
+        compared=capture('diff',capture_id=comparison,source_database='baseline 雪',table_name='native'+chr(10)+'雪')
+        assert not compared['capture']['empty'] and compared['capture']['tables']==['native'+chr(10)+'雪']
+        assert not compared['database_mutation']
+        capture('close',capture_id=comparison,confirmed=True)
+        filtered=capture('open',database='main')['capture']['capture_id']
+        capture('table_filter',capture_id=filtered,pattern='filter_keep*',exclude=False)
+        execute('CREATE TABLE filter_keep(id INTEGER PRIMARY KEY)');execute('CREATE TABLE filter_skip(id INTEGER PRIMARY KEY)')
+        execute('BEGIN');execute('INSERT INTO filter_keep VALUES(1)');execute('INSERT INTO filter_skip VALUES(1)')
+        assert not capture('status',capture_id=filtered)['capture']['empty']
+        capture('table_filter',capture_id=filtered,pattern=None,exclude=False)
+        execute('ROLLBACK');capture('close',capture_id=filtered,confirmed=True)
+        proof['checks'].append('authenticated-native-table-glob-filter-and-attached-baseline-diff-change-only-capture-memory-with-explicit-attachment-metadata')
         assert capture('inventory')['helper_available']
         opened=capture('open',database='main',estimate_size=True,track_rowids=False)['capture'];capture_id=opened['capture_id']
         capture('attach',capture_id=capture_id,table_name='native\n雪')
@@ -376,6 +392,31 @@ def browser(app,output,server_id,binary,driver_binary):
                 return False
             wait.until(attempt)
         engine_options();click('SQLite native captures','summary');click('Inspect native captures');click('Open native capture')
+        click('Automatic native capture table filter','summary')
+        pattern_label=driver.find_element(By.XPATH,'//label[normalize-space()="Native capture GLOB pattern"]')
+        field=driver.find_element(By.ID,pattern_label.get_attribute('for'));expose(field);field.clear();field.send_keys('native*')
+        click('Set automatic native table filter');click('Track all future native table names')
+        click('Compare an attached source into this capture','summary')
+        source_label=driver.find_element(By.XPATH,'//label[normalize-space()="Native diff source database"]')
+        field=driver.find_element(By.ID,source_label.get_attribute('for'));expose(field);field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='baseline 雪'),None)).click()
+        table_label=driver.find_element(By.XPATH,'//label[normalize-space()="Exact native diff table"]');field=driver.find_element(By.ID,table_label.get_attribute('for'));expose(field);field.send_keys('native'+chr(10)+'雪')
+        click('Add native table difference to capture')
+        def difference_ready(browser):
+            for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Native SQLite capture observations"]'):
+                expose(node)
+                if node.is_displayed():
+                    value=json.loads(node.get_attribute('textContent'))
+                    if not value['empty'] and value['tables']==['native'+chr(10)+'雪']:return value
+            return False
+        compared=wait.until(difference_ready)
+        with sqlite3.connect(output/'baseline.sqlite') as independent:assert independent.execute('SELECT id,body FROM "native'+chr(10)+'雪"').fetchall()==[(44,'baseline')]
+        def discard_capture(browser):
+            for label in browser.find_elements(By.XPATH,'//label[contains(.,"Discard this capture and any unexported changes")]'):
+                expose(label)
+                if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+            return False
+        wait.until(discard_capture).click();click('Close native capture');click('Open native capture')
         wait.until(lambda browser:browser.find_elements(By.XPATH,'//button[normalize-space()="Refresh native capture"]'))
         table_label=driver.find_element(By.XPATH,'//label[normalize-space()="Exact native capture table"]')
         field=driver.find_element(By.ID,table_label.get_attribute('for'));expose(field);field.send_keys('native\n雪');click('Attach native capture tables')
@@ -499,7 +540,7 @@ def browser(app,output,server_id,binary,driver_binary):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

@@ -31,7 +31,7 @@ def action(client,connection,request,library=None):
         'open':{'database','estimate_size','track_rowids'},'attach':{'capture_id','table_name'},
         'status':{'capture_id'},'configure':{'capture_id','enabled','indirect'},
         'object_config':{'capture_id','option','value'},'diff':{'capture_id','source_database','table_name'},
-        'close':{'capture_id','confirmed'}}
+        'table_filter':{'capture_id','pattern','exclude'},'close':{'capture_id','confirmed'}}
     allowed=fields.get(operation)
     if allowed is None or set(request)-({'operation'}|allowed):raise SessionAPIError('Native capture operation or arguments are unavailable')
     if operation=='open':
@@ -63,7 +63,10 @@ def action(client,connection,request,library=None):
         database,table=request.get('source_database'),request.get('table_name')
         if any(not isinstance(value,str) or not value or '\x00' in value for value in (database,table)):
             raise SessionAPIError('Select an attached native source database and exact table name')
-        api.call('diff',capture,database,table)
+        api.diff(capture,database,table)
+    elif operation=='table_filter':
+        if 'pattern' not in request:raise SessionAPIError('Select a native table filter pattern or all future tables')
+        api.table_filter(capture,request['pattern'],request.get('exclude',False))
     elif operation=='close':
         if request.get('confirmed') is not True:raise SessionAPIError('Confirm discarding this capture and any unexported changes')
         api.close(capture)

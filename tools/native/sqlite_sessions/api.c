@@ -16,7 +16,7 @@
 #endif
 
 typedef struct Capture Capture;
-struct Capture { char *id; sqlite3_session *session; Capture *next; };
+struct Capture { char *id; sqlite3_session *session; Capture *next; char *filter_pattern; int filter_exclude; };
 typedef struct State State;
 struct State { sqlite3 *db; unsigned char capability[32]; int bound, refs; Capture *captures; };
 typedef struct Output Output;
@@ -27,7 +27,7 @@ static void close_all(State *state){
   while(capture){
     Capture *next=capture->next;
     sqlite3session_delete(capture->session);
-    sqlite3_free(capture->id);sqlite3_free(capture);capture=next;
+    sqlite3_free(capture->filter_pattern);sqlite3_free(capture->id);sqlite3_free(capture);capture=next;
   }
   state->captures=0;sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,0,0);
 }
@@ -277,6 +277,11 @@ static void transform_changeset(sqlite3_context *context,State *state,int count,
   if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
 }
 
+static int table_filter(void *opaque,const char *table){
+  Capture *capture=opaque;int matches=sqlite3_strglob(capture->filter_pattern,table)==0;
+  return capture->filter_exclude ? !matches : matches;
+}
+
 static void control(sqlite3_context *context,int count,sqlite3_value **values){
   State *state=(State*)sqlite3_user_data(context);const char *operation,*id;
   Capture *capture,*previous=0;int result=SQLITE_OK;
@@ -291,7 +296,7 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
   if(strcmp(operation,"transform_file")==0 && count>=8){transform_changeset(context,state,count,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":4}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":5}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}
@@ -322,9 +327,18 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   if(!capture){fail(context,SQLITE_NOTFOUND,"Native session identity is unavailable");return;}
   if(strcmp(operation,"close")==0 && count==3){
     if(previous)previous->next=capture->next;else state->captures=capture->next;
-    sqlite3session_delete(capture->session);sqlite3_free(capture->id);sqlite3_free(capture);
+    sqlite3session_delete(capture->session);sqlite3_free(capture->filter_pattern);sqlite3_free(capture->id);sqlite3_free(capture);
     if(!state->captures)sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,0,0);
     return;
+  }else if(strcmp(operation,"table_filter")==0 && count==5){
+    const char *pattern=sqlite3_value_type(values[3])==SQLITE_NULL ? 0 : text(values[3]);
+    int exclude=sqlite3_value_int(values[4]);char *replacement=0,*previous_pattern=capture->filter_pattern;
+    if((!pattern && sqlite3_value_type(values[3])!=SQLITE_NULL) || (exclude!=0 && exclude!=1) || (!pattern && exclude)){
+      fail(context,SQLITE_MISUSE,"Select a native SQLite GLOB filter or all future table names");return;
+    }
+    if(pattern){replacement=sqlite3_mprintf("%s",pattern);if(!replacement){fail(context,SQLITE_NOMEM,"Native table filter allocation failed");return;}}
+    capture->filter_pattern=replacement;capture->filter_exclude=exclude;
+    sqlite3session_table_filter(capture->session,pattern ? table_filter : 0,capture);sqlite3_free(previous_pattern);return;
   }else if(strcmp(operation,"attach")==0 && count==4){
     const char *table=sqlite3_value_type(values[3])==SQLITE_NULL ? 0 : text(values[3]);
     if(!table && sqlite3_value_type(values[3])!=SQLITE_NULL){fail(context,SQLITE_MISUSE,"Select a native table or all-table filter");return;}
@@ -379,6 +393,9 @@ int sqlite3_cdeadminsessions_init(sqlite3 *db,char **error,const sqlite3_api_rou
     *error=sqlite3_mprintf("Native session adapter requires the connection's exact SQLite3.53.0 library and session/preupdate APIs");return SQLITE_MISMATCH;
   }
   state=sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.sessions.v1");fresh=state==0;
+  if(state && !sqlite3_get_clientdata(db,"org.cdeadmin.sqlite.session.layout.v2")){
+    *error=sqlite3_mprintf("Reconnect before loading a different native session controller layout");return SQLITE_MISMATCH;
+  }
   if(fresh){
     state=sqlite3_malloc64(sizeof(*state));if(!state)return SQLITE_NOMEM;
     memset(state,0,sizeof(*state));state->db=db;state->refs=1;
@@ -404,6 +421,7 @@ int sqlite3_cdeadminsessions_init(sqlite3 *db,char **error,const sqlite3_api_rou
       sqlite3_create_function_v2(db,calling,-1,SQLITE_UTF8,0,0,0,0,0);
     }
   }
+  if(result==SQLITE_OK)result=sqlite3_set_clientdata(db,"org.cdeadmin.sqlite.session.layout.v2",state,0);
   if(result==SQLITE_OK)result=sqlite3_set_clientdata(db,CDEADMIN_SESSION_GUARD,state,0);
   release_state(state);return result;
 }

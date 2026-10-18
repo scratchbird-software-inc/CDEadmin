@@ -2031,3 +2031,14 @@ changes and never prove commit. Native API, authenticated HTTP and browser check
 qualify this scope. See :doc:`sqlite_functional_completion`; interactive
 changeset decisions, broader installed capabilities and other engine gaps retain
 their own acceptance. History testing remains deferred.
+
+SQLite capture comparisons and automatic table predicates
+--------------------------------------------------------
+
+The editor now exposes native attached-source session diff and per-capture
+include/exclude GLOB predicates. Native exports qualify automatic attachment,
+future table matching and SQLite's sticky attachment behavior. Controls preserve
+pending transactions and source/destination table data. Explicit attachment
+metadata is labelled separately from SQLite's unenumerable internal automatic
+attachment list. Authenticated HTTP/browser checks qualify this scope; remaining
+changeset decisions and broader product requirements stay open.
