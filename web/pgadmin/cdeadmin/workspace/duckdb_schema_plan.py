@@ -21,8 +21,10 @@ _MAX_REBUILD_COLUMNS = 20_000  # Native catalog capture rejects more than 20,000
 
 
 def _quote(value):
-    if not isinstance(value, str) or not value or '\x00' in value or len(value.encode('utf8')) > 256:
-        raise ValueError('Native identifier is empty or exceeds 256 bytes')
+    if not isinstance(value, str) or not value or '\x00' in value:
+        raise ValueError('Native identifier must be nonempty text without NUL')
+    # Native DuckDB names are not limited to 256 bytes. Catalog, source and
+    # durable-review bounds constrain the complete operation instead.
     return '"' + value.replace('"', '""') + '"'
 
 

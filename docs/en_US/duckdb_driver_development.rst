@@ -315,3 +315,8 @@ while retaining their native catalog observations. Rebuilt-table verification
 compares exact column semantics and confirms the observed columns' owner OID
 matches the newly observed table. A new native table identity must not make a
 successful constraint rebuild fail its schema postconditions.
+Native DDN identifier quoting has no separate 256-byte cutoff. Long quoted
+schema, table and column names retain their exact Unicode and punctuation,
+subject to the existing complete-catalog, SQL-source and durable-review bounds.
+Native create/review/apply qualification includes independent observation and
+data access through those names, with one-use receipt reuse.
