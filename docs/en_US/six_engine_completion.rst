@@ -1971,13 +1971,21 @@ apply flags, compatible-selection checks, inversion and rebase output are
 available from the editor. Changed target schemas refuse old reviews. Sealed
 output can be reconciled without promoting an uncertain database commit or
 repeating it. Interactive per-row decisions and the remaining
-native transform/rebase/preupdate/carray tools retain separate acceptance.
+native preupdate/carray tools retain separate acceptance.
 
 External native changeset/patchset intake now uses bounded, acknowledged chunks
 and native stream validation. Resumes recheck the original file prefix, and
 validated uploads enter the same reviewed apply workflow as captured changes.
 Native CLI-produced files and browser upload/application qualify this scoped
 workflow; it does not establish complete SQLite or six-engine product coverage.
+
+Reviewed native file transformations now provide inversion, ordered
+concatenation, schema-aware changegroups and rebasing from acknowledged native
+apply buffers. Registered schema reads use an independent read-only connection;
+input data and user transactions remain separate. Validated outputs feed later
+transforms or the existing reviewed apply workflow. Native checks and the
+browser qualify this scoped support. Per-row decisions, transient schema bases,
+standalone preupdate/carray and the remaining engine work stay open.
 
 SQLite FTS content-view projection contracts
 --------------------------------------------

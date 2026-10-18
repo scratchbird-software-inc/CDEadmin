@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
 import SQLiteNativeUpload from './SQLiteNativeUpload';
+import SQLiteNativeTransforms from './SQLiteNativeTransforms';
 
 const active=state => ['dispatching','active','committing','cancel_requested'].includes(state);
 const kinds=['data','not_found','conflict','constraint','foreign_key'];
@@ -53,9 +54,9 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
   const selectInput=value => {setInput(value);setReceipt(current => current?.state==='reviewed' ? null : current);setConfirmed(false);};
   const selected=sources?.jobs.find(item => item.job_id===input);
   const blocked=busy || active(receipt?.state);
-  const sourceFields={source_database_target_id:sourceTarget,...(sourceKind==='upload' ? {source_kind:'upload'} : {})};
-  const useUploaded=value => {
-    setSourceKind('upload');setSourceTarget(databaseTargetId);setSources({jobs:[value],more:false,offset:0});setSourceOffset(0);setInput(value.job_id);
+  const sourceFields={source_database_target_id:sourceTarget,...(sourceKind!=='capture' ? {source_kind:sourceKind} : {})};
+  const useArtifact=(value,kind) => {
+    setSourceKind(kind);setSourceTarget(databaseTargetId);setSources({jobs:[value],more:false,offset:0});setSourceOffset(0);setInput(value.job_id);
     setReceipt(current => current?.state==='reviewed' ? null : current);setConfirmed(false);
     if(!catalog)perform('catalog');
   };
@@ -66,7 +67,8 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
   };
   return <Box component="details" sx={{my:1}}><summary>SQLite changeset application</summary>
     <Alert severity="info">Apply a verified native export to this registered destination using a separate owned connection. Query sessions and pending SQL work stay separate. Review conflict responses before committing native changes. Rebase data and output verification have separate receipts from database commit.</Alert>
-    <SQLiteNativeUpload post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={useUploaded} disabled={blocked || disabled} />
+    <SQLiteNativeUpload post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'upload')} disabled={blocked || disabled} />
+    <SQLiteNativeTransforms post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'transform')} disabled={blocked || disabled} />
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={blocked} onClick={() => perform('catalog')}>Inspect native apply sources</Button>
     <Button disabled={busy} onClick={() => perform('list',{offset,limit:25})}>Load changeset apply receipts</Button>
@@ -74,7 +76,7 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
       {!catalog.helper_available && <Alert severity="warning">{catalog.unavailable_reason}</Alert>}
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
         <TextField select size="small" label="Native source type" value={sourceKind} disabled={blocked} onChange={event => {setSourceKind(event.target.value);changeSource(sourceTarget);}}>
-          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem>
+          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem><MenuItem value="transform">Transformed native file</MenuItem>
         </TextField>
         <TextField select size="small" label="Native source database" value={sourceTarget} disabled={blocked} onChange={event => changeSource(event.target.value)}>
           {catalog.targets.map(target => <MenuItem key={target.target_id} value={target.target_id}>{target.display_name}</MenuItem>)}
@@ -97,7 +99,7 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
       <Box>{Object.entries(switches).map(([key,label]) => <FormControlLabel key={key} label={label} control={<Checkbox checked={options[key]} disabled={blocked} onChange={event => change(key,event.target.checked)} />} />)}</Box>
       <TextField multiline size="small" label="Apply only exact native table (empty means all tables)" value={options.table_name ?? ''} disabled={blocked} onChange={event => change('table_name',event.target.value || null)} />
       <TextField size="small" type="number" label="Native apply maximum seconds" value={options.timeout_seconds ?? ''} disabled={blocked} onChange={event => change('timeout_seconds',event.target.value==='' ? null : Number(event.target.value))} />
-      <Button disabled={blocked || disabled || !selected || !catalog.helper_available} onClick={() => perform('review',{...sourceFields,source_job_id:input,path:sourceKind==='upload' ? selected.result.artifact.input_name : 'capture.'+selected.options.kind,options})}>Review native changeset application</Button>
+      <Button disabled={blocked || disabled || !selected || !catalog.helper_available} onClick={() => perform('review',{...sourceFields,source_job_id:input,path:sourceKind!=='capture' ? selected.result.artifact.input_name : 'capture.'+selected.options.kind,options})}>Review native changeset application</Button>
     </>}
     {jobs && <Box>
       <TextField select size="small" label="Retained native apply receipt" value={jobs.jobs.some(item => item.job_id===receipt?.job_id) ? receipt.job_id : ''} disabled={blocked}

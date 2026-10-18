@@ -4,6 +4,7 @@
 #include <sqlite3ext.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 #ifdef _WIN32
 #include <io.h>
@@ -203,6 +204,78 @@ static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value 
   if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
 }
 
+static int rewind_input(int descriptor,sqlite3_int64 *length){
+#ifdef _WIN32
+  sqlite3_int64 size=_lseeki64(descriptor,0,SEEK_END);
+  if(size<0 || _lseeki64(descriptor,0,SEEK_SET)<0)return SQLITE_IOERR_SEEK;
+#else
+  off_t size=lseek(descriptor,0,SEEK_END);
+  if(size<0 || lseek(descriptor,0,SEEK_SET)<0)return SQLITE_IOERR_SEEK;
+#endif
+  *length=(sqlite3_int64)size;return SQLITE_OK;
+}
+
+static int configure_rebaser(sqlite3_rebaser *rebaser,Output *source){
+  sqlite3_int64 length=0,offset=0;unsigned char *bytes;int result=rewind_input(source->descriptor,&length);
+  if(result!=SQLITE_OK)return result;
+  if(length>INT_MAX)return SQLITE_TOOBIG; /* Public configure() accepts int. */
+  bytes=sqlite3_malloc64(length ? (sqlite3_uint64)length : 1);
+  if(!bytes)return SQLITE_NOMEM;
+  while(result==SQLITE_OK && offset<length){
+    int count=(int)((length-offset)>1048576 ? 1048576 : length-offset);
+    result=input(source,bytes+offset,&count);
+    if(result==SQLITE_OK && count==0)result=SQLITE_IOERR_SHORT_READ;
+    offset+=count;
+  }
+  if(result==SQLITE_OK)result=sqlite3rebaser_configure(rebaser,(int)length,bytes);
+  sqlite3_free(bytes);return result;
+}
+
+static void transform_changeset(sqlite3_context *context,State *state,int count,sqlite3_value **values){
+  const char *mode=text(values[2]),*schema=0;sqlite3_int64 outfd=sqlite3_value_int64(values[3]),cancel=sqlite3_value_int64(values[4]);
+  int patchset=sqlite3_value_int(values[6]),inputs=count-7,index,result=SQLITE_OK;Output sources[100],target;
+  sqlite3_changegroup *group=0;sqlite3_rebaser *rebaser=0;sqlite3_str *builder;char *metadata;
+  if(!mode || inputs<1 || inputs>100 || outfd<0 || outfd>INT_MAX || cancel<-1 || cancel>INT_MAX || patchset<-1 || patchset>1){
+    fail(context,SQLITE_MISUSE,"Select native transform mode and owned descriptors");return;
+  }
+  if(sqlite3_value_type(values[5])!=SQLITE_NULL){
+    schema=text(values[5]);if(!schema || !*schema){fail(context,SQLITE_MISUSE,"Select an exact native schema or no schema basis");return;}
+  }
+  if((strcmp(mode,"invert")==0 && inputs!=1) || (strcmp(mode,"concat")==0 && inputs!=2) ||
+      (strcmp(mode,"rebase")==0 && inputs<2) ||
+      (strcmp(mode,"merge")!=0 && (schema || patchset!=-1)) ||
+      (strcmp(mode,"invert")!=0 && strcmp(mode,"concat")!=0 && strcmp(mode,"merge")!=0 && strcmp(mode,"rebase")!=0)){
+    fail(context,SQLITE_MISUSE,"Native transform inputs or schema options differ from the selected operation");return;
+  }
+  for(index=0;index<inputs;index++){
+    sqlite3_int64 descriptor=sqlite3_value_int64(values[index+7]);
+    if(descriptor<0 || descriptor>INT_MAX){fail(context,SQLITE_MISUSE,"Select owned native transform input descriptors");return;}
+    sources[index].descriptor=(int)descriptor;sources[index].cancel=(int)cancel;sources[index].bytes=0;
+  }
+  target.descriptor=(int)outfd;target.cancel=(int)cancel;target.bytes=0;
+  if(cancelled(target.cancel))result=SQLITE_INTERRUPT;
+  else if(strcmp(mode,"invert")==0)result=sqlite3changeset_invert_strm(input,&sources[0],output,&target);
+  else if(strcmp(mode,"concat")==0)result=sqlite3changeset_concat_strm(input,&sources[0],input,&sources[1],output,&target);
+  else if(strcmp(mode,"merge")==0){
+    result=sqlite3changegroup_new(&group);
+    if(result==SQLITE_OK && patchset>=0)result=sqlite3changegroup_config(group,SQLITE_CHANGEGROUP_CONFIG_PATCHSET,&patchset);
+    if(result==SQLITE_OK && schema)result=sqlite3changegroup_schema(group,state->db,schema);
+    for(index=0;result==SQLITE_OK && index<inputs;index++)result=sqlite3changegroup_add_strm(group,input,&sources[index]);
+    if(result==SQLITE_OK)result=sqlite3changegroup_output_strm(group,output,&target);
+  }else{
+    result=sqlite3rebaser_create(&rebaser);
+    for(index=1;result==SQLITE_OK && index<inputs;index++)result=configure_rebaser(rebaser,&sources[index]);
+    if(result==SQLITE_OK)result=sqlite3rebaser_rebase_strm(rebaser,input,&sources[0],output,&target);
+  }
+  sqlite3changegroup_delete(group);sqlite3rebaser_delete(rebaser);
+  if(result!=SQLITE_OK){fail(context,result,"Native changeset transformation did not complete");return;}
+  builder=sqlite3_str_new(state->db);
+  sqlite3_str_appendf(builder,"{\"native_written_bytes\":\"%lld\",\"native_input_bytes\":[",target.bytes);
+  for(index=0;index<inputs;index++)sqlite3_str_appendf(builder,"%s\"%lld\"",index ? "," : "",sources[index].bytes);
+  sqlite3_str_appendall(builder,"]}");metadata=sqlite3_str_finish(builder);
+  if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
+}
+
 static void control(sqlite3_context *context,int count,sqlite3_value **values){
   State *state=(State*)sqlite3_user_data(context);const char *operation,*id;
   Capture *capture,*previous=0;int result=SQLITE_OK;
@@ -215,8 +288,9 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
     inspect_changeset(context,values,selected);return;
   }
   if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
+  if(strcmp(operation,"transform_file")==0 && count>=8){transform_changeset(context,state,count,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":2}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":3}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}

@@ -343,7 +343,7 @@ Native qualification applies both exported formats through the independent
 public C API to separate databases and compares exact 64-bit identifiers, large
 Unicode text and binary values with the pinned SQLite CLI. Pending source work,
 cross-target refusal and offline delivery are checked separately. Changeset
-per-row conflict decisions, transform/merge/rebase workflows, standalone
+per-row conflict decisions, standalone
 preupdate/carray support and broader installed-module coverage remain open.
 These captures do not represent schema changes, virtual-table changes, a
 database backup or proven recovery. Independent preupdate hooks cannot share a
@@ -380,7 +380,7 @@ inversion, rowid patchsets, rebase output, schema-review refusal, cancellation,
 busy commit, lost acknowledgements and authenticated cross-file delivery.
 
 Per-row interactive conflict decisions,
-transform/merge/rebase tools and standalone preupdate/carray workflows remain
+standalone preupdate/carray workflows remain
 separate work. Changeset apply is not a database recovery verification.
 
 External native changeset and patchset files
@@ -412,5 +412,39 @@ downloads exact bytes, applies them and compares large text, Unicode, binary
 values and wide integer keys through the pinned CLI. The browser exercises file
 selection, bounded upload, native validation and reviewed application. Native
 structure and checksums do not establish application-data completeness or a
-database backup. Per-row decisions, transform/merge/rebase tools and standalone
+database backup. Per-row decisions and standalone
 preupdate/carray remain open; history testing remains deferred.
+
+Native changeset transformation tools
+-------------------------------------
+
+The editor now creates new native artifacts through streaming inversion,
+ordered concatenation, changegroup merging and local changeset rebasing.
+Inputs can be captured exports, validated uploads or earlier transformed files.
+Rebase buffers are selected from retained native apply output with a separate
+commit acknowledgement. Input order, file checksums, execution host, helper
+revision and native options belong to the review. Unsupported native format
+combinations retain native errors rather than invented old values.
+
+Schema-aware merging uses a separate read-only connection to the selected
+registered file and its configured attachments. Review and execution compare
+native schema identity, and an owned read transaction keeps the selected schema
+consistent during transformation. Native changegroup schema handling fills
+compatible trailing defaults and preserves primary-key positions. Transient or
+uncommitted query-session schema remains separate work. Existing query
+transactions are never committed or rolled back by these file tools.
+
+Native return, stream parsing, seal and publication have separate receipts.
+Cancellation/deadline observation, source-file postimages and output checksums
+precede eligibility. Lost publication can be reconciled against a seal;
+unsealed output remains diagnostic. Outputs can be downloaded, explicitly
+removed while retaining receipts, selected as later transform inputs or sent
+to the separate reviewed database-apply workflow.
+
+Native qualification covers inversion, concatenation, schema-aware default
+filling, patchsets, acknowledged conflict-resolution buffers and rebasing.
+Zero-record streams may retain native table headers. Rebased bytes are compared
+with the independent public rebaser API. Browser qualification transforms an
+uploaded native file and applies the result, with independent database-row
+verification. This scope does not close per-row conflict decisions, standalone
+preupdate/carray or the broader product matrix. History tests remain deferred.

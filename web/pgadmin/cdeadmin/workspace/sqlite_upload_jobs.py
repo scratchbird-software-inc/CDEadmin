@@ -132,7 +132,7 @@ class UploadTransport:
         if self.connection is not None:self.connection.close();self.connection=None
 
     @contextmanager
-    def native_cancellation(self,cancel,timeout,started,progress):
+    def native_cancellation(self,cancel,timeout,started,progress,stage='native-validate-upload'):
         read,write=os.pipe();lock=threading.Lock();done=threading.Event();failure=[]
         def signal():
             with lock:
@@ -143,7 +143,7 @@ class UploadTransport:
                 try:
                     expired=timeout is not None and time.monotonic()-started>=timeout
                     if not sent and (cancel.is_set() or expired):signal();sent=True
-                    progress({'stage':'native-validate-upload','elapsed_seconds':time.monotonic()-started,'deadline_expired':expired})
+                    progress({'stage':stage,'elapsed_seconds':time.monotonic()-started,'deadline_expired':expired})
                 except BaseException as error:
                     failure.append(error)
                     try:

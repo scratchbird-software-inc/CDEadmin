@@ -34,6 +34,21 @@ def independent_apply(core,cli,changeset,database):
     return subprocess.check_output([str(cli),'-json',str(database),sql],text=True)
 
 
+def independent_rebase(core,local,buffer):
+    native=ctypes.CDLL(str(core));handle=ctypes.c_void_p();result=ctypes.c_void_p();length=ctypes.c_int()
+    native.sqlite3rebaser_create.argtypes=[ctypes.POINTER(ctypes.c_void_p)]
+    native.sqlite3rebaser_configure.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p]
+    native.sqlite3rebaser_rebase.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p,ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_void_p)]
+    native.sqlite3rebaser_delete.argtypes=[ctypes.c_void_p];native.sqlite3_free.argtypes=[ctypes.c_void_p]
+    local_buffer=ctypes.create_string_buffer(local);rebase_buffer=ctypes.create_string_buffer(buffer)
+    assert native.sqlite3rebaser_create(ctypes.byref(handle))==0
+    try:
+        assert native.sqlite3rebaser_configure(handle,len(buffer),rebase_buffer)==0
+        assert native.sqlite3rebaser_rebase(handle,len(local),local_buffer,ctypes.byref(length),ctypes.byref(result))==0
+        return ctypes.string_at(result,length.value)
+    finally:native.sqlite3_free(result);native.sqlite3rebaser_delete(handle)
+
+
 def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
@@ -44,6 +59,10 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
                  *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_capture*.py')),
                  *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_changeset*.py')),
                  *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_upload*.py')),
+                 *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_transform*.py')),
+                 ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_native_files.py',
+                 ROOT/'web/pgadmin/cdeadmin/providers/sqlite/changeset_transform.py',ROOT/'web/pgadmin/cdeadmin/providers/sqlite/transform_context.py',
+                 ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeTransforms.jsx',
                  ROOT/'web/pgadmin/cdeadmin/providers/sqlite/changeset_apply.py',
                  ROOT/'web/pgadmin/static/js/Dialogs/SQLiteChangesetApply.jsx',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeUpload.jsx',
                  ROOT/'web/pgadmin/cdeadmin/data_studio/studio.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',
@@ -177,9 +196,11 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
         producer_sql="CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB);\n.session open main producer\n.session producer attach external_file\nINSERT INTO external_file VALUES(9007199254740997,printf('%.*c',2500000,'Z')||'雪😀',x'00FF80');\n"
         producer_sql+=''.join('.session producer '+kind+' '+json.dumps(str(path),ensure_ascii=False)+'\n' for kind,path in external.items())
         subprocess.run([str(cli),':memory:'],input=producer_sql,encoding='utf8',check=True,capture_output=True)
+        external_uploads={}
         for kind,path in external.items():
             data=path.read_bytes();checksum=hashlib.sha256(data).hexdigest()
             uploaded=apply_action('upload_create',options={'filename':'external native 雪.'+kind,'length':str(len(data)),'expected_sha256':checksum,'kind':'auto','timeout_seconds':60})
+            external_uploads[kind]=uploaded['job_id']
             for offset in range(0,len(data),262144):
                 block=data[offset:offset+262144];packet={'offset':str(offset),'data_base64':base64.b64encode(block).decode('ascii'),'sha256':hashlib.sha256(block).hexdigest()}
                 received=apply_action('upload_chunk',job_id=uploaded['job_id'],chunk=packet)
@@ -203,6 +224,54 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
                 assert observed==([] if inverse else [{'id':'9007199254740997','characters':2500002,'suffix':'雪😀','payload':'00FF80'}]),observed
         with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('DELETE FROM external_file')
         proof['checks'].append('independent-native-CLI-produced-changeset-patchset-bounded-upload-retry-whole-SHA-native-detection-download-reviewed-apply-and-exact-CLI-comparison')
+        def apply_reference(reference,selected=None):
+            review=apply_action('review',source_kind=reference['kind'],source_database_target_id=reference['database_target_id'],source_job_id=reference['job_id'],path=reference['path'],options=selected or {})
+            value=apply_action('start',job_id=review['job_id'],review_digest=review['review_digest'],confirmed=True);deadline=time.monotonic()+30
+            while value['state'] in {'active','dispatching','committing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);value=apply_action('status',job_id=review['job_id'])
+            assert value['state']=='completed' and value['commit_returned'],value
+            return value
+        def transform_reference(inputs,selected):
+            review=apply_action('transform_review',inputs=inputs,options=selected)
+            value=apply_action('transform_start',job_id=review['job_id'],review_digest=review['review_digest'],confirmed=True);deadline=time.monotonic()+30
+            while value['state'] in {'active','dispatching','publishing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);value=apply_action('transform_status',job_id=review['job_id'])
+            assert value['state']=='completed' and value['result']['artifact']['native_iterator_complete'],value
+            assert apply_action('transform_start',job_id=review['job_id'],review_digest=review['review_digest'],confirmed=True)['state']=='completed'
+            delivered=client.post(url,data={'action':'sqlite_changeset_transform_download','payload':json.dumps({'database_target_id':other,'job_id':review['job_id'],'path':'transformed.native'})})
+            assert delivered.status_code==200
+            reference={'database_target_id':other,'kind':'transform','job_id':review['job_id'],'path':'transformed.native'}
+            return reference,value,delivered.data
+        uploaded_reference={'database_target_id':other,'kind':'upload','job_id':external_uploads['changeset'],'path':'uploaded.native'}
+        inverted,invert_receipt,_bytes=transform_reference([uploaded_reference],{'operation':'invert','timeout_seconds':60})
+        apply_reference(uploaded_reference);apply_reference(inverted)
+        with sqlite3.connect(output/'another.sqlite') as connection:assert connection.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        _concatenated,concat_receipt,concatenated_bytes=transform_reference([uploaded_reference,inverted],{'operation':'concat','timeout_seconds':60})
+        assert concat_receipt['result']['artifact']['native_record_count']=='0'
+        merged,merge_receipt,_bytes=transform_reference([uploaded_reference],{'operation':'merge','schema_database':'main','timeout_seconds':60})
+        apply_reference(merged);apply_reference(inverted)
+        with sqlite3.connect(output/'another.sqlite') as connection:assert connection.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        local_file=output/'local-branch.changeset'
+        local_sql="CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB);\n.session open main local\n.session local attach external_file\nINSERT INTO external_file VALUES(9007199254740997,'local branch',x'01');\n.session local changeset "+json.dumps(str(local_file),ensure_ascii=False)+'\n'
+        subprocess.run([str(cli),':memory:'],input=local_sql,encoding='utf8',check=True,capture_output=True)
+        local_data=local_file.read_bytes();local_upload=apply_action('upload_create',options={'filename':local_file.name,'length':str(len(local_data)),'timeout_seconds':60})
+        apply_action('upload_chunk',job_id=local_upload['job_id'],chunk={'offset':'0','data_base64':base64.b64encode(local_data).decode('ascii'),'sha256':hashlib.sha256(local_data).hexdigest()})
+        local_value=apply_action('upload_seal',job_id=local_upload['job_id']);deadline=time.monotonic()+30
+        while local_value['state'] in {'active','dispatching','publishing','cancel_requested'}:
+            assert time.monotonic()<deadline;time.sleep(.02);local_value=apply_action('upload_status',job_id=local_upload['job_id'])
+        assert local_value['state']=='completed',local_value
+        local_reference={'database_target_id':other,'kind':'upload','job_id':local_upload['job_id'],'path':'uploaded.native'}
+        apply_reference(local_reference)
+        remote_apply=apply_reference(uploaded_reference,{'include_rebase':True,'conflicts':{'data':'abort','not_found':'abort','conflict':'replace','constraint':'abort','foreign_key':'abort'},'timeout_seconds':60})
+        assert remote_apply['native_apply']['conflicts']['conflict']=='1'
+        rebase_reference={'database_target_id':other,'kind':'rebase','job_id':remote_apply['job_id'],'path':'native.rebase'}
+        _rebased,rebase_receipt,rebased_bytes=transform_reference([local_reference,rebase_reference],{'operation':'rebase','timeout_seconds':60})
+        rebase_response=client.post(url,data={'action':'sqlite_changeset_download','payload':json.dumps({'database_target_id':other,'job_id':remote_apply['job_id'],'path':'native.rebase'})})
+        assert rebase_response.status_code==200
+        assert rebased_bytes==independent_rebase(core,local_data,rebase_response.data) and rebase_receipt['result']['artifact']['native_record_count']=='0'
+        with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('DELETE FROM external_file')
+        proof['checks'].extend(['authenticated-native-invert-concat-and-readonly-schema-merge-with-reviewed-transformed-apply-and-no-repeat',
+            'acknowledged-native-conflict-replacement-rebase-buffer-and-streaming-local-rebase-agree-with-native-empty-result'])
         if browser_binary:
             proof['browser']=browser(app,output,server_id,browser_binary,driver_binary)
             proof['checks'].append('browser-native-capture-attach-sensitive-source-export-confirmation-and-streamed-three-megabyte-download')
@@ -320,12 +389,27 @@ def browser(app,output,server_id,binary,driver_binary):
         assert uploaded_apply['source']['input_file']['sha256']==hashlib.sha256((output/'external.changeset').read_bytes()).hexdigest()
         with sqlite3.connect(output/'another.sqlite') as independent:
             assert independent.execute('SELECT CAST(id AS TEXT),length(body),substr(body,-2),hex(payload) FROM external_file').fetchall()==[('9007199254740997',2500002,'雪😀','00FF80')]
+        click('SQLite native file transformations','summary');click('Inspect native transform support')
+        source_kind_label=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="Transform source kind"]'))
+        source_kind_field=driver.find_element(By.ID,source_kind_label.get_attribute('for'));expose(source_kind_field);source_kind_field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='Uploaded native file'),None)).click()
+        click('Load native transform inputs');click('Add ordered native input');click('Review native file transformation')
+        transform_confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm new native transformed artifact")]//input'));expose(transform_confirmation);transform_confirmation.click()
+        click('Start reviewed native transformation')
+        wait.until(lambda browser:any('Native transform ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Use transformed native file for apply');click('Review native changeset application')
+        confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm native changes and commit to this destination")]//input'));expose(confirmation);confirmation.click()
+        click('Apply reviewed native changeset')
+        wait.until(lambda browser:any('Native apply ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        transformed_apply=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
+        assert transformed_apply['commit_returned'] and transformed_apply['source']['source_kind']=='transform'
+        with sqlite3.connect(output/'another.sqlite') as independent:assert independent.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
         driver.save_screenshot(str(output/'native-sqlite-capture.png'))
         errors=[row for row in driver.get_log('browser') if row.get('level')=='SEVERE'];(output/'browser-console.json').write_text(json.dumps(errors,indent=2));assert not errors
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'external_native_upload_and_apply_verified':True}
+            'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
