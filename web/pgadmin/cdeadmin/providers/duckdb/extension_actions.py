@@ -40,7 +40,7 @@ def text(value,label):
 
 def public_url(value):
     value=text(value,'repository URL');parsed=urlsplit(value)
-    if parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+    if any(ord(char)<32 or ord(char)==127 for char in value) or parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
         raise ValueError('Use a public HTTP(S) repository without inline credentials, query or fragment')
     return value
 
@@ -88,13 +88,16 @@ def compile_operation(route,draft):
         source=name
     elif kind=='FILE':
         identity=file_identity(route,draft.get('source'));source=identity['path']
-    else:raise ValueError('Select an extension name or authorized native extension file')
+    elif kind=='URL':
+        if draft['action']!='install':raise ValueError('Install the remote file, then load its native installed name')
+        source=public_url(draft.get('source'))
+    else:raise ValueError('Select an extension name, authorized file or public installation URL')
     force=draft.get('force',False);repository_kind=draft.get('repository_kind','DEFAULT')
     repository=draft.get('repository','');version=draft.get('version','')
     if type(force) is not bool:raise ValueError('FORCE must be boolean')
     if draft['action']=='load' and (force or repository_kind!='DEFAULT' or repository or version):
         raise ValueError('Native LOAD does not accept FORCE, repository or version options')
-    if kind=='FILE' and (repository_kind!='DEFAULT' or repository or version):
+    if kind in {'FILE','URL'} and (repository_kind!='DEFAULT' or repository or version):
         raise ValueError('A native extension file supplies its own installation source and version')
     statement=('LOAD ' if draft['action']=='load' else 'FORCE INSTALL ' if force else 'INSTALL ')+literal(source)
     if repository_kind=='ALIAS':

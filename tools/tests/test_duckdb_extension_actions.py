@@ -13,7 +13,7 @@ def test_native_repository_alias_url_version_and_force_are_provider_built(tmp_pa
     assert module.compile_operation({}, {'action':'install','extension_name':'httpfs','repository_kind':'ALIAS','repository':'core'})['source']=="INSTALL 'httpfs' FROM \"core\""
 
 
-@pytest.mark.parametrize('draft',[{'source_kind':'URL','source':'https://secret'},
+@pytest.mark.parametrize('draft',[{'source_kind':'URL','source':'https://user:secret@example.test/httpfs.duckdb_extension'},
     {'repository_kind':'URL','repository':'https://user:secret@example.test'},
     {'repository_kind':'URL','repository':'https://example.test/?token=secret'},
     {'extension_name':"httpfs'; DROP TABLE t"},{'source':"another"},
@@ -21,6 +21,15 @@ def test_native_repository_alias_url_version_and_force_are_provider_built(tmp_pa
     {'action':'load','force':True},{'action':'load','version':'13e18b3'}])
 def test_untyped_sources_credentials_and_invalid_native_options_are_refused(draft):
     with pytest.raises(ValueError):module.compile_operation({}, {'action':'install','extension_name':'httpfs',**draft})
+
+
+def test_direct_public_url_installs_without_inventing_remote_native_load_support():
+    source='https://example.test/httpfs.duckdb_extension'
+    draft={'action':'install','extension_name':'httpfs','source_kind':'URL','source':source,'force':True}
+    assert module.compile_operation({},draft)['source']=="FORCE INSTALL '"+source+"'"
+    for change in [{'action':'load'},{'version':'13e18b3'},{'repository_kind':'ALIAS','repository':'core'},
+            {'source':'https://example.test/\r\nhttpfs.duckdb_extension'}]:
+        with pytest.raises(ValueError):module.compile_operation({},{**draft,**change})
 
 
 def test_local_source_is_bound_to_root_and_file_bytes(tmp_path):

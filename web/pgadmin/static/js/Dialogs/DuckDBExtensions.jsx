@@ -33,7 +33,7 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
       const active = sessionId || await ensureSession();
       if(token !== serial.current) return;
       const request = operation === 'review' ? {operation, draft: {action, extension_name: extensionName,
-        source_kind: sourceKind, ...(sourceKind === 'FILE' ? {source} : {}),
+        source_kind: sourceKind, ...(sourceKind !== 'NAME' ? {source} : {}),
         ...(action === 'install' ? {force} : {}),
         ...(action === 'install' && sourceKind === 'NAME' ? {repository_kind: repositoryKind,
           ...(repositoryKind !== 'DEFAULT' ? {repository} : {}), ...(version ? {version} : {})} : {})}} :
@@ -58,12 +58,16 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
     <Box sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, my: 1}}>
       <Button disabled={busy || blocked || awaitingReceipt} onClick={() => run('inventory')}>Inspect native extensions</Button>
       <TextField select size="small" label="Extension action" value={action} disabled={busy || blocked || awaitingReceipt}
-        onChange={change(setAction)}><MenuItem value="install">Install file</MenuItem><MenuItem value="load">Load native code</MenuItem></TextField>
+        onChange={event => {setAction(event.target.value); if(event.target.value === 'load' && sourceKind === 'URL') {
+          setSourceKind('NAME'); setSource('');} clear();}}><MenuItem value="install">Install file</MenuItem><MenuItem value="load">Load native code</MenuItem></TextField>
       <TextField size="small" label="Exact native extension name" value={extensionName} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setExtensionName)} />
       <TextField select size="small" label="Extension source" value={sourceKind} disabled={busy || blocked || awaitingReceipt}
-        onChange={change(setSourceKind)}><MenuItem value="NAME">Native name</MenuItem><MenuItem value="FILE">Authorized local file</MenuItem></TextField>
+        onChange={change(setSourceKind)}><MenuItem value="NAME">Native name</MenuItem><MenuItem value="FILE">Authorized local file</MenuItem>
+        {action === 'install' && <MenuItem value="URL">Public HTTP(S) extension URL</MenuItem>}</TextField>
       {sourceKind === 'FILE' && <TextField size="small" label="Absolute native extension file" value={source} disabled={busy || blocked || awaitingReceipt}
+        onChange={change(setSource)} sx={{minWidth: 350}} />}
+      {sourceKind === 'URL' && <TextField size="small" label="Public native extension URL" value={source} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setSource)} sx={{minWidth: 350}} />}
       {action === 'install' && <FormControlLabel label="FORCE replacement of extension file" control={<Checkbox checked={force} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setForce(event.target.checked); clear();}} />} />}
@@ -75,7 +79,7 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
         {repositoryKind !== 'DEFAULT' && <TextField size="small" label="Native extension repository" value={repository} disabled={busy || blocked || awaitingReceipt} onChange={change(setRepository)} />}
         <TextField size="small" label="Exact extension version (optional)" value={version} disabled={busy || blocked || awaitingReceipt} onChange={change(setVersion)} />
       </>}
-      <Button disabled={busy || blocked || awaitingReceipt || !extensionName || (sourceKind === 'FILE' && !source)} onClick={() => run('review')}>Review native extension</Button>
+      <Button disabled={busy || blocked || awaitingReceipt || !extensionName || (sourceKind !== 'NAME' && !source)} onClick={() => run('review')}>Review native extension</Button>
     </Box>
     {result?.extensions && <Box component="pre" aria-label="Native DuckDB extensions" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(result.extensions, null, 2)}</Box>}
     {result?.source && <><Alert severity="info">Native extension review: {result.state}. Session scope: {result.session_scope_id}. Repeated submissions read the same receipt.</Alert>

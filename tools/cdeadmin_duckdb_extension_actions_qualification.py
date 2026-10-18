@@ -61,6 +61,8 @@ def qualify(output,signed_extension):
                 handle.execute('INSERT INTO pending VALUES (42)');handle.execute('CREATE TEMP TABLE private(id INT)')
                 installed=apply(review(source_kind='FILE',source=str(source)))
                 assert installed['state']=='acknowledged' and installed['rediscovery_verified'],installed
+                direct=apply(review(source_kind='URL',source=url+'/v1.5.2/'+platform+'/httpfs.duckdb_extension.gz',force=True))
+                assert direct['state']=='acknowledged' and direct['rediscovery_verified'],direct
                 replaced=apply(review(force=True,repository_kind='URL',repository=url,version='13e18b3'))
                 assert replaced['state']=='acknowledged' and replaced['rediscovery_verified'] and replaced['loaded_code_replaced'] is False,replaced
                 loaded=apply(review(action='load',extension_name='http'))
@@ -82,6 +84,7 @@ def qualify(output,signed_extension):
                 assert not refused['native_acknowledged'] and refused['state'] in {'refused','unknown_outcome'},refused
                 proof['checks'].append({'root':'memory' if memory else 'file','signed_local_install_and_original_session_load_verified':True,
                     'native_httpfs_execution_verified':True,'public_repository_version_force_and_directory_verified':True,
+                    'direct_public_url_install_verified':True,
                     'pending_rows_and_temporary_objects_preserved':True,'loaded_code_and_installed_files_survive_database_rollback':True,
                     'stale_source_and_native_policy_refused_before_dispatch':True,'native_corrupt_binary_refusal_state':refused['state'],
                     'one_use_receipts_never_replay':True})

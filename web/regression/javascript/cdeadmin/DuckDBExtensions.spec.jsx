@@ -3,6 +3,9 @@ import DuckDBExtensions from 'sources/Dialogs/DuckDBExtensions';
 import {withTheme} from '../fake_theme';
 
 const Component = withTheme(DuckDBExtensions);
+const originalHeight=window.innerHeight;
+beforeAll(() => {window.innerHeight=1800;});
+afterAll(() => {window.innerHeight=originalHeight;});
 
 const review = {review_id: 'review-1', review_digest: 'digest-1', action: 'install', extension_name: 'httpfs',
   state: 'reviewed', session_scope_id: 'native-session-1', source: 'INSTALL ...', warnings: []};
@@ -19,6 +22,23 @@ const properties = post => ({post, databaseTargetId: 'file-1', sessionId: 'query
   ensureSession: jest.fn().mockResolvedValue('query-1'), onBusyChange: jest.fn(), onBlocked: jest.fn()});
 
 describe('DuckDB original-session extension workflow', () => {
+  it('reviews a direct public installation URL and returns to a native name for loading', async () => {
+    const post=jest.fn().mockResolvedValue(review);
+    render(<Component {...properties(post)} />);enter();
+    fireEvent.mouseDown(screen.getByRole('combobox', {name:'Extension source'}));
+    fireEvent.click(screen.getByRole('option', {name:'Public HTTP(S) extension URL'}));
+    fireEvent.change(screen.getByRole('textbox', {name:'Public native extension URL'}), {target:{value:'https://example.test/httpfs.duckdb_extension'}});
+    fireEvent.click(screen.getByRole('checkbox', {name:'FORCE replacement of extension file'}));
+    fireEvent.click(screen.getByRole('button', {name:'Review native extension'}));
+    await screen.findByRole('textbox', {name:'Exact reviewed extension name'});
+    expect(post).toHaveBeenCalledWith({action:'duckdb_extensions',database_target_id:'file-1',session_id:'query-1',
+      request:{operation:'review',draft:{action:'install',extension_name:'httpfs',source_kind:'URL',source:'https://example.test/httpfs.duckdb_extension',force:true}}});
+    fireEvent.mouseDown(screen.getByRole('combobox', {name:'Extension action'}));
+    fireEvent.click(screen.getByRole('option', {name:'Load native code'}));
+    expect(screen.queryByRole('textbox', {name:'Public native extension URL'})).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', {name:'Extension source'})).toHaveTextContent('Native name');
+    expect(screen.queryByRole('textbox', {name:'Exact reviewed extension name'})).not.toBeInTheDocument();
+  });
   it('requires exact confirmation and applies through the original retained session', async () => {
     const post = jest.fn().mockResolvedValueOnce(review).mockResolvedValueOnce(acknowledged);
     render(<Component {...properties(post)} />);

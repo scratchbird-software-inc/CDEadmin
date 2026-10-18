@@ -174,11 +174,14 @@ Original-session extension installation and loading
 ---------------------------------------------------
 
 The SQL editor's Engine options panel provides typed native INSTALL and LOAD
-controls on its original query connection. Select a native name or an authorized local extension file.
+controls on its original query connection. Select a native name, an authorized
+local extension file or a direct public HTTP(S) installation URL. Direct remote
+files are installed before their native name is loaded; a remote URL is not
+passed to the desktop native loader.
 Installation supports FORCE, native repository aliases, public HTTP(S)
 repositories, authorized repository directories and exact version selection.
-Inline repository credentials are refused; authenticated/direct remote-source
-admission and wider installed-capability reconciliation remain separate work.
+Inline credentials, URL queries and fragments are refused; authenticated remote
+source admission and wider installed-capability reconciliation remain separate work.
 
 Review retains all nine extension facts, installation/home directories, native
 signature/external-access settings and original catalog/session identity.
@@ -198,7 +201,7 @@ Unknown outcomes block session reuse. Receipts remain bound to the live original
 session; durable reconciliation after closing that instance remains open.
 
 ``tools/cdeadmin_duckdb_extension_actions_qualification.py`` uses an actual signed
-HTTPFS binary and owned repositories. It verifies local installation, canonical
+HTTPFS binary and owned repositories. It verifies local/direct-URL installation, canonical
 alias loading, HTTPFS execution, versioned repository/FORCE and directory
 installation, preserved pending rows and temporaries, rollback distinctions,
 changed-file/policy refusal and non-replay for file and authorized memory roots.
