@@ -868,8 +868,8 @@ rotations/publications, native parser verification, authenticated file delivery,
 once-only start and confirmed cancellation. Independent source-file comparison
 preserves every byte except the documented mutable FDE in-use flag, which the
 vendor checksum excludes. MySQL Python/C interfaces and GTID ON/OFF are separate
-cases. The receiver does not automatically restart. Stopped-tail adoption,
-retention, stronger stream-peer attestation and complete
+cases. The receiver does not automatically restart. Retention,
+stronger stream-peer attestation and complete
 base/PITR/production cutover retain separate native implementation/acceptance.
 
 Interrupted receivers expose an explicitly confirmed writer reconciliation.
@@ -894,6 +894,20 @@ artifact/checkpoint reconciliation before restart can be supported; merely
 stopping their writers is insufficient. The native qualification tool exercises
 clean restart, a new sealed batch, native purge refusal and orphan cleanup while
 an adjacent native process remains alive.
+
+Stopped receiver files can be inspected and selected for separate archive
+adoption. The parent must have confirmed native cleanup or an explicit writer
+reconciliation; every inspection, review, dispatch and worker rechecks its owned
+process scope. Only a contiguous selection of native closed logs with complete
+matching local lengths is admitted. Active, missing, linked, truncated or purged
+files cannot be labelled complete. Reviews bind local file identities and native
+catalog postimages. Dispatch and copying reject changed files; native framing,
+CRC checks, the exact reviewed parser, source/catalog postimages and durable
+publication use the same archive contract as live snapshots. The ordinary
+archive Start route preserves this adoption admission. Completed artifacts have
+their own authenticated downloads, replay inputs and removal lifecycle. Parent
+unknown/failed outcomes remain unchanged; neither adoption nor a utility return
+establishes recovered database contents or a new continuity checkpoint.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================

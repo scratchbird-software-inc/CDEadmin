@@ -10,12 +10,14 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[page,setPage]=useState(0);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [confirmStop,setConfirmStop]=useState(false);
+  const [tails,setTails]=useState(null),[tailFiles,setTailFiles]=useState([]),[tailReview,setTailReview]=useState(null);
   const generation=useRef(0);
   useEffect(() => {
     generation.current++;setCatalog(null);setStartFile('');setServerId('');setTimeoutValue(null);setReview(null);setReceipt(null);setJobs(null);setPage(0);setBusy(false);setError('');setConfirmStop(false);
     return () => {generation.current++;};
   },[post,engine]);
   useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
+  useEffect(() => {setTails(null);setTailFiles([]);setTailReview(null);},[post,engine,receipt?.job_id]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     try {const value=await post({action:prefix+action,request});if(token===generation.current)accept(value);}
@@ -45,7 +47,7 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <MenuItem value="">Select native log</MenuItem>{(catalog?.logs || []).map(row => <MenuItem key={row.Log_name} value={row.Log_name}>{row.Log_name}{row.closed ? ' (closed)' : ' (active)'}</MenuItem>)}
       </TextField>
       <TextField disabled={busy} size="small" type="number" label="Unique receiver server ID" value={serverId} onChange={event => {setServerId(event.target.value);setReview(null);}} />
-      <TextField disabled={busy} size="small" type="number" label="Receiver runtime seconds (blank: no deadline)" value={timeout ?? ''} onChange={event => {setTimeoutValue(event.target.value==='' ? null : Number(event.target.value));setReview(null);}} />
+      <TextField disabled={busy} size="small" type="number" label="Receiver runtime seconds (blank: no deadline)" value={timeout ?? ''} onChange={event => {setTimeoutValue(event.target.value==='' ? null : Number(event.target.value));setReview(null);setTailReview(null);}} />
       <Button disabled={busy} onClick={() => run('review',{options:{start_file:startFile,receiver_server_id:Number(serverId),timeout_seconds:timeout}},setReview)}>Review continuous receiver</Button>
     </Box>
     {catalog && <Box component="details"><summary>Native receiver source: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
@@ -71,6 +73,23 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},value => {setReceipt(value);setConfirmStop(false);})}>Reconcile receiver writers</Button>
       </Box>}
       {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned receiver and snapshot-parser utilities are stopped. This does not verify private tails or establish database recovery.</Alert>}
+      {['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>
+        <Button disabled={busy} onClick={() => run('tail_catalog',{job_id:receipt.job_id},value => {setTails(value);setTailFiles([]);setTailReview(null);})}>Inspect stopped receiver files</Button>
+        {tails && <>
+          <Alert severity="info">Only complete native closed files can be adopted. Each adoption creates a separate verified archive; the receiver outcome and active tails remain independent.</Alert>
+          <Table size="small" aria-label="Stopped native receiver files"><TableHead><TableRow>{['Select','Native log','Local bytes','Native bytes','Eligibility'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
+            {tails.logs.map(row => <TableRow key={row.Log_name}>
+              <TableCell><Checkbox inputProps={{'aria-label':'Adopt '+row.Log_name}} disabled={busy || !row.eligible} checked={tailFiles.includes(row.Log_name)} onChange={event => {setTailFiles(current => event.target.checked ? [...current,row.Log_name] : current.filter(name => name!==row.Log_name));setTailReview(null);}} /></TableCell>
+              <TableCell>{row.Log_name}</TableCell><TableCell>{row.local_bytes}</TableCell><TableCell>{row.File_size}</TableCell><TableCell>{row.eligible ? 'Complete closed candidate' : row.reason}</TableCell>
+            </TableRow>)}
+          </TableBody></Table>
+          <Button disabled={busy || !tailFiles.length} onClick={() => run('tail_review',{job_id:receipt.job_id,options:{log_names:tails.logs.filter(row => tailFiles.includes(row.Log_name)).map(row => row.Log_name),timeout_seconds:timeout}},setTailReview)}>Review stopped-file adoption</Button>
+        </>}
+        {tailReview && <Box>
+          <Box component="pre" aria-label="Stopped-file archive review" sx={{whiteSpace:'pre-wrap',maxHeight:280,overflow:'auto'}}>{JSON.stringify(tailReview,null,2)}</Box>
+          <Button disabled={busy || tailReview.state!=='reviewed'} onClick={() => run('tail_start',{job_id:tailReview.job_id,review_digest:tailReview.review_digest,confirmed:true},value => {setTailReview(current => ({...current,state:value.state}));onInspectArchive(value.job_id);})}>Confirm and adopt stopped logs</Button>
+        </Box>}
+      </Box>}
       {snapshots.map(id => <Button key={id} disabled={busy} onClick={() => onInspectArchive(id)}>Inspect produced archive {id}</Button>)}
       <Box component="details"><summary>Native continuous receiver observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}

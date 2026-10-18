@@ -45,9 +45,11 @@ def admit(captured, selected):
         raise BinlogArchiveError('The selected native starting binary log is unavailable or purged')
 
 
-def copy_completed(source, destination, expected_bytes, cancel):
+def copy_completed(source, destination, expected_bytes, cancel, *, expected_identity=None):
     """The receiver keeps its source; readers consume only this fsynced copy."""
     initial = source.lstat()
+    if expected_identity is not None and file_identity(source)!=expected_identity:
+        raise BinlogArchiveError('The reviewed stopped receiver file changed')
     if not stat.S_ISREG(initial.st_mode) or getattr(initial, 'st_file_attributes', 0) & 0x400 or source.resolve() != source:
         raise BinlogArchiveError('Native receiver files must be owned regular files')
     descriptor = os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0))
@@ -65,6 +67,71 @@ def copy_completed(source, destination, expected_bytes, cancel):
                 after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) or copied != expected_bytes:
             raise BinlogArchiveError('The native closed log changed during receiver publication')
         output.flush(); os.fsync(output.fileno())
+
+
+def file_identity(path):
+    path=Path(path);info=path.lstat()
+    if not stat.S_ISREG(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400 or path.resolve()!=path:
+        raise BinlogArchiveError('Native receiver files must be owned regular files')
+    return {key:str(getattr(info,key)) for key in ('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns')}
+
+
+def index_snapshot(directory,child_id):
+    index=directory/'snapshots';index.mkdir(exist_ok=True,mode=0o700);private_directory(index)
+    temporary=index/('.'+child_id)
+    with temporary.open('xb') as output:
+        private_file(temporary);output.flush();os.fsync(output.fileno())
+    durable_replace(temporary,index/child_id)
+
+
+def seal_received(native,client,family,record,workspace,source_directory,chosen,grant,observer,cancel,progress,*,source_postimages=None):
+    """One native archive contract for live snapshots and stopped-file adoption."""
+    incoming=workspace/'archive.incoming';incoming.mkdir(mode=0o700);private_directory(incoming)
+    native_rows=[]
+    for row in chosen:
+        name = row['Log_name']; expected = native.decoded_length(row) if family == 'mysql' else int(row['File_size'])
+        copy_completed(source_directory/name, incoming/name, expected, cancel,
+            expected_identity=None if source_postimages is None else source_postimages[name])
+        size, count, last = native.framing(incoming/name, cancel=cancel)
+        integrity = native.verify_frames(incoming/name, 'none', size, count, cancel=cancel)
+        native_rows.append({'name': name, 'decoded_bytes': str(size), 'event_count': str(count),
+            'last_event_type': last, 'native_integrity': integrity,
+            'server_file_bytes': row['File_size'],
+            **({'server_file_encrypted': row['Encrypted']} if family == 'mysql' else {})})
+    temporary = workspace/'verification-load'; temporary.mkdir(mode=0o700); private_directory(temporary)
+    tool = 'mysql-binlog' if family == 'mysql' else 'mariadb-binlog'
+    parser_grant = ProviderToolGrant(tool, str(workspace), grant.endpoint_host, grant.endpoint_port,
+        timeout_seconds=record['options']['timeout_seconds'], allow_unbounded_runtime=record['options']['timeout_seconds'] is None)
+    arguments = ['--no-defaults', *(['--no-login-paths'] if family == 'mysql' else []),
+        '--verify-binlog-checksum', '--short-form', '--local-load='+str(temporary), '--',
+        *[str(Path('archive.incoming')/row['name']) for row in native_rows]]
+    checked = client._tool_runner.run(parser_grant, arguments, cancel_signal=cancel, progress=progress)
+    if checked['process_observation'].get('cleanup_confirmed') is not True:
+        error=BinlogArchiveError('Native snapshot parser termination is unconfirmed')
+        error.observation={key:value for key,value in checked.items() if key not in {'stdout','stderr'}}
+        raise error
+    if cancel.is_set(): raise InterruptedError('Native receiver snapshot verification cancelled')
+    if checked['return_code'] != 0 or checked['executable_sha256'] != record['program']['executable_sha256']:
+        raise BinlogArchiveError('The reviewed native parser refused the receiver snapshot')
+    shutil.rmtree(temporary)
+    after = native.capture(observer)
+    verify_selection = native.selected_logs(after, {'log_names': [row['Log_name'] for row in chosen]})
+    if after['identity'] != record['source'] or verify_selection != chosen:
+        raise BinlogArchiveError('Native source or closed-log postimage changed during receiver publication')
+    metadata = {'format': 'mysql-raw-binlog@9.7.0' if family == 'mysql' else 'mariadb-binlog@12.2.2',
+        'source': record['source'], 'logs': native_rows,
+        'source_observation_scope': 'native_sql_identity_and_closed_catalog_before_after_receiver_copy_with_registered_transport_policy',
+        'native_parser_verification': {'tool_version': record['program']['tool_version'],
+            'executable_sha256': record['program']['executable_sha256'],
+            'scope': 'original_native_parser_postimages_bound_to_sealed_archive_bytes'}}
+    with (incoming/'archive.json').open('x', encoding='utf8') as output:
+        private_file(incoming/'archive.json'); json.dump(metadata, output, sort_keys=True, ensure_ascii=True)
+        output.flush(); os.fsync(output.fileno())
+    artifact = native.verify(incoming, record['source'], cancel=cancel)
+    seal(incoming, workspace/'archive', cancel=cancel)
+    if native.verify(workspace/'archive', record['source'], cancel=cancel) != artifact:
+        raise BinlogArchiveError('Native receiver snapshot changed during durable publication')
+    return {'artifact':artifact,'program':record['program'],'native_operation_returned':True,'remote_database_mutation':False}
 
 
 class ReceiverTransport:
@@ -89,60 +156,15 @@ class ReceiverTransport:
             {'identity': parent['source'], 'state': state}, parent['configuration'], parent['program'],
             continuation={'continuous_receiver_job_id': parent['job_id']})
         child = self.archive_jobs.load(review['job_id'], parent['owner'], parent['endpoint_id'])
-        index = directory/'snapshots'; index.mkdir(exist_ok=True, mode=0o700); private_directory(index)
-        temporary = index/('.'+child['job_id'])
-        with temporary.open('xb') as output:
-            private_file(temporary); output.flush(); os.fsync(output.fileno())
-        durable_replace(temporary, index/child['job_id'])
-        workspace = self.archive_jobs.directory(child); incoming = workspace/'archive.incoming'
-        incoming.mkdir(mode=0o700); private_directory(incoming)
+        index_snapshot(directory,child['job_id'])
+        workspace=self.archive_jobs.directory(child)
         self.archive_jobs.update(child, state='active', worker_identity=parent['worker_identity'],
                                  parent_receiver_job_id=parent['job_id'])
         with self.archive_jobs._maps_lock:
             self.archive_jobs.workers[child['job_id']] = (threading.current_thread(), cancel.signal)
-        native_rows = []
         try:
-            for row in chosen:
-                name = row['Log_name']; expected = native.decoded_length(row) if self.family == 'mysql' else int(row['File_size'])
-                copy_completed(directory/'receiving'/name, incoming/name, expected, cancel)
-                size, count, last = native.framing(incoming/name, cancel=cancel)
-                integrity = native.verify_frames(incoming/name, 'none', size, count, cancel=cancel)
-                native_rows.append({'name': name, 'decoded_bytes': str(size), 'event_count': str(count),
-                    'last_event_type': last, 'native_integrity': integrity,
-                    'server_file_bytes': row['File_size'],
-                    **({'server_file_encrypted': row['Encrypted']} if self.family == 'mysql' else {})})
-            temporary = workspace/'verification-load'; temporary.mkdir(mode=0o700); private_directory(temporary)
-            tool = 'mysql-binlog' if self.family == 'mysql' else 'mariadb-binlog'
-            parser_grant = ProviderToolGrant(tool, str(workspace), grant.endpoint_host, grant.endpoint_port,
-                timeout_seconds=parent['options']['timeout_seconds'], allow_unbounded_runtime=parent['options']['timeout_seconds'] is None)
-            arguments = ['--no-defaults', *(['--no-login-paths'] if self.family == 'mysql' else []),
-                '--verify-binlog-checksum', '--short-form', '--local-load='+str(temporary), '--',
-                *[str(Path('archive.incoming')/row['name']) for row in native_rows]]
-            checked = self.client._tool_runner.run(parser_grant, arguments, cancel_signal=cancel, progress=progress)
-            if cancel.is_set(): raise InterruptedError('Native receiver snapshot verification cancelled')
-            if checked['return_code'] != 0 or checked['executable_sha256'] != parent['program']['executable_sha256']:
-                raise BinlogArchiveError('The reviewed native parser refused the receiver snapshot')
-            shutil.rmtree(temporary)
-            after = native.capture(self.observer)
-            verify_selection = native.selected_logs(after, {'log_names': [row['Log_name'] for row in chosen]})
-            if after['identity'] != parent['source'] or verify_selection != chosen:
-                raise BinlogArchiveError('Native source or closed-log postimage changed during receiver publication')
-            metadata = {'format': 'mysql-raw-binlog@9.7.0' if self.family == 'mysql' else 'mariadb-binlog@12.2.2',
-                'source': parent['source'], 'logs': native_rows,
-                'source_observation_scope': 'native_sql_identity_and_closed_catalog_before_after_receiver_copy_with_registered_transport_policy',
-                'native_parser_verification': {'tool_version': parent['program']['tool_version'],
-                    'executable_sha256': parent['program']['executable_sha256'],
-                    'scope': 'original_native_parser_postimages_bound_to_sealed_archive_bytes'}}
-            with (incoming/'archive.json').open('x', encoding='utf8') as output:
-                private_file(incoming/'archive.json'); json.dump(metadata, output, sort_keys=True, ensure_ascii=True)
-                output.flush(); os.fsync(output.fileno())
-            artifact = native.verify(incoming, parent['source'], cancel=cancel)
-            seal(incoming, workspace/'archive', cancel=cancel)
-            if native.verify(workspace/'archive', parent['source'], cancel=cancel) != artifact:
-                raise BinlogArchiveError('Native receiver snapshot changed during durable publication')
-            self.archive_jobs.update(child, state='completed', result={'artifact': artifact,
-                'program': parent['program'], 'native_operation_returned': True, 'remote_database_mutation': False,
-                'producer_receiver_job_id': parent['job_id']}, native_process_termination_confirmed=True,
+            result=seal_received(native,self.client,self.family,child,workspace,directory/'receiving',chosen,grant,self.observer,cancel,progress)
+            self.archive_jobs.update(child, state='completed', result={**result,'producer_receiver_job_id':parent['job_id']}, native_process_termination_confirmed=True,
                 finished_at=time.time(), parent_receiver_still_independent=True)
             return child['job_id']
         except BaseException as error:

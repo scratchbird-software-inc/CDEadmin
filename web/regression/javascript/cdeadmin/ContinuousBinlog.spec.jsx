@@ -79,3 +79,28 @@ it('does not offer restart for an uncertain receiver even after its writers were
   await screen.findByText(/Receiver owned-receiver: unknown/);
   expect(screen.queryByRole('button',{name:'Review restart from stopped receiver'})).not.toBeInTheDocument();
 });
+
+it('selects complete stopped files and dispatches a separate reviewed archive without rewriting the receiver',async () => {
+  const failed={...reviewed,state:'failed'},post=jest.fn().mockResolvedValue({jobs:[failed],total:1}),inspect=jest.fn();
+  render(<Component post={post} engine="mysql" onInspectArchive={inspect} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load binary-log receivers'}));
+  await screen.findByRole('button',{name:'Inspect receiver owned-receiver'});
+  post.mockResolvedValue(failed);fireEvent.click(screen.getByRole('button',{name:'Inspect receiver owned-receiver'}));
+  await screen.findByText(/Receiver owned-receiver: failed/);
+  post.mockResolvedValue({logs:[{Log_name:'native.000001',eligible:true,local_bytes:'9007199254740993',File_size:'9007199254740993'},
+    {Log_name:'native.000002',eligible:false,reason:'Active or incomplete',local_bytes:'40',File_size:'80'}]});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect stopped receiver files'}));
+  await screen.findByRole('table',{name:'Stopped native receiver files'});
+  expect(screen.getByLabelText('Adopt native.000002')).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Review stopped-file adoption'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Adopt native.000001'));
+  post.mockResolvedValue({...reviewed,job_id:'separate-archive'});
+  fireEvent.click(screen.getByRole('button',{name:'Review stopped-file adoption'}));
+  await screen.findByLabelText('Stopped-file archive review');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_tail_review',request:{job_id:'owned-receiver',options:{log_names:['native.000001'],timeout_seconds:null}}});
+  post.mockResolvedValue({job_id:'separate-archive',state:'active'});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and adopt stopped logs'}));
+  await waitFor(() => expect(inspect).toHaveBeenCalledWith('separate-archive'));
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_tail_start',request:{job_id:'separate-archive',review_digest:'native-review',confirmed:true}});
+  expect(screen.getByText(/Receiver owned-receiver: failed/)).toBeInTheDocument();
+});

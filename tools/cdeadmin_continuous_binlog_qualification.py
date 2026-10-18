@@ -198,6 +198,68 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                     assert 'clean stopped' in refused['errormsg']
                 proof['checks'].append('native-orphan-before-first-heartbeat-stopped-through-owned-HTTP-reconciliation-while-neighbor-survives-and-unknown-cannot-restart')
                 started=original
+                # Lose publication after a real native rotation, retaining a
+                # complete closed file plus its following local native file.
+                query.execute('FLUSH BINARY LOGS')
+                query.execute('SHOW BINARY LOG STATUS' if family=='mysql' else 'SHOW MASTER STATUS');tail_name=query.fetchone()[0];query.fetchall()
+                tail_parent=http('review',{'options':{'start_file':tail_name,'receiver_server_id':4000000106}})
+                from pgadmin.cdeadmin.providers.mysql_family.continuous_binlog import ReceiverTransport
+                original_publish=ReceiverTransport.publish
+                def lost_publication(transport,parent,*args,**kwargs):
+                    if parent['job_id']==tail_parent['job_id']:raise BinlogArchiveError('Owned qualification publication fault')
+                    return original_publish(transport,parent,*args,**kwargs)
+                from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+                with patch.object(ReceiverTransport,'publish',lost_publication):
+                    started=http('start',{'job_id':tail_parent['job_id'],'review_digest':tail_parent['review_digest'],'confirmed':True})
+                    tail_record=jobs.load(started['job_id'],uid,endpoint);receiving=jobs.directory(tail_record)/'receiving'
+                    wait(lambda r:r['state']=='active' and (receiving/tail_name).is_file())
+                    query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254740997,'Stopped tail 😀',b'\x00\xfd'))
+                    query.execute('FLUSH BINARY LOGS');failed=wait(lambda r:r['state']=='failed')
+                    assert failed['native_process_termination_confirmed']
+                http('reconcile_writer',{'job_id':tail_parent['job_id'],'confirmed':True})
+                candidates=http('tail_catalog',{'job_id':tail_parent['job_id']})
+                assert next(row for row in candidates['logs'] if row['Log_name']==tail_name)['eligible']
+                assert any(not row['eligible'] for row in candidates['logs'])
+                adoption={'job_id':tail_parent['job_id'],'options':{'log_names':[tail_name],'timeout_seconds':None}}
+                adopt_review=http('tail_review',adoption)
+                source_file=receiving/tail_name
+                info=source_file.stat();os.utime(source_file,ns=(info.st_atime_ns,info.st_mtime_ns+1000000))
+                refused=http('start',{'job_id':adopt_review['job_id'],'review_digest':adopt_review['review_digest'],'confirmed':True},archive=True,refused=True)
+                assert 'postimages changed' in refused['errormsg']
+                adopt_review=http('tail_review',adoption)
+                adopt_request={'job_id':adopt_review['job_id'],'review_digest':adopt_review['review_digest'],'confirmed':True}
+                with patch.object(native_adapter,'capture',different_source):
+                    assert 'different native source' in http('tail_review',adoption,refused=True)['errormsg']
+                    assert 'different native source' in http('tail_start',adopt_request,refused=True)['errormsg']
+                # The ordinary archive Start route must preserve the stopped-
+                # receiver admission rather than redispatch remote retrieval.
+                http('start',adopt_request,archive=True)
+                deadline=time.monotonic()+90
+                while True:
+                    adopted=http('status',{'job_id':adopt_review['job_id']},archive=True)
+                    if adopted['state']=='completed':break
+                    assert adopted['state'] in {'dispatching','active'},adopted.get('error_message')
+                    if time.monotonic()>deadline:raise TimeoutError('Stopped-file native archive deadline')
+                    time.sleep(.1)
+                assert adopted['result']['adopted_stopped_files'] and adopted['result']['parent_outcome_rewritten'] is False
+                assert http('status',{'job_id':tail_parent['job_id']})['state']=='failed'
+                assert http('start',adopt_request,archive=True)['state']=='completed'
+                files=http('files',{'job_id':adopt_review['job_id']},archive=True)['files']
+                row=next(row for row in files if row['path']==tail_name)
+                response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':adopt_review['job_id'],'path':tail_name})})
+                data=response.data;assert response.status_code==200 and hashlib.sha256(data).hexdigest()==row['sha256'];response.close()
+                source_bytes=subprocess.run(['docker','exec',container,'cat',native_directory+'/'+tail_name],check=True,capture_output=True,timeout=15).stdout
+                left,right=bytearray(data),bytearray(source_bytes);left[21]&=254;right[21]&=254;assert left==right
+                original_size=source_file.stat().st_size
+                with source_file.open('ab') as stream:stream.write(b'\x00');stream.flush();os.fsync(stream.fileno())
+                assert 'incomplete' in http('tail_review',adoption,refused=True)['errormsg']
+                with source_file.open('r+b') as stream:stream.truncate(original_size);stream.flush();os.fsync(stream.fileno())
+                proof['checks'].extend(['fault-injected-publication-loss-retains-real-native-closed-file-and-active-tail',
+                    'native-stopped-file-review-rejects-active-incomplete-mutated-and-changed-source-inputs',
+                    'native-stopped-file-adoption-uses-real-parser-CRC-and-source-byte-comparison-with-independent-archive-download',
+                    'ordinary-archive-start-preserves-stopped-file-admission-and-once-only-dispatch-without-rewriting-failed-parent'])
+                proof['stopped_tail']={'receiver_job_id':tail_parent['job_id'],'archive_job_id':adopt_review['job_id'],'log_name':tail_name,'bytes':str(len(data))}
+                started=original
                 if browser_binary:
                     query.execute('FLUSH BINARY LOGS')
                     query.execute('SHOW BINARY LOG STATUS' if family=='mysql' else 'SHOW MASTER STATUS');browser_start=query.fetchone()[0];query.fetchall()
@@ -212,7 +274,8 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                         query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254740995,'Browser Native 😀',b'\x00\xff'))
                         query.execute('FLUSH BINARY LOGS')
                         return selected['job_id']
-                    proof['browser']=browser(app,output,registered_id,family,browser_start,browser_binary,driver_binary,browser_started)
+                    proof['browser']=browser(app,output,registered_id,family,browser_start,browser_binary,driver_binary,browser_started,
+                        stopped_tail=proof['stopped_tail'])
                     proof['checks'].append('native-browser-reviews-starts-observes-cancels-receiver-and-opens-its-produced-archive')
                 print('Native '+family+' continuous reception, two sealed batches and cancellation passed',flush=True)
             finally:query.close();native.close()
@@ -223,7 +286,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     return proof
 
 
-def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started):
+def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -259,14 +322,20 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',summary);summary.click()
         def click(label):
             def attempt(browser):
-                from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException
+                from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException,NoSuchElementException
                 try:
                     node=next((node for node in browser.find_elements(By.TAG_NAME,'button') if node.is_enabled() and node.get_attribute('textContent').strip()==label),None)
                     if node is None:return False
                     browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node)
-                    if not node.is_displayed():return False
+                    if not node.is_displayed():
+                        # The workspace can finish its initial remount after
+                        # the first disclosure click. Reopen its current DOM
+                        # summary through the same user action before retrying.
+                        disclosure=node.find_element(By.XPATH,'ancestor::details[1]')
+                        if not disclosure.get_attribute('open'):disclosure.find_element(By.TAG_NAME,'summary').click()
+                        return False
                     node.click();return True
-                except (ElementClickInterceptedException,StaleElementReferenceException):return False
+                except (ElementClickInterceptedException,StaleElementReferenceException,NoSuchElementException):return False
             wait.until(attempt)
         click('Inspect receiver source')
         def field(label):
@@ -302,11 +371,20 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         wait.until(lambda browser:any('previous_receiver_job_id' in node.get_attribute('textContent') for node in browser.find_elements(By.TAG_NAME,'pre')))
         click(archive_button);click('Load archive files')
         wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Verified native archive files"]'))
+        if stopped_tail:
+            click('Load binary-log receivers');click('Inspect receiver '+stopped_tail['receiver_job_id'])
+            click('Inspect stopped receiver files')
+            checkbox=wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'input[aria-label="Adopt '+stopped_tail['log_name']+'"]'))
+            driver.execute_script('arguments[0].click();',checkbox);click('Review stopped-file adoption')
+            wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'pre[aria-label="Stopped-file archive review"]'))
+            click('Confirm and adopt stopped logs')
+            wait.until(lambda browser:any('adopted_stopped_files' in node.get_attribute('textContent') for node in browser.find_elements(By.TAG_NAME,'pre')))
+            click('Load archive files')
         driver.save_screenshot(str(output/'native-continuous-binlogs.png'))
         errors=[node for node in driver.get_log('browser') if node.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'job_id':job_id,'produced_archive_job_id':archive_button.removeprefix('Inspect produced archive '),
-            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
+            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'stopped_tail_adopted':bool(stopped_tail),'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'))

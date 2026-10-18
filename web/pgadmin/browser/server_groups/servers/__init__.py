@@ -3007,7 +3007,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_binlog_capture_catalog','mysql_binlog_capture_review','mysql_binlog_capture_start','mysql_binlog_capture_status',
                                 'mysql_binlog_capture_list','mysql_binlog_capture_cancel','mariadb_binlog_capture_catalog','mariadb_binlog_capture_review',
                                 'mariadb_binlog_capture_start','mariadb_binlog_capture_status','mariadb_binlog_capture_list','mariadb_binlog_capture_cancel',
-                                'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer'}:
+                                'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer',
+                                'mysql_binlog_capture_tail_catalog','mysql_binlog_capture_tail_review','mysql_binlog_capture_tail_start',
+                                'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start'}:
                     family='mariadb' if action.startswith('mariadb_') else 'mysql'
                     try:payload=service.continuous_binlog(server,action.removeprefix(family+'_binlog_capture_'),data.get('request'),family)
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))

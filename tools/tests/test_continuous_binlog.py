@@ -46,6 +46,8 @@ def test_completed_copy_preserves_bytes_and_refuses_size_changes_or_links(tmp_pa
     with pytest.raises(BinlogArchiveError, match='changed'): receiver.copy_completed(source, tmp_path/'wrong-size', source.stat().st_size+1, cancel)
     linked=tmp_path/'linked'; linked.symlink_to(source)
     with pytest.raises(BinlogArchiveError, match='regular'): receiver.copy_completed(linked, tmp_path/'escaped', source.stat().st_size, cancel)
+    reviewed=receiver.file_identity(source);source.write_bytes(b'changed')
+    with pytest.raises(BinlogArchiveError,match='reviewed stopped'):receiver.copy_completed(source,tmp_path/'review-changed',7,cancel,expected_identity=reviewed)
 
 
 @pytest.mark.parametrize('family', ['mysql', 'mariadb'])

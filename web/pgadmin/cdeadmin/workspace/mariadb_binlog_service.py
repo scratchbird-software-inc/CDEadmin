@@ -32,6 +32,9 @@ def action(service,server,operation,request):
         return jobs.remove_artifact(request['job_id'],owner,endpoint.id,request['confirmation'])
     if operation=='start':
         reviewed=jobs.load(request.get('job_id'),owner,endpoint.id)
+        if (reviewed.get('continuation') or {}).get('stopped_receiver_job_id'):
+            from .continuous_binlog_service import action as receiver_action
+            return receiver_action(service,server,'tail_start',request,'mariadb')
         if reviewed['state']!='reviewed':return jobs.start(request,owner,endpoint.id,{},None)
         selected=reviewed['options']
     elif operation=='review':

@@ -98,3 +98,14 @@ def test_restart_requires_clean_checkpoint_and_rechecks_writer_scopes(owned):
     assert jobs.restart_checkpoint(record['job_id'],1,endpoint,archives)[1]==checkpoint
     jobs.update(record,state='unknown')
     with pytest.raises(BinlogArchiveError,match='clean stopped'):jobs.restart_checkpoint(record['job_id'],1,endpoint,archives)
+
+
+
+def test_stopped_file_inspection_requires_proof_and_rechecks_new_orphans(owned):
+    from pgadmin.cdeadmin.workspace.continuous_binlog_tails import stopped_parent
+    jobs,archives,record,endpoint,decoder,family=owned
+    with pytest.raises(BinlogArchiveError,match='Confirm stopped'):stopped_parent(jobs,archives,record['job_id'],1,endpoint)
+    jobs.reconcile_writer({'job_id':record['job_id'],'confirmed':True},1,endpoint,archives)
+    assert stopped_parent(jobs,archives,record['job_id'],1,endpoint)['state']=='unknown'
+    with waiting_binlog(jobs.directory(record),decoder,family,orphan=True):
+        with pytest.raises(BinlogArchiveError,match='Reconcile remaining'):stopped_parent(jobs,archives,record['job_id'],1,endpoint)

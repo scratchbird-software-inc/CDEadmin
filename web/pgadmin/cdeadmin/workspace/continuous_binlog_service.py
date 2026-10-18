@@ -155,6 +155,9 @@ def action(service, server, operation, request, family):
     from flask import current_app
     if not isinstance(request, dict): raise BinlogArchiveError('Select a native continuous receiver request')
     jobs, archives, owner, endpoint, _context = manager(service, server, family)
+    if operation in {'tail_catalog','tail_review','tail_start'}:
+        from .continuous_binlog_tails import action as tail_action
+        return tail_action(service,server,operation,request,family,(jobs,archives,owner,endpoint,_context))
     if operation == 'list':
         if set(request)-{'offset','limit'}: raise BinlogArchiveError('Invalid native receiver receipt page')
         return jobs.list(owner, endpoint.id, **request)

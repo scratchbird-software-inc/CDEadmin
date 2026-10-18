@@ -260,7 +260,10 @@ remain distinct. The source can be offline after the archive has been sealed.
 
 These are scoped archive/replay workflows. A compatible restored base is required;
 complete end-to-end PITR, physical continuity, production cutover and
-stopped-tail adoption/retention retain separate product acceptance. Clean stopped
+retention retains separate product acceptance. Complete stopped closed-log files
+can be separately reviewed, checked against native source/file postimages and
+adopted into ordinary verified archives. Active/incomplete files are refused;
+the parent outcome and recovery acceptance remain independent. Clean stopped
 receivers now support a separately reviewed restart from their exact retained
 next-log checkpoint, with source and native-writer rechecks. Interrupted writers
 have an explicit owned-process reconciliation which does not verify their

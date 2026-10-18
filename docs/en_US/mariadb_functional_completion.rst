@@ -430,7 +430,10 @@ independently verified closed batches, documented in
 from the exact retained next-log checkpoint; purged checkpoints and changed
 native sources are refused. Explicit writer reconciliation stops only owned
 receiver/linked-parser utilities and preserves unknown outcomes without
-verifying artifacts. Stopped-tail adoption, retention automation, PITR and
+verifying artifacts. Complete stopped closed-log files have separate reviewed
+adoption into verified native archives, with native parser/checksum/source and
+file-postimage checks; active/incomplete files are refused and the parent outcome
+is preserved. Retention automation, PITR and
 physical continuity retain separate product
 acceptance.
 
