@@ -3,6 +3,7 @@ import argparse
 import builtins
 import hashlib
 import json
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -66,6 +67,11 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
                 connection.execute('CREATE VIEW fts_projection AS SELECT '+("s.rowid,s.note FROM search('雪') AS s" if fts_function else
                     'rowid,note FROM search'+(" WHERE lang=3 AND search MATCH '雪'" if fts_language else '')))
                 connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON parent BEGIN INSERT INTO search(rowid,note'+(',lang' if fts_language else '')+') VALUES(new.id,new.note'+(',new.lang' if fts_language else '')+');END')
+                if fts_function:
+                    connection.execute('CREATE VIEW fts_dependent AS SELECT rowid,note FROM fts_projection')
+                    connection.execute('CREATE VIEW fts_boundary(stable_id,stable_note) AS SELECT rowid,note FROM fts_dependent')
+                    connection.execute('CREATE VIEW fts_writable AS SELECT rowid,note FROM fts_dependent')
+                    connection.execute('CREATE TRIGGER insert_fts_view INSTEAD OF INSERT ON fts_writable BEGIN INSERT INTO parent(id,note) VALUES(new.rowid,new.note);END')
         connection.commit()
     finally:connection.close()
     app=create_app('ScratchRobin-native-sqlite-rename');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start()
@@ -117,6 +123,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
             assert connection.execute(('SELECT rowid,body' if virtual_module and not external_content else 'SELECT *')+' FROM "renamed:雪"').fetchall()==[(9007199254740993,'雪',3) if fts_language else (9007199254740993,'雪')]
             assert connection.execute('SELECT * FROM projection').fetchall()==[(9007199254740993,'雪')]
             assert connection.execute('PRAGMA foreign_key_check').fetchall()==[]
+            if fts_function:assert connection.execute('SELECT * FROM fts_boundary').fetchall()==[(9007199254740993,'雪')]
         finally:connection.close()
         proof['checks'].append('authenticated-native-ddn-generation-preview-review-once-only-apply-and-independent-rows')
         assert post('sqlite_schema_receipt',{'review_id':reviewed['review_id']})['state']=='committed'
@@ -162,6 +169,10 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
                     assert connection.execute('SELECT * FROM fts_projection').fetchall()==[(9007199254740993,'雪')]
                     connection.execute('INSERT INTO "renamed:雪"(id,'+('note' if fts_language else '"browser:雪"')+") VALUES(9007199254740994,'fresh native term')")
                     assert connection.execute("SELECT rowid FROM search WHERE search MATCH 'fresh'"+language_filter).fetchall()==[(9007199254740994,)]
+                    if fts_function:
+                        assert connection.execute('SELECT * FROM fts_boundary').fetchall()==[(9007199254740993,'雪')]
+                        connection.execute("INSERT INTO fts_writable VALUES(9007199254740995,'mapped native trigger')")
+                        assert connection.execute("SELECT rowid FROM search WHERE search MATCH 'mapped'").fetchall()==[(9007199254740995,)]
                     connection.commit()
             finally:connection.close()
             proof['checks'].append('browser-native-fts-settings-generation-confirmed-apply-and-independent-content' if fts_settings else 'browser-context-menu-native-rename-generation-confirmed-apply-and-independent-rows')
@@ -225,8 +236,14 @@ def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_con
             node=driver.find_element(By.XPATH,'//label[normalize-space()="New native name"]');field=driver.find_element(By.ID,node.get_attribute('for'));field.send_keys('browser:雪')
             click('Generate native rename design');wait.until(lambda browser:'The generated rename intent is included' in browser.find_element(By.TAG_NAME,'body').text)
         click('Preview native changes');click('Prepare native change review')
+        def current_review(browser):
+            for alert in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]'):
+                match=re.search(r'Native receipt ([0-9a-f-]+): reviewed\.',alert.text)
+                if match:return match[1]
+            return False
+        review_id=wait.until(current_review)
         checkbox=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm this reviewed SQLite change")]//input'));driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
-        click('Apply reviewed change');wait.until(lambda browser:any('committed' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Apply reviewed change');wait.until(lambda browser:any('Native receipt '+review_id+': committed.' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
         driver.save_screenshot(str(output/('native-sqlite-fts-settings.png' if fts_settings else 'native-sqlite-rename.png')));errors=[row for row in driver.get_log('browser') if row.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'console_errors':0}

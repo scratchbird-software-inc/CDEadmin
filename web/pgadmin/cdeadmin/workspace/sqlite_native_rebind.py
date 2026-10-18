@@ -115,16 +115,31 @@ def mappings(connection, selected, rebindings):
     return result
 
 
-def rewrite(connection, declarations, selected, rebindings):
+def rewrite(connection, declarations, selected, rebindings, *, view_columns=()):
     if connection.execute('SELECT sqlite_version(),sqlite_source_id()').fetchone() != ('3.53.0', SOURCE_ID):
         raise ValueError('The schema binding connection does not match the pinned SQLite profile')
     dependencies = [row for row in declarations if row['kind'] in {'view', 'trigger'}]
     changes = mappings(connection, selected, rebindings)
+    views={row['name'] for row in dependencies if row['kind']=='view'}
+    for name,index,replacement in view_columns:
+        if name not in views or type(index) is not int or index<0 or not isinstance(replacement,str):
+            raise ValueError('Native derived-view binding identity is invalid')
+        columns=connection.execute('PRAGMA main.table_xinfo('+quote(name)+')').fetchall()
+        if index>=len(columns) or columns[index][0]!=index:
+            raise ValueError('Native derived-view binding ordinal changed')
+        if columns[index][1]!=replacement:changes.append(('column',name,index,replacement))
     executable = program(); before = hashlib.sha256(executable.read_bytes()).hexdigest()
     nonce = uuid.uuid4().hex; marker = '__cde_native_binding_' + nonce
     table = quote('__cde_bind_' + nonce)
+    cache = quote('__cde_view_columns_' + nonce)
     probes = []; expressions = ['CREATE TEMP TABLE ' + table + '(probe,rewritten,version,source_id);',
-        'INSERT INTO ' + table + " SELECT -1," + text(nonce) + ',sqlite_version(),sqlite_source_id();']
+        'CREATE TEMP TABLE ' + cache + '(owner,cid,name);']
+    # SQLite computes view columns lazily. Its internal column renamer checks
+    # nCol before parsing a dependent statement, so populate the native cache
+    # after the last schema DDL and before requesting view-column bindings.
+    expressions.extend('INSERT INTO '+cache+' SELECT '+text(row['name'])+',cid,name FROM pragma_table_xinfo('+text(row['name'])+",'main');"
+        for row in dependencies if row['kind']=='view')
+    expressions.append('INSERT INTO ' + table + " SELECT -1," + text(nonce) + ',sqlite_version(),sqlite_source_id();')
     for row_index, row in enumerate(dependencies):
         source = row['native']['ddl']
         if marker in source: raise ValueError('Native rewrite marker collision')

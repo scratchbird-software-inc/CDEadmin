@@ -43,6 +43,13 @@ def model(connection,baseline):
         engine='sqlite',native_model=True)
 
 
+def validate_dependencies(connection):
+    from .sqlite_schema_apply import _validate_dependencies,_PreservationRefused
+    try:_validate_dependencies(connection,{row['resource_id']:row for row in _resources(connection,{})})
+    except _PreservationRefused as error:
+        raise ValueError('Native SQLite rename refused: '+str(error)) from None
+
+
 def options(renames):
     if not isinstance(renames,(list,tuple)) or not 1<=len(renames)<=16:
         raise ValueError('Select one to sixteen exact native SQLite renames')
@@ -60,7 +67,7 @@ def options(renames):
 
 def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewrite_runtime=None):
     """Run schema-only native rewriting in an empty independent database."""
-    selected=options(renames);probe=sqlite3.connect(':memory:');rebindings=[]
+    selected=options(renames);probe=sqlite3.connect(':memory:',cached_statements=0);rebindings=[];original=None;schema_ready=False
     try:
         probe.execute('PRAGMA legacy_alter_table=OFF')
         probe.execute('PRAGMA foreign_keys=ON')
@@ -83,12 +90,28 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
         for row in rows:
             if row['kind']=='fts-table':
                 for source in statements(row['name'],row['native'].get('fts_configuration')):probe.execute(source)
-        if schema(model(probe,baseline))!=schema(baseline):
+        view_names={row['name'] for row in declarations if row['kind']=='view'};view_reads=set()
+        def observe_view_reads(action,name,column,_database,context):
+            if action==sqlite3.SQLITE_READ and name in view_names and context:
+                view_reads.add((name,column))
+            return sqlite3.SQLITE_OK
+        probe.set_authorizer(observe_view_reads)
+        try:
+            reproduced=model(probe,baseline)
+            if not _native_rebinding and view_names:
+                validate_dependencies(probe)
+        finally:probe.set_authorizer(None)
+        if schema(reproduced)!=schema(baseline):
             raise ValueError('The empty native rename schema cannot reproduce all baseline facts')
+        schema_ready=True
         stages=[];rewritten=[]
         if _native_rebinding:
             from .sqlite_native_rebind import rewrite
-            rewritten,runtime=rewrite(probe,declarations,selected,rebindings)
+            # This database contains only the independently materialized empty
+            # schema and module settings. Keep its original native identities
+            # for subsequent inferred view-column binding passes.
+            probe.commit();original=sqlite3.connect(':memory:',cached_statements=0);probe.backup(original)
+            rewritten,runtime=rewrite(original,declarations,selected,rebindings)
             if _rewrite_runtime is not None:_rewrite_runtime.update(runtime)
             # Native ALTER cannot bind a virtual table's function invocation
             # after its replacement by an ordinary rewrite relation. Bind the
@@ -112,20 +135,68 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
             for row,source in rewritten:
                 if row['kind']==kind:probe.execute(source);stages.append(source)
         if rewritten:
-            from .sqlite_schema_apply import _validate_dependencies
-            _validate_dependencies(probe,{row['resource_id']:row for row in _resources(probe,{})})
+            # A SELECT without explicit output aliases can change its native
+            # column labels. Observe those labels, then let the original native
+            # AST bind references in downstream views and INSTEAD OF triggers.
+            # Each pass crosses at least one dependency edge in an acyclic
+            # schema. Invalid/cyclic definitions still fail final preparation.
+            views=[row for row,_source in rewritten if row['kind']=='view']
+            before={row['name']:original.execute('PRAGMA main.table_xinfo('+_quote(row['name'])+')').fetchall() for row in views}
+            inferred={}
+            for _pass in range(len(views)+1):
+                changed=False
+                for row in views:
+                    name=row['name']
+                    try:after=probe.execute('PRAGMA main.table_xinfo('+_quote(name)+')').fetchall()
+                    except sqlite3.Error:continue
+                    if len(after)!=len(before[name]):raise ValueError('Native rename changed a derived view projection width')
+                    for old,new in zip(before[name],after):
+                        key=(name,old[0]);value=new[1]
+                        if old[0]!=new[0]:raise ValueError('Native rename changed a derived view column ordinal')
+                        if value!=inferred.get(key,old[1]):
+                            inferred[key]=value;changed=True
+                if not changed:break
+                rebound,observed_runtime=rewrite(original,declarations,selected,rebindings,
+                    view_columns=[(name,index,value) for (name,index),value in sorted(inferred.items())])
+                if observed_runtime!=runtime:raise ValueError('Native schema rewriter changed during derived-view binding')
+                for kind in ('trigger','view'):
+                    for row,_source in rewritten:
+                        if row['kind']==kind:
+                            source='DROP '+kind.upper()+' "main".'+_quote(row['name'])
+                            probe.execute(source);stages.append(source)
+                rewritten=rebound
+                for kind in ('view','trigger'):
+                    for row,source in rewritten:
+                        if row['kind']==kind:probe.execute(source);stages.append(source)
+            else:raise ValueError('Native derived-view bindings did not converge')
+            validate_dependencies(probe)
         generated=model(probe,baseline)
+        if not _native_rebinding and view_reads:
+            for row in declarations:
+                if row['kind']!='view':continue
+                current=generated['rows'].get(row['resource_id'])
+                if current is None:continue
+                old=row['native']['columns'];new=current['native']['columns']
+                if len(old)!=len(new):raise ValueError('Native rename changed a dependent view projection width')
+                if any(left['name']!=right['name'] and (row['name'],left['name']) in view_reads for left,right in zip(old,new)):
+                    # With DQS enabled SQLite can turn a formerly bound quoted
+                    # view column into a string literal instead of refusing it.
+                    # Follow original native bindings before accepting a plan.
+                    probe.close()
+                    return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime)
         desired=deepcopy(baseline)
         desired['rows']={identity:row for identity,row in desired['rows'].items() if row['kind'] not in KINDS}
         desired['rows'].update({identity:deepcopy(row) for identity,row in generated['rows'].items()
             if row['kind'] in KINDS and row['system']=='false'})
         return desired,selected,stages
     except sqlite3.Error as error:
-        if not _native_rebinding and any(item['before'] for item in rebindings):
+        if not _native_rebinding and schema_ready:
             probe.close()
             return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime)
         raise ValueError('Native SQLite rename refused ('+str(getattr(error,'sqlite_errorname','SQLITE_ERROR'))+'): '+str(error)) from None
-    finally:probe.close()
+    finally:
+        probe.close()
+        if original is not None:original.close()
 
 
 def plan(baseline,desired,live,renames,fts_rebindings=()):

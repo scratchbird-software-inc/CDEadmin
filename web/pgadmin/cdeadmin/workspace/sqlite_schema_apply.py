@@ -22,13 +22,17 @@ class _PreservationRefused(ValueError):
 
 def _validate_dependencies(connection, observed):
     """Prepare retained view/trigger uses without stepping their mutation VMs."""
+    # CPython can retain an EXPLAIN program across schema changes. EXPLAIN
+    # does not step that program's normal schema-cookie checks. Force a fresh
+    # native prepare for this validation, including on retained connections.
+    fresh=' /* cdeadmin-native-prepare:'+uuid.uuid4().hex+' */'
     for row in observed.values():
         if row['resource_kind'] == 'view':
             if (row['native'].get('column_observation',{}).get('available') is False or
                     row['native'].get('view_binding_observation',{}).get('available') is False):
                 raise _PreservationRefused('SQLite final view columns or native bindings are unavailable')
             connection.execute('EXPLAIN SELECT * FROM "main".' +
-                _quote(row['display_name']) + ' LIMIT 0').fetchone()
+                _quote(row['display_name']) + ' LIMIT 0'+fresh).fetchone()
     owners = {row['display_path'][1] for row in observed.values()
         if row['resource_kind'] == 'trigger' and row['display_path'][0] == 'main'}
     for owner in owners:
@@ -50,7 +54,7 @@ def _validate_dependencies(connection, observed):
             statements.append('UPDATE ' + target + ' SET ' + ', '.join(
                 _quote(name) + '=' + _quote(name) for name in columns))
         for source in statements:
-            connection.execute('EXPLAIN ' + source).fetchone()
+            connection.execute('EXPLAIN ' + source+fresh).fetchone()
 
 
 class SQLiteSchemaApplications(SchemaApplications):

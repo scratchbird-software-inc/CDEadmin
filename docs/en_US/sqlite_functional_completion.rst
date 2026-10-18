@@ -194,9 +194,11 @@ SQLITE-COMP-05: DDN design exchange
   and explicit view column names. The adapter recreates views/triggers within
   the same transaction and checks their final bindings before commit. Its
   application-host utility identity is part of the reviewed operation; a missing
-  or changed runtime refuses dispatch. FTS4 row-identity mappings, attached
-  environments and wider derived-view transformations retain separate adapter
-  acceptance. Native ALTER alone can leave an external-content search table
+  or changed runtime refuses dispatch. Native rename dependencies also follow
+  inferred ordinary/FTS view column labels through downstream views and INSTEAD
+  OF triggers, including star and expression projections. Explicit output names
+  remain stable. FTS4 row-identity mappings and attached environments retain
+  separate adapter acceptance. Native ALTER alone can leave an external-content search table
   unusable.
 
   The explorer's virtual-table creation form provides structured native

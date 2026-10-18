@@ -284,11 +284,13 @@ remains open for every engine; a scoped workflow is not the full denominator.
        preserve native language-specific searches and dependent code.
        FTS5 table-function dependencies use isolated native AST binding and
        transactional recreation, with reviewed utility identity and final
-       native view/trigger checks.
+       native view/trigger checks. Ordinary and FTS rename dependencies follow
+       native inferred projection labels through downstream views and view
+       triggers; explicit output aliases remain stable.
        Offline native file recovery uses private WAL/journal images, exact
        typed transfer, reviewed new-file publication, durable outcomes and
        registration/activation of recovered copies.
-     - Remaining attached/derived-view/FTS4 row-identity and installed-module transformations and
+     - Remaining attached/FTS4 row-identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1614,3 +1616,23 @@ refusals, rollback and lost commit replies retain the existing durable outcome
 contract. Native utility setup includes the pinned shell on Windows/macOS;
 those teams still own native platform qualification. Wider attached, derived
 view, FTS4 row-identity and installed-module transforms remain open.
+
+SQLite inferred view-column rename dependencies
+-----------------------------------------------
+
+Native table/column rename generation now follows inferred output names through
+ordinary and FTS view chains. Each pass observes native projection ordinals and
+labels, then uses the original empty schema's native AST to bind references in
+downstream views and INSTEAD OF triggers. Star projections and expression labels
+retain their native meaning; explicitly named view columns remain stable.
+SQLite's lazy view-column cache is populated before requesting internal column
+bindings. No identifier is inferred from SQL text.
+
+These passes run in the independent schema probe. Reviewed stages recreate the
+dependencies inside the existing owned write transaction and prepare final
+views/triggers before commit. Invalid bindings, changed projection widths or
+nonconvergent dependencies refuse generation. Application receipts retain
+stale-review refusal, rollback and uncertain commit outcomes. Attached contexts,
+FTS4 row-identity and installed-module transformations remain separate work.
+Final dependency checks force fresh native EXPLAIN preparation, preventing a
+cached pre-change program from accepting invalid post-change view/trigger SQL.
