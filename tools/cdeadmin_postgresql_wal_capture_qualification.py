@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
+def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=False):
     import psycopg
     from postgresql_qualification_support import server as owned_server
     output=Path(output).resolve()
@@ -46,7 +46,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
     app=create_app('ScratchRobin-native-wal-capture-qualification');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY=''
     app.run_before_app_start();client=app.test_client();jobs=None
     try:
-        with owned_server(output/'fixture',server_options=('-c','wal_keep_size=64MB'),
+        with owned_server(output/'fixture',server_options=('-c','wal_keep_size=64MB',* (('-c','wal_level=logical') if slots else ())),
                 initdb_options=('--wal-segsize=1','--locale=C','--encoding=UTF8')) as (route,password,fixture):
             with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
                                  dbname=route['database'],autocommit=True) as native:
@@ -80,7 +80,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                     while True:
                         current=http('status',{'job_id':job_id})
                         if predicate(current):return current
-                        if current['state'] in {'unknown','failed','not_dispatched'}:
+                        if current['state'] in {'unknown','failed','not_dispatched'} and current.get('slot_observation_state')!='pending':
                             (output/'job-failure.json').write_text(json.dumps(current,indent=2)+'\n')
                             raise AssertionError('Owned native WAL job returned '+current['state'])
                         if time.monotonic()>deadline:raise TimeoutError('Owned native WAL qualification deadline')
@@ -92,6 +92,37 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                     current=http('start',request)
                     assert http('start',request)['job_id']==current['job_id']
                     return reviewed,current
+                slot_name=None
+                if slots:
+                    import secrets
+                    slot_name='sr_owned_'+secrets.token_hex(6)
+                    logical_name='sr_logical_'+secrets.token_hex(6)
+                    def slot_command(operation,options,expected='completed'):
+                        reviewed,_current=start(operation,options)
+                        result=wait(reviewed['job_id'],lambda r:r['state']==expected and r.get('slot_observation_state')!='pending')
+                        assert result['native_utility_acknowledged']==(expected=='completed')
+                        return result
+                    initial=http('slots',{'offset':0,'limit':1});assert initial['slots']==[] and initial['total']==0
+                    made=slot_command('wal_slot_create',{'slot':slot_name})
+                    row=native.execute('SELECT slot_type,temporary,active,restart_lsn::text FROM pg_replication_slots WHERE slot_name=%s',(slot_name,)).fetchone()
+                    assert row==('physical',False,False,None) and made['slot_observation']['slot_type']=='physical'
+                    existing=slot_command('wal_slot_create',{'slot':slot_name,'if_not_exists':True})
+                    assert existing['slot_existed_before'] and existing['slot_observation']['slot_name']==slot_name
+                    duplicate=slot_command('wal_slot_create',{'slot':slot_name},expected='unknown')
+                    assert duplicate['tool_observation']['return_code']!=0 and duplicate['slot_observation']['slot_name']==slot_name
+                    native.execute("SELECT * FROM pg_create_logical_replication_slot(%s,'pgoutput')",(logical_name,))
+                    other_kind=slot_command('wal_slot_create',{'slot':logical_name,'if_not_exists':True})
+                    assert other_kind['slot_existed_before'] and other_kind['slot_observation']['slot_type']=='logical'
+                    first_page=http('slots',{'offset':0,'limit':1});second_page=http('slots',{'offset':1,'limit':1})
+                    assert first_page['total']==second_page['total']==2 and first_page['more'] and not second_page['more']
+                    assert {first_page['slots'][0]['slot_name'],second_page['slots'][0]['slot_name']}=={slot_name,logical_name}
+                    dropped=slot_command('wal_slot_drop',{'slot':logical_name})
+                    assert dropped['slot_observation'] is None and not native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s',(logical_name,)).fetchall()
+                    missing=slot_command('wal_slot_drop',{'slot':logical_name},expected='unknown')
+                    assert missing['tool_observation']['return_code']!=0 and missing['slot_observation'] is None
+                    proof['slot_commands']={'created':made['job_id'],'existing':existing['job_id'],'duplicate_unacknowledged':duplicate['job_id'],
+                        'existing_logical_unchanged':other_kind['job_id'],'logical_drop':dropped['job_id'],'missing_drop_unacknowledged':missing['job_id']}
+                    proof['checks'].append('native-slot-create-if-not-exists-logical-type-preservation-paged-catalog-drop-and-unacknowledged-errors')
                 base,_current=start('full_backup',{'timeout_seconds':120})
                 base=wait(base['job_id'],lambda r:r['state']=='verified')
                 proof['native_server']=base['source'];proof['native_tools']=dict(base['tool_identities'])
@@ -106,18 +137,26 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                 receipts=[];target='ScratchRobin managed WAL target ü'
                 for index,compression in enumerate(('none','gzip:level=3','lz4:level=3')):
                     name='managed-'+str(index)
-                    reviewed,_current=start('wal_capture',{'archive':name,'compression':compression,'timeout_seconds':None})
+                    reviewed,_current=start('wal_capture',{'archive':name,'compression':compression,'timeout_seconds':None,
+                        **({'slot':slot_name} if slots and index==0 else {})})
                     proof['native_tools'].update(reviewed['tool_identities'])
                     assert reviewed['source']['wal_segment_bytes']==1024**2 and reviewed['source']['wal_block_bytes']==8192
                     streaming(reviewed['job_id'])
+                    if slots and index==0:
+                        refused=slot_command('wal_slot_drop',{'slot':slot_name},expected='unknown')
+                        assert refused['tool_observation']['return_code']!=0 and refused['slot_observation']['active']
+                        assert native.execute('SELECT active FROM pg_replication_slots WHERE slot_name=%s',(slot_name,)).fetchone()[0] is True
+                        proof['slot_commands']['active_drop_unacknowledged']=refused['job_id']
+                        proof['checks'].append('native-active-slot-drop-refusal-preserves-running-owned-receiver')
                     if index==0:
                         native.execute("INSERT INTO sr_continuity_data VALUES(9007199254740994,'target state 😀')")
                         native.execute('SELECT pg_create_restore_point(%s)',(target,))
                         native.execute("INSERT INTO sr_continuity_data VALUES(9007199254740995,'after target')")
                     for segment in range(2):
                         native.execute('SELECT pg_logical_emit_message(false,%s,%s)',('scratchrobin-owned-wal','x'*8192))
+                        expected=native.execute('SELECT pg_walfile_name(pg_current_wal_insert_lsn())').fetchone()[0]
                         native.execute('SELECT pg_switch_wal()')
-                        wait(reviewed['job_id'],lambda r:(r.get('archive_observation') or {}).get('new_files',0)>=segment+1)
+                        wait(reviewed['job_id'],lambda r:any(item['name']==expected for item in (r.get('archive_observation') or {}).get('last_files',[])))
                     http('cancel',{'job_id':reviewed['job_id']})
                     cancelled=wait(reviewed['job_id'],lambda r:r['state']=='cancelled')
                     assert cancelled['tool_observation']['process_observation']['cleanup_confirmed']
@@ -145,6 +184,18 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                     'native-cancellation-stops-receiver-and-retains-completed-files',
                     'native-resume-from-completed-archive-with-unchanged-prior-segments'])
                 proof['captures']=receipts;proof['resumed_job_id']=resumed['job_id']
+                if slots:
+                    removed=slot_command('wal_slot_drop',{'slot':slot_name})
+                    assert removed['slot_observation'] is None and http('slots',{'offset':0,'limit':25})['total']==0
+                    proof['slot_commands']['physical_drop']=removed['job_id']
+                    proof['checks'].append('native-physical-slot-drop-after-receiver-cancellation')
+                    if browser_binary:
+                        browser_name='sr_browser_'+secrets.token_hex(6)
+                        def browser_slot_state(present):
+                            row=native.execute('SELECT slot_type,active FROM pg_replication_slots WHERE slot_name=%s',(browser_name,)).fetchone()
+                            assert row==('physical',False) if present else row is None
+                        proof['slot_browser']=qualify_capture_browser(app,output,browser_binary,driver_binary,browser_slot_state,password,slot_name=browser_name)
+                        proof['checks'].append('native-browser-discovers-reviews-creates-and-drops-physical-slot-with-independent-catalog-observations')
                 if browser_binary:
                     def browser_streaming():
                         selected=next(job for job in jobs.list(uid,endpoint)['jobs']
@@ -186,7 +237,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
     return proof
 
 
-def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password):
+def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password,*,slot_name=None):
     import re
     import threading
     from werkzeug.serving import make_server
@@ -201,7 +252,7 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
     try:
         options=webdriver.ChromeOptions();options.binary_location=browser_binary
         for value in ('--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1600,1000',
-                      '--user-data-dir='+str(output/'capture-browser-profile')):options.add_argument(value)
+                      '--user-data-dir='+str(output/('slot-browser-profile' if slot_name else 'capture-browser-profile'))):options.add_argument(value)
         options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
         driver=webdriver.Chrome(options=options,service=Service(driver_binary) if driver_binary else Service())
         driver.get('http://127.0.0.1:'+str(http.server_port)+'/browser/');wait=WebDriverWait(driver,60)
@@ -237,20 +288,50 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
                 except (ElementClickInterceptedException,StaleElementReferenceException):return False
             wait.until(attempt)
         wait.until(lambda browser:browser.find_elements(By.XPATH,'//label[normalize-space()="Continuity operation"]'))
-        def select_capture(browser):
-            from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException
-            try:
-                if authenticate(browser):return False
-                selected=next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
-                               if item.text.strip()=='Capture native WAL archive'),None)
-                if selected is not None:selected.click();return True
-                label=browser.find_element(By.XPATH,'//label[normalize-space()="Continuity operation"]')
-                field=browser.find_element(By.ID,label.get_attribute('for'))
-                browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
-                if field.get_attribute('aria-expanded')!='true':field.click()
+        def selection(text):
+            def attempt(browser):
+                from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException
+                try:
+                    if authenticate(browser):return False
+                    selected=next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if item.text.strip()==text),None)
+                    if selected is not None:selected.click();return True
+                    label=browser.find_element(By.XPATH,'//label[normalize-space()="Continuity operation"]')
+                    field=browser.find_element(By.ID,label.get_attribute('for'))
+                    browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
+                    if field.get_attribute('aria-expanded')!='true':field.click()
+                    return False
+                except (ElementClickInterceptedException,StaleElementReferenceException):return False
+            wait.until(attempt)
+        def receipt(operation):
+            def current(browser):
+                for element in browser.find_elements(By.CSS_SELECTOR,'details pre'):
+                    try:value=json.loads(element.get_attribute('textContent'))
+                    except (ValueError,TypeError):continue
+                    if (value.get('operation')==operation and value.get('options',{}).get('slot')==slot_name and
+                            value.get('state')=='completed' and value.get('native_utility_acknowledged') is True and value.get('slot_observation_state')=='observed'):
+                        return value
                 return False
-            except (ElementClickInterceptedException,StaleElementReferenceException):return False
-        wait.until(select_capture)
+            return wait.until(current)
+        if slot_name:
+            selection('Create physical replication slot')
+            label=driver.find_element(By.XPATH,'//label[normalize-space()="Replication slot name"]')
+            field=driver.find_element(By.ID,label.get_attribute('for'));field.send_keys(slot_name)
+            click('Review native operation')
+            wait.until(lambda browser:'wal_slot_create' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+            click('Confirm and start reviewed operation');created=receipt('wal_slot_create');on_started(True)
+            click('Load replication slots')
+            wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Native replication slots"]'))
+            selection('Drop replication slot');click('Use slot '+slot_name)
+            click('Review native operation')
+            wait.until(lambda browser:'wal_slot_drop' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+            click('Confirm and start reviewed operation');dropped=receipt('wal_slot_drop');on_started(False)
+            driver.save_screenshot(str(output/'native-replication-slots.png'))
+            expected=lambda item:'/browser/server/connect/' in item.get('message','') and '428' in item.get('message','')
+            errors=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE' and not expected(item)]
+            (output/'slot-browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
+            return {'complete':True,'created_job':created['job_id'],'dropped_job':dropped['job_id'],
+                    'native_catalog_observed':True,'console_errors':0,'screenshot':'native-replication-slots.png'}
+        selection('Capture native WAL archive')
         for label_text,value in (('WAL archive','browser-managed'),('WAL compression','gzip:level=3')):
             label=driver.find_element(By.XPATH,'//label[normalize-space()="'+label_text+'"]')
             field=driver.find_element(By.ID,label.get_attribute('for'))
@@ -291,5 +372,6 @@ if __name__=='__main__':
     parser.add_argument('--evidence',type=Path,required=True)
     parser.add_argument('--binary-path',type=Path,default=Path('/usr/lib/postgresql/18/bin'))
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+    parser.add_argument('--slots',action='store_true')
     args=parser.parse_args()
-    qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary)
+    qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,slots=args.slots)

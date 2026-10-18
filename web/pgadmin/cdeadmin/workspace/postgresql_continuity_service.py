@@ -70,8 +70,18 @@ def action(service, server, operation, request):
                                'runtime_limit':runtime_limit,'paths':paths,'wal_archive_root':str(jobs.archive_root)})
     transport=None
     try:
+        if operation=='slots':
+            from .postgresql_continuity_slots import catalog
+            context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
+            provider=service.endpoint_service.provider_registry.resolve(context).instance
+            source,transport=capture(provider,payload['route'],server=server)
+            return catalog(source,transport,request)
         if operation=='review':
             native_operation=request.get('operation')
+            slot=None
+            if native_operation in {'wal_slot_create','wal_slot_drop'}:
+                from .postgresql_continuity_slots import options
+                slot=options(native_operation,request.get('options',{}))['slot']
             if native_operation in {'verify','combine','recovery_drill'}:
                 ids=request.get('chain') if native_operation=='combine' else [request.get('base_job_id')]
                 if not isinstance(ids,list) or not ids:raise ContinuityError('Select backup artifacts')
@@ -80,14 +90,20 @@ def action(service, server, operation, request):
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=capture(provider,payload['route'],server=server,wal_details=native_operation=='wal_capture')
+                if native_operation in {'wal_slot_create','wal_slot_drop'}:
+                    from .postgresql_continuity_slots import enrich
+                    source=enrich(source,transport,slot)
             return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            if reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture'}:
+            if reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop'}:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=capture(provider,payload['route'],server=server,wal_details=reviewed['operation']=='wal_capture')
+                if reviewed['operation'] in {'wal_slot_create','wal_slot_drop'}:
+                    from .postgresql_continuity_slots import enrich
+                    source=enrich(source,transport,reviewed['options']['slot'])
             else:transport=ContinuityTransport({})
             admitted=transport;transport=None
             return jobs.start(request,owner,endpoint,source,configuration,admitted)

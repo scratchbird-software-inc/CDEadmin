@@ -254,7 +254,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        transfer; physical/incremental/compressed reconstruction and WAL-target
        recovery drills; interrupted native writer reconciliation and managed
        raw/gzip/LZ4 WAL capture with source binding, cancellation and resume;
-       additional native statistics collectors.
+       native slot catalog/physical creation and slot removal with separate
+       acknowledgement/current-state observations; additional native statistics
+       collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
        extension/language/HA coverage.
@@ -697,6 +699,34 @@ source adoption of unbound archive directories, replication-slot administration,
 remote execution agents, production restore/cutover or platform qualification.
 These remain required parts of the broader product matrix. ScratchBird history
 testing remains deferred.
+
+PostgreSQL native replication-slot commands
+==========================================
+
+The continuity workspace exposes native slot catalog pages, permanent physical
+slot creation and replication-slot removal through ``pg_receivewal``. Catalog
+pages preserve native properties and exact decimal ``safe_wal_size`` values.
+Selected names can be used by the receiver or the reviewed slot commands.
+Native ``if-not-exists`` accepts an existing slot unchanged; its observed type
+is reported even when it is logical. Native active-slot protection remains in
+force, and no receiver or backend is terminated as a side effect of dropping a
+slot. The application can cancel its receiver before a separate reviewed drop.
+
+Reviews bind the selected cluster, native slot identity properties, principal,
+registration, execution host and utility hash. Live progress counters do not
+change the slot's identity. The utility's successful acknowledgement is saved
+before a subsequent catalog read. A failed or lost later observation cannot
+erase that acknowledgement. A nonzero utility exit or interrupted command has
+no successful acknowledgement; its remote outcome remains uncertain even when
+the current catalog can be read. Current slot existence never converts the
+original uncertain operation into success, and a repeated start cannot
+redispatch the same job.
+
+These commands do not complete SQL-native physical reservation/temporary-slot
+options, logical-slot creation/options, slot advancement, synchronized/failover
+slot administration or replication-only credential admission without a regular
+SQL catalog connection. Those are remaining native adapters and qualification
+requirements, together with the broader replication/HA product scope.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================

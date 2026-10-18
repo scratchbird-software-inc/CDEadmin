@@ -136,3 +136,40 @@ it('reviews native WAL capture independently of backup inputs and preserves an u
   await screen.findByText(/Completed archive files observed: 3. Newly published: 2/);
   expect(screen.queryByText(/Native file verification: yes/)).not.toBeInTheDocument();
 });
+
+it('loads native slot properties, selects an exact name and reviews physical creation without a backup input',async () => {
+  const post=jest.fn().mockResolvedValue({slots:[{slot_name:'owned_slot',slot_type:'physical',active:false,
+    safe_wal_size:'9223372036854775807',database:null}],total:1,offset:0,limit:25});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Create physical replication slot'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load replication slots'}));
+  await screen.findByRole('table',{name:'Native replication slots'});
+  expect(post).toHaveBeenCalledWith({action:'postgresql_continuity_slots',request:{offset:0,limit:25}});
+  expect(screen.getByText(/9223372036854775807/, {selector:'pre'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Use slot owned_slot'}));
+  fireEvent.click(screen.getByRole('checkbox',{name:'Accept existing slot unchanged'}));
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_create'});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'wal_slot_create',
+    options:{slot:'owned_slot',if_not_exists:true,timeout_seconds:30}}});
+  expect(screen.queryByText('Selected input')).not.toBeInTheDocument();
+});
+
+it('keeps polling a completed native acknowledgement until its later slot observation arrives',async () => {
+  const post=jest.fn().mockResolvedValue({...reviewed,operation:'wal_slot_create'});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Create physical replication slot'}));
+  fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'owned_slot'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_create',state:'completed',native_utility_acknowledged:true,slot_observation_state:'pending'});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Native utility acknowledged: yes. Current slot observation: pending/);
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_create',state:'completed',native_utility_acknowledged:true,
+    slot_observation_state:'observed',slot_observation:{slot_type:'physical',active:false}});
+  await screen.findByText(/Current slot observation: physical; active: false/,{}, {timeout:5000});
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_status',request:{job_id:'native-job'}});
+});

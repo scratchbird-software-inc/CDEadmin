@@ -131,7 +131,9 @@ class PostgreSQLContinuityJobs:
     def observed(self, record):
         job_id=record['job_id']
         result = self.public(record)
-        if record['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}:
+        active=record['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}
+        pending_slot=record.get('slot_observation_state')=='pending'
+        if active or pending_slot:
             pid, created = record.get('worker_identity',(None,None))
             try:alive = pid is not None and psutil.Process(pid).create_time()==created
             except psutil.Error:alive=False
@@ -139,7 +141,8 @@ class PostgreSQLContinuityJobs:
                 known=self.workers.get(job_id)
                 local_alive=known is not None and known[0].is_alive()
             if not alive or (tuple(record.get('worker_identity',()))==self.worker_identity and not local_alive):
-                result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
+                if active:result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
+                if pending_slot:result.update(slot_observation_state='unavailable',slot_observation_blocker='The later slot observation is unavailable from this worker; refresh the native slot catalog. The recorded native acknowledgement is unchanged.')
         return result
 
     def require_stopped_writer(self, record):
@@ -285,6 +288,9 @@ class PostgreSQLContinuityJobs:
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
+        if operation in {'wal_slot_create','wal_slot_drop'}:
+            from .postgresql_continuity_slots import review
+            return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
         if operation=='wal_capture':
             from .postgresql_continuity_capture import review
             return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
@@ -415,7 +421,7 @@ class PostgreSQLContinuityJobs:
                         raise ContinuityError('Native utility execution host changed; prepare a review on this application host')
                     if review_digest(record)!=record['review_digest']:
                         raise ContinuityError('Backup review fingerprint changed')
-                    stable=lambda value:{key:fact for key,fact in value.items() if key!='lsn'}
+                    stable=lambda value:{key:fact for key,fact in value.items() if key not in {'lsn','slot_snapshot'}}
                     if record['expires_at']<time.time() or record['configuration']!=configuration or stable(record['source'])!=stable(source):
                         raise ContinuityError('Native backup target or registration changed; prepare a new review')
                     record.update(state='dispatching',worker_identity=self.worker_identity,started_at=time.time())
@@ -482,6 +488,9 @@ class PostgreSQLContinuityJobs:
                 current=self.load(record['job_id'],record['owner'],record['endpoint_id'])
                 if current['cancel_requested']:signal.set()
                 self.update(record,progress=event)
+            if record['operation'] in {'wal_slot_create','wal_slot_drop'}:
+                from .postgresql_continuity_slots import run
+                return run(self,record,tools,directory,transport,progress,signal)
             if record['operation']=='wal_capture':
                 from .postgresql_continuity_capture import run
                 return run(self,record,tools,directory,transport,progress,signal)
