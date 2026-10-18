@@ -424,8 +424,11 @@ archive formats and verifiers remain separate for MySQL and MariaDB. Configure
 ``CDEADMIN_MARIADB_BINLOG_BINARY``, ``CDEADMIN_MARIADB_BINLOG_ROOT`` and the
 optional ``CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS`` at the application host.
 The native development provisioner already includes the platform's vendor
-binary. Continuous/active-log collection and retention automation,
-PITR and physical continuity retain separate product acceptance.
+binary. The raw archive workspace also exposes continuous native reception and
+independently verified closed batches, documented in
+:doc:`six_engine_completion`. Reviewed receiver restart, stopped-tail adoption,
+retention automation, PITR and physical continuity retain separate product
+acceptance.
 
 
 Native archived-log replay

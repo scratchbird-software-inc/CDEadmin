@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
+import ContinuousBinlog from './ContinuousBinlog';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw=false}) {
@@ -55,6 +56,7 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
       <Button disabled={busy} onClick={() => run('catalog',{},setCatalog)}>Inspect native binary logs</Button>
       <Button disabled={busy} onClick={() => load(page)}>Load archive jobs</Button>
     </Box>
+    {closed && <Box component="details"><summary>Continuous native binary-log collection</summary><ContinuousBinlog post={post} engine={engine} onInspectArchive={id => inspect({job_id:id})} /></Box>}
     {catalog && <Box component="details"><summary>Native source, GTID state and available logs: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       {closed ? <TextField select size="small" label="Native closed binary logs" value={logNames} SelectProps={{multiple:true}} sx={{minWidth:280}} onChange={event => {setLogNames((catalog?.logs || []).filter(row => event.target.value.includes(row.Log_name)).map(row => row.Log_name));setReview(null);}}>

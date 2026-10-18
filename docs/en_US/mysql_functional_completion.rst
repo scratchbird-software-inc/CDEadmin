@@ -260,7 +260,7 @@ remain distinct. The source can be offline after the archive has been sealed.
 
 These are scoped archive/replay workflows. A compatible restored base is required;
 complete end-to-end PITR, physical continuity, production cutover and
-continuous collection/retention retain separate product acceptance. MariaDB's
+receiver restart/tail adoption/retention retain separate product acceptance. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
 

@@ -234,8 +234,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        observed command boundaries and preserve source-literal character sets.
      - Native administration, data/DDN work, local/registered remote clone,
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
-       exact transaction boundaries and shared target fencing.
-     - Complete base/PITR/cutover, continuous archive/retention,
+       exact transaction boundaries and shared target fencing; native continuous
+       raw reception with independently sealed closed-log batches.
+     - Complete base/PITR/cutover, receiver restart/tail adoption and retention,
        wider procedural scopes and complete installed-capability/lifecycle/HA
        workflows and evidence.
    * - MariaDB 12.2.2
@@ -243,8 +244,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        mode/role-aware completion; native normal/Oracle-mode preparation.
      - Native administration, data/DDN work and independently verified closed
        raw logs with native checksum, compressed-event and GTID-domain semantics;
-       reviewed native archive replay with target fencing and GTID boundaries.
-     - Complete PITR/physical continuity, active/continuous logs and
+       reviewed native archive replay with target fencing and GTID boundaries;
+       native continuous raw reception with independently sealed closed batches.
+     - Complete PITR/physical continuity, receiver restart/tail adoption and
        retention, wider procedural/package scopes and full native operational
        and installed-capability acceptance.
    * - PostgreSQL 18.3
@@ -826,6 +828,49 @@ acknowledged publication failure and an unrecorded acknowledgement handoff;
 reconciliation preserves their different native outcomes. This qualifies these
 SQL functions/plugins, not streaming replication, retained temporary-slot
 lifetimes, arbitrary installed output plugins or complete replication/HA.
+
+MySQL/MariaDB continuous raw binary-log reception
+=================================================
+
+The native raw-archive workspace exposes a continuous receiver for each engine.
+The user selects a discovered native starting log, an explicit nonzero uint32
+receiver server ID and a runtime or no deadline. Source-server ID reuse is
+refused; the review explains native client-ID collision behavior. Application
+runtime ceilings remain enforced. Reviews bind the registered source identity,
+native utility hash/version, execution hostname, storage and connection policy.
+MySQL uses native ``connection-server-id``; MariaDB retains its native
+``stop-never-slave-server-id`` semantics. MySQL's native password-factor limits
+remain explicit; an unsupported binding is not silently discarded.
+
+One privately supervised native raw utility follows the active file and native
+rotations. Active data stays in that receiver's private workspace. A completed
+batch requires a stable native closed-log catalog, the expected complete file
+length and the next local native file, which establishes that the utility has
+closed its previous handle. MySQL's decrypted-length/encryption-header rule and
+MariaDB's distinct file/GTID semantics retain their existing native adapters.
+Copies are independently checked for bounded framing, native event checksums,
+the exact reviewed native parser, source identity and catalog postimages before
+durable publication. No incomplete active tail is labelled a complete archive.
+
+Each published batch is an ordinary engine-specific archive receipt, linked to
+its producing receiver. It is immediately available in the existing archive,
+download and replay workflow while the receiver continues. The live receipt
+retains counts and only the latest ten archive IDs; completed archives retain
+their independent receipt/index entries. Parent cancellation stops its owned
+native process and preserves published snapshots. Publication or receipt-update
+failure first signals that process to stop, including when the generic utility
+observer would otherwise disable a failed callback. A publication failure is
+not reported as a successful capture or a user cancellation.
+
+``tools/cdeadmin_continuous_binlog_qualification.py`` owns isolated native
+MySQL 9.7.0 and MariaDB 12.2.2 fixtures. It checks active-file growth, two live
+rotations/publications, native parser verification, authenticated file delivery,
+once-only start and confirmed cancellation. Independent source-file comparison
+preserves every byte except the documented mutable FDE in-use flag, which the
+vendor checksum excludes. MySQL Python/C interfaces and GTID ON/OFF are separate
+cases. The receiver does not automatically restart. Reviewed restart, stopped
+tail adoption, retention, stronger stream-peer attestation and complete
+base/PITR/production cutover retain separate native implementation/acceptance.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================
