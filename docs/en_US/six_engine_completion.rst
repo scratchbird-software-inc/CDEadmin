@@ -306,13 +306,14 @@ remains open for every engine; a scoped workflow is not the full denominator.
        registration/activation of recovered copies. Retained native session
        captures provide streamed exports, attached-source diff and automatic
        GLOB predicates. Verified external files feed native transforms/rebase
-       and reviewed independent apply. Typed inspection preserves missing/NULL
+       and reviewed independent apply with live native per-conflict decisions.
+       Typed inspection preserves missing/NULL
        distinctions and offers exact ranges and full TEXT/BLOB extraction.
        Connection-owned native CARRAY bindings cover all five native types;
        bounded standalone preupdate diagnostics retain typed before-change
        observations and explicit loss, without claiming commit.
-     - Interactive per-row changeset decisions, transient schema bases and
-       managed long-running session-diff progress/cancellation; remaining
+     - Transient schema bases and managed long-running session-diff
+       progress/cancellation; remaining
        attached/content-view alias shadowing, language identity and installed-
        module transformations; complete independent native extension/feature
        and platform reconciliation.
@@ -2067,3 +2068,16 @@ Cancellable checksums/I/O, sealed recovery, diagnostic unsealed files, verified
 downloads and cleanup accompany the workflow. Authenticated HTTP/browser checks
 compare full extracted bytes independently. Per-row conflict decisions and the
 other listed product gaps remain open; history qualification stays deferred.
+
+SQLite live per-conflict native apply decisions
+----------------------------------------------
+
+Reviewed native apply now supports live decisions inside the owned transaction
+for every native conflict kind, with exact challenge-bound durable responses,
+optional reuse for the same kind and separate consumption/commit facts. Incoming
+and applicable current values retain native missing/NULL/type semantics and
+complete checksummed byte access. Cancellation/deadline and observer failures
+prevent commit and retain the owned rollback/unknown rules. Native unit/job,
+authenticated HTTP and browser evidence qualify this scope. The current matrix
+still requires transient schema bases, managed diff progress and complete
+installed-feature/lifecycle reconciliation; history qualification stays deferred.

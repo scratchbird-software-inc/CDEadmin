@@ -178,13 +178,13 @@ static int inspection_value(sqlite3_str *builder,sqlite3_value *value,sqlite3_in
   sqlite3_str_appendf(builder,"{\"native_type\":\"%s\",\"byte_length\":\"%d\",\"byte_offset\":\"%lld\",\"preview_byte_length\":\"%d\",\"truncated\":%s,\"hex\":",kind==SQLITE_TEXT?"text":"blob",length,offset,take,offset+take<length?"true":"false");
   inspection_hex(builder,offset ? (const unsigned char*)data+(size_t)offset : data,take);sqlite3_str_appendchar(builder,1,'}');return SQLITE_OK;
 }
-static int inspection_row(sqlite3_str *builder,sqlite3_changeset_iter *iterator,sqlite3_int64 number,int preview,int budget,int cancel){
+static int inspection_row(sqlite3_str *builder,sqlite3_changeset_iter *iterator,sqlite3_int64 number,int preview,int budget,int cancel,const char *number_label){
   const char *table=0;unsigned char *primary=0;int columns,operation,indirect,primary_columns,index,side,result;
   result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
   if(result==SQLITE_OK)result=sqlite3changeset_pk(iterator,&primary,&primary_columns);
   if(result!=SQLITE_OK)return result;
   if(columns!=primary_columns || columns<1)return SQLITE_CORRUPT;
-  sqlite3_str_appendf(builder,"{\"record_number\":\"%lld\",\"operation\":\"%s\",\"column_count\":%d,\"indirect\":%s,\"table_hex\":",number,operation==SQLITE_INSERT?"insert":operation==SQLITE_UPDATE?"update":"delete",columns,indirect?"true":"false");
+  sqlite3_str_appendf(builder,"{\"%s\":\"%lld\",\"operation\":\"%s\",\"column_count\":%d,\"indirect\":%s,\"table_hex\":",number_label,number,operation==SQLITE_INSERT?"insert":operation==SQLITE_UPDATE?"update":"delete",columns,indirect?"true":"false");
   if((sqlite3_int64)strlen(table)*2+sqlite3_str_length(builder)>budget)return SQLITE_TOOBIG;
   inspection_hex(builder,table,(int)strlen(table));sqlite3_str_appendall(builder,",\"primary_key\":[");
   if((sqlite3_int64)columns*4+sqlite3_str_length(builder)>budget)return SQLITE_TOOBIG;
@@ -221,7 +221,7 @@ static void inspect_page(sqlite3_context *context,sqlite3_value **values){
     if(number<=offset){result=SQLITE_OK;continue;}
     if(written==limit){more=1;result=SQLITE_OK;break;}
     if(written)sqlite3_str_appendchar(builder,1,',');
-    result=inspection_row(builder,iterator,number,preview,budget,source.cancel);if(result!=SQLITE_OK)break;written++;
+    result=inspection_row(builder,iterator,number,preview,budget,source.cancel,"record_number");if(result!=SQLITE_OK)break;written++;
   }
   if(result==SQLITE_DONE){complete=1;result=SQLITE_OK;}
   if(iterator){finished=sqlite3changeset_finalize(iterator);if(result==SQLITE_OK)result=finished;}
@@ -284,7 +284,7 @@ static void extract_cell(sqlite3_context *context,sqlite3_value **values){
 }
 
 typedef struct Apply Apply;
-struct Apply { int choices[6],cancel;sqlite3_int64 conflicts[6],seen,included;const char *table; };
+struct Apply { int choices[6],ask[6],cancel,response,event_error;sqlite3_int64 conflicts[6],seen,included,event_sequence;const char *table;sqlite3 *db;Output events,values; };
 
 static int apply_filter(void *opaque,sqlite3_changeset_iter *iterator){
   Apply *apply=(Apply*)opaque;const char *table=0;int columns=0,operation=0,indirect=0;
@@ -294,14 +294,112 @@ static int apply_filter(void *opaque,sqlite3_changeset_iter *iterator){
   apply->included++;return 1;
 }
 
+/* Each response names a live native callback. No iterator escapes this call. */
+static int conflict_response(Apply *apply,const unsigned char *nonce,int kind,int *remember){
+  unsigned char frame[20];int received=0;
+  while(received<(int)sizeof(frame)){
+    int available=0,count;
+    if(cancelled(apply->cancel))return SQLITE_CHANGESET_ABORT;
+#ifdef _WIN32
+    {DWORD bytes=0;HANDLE handle=(HANDLE)_get_osfhandle(apply->response);
+      if(handle==INVALID_HANDLE_VALUE || !PeekNamedPipe(handle,0,0,0,&bytes,0)){apply->event_error=SQLITE_IOERR_READ;return SQLITE_CHANGESET_ABORT;}
+      available=(int)(bytes>sizeof(frame) ? sizeof(frame) : bytes);
+      if(!available){Sleep(50);continue;}
+      count=_read(apply->response,frame+received,(unsigned int)(sizeof(frame)-received));
+    }
+#else
+    {struct pollfd item;int ready;item.fd=apply->response;item.events=POLLIN;item.revents=0;
+      do{ready=poll(&item,1,100);}while(ready<0 && errno==EINTR);
+      if(ready<0 || (ready>0 && !(item.revents&POLLIN))){apply->event_error=SQLITE_IOERR_READ;return SQLITE_CHANGESET_ABORT;}
+      available=ready;if(!available)continue;
+      count=(int)read(apply->response,frame+received,sizeof(frame)-received);
+    }
+#endif
+    if(count<0 && errno==EINTR)continue;
+    if(count<=0){apply->event_error=SQLITE_IOERR_READ;return SQLITE_CHANGESET_ABORT;}
+    received+=count;
+  }
+  if(frame[0]!='S' || frame[1]!='R' || memcmp(frame+2,nonce,16)!=0 || frame[18]>SQLITE_CHANGESET_ABORT || frame[19]>1 ||
+      (frame[18]==SQLITE_CHANGESET_REPLACE && kind!=SQLITE_CHANGESET_DATA && kind!=SQLITE_CHANGESET_CONFLICT)){
+    apply->event_error=SQLITE_AUTH;return SQLITE_CHANGESET_ABORT;
+  }
+  *remember=frame[19];return frame[18];
+}
+static int conflict_bytes(Apply *apply,sqlite3_str *builder,sqlite3_changeset_iter *iterator,int operation,int columns,int kind){
+  int side,index,written=0,result=SQLITE_OK;
+  sqlite3_str_appendall(builder,",\"byte_values\":[");
+  for(side=0;side<3;side++){
+    if((side==0 && operation==SQLITE_INSERT) || (side==1 && operation==SQLITE_DELETE) ||
+       (side==2 && kind!=SQLITE_CHANGESET_DATA && kind!=SQLITE_CHANGESET_CONFLICT))continue;
+    for(index=0;index<columns;index++){
+      sqlite3_value *value=0;int type,length;const void *data;sqlite3_int64 offset=apply->values.bytes;
+      if(cancelled(apply->cancel))return SQLITE_INTERRUPT;
+      result=side==0 ? sqlite3changeset_old(iterator,index,&value) : side==1 ? sqlite3changeset_new(iterator,index,&value) : sqlite3changeset_conflict(iterator,index,&value);
+      if(result!=SQLITE_OK)return result;
+      type=value ? sqlite3_value_type(value) : 0;if(type!=SQLITE_TEXT && type!=SQLITE_BLOB)continue;
+      data=type==SQLITE_TEXT ? (const void*)sqlite3_value_text(value) : sqlite3_value_blob(value);length=sqlite3_value_bytes(value);
+      if(length && !data)return SQLITE_NOMEM;
+      result=output(&apply->values,data,length);if(result!=SQLITE_OK)return result;
+      if(written++)sqlite3_str_appendchar(builder,1,',');
+      sqlite3_str_appendf(builder,"{\"side\":\"%s\",\"column_index\":%d,\"native_type\":\"%s\",\"byte_offset\":\"%lld\",\"byte_length\":\"%d\"}",side==0?"old":side==1?"new":"current",index,type==SQLITE_TEXT?"text":"blob",offset,length);
+      if(sqlite3_str_length(builder)>16777216)return SQLITE_TOOBIG;
+    }
+  }
+  sqlite3_str_appendchar(builder,1,']');return result;
+}
+static int interactive_conflict(Apply *apply,int kind,sqlite3_changeset_iter *iterator){
+  unsigned char nonce[16];sqlite3_str *builder=sqlite3_str_new(apply->db);char *json;int result=SQLITE_OK,choice,remember=0;
+  sqlite3_randomness(sizeof(nonce),nonce);apply->event_sequence++;
+  sqlite3_str_appendf(builder,"{\"event\":\"conflict\",\"sequence\":\"%lld\",\"apply_change_sequence\":\"%lld\",\"kind\":%d,\"challenge\":",apply->event_sequence,apply->seen,kind);
+  inspection_hex(builder,nonce,sizeof(nonce));
+  if(kind==SQLITE_CHANGESET_FOREIGN_KEY){int count=0;result=sqlite3changeset_fk_conflicts(iterator,&count);sqlite3_str_appendf(builder,",\"foreign_key_count\":%d",count);}
+  else{
+    const char *table=0;int columns,operation,indirect,index;
+    sqlite3_str_appendall(builder,",\"incoming\":");
+    result=inspection_row(builder,iterator,apply->seen,256,16777216,apply->cancel,"apply_change_sequence");
+    if(result==SQLITE_OK)result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
+    if(result==SQLITE_OK){
+      sqlite3_str_appendall(builder,",\"current_values\":");
+      if(kind==SQLITE_CHANGESET_DATA || kind==SQLITE_CHANGESET_CONFLICT){
+        sqlite3_str_appendchar(builder,1,'[');
+        for(index=0;index<columns && result==SQLITE_OK;index++){
+          sqlite3_value *value=0;if(index)sqlite3_str_appendchar(builder,1,',');
+          result=sqlite3changeset_conflict(iterator,index,&value);
+          if(result==SQLITE_OK)result=inspection_value(builder,value,0,256);
+          if(result==SQLITE_OK && sqlite3_str_length(builder)>16777216)result=SQLITE_TOOBIG;
+        }
+        sqlite3_str_appendchar(builder,1,']');
+      }else sqlite3_str_appendall(builder,"null");
+      if(result==SQLITE_OK)result=conflict_bytes(apply,builder,iterator,operation,columns,kind);
+    }
+  }
+  sqlite3_str_appendall(builder,"}\n");if(result==SQLITE_OK)result=sqlite3_str_errcode(builder);
+  json=sqlite3_str_finish(builder);if(!json && result==SQLITE_OK)result=SQLITE_NOMEM;
+  if(result==SQLITE_OK)result=output(&apply->events,json,(int)strlen(json));
+  sqlite3_free(json);
+  if(result!=SQLITE_OK){apply->event_error=result;return SQLITE_CHANGESET_ABORT;}
+  choice=conflict_response(apply,nonce,kind,&remember);
+  if(apply->event_error || cancelled(apply->cancel))return SQLITE_CHANGESET_ABORT;
+  builder=sqlite3_str_new(apply->db);
+  sqlite3_str_appendf(builder,"{\"event\":\"decision_ack\",\"sequence\":\"%lld\",\"challenge\":",apply->event_sequence);inspection_hex(builder,nonce,sizeof(nonce));
+  sqlite3_str_appendf(builder,",\"choice\":%d,\"remember_kind\":%s}\n",choice,remember?"true":"false");
+  result=sqlite3_str_errcode(builder);json=sqlite3_str_finish(builder);if(!json && result==SQLITE_OK)result=SQLITE_NOMEM;
+  if(result==SQLITE_OK)result=output(&apply->events,json,(int)strlen(json));
+  sqlite3_free(json);
+  if(result!=SQLITE_OK){apply->event_error=result;return SQLITE_CHANGESET_ABORT;}
+  if(remember){apply->ask[kind]=0;apply->choices[kind]=choice;}
+  return choice;
+}
+
 static int apply_conflict(void *opaque,int kind,sqlite3_changeset_iter *iterator){
-  Apply *apply=(Apply*)opaque;(void)iterator;
+  Apply *apply=(Apply*)opaque;
   if(kind<1 || kind>5)return SQLITE_CHANGESET_ABORT;
   apply->conflicts[kind]++;
+  if(apply->ask[kind])return interactive_conflict(apply,kind,iterator);
   return cancelled(apply->cancel) ? SQLITE_CHANGESET_ABORT : apply->choices[kind];
 }
 
-static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value **values){
+static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value **values,int interactive){
   sqlite3_int64 descriptor=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),rebase_descriptor=sqlite3_value_int64(values[10]);
   int flags=sqlite3_value_int(values[4]),result,rebase_size=0,write_result=SQLITE_OK,index;void *rebase=0;Output source,target;Apply apply;char *metadata;
   memset(&apply,0,sizeof(apply));
@@ -309,7 +407,14 @@ static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value 
       !(flags&SQLITE_CHANGESETAPPLY_NOSAVEPOINT) || (flags&~15) || sqlite3_get_autocommit(state->db)){
     fail(context,SQLITE_MISUSE,"Native apply requires owned descriptors and an application-owned savepoint");return;
   }
-  apply.cancel=(int)cancel;
+  apply.cancel=(int)cancel;apply.db=state->db;
+  if(interactive){
+    sqlite3_int64 events=sqlite3_value_int64(values[12]),response=sqlite3_value_int64(values[13]),bytes=sqlite3_value_int64(values[14]);
+    if(cancel<0 || events<0 || events>INT_MAX || response<0 || response>INT_MAX || bytes<0 || bytes>INT_MAX || events==bytes || events==descriptor || bytes==descriptor){fail(context,SQLITE_MISUSE,"Select separate owned native conflict channels and a cancellation pipe");return;}
+    apply.response=(int)response;apply.events.descriptor=(int)events;apply.events.cancel=(int)cancel;
+    apply.values.descriptor=(int)bytes;apply.values.cancel=(int)cancel;
+    for(index=1;index<=5;index++)apply.ask[index]=1;
+  }
   for(index=1;index<=5;index++){
     int choice=sqlite3_value_int(values[index+4]);
     if(choice<SQLITE_CHANGESET_OMIT || choice>SQLITE_CHANGESET_ABORT ||
@@ -327,8 +432,8 @@ static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value 
       rebase_descriptor<0 ? 0 : &rebase,rebase_descriptor<0 ? 0 : &rebase_size,flags);
   if(result==SQLITE_OK && rebase_size>0)write_result=output(&target,rebase,rebase_size);
   sqlite3_free(rebase);
-  metadata=sqlite3_mprintf("{\"native_apply_result_code\":%d,\"rebase_output_result_code\":%d,\"native_bytes_read\":\"%lld\",\"native_changes_seen\":\"%lld\",\"native_changes_included\":\"%lld\",\"native_rebase_bytes\":\"%lld\",\"conflicts\":{\"data\":\"%lld\",\"not_found\":\"%lld\",\"conflict\":\"%lld\",\"constraint\":\"%lld\",\"foreign_key\":\"%lld\"}}",
-      result,write_result,source.bytes,apply.seen,apply.included,target.bytes,apply.conflicts[1],apply.conflicts[2],apply.conflicts[3],apply.conflicts[4],apply.conflicts[5]);
+  metadata=sqlite3_mprintf("{\"native_conflict_event_error\":%d,\"native_conflict_events\":\"%lld\",\"native_conflict_value_bytes\":\"%lld\",\"native_apply_result_code\":%d,\"rebase_output_result_code\":%d,\"native_bytes_read\":\"%lld\",\"native_changes_seen\":\"%lld\",\"native_changes_included\":\"%lld\",\"native_rebase_bytes\":\"%lld\",\"conflicts\":{\"data\":\"%lld\",\"not_found\":\"%lld\",\"conflict\":\"%lld\",\"constraint\":\"%lld\",\"foreign_key\":\"%lld\"}}",
+      apply.event_error,apply.event_sequence,apply.values.bytes,result,write_result,source.bytes,apply.seen,apply.included,target.bytes,apply.conflicts[1],apply.conflicts[2],apply.conflicts[3],apply.conflicts[4],apply.conflicts[5]);
   if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
 }
 
@@ -423,10 +528,11 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
     if(sqlite3_value_type(values[4])!=SQLITE_NULL && (!selected || !*selected)){fail(context,SQLITE_MISUSE,"Select an exact table filter or all tables");return;}
     inspect_changeset(context,values,selected);return;
   }
-  if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
+  if(strcmp(operation,"apply_interactive")==0 && count==15){apply_changeset(context,state,values,1);return;}
+  if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values,0);return;}
   if(strcmp(operation,"transform_file")==0 && count>=8){transform_changeset(context,state,count,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":6}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":7}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}

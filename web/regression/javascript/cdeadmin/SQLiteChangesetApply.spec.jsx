@@ -19,7 +19,7 @@ it('reviews a selected native export and requires confirmation before independen
   fireEvent.click(screen.getByLabelText('Write native rebase data'));fireEvent.click(screen.getByRole('button',{name:'Review native changeset application'}));
   await screen.findByRole('button',{name:'Apply reviewed native changeset'});
   expect(post.mock.calls.at(-1)[0]).toEqual({action:'sqlite_changeset_review',request:{database_target_id:'file',source_database_target_id:'file',source_job_id:'export-job',path:'capture.changeset',options:{
-    invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:true,recursive_triggers:false,include_rebase:true,table_name:null,timeout_seconds:3600,
+    invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:true,recursive_triggers:false,include_rebase:true,interactive_conflicts:false,table_name:null,timeout_seconds:3600,
     conflicts:{data:'abort',not_found:'abort',conflict:'abort',constraint:'abort',foreign_key:'abort'}}}});
   expect(screen.getByRole('button',{name:'Apply reviewed native changeset'})).toBeDisabled();
   fireEvent.click(screen.getByLabelText('Confirm native changes and commit to this destination'));

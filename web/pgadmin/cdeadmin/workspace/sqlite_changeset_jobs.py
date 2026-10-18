@@ -3,6 +3,8 @@ from contextlib import ExitStack,contextmanager
 import hashlib
 import json
 import os
+import re
+import socket
 import sqlite3
 import stat
 import threading
@@ -10,8 +12,9 @@ import time
 
 from ..operations.fileio import durable_replace,private_directory,private_file
 from ..providers.sqlite.changeset_apply import ApplyFailure,connect,stage,target_snapshot
+from ..providers.sqlite.conflict_channel import ConflictChannel
 from ..providers.sqlite.session_api import SessionAPIError
-from .sqlite_capture_jobs import SQLiteCaptureJobs
+from .sqlite_capture_jobs import SQLiteCaptureJobs,checked_archive_reads
 from .mysql_binlog_jobs import DurableCancellation
 
 
@@ -49,6 +52,63 @@ class SQLiteChangesetJobs(SQLiteCaptureJobs):
                     known=self.workers.get(record['job_id'])
                     if known and known[0] is threading.current_thread():self.workers.pop(record['job_id'],None)
 
+    def decide(self,job_id,owner,endpoint,request):
+        if not isinstance(request,dict) or set(request)!={'challenge','choice','remember_kind'} or not isinstance(request['challenge'],str) or not re.fullmatch('[0-9A-F]{32}',request['challenge']) or request['choice'] not in ('omit','replace','abort') or type(request['remember_kind']) is not bool:
+            raise SessionAPIError('Select one exact native callback response')
+        with self.store(job_id) as store:
+            def admit(state):
+                record=self.record(state,job_id,owner,endpoint);pending=record.get('pending_conflict') or {}
+                if record['state']!='active' or record.get('worker_io_closed') or not pending.get('waiting') or pending.get('challenge')!=request['challenge']:
+                    raise SessionAPIError('This native conflict callback is no longer waiting for this response')
+                if record['program']['execution_host']['hostname']!=socket.gethostname():raise SessionAPIError('Send the response on the recorded native application host')
+                if request['choice'] not in pending['allowed_choices']:raise SessionAPIError('This native conflict kind does not support that response')
+                current=record.get('conflict_response')
+                if current is not None:
+                    if any(current.get(key)!=value for key,value in request.items()):raise SessionAPIError('A different response was already admitted for this callback')
+                    return self.public(record)
+                record['conflict_response']={**request,'admitted_at':time.time(),'native_pipe_write_returned':False}
+                return self.public(record)
+            return store.change(admit)
+
+    def conflict(self,job_id,owner,endpoint,challenge):
+        record=self.load(job_id,owner,endpoint);pending=record.get('pending_conflict') or {}
+        if not isinstance(challenge,str) or pending.get('challenge')!=challenge:raise SessionAPIError('Refresh the current native conflict identity')
+        root=self.directory(record)/'archive'
+        if not root.exists():root=self.directory(record)/'archive.incoming'
+        info=root.lstat()
+        if root.resolve()!=root or not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:raise SessionAPIError('Native conflict output directory changed')
+        path=root/'pending-conflict.json';descriptor=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+        with os.fdopen(descriptor,'rb') as stream:
+            before=os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or getattr(before,'st_file_attributes',0)&0x400 or before.st_size>134217728 or str(before.st_size)!=pending['event_size']:raise SessionAPIError('Native conflict event size or identity changed')
+            data=stream.read();after=os.fstat(descriptor)
+            if self.file_identity(before)!=self.file_identity(after) or hashlib.sha256(data).hexdigest()!=pending['event_sha256']:raise SessionAPIError('Native conflict event changed; refresh its current identity')
+        value=json.loads(data)
+        if value.get('challenge')!=challenge:raise SessionAPIError('Native conflict callback identity changed')
+        return {'event':value,'pending':pending,'state':record['state'],'database_commit_returned':record.get('commit_returned') is True,
+            'scope':'Values observed by this live native callback; the incoming change reflects the reviewed native inversion flag. Apply change sequence is not a source-file record ordinal.'}
+
+    @contextmanager
+    def conflict_value(self,job_id,owner,endpoint,challenge,side,column):
+        if side not in ('old','new','current') or type(column) is not int or column<0:raise SessionAPIError('Select one exact native conflict byte value')
+        event=self.conflict(job_id,owner,endpoint,challenge)['event']
+        selected=next((row for row in event.get('byte_values',[]) if row['side']==side and row['column_index']==column),None)
+        if selected is None:raise SessionAPIError('The native callback has no byte value at that position')
+        record=self.load(job_id,owner,endpoint);root=self.directory(record)/'archive'
+        if not root.exists():root=self.directory(record)/'archive.incoming'
+        descriptor=os.open(root/'native-conflict-values.bin',os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+        with os.fdopen(descriptor,'rb') as stream:
+            before=os.fstat(descriptor);offset=int(selected['byte_offset']);length=int(selected['byte_length'])
+            if not stat.S_ISREG(before.st_mode) or getattr(before,'st_file_attributes',0)&0x400 or offset<0 or length<0 or offset+length>before.st_size:raise SessionAPIError('Native conflict byte range changed')
+            stream.seek(offset);remaining=length;hashed=hashlib.sha256()
+            while remaining:
+                block=stream.read(min(remaining,1048576))
+                if not block:raise SessionAPIError('Native conflict byte range ended early')
+                hashed.update(block);remaining-=len(block)
+            after=os.fstat(descriptor)
+            if (before.st_dev,before.st_ino)!=(after.st_dev,after.st_ino) or hashed.hexdigest()!=selected['sha256']:raise SessionAPIError('Native conflict byte range differs from its acknowledged event')
+            stream.seek(offset);yield ConflictValueStream(stream,length),{**selected,'size':length,'path':'conflict-'+side+'-'+str(column+1)+'.bin'}
+
     def reconcile(self,job_id,owner,endpoint,inspector=None):
         record=self.load(job_id,owner,endpoint);self.require_stopped(record)
         if record.get('artifact_removed'):raise SessionAPIError('Native apply output files were removed')
@@ -67,7 +127,7 @@ class SQLiteChangesetJobs(SQLiteCaptureJobs):
         if record.get('artifact_removed') or record['state']!='completed' and not record.get('output_artifact_verified'):
             raise SessionAPIError('Select a verified retained native apply output')
         selected=next((row for row in (record.get('result') or {}).get('artifact',{}).get('files',[]) if row['path']==relative),None)
-        if selected is None or relative not in {'archive.json','native.rebase'}:raise SessionAPIError('Select an exact native apply output file')
+        if selected is None or relative not in {'archive.json','native.rebase','native-conflicts.jsonl','native-conflict-values.bin','pending-conflict.json'}:raise SessionAPIError('Select an exact native apply output file')
         root=self.directory(record)/'archive';info=root.lstat()
         if not stat.S_ISDIR(info.st_mode) or root.resolve()!=root or getattr(info,'st_file_attributes',0)&0x400:raise SessionAPIError('Native apply output directory changed')
         descriptor=os.open(root/relative,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
@@ -82,6 +142,14 @@ class SQLiteChangesetJobs(SQLiteCaptureJobs):
             stream.seek(0);yield stream,selected
 
 
+class ConflictValueStream:
+    def __init__(self,stream,length):self.stream,self.remaining=stream,length
+    def read(self,size=-1):
+        if size is None or size<0:size=self.remaining
+        data=self.stream.read(min(size,self.remaining));self.remaining-=len(data);return data
+    def close(self):self.stream.close()
+
+
 class ApplyTransport:
     def __init__(self,jobs,route,library,input_factory):
         self.jobs,self.route,self.library,self.input_factory=jobs,route,library,input_factory
@@ -91,18 +159,25 @@ class ApplyTransport:
         if self.connection is not None:self.connection.close();self.connection=None
 
     def execute(self,record,directory,cancel,progress):
-        connection,api=connect(self.route,self.library);self.connection=connection;selected=record['options']
+        started=time.monotonic();connection,api=connect(self.route,self.library);self.connection=connection;selected=record['options'];timeout=selected['timeout_seconds']
         if api.program!=record['program']:raise SessionAPIError('The reviewed native apply helper changed')
         if target_snapshot(connection,self.route)!=record['source']['destination']:raise SessionAPIError('The reviewed destination file or native schema changed')
         for name in ('foreign_keys','recursive_triggers'):connection.execute('PRAGMA '+name+'='+str(int(selected[name])))
         incoming=directory/'archive.incoming';incoming.mkdir(mode=0o700);private_directory(incoming)
         with ExitStack() as cleanup:
+            last_progress=[started]
+            def check_source():
+                now=time.monotonic()
+                if cancel.is_set() or timeout is not None and now-started>=timeout:raise ApplyFailure('Native apply stopped during source verification before its transaction')
+                if now-last_progress[0]>=.2:
+                    progress({'stage':'verify-native-input','elapsed_seconds':now-started});last_progress[0]=now
+            cleanup.enter_context(checked_archive_reads(check_source))
             stream,_identity=cleanup.enter_context(self.input_factory())
             rebase=-1
             if selected['include_rebase']:
                 path=incoming/'native.rebase';rebase=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_BINARY',0),0o600)
                 cleanup.callback(os.close,rebase);private_file(path)
-            read,write=os.pipe();lock=threading.Lock();done=threading.Event();failure=[];started=time.monotonic()
+            read,write=os.pipe();lock=threading.Lock();done=threading.Event();failure=[]
             def close_pipe(descriptor):
                 with lock:os.close(descriptor)
             cleanup.callback(close_pipe,read);cleanup.callback(close_pipe,write)
@@ -131,8 +206,17 @@ class ApplyTransport:
                 connection.execute('BEGIN IMMEDIATE')
                 if target_snapshot(connection,self.route)!=record['source']['destination']:raise SessionAPIError('Destination schema changed while acquiring the native write transaction')
                 self.jobs.update(record,native_dispatch_admitted=True)
-                native=stage(connection,api,stream.fileno(),selected,cancel_descriptor=read,rebase_descriptor=rebase,
+                channel=None
+                if selected.get('interactive_conflicts'):
+                    channel=cleanup.enter_context(ConflictChannel(incoming,
+                        lambda **fields:self.jobs.update(record,**fields),
+                        lambda:self.jobs.load(record['job_id'],record['owner'],record['endpoint_id']),stop))
+                native=stage(connection,api,stream.fileno(),selected,cancel_descriptor=read,rebase_descriptor=rebase,interactive_descriptors=None if channel is None else channel.native_descriptors,
                     acknowledge=lambda result:self.jobs.update(record,native_returned=True,native_apply=result))
+                if channel is not None:
+                    channel.finish()
+                    for descriptor in (channel.native_descriptors[0],channel.native_descriptors[2]):os.fsync(descriptor)
+                    channel.close()
                 if cancel.is_set() or timeout is not None and time.monotonic()-started>=timeout or failure:
                     raise ApplyFailure('Native apply stopped before commit; roll back the owned transaction',native)
                 if rebase>=0:os.fsync(rebase)

@@ -13,7 +13,7 @@ from .session_api import SessionAPI,SessionAPIError
 
 KINDS=('data','not_found','conflict','constraint','foreign_key')
 CHOICES={'omit':0,'replace':1,'abort':2}
-SWITCHES=('invert','ignore_noop','fk_no_action','foreign_keys','recursive_triggers','include_rebase')
+SWITCHES=('invert','ignore_noop','fk_no_action','foreign_keys','recursive_triggers','include_rebase','interactive_conflicts')
 DEFAULTS={**dict.fromkeys(SWITCHES,False),'foreign_keys':True,'table_name':None,'timeout_seconds':3600,
     'conflicts':dict.fromkeys(KINDS,'abort')}
 
@@ -66,7 +66,7 @@ class ApplyFailure(SessionAPIError):
         super().__init__(message,code);self.native_observations=result
 
 
-def stage(connection,api,descriptor,selected,*,cancel_descriptor=-1,rebase_descriptor=-1,acknowledge=lambda value:None):
+def stage(connection,api,descriptor,selected,*,cancel_descriptor=-1,rebase_descriptor=-1,interactive_descriptors=None,acknowledge=lambda value:None):
     """Leave successful changes in the caller's owned transaction for finality."""
     selected=options(selected)
     if not connection.in_transaction:raise SessionAPIError('Begin an owned apply transaction before staging native changes')
@@ -74,14 +74,25 @@ def stage(connection,api,descriptor,selected,*,cancel_descriptor=-1,rebase_descr
         observed=bool(connection.execute('PRAGMA '+name).fetchone()[0])
         if observed!=selected[name]:raise SessionAPIError('Native apply connection settings differ from the reviewed switches')
     if selected['include_rebase']!=(rebase_descriptor>=0):raise SessionAPIError('Select the reviewed native rebase output destination')
+    interactive=selected['interactive_conflicts']
+    if interactive!=(interactive_descriptors is not None):raise SessionAPIError('Select the reviewed native conflict response channel')
+    if interactive:
+        if api.program.get('native_session_revision',0)<7 or cancel_descriptor<0:raise SessionAPIError('Live native conflict decisions require the current helper and owned cancellation')
+        if not isinstance(interactive_descriptors,(tuple,list)) or len(interactive_descriptors)!=3 or any(type(fd) is not int or fd<0 for fd in interactive_descriptors):raise SessionAPIError('Select owned native conflict event, response and byte descriptors')
+        identities=[]
+        for fd in (descriptor,*interactive_descriptors[::2],*([rebase_descriptor] if rebase_descriptor>=0 else [])):
+            info=os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):raise SessionAPIError('Native conflict data requires regular owned files')
+            identities.append((info.st_dev,info.st_ino))
+        if len(set(identities))!=len(identities):raise SessionAPIError('Native conflict files must have distinct identities')
     os.lseek(descriptor,0,os.SEEK_SET)
     inspected=api.call('inspect_selection',descriptor,cancel_descriptor,selected['table_name'])
     os.lseek(descriptor,0,os.SEEK_SET)
     flags=1 | (2 if selected['invert'] else 0) | (4 if selected['ignore_noop'] else 0) | (8 if selected['fk_no_action'] else 0)
-    result=api.call('apply_file',descriptor,cancel_descriptor,flags,
-        *(CHOICES[selected['conflicts'][kind]] for kind in KINDS),rebase_descriptor,selected['table_name'])
+    result=api.call('apply_interactive' if interactive else 'apply_file',descriptor,cancel_descriptor,flags,
+        *(CHOICES[selected['conflicts'][kind]] for kind in KINDS),rebase_descriptor,selected['table_name'],*(interactive_descriptors or ()))
     acknowledge(result)
-    code=result['native_apply_result_code'] or result['rebase_output_result_code']
+    code=result.get('native_conflict_event_error',0) or result['native_apply_result_code'] or result['rebase_output_result_code']
     if code:raise ApplyFailure('Native changeset application did not complete',result,code)
     if result['native_changes_included']!=inspected['native_selected_record_count']:
         raise ApplyFailure('Native table compatibility skipped selected changes; the owned transaction must roll back',result)

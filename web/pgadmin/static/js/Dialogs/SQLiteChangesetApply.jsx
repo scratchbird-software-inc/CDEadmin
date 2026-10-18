@@ -5,13 +5,14 @@ import {startBrowserFileDownload} from './browserFileDownload';
 import SQLiteNativeUpload from './SQLiteNativeUpload';
 import SQLiteNativeTransforms from './SQLiteNativeTransforms';
 import SQLiteChangesetInspection from './SQLiteChangesetInspection';
+import SQLiteConflictDecisions from './SQLiteConflictDecisions';
 
 const active=state => ['dispatching','active','committing','cancel_requested'].includes(state);
 const kinds=['data','not_found','conflict','constraint','foreign_key'];
-const initial={invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:true,recursive_triggers:false,include_rebase:false,
+const initial={invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:true,recursive_triggers:false,include_rebase:false,interactive_conflicts:false,
   table_name:null,timeout_seconds:3600,conflicts:Object.fromEntries(kinds.map(kind => [kind,'abort']))};
 const switches={invert:'Invert incoming changeset',ignore_noop:'Ignore native no-op conflicts',fk_no_action:'Use NO ACTION for native foreign keys',
-  foreign_keys:'Enforce native foreign keys',recursive_triggers:'Enable recursive triggers on owned apply connection',include_rebase:'Write native rebase data'};
+  foreign_keys:'Enforce native foreign keys',recursive_triggers:'Enable recursive triggers on owned apply connection',include_rebase:'Write native rebase data',interactive_conflicts:'Decide conflicts while the native apply waits'};
 
 export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,disabled}) {
   const [catalog,setCatalog]=useState(null),[sourceTarget,setSourceTarget]=useState(''),[sources,setSources]=useState(null),[sourceOffset,setSourceOffset]=useState(0),[input,setInput]=useState('');
@@ -122,6 +123,8 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
         <Button disabled={busy || disabled || !confirmed} onClick={() => perform('start',{job_id:receipt.job_id,review_digest:receipt.review_digest,confirmed:true})}>Apply reviewed native changeset</Button>
       </>}
       {active(receipt.state) && receipt.state!=='committing' && <Button disabled={busy} onClick={() => perform('cancel',{job_id:receipt.job_id})}>Cancel native changeset application</Button>}
+      <SQLiteConflictDecisions post={post} databaseTargetId={databaseTargetId} receipt={receipt} endpointUrl={endpointUrl}
+        disabled={busy} onReceipt={value => setReceipt(current => current?.job_id===value.job_id && active(current.state) ? value : current)} />
       <Box role="status">Native apply acknowledgement: {receipt.native_returned ? 'received' : 'unconfirmed'}. Commit acknowledgement: {receipt.commit_returned ? 'received' : 'unconfirmed'}. Owned rollback: {receipt.owned_rollback_confirmed ? 'confirmed' : 'unconfirmed'}.</Box>
       {receipt.native_apply && <Box component="pre" aria-label="Native SQLite conflict observations" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(receipt.native_apply,null,2)}</Box>}
       {!active(receipt.state) && receipt.state!=='reviewed' && !receipt.artifact_removed && <Button disabled={busy} onClick={() => perform('reconcile',{job_id:receipt.job_id})}>Verify native apply output</Button>}

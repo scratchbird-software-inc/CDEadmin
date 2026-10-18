@@ -74,6 +74,8 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     for path in [ROOT/'web/pgadmin/cdeadmin/providers/sqlite/changeset_inspection.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_inspection_jobs.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_inspection_service.py',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteChangesetInspection.jsx']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [ROOT/'web/pgadmin/cdeadmin/providers/sqlite/conflict_channel.py',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteConflictDecisions.jsx']:
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -265,6 +267,28 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
                 response=client.post(url,data={'action':'sqlite_changeset_download','payload':json.dumps({'database_target_id':other,'job_id':apply_review['job_id'],'path':output_row['path']})})
                 assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==output_row['sha256']
         proof['checks'].append('authenticated-native-apply-and-inversion-to-separate-registration-independent-row-comparison-rebase-output-and-no-replay')
+        original_conflict_bytes=b'\x80\x00'*100000
+        with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('INSERT INTO "native'+chr(10)+'雪" VALUES(?,?,?)',(9007199254740993,'target conflict',original_conflict_bytes))
+        interactive=apply_action('review',source_database_target_id=target,source_job_id=exports['changeset'],path='capture.changeset',options={'interactive_conflicts':True,'timeout_seconds':60})
+        live=apply_action('start',job_id=interactive['job_id'],review_digest=interactive['review_digest'],confirmed=True);deadline=time.monotonic()+30
+        while not (live.get('pending_conflict') or {}).get('waiting'):
+            assert time.monotonic()<deadline and live['state'] in {'active','dispatching'},live
+            time.sleep(.02);live=apply_action('status',job_id=interactive['job_id'])
+        challenge=live['pending_conflict']['challenge'];event=apply_action('conflict',job_id=interactive['job_id'],challenge=challenge)['event']
+        assert event['kind_name']=='conflict' and event['current_values'][1]['preview_text']=='target conflict'
+        delivered=client.post(url,data={'action':'sqlite_changeset_conflict_value_download','payload':json.dumps({'database_target_id':other,'job_id':interactive['job_id'],'challenge':challenge,'side':'current','column_index':2})})
+        assert delivered.status_code==200 and delivered.data==original_conflict_bytes
+        refused=client.post(url,json={'action':'sqlite_changeset_decide','request':{'database_target_id':other,'job_id':interactive['job_id'],'response':{'challenge':'0'*32,'choice':'replace','remember_kind':False}}})
+        assert refused.status_code!=200 or not refused.get_json().get('success')
+        apply_action('decide',job_id=interactive['job_id'],response={'challenge':challenge,'choice':'replace','remember_kind':False})
+        deadline=time.monotonic()+30
+        while live['state'] in {'active','dispatching','committing','cancel_requested'}:
+            assert time.monotonic()<deadline;time.sleep(.02);live=apply_action('status',job_id=interactive['job_id'])
+        assert live['state']=='completed' and live['commit_returned'] and live['last_native_conflict_decision']['choice']==1,live
+        with sqlite3.connect(output/'another.sqlite') as connection:
+            assert connection.execute('SELECT CAST(id AS TEXT),length(body),hex(payload) FROM "native'+chr(10)+'雪"').fetchall()==[('9007199254740993',2400000,'0080FF')]
+            connection.execute('DELETE FROM "native'+chr(10)+'雪"')
+        proof['checks'].append('authenticated-live-native-conflict-byte-download-stale-challenge-refusal-scoped-response-native-consumption-and-separate-commit')
         apply_review=apply_action('review',source_database_target_id=target,source_job_id=exports['changeset'],path='capture.changeset',options={})
         with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('CREATE TABLE stale_review(id INTEGER PRIMARY KEY)')
         response=client.post(url,json={'action':'sqlite_changeset_start','request':{'database_target_id':other,'job_id':apply_review['job_id'],
@@ -486,6 +510,22 @@ def browser(app,output,server_id,binary,driver_binary):
         click('Load native apply output files');click('Download apply archive.json')
         metadata=downloads/'archive.json';wait.until(lambda _browser:metadata.is_file() and not list(downloads.glob('*.crdownload')))
         assert json.loads(metadata.read_text())['source']['input_file']['sha256']==checksum
+        conflict_original=b'\x80\x00'*100000
+        with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('UPDATE "native'+chr(10)+'雪" SET body=?,payload=? WHERE id=2',('target live',conflict_original))
+        def interactive_label(browser):
+            for label in browser.find_elements(By.XPATH,'//label[contains(.,"Decide conflicts while the native apply waits")]'):
+                expose(label)
+                if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+            return False
+        wait.until(interactive_label).click();click('Review native changeset application')
+        confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm native changes and commit to this destination")]//input'));expose(confirmation);confirmation.click()
+        click('Apply reviewed native changeset');click('Download current column 3 bytes')
+        conflict_value=downloads/'conflict-current-3.bin';wait.until(lambda _browser:conflict_value.is_file() and not list(downloads.glob('*.crdownload')))
+        assert conflict_value.read_bytes()==conflict_original
+        click('Use native replace for this conflict')
+        wait.until(lambda browser:any('Native apply ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        with sqlite3.connect(output/'another.sqlite') as connection:assert connection.execute('SELECT length(body),hex(payload) FROM "native'+chr(10)+'雪" WHERE id=2').fetchone()==(3000000,'01')
+        wait.until(interactive_label).click()
         click('External SQLite changeset files','summary');click('Inspect native upload support')
         def upload_input(browser):
             for node in browser.find_elements(By.CSS_SELECTOR,'input[aria-label="External native SQLite file"]'):
@@ -573,7 +613,7 @@ def browser(app,output,server_id,binary,driver_binary):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_live_conflict_decisions_verified':True,'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

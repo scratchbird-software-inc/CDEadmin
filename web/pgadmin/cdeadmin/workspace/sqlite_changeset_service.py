@@ -1,5 +1,6 @@
 """Authorized file-target apply reviews from verified native capture artifacts."""
 from ..providers.sqlite.changeset_apply import connect,options,target_snapshot
+from ..providers.sqlite.transform_context import context
 from ..providers.sqlite.session_api import SessionAPIError,identity,installed_library
 from .sqlite_capture_service import manager as capture_manager
 from .sqlite_capture_jobs import digest
@@ -60,10 +61,12 @@ def action(service,server,operation,request):
     library=current_app.config.get('CDEADMIN_SQLITE_SESSION_LIBRARY') or installed_library()
     if operation=='catalog':
         if fields:raise SessionAPIError('Select native apply source registrations')
-        try:_path,program=identity(library);available=True;reason=None
+        try:
+            with context(library) as (_connection,api):program=api.program
+            available=True;reason=None
         except (OSError,ValueError) as error:program=None;available=False;reason=str(error)
         return {'targets':[{'target_id':item.id,'display_name':item.display_name,'database':item.database} for item in endpoint.database_targets],
-            'helper_available':available,'program':program,'unavailable_reason':reason,
+            'helper_available':available,'program':program,'unavailable_reason':reason,'interactive_conflicts_available':bool(program and program.get('native_session_revision',0)>=7),
             'source_kinds':['capture','upload','transform'],
             'scope':'Verified native capture exports and uploads from this endpoint; application-owned main database writes on an independent connection'}
     if operation=='sources':
@@ -80,6 +83,12 @@ def action(service,server,operation,request):
     if operation=='list':
         if set(fields)-{'offset','limit'}:raise SessionAPIError('Select one apply receipt page')
         return jobs.list(owner,endpoint.id,**fields)
+    if operation=='conflict':
+        if set(fields)!={'job_id','challenge'}:raise SessionAPIError('Select the current native conflict callback')
+        return jobs.conflict(fields['job_id'],owner,endpoint.id,fields['challenge'])
+    if operation=='decide':
+        if set(fields)!={'job_id','response'}:raise SessionAPIError('Select one native callback response')
+        return jobs.decide(fields['job_id'],owner,endpoint.id,fields['response'])
     if operation in {'status','cancel','reconcile'}:
         if set(fields)!={'job_id'}:raise SessionAPIError('Select one native apply receipt')
         return {'status':jobs.get,'cancel':jobs.cancel,'reconcile':jobs.reconcile}[operation](fields['job_id'],owner,endpoint.id)
@@ -107,6 +116,8 @@ def action(service,server,operation,request):
     if limit is not None and (type(limit) is not int or not 1<=limit<=2147483647 or selected['timeout_seconds'] is None or selected['timeout_seconds']>limit):raise SessionAPIError('Application policy requires a bounded native apply duration')
     registered=route(service,server,endpoint,target)
     connection,api=connect(registered,library)
+    if selected.get('interactive_conflicts') and api.program.get('native_session_revision',0)<7:
+        connection.close();raise SessionAPIError('The native helper lacks live conflict response channels')
     try:observed={**observed_source,'destination':target_snapshot(connection,registered)};program=api.program
     finally:connection.close()
     configuration=digest({'registration':registered,'root':str(jobs.root),'runtime_limit':limit,'database_target_id':target})
@@ -126,3 +137,17 @@ def download(service,server,request):
         response.headers.update({'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'})
         response.call_on_close(lambda:opened.__exit__(None,None,None));return response
     except BaseException:opened.__exit__(None,None,None);raise
+
+
+
+def download_conflict_value(service,server,request):
+    from flask import send_file
+    if not isinstance(request,dict) or set(request)!={'database_target_id','job_id','challenge','side','column_index'}:raise SessionAPIError('Select one exact native conflict byte value')
+    jobs,owner,endpoint=manager(service,server,request['database_target_id'])
+    opened=jobs.conflict_value(request['job_id'],owner,endpoint.id,request['challenge'],request['side'],request['column_index']);stream,row=opened.__enter__()
+    try:
+        response=send_file(stream,mimetype='application/octet-stream',as_attachment=True,download_name=row['path'],conditional=False,max_age=0)
+        response.content_length=row['size'];response.direct_passthrough=False
+        response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='no-store'
+        response.call_on_close(lambda:opened.__exit__(None,None,None));return response
+    except BaseException:opened.__exit__(*__import__('sys').exc_info());raise

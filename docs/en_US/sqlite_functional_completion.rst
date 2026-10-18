@@ -594,3 +594,45 @@ This scope leaves interactive per-row conflict decisions, transient schema
 bases, managed long-running session-diff progress/cancellation, remaining native
 module transformations and the broader product matrix open. History testing is
 still deferred; platform teams own Windows/macOS qualification.
+
+Live native per-conflict decisions
+---------------------------------
+
+Reviewed apply can now pause in SQLite's native conflict callback for an
+owner-authorized response. DATA, NOTFOUND, CONFLICT, CONSTRAINT and aggregate
+FOREIGN KEY conflicts retain their different native semantics. Replacement is
+available only for DATA and CONFLICT. The workspace shows effective incoming
+values (including the reviewed inversion flag), available current target values,
+key masks, exact integer values and native undefined/NULL distinctions. Apply
+change sequence is explicitly separate from a source-file record ordinal.
+
+Complete incoming/current TEXT and BLOB values are copied while the protected
+callback values remain valid. The browser can download those exact byte ranges
+with individual checksums. No native iterator or protected value escapes its
+callback. A random callback challenge binds each durable response; a stale or
+different admitted response is refused. Responses may apply to the current
+conflict or, explicitly, later conflicts of the same kind. Native consumption is
+acknowledged separately from response admission and database commit.
+
+The apply transaction remains owned by its independent connection while waiting.
+Its locks persist until response, cancellation or the reviewed timeout. Closing
+the viewer does not cancel the job. Cancellation aborts native staging and rolls
+back the owned transaction; pending interactive user sessions remain separate.
+The operation is not previewed and replayed on the target to obtain conflicts.
+FOREIGN KEY OMIT retains the native possibility of committing violations.
+
+The owner-process channel bridges durable responses from HTTP workers to private
+native pipes. Observer/stream failures prevent commit. Event/value output is
+sealed separately, retained for owner-scoped inspection and removable with the
+operation's output. Native return/response acknowledgements never replace the
+existing commit-admission, commit-return and unknown-outcome rules. An uncertain
+operation is never replayed automatically.
+
+Native checks cover all conflict kinds, permitted/refused choices, scoped
+responses, cancellation while waiting, remembered choices, complete byte values,
+durable job admission and separate commit observation. Authenticated HTTP and
+browser qualification downloads current native bytes, resolves a live conflict
+and independently checks committed rows. Remaining transient schema bases,
+managed session-diff progress/cancellation, installed-module workflows and broader
+product coverage stay open. History tests remain deferred; platform evidence
+remains with the Windows/macOS teams.
