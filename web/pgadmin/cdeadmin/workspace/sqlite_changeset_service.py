@@ -21,22 +21,31 @@ def manager(service,server,target):
 
 
 def source(service,server,fields,owner,endpoint):
-    jobs,source_owner,source_endpoint=capture_manager(service,server,fields['source_database_target_id'])
+    kind=fields.get('source_kind','capture')
+    if not isinstance(kind,str) or kind not in {'capture','upload'}:raise SessionAPIError('Select a native capture export or uploaded artifact')
+    selected_manager=capture_manager
+    if kind=='upload':
+        from .sqlite_upload_service import manager as selected_manager
+    jobs,source_owner,source_endpoint=selected_manager(service,server,fields['source_database_target_id'])
     if owner!=source_owner or endpoint.id!=source_endpoint.id:raise SessionAPIError('Select an owned native source export')
     record=jobs.load(fields['source_job_id'],owner,endpoint.id)
     if record['state'] not in {'completed','artifact_verified'} or record.get('artifact_removed'):
         raise SessionAPIError('Select a retained verified native changeset/patchset export')
-    expected='capture.'+record['options']['kind']
     artifact=(record.get('result') or {}).get('artifact') or {}
+    expected='capture.'+record['options']['kind'] if kind=='capture' else artifact.get('input_name')
     row=next((row for row in artifact.get('files',[]) if row['path']==expected),None)
     if fields['path']!=expected or row is None or not artifact.get('native_iterator_complete'):
         raise SessionAPIError('Select the exact verified native changeset or patchset file')
     return jobs,{'source_database_target_id':fields['source_database_target_id'],'source_job_id':record['job_id'],
-        'input_path':expected,'input_file':row,'input_format':artifact['format'],'native_record_count':artifact['native_record_count']}
+        'input_path':expected,'input_file':row,'input_format':artifact['format'],'native_record_count':artifact['native_record_count'],
+        **({'source_kind':'upload'} if kind=='upload' else {})}
 
 
 def action(service,server,operation,request):
     from flask import current_app
+    if operation.startswith('upload_'):
+        from .sqlite_upload_service import action as upload
+        return upload(service,server,operation.removeprefix('upload_'),request)
     if not isinstance(request,dict):raise SessionAPIError('Select a native changeset apply request')
     target=request.get('database_target_id');fields={key:value for key,value in request.items() if key!='database_target_id'}
     jobs,owner,endpoint=manager(service,server,target)
@@ -47,10 +56,16 @@ def action(service,server,operation,request):
         except (OSError,ValueError) as error:program=None;available=False;reason=str(error)
         return {'targets':[{'target_id':item.id,'display_name':item.display_name,'database':item.database} for item in endpoint.database_targets],
             'helper_available':available,'program':program,'unavailable_reason':reason,
-            'scope':'Verified capture exports from this endpoint; application-owned main database writes on an independent connection'}
+            'source_kinds':['capture','upload'],
+            'scope':'Verified native capture exports and uploads from this endpoint; application-owned main database writes on an independent connection'}
     if operation=='sources':
-        if set(fields)-{'source_database_target_id','offset','limit'} or 'source_database_target_id' not in fields:raise SessionAPIError('Select one native source export page')
-        sources,source_owner,source_endpoint=capture_manager(service,server,fields['source_database_target_id'])
+        if set(fields)-{'source_database_target_id','source_kind','offset','limit'} or 'source_database_target_id' not in fields:raise SessionAPIError('Select one native source export page')
+        kind=fields.get('source_kind','capture')
+        if not isinstance(kind,str) or kind not in {'capture','upload'}:raise SessionAPIError('Select native capture exports or uploads')
+        selected_manager=capture_manager
+        if kind=='upload':
+            from .sqlite_upload_service import manager as selected_manager
+        sources,source_owner,source_endpoint=selected_manager(service,server,fields['source_database_target_id'])
         return sources.list(source_owner,source_endpoint.id,fields.get('offset',0),fields.get('limit',25))
     if operation=='list':
         if set(fields)-{'offset','limit'}:raise SessionAPIError('Select one apply receipt page')
@@ -65,13 +80,15 @@ def action(service,server,operation,request):
         if set(fields)!={'job_id','confirmation'}:raise SessionAPIError('Confirm one native apply output removal')
         return jobs.remove_artifact(fields['job_id'],owner,endpoint.id,fields['confirmation'])
     if operation=='review':
-        if set(fields)!={'source_database_target_id','source_job_id','path','options'}:raise SessionAPIError('Review exact native source and apply options')
+        required={'source_database_target_id','source_job_id','path','options'}
+        if not required<=set(fields) or set(fields)-required-{'source_kind'}:raise SessionAPIError('Review exact native source and apply options')
         selected=options(fields['options']);input_fields=fields
     elif operation=='start':
         reviewed=jobs.load(fields.get('job_id'),owner,endpoint.id)
         if reviewed['state']!='reviewed':return jobs.start(fields,owner,endpoint.id,{},None)
         selected=reviewed['options'];input_fields={key:reviewed['source'][key] for key in ('source_database_target_id','source_job_id')}
         input_fields['path']=reviewed['source']['input_path']
+        if 'source_kind' in reviewed['source']:input_fields['source_kind']=reviewed['source']['source_kind']
     else:raise SessionAPIError('Native changeset apply action is unavailable')
     source_jobs,observed_source=source(service,server,input_fields,owner,endpoint)
     if observed_source['input_format'].startswith('sqlite-native-patchset') and selected['invert']:

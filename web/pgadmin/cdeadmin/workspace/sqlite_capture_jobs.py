@@ -23,6 +23,8 @@ class SQLiteCaptureJobs(MySQLBinlogJobs):
         'The stream may include uncommitted work. Export does not commit, roll back or establish a recovered database. Closing the query connection loses its capture memory.',
         'Native return, verified output and publication have separate receipts. An uncertain export is not automatically repeated. Private partial output is not a complete changeset.',)
 
+    def data_file_name(self,record):return 'capture.'+record['options']['kind']
+
     def public(self,record):
         result=super().public({**record,'state':'active'} if record['state']=='publishing' else record)
         if record['state']=='publishing' and result['state']=='active':result['state']='publishing'
@@ -99,7 +101,7 @@ class SQLiteCaptureJobs(MySQLBinlogJobs):
 
     def inspect_partial(self,record,inspector):
         if not record.get('started_at') or inspector is None:raise SessionAPIError('A native partial-output inspector is required')
-        path=self.directory(record)/'archive.incoming'/('capture.'+record['options']['kind'])
+        path=self.directory(record)/'archive.incoming'/self.data_file_name(record)
         with self.open_partial(record,path.name) as stream:
             before=os.fstat(stream.fileno());hashed=hashlib.sha256()
             while block:=stream.read(1048576):hashed.update(block)
@@ -136,7 +138,7 @@ class SQLiteCaptureJobs(MySQLBinlogJobs):
     @contextmanager
     def diagnostic_download(self,job_id,owner,endpoint,relative):
         record=self.load(job_id,owner,endpoint);self.require_stopped(record)
-        selected=record.get('partial_output') or {};name='capture.'+record['options']['kind']
+        selected=record.get('partial_output') or {};name=self.data_file_name(record)
         if record.get('artifact_removed') or relative!='partial/'+name or relative!=selected.get('path'):
             raise SessionAPIError('Select one inspected native capture diagnostic file')
         with self.open_partial(record,name) as stream:

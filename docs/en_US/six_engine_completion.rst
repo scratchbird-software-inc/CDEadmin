@@ -1970,8 +1970,14 @@ records commit admission/acknowledgement separately. Native conflict responses,
 apply flags, compatible-selection checks, inversion and rebase output are
 available from the editor. Changed target schemas refuse old reviews. Sealed
 output can be reconciled without promoting an uncertain database commit or
-repeating it. External uploads, interactive per-row decisions and the remaining
+repeating it. Interactive per-row decisions and the remaining
 native transform/rebase/preupdate/carray tools retain separate acceptance.
+
+External native changeset/patchset intake now uses bounded, acknowledged chunks
+and native stream validation. Resumes recheck the original file prefix, and
+validated uploads enter the same reviewed apply workflow as captured changes.
+Native CLI-produced files and browser upload/application qualify this scoped
+workflow; it does not establish complete SQLite or six-engine product coverage.
 
 SQLite FTS content-view projection contracts
 --------------------------------------------

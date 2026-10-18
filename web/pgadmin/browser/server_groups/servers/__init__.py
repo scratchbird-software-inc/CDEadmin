@@ -2628,6 +2628,19 @@ class ServerNode(PGChildNodeView):
                         gid, sid, profile, state, snapshot
                     )
             else:
+                if request.form.get('action') == 'sqlite_changeset_upload_download':
+                    from pgadmin.cdeadmin.workspace.sqlite_upload_service import download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        selected = json.loads(body)
+                        target = request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected, dict) or selected.get('database_target_id') != target):
+                            raise ValueError('File download database scope does not match this workspace')
+                        return download(service, server, selected)
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid native intake file delivery request')
                 if request.form.get('action') == 'sqlite_changeset_download':
                     from pgadmin.cdeadmin.workspace.sqlite_changeset_service import download
                     body = request.form.get('payload', '')
@@ -2701,6 +2714,7 @@ class ServerNode(PGChildNodeView):
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in {
+                        'sqlite_changeset_upload_catalog', 'sqlite_changeset_upload_create', 'sqlite_changeset_upload_chunk', 'sqlite_changeset_upload_seal', 'sqlite_changeset_upload_status', 'sqlite_changeset_upload_cancel', 'sqlite_changeset_upload_list', 'sqlite_changeset_upload_files', 'sqlite_changeset_upload_reconcile', 'sqlite_changeset_upload_remove_artifact',
                         'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact',
                         'sqlite_capture_export_review', 'sqlite_capture_export_start', 'sqlite_capture_export_status', 'sqlite_capture_export_cancel', 'sqlite_capture_export_list', 'sqlite_capture_export_files', 'sqlite_capture_export_reconcile', 'sqlite_capture_export_remove_artifact',
                         'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
@@ -2974,7 +2988,8 @@ class ServerNode(PGChildNodeView):
                 elif action in {'duckdb_catalog_export', 'duckdb_catalog_compare'}:
                     payload = service.duckdb_catalog(server, data.get('request'),
                         compare=action == 'duckdb_catalog_compare')
-                elif action in {'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact'}:
+                elif action in {'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact',
+                                'sqlite_changeset_upload_catalog', 'sqlite_changeset_upload_create', 'sqlite_changeset_upload_chunk', 'sqlite_changeset_upload_seal', 'sqlite_changeset_upload_status', 'sqlite_changeset_upload_cancel', 'sqlite_changeset_upload_list', 'sqlite_changeset_upload_files', 'sqlite_changeset_upload_reconcile', 'sqlite_changeset_upload_remove_artifact'}:
                     payload = service.sqlite_changeset(server, action.removeprefix('sqlite_changeset_'), data.get('request'))
                 elif action in {'sqlite_capture_export_review', 'sqlite_capture_export_start', 'sqlite_capture_export_status', 'sqlite_capture_export_cancel', 'sqlite_capture_export_list', 'sqlite_capture_export_files', 'sqlite_capture_export_reconcile', 'sqlite_capture_export_remove_artifact'}:
                     payload = service.sqlite_capture_export(server, action.removeprefix('sqlite_capture_export_'), data.get('request'))

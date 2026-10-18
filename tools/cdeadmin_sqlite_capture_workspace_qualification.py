@@ -1,5 +1,6 @@
 """Native connection captures, streamed exports and authenticated offline delivery."""
 import argparse
+import base64
 import builtins
 import ctypes
 import hashlib
@@ -41,6 +42,10 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
     for path in [Path(__file__),ROOT/'tools/native/sqlite_sessions/api.c',
                  *list((ROOT/'web/pgadmin/cdeadmin/providers/sqlite').glob('session*.py')),
                  *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_capture*.py')),
+                 *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_changeset*.py')),
+                 *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_upload*.py')),
+                 ROOT/'web/pgadmin/cdeadmin/providers/sqlite/changeset_apply.py',
+                 ROOT/'web/pgadmin/static/js/Dialogs/SQLiteChangesetApply.jsx',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeUpload.jsx',
                  ROOT/'web/pgadmin/cdeadmin/data_studio/studio.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',
                  ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
@@ -73,12 +78,17 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
             db.session.add(server);db.session.commit();target=str(uuid.uuid4());other=str(uuid.uuid4())
             for identity,path in ((target,source),(other,output/'another.sqlite')):
                 if identity==other:
-                    with sqlite3.connect(path) as connection:connection.execute(schema)
+                    with sqlite3.connect(path) as connection:
+                        connection.execute(schema);connection.execute('CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB)')
                 db.session.add(EndpointDatabaseTarget(id=identity,endpoint_id=server.endpoint_profile.id,display_name=path.name,database=str(path),configuration='{}',active=1))
             db.session.commit();server_id=server.id;url=url_for('NODE-server.cde_workspace_id',gid=group.id,sid=server.id)
             verify=url_for('NODE-server.verify_endpoint_id',gid=group.id,sid=server.id)
         with client.session_transaction() as session:session['_user_id']=str(uid);session['_fresh']=True
         assert client.post(verify,json={}).get_json()['success']
+        cli_identity=json.loads(subprocess.check_output([str(cli),'-json',':memory:',
+            'SELECT sqlite_version() AS version,sqlite_source_id() AS source_id'],text=True))[0]
+        assert cli_identity['version']=='3.53.0'
+        proof['independent_cli']={**cli_identity,'binary_sha256':hashlib.sha256(Path(cli).read_bytes()).hexdigest()}
         def post(action,**fields):
             response=client.post(url,json={'action':action,'database_target_id':target,**fields});value=response.get_json()
             assert response.status_code==200 and value.get('success'),(action,response.status_code,value)
@@ -163,9 +173,40 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
             'review_digest':apply_review['review_digest'],'confirmed':True}})
         assert response.status_code!=200 or not response.get_json().get('success')
         proof['checks'].append('native-apply-start-refuses-changed-destination-schema-review')
+        external={kind:output/('external.'+kind) for kind in ('changeset','patchset')}
+        producer_sql="CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB);\n.session open main producer\n.session producer attach external_file\nINSERT INTO external_file VALUES(9007199254740997,printf('%.*c',2500000,'Z')||'雪😀',x'00FF80');\n"
+        producer_sql+=''.join('.session producer '+kind+' '+json.dumps(str(path),ensure_ascii=False)+'\n' for kind,path in external.items())
+        subprocess.run([str(cli),':memory:'],input=producer_sql,encoding='utf8',check=True,capture_output=True)
+        for kind,path in external.items():
+            data=path.read_bytes();checksum=hashlib.sha256(data).hexdigest()
+            uploaded=apply_action('upload_create',options={'filename':'external native 雪.'+kind,'length':str(len(data)),'expected_sha256':checksum,'kind':'auto','timeout_seconds':60})
+            for offset in range(0,len(data),262144):
+                block=data[offset:offset+262144];packet={'offset':str(offset),'data_base64':base64.b64encode(block).decode('ascii'),'sha256':hashlib.sha256(block).hexdigest()}
+                received=apply_action('upload_chunk',job_id=uploaded['job_id'],chunk=packet)
+                assert received['uploaded_bytes']==str(offset+len(block)) and received['chunk_sha256']==packet['sha256']
+                if offset==0:assert apply_action('upload_chunk',job_id=uploaded['job_id'],chunk=packet)==received
+            validated=apply_action('upload_seal',job_id=uploaded['job_id']);deadline=time.monotonic()+30
+            while validated['state'] in {'active','dispatching','publishing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);validated=apply_action('upload_status',job_id=uploaded['job_id'])
+            assert validated['state']=='completed' and validated['result']['artifact']['native_kind']==kind,validated
+            delivered=client.post(url,data={'action':'sqlite_changeset_upload_download','payload':json.dumps({'database_target_id':other,'job_id':uploaded['job_id'],'path':'uploaded.native'})})
+            assert delivered.status_code==200 and delivered.data==data
+            source_fields={'source_kind':'upload','source_database_target_id':other,'source_job_id':uploaded['job_id'],'path':'uploaded.native'}
+            for inverse in ((False,True) if kind=='changeset' else (False,)):
+                reviewed_upload=apply_action('review',**source_fields,options={'invert':inverse,'timeout_seconds':60})
+                applied_upload=apply_action('start',job_id=reviewed_upload['job_id'],review_digest=reviewed_upload['review_digest'],confirmed=True);deadline=time.monotonic()+30
+                while applied_upload['state'] in {'active','dispatching','committing','cancel_requested'}:
+                    assert time.monotonic()<deadline;time.sleep(.02);applied_upload=apply_action('status',job_id=reviewed_upload['job_id'])
+                assert applied_upload['state']=='completed' and applied_upload['commit_returned'],applied_upload
+                observed=json.loads(subprocess.check_output([str(cli),'-json',str(output/'another.sqlite'),
+                    'SELECT CAST(id AS TEXT) AS id,length(body) AS characters,substr(body,-2) AS suffix,hex(payload) AS payload FROM external_file'],text=True) or '[]')
+                assert observed==([] if inverse else [{'id':'9007199254740997','characters':2500002,'suffix':'雪😀','payload':'00FF80'}]),observed
+        with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('DELETE FROM external_file')
+        proof['checks'].append('independent-native-CLI-produced-changeset-patchset-bounded-upload-retry-whole-SHA-native-detection-download-reviewed-apply-and-exact-CLI-comparison')
         if browser_binary:
             proof['browser']=browser(app,output,server_id,browser_binary,driver_binary)
             proof['checks'].append('browser-native-capture-attach-sensitive-source-export-confirmation-and-streamed-three-megabyte-download')
+            proof['checks'].append('browser-external-native-CLI-file-bounded-upload-validation-reviewed-apply-and-independent-exact-row-check')
         proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,native_source_id=sqlite3.connect(':memory:').execute('SELECT sqlite_source_id()').fetchone()[0])
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
@@ -260,10 +301,31 @@ def browser(app,output,server_id,binary,driver_binary):
         click('Load native apply output files');click('Download apply archive.json')
         metadata=downloads/'archive.json';wait.until(lambda _browser:metadata.is_file() and not list(downloads.glob('*.crdownload')))
         assert json.loads(metadata.read_text())['source']['input_file']['sha256']==checksum
+        click('External SQLite changeset files','summary');click('Inspect native upload support')
+        def upload_input(browser):
+            for node in browser.find_elements(By.CSS_SELECTOR,'input[aria-label="External native SQLite file"]'):
+                try:
+                    expose(node)
+                    if node.is_enabled() and node.is_displayed():return node
+                except (StaleElementReferenceException,ElementNotInteractableException):continue
+            return False
+        upload=wait.until(upload_input);upload.send_keys(str(output/'external.changeset'));click('Upload and validate native file')
+        wait.until(lambda browser:any('Native file intake ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Use validated native file for apply');click('Review native changeset application')
+        confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm native changes and commit to this destination")]//input'));expose(confirmation);confirmation.click()
+        click('Apply reviewed native changeset')
+        wait.until(lambda browser:any('Native apply ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        uploaded_apply=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
+        assert uploaded_apply['commit_returned'] and uploaded_apply['source']['source_kind']=='upload'
+        assert uploaded_apply['source']['input_file']['sha256']==hashlib.sha256((output/'external.changeset').read_bytes()).hexdigest()
+        with sqlite3.connect(output/'another.sqlite') as independent:
+            assert independent.execute('SELECT CAST(id AS TEXT),length(body),substr(body,-2),hex(payload) FROM external_file').fetchall()==[('9007199254740997',2500002,'雪😀','00FF80')]
         driver.save_screenshot(str(output/'native-sqlite-capture.png'))
         errors=[row for row in driver.get_log('browser') if row.get('level')=='SEVERE'];(output/'browser-console.json').write_text(json.dumps(errors,indent=2));assert not errors
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
-            'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True}
+            'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
+            'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
+            'external_native_upload_and_apply_verified':True}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

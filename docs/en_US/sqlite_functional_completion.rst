@@ -343,7 +343,7 @@ Native qualification applies both exported formats through the independent
 public C API to separate databases and compares exact 64-bit identifiers, large
 Unicode text and binary values with the pinned SQLite CLI. Pending source work,
 cross-target refusal and offline delivery are checked separately. Changeset
-upload/per-row conflict decisions, transform/merge/rebase workflows, standalone
+per-row conflict decisions, transform/merge/rebase workflows, standalone
 preupdate/carray support and broader installed-module coverage remain open.
 These captures do not represent schema changes, virtual-table changes, a
 database backup or proven recovery. Independent preupdate hooks cannot share a
@@ -379,6 +379,38 @@ workflow. Native qualification includes exact typed rows, conflict kinds,
 inversion, rowid patchsets, rebase output, schema-review refusal, cancellation,
 busy commit, lost acknowledgements and authenticated cross-file delivery.
 
-External changeset upload, per-row interactive conflict decisions,
+Per-row interactive conflict decisions,
 transform/merge/rebase tools and standalone preupdate/carray workflows remain
 separate work. Changeset apply is not a database recovery verification.
+
+External native changeset and patchset files
+-------------------------------------------
+
+The apply editor also accepts external native files. Private intake receipts
+bind the selected registration, owner, exact decimal length, client filename,
+native helper and validation policy. The browser transfers bounded 256 KiB
+chunks with SHA256 acknowledgements. Paused/retried uploads refresh durable
+progress and revalidate the original file's acknowledged prefix before
+appending. Missing, overlapping, changed or oversized chunks cannot advance
+the recorded upload. An optional expected producer SHA256 binds the whole file.
+
+Completed intake streams through hashing and SQLite's native iterator before
+becoming an eligible apply source. Header format detection is followed by full
+native parsing; it does not replace parsing. Empty native streams retain their
+zero-record result. Validation has cancellation/deadline observation and uses an
+independent in-memory helper connection. It never modifies a registered file.
+Native return, seal and publication remain separate. Lost publication can be
+reconciled against the seal; unsealed input remains diagnostic. Download and
+explicit cleanup preserve the operation receipt and its owner/target scope.
+
+Validated uploads appear alongside captured exports in native apply selectors.
+Applying them requires the existing independent review and commit confirmation,
+with source checksums, target schema identity, native conflict policies and
+uncertain-outcome handling. Native qualification transfers independently
+CLI-produced changesets and patchsets, checks repeated chunk acknowledgements,
+downloads exact bytes, applies them and compares large text, Unicode, binary
+values and wide integer keys through the pinned CLI. The browser exercises file
+selection, bounded upload, native validation and reviewed application. Native
+structure and checksums do not establish application-data completeness or a
+database backup. Per-row decisions, transform/merge/rebase tools and standalone
+preupdate/carray remain open; history testing remains deferred.
