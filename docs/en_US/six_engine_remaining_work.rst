@@ -72,6 +72,13 @@ MySQL
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
 
+The first native source comparison identifies spatial reference systems,
+foreign-server definitions and component-backed masking policies as explicit
+adapter obligations. Masking-policy service installation and its native
+management privilege require separate admission. Server-variable discovery must
+also be reconciled beyond the current curated selection; that selection cannot
+establish catalog completeness.
+
 MariaDB
 -------
 
@@ -83,6 +90,10 @@ MariaDB
   configuration/lifecycle and upgrades using independent native members.
 * MA-LANGUAGE-CAPABILITIES: Close wider procedural/Oracle-package scopes and
   installed engines/plugins, security and maintenance findings from INV-MARIADB.
+
+Include native backup stages/locks and their connection lifetime in continuity
+reconciliation. Asynchronous replication-channel controls do not establish the
+Galera topology/bootstrap/repair workflows for installations that provide them.
 
 PostgreSQL
 ----------
@@ -112,6 +123,12 @@ DuckDB
   preserving exact nested types, names and native positioned diagnostics.
 * DU-CAPABILITIES: Close native installed-extension, file-format, storage,
   configuration and lifecycle findings from INV-DUCKDB.
+
+Native object-comment editing is implemented for the pinned engine's supported
+families; see :doc:`duckdb_driver_development`. This does not close attachment
+mutation, extension-update, copy-database or broader installed-capability
+reconciliation. Database/schema comment syntax that the native runtime rejects
+as unimplemented must not be presented as a supported management operation.
 
 SQLite
 ------

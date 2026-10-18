@@ -336,7 +336,7 @@ def test_duckdb_exact_dialect_inventory_activates_generated_tasks():
     checked = validate_dialect_contract(
         document, DUCKDB, DUCKDB_ADMINISTRATION.dialect_task_ids()
     )
-    assert checked['coverage']['authoritative_task_count'] == 35
+    assert checked['coverage']['authoritative_task_count'] == 42
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 489,
         'statements': 42,

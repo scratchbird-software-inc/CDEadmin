@@ -17,6 +17,7 @@ from ..relational_admin import (
 )
 from .administration import DuckDBAdministration
 from .driver import DuckDBClient
+from .object_metadata import KINDS as COMMENT_KINDS
 from ..native_editor import NativeEditorProvider
 from ..embedded_route import duckdb_arguments
 from ..embedded_route import contained_database
@@ -114,7 +115,8 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
             )
         },
     },
-    supported={
+    supported={kind: operations | (frozenset({'comment'}) if kind in COMMENT_KINDS else frozenset())
+               for kind, operations in {
         'database': frozenset({
             'inspect', 'create', 'drop', 'checkpoint',
             'force_checkpoint', 'vacuum', 'analyze',
@@ -139,7 +141,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
         'secret': frozenset({'inspect', 'create', 'drop'}),
         'extension': frozenset({'inspect', 'execute'}),
         'materialization': frozenset({'create'}),
-    },
+    }.items()},
 ))
 
 
@@ -372,6 +374,7 @@ def _resources(connection, request):
             parent_id = _resource_id('view', [database, schema], parent)
         if parent_id in resources:
             native['navigator_parent_resource_id'] = parent_id
+            native['catalog_metadata']['owner_oid'] = resources[parent_id]['native']['catalog_metadata']['oid']
             resources[parent_id]['native']['columns'].append({
                 'resource_id': column['resource_id'],
                 'name': str(name),

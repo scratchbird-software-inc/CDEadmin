@@ -1,5 +1,6 @@
 """DuckDB retained-session administration and catalog-aware row identity."""
 from contextlib import contextmanager
+from copy import deepcopy
 import os
 
 from ..relational_admin import RelationalAdministration
@@ -7,7 +8,28 @@ from ...sdk.relational import RelationalClientError
 
 
 class DuckDBAdministration(RelationalAdministration):
+    def catalog(self, catalog):
+        from .object_metadata import KINDS
+        value = deepcopy(catalog)
+        for resource in value.get('objects', []):
+            if resource['resource_kind'] in KINDS:
+                resource['operations'] = [row for row in resource.get('operations', [])
+                    if row['operation_id'] != 'comment'] + [{
+                        'operation_id': 'comment', 'title': 'Edit native comment',
+                        'mutation_class': 'admin', 'target_required': True,
+                        'confirmation_required': True, 'long_running': False,
+                        'cancellable': False, 'post_state_required': False}]
+        return super().catalog(value)
+
     def _form(self, kind, operation):
+        if operation == 'comment':
+            return {'form_id': f'duckdb.{kind}.comment', 'title': 'Edit native DuckDB comment',
+                'fields': [{**self._field('comment', 'Comment', 'multiline'),
+                    'submit_unchanged': True,
+                    'initial_value_path': ['catalog_metadata', 'comment'],
+                    'visible_when': {'field_id': 'clear_comment', 'equals': False}},
+                    self._field('clear_comment', 'Remove comment', 'boolean', default=False),
+                    self._field('confirmation', 'Exact object name', 'text', True)]}
         if operation == 'alter' and kind in {'view', 'macro'}:
             fields = [self._field(
                 'query' if kind == 'view' else 'source',
@@ -70,6 +92,14 @@ class DuckDBAdministration(RelationalAdministration):
             ]}
 
     def validate(self, request):
+        if request.get('operation_id') == 'comment':
+            try:
+                from .object_metadata import compile_operation
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                    'code': 'invalid_duckdb_comment', 'message': str(error)}]}
         result = super().validate(request)
         if (not result['errors'] and request.get('operation_id') == 'alter' and
                 request.get('resource_kind') in {'view', 'macro'}):
@@ -82,6 +112,9 @@ class DuckDBAdministration(RelationalAdministration):
         return result
 
     def _compile(self, request):
+        if request.get('operation_id') == 'comment':
+            from .object_metadata import compile_operation
+            return compile_operation(self, request)
         if (request['operation_id'] == 'alter' and
                 request['resource_kind'] in {'view', 'macro'}):
             return self._definition_replacement(request)
@@ -133,6 +166,9 @@ class DuckDBAdministration(RelationalAdministration):
 
     def apply(self, client, request, connection=None):
         with self._borrow(client, connection):
+            if 'duckdb_comment' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .object_metadata import apply
+                return apply(self, client, request, connection)
             return super().apply(client, request, connection=connection)
 
     def read_rows(self, client, request, connection=None):

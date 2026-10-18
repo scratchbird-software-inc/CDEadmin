@@ -28,8 +28,9 @@
       "session_settings": 157,
       "statements": 42
     },
-    "authoritative_task_count": 35,
+    "authoritative_task_count": 42,
     "authoritative_task_ids": [
+      "visual_admin.column.comment",
       "visual_admin.column.create",
       "visual_admin.column.drop",
       "visual_admin.column.rename",
@@ -40,9 +41,11 @@
       "visual_admin.database.import_database",
       "visual_admin.database.vacuum",
       "visual_admin.extension.execute",
+      "visual_admin.index.comment",
       "visual_admin.index.create",
       "visual_admin.index.drop",
       "visual_admin.macro.alter",
+      "visual_admin.macro.comment",
       "visual_admin.macro.create",
       "visual_admin.macro.drop",
       "visual_admin.materialization.create",
@@ -50,23 +53,27 @@
       "visual_admin.schema.drop",
       "visual_admin.secret.create",
       "visual_admin.secret.drop",
+      "visual_admin.sequence.comment",
       "visual_admin.sequence.create",
       "visual_admin.sequence.drop",
       "visual_admin.table.alter",
+      "visual_admin.table.comment",
       "visual_admin.table.create",
       "visual_admin.table.delete",
       "visual_admin.table.drop",
       "visual_admin.table.insert",
       "visual_admin.table.rename",
       "visual_admin.table.update",
+      "visual_admin.type.comment",
       "visual_admin.type.create",
       "visual_admin.type.drop",
       "visual_admin.view.alter",
+      "visual_admin.view.comment",
       "visual_admin.view.create",
       "visual_admin.view.drop",
       "visual_admin.view.rename"
     ],
-    "implemented_task_count": 35,
+    "implemented_task_count": 42,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -74730,7 +74737,8 @@
     "duckdb-sql"
   ],
   "live_evidence_ids": [
-    "duckdb-1.5.2-task-live-execution"
+    "duckdb-1.5.2-task-live-execution",
+    "duckdb-1.5.2-native-comment-execution"
   ],
   "profile_id": "duckdb-native",
   "proof_records": [
@@ -74778,6 +74786,24 @@
       "format": "CPython extension module",
       "license_id": "MIT",
       "sha256": "3df1b67c01f59581c71ee8100aaefb7ce8e98f69000c3949dfac727a16e8e67b"
+    },
+    {
+      "artifact": "duckdb-metadata585/proof.json",
+      "authority": "DuckDB 1.5.2 runtime",
+      "evidence_id": "duckdb-1.5.2-native-comment-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "native DuckDB object-comment qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "4f2add380e234fb9dfc74113f115220f308f109d89b2f320b09cac2fce54685e"
+    },
+    {
+      "artifact": "duckdb-metadata585/proof.json",
+      "authority": "DuckDB 1.5.2 runtime",
+      "evidence_id": "duckdb-1.5.2-native-comment-execution",
+      "evidence_kind": "live_execution",
+      "format": "native DuckDB object-comment qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "4f2add380e234fb9dfc74113f115220f308f109d89b2f320b09cac2fce54685e"
     }
   ],
   "provider_id": "org.cdeadmin.duckdb",
@@ -74828,6 +74854,20 @@
     }
   },
   "task_templates": [
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON COLUMN \"catalog \".\"schema . ü\".\"table . ü\".\"column . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON COLUMN \"catalog \".\"schema . ü\".\"table . ü\".\"column . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.column.comment"
+    },
     {
       "binding_style": "positional_question_mark",
       "proof_ids": [
@@ -74971,6 +75011,20 @@
     {
       "binding_style": "positional_question_mark",
       "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON INDEX \"catalog \".\"schema . ü\".\"index . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON INDEX \"catalog \".\"schema . ü\".\"index . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.index.comment"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
         "duckdb-1.5.2-task-parser-acceptance",
         "duckdb-1.5.2-task-live-execution"
       ],
@@ -75009,6 +75063,20 @@
         "CREATE OR REPLACE MACRO \"qualification\".\"main\".\"cde_editor_double\" (\"value\") AS value * 3"
       ],
       "task_id": "visual_admin.macro.alter"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON MACRO \"catalog \".\"schema . ü\".\"scalar . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON MACRO \"catalog \".\"schema . ü\".\"scalar . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.macro.comment"
     },
     {
       "binding_style": "positional_question_mark",
@@ -75111,6 +75179,20 @@
     {
       "binding_style": "positional_question_mark",
       "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON SEQUENCE \"catalog \".\"schema . ü\".\"sequence . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON SEQUENCE \"catalog \".\"schema . ü\".\"sequence . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.sequence.comment"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
         "duckdb-1.5.2-task-parser-acceptance",
         "duckdb-1.5.2-task-live-execution"
       ],
@@ -75149,6 +75231,20 @@
         "ALTER TABLE \"qualification\".\"main\".\"cde_editor_probe\" ADD \"note\" INTEGER"
       ],
       "task_id": "visual_admin.table.alter"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON TABLE \"catalog \".\"schema . ü\".\"table . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON TABLE \"catalog \".\"schema . ü\".\"table . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.table.comment"
     },
     {
       "binding_style": "positional_question_mark",
@@ -75247,6 +75343,20 @@
     {
       "binding_style": "positional_question_mark",
       "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON TYPE \"catalog \".\"schema . ü\".\"type . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON TYPE \"catalog \".\"schema . ü\".\"type . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.type.comment"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
         "duckdb-1.5.2-task-parser-acceptance",
         "duckdb-1.5.2-task-live-execution"
       ],
@@ -75285,6 +75395,20 @@
         "CREATE OR REPLACE VIEW \"qualification\".\"main\".\"cde_editor_view\" AS SELECT id FROM qualification"
       ],
       "task_id": "visual_admin.view.alter"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "duckdb-1.5.2-native-comment-parser",
+        "duckdb-1.5.2-native-comment-execution"
+      ],
+      "required_bindings": [],
+      "source": "COMMENT ON VIEW \"catalog \".\"schema . ü\".\"view . ü\" IS NULL",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "COMMENT ON VIEW \"catalog \".\"schema . ü\".\"view . ü\" IS NULL"
+      ],
+      "task_id": "visual_admin.view.comment"
     },
     {
       "binding_style": "positional_question_mark",

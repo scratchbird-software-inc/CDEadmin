@@ -109,3 +109,32 @@ The query result envelopes above are the native execution interface. Structured
 administration and editable-grid contracts retain their separately qualified
 forms and row-identity rules; this gate is not a claim that every GUI workflow
 or extension has been exercised on every receiving platform.
+
+Native object comments
+----------------------
+
+The existing object task menu exposes reviewed native comments for tables,
+columns, views, indexes, sequences, user types and SQL macros. Scalar and table
+macros use their distinct native keywords. Indexes remain displayed under their
+owner table but are addressed by their catalog/schema/index name. The multiline
+field preserves empty text separately from the explicit remove-comment option.
+
+Review retains the native object identity and previous comment. Application
+rechecks both on the execution attachment before dispatch and refuses a changed
+baseline. Independently owned operations use a native transaction and close the
+attachment after commit or failure. Retained-session operations preserve the
+caller's pending rows, temporary objects and transaction decision. A failed
+observation after native acknowledgement does not trigger a retry or an implicit
+rollback of the caller's work; uncertain sessions are blocked from further use.
+
+The pinned DuckDB 1.5.2 runtime rejects database and schema comments as
+unimplemented, despite recognizing their syntax. Its FUNCTION comment syntax
+addresses SQL macros, not native scalar/table functions. These are not exposed
+as additional supported comment targets. Native tags remain observational until
+their applicable native interface has been reconciled.
+
+``tools/cdeadmin_duckdb_metadata_qualification.py`` records native effects through
+independent catalog queries, including Unicode/quoted names, multiline literals,
+empty versus NULL comments, overloaded scalar/table macros, changed reviews and
+retained transaction rollback. This evidence covers the object-comment workflow;
+the broader six-engine inventory and acceptance remain open.
