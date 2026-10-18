@@ -12,15 +12,17 @@ import uuid
 from ..providers.postgresql import large_object_files as private_sql
 from ..providers.postgresql.continuity import ContinuityError
 from .postgresql_continuity_slots import IDENTITY, SLOT_PROPERTIES, name
+from . import postgresql_slot_changes as changes
 
 OPERATIONS = {'wal_slot_sql_physical_create', 'wal_slot_sql_logical_create',
               'wal_slot_sql_physical_copy', 'wal_slot_sql_logical_copy',
-              'wal_slot_sql_advance', 'wal_slot_sql_drop'}
+              'wal_slot_sql_advance', 'wal_slot_sql_drop', *changes.OPERATIONS}
 
 
 def options(operation, value):
     if operation not in OPERATIONS or not isinstance(value, dict):
         raise ContinuityError('Select a native SQL slot operation')
+    if operation in changes.OPERATIONS: return changes.options(value)
     fields = {'slot', 'timeout_seconds'}
     if operation.endswith('_physical_create'): fields.add('reserve_wal')
     if operation.endswith('_logical_create'): fields.update(('plugin', 'two_phase', 'failover'))
@@ -59,6 +61,7 @@ def client_identity():
     return {'kind': 'native-python-sql-client', 'psycopg_version': psycopg.__version__,
             'libpq_version': pq.version(), 'libpq_implementation': pq.__impl__,
             'adapter_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'change_adapter_sha256': hashlib.sha256(Path(changes.__file__).read_bytes()).hexdigest(),
             'private_transport_sha256': hashlib.sha256(Path(private_sql.__file__).read_bytes()).hexdigest()}
 
 
@@ -147,6 +150,12 @@ def review(jobs, request, owner, endpoint, source, configuration, paths, runtime
         record['warnings'].append('Logical creation uses the selected database and installed output plugin. Native snapshot initialization may wait for concurrent transactions. Two-phase and failover capabilities are validated by PostgreSQL.')
     if operation.endswith('_drop'):
         record['warnings'].append('Dropping a slot removes its retained position. Active slots are refused by PostgreSQL; no session is terminated automatically.')
+    if operation in changes.OPERATIONS:
+        record['warnings'].append('Native logical output is streamed into a private UTF-8 JSON Lines artifact. Binary payloads use lossless base64; native LSN and transaction identities remain text. Native output plugin options are passed as exact ordered name/value pairs.')
+        record['warnings'].append('The native change count is a transaction-boundary threshold, not a hard output-row limit. PostgreSQL may return more rows for a complete transaction. Server materialization follows native work_mem and temporary-file policies; the application buffers one native row at a time.')
+        if '_get_' in operation:
+            record['warnings'].append('Get consumes changes and advances the native confirmed position. A lost response, cancellation or application artifact failure can leave consumption ahead of captured output. The application never repeats this job to recover an uncertain result.')
+        else: record['warnings'].append('Peek reads changes without acknowledging consumption. The output reflects this native read, not an immutable snapshot of future decoding or a replication checkpoint.')
     record['artifact_location'] = str(jobs.directory(record))
     return jobs.save_review(record)
 
@@ -210,19 +219,34 @@ def run(jobs, record, transport, signal):
                 return
             with private_sql.cursor(connection) as query:
                 query.execute("SELECT pg_catalog.set_config('statement_timeout',%s,false)", ('0' if selected['timeout_seconds'] is None else str(selected['timeout_seconds']) + 's',))
-            command, arguments = statement(record['operation'], selected)
             jobs.update(record, state='active', phase='native_sql_slot_command', sql_dispatched=True,
                         native_backend_pid=connection.info.backend_pid, remote_finality_inferred=False)
             dispatch = True
-            with private_sql.cursor(connection) as query:
-                query.execute(command, arguments)
-                row = query.fetchone()
-            acknowledged = True
-            result = {'slot_name': selected['slot']} if record['operation'].endswith('_drop') else {'slot_name': row[0], 'end_lsn': row[1]}
-            # Persist the actual reply before any later observation or cleanup.
-            jobs.update(record, state='completed', native_sql_acknowledged=True, native_sql_result=result,
-                        sql_dispatched=True, remote_finality_inferred=False, slot_observation_state='pending',
-                        slot_existed_before=record['source']['slot_snapshot'] is not None, finished_at=time.time())
+            def acknowledge(result):
+                nonlocal acknowledged
+                acknowledged = True
+                jobs.update(record, state='completed', native_sql_acknowledged=True, native_sql_result=result,
+                            sql_dispatched=True, remote_finality_inferred=False, slot_observation_state='pending',
+                            slot_existed_before=record['source']['slot_snapshot'] is not None, finished_at=time.time(),
+                            **({'change_artifact': {'state': 'publishing'}} if record['operation'] in changes.OPERATIONS else {}))
+            if record['operation'] in changes.OPERATIONS:
+                next_progress = 0
+                def delivery_progress(event):
+                    nonlocal next_progress
+                    if time.monotonic() >= next_progress:
+                        jobs.update(record, change_progress=event); next_progress = time.monotonic() + .25
+                def check_cancel():
+                    if signal.is_set(): raise ContinuityError('Native logical change delivery was interrupted')
+                artifact = changes.stream(connection, jobs.directory(record), record['operation'], selected,
+                    acknowledge=acknowledge, progress=delivery_progress, check_cancel=check_cancel)
+                jobs.update(record, change_artifact={**artifact, 'state': 'verified'})
+            else:
+                command, arguments = statement(record['operation'], selected)
+                with private_sql.cursor(connection) as query:
+                    query.execute(command, arguments)
+                    row = query.fetchone()
+                result = {'slot_name': selected['slot']} if record['operation'].endswith('_drop') else {'slot_name': row[0], 'end_lsn': row[1]}
+                acknowledge(result)
             stopped.set()
             if observer is not None: observer.join(timeout=2)
             try:
@@ -233,6 +257,10 @@ def run(jobs, record, transport, signal):
                 jobs.update(record, slot_observation_state='unavailable',
                             slot_observation_blocker='Current native slot observation is unavailable (' + type(error).__name__ + ')')
     except Exception as error:
+        if record['operation'] in changes.OPERATIONS:
+            current = jobs.load(record['job_id'], record['owner'], record['endpoint_id'])
+            if (current.get('change_artifact') or {}).get('state') != 'verified':
+                jobs.update(record, change_artifact={'state': 'unavailable', 'error_type': type(error).__name__})
         if acknowledged:
             # Even a later cleanup or observation failure cannot erase an ACK.
             jobs.update(record, state='completed', native_sql_acknowledged=True, slot_observation_state='unavailable')

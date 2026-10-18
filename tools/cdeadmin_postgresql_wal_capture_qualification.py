@@ -343,7 +343,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
     return proof
 
 
-def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password,*,slot_name=None,sql_database=None):
+def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password,*,slot_name=None,sql_database=None,change_case=None):
     import re
     import threading
     from werkzeug.serving import make_server
@@ -358,7 +358,7 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
     try:
         options=webdriver.ChromeOptions();options.binary_location=browser_binary
         for value in ('--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1600,1000',
-                      '--user-data-dir='+str(output/('slot-browser-profile' if slot_name else 'capture-browser-profile'))):options.add_argument(value)
+                      '--user-data-dir='+str(output/('changes-browser-profile' if change_case else 'slot-browser-profile' if slot_name else 'capture-browser-profile'))):options.add_argument(value)
         options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
         driver=webdriver.Chrome(options=options,service=Service(driver_binary) if driver_binary else Service())
         driver.get('http://127.0.0.1:'+str(http.server_port)+'/browser/');wait=WebDriverWait(driver,60)
@@ -418,6 +418,37 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
                         return value
                 return False
             return wait.until(current)
+        if change_case:
+            selection('Peek logical binary changes');click('Load slot databases')
+            label=driver.find_element(By.XPATH,'//label[normalize-space()="Native SQL slot database"]')
+            field=driver.find_element(By.ID,label.get_attribute('for'));wait.until(lambda _browser:field.is_enabled())
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field);field.click()
+            wait.until(lambda browser:next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if item.text.strip()==sql_database),False)).click()
+            def fill(label_text,value):
+                label=driver.find_element(By.XPATH,'//label[normalize-space()="'+label_text+'"]')
+                field=driver.find_element(By.ID,label.get_attribute('for'))
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field)
+                field.send_keys(Keys.COMMAND if sys.platform=='darwin' else Keys.CONTROL,'a');field.send_keys(Keys.BACKSPACE);field.send_keys(value)
+                wait.until(lambda _browser:field.get_attribute('value')==value)
+            fill('Replication slot name',slot_name)
+            for index,pair in enumerate(change_case['plugin_options'],1):
+                click('Add output plugin option');fill('Plugin option name '+str(index),pair['name']);fill('Plugin option value '+str(index),pair['value'])
+            click('Review native operation')
+            wait.until(lambda browser:'wal_slot_sql_peek_binary' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+            click('Confirm and start reviewed operation');created=receipt('wal_slot_sql_peek_binary');on_started(created)
+            click('Preview captured changes')
+            wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Captured native logical changes"]'))
+            downloads=output/'browser-change-downloads';downloads.mkdir()
+            driver.execute_cdp_cmd('Browser.setDownloadBehavior',{'behavior':'allow','downloadPath':str(downloads.resolve())})
+            click('Download logical changes')
+            downloaded=wait.until(lambda _browser:next((path for path in downloads.iterdir() if path.name.endswith('.jsonl')),False))
+            assert hashlib.sha256(downloaded.read_bytes()).hexdigest()==created['change_artifact']['sha256']
+            driver.save_screenshot(str(output/'native-logical-changes.png'))
+            expected=lambda item:'/browser/server/connect/' in item.get('message','') and '428' in item.get('message','')
+            errors=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE' and not expected(item)]
+            (output/'changes-browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
+            return {'complete':True,'job_id':created['job_id'],'native_sql_acknowledged':True,'lossless_download':True,
+                    'download_bytes':str(downloaded.stat().st_size),'preview_visible':True,'console_errors':0,'screenshot':'native-logical-changes.png'}
         if slot_name:
             selection('Create physical replication slot')
             label=driver.find_element(By.XPATH,'//label[normalize-space()="Replication slot name"]')

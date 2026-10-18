@@ -8267,7 +8267,7 @@ export default function ProviderWorkspaceContent({
           onRefresh={refreshResources} refreshing={loadingMore}
           onMutationApplied={reloadAfterAdministration}
           post={post} setError={setError} />
-        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} databaseTargetId={queryDatabaseTargetId} />}</>}
+        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}</>}
       {workspace && tab === 'semantic' &&
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}

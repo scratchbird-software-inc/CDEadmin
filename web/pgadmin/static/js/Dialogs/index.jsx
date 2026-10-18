@@ -297,7 +297,7 @@ export function showProviderWorkspace(
     <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
         <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
-          <PostgresqlContinuity post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
+          <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
   const panel = {
     id: panelId,
     title,

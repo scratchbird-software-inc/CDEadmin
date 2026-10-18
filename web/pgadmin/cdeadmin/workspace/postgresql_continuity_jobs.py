@@ -79,6 +79,7 @@ class PostgreSQLContinuityJobs:
     def public(record, *, summary=False):
         result={**deepcopy({key:value for key,value in record.items() if key not in {'owner','configuration'}}),
                 'automatic_retry':False}
+        if result.get('change_artifact'):result['change_artifact'].pop('file_identity',None)
         if summary:
             result['source']['tablespace_count']=len(result['source'].pop('tablespaces',[]))
             for name in ('tool_observation','verification_observation','process_observation','input_verifications'):
@@ -134,7 +135,8 @@ class PostgreSQLContinuityJobs:
         result = self.public(record)
         active=record['state'] in {'dispatching','active','verifying','verifying_inputs','cancel_requested'}
         pending_slot=record.get('slot_observation_state')=='pending'
-        if active or pending_slot:
+        pending_changes=(record.get('change_artifact') or {}).get('state')=='publishing'
+        if active or pending_slot or pending_changes:
             pid, created = record.get('worker_identity',(None,None))
             try:alive = pid is not None and psutil.Process(pid).create_time()==created
             except psutil.Error:alive=False
@@ -144,6 +146,7 @@ class PostgreSQLContinuityJobs:
             if not alive or (tuple(record.get('worker_identity',()))==self.worker_identity and not local_alive):
                 if active:result.update(state='unknown', observation_blocker='The worker stopped before a terminal receipt. Inspect the artifact and process; do not repeat the backup.')
                 if pending_slot:result.update(slot_observation_state='unavailable',slot_observation_blocker='The later slot observation is unavailable from this worker; refresh the native slot catalog. The recorded native acknowledgement is unchanged.')
+                if pending_changes:result['change_artifact']={'state':'unavailable','blocker':'The worker stopped before artifact publication; the native acknowledgement is unchanged.'}
         return result
 
     def require_stopped_writer(self, record):

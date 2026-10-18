@@ -67,6 +67,12 @@ def action(service, server, operation, request):
     if operation=='slot_databases':
         if request:raise ContinuityError('Invalid native slot database selection')
         return service.endpoint_service.database_catalog(server)
+    if operation in {'change_preview','change_reconcile'}:
+        from . import postgresql_slot_changes as changes
+        if operation=='change_reconcile' and set(request)!={'job_id'}:
+            raise ContinuityError('Select one owned logical change artifact')
+        record=jobs.load(request.get('job_id'),owner,endpoint)
+        return changes.preview(jobs,record,request) if operation=='change_preview' else changes.reconcile(jobs,record)
     runtime_limit=current_app.config.get('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS')
     paths=paths_for_app(current_app)
     configuration=fingerprint({'registration':PostgreSQLMonitoringHost._configuration(server),
@@ -131,3 +137,30 @@ def action(service, server, operation, request):
         raise ContinuityError('Native continuity action is unavailable')
     finally:
         if transport is not None:transport.close()
+
+
+def change_download(service,server,request):
+    """Authenticated delivery is available without a live database connection."""
+    import os
+    from flask import send_file
+    from . import postgresql_slot_changes as changes
+    if not isinstance(request,dict) or set(request)!={'job_id'}:
+        raise ContinuityError('Select one native logical change artifact')
+    action(service,server,'status',request)  # Native registration, permission and owner/endpoint admission.
+    jobs=service.postgresql_continuity_jobs
+    record=jobs.load(request['job_id'],service._principal_id(server),server.endpoint_profile.id)
+    owned=changes.payload(jobs,record)
+    try:stream=owned.__enter__()
+    except OSError:raise ContinuityError('Captured native change bytes are unavailable') from None
+    try:
+        artifact=record['change_artifact'];partial=artifact['state']=='partial'
+        response=send_file(stream,mimetype='application/x-ndjson',as_attachment=True,
+            download_name='postgresql-logical-'+record['job_id']+'.jsonl'+('.partial' if partial else ''),conditional=False,max_age=0)
+        response.content_length=os.fstat(stream.fileno()).st_size
+        response.headers.update({'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff',
+            'X-Content-SHA256':artifact['sha256'],'X-Export-Completeness':'incomplete' if partial else 'verified',
+            'X-Native-SQL-Acknowledged':'yes' if record.get('native_sql_acknowledged') is True else 'unconfirmed'})
+        response.direct_passthrough=False
+        response.call_on_close(lambda:owned.__exit__(None,None,None))
+        return response
+    except BaseException:owned.__exit__(None,None,None);raise

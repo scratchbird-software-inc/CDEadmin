@@ -2636,6 +2636,14 @@ class ServerNode(PGChildNodeView):
                     try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw'}.get(request.form['action'],'mysql'))
                     except (ValueError,TypeError,KeyError,OSError) as error:
                         return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
+                if request.form.get('action') == 'postgresql_continuity_change_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_continuity_service import change_download
+                    from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('Change delivery request is too large')
+                    try:return change_download(service,server,json.loads(body))
+                    except (ValueError,TypeError,KeyError,OSError) as error:
+                        return bad_request(str(error) if isinstance(error,ContinuityError) else 'Invalid native change delivery request')
                 if request.form.get('action') == 'postgresql_large_object_download':
                     from pgadmin.cdeadmin.workspace.postgresql_large_object_service import download
                     from pgadmin.cdeadmin.providers.postgresql.large_object_files import LargeObjectFileError
@@ -2981,7 +2989,8 @@ class ServerNode(PGChildNodeView):
                 elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
                                 'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',
-                                'postgresql_continuity_slot_databases'}:
+                                'postgresql_continuity_slot_databases','postgresql_continuity_change_preview',
+                                'postgresql_continuity_change_reconcile'}:
                     try:
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:

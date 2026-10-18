@@ -1,7 +1,9 @@
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import PostgresqlContinuity from 'sources/Dialogs/PostgresqlContinuity';
+import {startBrowserFileDownload} from 'sources/Dialogs/browserFileDownload';
 import {withTheme} from '../fake_theme';
 const Component=withTheme(PostgresqlContinuity);
+jest.mock('sources/Dialogs/browserFileDownload',() => ({startBrowserFileDownload:jest.fn(() => jest.fn())}));
 const reviewed={job_id:'native-job',review_digest:'native-digest',state:'reviewed',operation:'full_backup',
   source:{system_identifier:'18446744073709551615'},options:{format:'plain'},inputs:[],tool_identities:{},warnings:['Complete cluster backup']};
 let originalHeight;
@@ -218,4 +220,54 @@ it('copies the selected source slot and preserves plugin inheritance and the own
   expect(screen.queryByRole('button',{name:'Reconcile native writer'})).not.toBeInTheDocument();
   rerender(<Component post={post} databaseTargetId="postgresql-database:456" />);
   expect(screen.queryByRole('button',{name:'Confirm and start reviewed operation'})).not.toBeInTheDocument();
+});
+
+it('reviews exact ordered decoding options and delivers a lossless binary artifact through the download manager',async () => {
+  const post=jest.fn().mockResolvedValue({...reviewed,operation:'wal_slot_sql_get_binary'});
+  render(<Component post={post} databaseTargetId="postgresql-database:123" endpointUrl="/owned/workspace" />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Consume logical binary changes'}));
+  fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'owned_logical'}});
+  fireEvent.change(screen.getByLabelText('Native change threshold (blank: no limit)'),{target:{value:''}});
+  fireEvent.change(screen.getByLabelText('Changes up to LSN (blank: native end)'),{target:{value:'FFFFFFFF/FFFFFFFF'}});
+  for(const [index,name,value] of [[1,'proto_version','4'],[2,'publication_names','Exact "ü"']]) {
+    fireEvent.click(screen.getByRole('button',{name:'Add output plugin option'}));
+    fireEvent.change(screen.getByLabelText(`Plugin option name ${index}`),{target:{value:name}});
+    fireEvent.change(screen.getByLabelText(`Plugin option value ${index}`),{target:{value}});
+  }
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'wal_slot_sql_get_binary',database_target_id:'postgresql-database:123',
+    options:{slot:'owned_logical',timeout_seconds:30,upto_lsn:'FFFFFFFF/FFFFFFFF',upto_nchanges:null,plugin_options:[{name:'proto_version',value:'4'},{name:'publication_names',value:'Exact "ü"'}]}}});
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_get_binary',state:'completed',native_sql_acknowledged:true,native_sql_result:{rows:'4294967295'},change_artifact:{state:'verified'}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Captured change rows: 4294967295. Artifact: verified/);
+  fireEvent.click(screen.getByRole('button',{name:'Download logical changes'}));
+  expect(startBrowserFileDownload).toHaveBeenCalledWith('/owned/workspace',{job_id:'native-job'},
+    {action:'postgresql_continuity_change_download',prefix:'postgresql-logical',title:'PostgreSQL logical change download'});
+  post.mockResolvedValue({rows:[{lsn:'FFFFFFFF/FFFFFFFF',xid:'4294967295',data_encoding:'base64',data:'AID/'}],next_offset:null});
+  fireEvent.click(screen.getByRole('button',{name:'Preview captured changes'}));
+  await screen.findByRole('table',{name:'Captured native logical changes'});
+  expect(screen.getByText('AID/')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Next change page'})).toBeDisabled();
+});
+
+it('keeps incomplete capture inspection separate from an unknown native consumption outcome',async () => {
+  const post=jest.fn().mockResolvedValue({...reviewed,operation:'wal_slot_sql_get_text'});
+  render(<Component post={post} databaseTargetId="postgresql-database:123" endpointUrl="/owned/workspace" />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Consume logical text changes'}));
+  fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'owned_logical'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_get_text',state:'unknown',native_sql_acknowledged:false,change_artifact:{state:'unavailable'}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Native SQL acknowledged: unconfirmed/);
+  expect(screen.getByRole('button',{name:'Preview captured changes'})).toBeDisabled();
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_get_text',state:'unknown',native_sql_acknowledged:false,change_artifact:{state:'partial'}});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect and reconcile captured bytes'}));
+  await screen.findByText(/These captured bytes are incomplete evidence/);
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_change_reconcile',request:{job_id:'native-job'}});
+  expect(screen.getByRole('button',{name:'Download incomplete captured changes'})).toBeEnabled();
+  expect(screen.queryByRole('button',{name:'Reconcile native writer'})).not.toBeInTheDocument();
 });

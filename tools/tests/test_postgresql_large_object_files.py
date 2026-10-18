@@ -40,6 +40,12 @@ def sealed(jobs,data=b'\x00\xffnative'):
         if result['state']!='reviewing':break
         assert time.monotonic()<deadline;time.sleep(.01)
     assert result['state']=='reviewed'
+    # The review is durable before the hashing thread finishes cleanup.
+    # Tests removing its file must also honor the active-writer guard.
+    worker=jobs.workers.get(record['job_id'])
+    if worker is not None:
+        worker[0].join(timeout=3)
+        assert not worker[0].is_alive()
     return result
 
 

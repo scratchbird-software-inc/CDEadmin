@@ -257,7 +257,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        native slot catalog/physical creation and slot removal with separate
        acknowledgement/current-state observations; native SQL permanent physical
        reservation/copy, logical creation/copy and slot advancement on an
-       explicitly selected database; additional native statistics collectors.
+       explicitly selected database; native logical text/binary peek/get with
+       exact artifacts and independent acknowledgement/publication recovery;
+       additional native statistics collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
        extension/language/HA coverage.
@@ -773,8 +775,57 @@ initialization while a neighboring transaction remains usable. Browser coverage
 selects the native database, reviews, creates and removes a reserved SQL slot.
 Temporary slots require a retained creating session and are not represented by
 creating a slot on a connection that is immediately closed. Retained-session
-slot lifetimes, decoding/change consumption, standby synchronization and wider
+slot lifetimes, standby synchronization and wider
 replication/HA administration retain separate acceptance.
+
+PostgreSQL native logical change extraction
+===========================================
+
+The SQL slot workspace exposes the native text/binary ``peek`` and ``get``
+functions with an explicit database, slot, upper LSN, native change threshold
+and ordered output-plugin name/value pairs. Duplicate option names retain their
+order for native plugin validation. Null and zero native bounds retain their
+native unlimited/end-of-WAL meaning. The signed int32 change threshold is passed
+as selected; it is not an application row limit. PostgreSQL may emit more output
+for a complete transaction. Native plugin/type/privilege errors have no positive
+command acknowledgement and never trigger automatic replay.
+
+Results stream one native row at a time into a private application-host UTF-8
+JSON Lines artifact. LSN and transaction identifiers remain native text.
+Text output preserves Unicode, quotes, control characters and line breaks;
+binary output uses lossless base64 independently of display-oriented bytea
+loaders. Native server materialization still follows PostgreSQL's work-memory
+and temporary-file behavior. Client streaming does not claim constant server
+memory or a hard byte limit for one native message.
+
+The command's actual final response is recorded before local artifact flush and
+publication. Completed bytes carry their length and SHA-256. A local publication
+failure cannot erase a native acknowledgement. Owned-byte reconciliation can
+finish publication only when an already recorded native acknowledgement and
+the exact byte hash, length and record count agree. It does not dispatch SQL.
+Without that acknowledgement, even apparently complete captured bytes remain
+incomplete evidence of an unknown original outcome. They may be inspected and
+downloaded with an explicit incomplete label, including an incomplete final
+record. Current slot state never supplies a missing original acknowledgement.
+
+Authenticated preview/download and reconciliation remain available without a
+live database connection and retain owner/endpoint and backup-administration
+authorization. Preview uses byte-boundary pagination, caps data cells at 4096
+characters, and reports large or incomplete records by byte location without
+inventing their native fields. Exact download streams through the browser's
+download manager; it does not create a whole-file JavaScript Blob. Changed,
+linked or unavailable artifacts are refused. A consumed operation is never
+rerun to recover missing output: native ``get`` can leave the confirmed position
+ahead of an interrupted local capture, and SQL rollback does not restore it.
+
+``tools/cdeadmin_postgresql_slot_changes_qualification.py`` compares native
+``test_decoding`` text and ``pgoutput`` binary output against independent native
+peek observations, including transaction thresholds, Unicode/int64 values,
+large native messages and byte-exact HTTP/browser downloads. It exercises both
+acknowledged publication failure and an unrecorded acknowledgement handoff;
+reconciliation preserves their different native outcomes. This qualifies these
+SQL functions/plugins, not streaming replication, retained temporary-slot
+lifetimes, arbitrary installed output plugins or complete replication/HA.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================
