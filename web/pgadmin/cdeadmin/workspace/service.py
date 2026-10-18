@@ -1638,9 +1638,10 @@ class ProviderWorkspaceService:
     def sqlite_changeset(self,server,operation,request):
         import sqlite3
         from .sqlite_changeset_service import action
+        from ..data_studio.models import DataStudioError
         from ..sdk import RelationalClientError
         try:return action(self,server,operation,request)
-        except (ValueError,OSError,RelationalClientError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except (ValueError,OSError,DataStudioError,RelationalClientError) as error:raise ProviderWorkspaceError(str(error)) from None
         except sqlite3.Error:raise ProviderWorkspaceError('Native SQLite connection or metadata could not be inspected') from None
 
     def mysql_binlog_replay(self,server,operation,request):

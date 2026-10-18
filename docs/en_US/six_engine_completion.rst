@@ -311,8 +311,10 @@ remains open for every engine; a scoped workflow is not the full denominator.
        distinctions and offers exact ranges and full TEXT/BLOB extraction.
        Connection-owned native CARRAY bindings cover all five native types;
        bounded standalone preupdate diagnostics retain typed before-change
-       observations and explicit loss, without claiming commit.
-     - Transient schema bases and managed long-running session-diff
+       observations and explicit loss, without claiming commit. Native
+       changegroups can use the original retained main/temp/attached schema,
+       including uncommitted objects and native defaults, while preserving SQL.
+     - Separate transient DDN coverage and managed long-running session-diff
        progress/cancellation; remaining
        attached/content-view alias shadowing, language identity and installed-
        module transformations; complete independent native extension/feature
@@ -2081,3 +2083,16 @@ prevent commit and retain the owned rollback/unknown rules. Native unit/job,
 authenticated HTTP and browser evidence qualify this scope. The current matrix
 still requires transient schema bases, managed diff progress and complete
 installed-feature/lifecycle reconciliation; history qualification stays deferred.
+
+SQLite retained transient schema bases
+--------------------------------------
+
+Native changegroup merges can now use the original authorized query connection
+as their schema basis, including temporary, attached in-memory and uncommitted
+schema. Exact session/generation, schema, attachment and transaction observations
+are rechecked under a connection reservation. Native defaults come from SQLite;
+pending SQL and savepoints remain intact on success and cancellation. Native
+tests and authenticated HTTP/browser workflows independently apply and verify
+the generated artifact. Transient DDN coverage, managed long-running diff
+progress/cancellation and other product gaps remain open. History testing stays
+deferred; Windows/macOS evidence remains with the platform teams.

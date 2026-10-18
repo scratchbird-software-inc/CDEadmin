@@ -7,10 +7,11 @@ const active=state => ['dispatching','active','publishing','cancel_requested'].i
 const eligible=(item,kind) => !item.artifact_removed && (kind==='rebase' ? item.commit_returned && item.options.include_rebase && (item.state==='completed' || item.output_artifact_verified) :
   ['completed','artifact_verified'].includes(item.state) && item.result?.artifact?.native_iterator_complete);
 
-export default function SQLiteNativeTransforms({post,databaseTargetId,endpointUrl,onSelected,disabled}) {
+export default function SQLiteNativeTransforms({post,databaseTargetId,sessionId,endpointUrl,onSelected,disabled}) {
   const [catalog,setCatalog]=useState(null),[sourceTarget,setSourceTarget]=useState(''),[kind,setKind]=useState('capture');
   const [sources,setSources]=useState(null),[sourceOffset,setSourceOffset]=useState(0),[selectedInput,setSelectedInput]=useState(''),[inputs,setInputs]=useState([]);
   const [options,setOptions]=useState({operation:'invert',schema_database:null,patchset_output:null,timeout_seconds:3600}),[schemas,setSchemas]=useState(null);
+  const [useSession,setUseSession]=useState(false);
   const [receipt,setReceipt]=useState(null),[confirmed,setConfirmed]=useState(false),[jobs,setJobs]=useState(null),[offset,setOffset]=useState(0),[files,setFiles]=useState(null),[remove,setRemove]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const serial=useRef(0),downloads=useRef([]);
   const call=(operation,fields={}) => post({action:'sqlite_changeset_transform_'+operation,request:{database_target_id:databaseTargetId,...fields}});
@@ -19,6 +20,11 @@ export default function SQLiteNativeTransforms({post,databaseTargetId,endpointUr
     setReceipt(null);setConfirmed(false);setJobs(null);setOffset(0);setFiles(null);setRemove(false);setBusy(false);setError('');
     return () => {serial.current++;downloads.current.forEach(close => close());downloads.current=[];};
   },[databaseTargetId]);
+  useEffect(() => {
+    serial.current++;setUseSession(false);setSchemas(null);setBusy(false);
+    setOptions(current => ({...current,schema_database:null}));
+    setReceipt(current => current?.state==='reviewed' ? null : current);setConfirmed(false);
+  },[databaseTargetId,sessionId]);
   const perform=async (operation,fields={}) => {
     const token=serial.current;setBusy(true);setError('');
     try {
@@ -92,9 +98,11 @@ export default function SQLiteNativeTransforms({post,databaseTargetId,endpointUr
         <Button disabled={blocked} onClick={() => {setInputs(current => current.filter((_value,position) => position!==index));invalidate();}}>Remove native input {index+1}</Button>
       </Box>)}</Box>
       {options.operation==='merge' && <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
-        <Button disabled={blocked} onClick={() => perform('schemas')}>Inspect registered merge schemas</Button>
+        <FormControlLabel label="Use current query session schema for merge" control={<Checkbox checked={useSession} disabled={blocked || !sessionId}
+          onChange={event => {setUseSession(event.target.checked);setSchemas(null);change('schema_database',null);}} />} />
+        <Button disabled={blocked || useSession && !sessionId} onClick={() => perform('schemas',useSession ? {session_id:sessionId} : {})}>{useSession ? 'Inspect retained merge schemas' : 'Inspect registered merge schemas'}</Button>
         <TextField select size="small" label="Native merge schema basis" value={options.schema_database || ''} disabled={blocked} onChange={event => change('schema_database',event.target.value || null)}>
-          <MenuItem value="">No schema basis</MenuItem>{schemas?.schemas.map(schema => <MenuItem key={schema.name} value={schema.name}>{schema.name} — {schema.filename}</MenuItem>)}
+          <MenuItem value="">No schema basis</MenuItem>{schemas?.schemas.map(schema => <MenuItem key={schema.name} value={schema.name}>{schema.name} — {schema.filename || 'connection-local'}</MenuItem>)}
         </TextField>
         <TextField select size="small" label="Native changegroup output configuration" value={options.patchset_output===null ? 'auto' : String(options.patchset_output)} disabled={blocked} onChange={event => change('patchset_output',event.target.value==='auto' ? null : event.target.value==='true')}>
           <MenuItem value="auto">Native input format</MenuItem><MenuItem value="false">Native changeset configuration</MenuItem><MenuItem value="true">Native patchset configuration</MenuItem>
@@ -102,7 +110,8 @@ export default function SQLiteNativeTransforms({post,databaseTargetId,endpointUr
         {schemas && <Alert severity="info">{schemas.scope}</Alert>}
       </Box>}
       <TextField size="small" type="number" label="Native transform maximum seconds" value={options.timeout_seconds ?? ''} disabled={blocked} onChange={event => change('timeout_seconds',event.target.value==='' ? null : Number(event.target.value))} />
-      <Button disabled={blocked || !inputs.length || !catalog.helper_available} onClick={() => perform('review',{inputs,options})}>Review native file transformation</Button>
+      <Button disabled={blocked || !inputs.length || !catalog.helper_available} onClick={() => perform('review',{inputs,options:{...options,
+        ...(useSession && options.operation==='merge' && options.schema_database ? {schema_session_id:sessionId} : {})}})}>Review native file transformation</Button>
     </>}
     {jobs && <Box>
       <TextField select size="small" label="Retained native transform" value={jobs.jobs.some(item => item.job_id===receipt?.job_id) ? receipt.job_id : ''} disabled={blocked} onChange={event => perform('status',{job_id:event.target.value})} sx={{minWidth:420}}>
@@ -129,4 +138,4 @@ export default function SQLiteNativeTransforms({post,databaseTargetId,endpointUr
     </Box>}
   </Box>;
 }
-SQLiteNativeTransforms.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,endpointUrl:PropTypes.string,onSelected:PropTypes.func.isRequired,disabled:PropTypes.bool};
+SQLiteNativeTransforms.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,sessionId:PropTypes.string,endpointUrl:PropTypes.string,onSelected:PropTypes.func.isRequired,disabled:PropTypes.bool};

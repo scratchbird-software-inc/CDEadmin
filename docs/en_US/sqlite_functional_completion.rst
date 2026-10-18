@@ -636,3 +636,30 @@ and independently checks committed rows. Remaining transient schema bases,
 managed session-diff progress/cancellation, installed-module workflows and broader
 product coverage stay open. History tests remain deferred; platform evidence
 remains with the Windows/macOS teams.
+
+Retained schema bases for native changegroups
+-------------------------------------------
+
+Native changegroup merging can select its schema basis from the current query
+session. Main, temporary and attached schemas include in-memory and uncommitted
+objects. SQLite reads the original connection's schema and native default values;
+ScratchRobin does not recreate DDL on another connection. Registered read-only
+file schema bases remain available independently.
+
+The review binds the exact query session, native connection generation,
+attachments, schema contents/version and transaction-open state. These are
+checked again at admission and under an exclusive connection reservation before
+dispatch. Another target, closed connection, active execution or changed schema
+is refused. Native file cancellation uses a private cancellation pipe and never
+interrupts, commits or rolls back the borrowed query connection. Pending data and
+savepoints remain owned by the user. Cancellation and completion release the
+connection reservation; sealed artifacts remain usable after the session closes.
+
+Native checks merge changesets with fewer columns using actual temporary,
+uncommitted-main and attached-memory schema defaults, then independently apply
+the output and compare values. Authenticated HTTP checks cover target/schema
+refusal, preserved savepoints and offline artifact verification; browser controls
+select a retained basis, merge, download and independently apply its output.
+Separate transient DDN coverage, managed long-running diff controls and remaining
+installed-module/product workflows stay open. History testing is deferred and
+platform qualification remains with the Windows/macOS teams.

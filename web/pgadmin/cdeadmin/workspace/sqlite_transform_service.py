@@ -11,6 +11,17 @@ from .sqlite_recovery_service import route
 from .sqlite_transform_jobs import SQLiteTransformJobs,TransformTransport
 
 
+def retained_binding(service,server,target,session_id,library,database=None):
+    from ..providers.embedded_route import contained_database
+    context,_payload,_root=service.endpoint_service.workspace(server,database_target_id=target)
+    result=service.studio_service.sqlite_transform_binding(context,session_id,library,database)
+    registered=route(service,server,server.endpoint_profile,target)
+    actual=result['client']._connection_databases.get(id(result['handle']))
+    if not isinstance(actual,str) or contained_database({**registered,'database':actual})!=contained_database(registered):
+        raise SessionAPIError('The retained schema connection belongs to another SQLite database target')
+    return result,registered
+
+
 def manager(service,server,target):
     base,owner,endpoint=capture_manager(service,server,target)
     with service._semantic_lock:
@@ -40,7 +51,13 @@ def action(service,server,operation,request):
             'targets':[{'target_id':item.id,'display_name':item.display_name,'database':item.database} for item in endpoint.database_targets],
             'input_kinds':['capture','upload','transform','rebase'],'database_mutation':False}
     if operation=='schemas':
-        if fields:raise SessionAPIError('Select the registered schema basis')
+        if set(fields)-{'session_id'}:raise SessionAPIError('Select the registered or retained schema basis')
+        if 'session_id' in fields:
+            if not isinstance(fields['session_id'],str) or not fields['session_id']:raise SessionAPIError('Select a retained query session')
+            selected,_registered=retained_binding(service,server,target,fields['session_id'],library)
+            return {'schemas':[{'name':row[1],'filename':row[2]} for row in selected['source']['databases']],
+                'session_id':fields['session_id'],'transaction_open':selected['source']['transaction_open'],
+                'scope':'this retained query connection, including temporary, in-memory, attached and uncommitted schema; its SQL transaction is preserved'}
         registered=route(service,server,endpoint,target)
         with context(library,registered) as (connection,_api):
             return {'schemas':[{'name':row[1],'filename':row[2]} for row in connection.execute('PRAGMA database_list') if row[2]],
@@ -88,13 +105,19 @@ def action(service,server,operation,request):
     limit=current_app.config.get('CDEADMIN_SQLITE_CAPTURE_MAX_RUNTIME_SECONDS')
     if limit is not None and (type(limit) is not int or not 1<=limit<=2147483647 or selected['timeout_seconds'] is None or selected['timeout_seconds']>limit):
         raise SessionAPIError('Application policy requires a bounded native transform duration')
-    registered=route(service,server,endpoint,target) if selected['schema_database'] is not None else None
-    with context(library,registered) as (connection,api):
-        schema=None if registered is None else schema_snapshot(connection,selected['schema_database']);program=api.program
+    retained=None
+    if selected.get('schema_session_id') is not None:
+        retained,registered=retained_binding(service,server,target,selected['schema_session_id'],library,selected['schema_database'])
+        schema=retained['source']['schema'];program=retained['program']
+    else:
+        registered=route(service,server,endpoint,target) if selected['schema_database'] is not None else None
+        with context(library,registered) as (connection,api):
+            schema=None if registered is None else schema_snapshot(connection,selected['schema_database']);program=api.program
     observed={'inputs':identities,'schema':schema}
+    if retained is not None:observed['schema_binding']=retained['source']
     configuration=digest({'database_target_id':target,'root':str(jobs.root),'schema_registration':registered,'runtime_limit':limit})
     if operation=='review':return jobs.review(owner,endpoint.id,selected,{'identity':observed,'state':{}},configuration,program)
-    transport=TransformTransport(jobs,library,[item[1] for item in native_inputs],registered)
+    transport=TransformTransport(jobs,library,[item[1] for item in native_inputs],registered,retained_binding=retained)
     return jobs.start(fields,owner,endpoint.id,{'source':observed,'configuration':configuration,'program':program},transport)
 
 

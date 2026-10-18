@@ -6,15 +6,20 @@ from .session_api import SessionAPIError
 
 
 def options(value):
-    if not isinstance(value,dict) or set(value)-{'operation','schema_database','patchset_output','timeout_seconds'}:
+    if not isinstance(value,dict) or set(value)-{'operation','schema_database','schema_session_id','patchset_output','timeout_seconds'}:
         raise SessionAPIError('Select native changeset transformation options')
     operation=value.get('operation');database=value.get('schema_database');patchset=value.get('patchset_output');timeout=value.get('timeout_seconds',3600)
+    session=value.get('schema_session_id')
+    if session is not None and (not isinstance(session,str) or not session or len(session)>128 or '\x00' in session or database is None):
+        raise SessionAPIError('Select an exact retained query session and its schema basis')
     if not isinstance(operation,str) or operation not in {'invert','concat','merge','rebase'}:raise SessionAPIError('Select native invert, concat, merge or rebase')
     if database is not None and (not isinstance(database,str) or not database or '\x00' in database):raise SessionAPIError('Select an exact native schema basis or none')
     if patchset is not None and type(patchset) is not bool:raise SessionAPIError('Select native changegroup output configuration or automatic format')
     if operation!='merge' and (database is not None or patchset is not None):raise SessionAPIError('Schema and output configuration apply only to native changegroups')
     if timeout is not None and (type(timeout) is not int or not 1<=timeout<=2147483647):raise SessionAPIError('Select a positive native transform duration or no deadline')
-    return {'operation':operation,'schema_database':database,'patchset_output':patchset,'timeout_seconds':timeout}
+    result={'operation':operation,'schema_database':database,'patchset_output':patchset,'timeout_seconds':timeout}
+    if session is not None:result['schema_session_id']=session
+    return result
 
 
 def transform(api,descriptors,output,selected,*,cancel_descriptor=-1):

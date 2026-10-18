@@ -617,6 +617,22 @@ class DataStudioService:
         except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_transform_binding(self, context, session_id, library, database=None):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..providers.sqlite.session_api import SessionAPI,SessionAPIError
+        from ..providers.sqlite.transform_context import retained_snapshot
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        with provider.client._lock:
+            provider.client._require_idle(handle)
+            api=handle._cdeadmin_session_api or SessionAPI(handle,library,owner_shutdown=provider.client.close)
+            if api.program.get('native_session_revision',0)<3:raise SessionAPIError('The retained helper lacks native changegroups')
+            source=retained_snapshot(handle,api,session_id,database)
+            return {'client':provider.client,'handle':handle,'api':api,'source':source,'program':api.program}
+
+    @serialized_execution
     def sqlite_capture_binding(self, context, session_id, capture_id):
         session,binding=self._operational_session(context,session_id)
         if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':

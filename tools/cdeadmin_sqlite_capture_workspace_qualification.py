@@ -16,7 +16,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def independent_apply(core,cli,changeset,database):
+def independent_apply(core,cli,changeset,database,query=None):
     """Use the pinned core's public C API, independently of the capture bridge."""
     native=ctypes.CDLL(str(core));db=ctypes.c_void_p()
     native.sqlite3_open_v2.argtypes=[ctypes.c_char_p,ctypes.POINTER(ctypes.c_void_p),ctypes.c_int,ctypes.c_char_p]
@@ -30,7 +30,7 @@ def independent_apply(core,cli,changeset,database):
     try:
         with changeset.open('rb') as stream:assert native.sqlite3changeset_apply_strm(db,read,None,None,None,None)==0
     finally:assert native.sqlite3_close(db)==0
-    sql='SELECT CAST(id AS TEXT),length(body),hex(payload) FROM "native\n雪"'
+    sql=query or 'SELECT CAST(id AS TEXT),length(body),hex(payload) FROM "native\n雪"'
     return subprocess.check_output([str(cli),'-json',str(database),sql],text=True)
 
 
@@ -128,11 +128,12 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         session_id=post('open_session',language_profile='sqlite-sql')['session_id']
         def capture(operation,**fields):return post('sqlite_native_sessions',session_id=session_id,request={'operation':operation,**fields})
         def export(operation,**fields):return post('sqlite_capture_export_'+operation,request={'database_target_id':target,**fields})
-        def execute(source,parameters=None):
-            started=post('execute',session_id=session_id,source=source,parameters=parameters or {},history_sensitive=True)
+        def execute(source,parameters=None,*,retained_session_id=None,database_target_id=None):
+            database_target_id=database_target_id or target
+            started=post('execute',database_target_id=database_target_id,session_id=retained_session_id or session_id,source=source,parameters=parameters or {},history_sensitive=True)
             deadline=time.monotonic()+30;rows=[]
             while time.monotonic()<deadline:
-                occurrence=post('poll',occurrence_id=started['occurrence_id'])['occurrence']
+                occurrence=post('poll',database_target_id=database_target_id,occurrence_id=started['occurrence_id'])['occurrence']
                 payload=(occurrence.get('result') or {}).get('extensions',{}).get('sqlite',{}).get('payload',{})
                 rows.extend(payload.get('rows') or [])
                 if occurrence['operation']['terminal']:
@@ -354,6 +355,34 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         merged,merge_receipt,_bytes=transform_reference([uploaded_reference],{'operation':'merge','schema_database':'main','timeout_seconds':60})
         apply_reference(merged);apply_reference(inverted)
         with sqlite3.connect(output/'another.sqlite') as connection:assert connection.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        retained_id=post('open_session',database_target_id=other,language_profile='sqlite-sql')['session_id']
+        def retained_sql(sql):return execute(sql,retained_session_id=retained_id,database_target_id=other)[0]
+        retained_sql('BEGIN');retained_sql('SAVEPOINT owner_pending')
+        retained_schema="external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB,extra TEXT DEFAULT 'transient 😀')"
+        retained_sql('CREATE TEMP TABLE '+retained_schema);retained_sql("INSERT INTO temp.external_file(id) VALUES(99)")
+        schemas=apply_action('transform_schemas',session_id=retained_id)
+        assert schemas['transaction_open'] and 'temp' in {row['name'] for row in schemas['schemas']}
+        refused=client.post(url,json={'action':'sqlite_changeset_transform_schemas','request':{'database_target_id':target,'session_id':retained_id}})
+        assert refused.status_code!=200 or not refused.get_json().get('success')
+        _transient,transient_receipt,transient_bytes=transform_reference([uploaded_reference],
+            {'operation':'merge','schema_database':'temp','schema_session_id':retained_id,'timeout_seconds':60})
+        assert transient_receipt['source_transaction_open'] and transient_receipt['source_transaction_open_after']
+        transient_file=output/'retained-temp.changeset';transient_file.write_bytes(transient_bytes);independent=output/'retained-independent.sqlite'
+        with sqlite3.connect(independent) as connection:connection.execute('CREATE TABLE '+retained_schema)
+        observed=json.loads(independent_apply(core,cli,transient_file,independent,
+            'SELECT CAST(id AS TEXT) AS id,length(body) AS characters,hex(payload) AS payload,extra FROM external_file'))
+        assert observed==[{'id':'9007199254740997','characters':2500002,'payload':'00FF80','extra':'transient 😀'}],observed
+        assert retained_sql('SELECT id,extra FROM temp.external_file')==[[99,'transient 😀']]
+        stale=apply_action('transform_review',inputs=[uploaded_reference],options={'operation':'merge','schema_database':'temp','schema_session_id':retained_id})
+        retained_sql('ALTER TABLE temp.external_file ADD COLUMN changed TEXT')
+        refused=client.post(url,json={'action':'sqlite_changeset_transform_start','request':{'database_target_id':other,'job_id':stale['job_id'],'review_digest':stale['review_digest'],'confirmed':True}})
+        assert refused.status_code!=200 or not refused.get_json().get('success') or refused.get_json()['data']['state']=='reviewed'
+        retained_sql('ROLLBACK TO owner_pending');retained_sql('RELEASE owner_pending');retained_sql('ROLLBACK')
+        post('close_session',database_target_id=other,session_id=retained_id)
+        refused=client.post(url,json={'action':'sqlite_changeset_transform_schemas','request':{'database_target_id':other,'session_id':retained_id}})
+        assert refused.status_code<500 and (refused.status_code!=200 or not refused.get_json().get('success'))
+        assert apply_action('transform_reconcile',job_id=transient_receipt['job_id'])['state']=='artifact_verified'
+        proof['checks'].append('authenticated-retained-uncommitted-temp-schema-native-defaults-independent-apply-exact-bytes-stale-target-and-schema-refusal-savepoint-preservation-and-offline-reconcile')
         local_file=output/'local-branch.changeset'
         local_sql="CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB);\n.session open main local\n.session local attach external_file\nINSERT INTO external_file VALUES(9007199254740997,'local branch',x'01');\n.session local changeset "+json.dumps(str(local_file),ensure_ascii=False)+'\n'
         subprocess.run([str(cli),':memory:'],input=local_sql,encoding='utf8',check=True,capture_output=True)
@@ -376,7 +405,7 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         proof['checks'].extend(['authenticated-native-invert-concat-and-readonly-schema-merge-with-reviewed-transformed-apply-and-no-repeat',
             'acknowledged-native-conflict-replacement-rebase-buffer-and-streaming-local-rebase-agree-with-native-empty-result'])
         if browser_binary:
-            proof['browser']=browser(app,output,server_id,browser_binary,driver_binary)
+            proof['browser']=browser(app,output,server_id,browser_binary,driver_binary,core,cli)
             proof['checks'].append('browser-native-capture-attach-sensitive-source-export-confirmation-and-streamed-three-megabyte-download')
             proof['checks'].append('browser-external-native-CLI-file-bounded-upload-validation-reviewed-apply-and-independent-exact-row-check')
         proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,native_source_id=sqlite3.connect(':memory:').execute('SELECT sqlite_source_id()').fetchone()[0])
@@ -384,7 +413,7 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
     return proof
 
 
-def browser(app,output,server_id,binary,driver_binary):
+def browser(app,output,server_id,binary,driver_binary,core,cli):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -393,7 +422,7 @@ def browser(app,output,server_id,binary,driver_binary):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
-    from cdeadmin_ui_evidence import ensure_data_explorer,expand,wait_for_tree_item,invoke_context_action
+    from cdeadmin_ui_evidence import ensure_data_explorer,expand,wait_for_tree_item,named_tree_item,invoke_context_action
     from cdeadmin_sqlite_query_ui_gate import _run_query
     downloads=output/'browser-downloads';downloads.mkdir(mode=0o700)
     http=make_server('127.0.0.1',0,app,threaded=True);thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start();driver=None
@@ -409,8 +438,14 @@ def browser(app,output,server_id,binary,driver_binary):
         def owned(browser):
             return next((node for node in browser.find_elements(By.CSS_SELECTOR,'.file-name') if node.is_displayed() and browser.execute_script(
                 'const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);',node,server_id)),None)
-        label=wait.until(owned).text;expand(wait,label,('Connectors','SQLite'))
-        database=wait_for_tree_item(wait,'native.sqlite',('Connectors','SQLite',label))
+        label=wait.until(owned).text
+        def database_child(browser):
+            mounted=named_tree_item(browser,'native.sqlite',('Connectors','SQLite',label))
+            if mounted is not None:return mounted
+            # Verification can replace the registration row after a click.
+            # Expand only a currently collapsed row and wait for the real child.
+            expand(wait,label,('Connectors','SQLite'));return False
+        database=wait.until(database_child)
         invoke_context_action(wait,driver,database,('Database workspace','Open SQLite SQL editor...'),handle_endpoint_prompt=False)
         def expose(node):
             ancestors=driver.execute_script('let n=arguments[0].parentElement,a=[];while(n){if(n.tagName==="DETAILS" && !n.open && n.querySelector(":scope > summary")!==arguments[0])a.unshift(n);n=n.parentElement;}return a;',node)
@@ -560,6 +595,41 @@ def browser(app,output,server_id,binary,driver_binary):
         transformed_apply=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
         assert transformed_apply['commit_returned'] and transformed_apply['source']['source_kind']=='transform'
         with sqlite3.connect(output/'another.sqlite') as independent:assert independent.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        def visible_retained_sensitive(browser):
+            for label in browser.find_elements(By.XPATH,'//label[contains(.,"Omit this sensitive source from SQL history")]'):
+                expose(label)
+                if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+            return False
+        sensitive=wait.until(visible_retained_sensitive)
+        if not sensitive.find_element(By.TAG_NAME,'input').is_selected():sensitive.click()
+        _run_query(driver,wait,'SELECT 9173 AS retained_schema_probe','9173','SQLite',output)
+        engine_options()
+        operation_label=driver.find_element(By.XPATH,'//label[normalize-space()="Native file transformation"]')
+        field=driver.find_element(By.ID,operation_label.get_attribute('for'));expose(field);field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='Merge native changegroup'),None)).click()
+        def retained_label(browser):
+            for label in browser.find_elements(By.XPATH,'//label[contains(.,"Use current query session schema for merge")]'):
+                expose(label)
+                if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+            return False
+        wait.until(retained_label).click();click('Inspect retained merge schemas')
+        schema_label=driver.find_element(By.XPATH,'//label[normalize-space()="Native merge schema basis"]')
+        field=driver.find_element(By.ID,schema_label.get_attribute('for'));expose(field);field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip().startswith('main —')),None)).click()
+        click('Review native file transformation')
+        transform_confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm new native transformed artifact")]//input'));expose(transform_confirmation);transform_confirmation.click()
+        click('Start reviewed native transformation')
+        wait.until(lambda browser:any('Native transform ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        retained_merge=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite transform receipt"]').get_attribute('textContent'))
+        assert retained_merge['options']['schema_session_id']==retained_merge['source']['schema_binding']['studio_session_id']
+        assert retained_merge['native_returned'] and retained_merge['source_transaction_open_after'] is False
+        click('Load native transformed files');click('Download transform transformed.native')
+        merged_file=downloads/'transformed.native';wait.until(lambda _browser:merged_file.is_file() and not list(downloads.glob('*.crdownload')))
+        independent_path=output/'browser-retained-independent.sqlite'
+        with sqlite3.connect(independent_path) as independent:independent.execute('CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB)')
+        observed=json.loads(independent_apply(core,cli,merged_file,independent_path,
+            'SELECT CAST(id AS TEXT) AS id,length(body) AS characters,hex(payload) AS payload FROM external_file'))
+        assert observed==[{'id':'9007199254740997','characters':2500002,'payload':'00FF80'}],observed
         native_preupdate=False
         if app.config.get('CDEADMIN_SQLITE_PREUPDATE_LIBRARY'):
             engine_options();click('SQLite before-change diagnostics','summary');click('Inspect native preupdate support');click('Start native preupdate observations')
@@ -613,7 +683,7 @@ def browser(app,output,server_id,binary,driver_binary):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_live_conflict_decisions_verified':True,'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_retained_schema_merge_verified':True,'native_live_conflict_decisions_verified':True,'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

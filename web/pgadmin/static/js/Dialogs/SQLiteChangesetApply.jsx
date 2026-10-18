@@ -14,7 +14,7 @@ const initial={invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:tr
 const switches={invert:'Invert incoming changeset',ignore_noop:'Ignore native no-op conflicts',fk_no_action:'Use NO ACTION for native foreign keys',
   foreign_keys:'Enforce native foreign keys',recursive_triggers:'Enable recursive triggers on owned apply connection',include_rebase:'Write native rebase data',interactive_conflicts:'Decide conflicts while the native apply waits'};
 
-export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,disabled}) {
+export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,endpointUrl,disabled}) {
   const [catalog,setCatalog]=useState(null),[sourceTarget,setSourceTarget]=useState(''),[sources,setSources]=useState(null),[sourceOffset,setSourceOffset]=useState(0),[input,setInput]=useState('');
   const [sourceKind,setSourceKind]=useState('capture');
   const [options,setOptions]=useState(initial),[receipt,setReceipt]=useState(null),[confirmed,setConfirmed]=useState(false);
@@ -70,7 +70,7 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
   return <Box component="details" sx={{my:1}}><summary>SQLite changeset application</summary>
     <Alert severity="info">Apply a verified native export to this registered destination using a separate owned connection. Query sessions and pending SQL work stay separate. Review conflict responses before committing native changes. Rebase data and output verification have separate receipts from database commit.</Alert>
     <SQLiteNativeUpload post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'upload')} disabled={blocked || disabled} />
-    <SQLiteNativeTransforms post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'transform')} disabled={blocked || disabled} />
+    <SQLiteNativeTransforms post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'transform')} disabled={blocked || disabled} />
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={blocked} onClick={() => perform('catalog')}>Inspect native apply sources</Button>
     <Button disabled={busy} onClick={() => perform('list',{offset,limit:25})}>Load changeset apply receipts</Button>
@@ -138,4 +138,4 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
     </Box>}
   </Box>;
 }
-SQLiteChangesetApply.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,endpointUrl:PropTypes.string,disabled:PropTypes.bool};
+SQLiteChangesetApply.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,sessionId:PropTypes.string,endpointUrl:PropTypes.string,disabled:PropTypes.bool};
