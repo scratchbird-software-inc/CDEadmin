@@ -63,7 +63,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
                         host=route['host'],port=route['port'],username=route['user'],maintenance_db=route['database'],
                         connection_params={'sslmode':'disable'},save_password=0)
                     db.session.add(registered);db.session.commit()
-                    uid,endpoint=user.id,registered.endpoint_profile.id
+                    uid,endpoint,native_server_id=user.id,registered.endpoint_profile.id,registered.id
                     connect_url=url_for('NODE-server.connect_id',gid=group.id,sid=registered.id)
                     workspace_url=url_for('NODE-server.cde_workspace_id',gid=group.id,sid=registered.id)
                 with client.session_transaction() as session:session['_user_id']=str(uid);session['_fresh']=True
@@ -123,6 +123,82 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
                     proof['slot_commands']={'created':made['job_id'],'existing':existing['job_id'],'duplicate_unacknowledged':duplicate['job_id'],
                         'existing_logical_unchanged':other_kind['job_id'],'logical_drop':dropped['job_id'],'missing_drop_unacknowledged':missing['job_id']}
                     proof['checks'].append('native-slot-create-if-not-exists-logical-type-preservation-paged-catalog-drop-and-unacknowledged-errors')
+                    # Native SQL functions cover options absent from pg_receivewal.
+                    # Use another database so maintenance-database fallback cannot
+                    # accidentally qualify logical slot routing.
+                    from psycopg import sql
+                    database_name='ScratchRobin slot target "ü"'
+                    native.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(database_name)))
+                    sql_target='postgresql-database:'+str(native.execute('SELECT oid FROM pg_database WHERE datname=%s',(database_name,)).fetchone()[0])
+                    sql_names=[]
+                    def sql_command(suffix,options,expected='completed'):
+                        reviewed,_current=start('wal_slot_sql_'+suffix,options,database_target_id=sql_target)
+                        result=wait(reviewed['job_id'],lambda r:r['state']==expected and r.get('slot_observation_state')!='pending')
+                        assert result['native_sql_acknowledged']==(expected=='completed')
+                        assert result['source']['sql_identity']['database']==database_name
+                        return result
+                    physical='sr_sql_'+secrets.token_hex(6);copied=physical+'_copy'
+                    logical='sr_sql_logical_'+secrets.token_hex(6);logical_copy=logical+'_copy';logical_explicit=logical+'_explicit'
+                    reserved=sql_command('physical_create',{'slot':physical,'reserve_wal':True})
+                    assert reserved['slot_observation']['restart_lsn'] is not None
+                    assert native.execute('SELECT restart_lsn IS NOT NULL,temporary FROM pg_replication_slots WHERE slot_name=%s',(physical,)).fetchone()==(True,False)
+                    sql_names.append(physical)
+                    copy=sql_command('physical_copy',{'slot':copied,'source_slot':physical});sql_names.append(copied)
+                    positions=native.execute('SELECT restart_lsn::text FROM pg_replication_slots WHERE slot_name=ANY(%s) ORDER BY slot_name',([physical,copied],)).fetchall()
+                    assert len(positions)==2 and positions[0]==positions[1] and copy['slot_observation']['temporary'] is False
+                    native.execute('SELECT pg_switch_wal()')
+                    advanced=sql_command('advance',{'slot':copied,'upto_lsn':'FFFFFFFF/FFFFFFFF'})
+                    reached=advanced['native_sql_result']['end_lsn']
+                    assert native.execute('SELECT restart_lsn=%s::pg_lsn AND restart_lsn<=pg_current_wal_flush_lsn() FROM pg_replication_slots WHERE slot_name=%s',(reached,copied)).fetchone()[0] is True
+                    made_logical=sql_command('logical_create',{'slot':logical,'plugin':'pgoutput','two_phase':True,'failover':True});sql_names.append(logical)
+                    logical_state=native.execute('SELECT slot_type,database,plugin,temporary,two_phase,failover FROM pg_replication_slots WHERE slot_name=%s',(logical,)).fetchone()
+                    assert logical_state==('logical',database_name,'pgoutput',False,True,True)
+                    logical_copied=sql_command('logical_copy',{'slot':logical_copy,'source_slot':logical,'plugin':''});sql_names.append(logical_copy)
+                    assert logical_copied['slot_observation']['database']==database_name and logical_copied['slot_observation']['plugin']=='pgoutput'
+                    explicit_copied=sql_command('logical_copy',{'slot':logical_explicit,'source_slot':logical,'plugin':'pgoutput'});sql_names.append(logical_explicit)
+                    assert explicit_copied['slot_observation']['plugin']=='pgoutput'
+                    native.execute('SELECT pg_logical_emit_message(false,%s,%s)',('owned-slot-advance','advance'))
+                    native.execute('SELECT pg_switch_wal()')
+                    logical_advanced=sql_command('advance',{'slot':logical_copy,'upto_lsn':'FFFFFFFF/FFFFFFFF'})
+                    assert native.execute('SELECT confirmed_flush_lsn=%s::pg_lsn FROM pg_replication_slots WHERE slot_name=%s',
+                        (logical_advanced['native_sql_result']['end_lsn'],logical_copy)).fetchone()[0] is True
+                    duplicate_sql=sql_command('physical_create',{'slot':physical},expected='unknown')
+                    assert duplicate_sql['native_sqlstate']=='42710' and duplicate_sql['sql_dispatched']
+                    proof['sql_slot_commands']={'reserved':reserved['job_id'],'physical_copy':copy['job_id'],
+                        'clamped_physical_advance':advanced['job_id'],'logical_create':made_logical['job_id'],
+                        'logical_copy_inherit_plugin':logical_copied['job_id'],'duplicate_unacknowledged':duplicate_sql['job_id'],
+                        'logical_copy_explicit_plugin':explicit_copied['job_id'],'logical_advance':logical_advanced['job_id'],
+                        'target_database':database_name,'client_identity':reserved['client_identity']}
+                    proof['checks'].extend(['native-sql-immediate-reservation-physical-copy-and-clamped-advancement',
+                        'native-sql-explicit-database-logical-create-two-phase-failover-and-copy',
+                        'native-sql-duplicate-error-has-no-positive-acknowledgement'])
+                    for owned_name in sql_names:
+                        removed_sql=sql_command('drop',{'slot':owned_name})
+                        assert removed_sql['slot_observation'] is None
+                    # Keep an owned transaction open before logical snapshot
+                    # creation, then cancel only the application's private client.
+                    with psycopg.connect(host=route['host'],port=route['port'],user=route['user'],password=password,
+                                         dbname=database_name,autocommit=True) as blocker:
+                        blocker.execute('CREATE TABLE sr_slot_snapshot_blocker(id integer)')
+                        blocker.execute('BEGIN');blocker.execute('INSERT INTO sr_slot_snapshot_blocker VALUES(1)')
+                        cancel_name='sr_sql_cancel_'+secrets.token_hex(6)
+                        pending,_current=start('wal_slot_sql_logical_create',{'slot':cancel_name,'plugin':'pgoutput','timeout_seconds':None},database_target_id=sql_target)
+                        deadline=time.monotonic()+20
+                        while True:
+                            current=http('status',{'job_id':pending['job_id']})
+                            pid=current.get('native_backend_pid')
+                            row=native.execute('SELECT wait_event FROM pg_stat_activity WHERE pid=%s',(pid,)).fetchone() if pid else None
+                            if row and row[0] is not None:break
+                            if time.monotonic()>deadline:raise TimeoutError('Owned native logical slot snapshot wait')
+                            time.sleep(.1)
+                        http('cancel',{'job_id':pending['job_id']})
+                        cancelled_sql=wait(pending['job_id'],lambda r:r['state']=='unknown')
+                        assert cancelled_sql['native_sqlstate']=='57014' and not cancelled_sql['native_sql_acknowledged']
+                        assert blocker.execute('SELECT 1').fetchone()[0] in (1,'1')
+                        blocker.execute('ROLLBACK')
+                        assert not native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s',(cancel_name,)).fetchall()
+                        proof['sql_slot_commands']['cancelled_snapshot']=cancelled_sql['job_id']
+                        proof['checks'].append('native-sql-cancellation-interrupts-owned-snapshot-wait-and-preserves-neighbor-session')
                 base,_current=start('full_backup',{'timeout_seconds':120})
                 base=wait(base['job_id'],lambda r:r['state']=='verified')
                 proof['native_server']=base['source'];proof['native_tools']=dict(base['tool_identities'])
@@ -194,7 +270,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
                         def browser_slot_state(present):
                             row=native.execute('SELECT slot_type,active FROM pg_replication_slots WHERE slot_name=%s',(browser_name,)).fetchone()
                             assert row==('physical',False) if present else row is None
-                        proof['slot_browser']=qualify_capture_browser(app,output,browser_binary,driver_binary,browser_slot_state,password,slot_name=browser_name)
+                        proof['slot_browser']=qualify_capture_browser(app,output,browser_binary,driver_binary,browser_slot_state,password,slot_name=browser_name,sql_database=database_name)
                         proof['checks'].append('native-browser-discovers-reviews-creates-and-drops-physical-slot-with-independent-catalog-observations')
                 if browser_binary:
                     def browser_streaming():
@@ -211,6 +287,36 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
                         original=native.execute("SELECT encode(pg_read_binary_file(%s),'hex')",('pg_wal/'+path.name,)).fetchone()[0]
                         assert path.read_bytes()==bytes.fromhex(original)
                     proof['checks'].append('native-browser-reviews-starts-observes-and-cancels-managed-wal-capture-with-independent-source-bytes')
+                if slots:
+                    # Verify SET ROLE on a real private job connection, including
+                    # a native refusal for the same authenticated login.
+                    original_workspace_url=workspace_url
+                    try:
+                        for allowed in (True,False):
+                            role_name='sr_slot_role_'+secrets.token_hex(6)
+                            native.execute(sql.SQL('CREATE ROLE {} NOLOGIN {}').format(sql.Identifier(role_name),sql.SQL('REPLICATION' if allowed else 'NOREPLICATION')))
+                            with app.test_request_context('/'):
+                                group=ServerGroup.query.filter_by(user_id=uid).order_by(ServerGroup.id).first()
+                                role_server=Server(user_id=uid,servergroup_id=group.id,name='Owned SQL slot role '+str(allowed),
+                                    host=route['host'],port=route['port'],username=route['user'],role=role_name,
+                                    maintenance_db=route['database'],connection_params={'sslmode':'disable'},save_password=0)
+                                db.session.add(role_server);db.session.commit()
+                                role_connect=url_for('NODE-server.connect_id',gid=group.id,sid=role_server.id)
+                                workspace_url=url_for('NODE-server.cde_workspace_id',gid=group.id,sid=role_server.id)
+                            assert client.post(role_connect,json={'password':password}).get_json().get('success')
+                            role_slot='sr_role_slot_'+secrets.token_hex(6)
+                            role_result=sql_command('physical_create',{'slot':role_slot},expected='completed' if allowed else 'unknown')
+                            assert role_result['source']['sql_identity']['authenticated_principal']==route['user']
+                            assert role_result['source']['sql_identity']['effective_principal']==role_name
+                            if allowed:
+                                assert native.execute('SELECT slot_type FROM pg_replication_slots WHERE slot_name=%s',(role_slot,)).fetchone()[0]=='physical'
+                                sql_command('drop',{'slot':role_slot})
+                            else:
+                                assert role_result['native_sqlstate']=='42501'
+                                assert not native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s',(role_slot,)).fetchall()
+                            proof['sql_slot_commands']['effective_role_'+str(allowed)]=role_result['job_id']
+                        proof['checks'].append('native-sql-preserves-effective-role-and-engine-denies-role-without-replication')
+                    finally:workspace_url=original_workspace_url
         assert fixture['owned_server_stopped']
         # This separate owned recovery archive grows by one genuine completed
         # source segment after the native review has pinned its input hashes.
@@ -229,7 +335,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
         proof['recovery_job_id']=recovered['job_id']
         if browser_binary:
             from cdeadmin_postgresql_continuity_qualification import qualify_browser
-            proof['browser']=qualify_browser(app,output,base['job_id'],browser_binary,driver_binary)
+            proof['browser']=qualify_browser(app,output,base['job_id'],browser_binary,driver_binary,server_id=native_server_id)
         proof['complete']=True
     finally:
         if jobs is not None:jobs.close()
@@ -237,7 +343,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slots=Fa
     return proof
 
 
-def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password,*,slot_name=None):
+def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,password,*,slot_name=None,sql_database=None):
     import re
     import threading
     from werkzeug.serving import make_server
@@ -308,7 +414,7 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
                     try:value=json.loads(element.get_attribute('textContent'))
                     except (ValueError,TypeError):continue
                     if (value.get('operation')==operation and value.get('options',{}).get('slot')==slot_name and
-                            value.get('state')=='completed' and value.get('native_utility_acknowledged') is True and value.get('slot_observation_state')=='observed'):
+                            value.get('state')=='completed' and value.get('native_sql_acknowledged' if operation.startswith('wal_slot_sql_') else 'native_utility_acknowledged') is True and value.get('slot_observation_state')=='observed'):
                         return value
                 return False
             return wait.until(current)
@@ -325,11 +431,31 @@ def qualify_capture_browser(app,output,browser_binary,driver_binary,on_started,p
             click('Review native operation')
             wait.until(lambda browser:'wal_slot_drop' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
             click('Confirm and start reviewed operation');dropped=receipt('wal_slot_drop');on_started(False)
+            sql_created=None;sql_dropped=None
+            if sql_database:
+                selection('Create physical slot with SQL options')
+                click('Load slot databases')
+                label=driver.find_element(By.XPATH,'//label[normalize-space()="Native SQL slot database"]')
+                field=driver.find_element(By.ID,label.get_attribute('for'))
+                wait.until(lambda _browser:field.is_enabled())
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',field);field.click()
+                wait.until(lambda browser:next((item for item in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if item.text.strip()==sql_database),False)).click()
+                label=driver.find_element(By.XPATH,'//label[normalize-space()="Replication slot name"]')
+                field=driver.find_element(By.ID,label.get_attribute('for'));field.send_keys(slot_name)
+                click('Review native operation')
+                wait.until(lambda browser:'wal_slot_sql_physical_create' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+                click('Confirm and start reviewed operation');sql_created=receipt('wal_slot_sql_physical_create');on_started(True)
+                assert sql_created['source']['sql_identity']['database']==sql_database and sql_created['slot_observation']['restart_lsn'] is not None
+                selection('Drop replication slot with SQL')
+                click('Review native operation')
+                wait.until(lambda browser:'wal_slot_sql_drop' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').get_attribute('textContent'))
+                click('Confirm and start reviewed operation');sql_dropped=receipt('wal_slot_sql_drop');on_started(False)
             driver.save_screenshot(str(output/'native-replication-slots.png'))
             expected=lambda item:'/browser/server/connect/' in item.get('message','') and '428' in item.get('message','')
             errors=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE' and not expected(item)]
             (output/'slot-browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
             return {'complete':True,'created_job':created['job_id'],'dropped_job':dropped['job_id'],
+                    'sql_created_job':sql_created['job_id'] if sql_created else None,'sql_dropped_job':sql_dropped['job_id'] if sql_dropped else None,
                     'native_catalog_observed':True,'console_errors':0,'screenshot':'native-replication-slots.png'}
         selection('Capture native WAL archive')
         for label_text,value in (('WAL archive','browser-managed'),('WAL compression','gzip:level=3')):

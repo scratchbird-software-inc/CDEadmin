@@ -26,7 +26,8 @@ def fingerprint(value):
 
 
 REVIEW_FIELDS=('job_id','owner','endpoint_id','configuration','operation','options','source','paths',
-               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','runtime_limit','warnings','wal_archive')
+               'tool_identities','inputs','created_at','expires_at','execution_host','artifact_location','artifact_wal_method','runtime_limit','warnings','wal_archive',
+               'database_target_id','client_identity')
 
 
 def review_digest(record):
@@ -285,9 +286,14 @@ class PostgreSQLContinuityJobs:
         return self.get(record['job_id'],owner,endpoint)
 
     def review(self, request, owner, endpoint, source, configuration, paths, *, runtime_limit=None):
-        if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
+        if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain','database_target_id'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
+        from .postgresql_continuity_slot_sql import OPERATIONS as SQL_SLOTS
+        if operation in SQL_SLOTS:
+            from .postgresql_continuity_slot_sql import review
+            return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
+        if 'database_target_id' in request:raise ContinuityError('Database targeting applies only to native SQL slot operations')
         if operation in {'wal_slot_create','wal_slot_drop'}:
             from .postgresql_continuity_slots import review
             return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
@@ -421,7 +427,7 @@ class PostgreSQLContinuityJobs:
                         raise ContinuityError('Native utility execution host changed; prepare a review on this application host')
                     if review_digest(record)!=record['review_digest']:
                         raise ContinuityError('Backup review fingerprint changed')
-                    stable=lambda value:{key:fact for key,fact in value.items() if key not in {'lsn','slot_snapshot'}}
+                    stable=lambda value:{key:fact for key,fact in value.items() if key not in {'lsn','slot_snapshot','copy_slot_snapshot'}}
                     if record['expires_at']<time.time() or record['configuration']!=configuration or stable(record['source'])!=stable(source):
                         raise ContinuityError('Native backup target or registration changed; prepare a new review')
                     record.update(state='dispatching',worker_identity=self.worker_identity,started_at=time.time())
@@ -481,6 +487,10 @@ class PostgreSQLContinuityJobs:
         try:
             directory.mkdir(parents=True,exist_ok=False,mode=0o700)
             private_directory(directory)
+            from .postgresql_continuity_slot_sql import OPERATIONS as SQL_SLOTS
+            if record['operation'] in SQL_SLOTS:
+                from .postgresql_continuity_slot_sql import run
+                return run(self,record,transport,signal)
             tools = PhysicalTools(record['paths'])
             for name,identity in record['tool_identities'].items():
                 if tools.identify(name,directory)!=identity:raise ContinuityError('Native utility installation changed after review')

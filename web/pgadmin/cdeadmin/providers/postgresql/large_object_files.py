@@ -52,10 +52,10 @@ def identity(connection):
                      'postmaster_started_epoch','server_address','server_port'),(str(v) if v is not None else None for v in row)))
 
 
-def capture(provider,route,server):
+def capture(provider,route,server,*,resolved_database=None,application_name='ScratchRobin large-object files'):
     """Seal a private attachment while the admitting request owns its context."""
     provider.permissions.require('execute');provider.permissions.require('secret_read')
-    opened=provider.open_session({'route':route});transport=None
+    opened=provider.open_session({'route':route},**({'_resolved_database':resolved_database} if resolved_database is not None else {}));transport=None
     try:
         state=provider._sessions[opened['session_id']];provider._ensure_native_connection(state)
         native=state.connection.conn
@@ -63,7 +63,7 @@ def capture(provider,route,server):
         parameters={key:value for key,value in info.get_parameters().items() if key not in
                     {'service','passfile','replication','fallback_application_name'}}
         parameters.update(host=info.host,port=info.port,user=info.user,dbname=info.dbname,
-                          application_name='ScratchRobin large-object files')
+                          application_name=application_name)
         if info.hostaddr:parameters['hostaddr']=info.hostaddr
         secrets={};password=native.pgconn.password
         if password:secrets['database_password']=password

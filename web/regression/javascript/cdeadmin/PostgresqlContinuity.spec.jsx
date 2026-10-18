@@ -173,3 +173,49 @@ it('keeps polling a completed native acknowledgement until its later slot observ
   await screen.findByText(/Current slot observation: physical; active: false/,{}, {timeout:5000});
   expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_status',request:{job_id:'native-job'}});
 });
+
+it('selects the native database and logical slot options without a utility or backup input',async () => {
+  const post=jest.fn().mockResolvedValue({targets:[{target_id:'postgresql-database:123',display_name:'Exact "ü"'}]});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Create logical replication slot'}));
+  expect(screen.getByRole('button',{name:'Review native operation'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button',{name:'Load slot databases'}));
+  await waitFor(() => expect(screen.getByRole('button',{name:'Load slot databases'})).toBeEnabled());
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_slot_databases',request:{}});
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_logical_create'});
+  fireEvent.mouseDown(screen.getByLabelText('Native SQL slot database'));
+  fireEvent.click(await screen.findByRole('option',{name:'Exact "ü"'}));
+  fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'owned_logical'}});
+  fireEvent.click(screen.getByRole('checkbox',{name:'two phase'}));
+  fireEvent.click(screen.getByRole('checkbox',{name:'failover'}));
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'wal_slot_sql_logical_create',
+    database_target_id:'postgresql-database:123',options:{slot:'owned_logical',plugin:'pgoutput',two_phase:true,failover:true,timeout_seconds:30}}});
+  expect(screen.queryByText('Selected input')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('manifest checksums')).not.toBeInTheDocument();
+});
+
+it('copies the selected source slot and preserves plugin inheritance and the owned database',async () => {
+  const post=jest.fn().mockResolvedValue({slots:[{slot_name:'source_slot',slot_type:'logical',active:false}],total:1});
+  const {rerender}=render(<Component post={post} databaseTargetId="postgresql-database:123" />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Copy logical replication slot'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load replication slots'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Use slot source_slot'}));
+  expect(screen.getByLabelText('Source replication slot')).toHaveValue('source_slot');
+  fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'destination'}});
+  fireEvent.change(screen.getByLabelText('Output plugin (blank copy: inherit)'),{target:{value:''}});
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_logical_copy'});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'wal_slot_sql_logical_copy',
+    database_target_id:'postgresql-database:123',options:{slot:'destination',source_slot:'source_slot',plugin:'',timeout_seconds:30}}});
+  post.mockResolvedValue({...reviewed,operation:'wal_slot_sql_logical_copy',state:'unknown',native_sql_acknowledged:false});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Native SQL acknowledged: unconfirmed/);
+  expect(screen.queryByRole('button',{name:'Reconcile native writer'})).not.toBeInTheDocument();
+  rerender(<Component post={post} databaseTargetId="postgresql-database:456" />);
+  expect(screen.queryByRole('button',{name:'Confirm and start reviewed operation'})).not.toBeInTheDocument();
+});

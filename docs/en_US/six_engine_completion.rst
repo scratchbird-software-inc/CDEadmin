@@ -255,8 +255,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        recovery drills; interrupted native writer reconciliation and managed
        raw/gzip/LZ4 WAL capture with source binding, cancellation and resume;
        native slot catalog/physical creation and slot removal with separate
-       acknowledgement/current-state observations; additional native statistics
-       collectors.
+       acknowledgement/current-state observations; native SQL permanent physical
+       reservation/copy, logical creation/copy and slot advancement on an
+       explicitly selected database; additional native statistics collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
        extension/language/HA coverage.
@@ -722,11 +723,58 @@ the current catalog can be read. Current slot existence never converts the
 original uncertain operation into success, and a repeated start cannot
 redispatch the same job.
 
-These commands do not complete SQL-native physical reservation/temporary-slot
-options, logical-slot creation/options, slot advancement, synchronized/failover
-slot administration or replication-only credential admission without a regular
-SQL catalog connection. Those are remaining native adapters and qualification
-requirements, together with the broader replication/HA product scope.
+The utility commands have their native CLI scope. The SQL workflow below adds
+permanent slot options. Temporary retained-session slots, synchronized slot
+administration and replication-only credential admission without a regular SQL
+catalog connection remain native adapters and qualification requirements,
+together with the broader replication/HA product scope.
+
+PostgreSQL permanent SQL replication-slot operations
+===================================================
+
+The continuity workspace also exposes native SQL physical-slot creation with
+immediate WAL reservation, physical-slot copying, logical-slot creation with
+output plugin/two-phase/failover options, logical copying with inherited or
+explicit plugin, position advancement and slot removal. The database selector
+uses discovered native database targets, including names containing punctuation
+or non-ASCII characters. Logical initialization runs on that selected database;
+it does not silently fall back to the registration's maintenance database.
+
+Reviews bind the database/server-instance identity, authenticated/effective
+principals, stable source/destination slot properties, application host and
+native Python/libpq client identity. An independently owned autocommit SQL
+connection restores the effective role, rechecks identity and submits one fixed
+parameterized native function call. Current WAL positions do not change the
+slot's stable identity. PostgreSQL validates privileges, installed plugins,
+concurrent use and version-specific flags. Plugin names that would be truncated
+by the native ``name`` type are refused before mutation.
+
+The real command acknowledgement and returned position are saved before a later
+catalog observation. Advancement reports PostgreSQL's actual reached LSN, which
+may be clamped to flushed/replayed WAL. A later observation or cleanup failure
+cannot erase a recorded acknowledgement. Slot functions have nontransactional
+side effects: cancellation, a SQL error or rollback does not prove that every
+side effect was undone. A dispatched command without a positive reply remains
+unknown and is never automatically repeated; loading the current catalog does
+not convert it into a successful original operation.
+
+An independent watcher reads durable cancellation requests, including those
+received by another application worker, and cancels only this job's SQL
+connection. The configured native statement deadline is also applied.
+Successful acknowledgement wins a late cancellation request. Bounded native
+cancellation requires libpq 17 or later. Existing slot utilities retain their
+separate process receipts and reconciliation. SQL jobs are never passed to
+utility-process reconciliation or offered as physical-backup inputs.
+
+``tools/cdeadmin_postgresql_wal_capture_qualification.py --slots`` includes
+native reservation/copy/clamped-position comparisons, logical database and flag
+checks, duplicate-error handling and cancellation during owned logical snapshot
+initialization while a neighboring transaction remains usable. Browser coverage
+selects the native database, reviews, creates and removes a reserved SQL slot.
+Temporary slots require a retained creating session and are not represented by
+creating a slot on a connection that is immediately closed. Retained-session
+slot lifetimes, decoding/change consumption, standby synchronization and wider
+replication/HA administration retain separate acceptance.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================

@@ -64,12 +64,16 @@ def action(service, server, operation, request):
     if operation in {'status','cancel'}:
         if set(request)!={'job_id'}:raise ContinuityError('Select one native continuity job')
         return (jobs.get if operation=='status' else jobs.cancel)(request['job_id'],owner,endpoint)
+    if operation=='slot_databases':
+        if request:raise ContinuityError('Invalid native slot database selection')
+        return service.endpoint_service.database_catalog(server)
     runtime_limit=current_app.config.get('CDEADMIN_POSTGRESQL_CONTINUITY_MAX_RUNTIME_SECONDS')
     paths=paths_for_app(current_app)
     configuration=fingerprint({'registration':PostgreSQLMonitoringHost._configuration(server),
                                'runtime_limit':runtime_limit,'paths':paths,'wal_archive_root':str(jobs.archive_root)})
     transport=None
     try:
+        from . import postgresql_continuity_slot_sql as sql_slots
         if operation=='slots':
             from .postgresql_continuity_slots import catalog
             context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
@@ -78,6 +82,18 @@ def action(service, server, operation, request):
             return catalog(source,transport,request)
         if operation=='review':
             native_operation=request.get('operation')
+            if native_operation in sql_slots.OPERATIONS:
+                from ..providers.postgresql.connection_target import database_oid
+                target=request.get('database_target_id')
+                if not isinstance(target,str) or not 1<=len(target)<=256:
+                    raise ContinuityError('Select an explicit PostgreSQL database target')
+                selected=sql_slots.options(native_operation,request.get('options',{}))
+                try:selected_oid=database_oid(target)
+                except ValueError as error:raise ContinuityError(str(error)) from None
+                context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
+                provider=service.endpoint_service.provider_registry.resolve(context).instance
+                source,transport=sql_slots.capture(provider,payload['route'],server,selected,selected_oid)
+                return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
             slot=None
             if native_operation in {'wal_slot_create','wal_slot_drop'}:
                 from .postgresql_continuity_slots import options
@@ -97,7 +113,12 @@ def action(service, server, operation, request):
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            if reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop'}:
+            if reviewed['state']=='reviewed' and reviewed['operation'] in sql_slots.OPERATIONS:
+                from ..providers.postgresql.connection_target import database_oid
+                context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
+                provider=service.endpoint_service.provider_registry.resolve(context).instance
+                source,transport=sql_slots.capture(provider,payload['route'],server,reviewed['options'],database_oid(reviewed['database_target_id']))
+            elif reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop'}:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
                 source,transport=capture(provider,payload['route'],server=server,wal_details=reviewed['operation']=='wal_capture')

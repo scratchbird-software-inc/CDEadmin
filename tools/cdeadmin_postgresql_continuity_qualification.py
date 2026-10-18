@@ -291,7 +291,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pit
     return proof
 
 
-def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_target=None, writer_job_id=None):
+def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_target=None, writer_job_id=None, server_id=None):
     """Exercise the actual disconnected-server callback and compiled panel."""
     import threading
     from werkzeug.serving import make_server
@@ -316,7 +316,18 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_
         expand(wait,'Connectors')
         wait_for_tree_item(wait,'PostgreSQL')
         expand(wait,'PostgreSQL')
-        element=wait_for_tree_item(wait,'localhost',ancestors=('Connectors','PostgreSQL'))
+        if server_id is None:
+            element=wait_for_tree_item(wait,'localhost',ancestors=('Connectors','PostgreSQL'))
+        else:
+            element=wait.until(lambda browser:browser.execute_script("""
+              const tree=window.pgAdmin.Browser.tree;
+              return Array.from(document.querySelectorAll('.file-entry')).find(entry => {
+                try {
+                  const data=tree.itemData(tree.itemFrom(entry));
+                  return data?._type==='server' && String(data._id)===String(arguments[0]);
+                } catch { return false; }
+              }) || null;
+            """,server_id))
         for control in driver.find_elements(By.CSS_SELECTOR,'[role="dialog"] button'):
             if control.is_displayed() and control.text.strip()=='Cancel':control.click();break
         # Scope console observations to this workspace; the normal shell may
