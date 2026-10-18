@@ -1282,8 +1282,25 @@ IF NOT EXISTS acknowledgement without replacement.
 ``tools/cdeadmin_mysql_spatial_reference_qualification.py`` compares the full
 observed native catalog independently and exercises pure/C extension drivers,
 normal and ANSI/NO_BACKSLASH_ESCAPES modes, all attributes, changed reviews,
-in-use spatial columns and restricted-user refusal. The broader server DDN,
-recovery/lifecycle and product-inventory requirements remain separate.
+in-use spatial columns and restricted-user refusal. The recovery/lifecycle and
+product-inventory requirements remain separate.
+
+Server DDN also supports spatial-reference capture and explicit native create,
+complete replacement and drop. Select up to 128 distinct SRIDs in the server
+metadata workspace. Every selected definition retains all six native fields;
+captures record their exact SRID scope, including selected IDs that are absent.
+Omitted IDs are not observed absence or deletion intent. Large installations
+can exchange separate selected batches under the existing 8 MiB limits.
+
+Preview and application independently reobserve the SRIDs used by the imported
+baseline and desired metadata. Native IDs, imported resource addresses and
+confirmation must agree. Review binds the native instance, principals, active
+roles and SQL mode. Application checks every resulting native field, captures
+native warnings and preserves durable receipts without replaying a mutation.
+Native in-use and privilege refusals remain explicit failures. The qualification
+tool ``tools/cdeadmin_mysql_spatial_ddn_qualification.py`` exercises paired DDN
+roundtrip, both connectors and SQL modes, create/replacement/drop, stale reviews,
+in-use data preservation, native authority and receipt restart.
 
 Native column facts and masking references
 ------------------------------------------

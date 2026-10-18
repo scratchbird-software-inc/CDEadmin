@@ -4,7 +4,7 @@ import hashlib
 
 from ..workspace.firebird_schema_plan import digest
 from ..workspace.firebird_catalog_export import build_export
-from ..workspace.mysql_server_plan import compile_operation, state
+from ..workspace.mysql_server_plan import compile_operation, state, spatial_selection
 from .mysql_family.mysql_server_catalog import capture
 
 
@@ -53,6 +53,13 @@ def effect(row, operation, live):
             if column and draft.get('include_' + option):
                 expected[column] = str(draft[option]) if option == 'port' else draft[option]
         return normalized(facts) == expected
+    if kind == 'spatial-reference-system':
+        from .mysql_family.spatial_reference_systems import normalized
+        expected = {'srs_id':row['native']['catalog_row']['srs_id'], 'srs_name':draft['name'],
+            'definition':draft['definition'], 'organization':draft.get('organization') if draft.get('include_organization') else None,
+            'organization_coordsys_id':draft.get('organization_id') if draft.get('include_organization') else None,
+            'description':draft.get('description') if draft.get('include_description') else None}
+        return normalized(facts) == normalized(expected)
     if kind == 'role-membership':
         return facts.get('with_admin_option') == ('Y' if draft.get('admin_option') else 'N')
     if kind == 'privilege':
@@ -109,12 +116,15 @@ def apply_operation(connection, record, operation):
         if not locked:
             raise ValueError('Server operation lock is unavailable')
         def current():
-            acquired = capture(connection)
+            selection = spatial_selection(record['baseline'], record['desired'])
+            acquired = capture(connection, spatial_reference_ids=selection) if selection else capture(connection)
             return build_export(acquired['resources'], endpoint_id=plan['endpoint_id'],
                 target_id='server:' + plan['server_uuid'], generation=acquired['generation'],
                 include_system=True, refreshed=True, engine='mysql', native_model=True)
         live = current()
         root = next(item for item in live['rows'].values() if item['kind'] == 'server')
+        if row['kind']=='spatial-reference-system' and root['native']['catalog_row']!=operation.get('execution_identity'):
+            raise ValueError('Native spatial reference execution identity changed since review')
         available = {item['section']: item['available']
                      for item in root['native']['catalog_observations']}
         if not available.get(row['native']['section']):
@@ -132,11 +142,14 @@ def apply_operation(connection, record, operation):
         if digest({uid: state(live['rows'][uid]) for uid in guard_ids if uid in live['rows']}) != operation['guard_sha256']:
             raise ValueError('Native server object sibling set changed since review')
         dispatched = True
+        connection.raise_on_warnings = False
+        connection.get_warnings = True
         cursor.execute(statement['source'], statement['parameters'] or None)
         if cursor.description:
             cursor.fetchall()
         acknowledged = True
         result['state'] = 'acknowledged'
+        result['native_warnings'] = [{'level':level,'code':code,'message':message} for level,code,message in (cursor.warnings or ())]
         observed = current()
         result['rediscovery_verified'] = effect(row, operation, observed)
         result['native_observation'] = state(observed['rows'].get(key))

@@ -9,9 +9,18 @@ from ..providers.mysql_family.mysql_catalog import identifier
 from ..providers.mysql_roles import account
 
 SPEC = {section: (kind, keys) for section, kind, _sql, keys in SECTIONS}
-SUPPORTED = {'user', 'role-membership', 'default-role', 'privilege', 'plugin', 'component', 'server-link',
+SUPPORTED = {'user', 'role-membership', 'default-role', 'privilege', 'plugin', 'component', 'server-link', 'spatial-reference-system',
              'tablespace', 'resource-group', 'system-variable', 'replication-channel'}
 VOLATILE = {'component_id', 'component_group_id', 'space', 'file_size', 'allocated_size'}
+
+
+def spatial_selection(*documents):
+    from ..providers.mysql_family.mysql_server_catalog import spatial_ids
+    values = [row['native']['catalog_row']['srs_id'] for document in documents
+        for row in document['rows'].values() if row['kind'] == 'spatial-reference-system']
+    if any(type(value) is not int for value in values):
+        raise ValueError('DDN spatial reference identities must be native unsigned integers')
+    return spatial_ids(list(set(values)))
 
 
 def state(row):
@@ -74,6 +83,23 @@ def compile_operation(row):
         raise ValueError('Built-in or unclassified server objects are not migration targets')
     if action in {'drop', 'revoke', 'rename', 'reset', 'reset_persist', 'set_default'} and intent.get('confirmation') != row['name']:
         raise ValueError('Confirm the exact native object label')
+    if kind == 'spatial-reference-system':
+        from ..providers.mysql_family import spatial_reference_systems as srs
+        from ..sdk import RelationalClientError
+        try:
+            srid = srs.number(facts['srs_id'], 'Native SRID')
+            if row['name'] != str(srid) or (action == 'create' and srs.number(draft.get('srs_id'), 'Draft SRID') != srid):
+                raise ValueError('Spatial reference instructions differ from the exact native SRID')
+            if action != 'create':
+                if intent.get('confirmation') != row['name']:
+                    raise ValueError('Confirm the exact native spatial reference ID')
+                draft.setdefault('confirmation', str(srid))
+            target = {'resource_id':srs.KIND+':'+str(srid),'resource_kind':srs.KIND,
+                'display_name':str(srid),'display_path':[str(srid)],'native':{'catalog_row':facts}}
+            statement = srs.compile_operation(action, draft, None if action == 'create' else target)['statements'][0]
+        except RelationalClientError as error:
+            raise ValueError(str(error)) from None
+        return {'source':statement['source'],'parameters':list(statement['parameters'])}
     if kind == 'server-link':
         from ..providers.mysql_family import foreign_servers
         from ..sdk import RelationalClientError
@@ -170,6 +196,10 @@ def plan(baseline, desired, live):
                 raise ValueError('Native system objects are not migration targets')
             if not observations.get(after['native']['section']):
                 raise ValueError('Native catalog section is unavailable; absence is not authoritative')
+            if after['kind'] == 'spatial-reference-system':
+                observed_scope = next(item for item in server['native']['catalog_observations'] if item['section']=='spatial-reference-systems')
+                if after['native']['catalog_row']['srs_id'] not in observed_scope.get('selected_ids', []):
+                    raise ValueError('Exact SRID was not observed in this native capture')
             if after['kind'] == 'privilege' and not observations.get('accounts'):
                 raise ValueError('Separate native account identities are unavailable')
             if (before is None) != (current is None) or before is not None and state(before) != state(current):
@@ -188,6 +218,7 @@ def plan(baseline, desired, live):
                           tuple(row['native']['catalog_row'][field] for field in ('user', 'host')) == account_pair]
             operations.append({'resource_id': key, 'kind': after['kind'], 'operation': action,
                 'name': after['name'], **statement, 'baseline_sha256': digest(state(before)),
+                **({'execution_identity':deepcopy(server['native']['catalog_row'])} if after['kind']=='spatial-reference-system' else {}),
                 'desired_sha256': digest(after), 'guard_ids': sorted(guards),
                 'guard_sha256': digest({uid: state(baseline['rows'][uid]) for uid in guards if uid in baseline['rows']})})
         except (ValueError, KeyError, TypeError) as error:

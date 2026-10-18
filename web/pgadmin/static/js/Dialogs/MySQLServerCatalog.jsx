@@ -10,6 +10,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
   const identityKey = engine === 'mariadb' ? 'server_uid' : 'server_uuid';
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [system, setSystem] = useState(true), [targets, setTargets] = useState([]), [scope, setScope] = useState('server');
+  const [spatialIds, setSpatialIds] = useState('');
   const [view, setView] = useState('inventory_1');
   const [baseline, setBaseline] = useState(''), [source, setSource] = useState('');
   const [plan, setPlan] = useState(null), [review, setReview] = useState(null), [confirmed, setConfirmed] = useState(false);
@@ -17,6 +18,7 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setResult(null); setTargets([]); setScope('server'); setView('inventory_1'); setBusy(false); setError('');
+    setSpatialIds('');
     setBaseline(''); setSource(''); setPlan(null); setReview(null); setReceipts([]); setConfirmed(false);
     return () => {serial.current++;};
   }, [post, engine]);
@@ -24,7 +26,15 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
     const token = ++serial.current;
     setBusy(true); setError('');
     try {
-      const value = await post({action: `${engine}_server_catalog`, request: {include_system: system, targets: expand ? targets : []}});
+      let selection = [];
+      if(engine === 'mysql' && spatialIds.trim()) {
+        const values = spatialIds.split(',').map(value => value.trim());
+        if(values.length > 128 || values.some(value => !/^(0|[1-9][0-9]*)$/.test(value) || Number(value) > 4294967295) ||
+          new Set(values).size !== values.length) throw new Error('Select at most 128 distinct unsigned 32-bit SRIDs, separated by commas.');
+        selection = values.map(Number);
+      }
+      const value = await post({action: `${engine}_server_catalog`, request: {include_system: system, targets: expand ? targets : [],
+        ...(selection.length ? {spatial_reference_ids: selection} : {})}});
       if(token === serial.current) {setResult(value); setScope('server'); setView(value.snapshot.view);
         setBaseline(JSON.stringify(value.snapshot)); setSource(JSON.stringify(value.snapshot, null, 2));
         setPlan(null); setReview(null); setConfirmed(false);}
@@ -65,6 +75,9 @@ export default function MySQLServerCatalog({post, engine='mysql'}) {
       <FormControlLabel label="Include built-in system objects" control={<Checkbox checked={system} disabled={busy}
         onChange={event => setSystem(event.target.checked)} />} />
       <Button disabled={busy} onClick={() => capture()}>Capture server inventory</Button>
+      {engine === 'mysql' && <TextField size="small" label="Spatial reference IDs to include" value={spatialIds} disabled={busy}
+        helperText="Optional comma-separated SRIDs; capture large catalogs in separate batches."
+        onChange={event => setSpatialIds(event.target.value)} sx={{minWidth: 300}} />}
       {<Button disabled={busy} onClick={() => native('receipts')}>Load recent server receipts</Button>}
       <TextField select size="small" label="Registered databases to include" value={targets} disabled={busy || !result}
         slotProps={{select: {multiple: true}}} sx={{minWidth: 260}} onChange={event => setTargets(event.target.value)}>

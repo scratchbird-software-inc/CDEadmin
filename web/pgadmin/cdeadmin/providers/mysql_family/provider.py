@@ -1598,14 +1598,14 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
         finally:
             self.client._discard_failed_session(connection)
 
-    def capture_server_catalog(self, route):
+    def capture_server_catalog(self, route, *, spatial_reference_ids=None):
         from .mysql_server_catalog import capture
         self._require('data_read', 'resource')
         if not isinstance(self.client, MySQLDBAPIClient):
             raise RelationalClientError('Native MySQL catalog client is unavailable')
         connection = self.client._connect({'route': {**route, 'database': None}})
         try:
-            return capture(connection)
+            return capture(connection, spatial_reference_ids=spatial_reference_ids)
         finally:
             self.client._discard_failed_session(connection)
 

@@ -733,7 +733,7 @@ class ProviderWorkspaceService:
     def mysql_server_catalog(self, server, request):
         from ..providers.mysql_family.provider import MySQLPilotProvider
         from .firebird_catalog_export import build_export, MAX_BYTES
-        if not isinstance(request, dict) or set(request) - {'targets', 'include_system'}:
+        if not isinstance(request, dict) or set(request) - {'targets', 'include_system', 'spatial_reference_ids'}:
             raise ProviderWorkspaceError('Invalid MySQL server catalog request')
         self._principal_id(server)
         if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mysql-native':
@@ -750,7 +750,9 @@ class ProviderWorkspaceService:
         if context.profile_id != 'mysql-native' or not isinstance(provider, MySQLPilotProvider):
             raise ProviderWorkspaceError('Select a native MySQL endpoint')
         try:
-            captured = provider.capture_server_catalog(endpoint['route'])
+            from ..providers.mysql_family.mysql_server_catalog import spatial_ids
+            selection = spatial_ids(request.get('spatial_reference_ids', []))
+            captured = provider.capture_server_catalog(endpoint['route'], spatial_reference_ids=selection) if selection else provider.capture_server_catalog(endpoint['route'])
             result = build_export(captured['resources'], endpoint_id=str(context.endpoint_id),
                 target_id='server:' + captured['server_uuid'], generation=captured['generation'],
                 include_system=include_system, refreshed=True, engine='mysql')
@@ -862,7 +864,7 @@ class ProviderWorkspaceService:
     def mysql_server_plan(self, server, request):
         from .firebird_catalog_import import read_catalog
         from .firebird_catalog_export import build_export
-        from .mysql_server_plan import plan
+        from .mysql_server_plan import plan, spatial_selection
         if not isinstance(request, dict) or set(request) != {'baseline', 'source'}:
             raise ProviderWorkspaceError('Server preview requires baseline and desired DDN')
         context, endpoint, provider = self._mysql_server_context(server)
@@ -870,7 +872,8 @@ class ProviderWorkspaceService:
             baseline, desired = [read_catalog(request[key], engine='mysql') for key in ('baseline', 'source')]
             if any(document['provenance']['endpoint_id'] != str(context.endpoint_id) for document in (baseline, desired)):
                 raise ValueError('Server DDN belongs to another registered endpoint')
-            acquired = provider.capture_server_catalog(endpoint['route'])
+            selection = spatial_selection(baseline, desired)
+            acquired = provider.capture_server_catalog(endpoint['route'], spatial_reference_ids=selection) if selection else provider.capture_server_catalog(endpoint['route'])
             live = build_export(acquired['resources'], endpoint_id=str(context.endpoint_id),
                 target_id='server:' + acquired['server_uuid'], generation=acquired['generation'],
                 include_system=True, refreshed=True, engine='mysql', native_model=True)

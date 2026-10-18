@@ -72,8 +72,10 @@ MySQL
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
 
-Native spatial-reference catalog and typed management operations are implemented;
-their wider server DDN integration remains open. The first native source
+Native spatial-reference catalog, typed management and bounded selected-SRID
+server DDN exchange/migration are implemented. Captured SRID scope is explicit;
+large catalogs use separate selected batches under the existing byte bounds.
+The first native source
 comparison also identifies component-backed global masking-policy definitions as
 an explicit adapter obligation. Full native column facts and reviewed column
 policy assignment/removal are implemented, including the native distinction

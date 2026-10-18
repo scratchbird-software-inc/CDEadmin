@@ -23,11 +23,21 @@ SECTIONS = (
     ('resource-groups', 'resource-group', 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, RESOURCE_GROUP_ENABLED, VCPU_IDS, THREAD_PRIORITY FROM information_schema.RESOURCE_GROUPS ORDER BY RESOURCE_GROUP_NAME', ('resource_group_name',)),
     ('system-variables', 'system-variable', 'SELECT g.VARIABLE_NAME,g.VARIABLE_VALUE AS GLOBAL_VALUE,v.VARIABLE_SOURCE,v.VARIABLE_PATH,v.MIN_VALUE,v.MAX_VALUE,v.SET_TIME,v.SET_USER,v.SET_HOST,p.VARIABLE_VALUE AS PERSISTED_VALUE FROM performance_schema.global_variables g LEFT JOIN performance_schema.variables_info v ON v.VARIABLE_NAME=g.VARIABLE_NAME LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME ORDER BY g.VARIABLE_NAME', ('variable_name',)),
     ('foreign-servers', 'server-link', 'SELECT Server_name,Host,Db,Username,Port,Socket,Wrapper,Owner FROM mysql.servers ORDER BY Server_name', ('server_name',)),
+    ('spatial-reference-systems', 'spatial-reference-system', 'SELECT SRS_NAME,SRS_ID,ORGANIZATION,ORGANIZATION_COORDSYS_ID,DEFINITION,DESCRIPTION FROM information_schema.ST_SPATIAL_REFERENCE_SYSTEMS', ('srs_id',)),
     ('replication-channels', 'replication-channel', 'SELECT CHANNEL_NAME,HOST,PORT,USER,AUTO_POSITION,CONNECTION_RETRY_INTERVAL,CONNECTION_RETRY_COUNT,HEARTBEAT_INTERVAL,TLS_VERSION,SSL_ALLOWED,SSL_VERIFY_SERVER_CERTIFICATE FROM performance_schema.replication_connection_configuration ORDER BY CHANNEL_NAME', ('channel_name',)),
 ) + tuple((section, 'privilege', sql, keys) for section, _scope, sql, keys in GRANTS)
 
 
-def capture(connection):
+def spatial_ids(value):
+    if (not isinstance(value, list) or len(value) > 128 or
+            any(type(item) is not int or not 0 <= item <= 4294967295 for item in value) or
+            len(set(value)) != len(value)):
+        raise ValueError('Select at most 128 distinct native unsigned 32-bit SRIDs')
+    return sorted(value)
+
+
+def capture(connection, *, spatial_reference_ids=None):
+    selected = spatial_ids([] if spatial_reference_ids is None else spatial_reference_ids)
     if connection.in_transaction:
         raise ValueError('Server inventory requires an independently owned idle attachment')
     connection.autocommit = True
@@ -64,7 +74,8 @@ def capture(connection):
         finally:
             cursor.close()
     identity = list(read('SELECT VERSION() AS version, @@server_uuid AS server_uuid, '
-        '@@lower_case_table_names AS lower_case_table_names, @@sql_mode AS sql_mode'))
+        '@@lower_case_table_names AS lower_case_table_names, @@sql_mode AS sql_mode, '
+        'CURRENT_USER() AS effective_principal, USER() AS authenticated_principal, CURRENT_ROLE() AS active_roles'))
     if (len(identity) != 1 or str(identity[0]['version']).split('-')[0] != '9.7.0' or
             not isinstance(identity[0]['server_uuid'],str) or not identity[0]['server_uuid']):
         raise ValueError('Server inventory requires native MySQL 9.7.0 identity')
@@ -86,6 +97,10 @@ def capture(connection):
     accounts = {}
     account_rows = None
     for section,kind,source,keys in SECTIONS:
+        if section == 'spatial-reference-systems' and not selected:
+            observations.append({'section':section,'available':False,
+                'reason':'Select explicit SRIDs for bounded native definition exchange', 'selected_ids':[]})
+            continue
         try:
             if section == 'routine-grants':
                 from ..mysql_grants import routine_grants
@@ -94,6 +109,8 @@ def capture(connection):
                         'reason': 'Separate account identities are not visible'})
                     continue
                 rows = list(routine_grants(account_rows, read))
+            elif section == 'spatial-reference-systems':
+                rows = list(read(source+' WHERE SRS_ID IN ('+','.join(['%s']*len(selected))+') ORDER BY SRS_ID', tuple(selected)))
             else:
                 rows = list(read(source))
         except Exception as error:
@@ -117,7 +134,8 @@ def capture(connection):
                             grantee=account_row['grantee_identity'],
                             grantee_user=account_row['user'], grantee_host=account_row['host'])
             for row in rows:add(section,kind,row,keys)
-            observations.append({'section':section,'available':True,'rows':len(rows)})
+            observations.append({'section':section,'available':True,'rows':len(rows),
+                **({'selected_ids':selected} if section == 'spatial-reference-systems' else {})})
     if len({row['resource_id'] for row in resources}) != len(resources):
         raise ValueError('Server catalog contains ambiguous native identities')
     warnings = ['Privilege-filtered observational server metadata; full coverage is not asserted.',
