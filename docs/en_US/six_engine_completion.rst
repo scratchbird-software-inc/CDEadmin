@@ -205,6 +205,9 @@ the complete native feature denominator has been reconciled.
 Current implementation matrix, 2026-10-18
 =========================================
 
+The current known remaining acceptance items and work order are consolidated
+in :doc:`six_engine_remaining_work`. The initial ledger below is historical.
+
 All six engines now have catalog-backed completion, native nonexecuting
 preflight, engine-specific formatting and implemented native administration,
 data and design workflows. The implementations and scoped receipts below
@@ -236,8 +239,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        Shell/raw closed archives and reviewed native replay with GTIDs on/off,
        exact transaction boundaries and shared target fencing; native continuous
        raw reception with independently sealed closed-log batches.
-     - Complete base/PITR/cutover, receiver restart/tail adoption and retention,
-       wider procedural scopes and complete installed-capability/lifecycle/HA
+     - Complete base/PITR/cutover, unresolved receiver/checkpoint recovery and
+       retention, wider procedural scopes and complete installed-capability/lifecycle/HA
        workflows and evidence.
    * - MariaDB 12.2.2
      - Independent native category/DDN reconciliation; retained catalog and
@@ -246,8 +249,8 @@ remains open for every engine; a scoped workflow is not the full denominator.
        raw logs with native checksum, compressed-event and GTID-domain semantics;
        reviewed native archive replay with target fencing and GTID boundaries;
        native continuous raw reception with independently sealed closed batches.
-     - Complete PITR/physical continuity, receiver restart/tail adoption and
-       retention, wider procedural/package scopes and full native operational
+     - Complete PITR/physical continuity, unresolved receiver/checkpoint recovery
+       and retention, wider procedural/package scopes and full native operational
        and installed-capability acceptance.
    * - PostgreSQL 18.3
      - Independent server/retained-session catalog work; native completion,
