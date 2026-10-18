@@ -58,9 +58,9 @@ def options(renames):
     return result
 
 
-def generate(baseline,renames,fts_rebindings=()):
+def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewrite_runtime=None):
     """Run schema-only native rewriting in an empty independent database."""
-    selected=options(renames);probe=sqlite3.connect(':memory:')
+    selected=options(renames);probe=sqlite3.connect(':memory:');rebindings=[]
     try:
         probe.execute('PRAGMA legacy_alter_table=OFF')
         probe.execute('PRAGMA foreign_keys=ON')
@@ -85,7 +85,19 @@ def generate(baseline,renames,fts_rebindings=()):
                 for source in statements(row['name'],row['native'].get('fts_configuration')):probe.execute(source)
         if schema(model(probe,baseline))!=schema(baseline):
             raise ValueError('The empty native rename schema cannot reproduce all baseline facts')
-        stages=[]
+        stages=[];rewritten=[]
+        if _native_rebinding:
+            from .sqlite_native_rebind import rewrite
+            rewritten,runtime=rewrite(probe,declarations,selected,rebindings)
+            if _rewrite_runtime is not None:_rewrite_runtime.update(runtime)
+            # Native ALTER cannot bind a virtual table's function invocation
+            # after its replacement by an ordinary rewrite relation. Bind the
+            # original dependencies first, then restore them after rebuilding.
+            for kind in ('trigger','view'):
+                for row,_source in rewritten:
+                    if row['kind']==kind:
+                        source='DROP '+kind.upper()+' "main".'+_quote(row['name'])
+                        probe.execute(source);stages.append(source)
         for rebind in rebindings:
             for source in rebind['before']:probe.execute(source);stages.append(source)
         for item in selected:
@@ -96,6 +108,12 @@ def generate(baseline,renames,fts_rebindings=()):
             probe.execute(source);stages.append(source)
         for rebind in rebindings:
             for source in rebind['stages']:probe.execute(source);stages.append(source)
+        for kind in ('view','trigger'):
+            for row,source in rewritten:
+                if row['kind']==kind:probe.execute(source);stages.append(source)
+        if rewritten:
+            from .sqlite_schema_apply import _validate_dependencies
+            _validate_dependencies(probe,{row['resource_id']:row for row in _resources(probe,{})})
         generated=model(probe,baseline)
         desired=deepcopy(baseline)
         desired['rows']={identity:row for identity,row in desired['rows'].items() if row['kind'] not in KINDS}
@@ -103,12 +121,16 @@ def generate(baseline,renames,fts_rebindings=()):
             if row['kind'] in KINDS and row['system']=='false'})
         return desired,selected,stages
     except sqlite3.Error as error:
+        if not _native_rebinding and any(item['before'] for item in rebindings):
+            probe.close()
+            return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime)
         raise ValueError('Native SQLite rename refused ('+str(getattr(error,'sqlite_errorname','SQLITE_ERROR'))+'): '+str(error)) from None
     finally:probe.close()
 
 
 def plan(baseline,desired,live,renames,fts_rebindings=()):
-    generated,selected,stages=generate(baseline,renames,fts_rebindings)
+    runtime={}
+    generated,selected,stages=generate(baseline,renames,fts_rebindings,_rewrite_runtime=runtime)
     from .sqlite_fts_rebind import plans as rebind_plans
     rebuilds=rebind_plans(baseline,selected,fts_rebindings)
     conflicts=[];blockers=[]
@@ -119,6 +141,7 @@ def plan(baseline,desired,live,renames,fts_rebindings=()):
         'fts_rebuilds':[{key:item[key] for key in ('resource_id','source_name','name','module','original_content','content','configuration','column_renames')} for item in rebuilds],
         'source':'\n'.join(stage+';' for stage in stages),'baseline_schema_sha256':digest(schema(baseline)),
         'desired_schema_sha256':digest(schema(generated))}
+    if runtime:operation['rewrite_runtime']=runtime
     ready=not conflicts and not blockers
     return {'format':FORMAT,'engine':'sqlite','database_target_id':baseline['provenance']['database_target_id'],
         'operations':[operation],'blockers':blockers,'conflicts':conflicts,'execution_sha256':digest([operation]),

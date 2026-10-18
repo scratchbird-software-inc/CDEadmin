@@ -141,6 +141,8 @@ def paths(env):
                      'libcdeadmin_sqlite_recovery.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_recovery.so')
     recovery_library = STATE / 'sqlite' / recovery_name
     if recovery_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_RECOVERY_LIBRARY', str(recovery_library))
+    sqlite_shell = STATE / 'sqlite' / ('sqlite3' + extension)
+    if sqlite_shell.is_file(): selected.setdefault('CDEADMIN_SQLITE_BINARY', str(sqlite_shell))
     candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
                 STATE/'mysql-shell/libexec/mysqlsh'/('mysqlbinlog'+extension)]
     available_binlog=next((path for path in candidates if path.is_file()),None)
@@ -229,6 +231,7 @@ def clients(evidence, env):
                 env=env, log=evidence / 'connector-install.log')
         (prefix / '.cdeadmin-complete').write_text(ASSETS['mariadb-c'][1], encoding='utf-8')
     build_sqlite(evidence, env)
+    build_sqlite_shell(evidence, env)
     build_sqlite_recovery(evidence, env)
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
@@ -275,6 +278,39 @@ def build_sqlite(evidence, env):
     with target.open('rb') as source:
         actual = hashlib.file_digest(source, 'sha256').hexdigest()
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': actual}, indent=2), encoding='utf-8')
+
+
+def build_sqlite_shell(evidence, env):
+    """Ship the same pinned native CLI for isolated schema AST binding."""
+    sqlite = STATE / 'sqlite'
+    source = sqlite / 'shell.c'
+    with zipfile.ZipFile(download('sqlite')) as archive:
+        admitted = archive.read('sqlite-amalgamation-3530000/shell.c')
+    if source.exists() and source.read_bytes() != admitted:
+        raise RuntimeError('Preserved a modified native SQLite shell source')
+    if not source.exists(): source.write_bytes(admitted)
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'archive': ASSETS['sqlite'][1], 'source': sha(source), 'core': sha(core),
+              'system': platform.system(), 'machine': platform.machine()}
+    target = sqlite / ('sqlite3.exe' if os.name == 'nt' else 'sqlite3')
+    marker = sqlite / 'shell-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if previous.get('inputs') == inputs and target.is_file() and previous.get('sha256') == sha(target): return
+        raise RuntimeError('Native SQLite shell build changed; use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite shell')
+    if os.name == 'nt':
+        command(['cl.exe', '/nologo', '/O2', '/MD', 'shell.c', 'sqlite3.lib',
+                 '/link', '/OUT:sqlite3.exe', 'advapi32.lib', 'user32.lib'], cwd=sqlite, env=env,
+                log=evidence / 'sqlite-shell-build.log')
+    else:
+        command(['cc', '-O2', 'shell.c', '-I.', '-L.', '-lsqlite3',
+                 '-Wl,-rpath,' + str(sqlite), '-o', 'sqlite3'], cwd=sqlite, env=env,
+                log=evidence / 'sqlite-shell-build.log')
+    command([target, '-safe', '-batch', '-bail', ':memory:', 'SELECT sqlite_version(),sqlite_source_id();'],
+            env=env, log=evidence / 'sqlite-shell-runtime.log')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target)}, indent=2), encoding='utf8')
 
 
 def build_sqlite_recovery(evidence, env):

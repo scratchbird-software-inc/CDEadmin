@@ -21,10 +21,12 @@ CASES += [('fts4',mode,failure) for mode in ('language','language-chain')
           for failure in (None,'stale','rollback','denied','lost_commit')]
 CASES += [(module,'control',failure) for module in ('fts4','fts5')
           for failure in (None,'stale','rollback','denied','lost_commit')]
+CASES += [('fts5',mode,failure) for mode in ('public-function','public-function-chain')
+          for failure in (None,'stale','rollback','denied','lost_commit','runtime_unavailable')]
 
 
 @pytest.mark.parametrize('module,mode,failure',CASES)
-def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(tmp_path,module,mode,failure):
+def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(tmp_path,monkeypatch,module,mode,failure):
     path=tmp_path/'external.sqlite';owner="Owner'雪";search="search'雪";new_owner='renamed:雪';new_search='rebuilt:雪';wide=9007199254740993
     language=mode.startswith('language')
     quote=lambda value:'"'+value.replace('"','""')+'"'
@@ -37,7 +39,13 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
             for key,value in [('automerge',8),('usermerge',4),('crisismerge',10),('deletemerge',11),('pgsz',1024),('hashsize',16384),('rank','bm25(2.0)'),('secure-delete',1),('insttoken',1)]:
                 connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+',rank) VALUES(?,?)',(key,value))
         else:connection.execute('INSERT INTO '+quote(search)+'('+quote(search)+") VALUES('automerge=4')")
-        connection.execute('CREATE VIEW projection AS SELECT rowid,body FROM '+quote(search)+(' WHERE '+('lang=3 AND ' if language else '')+quote(search)+" MATCH 'native'" if language or mode=='control' else ''));connection.commit()
+        function='function' in mode
+        connection.execute('CREATE VIEW projection'+('(rowid,body)' if function else '')+' AS SELECT '+('s.rowid,s.body FROM '+quote(search)+"('native') AS s" if function else
+            'rowid,body FROM '+quote(search)+(' WHERE '+('lang=3 AND ' if language else '')+quote(search)+" MATCH 'native'" if language or mode=='control' else '')))
+        if function:
+            connection.execute('CREATE VIEW shadowed AS WITH '+quote(search)+"(body) AS (VALUES('body literal search')) SELECT body FROM "+quote(search))
+            connection.execute('CREATE VIEW dependent(out_id,out_body) AS SELECT rowid,body FROM projection')
+        connection.commit()
         if mode.startswith('public') or language or mode=='control':
             connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON '+quote(owner)+' BEGIN INSERT INTO '+quote(search)+'(rowid,body'+(',lang' if language else '')+') VALUES(new.id,new.body'+(',new.lang' if language else '')+');END')
             connection.commit()
@@ -53,7 +61,7 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
             [{'kind':'table','table':owner,'to':new_owner}] if mode in {'owner','chain'} else
             [{'kind':'column','table':owner,'from':'id' if mode=='rowid' else 'extra','to':'new_id' if mode=='rowid' else 'new_extra'}])
         if mode=='chain':renames.append({'kind':'table','table':search,'to':new_search})
-        if mode=='public-chain':renames.extend([{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
+        if mode in {'public-chain','public-function-chain'}:renames.extend([{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
         if mode=='language-chain':renames.extend([{'kind':'column','table':owner,'from':'intermediate:雪','to':'locale:雪'},{'kind':'table','table':owner,'to':new_owner},{'kind':'table','table':search,'to':new_search}])
         required=mode in {'owner','chain','control'} or mode.startswith('public') or language or module=='fts5' and mode=='rowid'
         selected=[_resource_id('fts-table',['main'],search)] if required else []
@@ -67,6 +75,7 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
             assert configuration(observer,'main',search,module)['commands']==saved['commands']
         reviewed=service.sqlite_schema_application('owned','sqlite_schema_review',{**documents,'execution_sha256':displayed['execution_sha256']})
         apply_request={'database_target_id':'file',**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True}
+        if failure=='runtime_unavailable':monkeypatch.setenv('CDEADMIN_SQLITE_BINARY',str(tmp_path/'missing-native-sqlite'))
         if failure=='stale':
             with closing(sqlite3.connect(path)) as observer:
                 observer.execute('INSERT INTO '+quote(search)+'('+quote(search)+(',rank) VALUES(\'automerge\',6)' if module=='fts5' else ") VALUES('automerge=6')"));observer.commit()
@@ -88,14 +97,14 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
                     if failure=='lost_commit':raise ConnectionError('Owned loss after actual external-content reconstruction commit')
             provider.client._connect=Mock(side_effect=lambda payload:Injected(connect(payload)))
         result=service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)
-        expected='not_dispatched' if failure=='stale' else 'rolled_back' if failure in {'rollback','denied'} else 'unknown_outcome' if failure=='lost_commit' else 'committed'
+        expected='not_dispatched' if failure in {'stale','runtime_unavailable'} else 'rolled_back' if failure in {'rollback','denied'} else 'unknown_outcome' if failure=='lost_commit' else 'committed'
         assert result['state']==expected,result
         provider.client._connect=Mock(side_effect=AssertionError('external-content review was replayed'))
         assert service.sqlite_schema_application('owned','sqlite_schema_apply',apply_request)['state']==expected
         provider.client._connect.assert_not_called()
         applied=failure in {None,'lost_commit'}
-        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain','language-chain'} else owner
-        actual_search=new_search if applied and mode in {'chain','public-chain','language-chain','control'} else search
+        actual_owner=new_owner if applied and mode in {'owner','chain','public-chain','public-function-chain','language-chain'} else owner
+        actual_search=new_search if applied and mode in {'chain','public-chain','public-function-chain','language-chain','control'} else search
         actual_field='text:雪' if applied and mode.startswith('public') else 'body'
         actual_language='locale:雪' if applied and language else 'lang'
         language_filter=' AND '+quote(actual_language)+'=3' if language else ''
@@ -103,6 +112,9 @@ def test_reviewed_native_external_content_rebinding_preserves_rows_and_settings(
             assert observer.execute('SELECT rowid,* FROM '+quote(actual_owner)+' ORDER BY rowid').fetchall()==[row+((3,) if language else ()) for row in [(1,1,'native token','one'),(wide,wide,'native 雪 token','two')]]
             assert observer.execute('SELECT rowid,'+quote(actual_field)+' FROM '+quote(actual_search)+' WHERE '+quote(actual_search)+" MATCH 'native'"+language_filter+' ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
             assert observer.execute('SELECT * FROM projection ORDER BY rowid').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+            if function:
+                assert observer.execute('SELECT * FROM dependent ORDER BY out_id').fetchall()==[(1,'native token'),(wide,'native 雪 token')]
+                assert observer.execute('SELECT * FROM shadowed').fetchall()==[('body literal search',)]
             assert configuration(observer,'main',actual_search,module)['commands']==saved['commands']
             if not applied:assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==original
             else:

@@ -282,10 +282,13 @@ remains open for every engine; a scoped workflow is not the full denominator.
        ordinary dependent views, maintenance triggers and native index settings.
        FTS4 language-column and selected FTS hidden MATCH-column mappings
        preserve native language-specific searches and dependent code.
+       FTS5 table-function dependencies use isolated native AST binding and
+       transactional recreation, with reviewed utility identity and final
+       native view/trigger checks.
        Offline native file recovery uses private WAL/journal images, exact
        typed transfer, reviewed new-file publication, durable outcomes and
        registration/activation of recovered copies.
-     - Remaining attached/FTS table-function-view/row-identity and installed-module transformations and
+     - Remaining attached/derived-view/FTS4 row-identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1590,3 +1593,24 @@ Native qualification covers both connector implementations, independent pending
 work, stored-procedure charset changes, client delimiters and HTTP/browser flow.
 Wider computed/procedural contexts and future-state preflight retain separate
 acceptance.
+
+SQLite FTS5 table-function dependency reconstruction
+---------------------------------------------------
+
+Public content-column and coordinated table renames now preserve dependent
+FTS5 function invocations, including aliases and explicit view output names.
+The ordinary-relation rewrite path remains available. When that path cannot
+bind the virtual function, the pinned SQLite 3.53.0 native rename helpers bind
+the original empty schema in a separate safe CLI process. Only native-selected
+identifier spans are replaced; independent original-identity probes compose
+column/table chains without guessing names in SQL text. Unrelated CTE names,
+literals and comments remain exact. Internal testing functions are never
+enabled on a registered database or user connection.
+
+The reviewed operation records executable/source identity and execution host.
+Views and triggers are recreated within the owned rename transaction, then
+native preparation checks every final dependency. Review reuse, stale settings,
+refusals, rollback and lost commit replies retain the existing durable outcome
+contract. Native utility setup includes the pinned shell on Windows/macOS;
+those teams still own native platform qualification. Wider attached, derived
+view, FTS4 row-identity and installed-module transforms remain open.

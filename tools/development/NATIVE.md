@@ -406,3 +406,20 @@ freelist recovery can include deleted records. Inspect the copy before adopting
 its data. The workspace can register and activate a verified recovered file and
 remove its staged images while retaining the receipt and published copy.
 Windows/macOS build and workflow acceptance remain with the platform teams.
+
+## SQLite native schema binding utility
+
+Native client setup also builds the SQLite 3.53.0 CLI from the admitted
+amalgamation and sets `CDEADMIN_SQLITE_BINARY` in the launch environment. For a
+separately managed installation, set that variable (or application setting) to
+the matching native `sqlite3.exe` / `sqlite3`. The application verifies its
+version and exact source ID. The reviewed operation includes its executable
+hash, resolved path and execution host; changes require a new review.
+
+This utility handles FTS5 table-function dependencies during selected native
+schema renames. It runs with `-safe -batch -bail`, an empty initialization file,
+and an empty memory database in private temporary storage. Only schema is
+provided. Its version-specific internal rename helpers never run on a user's
+connection or registered file. Missing or incompatible utility availability
+is reported before migration dispatch. This setup wiring is separate from
+native Windows/macOS qualification by the platform teams.

@@ -188,9 +188,16 @@ SQLITE-COMP-05: DDN design exchange
   FTS4 language-column changes preserve language-specific searches and rewrite
   dependent views and maintenance triggers. Explicitly selected reconstruction
   also rewrites the hidden MATCH/control column when the FTS table is renamed.
-  Native table-function views and FTS4 row-identity mappings retain separate
-  adapter acceptance. Native ALTER alone can leave an external-content search
-  table unusable.
+  FTS5 table-function views use the pinned native AST binder when an ordinary
+  rewrite relation cannot preserve their function syntax. Native bindings select
+  exact identifier spans, preserving CTE shadows, aliases, literals, comments
+  and explicit view column names. The adapter recreates views/triggers within
+  the same transaction and checks their final bindings before commit. Its
+  application-host utility identity is part of the reviewed operation; a missing
+  or changed runtime refuses dispatch. FTS4 row-identity mappings, attached
+  environments and wider derived-view transformations retain separate adapter
+  acceptance. Native ALTER alone can leave an external-content search table
+  unusable.
 
   The explorer's virtual-table creation form provides structured native
   constructors for FTS3/4/5, RTree/RTree integer, Geopoly, FTS4 auxiliary,

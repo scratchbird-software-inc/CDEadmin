@@ -13,10 +13,13 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external_content=False,fts_settings=False,public_column=False,fts_language=False):
+def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external_content=False,fts_settings=False,public_column=False,fts_language=False,fts_function=False):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700);builtins.SERVER_MODE=None
+    if fts_function:
+        if virtual_module or fts_settings or fts_language:raise ValueError('FTS function qualification selects its own native fixture')
+        external_content=True;public_column=True
     if fts_language:
         if virtual_module or fts_settings or public_column:raise ValueError('FTS4 language qualification selects its own native fixture')
         external_content=True
@@ -60,7 +63,8 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
             else:
                 for key,value in [('automerge',8),('rank','bm25(2.0)'),('secure-delete',1)]:connection.execute('INSERT INTO search(search,rank) VALUES(?,?)',(key,value))
             if public_column or fts_language:
-                connection.execute('CREATE VIEW fts_projection AS SELECT rowid,note FROM search'+(" WHERE lang=3 AND search MATCH '雪'" if fts_language else ''))
+                connection.execute('CREATE VIEW fts_projection AS SELECT '+("s.rowid,s.note FROM search('雪') AS s" if fts_function else
+                    'rowid,note FROM search'+(" WHERE lang=3 AND search MATCH '雪'" if fts_language else '')))
                 connection.execute('CREATE TRIGGER maintain_search AFTER INSERT ON parent BEGIN INSERT INTO search(rowid,note'+(',lang' if fts_language else '')+') VALUES(new.id,new.note'+(',new.lang' if fts_language else '')+');END')
         connection.commit()
     finally:connection.close()
@@ -101,6 +105,9 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
         finally:connection.close()
         request={'baseline':baseline,'desired':json.dumps(generated['snapshot']),'renames':renames,**({'fts_rebindings':fts_rebindings} if external_content else {})}
         displayed=post('sqlite_schema_plan',request);assert displayed['ready_for_review'],displayed
+        if fts_function:
+            assert displayed['operations'][0]['rewrite_runtime']['authority']=='sqlite-3.53.0-native-rename-ast'
+            proof['rewrite_runtime']=displayed['operations'][0]['rewrite_runtime']
         reviewed=post('sqlite_schema_review',{**request,'execution_sha256':displayed['execution_sha256']})
         apply_request={**{key:reviewed[key] for key in ('review_id','review_digest')},'confirmed':True}
         result=post('sqlite_schema_apply',apply_request);assert result['state']=='committed' and result['outcome']['rediscovery_verified'],result
@@ -158,7 +165,7 @@ def qualify(output,*,binary=None,driver_binary=None,virtual_module=None,external
                     connection.commit()
             finally:connection.close()
             proof['checks'].append('browser-native-fts-settings-generation-confirmed-apply-and-independent-content' if fts_settings else 'browser-context-menu-native-rename-generation-confirmed-apply-and-independent-rows')
-        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module,external_content=external_content,fts_settings=fts_settings,public_column=public_column,fts_language=fts_language)
+        proof.update(complete=True,native_sqlite_version=sqlite3.sqlite_version,virtual_module=virtual_module,external_content=external_content,fts_settings=fts_settings,public_column=public_column,fts_language=fts_language,fts_function=fts_function)
     finally:(output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
 
@@ -233,5 +240,5 @@ def browser(app,output,path,sid,target_label,binary,driver_binary,*,external_con
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));parser.add_argument('--external-content',action='store_true');parser.add_argument('--fts-settings',action='store_true');parser.add_argument('--public-column',action='store_true');parser.add_argument('--fts-language',action='store_true');args=parser.parse_args()
-    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module,external_content=args.external_content,fts_settings=args.fts_settings,public_column=args.public_column,fts_language=args.fts_language)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--virtual-module',choices=('fts3','fts4','fts5'));parser.add_argument('--external-content',action='store_true');parser.add_argument('--fts-settings',action='store_true');parser.add_argument('--public-column',action='store_true');parser.add_argument('--fts-language',action='store_true');parser.add_argument('--fts-function',action='store_true');args=parser.parse_args()
+    qualify(args.evidence,binary=args.browser_binary,driver_binary=args.driver_binary,virtual_module=args.virtual_module,external_content=args.external_content,fts_settings=args.fts_settings,public_column=args.public_column,fts_language=args.fts_language,fts_function=args.fts_function)

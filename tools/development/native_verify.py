@@ -76,6 +76,17 @@ def child(name, evidence, port):
             assert connection.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone() == (1,)
             for name in ('json_each', 'jsonb_each', 'dbstat', 'sqlite_dbpage', 'carray'):
                 assert connection.execute('SELECT * FROM pragma_table_xinfo(?)', (name,)).fetchall(), name
+            from pgadmin.cdeadmin.workspace.sqlite_native_rebind import rewrite
+            declarations = [
+                {'kind': 'table', 'name': 'bind_owner', 'native': {'ddl': 'CREATE TABLE bind_owner(id INTEGER PRIMARY KEY,body)'}},
+                {'kind': 'fts-table', 'name': 'bind_search', 'native': {'ddl': "CREATE VIRTUAL TABLE bind_search USING fts5(body,content='bind_owner')"}},
+                {'kind': 'view', 'name': 'bind_view', 'native': {'ddl': "CREATE VIEW bind_view AS SELECT s.body FROM bind_search('native') AS s"}}]
+            for row in declarations: connection.execute(row['native']['ddl'])
+            rewritten, runtime = rewrite(connection, declarations,
+                [{'kind': 'column', 'table': 'bind_owner', 'from': 'body', 'to': 'text'}],
+                [{'source_name': 'bind_search', 'column_renames': [{'from': 'body', 'to': 'text'}]}])
+            assert rewritten[0][1] == 'CREATE VIEW bind_view AS SELECT s."text" FROM bind_search(\'native\') AS s'
+            print(json.dumps(runtime, indent=2))
         return 0
     if name == 'http':
         import config
