@@ -49,7 +49,7 @@ def independent_rebase(core,local,buffer):
     finally:native.sqlite3_free(result);native.sqlite3rebaser_delete(handle)
 
 
-def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,array_library=None):
+def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,array_library=None,preupdate_library=None):
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
@@ -70,6 +70,8 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     for path in [*list((ROOT/'web/pgadmin/cdeadmin/providers/sqlite').glob('array*.py')),ROOT/'tools/native/sqlite_arrays/api.c',ROOT/'tools/native/sqlite_arrays/CMakeLists.txt',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeArrays.jsx']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [*list((ROOT/'web/pgadmin/cdeadmin/providers/sqlite').glob('preupdate*.py')),ROOT/'tools/native/sqlite_preupdate/api.c',ROOT/'tools/native/sqlite_preupdate/CMakeLists.txt',ROOT/'tools/native/sqlite_hook_ownership.h',ROOT/'web/pgadmin/static/js/Dialogs/SQLitePreupdate.jsx']:
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -80,6 +82,7 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         setattr(config,name,str(output/filename))
     config.CDEADMIN_SQLITE_SESSION_LIBRARY=str(Path(library).resolve(strict=True))
     if array_library:config.CDEADMIN_SQLITE_ARRAY_LIBRARY=str(Path(array_library).resolve(strict=True))
+    if preupdate_library:config.CDEADMIN_SQLITE_PREUPDATE_LIBRARY=str(Path(preupdate_library).resolve(strict=True))
     source=output/'native.sqlite';schema='CREATE TABLE "native\n雪"(id INTEGER PRIMARY KEY,body TEXT,payload BLOB)'
     assert sqlite3.sqlite_version=='3.53.0'
     with sqlite3.connect(source) as connection:
@@ -147,6 +150,25 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
                 assert array('close',array_id=created['array_id'],confirmed=True)['closed']
             assert array('inventory')['total']==0
             proof['checks'].append('authenticated-retained-native-array-bindings-all-five-types-wide-int64-null-empty-binary-and-target-ownership')
+        if preupdate_library:
+            def preupdate(operation,**fields):return post('sqlite_native_preupdate',session_id=session_id,request={'operation':operation,**fields})
+            assert preupdate('inventory')['helper_available']
+            execute('CREATE TEMP TABLE preupdate_check(id INTEGER PRIMARY KEY,body TEXT,b BLOB)')
+            started=preupdate('start',max_events=100,max_json_bytes='1048576');run=started['status']['run_id'];proof['native_preupdate_program']=started['program']
+            execute('BEGIN');execute('INSERT INTO preupdate_check VALUES(?,?,?)',[{'encoding':'integer','data':'9007199254740993'},'雪'+chr(0)+'😀',{'encoding':'base64','data':'AP8='}])
+            execute('UPDATE preupdate_check SET body=NULL');execute('DELETE FROM preupdate_check');execute('ROLLBACK')
+            page=preupdate('events',run_id=run,after_sequence='0',limit=25)
+            assert [event['operation'] for event in page['events']]==['insert','update','delete']
+            assert page['events'][0]['database']=='temp' and page['events'][0]['new_values']==[
+                {'native_type':'integer','data':'9007199254740993'},{'native_type':'text','data':'雪'+chr(0)+'😀'},
+                {'native_type':'blob','data':{'encoding':'base64','data':'AP8=','byte_length':2}}]
+            observed,_payload=execute('SELECT count(*) FROM preupdate_check');assert observed==[[0]]
+            refused=client.post(url,json={'action':'sqlite_native_sessions','database_target_id':target,'session_id':session_id,'request':{'operation':'open','database':'main'}})
+            assert refused.status_code!=200 or not refused.get_json().get('success')
+            preupdate('stop',run_id=run);preupdate('clear',run_id=run,confirmed=True)
+            refused=client.post(url,json={'action':'sqlite_native_preupdate','database_target_id':target,'session_id':session_id,'request':{'operation':'events','run_id':run}})
+            assert refused.status_code!=200 or not refused.get_json().get('success')
+            proof['checks'].append('authenticated-native-preupdate-insert-update-delete-typed-data-rollback-observations-hook-exclusion-and-generation-refusal')
         assert capture('inventory')['helper_available']
         opened=capture('open',database='main',estimate_size=True,track_rowids=False)['capture'];capture_id=opened['capture_id']
         capture('attach',capture_id=capture_id,table_name='native\n雪')
@@ -329,7 +351,7 @@ def browser(app,output,server_id,binary,driver_binary):
         database=wait_for_tree_item(wait,'native.sqlite',('Connectors','SQLite',label))
         invoke_context_action(wait,driver,database,('Database workspace','Open SQLite SQL editor...'),handle_endpoint_prompt=False)
         def expose(node):
-            ancestors=driver.execute_script('let n=arguments[0].parentElement,a=[];while(n){if(n.tagName==="DETAILS" && !n.open)a.unshift(n);n=n.parentElement;}return a;',node)
+            ancestors=driver.execute_script('let n=arguments[0].parentElement,a=[];while(n){if(n.tagName==="DETAILS" && !n.open && n.querySelector(":scope > summary")!==arguments[0])a.unshift(n);n=n.parentElement;}return a;',node)
             for ancestor in ancestors:
                 summary=ancestor.find_element(By.XPATH,'./summary');driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',summary)
                 if summary.is_displayed():summary.click()
@@ -424,6 +446,35 @@ def browser(app,output,server_id,binary,driver_binary):
         transformed_apply=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
         assert transformed_apply['commit_returned'] and transformed_apply['source']['source_kind']=='transform'
         with sqlite3.connect(output/'another.sqlite') as independent:assert independent.execute('SELECT count(*) FROM external_file').fetchone()==(0,)
+        native_preupdate=False
+        if app.config.get('CDEADMIN_SQLITE_PREUPDATE_LIBRARY'):
+            engine_options();click('SQLite before-change diagnostics','summary');click('Inspect native preupdate support');click('Start native preupdate observations')
+            wait.until(lambda browser:any('Preupdate hook: enabled.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            def visible_sensitive(browser):
+                for label in browser.find_elements(By.XPATH,'//label[contains(.,"Omit this sensitive source from SQL history")]'):
+                    expose(label)
+                    if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+                return False
+            sensitive=wait.until(visible_sensitive)
+            if not sensitive.find_element(By.TAG_NAME,'input').is_selected():sensitive.click()
+            statement='INSERT INTO '+chr(34)+'native'+chr(10)+'雪'+chr(34)+" VALUES(73,'before change',x'00FF') RETURNING id"
+            _run_query(driver,wait,statement,'73','SQLite',output)
+            engine_options();click('Load first native preupdate events');click('Inspect native event 1','summary')
+            def visible_event(browser):
+                for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Native SQLite before-change events"] pre'):
+                    expose(node)
+                    if node.is_displayed():return node
+                return False
+            event=wait.until(visible_event)
+            event=json.loads(event.get_attribute('textContent'));assert event['operation']=='insert' and event['new_values'][0]=={'native_type':'integer','data':'73'}
+            click('Stop native preupdate observations')
+            wait.until(lambda browser:any('Preupdate hook: stopped.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            def discard_label(browser):
+                for label in browser.find_elements(By.XPATH,'//label[contains(.,"Discard retained before-change observations")]'):
+                    expose(label)
+                    if label.is_displayed() and label.find_element(By.TAG_NAME,'input').is_enabled():return label
+                return False
+            wait.until(discard_label).click();click('Clear native preupdate observations');native_preupdate=True
         native_arrays=False
         if app.config.get('CDEADMIN_SQLITE_ARRAY_LIBRARY'):
             engine_options();click('SQLite native arrays','summary');click('Inspect native arrays');click('Create native array')
@@ -448,7 +499,7 @@ def browser(app,output,server_id,binary,driver_binary):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
@@ -461,5 +512,5 @@ def browser(app,output,server_id,binary,driver_binary):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True)
     parser.add_argument('--library',type=Path,required=True);parser.add_argument('--sqlite-core',type=Path,required=True);parser.add_argument('--sqlite-cli',type=Path,required=True)
-    parser.add_argument('--array-library',type=Path);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    args=parser.parse_args();qualify(args.evidence,args.library,args.sqlite_core,args.sqlite_cli,browser_binary=args.browser_binary,driver_binary=args.driver_binary,array_library=args.array_library)
+    parser.add_argument('--preupdate-library',type=Path);parser.add_argument('--array-library',type=Path);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+    args=parser.parse_args();qualify(args.evidence,args.library,args.sqlite_core,args.sqlite_cli,browser_binary=args.browser_binary,driver_binary=args.driver_binary,array_library=args.array_library,preupdate_library=args.preupdate_library)

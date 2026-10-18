@@ -2,6 +2,7 @@
  * The application owns the capability, session lifetime, destination descriptors
  * and cancellation pipe. No CPython connection/statement layout is accessed. */
 #include <sqlite3ext.h>
+#include "../sqlite_hook_ownership.h"
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -28,7 +29,7 @@ static void close_all(State *state){
     sqlite3session_delete(capture->session);
     sqlite3_free(capture->id);sqlite3_free(capture);capture=next;
   }
-  state->captures=0;
+  state->captures=0;sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,0,0);
 }
 
 static void release_state(void *opaque){
@@ -290,7 +291,7 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
   if(strcmp(operation,"transform_file")==0 && count>=8){transform_changeset(context,state,count,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":3}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":4}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}
@@ -301,14 +302,19 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
     if(capture || !database || (size!=0 && size!=1) || (rowid!=0 && rowid!=1)){
       fail(context,SQLITE_MISUSE,"Native session identity or configuration is invalid");return;
     }
+    if(sqlite3_get_clientdata(state->db,CDEADMIN_PREUPDATE_ACTIVE)){
+      fail(context,SQLITE_BUSY,"Stop the independent native preupdate hook before opening a session capture");return;
+    }
     capture=sqlite3_malloc64(sizeof(*capture));if(!capture){sqlite3_result_error_nomem(context);return;}
     memset(capture,0,sizeof(*capture));capture->id=sqlite3_mprintf("%s",id);
     if(!capture->id){sqlite3_free(capture);sqlite3_result_error_nomem(context);return;}
-    result=sqlite3session_create(state->db,database,&capture->session);
+    result=sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,state,0);
+    if(result==SQLITE_OK)result=sqlite3session_create(state->db,database,&capture->session);
     if(result==SQLITE_OK)result=sqlite3session_object_config(capture->session,SQLITE_SESSION_OBJCONFIG_SIZE,&size);
     if(result==SQLITE_OK)result=sqlite3session_object_config(capture->session,SQLITE_SESSION_OBJCONFIG_ROWID,&rowid);
     if(result!=SQLITE_OK){
       if(capture->session)sqlite3session_delete(capture->session);
+      if(!state->captures)sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,0,0);
       sqlite3_free(capture->id);sqlite3_free(capture);fail(context,result,"Native session creation failed");return;
     }
     capture->next=state->captures;state->captures=capture;return;
@@ -316,7 +322,9 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   if(!capture){fail(context,SQLITE_NOTFOUND,"Native session identity is unavailable");return;}
   if(strcmp(operation,"close")==0 && count==3){
     if(previous)previous->next=capture->next;else state->captures=capture->next;
-    sqlite3session_delete(capture->session);sqlite3_free(capture->id);sqlite3_free(capture);return;
+    sqlite3session_delete(capture->session);sqlite3_free(capture->id);sqlite3_free(capture);
+    if(!state->captures)sqlite3_set_clientdata(state->db,CDEADMIN_SESSION_ACTIVE,0,0);
+    return;
   }else if(strcmp(operation,"attach")==0 && count==4){
     const char *table=sqlite3_value_type(values[3])==SQLITE_NULL ? 0 : text(values[3]);
     if(!table && sqlite3_value_type(values[3])!=SQLITE_NULL){fail(context,SQLITE_MISUSE,"Select a native table or all-table filter");return;}
@@ -396,5 +404,6 @@ int sqlite3_cdeadminsessions_init(sqlite3 *db,char **error,const sqlite3_api_rou
       sqlite3_create_function_v2(db,calling,-1,SQLITE_UTF8,0,0,0,0,0);
     }
   }
+  if(result==SQLITE_OK)result=sqlite3_set_clientdata(db,CDEADMIN_SESSION_GUARD,state,0);
   release_state(state);return result;
 }

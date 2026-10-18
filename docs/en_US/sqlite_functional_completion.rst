@@ -487,3 +487,41 @@ checks exercise the workspace-to-native binding path. This closes the scoped
 typed array workflow; standalone preupdate, interactive changeset decisions and
 broader installed-module/product coverage remain open. History tests remain
 deferred by owner direction.
+
+Standalone native preupdate diagnostics
+--------------------------------------
+
+The retained SQLite editor now starts, stops, inspects and clears standalone
+native preupdate observations. Public callbacks record INSERT, UPDATE and DELETE,
+old/new typed column values, native trigger depth and incremental BLOB-write
+column metadata. Integer values remain decimal strings; TEXT includes embedded
+zero bytes and invalid UTF-8 through explicit byte envelopes. BLOB NULL/empty
+values remain distinct. Raw native rowid fields retain their documented limits:
+WITHOUT ROWID tables, INSERT's old rowid and DELETE's new rowid are undefined.
+These fields never authorize row mutations.
+
+Callbacks occur before changes and can survive statement/transaction rollback.
+They do not establish commit, and schema, virtual-table and system-table changes
+have separate diagnostics. Per-run event/JSON retention limits and explicit loss
+counters identify dropped observations. Limits count retained JSON data rather
+than all native allocation overhead. Pages and reset/stop actions bind the exact
+observation generation. Reset is confirmed; closing the connection stops the hook
+and releases retained observations. Query-worker ownership guards all controls.
+
+Native sessions and this independent hook use SQLite's single preupdate slot.
+Cooperating bridges refuse replacement in both directions. Closing the last
+session capture allows preupdate; stopping preupdate allows a session capture.
+Older session helpers require a reconnect with the current bridge before hook
+switching. Operator-approved third-party extensions remain responsible for their
+own hook usage; these controls do not claim to chain arbitrary native callbacks.
+The standalone bridge is selected by ``CDEADMIN_SQLITE_PREUPDATE_LIBRARY`` and
+uses the exact connection library/source identity and closed controlled loader.
+Platform provisioning includes its native build; platform teams still own their
+Windows/macOS qualification.
+
+Native checks cover typed callbacks, triggers, WITHOUT ROWID tables, blob writes,
+rollback observations, limits/loss, paging, reset generations, loader/control
+privacy and mutual exclusion. Authenticated HTTP and browser workflows exercise
+start, observed changes, typed event inspection, stop and explicit reset.
+This scoped workflow leaves interactive changeset decisions, remaining module
+coverage and the broader product matrix open. History testing remains deferred.

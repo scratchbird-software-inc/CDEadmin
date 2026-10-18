@@ -129,6 +129,9 @@ class SessionAPI:
     def open(self,database,*,estimate_size=False,track_rowids=False):
         if not isinstance(database,str) or not database or '\x00' in database or type(estimate_size) is not bool or type(track_rowids) is not bool:
             raise SessionAPIError('Select an exact native database name and session switches')
+        hook=getattr(self.connection,'_cdeadmin_preupdate_api',None)
+        if hook is not None and hook.status()['enabled']:
+            raise SessionAPIError('Stop the independent native preupdate hook before opening a session capture')
         session_id=str(uuid.uuid4());_LIVE[id(self.connection)]=self
         try:self.call('open',session_id,database,int(estimate_size),int(track_rowids))
         except BaseException:

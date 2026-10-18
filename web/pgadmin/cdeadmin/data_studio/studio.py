@@ -606,6 +606,17 @@ class DataStudioService:
         except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_native_preupdate_action(self, context, session_id, request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        import config
+        try:
+            return binding.instance.native_preupdate_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},getattr(config,'CDEADMIN_SQLITE_PREUPDATE_LIBRARY',None))
+        except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def sqlite_capture_binding(self, context, session_id, capture_id):
         session,binding=self._operational_session(context,session_id)
         if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':

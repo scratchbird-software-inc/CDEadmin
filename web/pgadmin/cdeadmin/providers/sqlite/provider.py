@@ -310,6 +310,20 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
         finally:
             with self.client._lock:self.client._busy.discard(id(handle))
 
+    def native_preupdate_action(self, request, library):
+        from .preupdate_actions import action
+        self._require('execute')
+        if request.get('operation')!='inventory':self._require('administer')
+        handle=self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            self.client._busy.add(id(handle))
+        try:
+            return action(self.client,handle,{key:value for key,value in request.items()
+                if key not in {'session_id','language_profile'}},library)
+        finally:
+            with self.client._lock:self.client._busy.discard(id(handle))
+
     def validate_source_without_execution(self, request):
         from pgadmin.cdeadmin.data_studio.language_tools import analyze
         if (not isinstance(request, dict) or

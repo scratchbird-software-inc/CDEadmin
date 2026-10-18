@@ -2019,3 +2019,15 @@ policy accompany the workflow. See :doc:`sqlite_functional_completion` for
 scope and native limitations. This evidence does not close the remaining
 SQLite workflows or the full six-engine matrix; history qualification remains
 deferred.
+
+SQLite standalone preupdate diagnostics
+--------------------------------------
+
+Retained SQLite sessions now expose bounded native before-change observations
+with typed old/new data, trigger depth and BLOB-write metadata. Explicit loss
+counters, generation-bound pages/reset, connection ownership and native session
+hook exclusion accompany the workflow. Observations can include rolled-back
+changes and never prove commit. Native API, authenticated HTTP and browser checks
+qualify this scope. See :doc:`sqlite_functional_completion`; interactive
+changeset decisions, broader installed capabilities and other engine gaps retain
+their own acceptance. History testing remains deferred.

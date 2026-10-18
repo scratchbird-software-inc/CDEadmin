@@ -149,6 +149,10 @@ def paths(env):
                   'libcdeadmin_sqlite_arrays.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_arrays.so')
     array_library = STATE / 'sqlite' / array_name
     if array_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_ARRAY_LIBRARY', str(array_library))
+    preupdate_name = ('cdeadmin_sqlite_preupdate.dll' if os.name == 'nt' else
+                  'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
+    preupdate_library = STATE / 'sqlite' / preupdate_name
+    if preupdate_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_PREUPDATE_LIBRARY', str(preupdate_library))
     sqlite_shell = STATE / 'sqlite' / ('sqlite3' + extension)
     if sqlite_shell.is_file(): selected.setdefault('CDEADMIN_SQLITE_BINARY', str(sqlite_shell))
     candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
@@ -243,6 +247,7 @@ def clients(evidence, env):
     build_sqlite_recovery(evidence, env)
     build_sqlite_sessions(evidence, env)
     build_sqlite_arrays(evidence, env)
+    build_sqlite_preupdate(evidence, env)
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
         build_macos_python(evidence, env)
@@ -377,7 +382,7 @@ def build_sqlite_sessions(evidence, env):
     provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
     sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     inputs = {'core': sha(core), 'cmake': sha(project / 'CMakeLists.txt'),
-        'adapter': sha(project / 'api.c'), 'provenance': sha(provenance),
+        'adapter': sha(project / 'api.c'), 'hook_ownership': sha(ROOT / 'tools/native/sqlite_hook_ownership.h'), 'provenance': sha(provenance),
         'system': platform.system(), 'machine': platform.machine()}
     target, marker = sqlite / name, sqlite / 'sessions-build.json'
     if marker.is_file():
@@ -430,6 +435,40 @@ def build_sqlite_arrays(evidence, env):
         env=env, log=evidence / 'sqlite-arrays-build.log')
     built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
     if built is None: raise RuntimeError('Native array build did not produce its platform library')
+    shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_preupdate(evidence, env):
+    """Own preupdate bridge links the same native library as the Python driver."""
+    sqlite = STATE / 'sqlite'
+    name = ('cdeadmin_sqlite_preupdate.dll' if os.name == 'nt' else
+            'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native/sqlite_preupdate'
+    provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {'core': sha(core), 'cmake': sha(project / 'CMakeLists.txt'),
+        'adapter': sha(project / 'api.c'), 'hook_ownership': sha(ROOT / 'tools/native/sqlite_hook_ownership.h'), 'provenance': sha(provenance),
+        'system': platform.system(), 'machine': platform.machine()}
+    target, marker = sqlite / name, sqlite / 'preupdate-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))): return
+        raise RuntimeError('Native SQLite preupdate build changed; stop apps and use a fresh owned runtime')
+    if target.exists(): raise RuntimeError('Preserved an unknown native SQLite preupdate library')
+    build = STATE / 'sqlite-preupdate-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSQLite3_INCLUDE_DIR=' + str(sqlite), '-DSQLite3_LIBRARY=' + str(library),
+        *(['-A', 'x64'] if os.name == 'nt' else [])], env=env, log=evidence / 'sqlite-preupdate-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / 'sqlite-preupdate-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None: raise RuntimeError('Native preupdate build did not produce its platform library')
     shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
         'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
