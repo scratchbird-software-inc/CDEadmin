@@ -9,7 +9,7 @@ from ..providers.mysql_family.mysql_catalog import identifier
 from ..providers.mysql_roles import account
 
 SPEC = {section: (kind, keys) for section, kind, _sql, keys in SECTIONS}
-SUPPORTED = {'user', 'role-membership', 'default-role', 'privilege', 'plugin', 'component',
+SUPPORTED = {'user', 'role-membership', 'default-role', 'privilege', 'plugin', 'component', 'server-link',
              'tablespace', 'resource-group', 'system-variable', 'replication-channel'}
 VOLATILE = {'component_id', 'component_group_id', 'space', 'file_size', 'allocated_size'}
 
@@ -74,6 +74,26 @@ def compile_operation(row):
         raise ValueError('Built-in or unclassified server objects are not migration targets')
     if action in {'drop', 'revoke', 'rename', 'reset', 'reset_persist', 'set_default'} and intent.get('confirmation') != row['name']:
         raise ValueError('Confirm the exact native object label')
+    if kind == 'server-link':
+        from ..providers.mysql_family import foreign_servers
+        from ..sdk import RelationalClientError
+        name = facts['server_name']
+        if action == 'create':
+            if draft.get('name') != name or ('wrapper' in facts and draft.get('wrapper') != facts['wrapper']):
+                raise ValueError('Foreign-server creation differs from the native DDN identity or wrapper')
+            target = None
+        else:
+            if intent.get('confirmation') != row['name']:
+                raise ValueError('Confirm the exact native foreign server')
+            draft.setdefault('confirmation', name)
+            target = {'resource_id': foreign_servers.address(name), 'resource_kind': kind,
+                'display_name': name, 'display_path': [name], 'native': facts}
+        try:
+            compiled = foreign_servers.compile_operation(action, draft, target)
+        except RelationalClientError as error:
+            raise ValueError(str(error)) from None
+        statement = compiled['statements'][0]
+        return {'source': statement['source'], 'parameters': list(statement['parameters'])}
     if kind == 'user':
         name = account(facts['user'], facts['host'])
         if action == 'create' and not draft:

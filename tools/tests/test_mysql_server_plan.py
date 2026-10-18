@@ -89,3 +89,52 @@ def test_native_section_revocation_after_review_refuses_before_dispatch(monkeypa
     outcome = apply_operation(connection, {'plan': preview, 'desired': desired}, preview['operations'][0])
     assert outcome['state'] == 'not_dispatched' and 'unavailable' in outcome['rejection_reason']
     assert not any(call.args[0].startswith('CREATE USER') for call in cursor.execute.call_args_list)
+
+
+def foreign(name='remote : . ` é'):
+    key = 'mysql-server:' + json.dumps(['uuid', 'foreign-servers', [name]], ensure_ascii=False, separators=(',', ':'))
+    return {'resource_id': key, 'kind': 'server-link', 'name': name, 'system': 'false',
+        'native': {'section': 'foreign-servers', 'server_uuid': 'uuid', 'system_object': False,
+            'catalog_row': {'server_name': name, 'wrapper': 'mysql'},
+            'mysql_change': {'action': 'create', 'draft': {'name': name, 'wrapper': 'mysql',
+                'include_host': True, 'host': "host ' \\", 'include_port': True, 'port': '2147483647'}}}}
+
+
+def test_foreign_server_ddn_uses_bound_native_attributes_and_exact_address():
+    baseline = model();baseline['rows']['server']['native']['catalog_observations'].append({'section': 'foreign-servers', 'available': True})
+    desired = deepcopy(baseline);row = foreign();desired['rows'][row['resource_id']] = row
+    result = plan(baseline, desired, baseline)
+    assert result['ready_for_review'] and not result['blockers']
+    operation = result['operations'][0]
+    assert operation['source'] == 'CREATE SERVER `remote : . `` é` FOREIGN DATA WRAPPER %s OPTIONS (HOST %s, PORT 2147483647)'
+    assert operation['parameters'] == ['mysql', "host ' \\"]
+    assert plan(desired, baseline, desired)['operations'] == []
+
+
+@pytest.mark.parametrize('change', ['password', 'identity', 'confirmation', 'operation'])
+def test_foreign_server_ddn_refuses_credentials_redirection_and_invalid_intent(change):
+    baseline = model();baseline['rows']['server']['native']['catalog_observations'].append({'section': 'foreign-servers', 'available': True})
+    desired = deepcopy(baseline);row = foreign();desired['rows'][row['resource_id']] = row
+    if change == 'password':
+        row['native']['mysql_change']['draft'].update(include_password=True, password='never store')
+    elif change == 'identity':
+        row['native']['mysql_change']['draft']['name'] = 'another'
+    elif change == 'confirmation':
+        row['native']['mysql_change'] = {'action': 'drop', 'draft': {}, 'confirmation': 'another'}
+    else:
+        row['native']['mysql_change']['action'] = 'rename'
+    result = plan(baseline, desired, baseline)
+    assert not result['ready_for_review'] and result['blockers']
+
+
+def test_foreign_server_postconditions_check_attributes_and_preserved_fields():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    row = foreign('remote');row['native']['catalog_row'].update(host='old', db='db', username='user', port=3306, socket='', owner='owner')
+    row['native']['mysql_change'] = {'action': 'alter', 'draft': {'include_host': True, 'host': 'new'}}
+    key = row['resource_id'];live = {'rows': {key: deepcopy(row)}}
+    operation = {'operation': 'alter'}
+    assert not effect(row, operation, live)
+    live['rows'][key]['native']['catalog_row']['host'] = 'new'
+    assert effect(row, operation, live)
+    live['rows'][key]['native']['catalog_row']['owner'] = 'changed unexpectedly'
+    assert not effect(row, operation, live)

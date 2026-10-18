@@ -76,9 +76,9 @@ Native spatial-reference catalog and typed management operations are implemented
 their wider server DDN integration remains open. The first native source
 comparison also identifies component-backed masking policies as an explicit
 adapter obligation. Masking-policy installation and its native management
-privilege require separate admission. Foreign-server catalog and typed native
-management are implemented; their wider server DDN migration generation remains
-open. Server capture now includes every visible global variable and its native
+privilege require separate admission. Foreign-server catalog, typed native
+management and credential-free server DDN migration generation/application are
+implemented. Server capture now includes every visible global variable and its native
 provenance; this does not close all installed-component or persisted-only state
 reconciliation.
 

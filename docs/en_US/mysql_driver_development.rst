@@ -1231,7 +1231,23 @@ changes explicitly selected options, preserving omitted credentials and native
 fields. Native errors, warnings, dispatch and acknowledgement remain separate;
 an observation failure after acknowledgement never authorizes replay. Catalog
 and review require visibility of ``mysql.servers``; mutation requires native
-SUPER authority. Wider server DDN migration generation remains open.
+SUPER authority.
+
+The server DDN planner also admits explicit credential-free foreign-server
+create, partial alter and drop instructions. Imported identity and wrapper must
+match the native target; altering or dropping requires exact confirmation.
+Application rechecks the captured native baseline before dispatch and verifies
+all selected attributes plus preserved omitted fields afterward. Missing DDN
+selections never request removal. Configure remote passwords separately through
+the native object controls; DDN instructions and durable reviews exclude them.
+Native acknowledgement, verified rediscovery and an unknown outcome remain
+separate, and repeated requests read the durable receipt without redispatch.
+
+``tools/cdeadmin_mysql_foreign_server_ddn_qualification.py`` exercises paired DDN
+export/import, generated native create/alter/drop, omitted credential
+preservation, changed-baseline refusal and receipt restart with both connector
+implementations and SQL modes. This extends the server exchange scope without
+claiming a consistent server backup or fencing external administration.
 
 Server capture now discovers every visible global variable, with persisted value,
 source, file, bounds and last-set provenance where MySQL exposes them. It retains

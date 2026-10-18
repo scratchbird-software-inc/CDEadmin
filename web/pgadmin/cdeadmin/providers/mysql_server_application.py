@@ -42,6 +42,17 @@ def effect(row, operation, live):
         return False
     if kind == 'user':
         return facts.get('account_locked') == ('Y' if action == 'create' or not draft.get('active', False) else 'N')
+    if kind == 'server-link':
+        from .mysql_family.foreign_servers import FIELDS, OPTIONS, normalized
+        if action == 'create':
+            expected = dict.fromkeys(FIELDS, '')
+            expected.update(server_name=draft['name'], wrapper=draft['wrapper'], port='0')
+        else:
+            expected = normalized(row['native']['catalog_row'])
+        for option, (_keyword, _label, column) in OPTIONS.items():
+            if column and draft.get('include_' + option):
+                expected[column] = str(draft[option]) if option == 'port' else draft[option]
+        return normalized(facts) == expected
     if kind == 'role-membership':
         return facts.get('with_admin_option') == ('Y' if draft.get('admin_option') else 'N')
     if kind == 'privilege':
