@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {startBrowserFileDownload} from './browserFileDownload';
+import PostgresqlTemporarySlots from './PostgresqlTemporarySlots';
 
 const ACTIVE = new Set(['dispatching', 'active', 'verifying', 'verifying_inputs', 'cancel_requested']);
 const CHANGES = new Set(['wal_slot_sql_peek_text','wal_slot_sql_get_text','wal_slot_sql_peek_binary','wal_slot_sql_get_binary']);
@@ -106,6 +107,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   };
   return <Box aria-label="PostgreSQL continuity workspace" sx={{p:1,overflow:'auto',flex:1,minHeight:0,minWidth:0,height:'100%',boxSizing:'border-box'}}>
     <FormReference formKey="postgresql-continuity" />
+    <PostgresqlTemporarySlots post={post} databaseTargetId={databaseTargetId} />
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

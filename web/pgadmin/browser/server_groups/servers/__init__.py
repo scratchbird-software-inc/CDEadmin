@@ -2773,6 +2773,7 @@ class ServerNode(PGChildNodeView):
                         'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
                         'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
                         'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
+                        'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_command_cancel',
                         'postgresql_recipe_read', 'postgresql_recipe_save',
                         'duckdb_recipe_read', 'duckdb_recipe_save',
                         'sqlite_recipe_read', 'sqlite_recipe_save',
@@ -3086,6 +3087,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
                                 'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact'}:
                     try:payload=service.postgresql_large_object_file(server,action.removeprefix('postgresql_large_object_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_command_cancel'}:
+                    try:payload=service.postgresql_temporary_slots(server,action.removeprefix('postgresql_temporary_slots_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',

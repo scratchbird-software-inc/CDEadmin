@@ -1293,3 +1293,36 @@ native estimated/analyzed parameterized JSON-plan and transactional INSERT
 qualification is retained in ``shared-editor-native-plan.log`` in the owner's
 temporary evidence area. The qualified parser remains pglast 8.5 / PostgreSQL
 18.6 and does not imply a server revision change.
+Retained temporary replication-slot resources
+---------------------------------------------
+
+The continuity workspace can open an independently owned SQL backend for
+temporary physical and logical slots. Native create/copy, physical WAL
+reservation, logical output-plugin/two-phase settings, advancement and removal
+use that same backend. Paged inventory includes only its temporary slots;
+permanent slots and temporary slots owned by another backend cannot be selected
+for mutation through this resource. Plugin names are checked in the database's
+encoding before PostgreSQL's name cast can silently truncate them.
+
+Resource and command reviews have separate confirmation and receipts. A durable
+owner-process channel supports requests admitted by other application workers.
+Native dispatch/return, later slot observation, local connection close and
+independent backend/slot cleanup remain separate facts. Duplicate requests do
+not redispatch a completed or uncertain command. Closing a viewer or selecting
+another database does not release the resource; explicit release or its reviewed
+lifetime closes the backend. WAL may be retained until PostgreSQL removes slots.
+
+Native SQL errors can remove every temporary slot on the resource's backend.
+Cancellation observers stop before later SQL/cleanup observations. Existing
+interactive query connections, pending SQL and savepoints stay separate. Native
+checks cover temporary create/copy/advance/drop, UTF-8/LATIN1 name widths, lost
+acknowledgement, native-error cleanup and asynchronous connection-close cleanup.
+Cross-process requests and cancellation of waiting logical initialization are
+qualified without settling a separate user transaction. Authenticated API and
+browser checks verify native slot lifetime, inventory, confirmation/scope
+refusals and later independent cleanup.
+
+This scope covers retained SQL slot controls. Temporary logical text/binary
+peek/get and replication-protocol streams remain open, together with the wider
+product matrix. History testing remains deferred and Windows/macOS qualification
+remains with the platform teams.

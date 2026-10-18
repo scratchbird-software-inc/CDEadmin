@@ -1589,6 +1589,15 @@ class ProviderWorkspaceService:
         except ContinuityError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_temporary_slots(self,server,operation,request):
+        from psycopg import Error as NativeError
+        from .postgresql_temporary_slot_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        from ..providers.postgresql.provider import PostgreSQLProviderError
+        try:return action(self,server,operation,request)
+        except (ValueError,ContinuityError,PostgreSQLProviderError) as error:raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:raise ProviderWorkspaceError('Native temporary-slot admission failed ('+(error.sqlstate or type(error).__name__)+')') from None
+
     def mysql_clone(self, server, operation, request):
         from .mysql_clone_service import action
         from ..providers.mysql_family.mysql_clone import CloneError

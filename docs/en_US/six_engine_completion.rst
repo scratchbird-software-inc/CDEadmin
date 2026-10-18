@@ -261,10 +261,13 @@ remains open for every engine; a scoped workflow is not the full denominator.
        reservation/copy, logical creation/copy and slot advancement on an
        explicitly selected database; native logical text/binary peek/get with
        exact artifacts and independent acknowledgement/publication recovery;
-       additional native statistics collectors.
+       retained temporary physical/logical slot create/copy/advance/drop,
+       paged owner-backend inventory, explicit resource release and independent
+       cleanup observation; additional native statistics collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
-       extension/language/HA coverage.
+       extension/language/HA coverage. Temporary logical decoding and native
+       replication-protocol streams require their remaining retained adapters.
    * - DuckDB 1.5.2
      - Native attached/session catalogs, functions/types/macros, retained
        completion, native parsing and nested/indexed/positional member binding,
