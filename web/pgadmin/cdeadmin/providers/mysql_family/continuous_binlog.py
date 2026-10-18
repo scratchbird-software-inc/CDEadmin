@@ -10,7 +10,7 @@ import threading
 import time
 
 from .mysql_binlog_archives import BinlogArchiveError, seal
-from ...operations.fileio import private_directory, private_file
+from ...operations.fileio import durable_replace, private_directory, private_file
 from ...sdk.tooling import ProviderToolGrant
 
 
@@ -89,6 +89,11 @@ class ReceiverTransport:
             {'identity': parent['source'], 'state': state}, parent['configuration'], parent['program'],
             continuation={'continuous_receiver_job_id': parent['job_id']})
         child = self.archive_jobs.load(review['job_id'], parent['owner'], parent['endpoint_id'])
+        index = directory/'snapshots'; index.mkdir(exist_ok=True, mode=0o700); private_directory(index)
+        temporary = index/('.'+child['job_id'])
+        with temporary.open('xb') as output:
+            private_file(temporary); output.flush(); os.fsync(output.fileno())
+        durable_replace(temporary, index/child['job_id'])
         workspace = self.archive_jobs.directory(child); incoming = workspace/'archive.incoming'
         incoming.mkdir(mode=0o700); private_directory(incoming)
         self.archive_jobs.update(child, state='active', worker_identity=parent['worker_identity'],

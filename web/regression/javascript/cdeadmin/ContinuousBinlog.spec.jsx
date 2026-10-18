@@ -46,3 +46,36 @@ it('uses the native MariaDB action family and clears a stale review when the eng
   await waitFor(() => expect(screen.queryByRole('button',{name:'Confirm and start continuous receiver'})).not.toBeInTheDocument());
   expect(screen.getByLabelText('Unique receiver server ID')).toHaveValue(null);
 });
+
+it('requires explicit writer-stop confirmation and prepares a separate reviewed restart',async () => {
+  const stopped={...reviewed,state:'cancelled',native_process_termination_confirmed:true,result:{next_file:'native.000004'}};
+  const post=jest.fn().mockResolvedValue({jobs:[stopped],total:1}),inspect=jest.fn();
+  render(<Component post={post} engine="mariadb" onInspectArchive={inspect} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load binary-log receivers'}));
+  await screen.findByRole('button',{name:'Inspect receiver owned-receiver'});
+  post.mockResolvedValue(stopped);fireEvent.click(screen.getByRole('button',{name:'Inspect receiver owned-receiver'}));
+  await screen.findByText(/Receiver owned-receiver: cancelled/);
+  expect(screen.getByRole('button',{name:'Reconcile receiver writers'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Confirm stopping this receiver\'s remaining native utilities'));
+  post.mockResolvedValue({...stopped,writer_reconciliation:{process_scope_stopped:true}});
+  fireEvent.click(screen.getByRole('button',{name:'Reconcile receiver writers'}));
+  await screen.findByText(/Owned receiver and snapshot-parser utilities are stopped/);
+  expect(post).toHaveBeenLastCalledWith({action:'mariadb_binlog_capture_reconcile_writer',request:{job_id:'owned-receiver',confirmed:true}});
+  fireEvent.change(screen.getByLabelText('Unique receiver server ID'),{target:{value:'44'}});
+  post.mockResolvedValue({...reviewed,job_id:'new-reviewed-receiver',options:{...reviewed.options,start_file:'native.000004',receiver_server_id:44}});
+  fireEvent.click(screen.getByRole('button',{name:'Review restart from stopped receiver'}));
+  await screen.findByText('Explicit native receiver ID');
+  expect(post).toHaveBeenLastCalledWith({action:'mariadb_binlog_capture_review',request:{resume_job_id:'owned-receiver',options:{start_file:'native.000004',receiver_server_id:44,timeout_seconds:null}}});
+  expect(screen.getByRole('button',{name:'Confirm and start continuous receiver'})).toBeEnabled();
+});
+
+it('does not offer restart for an uncertain receiver even after its writers were stopped',async () => {
+  const unknown={...reviewed,state:'unknown',writer_reconciliation:{process_scope_stopped:true},result:{next_file:'native.000004'}};
+  const post=jest.fn().mockResolvedValue({jobs:[unknown],total:1});
+  render(<Component post={post} engine="mysql" onInspectArchive={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load binary-log receivers'}));
+  await screen.findByRole('button',{name:'Inspect receiver owned-receiver'});
+  post.mockResolvedValue(unknown);fireEvent.click(screen.getByRole('button',{name:'Inspect receiver owned-receiver'}));
+  await screen.findByText(/Receiver owned-receiver: unknown/);
+  expect(screen.queryByRole('button',{name:'Review restart from stopped receiver'})).not.toBeInTheDocument();
+});

@@ -1,5 +1,6 @@
 """Registered native MySQL/MariaDB continuous receiver admission and receipts."""
 import socket
+import stat
 import time
 
 from ..providers.mysql_family import continuous_binlog as native
@@ -14,6 +15,87 @@ class ReceiverJobs(MySQLBinlogJobs):
         'A long-lived native utility reads this source through the application host. Active files stay private; only independently verified closed-log snapshots enter the existing archive/replay workspace.',
         'Choose a receiver server ID unique among clients and replicas on this source. A conflicting native replication ID can disconnect another receiver; the source does not expose every unregistered client ID.',
         'Stopping or losing this receiver does not restart it automatically. Published archives remain independent; an unclosed private file is not a complete archive or proof of a recoverable transaction.',)
+
+    def restart_checkpoint(self,job_id,owner,endpoint,archives):
+        from ..operations.native_writers import inspect,NativeWriterError
+        record=self.load(job_id,owner,endpoint)
+        result=record.get('result') or {}
+        if (record['state'] not in {'cancelled','captured'} or
+                record.get('native_process_termination_confirmed') is not True or not result.get('next_file')):
+            raise BinlogArchiveError('Restart requires a clean stopped receiver with a durable next-log checkpoint')
+        with self._maps_lock:known=self.workers.get(job_id)
+        if known is not None and known[0].is_alive():raise BinlogArchiveError('The local receiver worker is still stopping')
+        try:
+            candidates,_absent=inspect(self.writer_scopes(record,archives),
+                hostname=record['program']['execution_host'].get('hostname'),started_at=record.get('started_at',record['created_at']))
+            if candidates:raise NativeWriterError('Reconcile remaining native receiver writers before reviewing a restart')
+        except NativeWriterError as error:raise BinlogArchiveError(str(error)) from None
+        return record,result['next_file']
+
+    def writer_scopes(self,record,archives):
+        from ..operations.native_writers import NativeWriterError
+        from .mysql_binlog_jobs import identity
+        parent=self.directory(record);children=[]
+        if (record.get('continuation') or {}).get('writer_scope_index')==1:
+            index=parent/'snapshots'
+            if index.is_symlink() or index.exists() and (index.resolve()!=index or getattr(index.lstat(),'st_file_attributes',0)&0x400):
+                raise NativeWriterError('Native receiver snapshot index cannot contain links or reparse points')
+            if index.is_dir():
+                for entry in index.iterdir():
+                    if entry.name.startswith('.'):continue
+                    identity(entry.name);info=entry.lstat()
+                    if not stat.S_ISREG(info.st_mode) or info.st_size or getattr(info,'st_file_attributes',0)&0x400:
+                        raise NativeWriterError('Native receiver snapshot index entry is invalid')
+                    children.append(archives.load(entry.name,record['owner'],record['endpoint_id']))
+        else:
+            # Phase-84 receipts predate the dedicated parent index. Inspect
+            # their existing owner/endpoint archive index once for compatibility.
+            index=archives.scope(record['owner'],record['endpoint_id'])/'index'
+            if index.is_dir():
+                for entry in index.iterdir():
+                    if entry.name.startswith('.'):continue
+                    child=archives.load(entry.name.split('_',1)[-1],record['owner'],record['endpoint_id'])
+                    if (child.get('continuation') or {}).get('continuous_receiver_job_id')==record['job_id']:children.append(child)
+        allowed={record['program']['executable_sha256']:'native-binlog-receiver'}
+        scopes=[{'directory':parent,'executables':allowed}]
+        for child in children:
+            if ((child.get('continuation') or {}).get('continuous_receiver_job_id')!=record['job_id'] or
+                    child['source']!=record['source'] or child['program']!=record['program']):
+                raise NativeWriterError('Native receiver snapshot ownership or executable identity differs')
+            directory=archives.directory(child)
+            if directory.is_dir():scopes.append({'directory':directory,'executables':{record['program']['executable_sha256']:'native-binlog-parser'}})
+        return scopes
+
+    def reconcile_writer(self,request,owner,endpoint,archives):
+        from ..operations.native_writers import inspect,stop,NativeWriterError
+        if set(request)!={'job_id','confirmed'} or request['confirmed'] is not True:
+            raise BinlogArchiveError('Confirm stopping reviewed native utilities in one receiver and its owned snapshot workspaces')
+        record=self.load(request['job_id'],owner,endpoint)
+        if self.get(record['job_id'],owner,endpoint)['state'] not in {'unknown','failed','cancelled','captured'}:
+            raise BinlogArchiveError('Cancel the active receiver before reconciling its writers')
+        with self._maps_lock:known=self.workers.get(record['job_id'])
+        if known is not None and known[0].is_alive():raise BinlogArchiveError('The local receiver worker is still stopping')
+        try:
+            scopes=self.writer_scopes(record,archives)
+            hostname=record['program']['execution_host'].get('hostname')
+            observation=record.get('tool_observation') or (record.get('result') or {}).get('receiver_observation') or {}
+            observation=observation.get('process_observation',observation)
+            progress=record.get('progress') or {}
+            expected=[{'pid':progress.get('pid',observation.get('pid')),
+                       'process_create_time':progress.get('process_create_time',observation.get('process_create_time'))}]
+            arguments={'hostname':hostname,'started_at':record.get('started_at',record['created_at']),'expected':expected}
+            candidates,absent=inspect(scopes,**arguments)
+            if not candidates and (record.get('writer_reconciliation') or {}).get('process_scope_stopped') is True:
+                return self.get(record['job_id'],owner,endpoint)
+            stopped=stop(candidates)
+            remaining,_absent=inspect(scopes,**arguments)
+            if remaining:raise NativeWriterError('A reviewed native utility is still using an owned receiver workspace')
+        except NativeWriterError as error:raise BinlogArchiveError(str(error)) from None
+        self.update(record,state=record['state'] if record['state'] in {'unknown','failed','cancelled','captured'} else 'unknown',
+            writer_reconciliation={'process_scope_stopped':True,'hostname':hostname,'processes':stopped,
+                'recorded_process_ids_absent':absent,'scope':'reviewed receiver and its linked native snapshot parser workspaces',
+                'artifact_verified':False,'remote_finality_inferred':False,'observed_at':time.time()},automatic_retry=False)
+        return self.get(record['job_id'],owner,endpoint)
 
     def run(self, record, transport, signal):
         cancel = DurableCancellation(self, record, signal)
@@ -79,14 +161,23 @@ def action(service, server, operation, request, family):
     if operation in {'status','cancel'}:
         if set(request) != {'job_id'}: raise BinlogArchiveError('Select one owned native receiver')
         return (jobs.get if operation == 'status' else jobs.cancel)(request['job_id'], owner, endpoint.id)
+    if operation=='reconcile_writer':return jobs.reconcile_writer(request,owner,endpoint.id,archives)
     adapter = native.adapter(family)
+    previous=None
     if operation == 'review':
-        if set(request) != {'options'}: raise BinlogArchiveError('Review exact native receiver options')
+        if set(request) not in ({'options'},{'options','resume_job_id'}): raise BinlogArchiveError('Review exact native receiver options')
         selected = native.options(family, request['options'])
+        if 'resume_job_id' in request:
+            previous,checkpoint=jobs.restart_checkpoint(request['resume_job_id'],owner,endpoint.id,archives)
+            if selected['start_file']!=checkpoint:raise BinlogArchiveError('Restart from the stopped receiver\'s exact next native log')
     elif operation == 'start':
         reviewed = jobs.load(request.get('job_id'), owner, endpoint.id)
         if reviewed['state'] != 'reviewed': return jobs.start(request, owner, endpoint.id, {}, None)
         selected = reviewed['options']
+        previous_id=(reviewed.get('continuation') or {}).get('previous_receiver_job_id')
+        if previous_id:
+            previous,checkpoint=jobs.restart_checkpoint(previous_id,owner,endpoint.id,archives)
+            if selected['start_file']!=checkpoint:raise BinlogArchiveError('The stopped receiver checkpoint changed; prepare a new review')
     elif operation == 'catalog':
         if request: raise BinlogArchiveError('Native receiver catalog takes no browser route')
         selected = None
@@ -111,6 +202,8 @@ def action(service, server, operation, request, family):
             captured = adapter.capture(connection)
             if operation == 'catalog': return captured
             native.admit(captured, selected)
+            if previous is not None and previous['source']!=captured['identity']:
+                raise BinlogArchiveError('The stopped receiver belongs to a different native source identity')
             program = program_identity(adapter, client, route, jobs.prepare_scope(owner, endpoint.id))
             runtime_limit = current_app.config.get('CDEADMIN_' + family.upper() + '_CONTINUOUS_BINLOG_MAX_RUNTIME_SECONDS')
             if runtime_limit is not None and (type(runtime_limit) is not int or not 1 <= runtime_limit <= 2147483647 or
@@ -118,7 +211,8 @@ def action(service, server, operation, request, family):
                 raise BinlogArchiveError('Application policy requires a bounded native receiver duration')
             configuration = digest({'registration': MySQLMonitoringHost._configuration(server),
                 'collector_root': str(jobs.root), 'archive_root': str(archives.root), 'runtime_limit': runtime_limit})
-            if operation == 'review': return jobs.review(owner, endpoint.id, selected, captured, configuration, program)
+            if operation == 'review': return jobs.review(owner, endpoint.id, selected, captured, configuration, program,
+                continuation={'writer_scope_index':1,**({'previous_receiver_job_id':previous['job_id']} if previous else {})})
             transport = native.ReceiverTransport(family, client, route, adapter.delegate_credentials(client, route), connection, archives)
             connection = None
             admitted = transport; transport = None

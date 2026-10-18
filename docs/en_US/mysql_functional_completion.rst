@@ -260,7 +260,11 @@ remain distinct. The source can be offline after the archive has been sealed.
 
 These are scoped archive/replay workflows. A compatible restored base is required;
 complete end-to-end PITR, physical continuity, production cutover and
-receiver restart/tail adoption/retention retain separate product acceptance. MariaDB's
+stopped-tail adoption/retention retain separate product acceptance. Clean stopped
+receivers now support a separately reviewed restart from their exact retained
+next-log checkpoint, with source and native-writer rechecks. Interrupted writers
+have an explicit owned-process reconciliation which does not verify their
+artifacts or authorize restart of an unknown outcome. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
 

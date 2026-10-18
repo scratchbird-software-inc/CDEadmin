@@ -145,6 +145,59 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                 assert query.fetchall()==[('9007199254740993','Native 😀 0','0080FF'),('9007199254740994','Native 😀 1','FF00')]
                 proof['checks'].append('native-sealed-snapshots-pass-independent-source-frame-byte-comparison-and-authenticated-download')
                 proof.update(receiver_job_id=started['job_id'],source=stopped['source'],program=stopped['program'],snapshots=snapshots)
+                reconciled=http('reconcile_writer',{'job_id':started['job_id'],'confirmed':True})
+                assert reconciled['writer_reconciliation']['process_scope_stopped']
+                assert reconciled['writer_reconciliation']['artifact_verified'] is False
+                resume={'resume_job_id':started['job_id'],'options':{'start_file':stopped['result']['next_file'],
+                    'receiver_server_id':4000000103,'timeout_seconds':None}}
+                restarted_review=http('review',resume)
+                assert restarted_review['job_id']!=started['job_id']
+                assert restarted_review['continuation']['previous_receiver_job_id']==started['job_id']
+                restarted_request={'job_id':restarted_review['job_id'],'review_digest':restarted_review['review_digest'],'confirmed':True}
+                from copy import deepcopy
+                from unittest.mock import patch
+                from pgadmin.cdeadmin.providers.mysql_family.continuous_binlog import adapter
+                native_adapter=adapter(family);capture=native_adapter.capture
+                def different_source(connection):
+                    changed=deepcopy(capture(connection));key='server_uuid' if family=='mysql' else 'server_uid'
+                    changed['identity'][key]='different-native-source-fault-injection';return changed
+                with patch.object(native_adapter,'capture',different_source):
+                    assert 'different native source' in http('review',resume,refused=True)['errormsg']
+                    assert 'different native source' in http('start',restarted_request,refused=True)['errormsg']
+                assert http('status',{'job_id':restarted_review['job_id']})['state']=='reviewed'
+                proof['checks'].append('fault-injected-native-source-identity-change-refuses-both-restart-review-and-dispatch')
+                original=started;started=http('start',restarted_request)
+                private=jobs.load(started['job_id'],uid,endpoint);receiving=jobs.directory(private)/'receiving'
+                wait(lambda r:r['state']=='active' and (receiving/resume['options']['start_file']).is_file())
+                query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254740996,'Reviewed restart 😀',b'\x00\xfe'))
+                query.execute('FLUSH BINARY LOGS')
+                resumed=wait(lambda r:r.get('progress',{}).get('published_batches',0)>=1)
+                http('cancel',{'job_id':started['job_id']});resumed=wait(lambda r:r['state']=='cancelled')
+                assert resumed['native_process_termination_confirmed']
+                assert http('start',restarted_request)['state']=='cancelled'
+                checkpoint_archive=http('status',{'job_id':resumed['result']['last_archive_job_ids'][0]},archive=True)
+                assert checkpoint_archive['options']['log_names'][0]==resume['options']['start_file']
+                query.execute('SHOW BINARY LOG STATUS' if family=='mysql' else 'SHOW MASTER STATUS');latest=query.fetchone()[0];query.fetchall()
+                query.execute('PURGE BINARY LOGS TO %s',(latest,))
+                refused=http('review',resume,refused=True);assert 'purged' in refused['errormsg']
+                proof['checks'].extend(['native-clean-stop-reconciliation-preserves-artifact-and-remote-finality-separation',
+                    'native-new-reviewed-restart-rereads-exact-checkpoint-with-new-receiver-identity-and-seals-next-batch',
+                    'native-purged-restart-checkpoint-is-refused-without-guessing-a-successor'])
+                from native_binlog_qualification_support import waiting_binlog
+                interrupted=http('review',{'options':{'start_file':latest,'receiver_server_id':4000000104}})
+                interrupted_record=jobs.load(interrupted['job_id'],uid,endpoint)
+                directory=jobs.directory(interrupted_record)
+                with waiting_binlog(directory,decoder,family,orphan=True) as orphan, waiting_binlog(directory.parent/'owned-neighbor',decoder,family) as neighbor:
+                    jobs.update(interrupted_record,state='active',worker_identity=[999999999,0],started_at=time.time()-1)
+                    assert http('status',{'job_id':interrupted['job_id']})['state']=='unknown'
+                    reconciled=http('reconcile_writer',{'job_id':interrupted['job_id'],'confirmed':True})
+                    assert reconciled['state']=='unknown' and reconciled['writer_reconciliation']['processes'][0]['pid']==orphan.pid
+                    assert neighbor.is_running() and neighbor.status()!='zombie'
+                    assert http('reconcile_writer',{'job_id':interrupted['job_id'],'confirmed':True})['writer_reconciliation']==reconciled['writer_reconciliation']
+                    refused=http('review',{'resume_job_id':interrupted['job_id'],'options':{'start_file':latest,'receiver_server_id':4000000105}},refused=True)
+                    assert 'clean stopped' in refused['errormsg']
+                proof['checks'].append('native-orphan-before-first-heartbeat-stopped-through-owned-HTTP-reconciliation-while-neighbor-survives-and-unknown-cannot-restart')
+                started=original
                 if browser_binary:
                     query.execute('FLUSH BINARY LOGS')
                     query.execute('SHOW BINARY LOG STATUS' if family=='mysql' else 'SHOW MASTER STATUS');browser_start=query.fetchone()[0];query.fetchall()
@@ -242,13 +295,18 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         archive_button=wait.until(published)
         click('Cancel continuous receiver')
         wait.until(lambda browser:any(('Receiver '+job_id+': cancelled.') in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        box=driver.find_element(By.XPATH,'//label[contains(normalize-space(),"Confirm stopping this receiver")]/span/input')
+        driver.execute_script('arguments[0].click();',box);click('Reconcile receiver writers')
+        wait.until(lambda browser:any('Owned receiver and snapshot-parser utilities are stopped.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Review restart from stopped receiver')
+        wait.until(lambda browser:any('previous_receiver_job_id' in node.get_attribute('textContent') for node in browser.find_elements(By.TAG_NAME,'pre')))
         click(archive_button);click('Load archive files')
         wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Verified native archive files"]'))
         driver.save_screenshot(str(output/'native-continuous-binlogs.png'))
         errors=[node for node in driver.get_log('browser') if node.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'job_id':job_id,'produced_archive_job_id':archive_button.removeprefix('Inspect produced archive '),
-            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
+            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'))

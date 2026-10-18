@@ -868,9 +868,32 @@ rotations/publications, native parser verification, authenticated file delivery,
 once-only start and confirmed cancellation. Independent source-file comparison
 preserves every byte except the documented mutable FDE in-use flag, which the
 vendor checksum excludes. MySQL Python/C interfaces and GTID ON/OFF are separate
-cases. The receiver does not automatically restart. Reviewed restart, stopped
-tail adoption, retention, stronger stream-peer attestation and complete
+cases. The receiver does not automatically restart. Stopped-tail adoption,
+retention, stronger stream-peer attestation and complete
 base/PITR/production cutover retain separate native implementation/acceptance.
+
+Interrupted receivers expose an explicitly confirmed writer reconciliation.
+The application checks the recorded execution hostname, executable SHA256,
+process creation identity and exact owned working directories before stopping
+native utilities. It also inspects linked snapshot-parser directories, including
+orphans lost before their first progress receipt. An index binds new snapshots
+to their parent; older receipts use their existing owner/endpoint archive index.
+Other receiver/archive workspaces are excluded. Reused process identities and
+incomplete ownership observations are refused. Repeated reconciliation checks
+the workspaces again. It preserves an unknown receiver outcome and does not
+verify artifacts, adopt active tails or infer remote recovery.
+
+A clean stopped receiver with confirmed native cleanup and a durable next-log
+checkpoint can prepare a separate restart review. The new receiver has its own
+job identity, explicit native replication ID, runtime and confirmation. Review
+and dispatch recheck the old checkpoint, source identity and remaining native
+writers. The exact checkpoint must still occur in the native catalog; a purged
+log is a continuity gap, never a guessed numeric successor. The native utility
+rereads that file from its beginning. Unknown/failed receivers require separate
+artifact/checkpoint reconciliation before restart can be supported; merely
+stopping their writers is insufficient. The native qualification tool exercises
+clean restart, a new sealed batch, native purge refusal and orphan cleanup while
+an adjacent native process remains alive.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================

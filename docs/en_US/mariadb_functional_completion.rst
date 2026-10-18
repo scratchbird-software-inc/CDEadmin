@@ -426,8 +426,12 @@ optional ``CDEADMIN_MARIADB_BINLOG_MAX_RUNTIME_SECONDS`` at the application host
 The native development provisioner already includes the platform's vendor
 binary. The raw archive workspace also exposes continuous native reception and
 independently verified closed batches, documented in
-:doc:`six_engine_completion`. Reviewed receiver restart, stopped-tail adoption,
-retention automation, PITR and physical continuity retain separate product
+:doc:`six_engine_completion`. Clean stopped receivers can review a new receiver
+from the exact retained next-log checkpoint; purged checkpoints and changed
+native sources are refused. Explicit writer reconciliation stops only owned
+receiver/linked-parser utilities and preserves unknown outcomes without
+verifying artifacts. Stopped-tail adoption, retention automation, PITR and
+physical continuity retain separate product
 acceptance.
 
 

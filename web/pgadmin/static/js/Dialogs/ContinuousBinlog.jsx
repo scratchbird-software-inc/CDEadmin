@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 
@@ -9,11 +9,13 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
   const [catalog,setCatalog]=useState(null),[startFile,setStartFile]=useState(''),[serverId,setServerId]=useState(''),[timeout,setTimeoutValue]=useState(null);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[page,setPage]=useState(0);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [confirmStop,setConfirmStop]=useState(false);
   const generation=useRef(0);
   useEffect(() => {
-    generation.current++;setCatalog(null);setStartFile('');setServerId('');setTimeoutValue(null);setReview(null);setReceipt(null);setJobs(null);setPage(0);setBusy(false);setError('');
+    generation.current++;setCatalog(null);setStartFile('');setServerId('');setTimeoutValue(null);setReview(null);setReceipt(null);setJobs(null);setPage(0);setBusy(false);setError('');setConfirmStop(false);
     return () => {generation.current++;};
   },[post,engine]);
+  useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     try {const value=await post({action:prefix+action,request});if(token===generation.current)accept(value);}
@@ -49,7 +51,7 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
     {catalog && <Box component="details"><summary>Native receiver source: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
-      <Box component="pre" aria-label="Native continuous receiver review" sx={{whiteSpace:'pre-wrap',maxHeight:280,overflow:'auto'}}>{JSON.stringify({source:review.source,options:review.options,program:review.program,execution_host:review.execution_host},null,2)}</Box>
+      <Box component="pre" aria-label="Native continuous receiver review" sx={{whiteSpace:'pre-wrap',maxHeight:280,overflow:'auto'}}>{JSON.stringify({source:review.source,options:review.options,program:review.program,execution_host:review.execution_host,continuation:review.continuation},null,2)}</Box>
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));})}>Confirm and start continuous receiver</Button>
     </Box>}
     {jobs && <>
@@ -62,6 +64,13 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
       <Alert severity={['unknown','failed','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>Receiver {receipt.job_id}: {receipt.state}. Published archive batches: {receipt.result?.published_batches ?? receipt.progress?.published_batches ?? 0}. Automatic restart: disabled.</Alert>
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh continuous receiver</Button>
       <Button disabled={busy || (!ACTIVE.has(receipt.state) && receipt.state!=='reviewed')} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel continuous receiver</Button>
+      {['cancelled','captured'].includes(receipt.state) && receipt.native_process_termination_confirmed && receipt.result?.next_file && <Button disabled={busy}
+        onClick={() => run('review',{resume_job_id:receipt.job_id,options:{start_file:receipt.result.next_file,receiver_server_id:Number(serverId),timeout_seconds:timeout}},value => {setStartFile(value.options.start_file);setReview(value);})}>Review restart from stopped receiver</Button>}
+      {['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>
+        <FormControlLabel label="Confirm stopping this receiver's remaining native utilities" control={<Checkbox disabled={busy} checked={confirmStop} onChange={event => setConfirmStop(event.target.checked)} />} />
+        <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},value => {setReceipt(value);setConfirmStop(false);})}>Reconcile receiver writers</Button>
+      </Box>}
+      {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned receiver and snapshot-parser utilities are stopped. This does not verify private tails or establish database recovery.</Alert>}
       {snapshots.map(id => <Button key={id} disabled={busy} onClick={() => onInspectArchive(id)}>Inspect produced archive {id}</Button>)}
       <Box component="details"><summary>Native continuous receiver observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
