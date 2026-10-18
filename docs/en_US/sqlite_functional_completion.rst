@@ -343,9 +343,42 @@ Native qualification applies both exported formats through the independent
 public C API to separate databases and compares exact 64-bit identifiers, large
 Unicode text and binary values with the pinned SQLite CLI. Pending source work,
 cross-target refusal and offline delivery are checked separately. Changeset
-apply/conflict resolution, transform/merge/rebase workflows, standalone
+upload/per-row conflict decisions, transform/merge/rebase workflows, standalone
 preupdate/carray support and broader installed-module coverage remain open.
 These captures do not represent schema changes, virtual-table changes, a
 database backup or proven recovery. Independent preupdate hooks cannot share a
 connection with native sessions. Windows/macOS qualification remains with the
 platform teams; ScratchBird/history testing remains deferred.
+
+Reviewed native changeset application
+--------------------------------------
+
+The SQL editor can apply verified capture exports to another registered file
+within the same owned endpoint. Source selectors enumerate registered files
+and paged export receipts. Reviews bind exact source checksums, target file and
+schema identity, execution host, native helper revision and apply options.
+Writes use a separate owned connection and transaction. The retained user
+query connection and its pending work remain independent.
+
+Native v3 streaming apply supports changesets and patchsets, optional exact
+table filtering, changeset inversion, IGNORENOOP, FKNOACTION, foreign-key and
+recursive-trigger settings. Every native conflict kind has an explicit reviewed
+ABORT/OMIT response; DATA and CONFLICT additionally support native REPLACE.
+FOREIGN KEY OMIT retains changes including violations. Optional native rebase
+output is retained separately. Selected changes skipped by native table
+compatibility cause the owned transaction to roll back instead of receiving a
+success receipt.
+
+Apply return, commit admission, commit acknowledgement and output publication
+have separate durable facts. Cancellation before commit rolls back the owned
+work. A confirmed busy-commit rollback retains its own outcome. Lost commit
+acknowledgements stay uncertain and cannot repeat the operation. Reconciliation
+can verify/download sealed output independently while preserving that uncertain
+database outcome. Existing query transactions are never committed by this
+workflow. Native qualification includes exact typed rows, conflict kinds,
+inversion, rowid patchsets, rebase output, schema-review refusal, cancellation,
+busy commit, lost acknowledgements and authenticated cross-file delivery.
+
+External changeset upload, per-row interactive conflict decisions,
+transform/merge/rebase tools and standalone preupdate/carray workflows remain
+separate work. Changeset apply is not a database recovery verification.

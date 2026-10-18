@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import SQLiteCaptureExports from './SQLiteCaptureExports';
+import SQLiteChangesetApply from './SQLiteChangesetApply';
 import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
 
 export default function SQLiteNativeSessions({post,ensureSession,sessionId,databaseTargetId,endpointUrl,disabled,onBusyChange}) {
@@ -64,6 +65,7 @@ export default function SQLiteNativeSessions({post,ensureSession,sessionId,datab
       <Box component="pre" aria-label="Native SQLite capture observations" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(capture,null,2)}</Box>
     </Box>}
     <SQLiteCaptureExports post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} captureId={capture?.capture_id} endpointUrl={endpointUrl} disabled={blocked} />
+    <SQLiteChangesetApply post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} disabled={blocked} />
   </Box>;
 }
 SQLiteNativeSessions.propTypes={post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,sessionId:PropTypes.string,

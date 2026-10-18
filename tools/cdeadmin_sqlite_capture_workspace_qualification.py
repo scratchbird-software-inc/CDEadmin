@@ -103,8 +103,10 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
         capture('attach',capture_id=capture_id,table_name='native\n雪')
         execute('BEGIN');execute('INSERT INTO "native\n雪" VALUES(9007199254740993,?,x\'0080FF\')',['native 😀'*300000])
         proof['checks'].append('authenticated-capture-on-retained-query-with-exact-newline-unicode-table-and-pending-large-data')
+        exports={}
         for kind in ('changeset','patchset'):
             reviewed=export('review',session_id=session_id,capture_id=capture_id,kind=kind,timeout_seconds=60)
+            exports[kind]=reviewed['job_id']
             request={'job_id':reviewed['job_id'],'review_digest':reviewed['review_digest'],'confirmed':True}
             started=export('start',**request);deadline=time.monotonic()+30
             while started['state'] in {'active','dispatching','publishing','cancel_requested'}:
@@ -135,6 +137,32 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None):
         assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==row['sha256']
         assert export('start',**request)['state']=='artifact_verified'
         proof['checks'].append('target-scope-refusal-pending-SQL-not-committed-no-replay-and-offline-reconcile-download-after-query-close')
+        def apply_action(operation,**fields):
+            return post('sqlite_changeset_'+operation,database_target_id=other,request={'database_target_id':other,**fields})
+        for inverted in (False,True):
+            apply_review=apply_action('review',source_database_target_id=target,source_job_id=exports['changeset'],path='capture.changeset',
+                options={'invert':inverted,'include_rebase':True,'timeout_seconds':60})
+            apply_request={'job_id':apply_review['job_id'],'review_digest':apply_review['review_digest'],'confirmed':True}
+            applied=apply_action('start',**apply_request);deadline=time.monotonic()+30
+            while applied['state'] in {'active','dispatching','committing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);applied=apply_action('status',job_id=apply_review['job_id'])
+            assert applied['state']=='completed' and applied['native_returned'] and applied['commit_returned'],applied
+            assert apply_action('start',**apply_request)['state']=='completed'
+            with sqlite3.connect(output/'another.sqlite') as connection:
+                rows=connection.execute('SELECT CAST(id AS TEXT),length(body),hex(payload) FROM "native\n雪"').fetchall()
+            assert rows==([] if inverted else [('9007199254740993',2400000,'0080FF')]),rows
+            assert apply_action('reconcile',job_id=apply_review['job_id'])['output_artifact_verified']
+            output_files=apply_action('files',job_id=apply_review['job_id'])['files']
+            for output_row in output_files:
+                response=client.post(url,data={'action':'sqlite_changeset_download','payload':json.dumps({'database_target_id':other,'job_id':apply_review['job_id'],'path':output_row['path']})})
+                assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==output_row['sha256']
+        proof['checks'].append('authenticated-native-apply-and-inversion-to-separate-registration-independent-row-comparison-rebase-output-and-no-replay')
+        apply_review=apply_action('review',source_database_target_id=target,source_job_id=exports['changeset'],path='capture.changeset',options={})
+        with sqlite3.connect(output/'another.sqlite') as connection:connection.execute('CREATE TABLE stale_review(id INTEGER PRIMARY KEY)')
+        response=client.post(url,json={'action':'sqlite_changeset_start','request':{'database_target_id':other,'job_id':apply_review['job_id'],
+            'review_digest':apply_review['review_digest'],'confirmed':True}})
+        assert response.status_code!=200 or not response.get_json().get('success')
+        proof['checks'].append('native-apply-start-refuses-changed-destination-schema-review')
         if browser_binary:
             proof['browser']=browser(app,output,server_id,browser_binary,driver_binary)
             proof['checks'].append('browser-native-capture-attach-sensitive-source-export-confirmation-and-streamed-three-megabyte-download')
@@ -187,7 +215,14 @@ def browser(app,output,server_id,binary,driver_binary):
                 return False
             wait.until(attempt)
         def engine_options():
-            node=wait.until(lambda browser:browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'));expose(node);node.click()
+            def attempt(browser):
+                for node in browser.find_elements(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'):
+                    try:
+                        expose(node)
+                        if node.is_displayed() and node.is_enabled():node.click();return True
+                    except (StaleElementReferenceException,ElementClickInterceptedException,ElementNotInteractableException):continue
+                return False
+            wait.until(attempt)
         engine_options();click('SQLite native captures','summary');click('Inspect native captures');click('Open native capture')
         wait.until(lambda browser:browser.find_elements(By.XPATH,'//button[normalize-space()="Refresh native capture"]'))
         table_label=driver.find_element(By.XPATH,'//label[normalize-space()="Exact native capture table"]')
@@ -206,9 +241,29 @@ def browser(app,output,server_id,binary,driver_binary):
         receipt=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="SQLite capture export receipt"]').get_attribute('textContent'))
         assert receipt['result']['artifact']['native_iterator_complete'] and receipt['native_returned']
         checksum=hashlib.sha256(artifact.read_bytes()).hexdigest()
+        destination=wait_for_tree_item(wait,'another.sqlite',('Connectors','SQLite',label))
+        invoke_context_action(wait,driver,destination,('Database workspace','Open SQLite SQL editor...'),handle_endpoint_prompt=False)
+        engine_options();click('SQLite changeset application','summary');click('Inspect native apply sources')
+        source_label=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[normalize-space()="Native source database"]'))
+        source_field=driver.find_element(By.ID,source_label.get_attribute('for'));expose(source_field);source_field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
+            if node.is_displayed() and node.text.strip()=='native.sqlite'),None)).click()
+        click('Load verified source exports');click('Review native changeset application')
+        confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm native changes and commit to this destination")]//input'));expose(confirmation);confirmation.click()
+        click('Apply reviewed native changeset')
+        wait.until(lambda browser:any('Native apply ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Native SQLite apply receipt','summary')
+        applied=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite apply receipt"]').get_attribute('textContent'))
+        assert applied['commit_returned'] and applied['native_returned'] and applied['source']['source_job_id']==receipt['job_id']
+        with sqlite3.connect(output/'another.sqlite') as independent:
+            assert independent.execute('SELECT id,length(body),hex(payload) FROM "native\n雪"').fetchall()==[(2,3000000,'01')]
+        click('Load native apply output files');click('Download apply archive.json')
+        metadata=downloads/'archive.json';wait.until(lambda _browser:metadata.is_file() and not list(downloads.glob('*.crdownload')))
+        assert json.loads(metadata.read_text())['source']['input_file']['sha256']==checksum
         driver.save_screenshot(str(output/'native-sqlite-capture.png'))
         errors=[row for row in driver.get_log('browser') if row.get('level')=='SEVERE'];(output/'browser-console.json').write_text(json.dumps(errors,indent=2));assert not errors
-        return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum}
+        return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
+            'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

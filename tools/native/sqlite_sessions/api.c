@@ -126,8 +126,8 @@ static int input(void *opaque,void *data,int *length){
   }
 }
 
-static void inspect_changeset(sqlite3_context *context,sqlite3_value **values){
-  sqlite3_int64 descriptor=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),rows=0;
+static void inspect_changeset(sqlite3_context *context,sqlite3_value **values,const char *selected){
+  sqlite3_int64 descriptor=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),rows=0,selected_rows=0;
   sqlite3_changeset_iter *iterator=0;Output source;int result,finished;
   if(descriptor<0 || descriptor>INT_MAX || cancel<-1 || cancel>INT_MAX){fail(context,SQLITE_MISUSE,"Select owned native changeset input descriptors");return;}
   source.descriptor=(int)descriptor;source.cancel=(int)cancel;source.bytes=0;
@@ -136,15 +136,71 @@ static void inspect_changeset(sqlite3_context *context,sqlite3_value **values){
     while((result=sqlite3changeset_next(iterator))==SQLITE_ROW){
       if(cancelled(source.cancel)){result=SQLITE_INTERRUPT;break;}
       rows++;
+      if(!selected)selected_rows++;
+      else{
+        const char *table=0;int columns=0,operation=0,indirect=0;
+        result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
+        if(result!=SQLITE_OK)break;
+        if(strcmp(table,selected)==0)selected_rows++;
+      }
     }
     finished=sqlite3changeset_finalize(iterator);
     if(result==SQLITE_DONE)result=finished;
   }
   if(result!=SQLITE_OK){fail(context,result,"Native changeset iterator did not reach a complete stream");return;}
   {
-    char *metadata=sqlite3_mprintf("{\"native_record_count\":\"%lld\",\"native_bytes_read\":\"%lld\",\"native_iterator_complete\":true}",rows,source.bytes);
+    char *metadata=sqlite3_mprintf("{\"native_record_count\":\"%lld\",\"native_selected_record_count\":\"%lld\",\"native_bytes_read\":\"%lld\",\"native_iterator_complete\":true}",rows,selected_rows,source.bytes);
     if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
   }
+}
+
+typedef struct Apply Apply;
+struct Apply { int choices[6],cancel;sqlite3_int64 conflicts[6],seen,included;const char *table; };
+
+static int apply_filter(void *opaque,sqlite3_changeset_iter *iterator){
+  Apply *apply=(Apply*)opaque;const char *table=0;int columns=0,operation=0,indirect=0;
+  apply->seen++;
+  if(sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect)!=SQLITE_OK)return 0;
+  if(apply->table && strcmp(apply->table,table)!=0)return 0;
+  apply->included++;return 1;
+}
+
+static int apply_conflict(void *opaque,int kind,sqlite3_changeset_iter *iterator){
+  Apply *apply=(Apply*)opaque;(void)iterator;
+  if(kind<1 || kind>5)return SQLITE_CHANGESET_ABORT;
+  apply->conflicts[kind]++;
+  return cancelled(apply->cancel) ? SQLITE_CHANGESET_ABORT : apply->choices[kind];
+}
+
+static void apply_changeset(sqlite3_context *context,State *state,sqlite3_value **values){
+  sqlite3_int64 descriptor=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),rebase_descriptor=sqlite3_value_int64(values[10]);
+  int flags=sqlite3_value_int(values[4]),result,rebase_size=0,write_result=SQLITE_OK,index;void *rebase=0;Output source,target;Apply apply;char *metadata;
+  memset(&apply,0,sizeof(apply));
+  if(descriptor<0 || descriptor>INT_MAX || cancel<-1 || cancel>INT_MAX || rebase_descriptor<-1 || rebase_descriptor>INT_MAX ||
+      !(flags&SQLITE_CHANGESETAPPLY_NOSAVEPOINT) || (flags&~15) || sqlite3_get_autocommit(state->db)){
+    fail(context,SQLITE_MISUSE,"Native apply requires owned descriptors and an application-owned savepoint");return;
+  }
+  apply.cancel=(int)cancel;
+  for(index=1;index<=5;index++){
+    int choice=sqlite3_value_int(values[index+4]);
+    if(choice<SQLITE_CHANGESET_OMIT || choice>SQLITE_CHANGESET_ABORT ||
+        (choice==SQLITE_CHANGESET_REPLACE && index!=SQLITE_CHANGESET_DATA && index!=SQLITE_CHANGESET_CONFLICT)){
+      fail(context,SQLITE_MISUSE,"Native conflict replacement is valid only for DATA or CONFLICT");return;
+    }
+    apply.choices[index]=choice;
+  }
+  if(sqlite3_value_type(values[11])!=SQLITE_NULL){
+    apply.table=text(values[11]);if(!apply.table || !*apply.table){fail(context,SQLITE_MISUSE,"Select an exact native table filter or all tables");return;}
+  }
+  source.descriptor=(int)descriptor;source.cancel=(int)cancel;source.bytes=0;
+  target.descriptor=(int)rebase_descriptor;target.cancel=(int)cancel;target.bytes=0;
+  result=cancelled(source.cancel) ? SQLITE_INTERRUPT : sqlite3changeset_apply_v3_strm(state->db,input,&source,apply_filter,apply_conflict,&apply,
+      rebase_descriptor<0 ? 0 : &rebase,rebase_descriptor<0 ? 0 : &rebase_size,flags);
+  if(result==SQLITE_OK && rebase_size>0)write_result=output(&target,rebase,rebase_size);
+  sqlite3_free(rebase);
+  metadata=sqlite3_mprintf("{\"native_apply_result_code\":%d,\"rebase_output_result_code\":%d,\"native_bytes_read\":\"%lld\",\"native_changes_seen\":\"%lld\",\"native_changes_included\":\"%lld\",\"native_rebase_bytes\":\"%lld\",\"conflicts\":{\"data\":\"%lld\",\"not_found\":\"%lld\",\"conflict\":\"%lld\",\"constraint\":\"%lld\",\"foreign_key\":\"%lld\"}}",
+      result,write_result,source.bytes,apply.seen,apply.included,target.bytes,apply.conflicts[1],apply.conflicts[2],apply.conflicts[3],apply.conflicts[4],apply.conflicts[5]);
+  if(!metadata)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,metadata,-1,sqlite3_free);
 }
 
 static void control(sqlite3_context *context,int count,sqlite3_value **values){
@@ -152,9 +208,15 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   Capture *capture,*previous=0;int result=SQLITE_OK;
   if(count<2 || !admitted(state,values[0])){fail(context,SQLITE_AUTH,"Native session capability is unavailable");return;}
   operation=text(values[1]);if(!operation){fail(context,SQLITE_MISUSE,"Select a native session operation");return;}
-  if(strcmp(operation,"inspect_file")==0 && count==4){inspect_changeset(context,values);return;}
+  if(strcmp(operation,"inspect_file")==0 && count==4){inspect_changeset(context,values,0);return;}
+  if(strcmp(operation,"inspect_selection")==0 && count==5){
+    const char *selected=sqlite3_value_type(values[4])==SQLITE_NULL ? 0 : text(values[4]);
+    if(sqlite3_value_type(values[4])!=SQLITE_NULL && (!selected || !*selected)){fail(context,SQLITE_MISUSE,"Select an exact table filter or all tables");return;}
+    inspect_changeset(context,values,selected);return;
+  }
+  if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":2}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}

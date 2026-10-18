@@ -1965,6 +1965,14 @@ Unsealed output remains diagnostic and retains its uncertain outcome even when
 its current bytes parse. See :doc:`sqlite_functional_completion` for the exact
 scope and remaining apply/conflict, transform/rebase, preupdate and carray work.
 
+Reviewed native apply now stages changes on an independent file connection and
+records commit admission/acknowledgement separately. Native conflict responses,
+apply flags, compatible-selection checks, inversion and rebase output are
+available from the editor. Changed target schemas refuse old reviews. Sealed
+output can be reconciled without promoting an uncertain database commit or
+repeating it. External uploads, interactive per-row decisions and the remaining
+native transform/rebase/preupdate/carray tools retain separate acceptance.
+
 SQLite FTS content-view projection contracts
 --------------------------------------------
 
