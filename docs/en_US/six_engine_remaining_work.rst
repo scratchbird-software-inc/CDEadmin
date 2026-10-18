@@ -128,9 +128,11 @@ DuckDB
   configuration and lifecycle findings from INV-DUCKDB.
 
 Native object-comment editing is implemented for the pinned engine's supported
-families; see :doc:`duckdb_driver_development`. This does not close attachment
-mutation, extension-update, copy-database or broader installed-capability
-reconciliation. Database/schema comment syntax that the native runtime rejects
+families; see :doc:`duckdb_driver_development`. Full native extension facts and
+reviewed individual/all extension-file updates are also implemented. This does
+not close attachment mutation, wider extension installation options,
+copy-database or broader installed-capability reconciliation.
+Database/schema comment syntax that the native runtime rejects
 as unimplemented must not be presented as a supported management operation.
 
 SQLite

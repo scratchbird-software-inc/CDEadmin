@@ -120,7 +120,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
         'database': frozenset({
             'inspect', 'create', 'drop', 'checkpoint',
             'force_checkpoint', 'vacuum', 'analyze',
-            'export_database', 'import_database',
+            'export_database', 'import_database', 'update_extensions',
         }),
         'attached-database': frozenset({'inspect'}),
         'schema': frozenset({
@@ -139,7 +139,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
         'macro': frozenset({'inspect', 'create', 'alter', 'drop'}),
         'function': frozenset({'inspect'}),
         'secret': frozenset({'inspect', 'create', 'drop'}),
-        'extension': frozenset({'inspect', 'execute'}),
+        'extension': frozenset({'inspect', 'execute', 'update'}),
         'materialization': frozenset({'create'}),
     }.items()},
 ))
@@ -564,14 +564,21 @@ def _resources(connection, request):
                 'varargs': item['catalog_metadata'].get('varargs'),
                 'definition': item.get('definition'),
             }, sort_keys=True, default=str)))
-    cursor.execute(
-        'SELECT extension_name, loaded, installed, extension_version '
-        'FROM duckdb_extensions() ORDER BY extension_name'
-    )
-    for name, loaded, installed, version in cursor.fetchall():
-        add('extension', [], name, {
-            'loaded': loaded, 'installed': installed, 'version': version,
+    from .extension_updates import inventory as extension_inventory, context as extension_context
+    native_extensions = extension_inventory(connection)
+    native_extension_context = extension_context(connection)
+    for record in native_extensions:
+        add('extension', [], record['extension_name'], {
+            'loaded': record['loaded'], 'installed': record['installed'],
+            'version': record['extension_version'], 'catalog_metadata': record,
+            'extension_update_context': native_extension_context,
+            **({'administration': {'allowed_operations': ['inspect', 'execute']}}
+               if not record['installed'] or record['install_mode'] == 'STATICALLY_LINKED' else {}),
         })
+    for resource in resources.values():
+        if resource['resource_kind'] == 'database':
+            resource['native'].update(extension_inventory=native_extensions,
+                extension_update_context=native_extension_context)
     cursor.execute(
         'SELECT name, type, provider, persistent, storage, scope '
         'FROM duckdb_secrets() ORDER BY name'

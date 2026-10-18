@@ -28,7 +28,7 @@
       "session_settings": 157,
       "statements": 42
     },
-    "authoritative_task_count": 42,
+    "authoritative_task_count": 44,
     "authoritative_task_ids": [
       "visual_admin.column.comment",
       "visual_admin.column.create",
@@ -39,8 +39,10 @@
       "visual_admin.database.export_database",
       "visual_admin.database.force_checkpoint",
       "visual_admin.database.import_database",
+      "visual_admin.database.update_extensions",
       "visual_admin.database.vacuum",
       "visual_admin.extension.execute",
+      "visual_admin.extension.update",
       "visual_admin.index.comment",
       "visual_admin.index.create",
       "visual_admin.index.drop",
@@ -73,7 +75,7 @@
       "visual_admin.view.drop",
       "visual_admin.view.rename"
     ],
-    "implemented_task_count": 42,
+    "implemented_task_count": 44,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -74804,6 +74806,24 @@
       "format": "native DuckDB object-comment qualification JSON",
       "license_id": "PostgreSQL",
       "sha256": "d5300f8ed3d60b95fd9cd57b47de0f33d0a736aa5414c708e72a93c378d1811b"
+    },
+    {
+      "artifact": "duckdb-extensions618/proof.json",
+      "authority": "Native DuckDB 1.5.2 and signed httpfs repository extension",
+      "evidence_id": "duckdb-1.5.2-extension-update-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "native DuckDB extension-update qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "0238693013236ee02a9f2e151b681b3b965f32938f33da03d58a4764a3303d34"
+    },
+    {
+      "artifact": "duckdb-extensions618/proof.json",
+      "authority": "Native DuckDB 1.5.2 and signed httpfs repository extension",
+      "evidence_id": "duckdb-1.5.2-extension-update-execution",
+      "evidence_kind": "live_execution",
+      "format": "native DuckDB extension-update qualification JSON",
+      "license_id": "PostgreSQL",
+      "sha256": "0238693013236ee02a9f2e151b681b3b965f32938f33da03d58a4764a3303d34"
     }
   ],
   "provider_id": "org.cdeadmin.duckdb",
@@ -74981,6 +75001,20 @@
       "task_id": "visual_admin.database.import_database"
     },
     {
+      "binding_style": "qmark",
+      "proof_ids": [
+        "duckdb-1.5.2-extension-update-parser",
+        "duckdb-1.5.2-extension-update-execution"
+      ],
+      "required_bindings": [],
+      "source": "UPDATE EXTENSIONS",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "UPDATE EXTENSIONS"
+      ],
+      "task_id": "visual_admin.database.update_extensions"
+    },
+    {
       "binding_style": "positional_question_mark",
       "proof_ids": [
         "duckdb-1.5.2-task-parser-acceptance",
@@ -75007,6 +75041,20 @@
         "LOAD \"json\""
       ],
       "task_id": "visual_admin.extension.execute"
+    },
+    {
+      "binding_style": "qmark",
+      "proof_ids": [
+        "duckdb-1.5.2-extension-update-parser",
+        "duckdb-1.5.2-extension-update-execution"
+      ],
+      "required_bindings": [],
+      "source": "UPDATE EXTENSIONS (\"httpfs\")",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "UPDATE EXTENSIONS (\"httpfs\")"
+      ],
+      "task_id": "visual_admin.extension.update"
     },
     {
       "binding_style": "positional_question_mark",

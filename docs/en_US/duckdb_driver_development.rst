@@ -138,3 +138,36 @@ independent catalog queries, including Unicode/quoted names, multiline literals,
 empty versus NULL comments, overloaded scalar/table macros, changed reviews and
 retained transaction rollback. This evidence covers the object-comment workflow;
 the broader six-engine inventory and acceptance remain open.
+
+Native extension discovery and updates
+--------------------------------------
+
+Extension discovery preserves all nine fields of DuckDB 1.5.2's native
+``duckdb_extensions()`` table: name, loaded/installed state, installation path,
+description, aliases, extension version, installation mode and repository/source.
+Repository credentials are redacted while the owning extension remains visible.
+The Extensions branch offers a reviewed update for installed extension files;
+the database task menu offers an update of all installed extension files.
+Statically linked built-ins have no separately updateable native file.
+
+Review captures the visible installation facts and native extension/home
+directory settings. Dispatch rechecks that installation and resource address.
+Results preserve each native extension name, repository, status, previous version
+and current installed version. Loaded native code is not replaced by a file
+update; a new native database instance loads the updated binary. The native
+status ``NO_UPDATE_AVAILABLE`` remains distinct from an installed version change.
+
+Native extension files are outside database rollback. These controls do not
+commit or roll back a retained query session, and pending rows and temporary
+objects retain the caller's transaction decision. Updating several extensions
+can change files before a later failure. Dispatch, acknowledgement, native
+results and subsequent observations remain separate; no failure authorizes
+automatic replay. An uncertain borrowed session is blocked from further use.
+
+``tools/cdeadmin_duckdb_extensions_qualification.py`` uses an independently owned
+installation directory and a signed native repository extension. It compares
+all native catalog fields, verifies individual/all update results, changed
+installation refusal, corrupt-file refusal and retained transaction behavior.
+The receipt records the repository artifact and observed native status. Broader
+extension installation options and other installed capabilities retain their
+own inventory and qualification obligations.

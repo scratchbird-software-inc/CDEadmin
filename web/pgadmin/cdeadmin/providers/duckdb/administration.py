@@ -10,8 +10,18 @@ from ...sdk.relational import RelationalClientError
 class DuckDBAdministration(RelationalAdministration):
     def catalog(self, catalog):
         from .object_metadata import KINDS
+        from .extension_updates import OPERATIONS
         value = deepcopy(catalog)
         for resource in value.get('objects', []):
+            for kind, operation in sorted(OPERATIONS):
+                if resource['resource_kind'] == kind:
+                    resource['operations'] = [row for row in resource.get('operations', [])
+                        if row['operation_id'] != operation] + [{
+                            'operation_id': operation,
+                            'title': 'Update native extension' if kind == 'extension' else 'Update installed extensions',
+                            'mutation_class': 'admin', 'target_required': True,
+                            'confirmation_required': True, 'long_running': False,
+                            'cancellable': False, 'post_state_required': False}]
             if resource['resource_kind'] in KINDS:
                 resource['operations'] = [row for row in resource.get('operations', [])
                     if row['operation_id'] != 'comment'] + [{
@@ -22,6 +32,9 @@ class DuckDBAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        from .extension_updates import OPERATIONS, form
+        if (kind, operation) in OPERATIONS:
+            return form(kind, operation, self._field)
         if operation == 'comment':
             return {'form_id': f'duckdb.{kind}.comment', 'title': 'Edit native DuckDB comment',
                 'fields': [{**self._field('comment', 'Comment', 'multiline'),
@@ -92,6 +105,14 @@ class DuckDBAdministration(RelationalAdministration):
             ]}
 
     def validate(self, request):
+        from .extension_updates import OPERATIONS, compile_operation
+        if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
+            try:
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None,
+                    'code': 'invalid_duckdb_extension_update', 'message': str(error)}]}
         if request.get('operation_id') == 'comment':
             try:
                 from .object_metadata import compile_operation
@@ -112,6 +133,9 @@ class DuckDBAdministration(RelationalAdministration):
         return result
 
     def _compile(self, request):
+        from .extension_updates import OPERATIONS, compile_operation
+        if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
+            return compile_operation(self, request)
         if request.get('operation_id') == 'comment':
             from .object_metadata import compile_operation
             return compile_operation(self, request)
@@ -166,6 +190,9 @@ class DuckDBAdministration(RelationalAdministration):
 
     def apply(self, client, request, connection=None):
         with self._borrow(client, connection):
+            if 'duckdb_extension_update' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .extension_updates import apply
+                return apply(self, client, request, connection)
             if 'duckdb_comment' in (request.get('provider_payload') or {}).get('compiled', {}):
                 from .object_metadata import apply
                 return apply(self, client, request, connection)
