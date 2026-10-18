@@ -76,6 +76,10 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     for path in [ROOT/'web/pgadmin/cdeadmin/providers/sqlite/conflict_channel.py',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteConflictDecisions.jsx']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [ROOT/'web/pgadmin/cdeadmin/providers/sqlite/diff_export.py',
+                 *list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('sqlite_diff*.py')),
+                 ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeDiff.jsx',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteNativeSessions.jsx']:
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -373,6 +377,31 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
             'SELECT CAST(id AS TEXT) AS id,length(body) AS characters,hex(payload) AS payload,extra FROM external_file'))
         assert observed==[{'id':'9007199254740997','characters':2500002,'payload':'00FF80','extra':'transient 😀'}],observed
         assert retained_sql('SELECT id,extra FROM temp.external_file')==[[99,'transient 😀']]
+        existing=post('sqlite_native_sessions',database_target_id=other,session_id=retained_id,request={'operation':'open','database':'main'})['capture']['capture_id']
+        post('sqlite_native_sessions',database_target_id=other,session_id=retained_id,request={'operation':'attach','capture_id':existing,'table_name':'native\n雪'})
+        retained_sql('DELETE FROM "native\n雪"');retained_sql('INSERT INTO "native\n雪" VALUES(777,\'pending difference 雪😀\',x\'0080FF\')')
+        comparisons={}
+        for kind in ('changeset','patchset'):
+            comparison=apply_action('diff_review',session_id=retained_id,options={'database':'main','source_database':'baseline 雪','table_name':'native\n雪','kind':kind,'timeout_seconds':60})
+            value=apply_action('diff_start',job_id=comparison['job_id'],review_digest=comparison['review_digest'],confirmed=True);deadline=time.monotonic()+30
+            while value['state'] in {'active','dispatching','publishing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);value=apply_action('diff_status',job_id=comparison['job_id'])
+            assert value['state']=='completed' and value['diff_returned'] and value['export_returned'] and value['capture_closed'],value
+            assert value['source_transaction_open'] and value['source_transaction_open_after']
+            assert apply_action('diff_start',job_id=comparison['job_id'],review_digest=comparison['review_digest'],confirmed=True)['state']=='completed'
+            delivered=client.post(url,data={'action':'sqlite_changeset_diff_download','payload':json.dumps({'database_target_id':other,'job_id':comparison['job_id'],'path':'difference.native'})})
+            assert delivered.status_code==200
+            path=output/('managed-diff.'+kind);path.write_bytes(delivered.data);independent_diff=output/('independent-managed-diff-'+kind+'.sqlite')
+            with sqlite3.connect(independent_diff) as connection:
+                connection.execute(schema);connection.execute('INSERT INTO "native\n雪" VALUES(44,?,?)',('baseline',b'\x01'))
+            observed=json.loads(independent_apply(core,cli,path,independent_diff,'SELECT id,body,hex(payload) AS payload FROM "native\n雪"'))
+            assert observed==[{'id':777,'body':'pending difference 雪😀','payload':'0080FF'}],observed
+            comparisons[kind]={'database_target_id':other,'kind':'diff','job_id':comparison['job_id'],'path':'difference.native'}
+            _inspection,result=inspect_reference(comparisons[kind],{'mode':'page','offset':'0','limit':10,'preview_bytes':32,'max_json_bytes':1048576,'timeout_seconds':60})
+            assert len(result['inspection']['rows'])==2
+        assert post('sqlite_native_sessions',database_target_id=other,session_id=retained_id,request={'operation':'status','capture_id':existing})['capture']['capture_id']==existing
+        assert retained_sql('SELECT id,body,hex(payload) FROM "native\n雪"')==[[777,'pending difference 雪😀','0080FF']]
+        post('sqlite_native_sessions',database_target_id=other,session_id=retained_id,request={'operation':'close','capture_id':existing,'confirmed':True})
         stale=apply_action('transform_review',inputs=[uploaded_reference],options={'operation':'merge','schema_database':'temp','schema_session_id':retained_id})
         retained_sql('ALTER TABLE temp.external_file ADD COLUMN changed TEXT')
         refused=client.post(url,json={'action':'sqlite_changeset_transform_start','request':{'database_target_id':other,'job_id':stale['job_id'],'review_digest':stale['review_digest'],'confirmed':True}})
@@ -382,7 +411,17 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         refused=client.post(url,json={'action':'sqlite_changeset_transform_schemas','request':{'database_target_id':other,'session_id':retained_id}})
         assert refused.status_code<500 and (refused.status_code!=200 or not refused.get_json().get('success'))
         assert apply_action('transform_reconcile',job_id=transient_receipt['job_id'])['state']=='artifact_verified'
+        for reference in comparisons.values():assert apply_action('diff_reconcile',job_id=reference['job_id'])['state']=='artifact_verified'
+        with sqlite3.connect(output/'another.sqlite') as connection:
+            saved=connection.execute('SELECT * FROM "native\n雪"').fetchall()
+            connection.execute('DELETE FROM "native\n雪"');connection.execute('INSERT INTO "native\n雪" VALUES(44,?,?)',('baseline',b'\x01'))
+        applied_difference=apply_reference(comparisons['changeset'])
+        assert applied_difference['source']['source_kind']=='diff'
+        with sqlite3.connect(output/'another.sqlite') as connection:
+            assert connection.execute('SELECT id,body,hex(payload) FROM "native\n雪"').fetchall()==[(777,'pending difference 雪😀','0080FF')]
+            connection.execute('DELETE FROM "native\n雪"');connection.executemany('INSERT INTO "native\n雪" VALUES(?,?,?)',saved)
         proof['checks'].append('authenticated-retained-uncommitted-temp-schema-native-defaults-independent-apply-exact-bytes-stale-target-and-schema-refusal-savepoint-preservation-and-offline-reconcile')
+        proof['checks'].append('authenticated-managed-native-diff-changeset-and-patchset-private-capture-closure-pending-SQL-preservation-typed-inspection-independent-apply-offline-reconcile-and-reviewed-managed-apply')
         local_file=output/'local-branch.changeset'
         local_sql="CREATE TABLE external_file(id INTEGER PRIMARY KEY,body TEXT,payload BLOB);\n.session open main local\n.session local attach external_file\nINSERT INTO external_file VALUES(9007199254740997,'local branch',x'01');\n.session local changeset "+json.dumps(str(local_file),ensure_ascii=False)+'\n'
         subprocess.run([str(cli),':memory:'],input=local_sql,encoding='utf8',check=True,capture_output=True)
@@ -630,6 +669,26 @@ def browser(app,output,server_id,binary,driver_binary,core,cli):
         observed=json.loads(independent_apply(core,cli,merged_file,independent_path,
             'SELECT CAST(id AS TEXT) AS id,length(body) AS characters,hex(payload) AS payload FROM external_file'))
         assert observed==[{'id':'9007199254740997','characters':2500002,'payload':'00FF80'}],observed
+        click('SQLite managed table differences','summary');click('Inspect retained table comparison support');click('Load native comparison tables')
+        table_label=driver.find_element(By.XPATH,'//label[normalize-space()="Exact native comparison table"]')
+        field=driver.find_element(By.ID,table_label.get_attribute('for'));expose(field);field.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
+            if node.is_displayed() and node.get_attribute('textContent').strip()=='native\n雪'),None)).click()
+        click('Review native table comparison')
+        confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm disposable native table comparison")]//input'));expose(confirmation);confirmation.click()
+        click('Start reviewed native table comparison')
+        wait.until(lambda browser:any('Native table comparison ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        comparison=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native SQLite table comparison receipt"]').get_attribute('textContent'))
+        assert comparison['diff_returned'] and comparison['export_returned'] and comparison['capture_closed']
+        click('Load native comparison files');click('Download comparison difference.native')
+        difference=downloads/'difference.native';wait.until(lambda _browser:difference.is_file() and not list(downloads.glob('*.crdownload')))
+        independent_diff=output/'browser-managed-diff-independent.sqlite'
+        with sqlite3.connect(independent_diff) as independent:
+            independent.execute('CREATE TABLE "native\n雪"(id INTEGER PRIMARY KEY,body TEXT,payload BLOB)')
+            independent.execute('INSERT INTO "native\n雪" VALUES(44,?,?)',('baseline',b'\x01'))
+        independent_apply(core,cli,difference,independent_diff)
+        with sqlite3.connect(independent_diff) as independent,sqlite3.connect(output/'another.sqlite') as expected:
+            assert independent.execute('SELECT * FROM "native\n雪" ORDER BY id').fetchall()==expected.execute('SELECT * FROM "native\n雪" ORDER BY id').fetchall()
         native_preupdate=False
         if app.config.get('CDEADMIN_SQLITE_PREUPDATE_LIBRARY'):
             engine_options();click('SQLite before-change diagnostics','summary');click('Inspect native preupdate support');click('Start native preupdate observations')
@@ -683,7 +742,7 @@ def browser(app,output,server_id,binary,driver_binary,core,cli):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_retained_schema_merge_verified':True,'native_live_conflict_decisions_verified':True,'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_managed_diff_verified':True,'native_retained_schema_merge_verified':True,'native_live_conflict_decisions_verified':True,'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

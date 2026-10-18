@@ -132,11 +132,13 @@ class UploadTransport:
         if self.connection is not None:self.connection.close();self.connection=None
 
     @contextmanager
-    def native_cancellation(self,cancel,timeout,started,progress,stage='native-validate-upload'):
+    def native_cancellation(self,cancel,timeout,started,progress,stage='native-validate-upload',on_cancel=None):
         read,write=os.pipe();lock=threading.Lock();done=threading.Event();failure=[]
         def signal():
             with lock:
-                if not done.is_set():os.write(write,b'cancel')
+                if not done.is_set():
+                    if on_cancel is not None:on_cancel()
+                    os.write(write,b'cancel')
         def observe():
             sent=False
             while not done.wait(.1):

@@ -663,3 +663,36 @@ select a retained basis, merge, download and independently apply its output.
 Separate transient DDN coverage, managed long-running diff controls and remaining
 installed-module/product workflows stay open. History testing is deferred and
 platform qualification remains with the Windows/macOS teams.
+
+Managed native table differences
+--------------------------------
+
+Retained query sessions can compare a selected table against an attached source
+through a reviewed, durable job. A disposable native session capture produces a
+changeset or patchset; existing user captures stay separate. The operation uses
+the original connection's main/temp/attached schema, current SQL visibility and
+native defaults. Pending data, transactions and savepoints remain owned by the
+user. A comparison does not settle SQL or establish a backup/recovered database.
+
+The worker reserves the connection and rechecks both schemas, attachment and
+connection identities. Native VM progress callbacks support cancellation and a
+reviewed deadline; their count is not rows or a percentage. A pre-existing
+progress-handler owner is refused and preserved. Native diff can leave partial
+capture memory on error: this workflow closes its private capture and never
+adds that partial state to an existing user capture. Unconfirmed capture cleanup
+blocks further connection use until the user closes it.
+
+Comparison return, export return, capture closure, output verification and
+publication have separate durable facts. Retained files support typed inspection,
+transforms, reviewed independent apply, downloads, verification after connection
+closure and confirmed removal. Unsealed output is diagnostic and an uncertain
+job is never automatically repeated. The original immediate diff-into-capture
+control retains its separate native semantics.
+
+Native checks cover changesets/patchsets, main/temp/attached schemas, exact
+independent application, cancellation during comparison, preserved capture bytes,
+SQL/savepoint ownership, stale source schema and cleanup failures. Authenticated
+HTTP/browser qualification exercises comparison/export/download, native typed
+inspection and independently verified apply. Transient DDN, installed-module and
+other product gaps remain open. History tests stay deferred and platform teams
+retain Windows/macOS qualification.

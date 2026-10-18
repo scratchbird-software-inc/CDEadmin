@@ -6,6 +6,7 @@ import SQLiteNativeUpload from './SQLiteNativeUpload';
 import SQLiteNativeTransforms from './SQLiteNativeTransforms';
 import SQLiteChangesetInspection from './SQLiteChangesetInspection';
 import SQLiteConflictDecisions from './SQLiteConflictDecisions';
+import SQLiteNativeDiff from './SQLiteNativeDiff';
 
 const active=state => ['dispatching','active','committing','cancel_requested'].includes(state);
 const kinds=['data','not_found','conflict','constraint','foreign_key'];
@@ -14,7 +15,7 @@ const initial={invert:false,ignore_noop:false,fk_no_action:false,foreign_keys:tr
 const switches={invert:'Invert incoming changeset',ignore_noop:'Ignore native no-op conflicts',fk_no_action:'Use NO ACTION for native foreign keys',
   foreign_keys:'Enforce native foreign keys',recursive_triggers:'Enable recursive triggers on owned apply connection',include_rebase:'Write native rebase data',interactive_conflicts:'Decide conflicts while the native apply waits'};
 
-export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,endpointUrl,disabled}) {
+export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,ensureSession,endpointUrl,disabled}) {
   const [catalog,setCatalog]=useState(null),[sourceTarget,setSourceTarget]=useState(''),[sources,setSources]=useState(null),[sourceOffset,setSourceOffset]=useState(0),[input,setInput]=useState('');
   const [sourceKind,setSourceKind]=useState('capture');
   const [options,setOptions]=useState(initial),[receipt,setReceipt]=useState(null),[confirmed,setConfirmed]=useState(false);
@@ -71,6 +72,7 @@ export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,en
     <Alert severity="info">Apply a verified native export to this registered destination using a separate owned connection. Query sessions and pending SQL work stay separate. Review conflict responses before committing native changes. Rebase data and output verification have separate receipts from database commit.</Alert>
     <SQLiteNativeUpload post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'upload')} disabled={blocked || disabled} />
     <SQLiteNativeTransforms post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'transform')} disabled={blocked || disabled} />
+    <SQLiteNativeDiff post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} ensureSession={ensureSession} endpointUrl={endpointUrl} onSelected={value => useArtifact(value,'diff')} disabled={blocked || disabled} />
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={blocked} onClick={() => perform('catalog')}>Inspect native apply sources</Button>
     <Button disabled={busy} onClick={() => perform('list',{offset,limit:25})}>Load changeset apply receipts</Button>
@@ -78,7 +80,7 @@ export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,en
       {!catalog.helper_available && <Alert severity="warning">{catalog.unavailable_reason}</Alert>}
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
         <TextField select size="small" label="Native source type" value={sourceKind} disabled={blocked} onChange={event => {setSourceKind(event.target.value);changeSource(sourceTarget);}}>
-          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem><MenuItem value="transform">Transformed native file</MenuItem>
+          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem><MenuItem value="transform">Transformed native file</MenuItem><MenuItem value="diff">Native table difference</MenuItem>
         </TextField>
         <TextField select size="small" label="Native source database" value={sourceTarget} disabled={blocked} onChange={event => changeSource(event.target.value)}>
           {catalog.targets.map(target => <MenuItem key={target.target_id} value={target.target_id}>{target.display_name}</MenuItem>)}
@@ -138,4 +140,4 @@ export default function SQLiteChangesetApply({post,databaseTargetId,sessionId,en
     </Box>}
   </Box>;
 }
-SQLiteChangesetApply.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,sessionId:PropTypes.string,endpointUrl:PropTypes.string,disabled:PropTypes.bool};
+SQLiteChangesetApply.propTypes={post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string.isRequired,sessionId:PropTypes.string,ensureSession:PropTypes.func,endpointUrl:PropTypes.string,disabled:PropTypes.bool};

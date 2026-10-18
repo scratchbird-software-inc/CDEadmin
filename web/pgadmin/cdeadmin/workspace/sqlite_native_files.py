@@ -5,10 +5,11 @@ from ..providers.sqlite.session_api import SessionAPIError
 
 
 def manager(service,server,target,kind):
-    if not isinstance(kind,str) or kind not in {'capture','upload','transform','rebase'}:raise SessionAPIError('Select an owned native artifact kind')
+    if not isinstance(kind,str) or kind not in {'capture','upload','transform','diff','rebase'}:raise SessionAPIError('Select an owned native artifact kind')
     if kind=='capture':from .sqlite_capture_service import manager as selected
     elif kind=='upload':from .sqlite_upload_service import manager as selected
     elif kind=='transform':from .sqlite_transform_service import manager as selected
+    elif kind=='diff':from .sqlite_diff_service import manager as selected
     else:from .sqlite_changeset_service import manager as selected
     return selected(service,server,target)
 

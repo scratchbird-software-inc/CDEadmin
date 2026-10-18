@@ -23,12 +23,14 @@ def manager(service,server,target):
 
 def source(service,server,fields,owner,endpoint):
     kind=fields.get('source_kind','capture')
-    if not isinstance(kind,str) or kind not in {'capture','upload','transform'}:raise SessionAPIError('Select a native capture, upload or transformed artifact')
+    if not isinstance(kind,str) or kind not in {'capture','upload','transform','diff'}:raise SessionAPIError('Select a native capture, upload, comparison or transformed artifact')
     selected_manager=capture_manager
     if kind=='upload':
         from .sqlite_upload_service import manager as selected_manager
     elif kind=='transform':
         from .sqlite_transform_service import manager as selected_manager
+    elif kind=='diff':
+        from .sqlite_diff_service import manager as selected_manager
     jobs,source_owner,source_endpoint=selected_manager(service,server,fields['source_database_target_id'])
     if owner!=source_owner or endpoint.id!=source_endpoint.id:raise SessionAPIError('Select an owned native source export')
     record=jobs.load(fields['source_job_id'],owner,endpoint.id)
@@ -46,6 +48,9 @@ def source(service,server,fields,owner,endpoint):
 
 def action(service,server,operation,request):
     from flask import current_app
+    if operation.startswith('diff_'):
+        from .sqlite_diff_service import action as native_diff
+        return native_diff(service,server,operation.removeprefix('diff_'),request)
     if operation.startswith('inspect_'):
         from .sqlite_inspection_service import action as native_inspection
         return native_inspection(service,server,operation.removeprefix('inspect_'),request)
@@ -67,17 +72,19 @@ def action(service,server,operation,request):
         except (OSError,ValueError) as error:program=None;available=False;reason=str(error)
         return {'targets':[{'target_id':item.id,'display_name':item.display_name,'database':item.database} for item in endpoint.database_targets],
             'helper_available':available,'program':program,'unavailable_reason':reason,'interactive_conflicts_available':bool(program and program.get('native_session_revision',0)>=7),
-            'source_kinds':['capture','upload','transform'],
+            'source_kinds':['capture','upload','transform','diff'],
             'scope':'Verified native capture exports and uploads from this endpoint; application-owned main database writes on an independent connection'}
     if operation=='sources':
         if set(fields)-{'source_database_target_id','source_kind','offset','limit'} or 'source_database_target_id' not in fields:raise SessionAPIError('Select one native source export page')
         kind=fields.get('source_kind','capture')
-        if not isinstance(kind,str) or kind not in {'capture','upload','transform'}:raise SessionAPIError('Select native capture exports, uploads or transformed files')
+        if not isinstance(kind,str) or kind not in {'capture','upload','transform','diff'}:raise SessionAPIError('Select native capture exports, uploads, comparisons or transformed files')
         selected_manager=capture_manager
         if kind=='upload':
             from .sqlite_upload_service import manager as selected_manager
         elif kind=='transform':
             from .sqlite_transform_service import manager as selected_manager
+        elif kind=='diff':
+            from .sqlite_diff_service import manager as selected_manager
         sources,source_owner,source_endpoint=selected_manager(service,server,fields['source_database_target_id'])
         return sources.list(source_owner,source_endpoint.id,fields.get('offset',0),fields.get('limit',25))
     if operation=='list':

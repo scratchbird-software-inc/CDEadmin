@@ -314,8 +314,9 @@ remains open for every engine; a scoped workflow is not the full denominator.
        observations and explicit loss, without claiming commit. Native
        changegroups can use the original retained main/temp/attached schema,
        including uncommitted objects and native defaults, while preserving SQL.
-     - Separate transient DDN coverage and managed long-running session-diff
-       progress/cancellation; remaining
+       Managed disposable table comparisons provide native progress/cancellation
+       and streamed changeset/patchset artifacts without changing user captures.
+     - Separate transient DDN coverage; remaining
        attached/content-view alias shadowing, language identity and installed-
        module transformations; complete independent native extension/feature
        and platform reconciliation.
@@ -2096,3 +2097,16 @@ tests and authenticated HTTP/browser workflows independently apply and verify
 the generated artifact. Transient DDN coverage, managed long-running diff
 progress/cancellation and other product gaps remain open. History testing stays
 deferred; Windows/macOS evidence remains with the platform teams.
+
+SQLite managed native table comparisons
+---------------------------------------
+
+Reviewed retained-session jobs now compare a table with its attached source,
+report native VM progress and support cancellation/deadlines. Private capture
+memory is discarded on failure; existing captures, pending SQL and savepoints
+remain intact. Separate native comparison/export/cleanup/publication receipts
+support inspection, transforms, downloads and reviewed independent apply of
+retained changesets/patchsets. Native regressions and authenticated HTTP/browser
+qualification independently apply and verify output. The immediate native
+diff-into-existing-capture control retains its separate semantics. Transient DDN,
+installed-module and other product gaps remain open; history testing is deferred.

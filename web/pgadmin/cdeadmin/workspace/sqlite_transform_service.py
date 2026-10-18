@@ -49,7 +49,7 @@ def action(service,server,operation,request):
         except (ValueError,OSError) as error:program=None;available=False;reason=str(error)
         return {'helper_available':available,'program':program,'unavailable_reason':reason,
             'targets':[{'target_id':item.id,'display_name':item.display_name,'database':item.database} for item in endpoint.database_targets],
-            'input_kinds':['capture','upload','transform','rebase'],'database_mutation':False}
+            'input_kinds':['capture','upload','transform','diff','rebase'],'database_mutation':False}
     if operation=='schemas':
         if set(fields)-{'session_id'}:raise SessionAPIError('Select the registered or retained schema basis')
         if 'session_id' in fields:

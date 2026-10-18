@@ -84,7 +84,7 @@ export default function SQLiteNativeSessions({post,ensureSession,sessionId,datab
       <Box component="pre" aria-label="Native SQLite capture observations" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(capture,null,2)}</Box>
     </Box>}
     <SQLiteCaptureExports post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} captureId={capture?.capture_id} endpointUrl={endpointUrl} disabled={blocked} />
-    <SQLiteChangesetApply post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} endpointUrl={endpointUrl} disabled={blocked} />
+    <SQLiteChangesetApply post={post} databaseTargetId={databaseTargetId} sessionId={sessionId} ensureSession={ensureSession} endpointUrl={endpointUrl} disabled={blocked} />
   </Box>;
 }
 SQLiteNativeSessions.propTypes={post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,sessionId:PropTypes.string,

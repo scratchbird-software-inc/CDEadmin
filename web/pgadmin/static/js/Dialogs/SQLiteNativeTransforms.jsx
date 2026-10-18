@@ -79,7 +79,7 @@ export default function SQLiteNativeTransforms({post,databaseTargetId,sessionId,
           {catalog.targets.map(target => <MenuItem key={target.target_id} value={target.target_id}>{target.display_name}</MenuItem>)}
         </TextField>
         <TextField select size="small" label="Transform source kind" value={kind} disabled={blocked} onChange={event => changeSource('kind',event.target.value)}>
-          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem><MenuItem value="transform">Transformed native file</MenuItem><MenuItem value="rebase">Native apply rebase buffer</MenuItem>
+          <MenuItem value="capture">Captured changes</MenuItem><MenuItem value="upload">Uploaded native file</MenuItem><MenuItem value="transform">Transformed native file</MenuItem><MenuItem value="diff">Native table difference</MenuItem><MenuItem value="rebase">Native apply rebase buffer</MenuItem>
         </TextField>
         <Button disabled={blocked || !sourceTarget} onClick={() => perform('sources',{...sourceFields,offset:sourceOffset,limit:25})}>Load native transform inputs</Button>
       </Box>
