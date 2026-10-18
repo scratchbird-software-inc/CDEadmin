@@ -62,9 +62,40 @@ def test_unsafe_or_changed_wal_inputs_cannot_be_reported_staged(tmp_path,kind):
         return
     reviewed=freeze(archive.parent,'owned');clone=tmp_path/'clone';(clone/'pg_wal').mkdir(parents=True)
     signal=threading.Event()
-    if kind=='inventory':(archive/(SEGMENT[:-1]+'3')).write_bytes(b'additional')
+    if kind=='inventory':source.unlink()
     else:signal.set()
     with pytest.raises(ContinuityError):stage(archive.parent,reviewed,clone,progress=lambda _event:None,cancel_signal=signal)
+    assert not list((clone/'pg_wal').iterdir())
+
+
+def test_append_only_archive_growth_does_not_expand_a_reviewed_recovery(tmp_path):
+    archive=tmp_path/'archives/owned';archive.mkdir(parents=True)
+    (archive/SEGMENT).write_bytes(b'owned reviewed bytes')
+    reviewed=freeze(archive.parent,'owned')
+    extra=archive/(SEGMENT[:-1]+'3');extra.write_bytes(b'later completed native bytes')
+    clone=tmp_path/'clone';(clone/'pg_wal').mkdir(parents=True)
+    result=stage(archive.parent,reviewed,clone,progress=lambda _event:None,cancel_signal=threading.Event())
+    assert {p.name for p in (clone/'pg_wal').iterdir()}=={SEGMENT}
+    assert result['reviewed_content_matched'] and result['unreviewed_files_at_start']==1
+    assert result['unreviewed_files_staged'] is False
+    assert extra.read_bytes()==b'later completed native bytes'
+
+
+@pytest.mark.parametrize('kind',['partial','symlink','directory','changed_reviewed'])
+def test_archive_growth_never_admits_unsafe_entries_or_changed_pinned_bytes(tmp_path,kind):
+    archive=tmp_path/'archives/owned';archive.mkdir(parents=True)
+    (archive/SEGMENT).write_bytes(b'owned reviewed bytes')
+    reviewed=freeze(archive.parent,'owned')
+    extra=archive/(SEGMENT[:-1]+'3')
+    if kind=='partial':extra.with_suffix('.partial').write_bytes(b'not complete')
+    elif kind=='symlink':extra.symlink_to(Path(__file__))
+    elif kind=='directory':extra.mkdir()
+    else:
+        extra.write_bytes(b'later completed file')
+        (archive/SEGMENT).write_bytes(b'changed pinned bytes')
+    clone=tmp_path/'clone';(clone/'pg_wal').mkdir(parents=True)
+    with pytest.raises(ContinuityError):
+        stage(archive.parent,reviewed,clone,progress=lambda _event:None,cancel_signal=threading.Event())
     assert not list((clone/'pg_wal').iterdir())
 
 

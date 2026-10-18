@@ -144,7 +144,7 @@ class PostgreSQLContinuityJobs:
 
     def require_stopped_writer(self, record):
         if record['state']=='verified':return
-        if self.observed(record)['state'] not in {'unknown','failed','cancelled'}:
+        if self.observed(record)['state'] not in {'unknown','failed','cancelled','captured'}:
             raise ContinuityError('The backup artifact still has an active worker')
         if (record.get('writer_reconciliation') or {}).get('process_scope_stopped') is True:
             candidates,_absent=self.writer_processes(record)
@@ -285,6 +285,9 @@ class PostgreSQLContinuityJobs:
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
+        if operation=='wal_capture':
+            from .postgresql_continuity_capture import review
+            return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
         if operation not in {'full_backup','incremental_backup','verify','combine','recovery_drill'}:
             raise ContinuityError('Native continuity operation is unavailable')
         options = (recovery_options if operation=='recovery_drill' else combine_options if operation=='combine' else backup_options)(request.get('options',{}))
@@ -370,9 +373,12 @@ class PostgreSQLContinuityJobs:
             record['warnings'].append('This uncertain artifact has no prior manifest receipt. Verification records its current manifest identity and native file checks; it does not resume the interrupted backup.')
         if options['timeout_seconds'] is None:
             record['warnings'].append('No runtime deadline is set. Each native utility continues until it exits or cancellation is requested.')
+        return self.save_review(record)
+
+    def save_review(self, record):
         record['review_digest']=review_digest(record)
         self.directory(record)  # Validate the artifact scope before publication.
-        index=Path(str(self.path)+'.index')/str(owner)/endpoint
+        index=Path(str(self.path)+'.index')/str(record['owner'])/record['endpoint_id']
         index.mkdir(parents=True,exist_ok=True,mode=0o700)
         private_directory(index)
         index_entry=index/(f'{time.time_ns():020d}_'+record['job_id'])
@@ -404,6 +410,9 @@ class PostgreSQLContinuityJobs:
                     if record['review_digest']!=request['review_digest']:
                         raise ContinuityError('Backup review fingerprint changed')
                     if record['state']!='reviewed':return deepcopy(record)
+                    hostname=(record.get('execution_host') or {}).get('hostname')
+                    if hostname is not None and hostname!=socket.gethostname():
+                        raise ContinuityError('Native utility execution host changed; prepare a review on this application host')
                     if review_digest(record)!=record['review_digest']:
                         raise ContinuityError('Backup review fingerprint changed')
                     stable=lambda value:{key:fact for key,fact in value.items() if key!='lsn'}
@@ -473,6 +482,9 @@ class PostgreSQLContinuityJobs:
                 current=self.load(record['job_id'],record['owner'],record['endpoint_id'])
                 if current['cancel_requested']:signal.set()
                 self.update(record,progress=event)
+            if record['operation']=='wal_capture':
+                from .postgresql_continuity_capture import run
+                return run(self,record,tools,directory,transport,progress,signal)
             next_manifest_progress=0
             def file_progress(event):
                 nonlocal next_manifest_progress

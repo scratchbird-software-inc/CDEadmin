@@ -70,7 +70,7 @@ def replication_identity(parameters):
         raise ContinuityError('Native replication admission failed ('+(error.sqlstate or type(error).__name__)+')') from None
 
 
-def capture(provider, route, *, server=None):
+def capture(provider, route, *, server=None, wal_details=False):
     """Freeze a private attachment in the admitting request, then release it."""
     from psycopg import Cursor
     from psycopg.rows import tuple_row
@@ -89,6 +89,11 @@ def capture(provider, route, *, server=None):
                 raise ContinuityError('Physical replication requires an explicitly registered replication principal; SQL SET ROLE cannot govern this protocol')
             cursor.execute('SELECT oid,spcname,pg_catalog.pg_tablespace_location(oid) FROM pg_catalog.pg_tablespace ORDER BY oid')
             tablespaces=[{'oid':int(oid),'name':name,'location':location} for oid,name,location in cursor]
+            wal_geometry={}
+            if wal_details:
+                cursor.execute("SELECT pg_catalog.pg_size_bytes(current_setting('wal_segment_size')),current_setting('wal_block_size')::integer")
+                segment_bytes,block_bytes=cursor.fetchone()
+                wal_geometry={'wal_segment_bytes':int(segment_bytes),'wal_block_bytes':int(block_bytes)}
         info=connection.info
         parameters={key:value for key,value in info.get_parameters().items()
                     if key not in {'service','passfile','replication','fallback_application_name'}}
@@ -112,7 +117,7 @@ def capture(provider, route, *, server=None):
         transport=ContinuityTransport(parameters,ssh=ssh,secrets=secrets)
         with transport.parameters() as native:
             identity=replication_identity(native)
-        source={**identity,'authenticated_principal':authenticated,'summarize_wal':summarize,
+        source={**identity,**wal_geometry,'authenticated_principal':authenticated,'summarize_wal':summarize,
                 'native_build':version,'tablespaces':tablespaces,
                 'host':server.host if server is not None else info.host,
                 'port':server.port if server is not None else info.port}

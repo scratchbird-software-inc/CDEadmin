@@ -252,9 +252,12 @@ remains open for every engine; a scoped workflow is not the full denominator.
        context/savepoint preservation and qualified SQL/SQL-body/PLpgSQL checks.
      - Typed imports and durable recipes; native large objects/whole-file
        transfer; physical/incremental/compressed reconstruction and WAL-target
-       recovery drills; additional native statistics collectors.
-     - Production restore/cutover, continuous archive/retention, remote-host
-       lifecycle/upgrades and complete installed-extension/language/HA coverage.
+       recovery drills; interrupted native writer reconciliation and managed
+       raw/gzip/LZ4 WAL capture with source binding, cancellation and resume;
+       additional native statistics collectors.
+     - Production restore/cutover, archive retention/restart and replication-slot
+       administration, remote-host lifecycle/upgrades and complete installed-
+       extension/language/HA coverage.
    * - DuckDB 1.5.2
      - Native attached/session catalogs, functions/types/macros, retained
        completion, native parsing and nested/indexed/positional member binding,
@@ -644,6 +647,50 @@ is refused until persistent standby credential provisioning can replace the
 temporary service alias. These scoped workflows do not close the
 full native utility option denominator or the complete six-engine matrix.
 History testing remains explicitly deferred by the owner.
+
+PostgreSQL managed native WAL capture
+===================================
+
+The continuity workspace includes reviewed ``pg_receivewal`` jobs on the
+recorded application host. Native raw, gzip and LZ4 receiver output is handled
+without lowering the selected product's compression settings, status interval,
+end LSN, existing slot, synchronization or reconnect options. A null runtime
+deadline permits ongoing reception independently of the viewer. Application
+runtime policy can require a bounded duration. Reviews cannot dispatch on a
+different application hostname.
+
+Archives are owner/endpoint scoped and bound to the native cluster identifier,
+PostgreSQL version and WAL segment/block geometry. One durable writer claim
+prevents another job from using an active or unreconciled archive. After
+confirmed writer termination, completed files left in its private staging area
+can be published before a new receiver resumes. Native reconnect selection is
+seeded from the archive's latest completed segment; prior archive bytes are
+never replaced with different content. Partial receiver files remain private to
+their originating job.
+
+Only closed native files are decoded and published. Segment size, long-page
+header identity and segment address are checked before exclusive publication.
+The receipt explicitly distinguishes those checks from native record/CRC,
+timeline-continuity and recovery-target verification. Completed older staging
+segments are removed after publication while the latest reconnect segment is
+retained. Progress receipts keep bounded recent file details and cumulative
+counts. Cancellation stops the receiver and retains the completed archive.
+A publication failure requests native cancellation even if the generic process
+observer disables a failing progress callback.
+
+A recovery review pins exact completed file hashes. Additional valid completed
+files can arrive afterward; they do not expand the reviewed recovery's input.
+Missing or changed reviewed bytes, incomplete names, links and non-native
+entries still refuse staging. Recovery copies only its pinned file set.
+
+``tools/cdeadmin_postgresql_wal_capture_qualification.py`` owns a PostgreSQL
+18.3 fixture and exercises authenticated native streaming, exact source-byte
+comparison, cancellation, resume and independent native point-in-time recovery.
+This scope does not complete retention, automatic restart/credential policy,
+source adoption of unbound archive directories, replication-slot administration,
+remote execution agents, production restore/cutover or platform qualification.
+These remain required parts of the broader product matrix. ScratchBird history
+testing remains deferred.
 
 PostgreSQL manifest and runtime scaling increment
 ================================================

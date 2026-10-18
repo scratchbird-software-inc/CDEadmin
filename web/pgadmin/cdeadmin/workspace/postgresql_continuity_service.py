@@ -79,15 +79,15 @@ def action(service, server, operation, request):
             else:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
-                source,transport=capture(provider,payload['route'],server=server)
+                source,transport=capture(provider,payload['route'],server=server,wal_details=native_operation=='wal_capture')
             return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            if reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup'}:
+            if reviewed['state']=='reviewed' and reviewed['operation'] in {'full_backup','incremental_backup','wal_capture'}:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
-                source,transport=capture(provider,payload['route'],server=server)
+                source,transport=capture(provider,payload['route'],server=server,wal_details=reviewed['operation']=='wal_capture')
             else:transport=ContinuityTransport({})
             admitted=transport;transport=None
             return jobs.start(request,owner,endpoint,source,configuration,admitted)

@@ -115,3 +115,24 @@ it('reviews a native restore point and the selected owner-scoped WAL archive',as
   fireEvent.change(screen.getByLabelText('Exact native target value'),{target:{value:'new target'}});
   expect(screen.queryByRole('button',{name:'Confirm and start reviewed operation'})).not.toBeInTheDocument();
 });
+
+it('reviews native WAL capture independently of backup inputs and preserves an unlimited receiver duration',async () => {
+  const post=jest.fn().mockResolvedValue({...reviewed,operation:'wal_capture'});
+  render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'Capture native WAL archive'}));
+  fireEvent.change(screen.getByLabelText('WAL archive'),{target:{value:'owned.capture'}});
+  fireEvent.change(screen.getByLabelText('WAL compression'),{target:{value:'gzip:level=3'}});
+  fireEvent.change(screen.getByLabelText('WAL end lsn'),{target:{value:'A/FFFFFFFF'}});
+  fireEvent.change(screen.getByLabelText('WAL status interval seconds'),{target:{value:'0'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+  await screen.findByText('Complete cluster backup');
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'wal_capture',
+    options:{archive:'owned.capture',compression:'gzip:level=3',end_lsn:'A/FFFFFFFF',slot:'',
+      synchronous:true,sync:true,status_interval_seconds:0,no_loop:false,timeout_seconds:null}}});
+  expect(screen.queryByText('Selected input')).not.toBeInTheDocument();
+  post.mockResolvedValue({...reviewed,operation:'wal_capture',state:'captured',archive_observation:{completed_files:3,new_files:2}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+  await screen.findByText(/Completed archive files observed: 3. Newly published: 2/);
+  expect(screen.queryByText(/Native file verification: yes/)).not.toBeInTheDocument();
+});

@@ -73,9 +73,18 @@ def freeze(root, name):
 
 def stage(root, reviewed, clone, *, progress, cancel_signal):
     selected = directory(root, reviewed['name'])
-    # Refuse additions/removals as well as changed bytes. Native PostgreSQL
-    # validates segment headers, cluster identity, CRCs, timeline and ancestry.
-    if {entry.name for entry in selected.iterdir()} != {item['name'] for item in reviewed['files']}:
+    # A completed-file archive can grow while a recovery is being reviewed.
+    # Copy only the pinned review; newer files never expand its authority.
+    names=set()
+    for entry in selected.iterdir():
+        if NATIVE_FILE.fullmatch(entry.name) is None:
+            raise ContinuityError('The WAL archive contains an incomplete or non-native file')
+        _regular(entry)
+        names.add(entry.name)
+        if len(names)>MAX_FILES:
+            raise ContinuityError('Select at most 100000 completed native WAL archive files per recovery review')
+    reviewed_names={item['name'] for item in reviewed['files']}
+    if not reviewed_names<=names:
         raise ContinuityError('WAL archive inventory changed after review')
     target = Path(clone) / 'pg_wal'
     if target.is_symlink() or not target.is_dir():
@@ -101,4 +110,5 @@ def stage(root, reviewed, clone, *, progress, cancel_signal):
         finally: temporary.unlink(missing_ok=True)
         total += item['bytes']; aggregate.update((item['name'] + ':' + item['sha256'] + '\n').encode('ascii'))
     return {'files': len(reviewed['files']), 'bytes': total, 'content_sha256': aggregate.hexdigest(),
-            'reviewed_content_matched': True, 'source_files_modified': False}
+            'reviewed_content_matched': True, 'source_files_modified': False,
+            'unreviewed_files_at_start':len(names-reviewed_names),'unreviewed_files_staged':False}

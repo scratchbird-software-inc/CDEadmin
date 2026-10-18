@@ -112,3 +112,18 @@ def test_legacy_receipt_needs_a_locally_observed_owned_utility_before_host_bindi
         result=jobs.reconcile_writer({'job_id':record['job_id'],'confirmed':True},1,endpoint)
         assert result['writer_reconciliation']['hostname']==__import__('socket').gethostname()
         jobs.require_stopped_writer(jobs.load(record['job_id'],1,endpoint))
+
+
+def test_a_review_cannot_dispatch_on_another_application_host(owned,monkeypatch):
+    jobs,record,endpoint,_directory,_paths=owned
+    # This fixture seeds an interrupted dispatch. Return only its owned receipt
+    # to reviewed state to exercise the actual immutable review admission.
+    jobs.update(record,state='reviewed')
+    import pgadmin.cdeadmin.workspace.postgresql_continuity_jobs as module
+    monkeypatch.setattr(module.socket,'gethostname',lambda:'another-application-host.invalid')
+    from pgadmin.cdeadmin.providers.postgresql.continuity_transport import ContinuityTransport
+    transport=ContinuityTransport({})
+    with pytest.raises(ContinuityError,match='execution host changed'):
+        jobs.start({'job_id':record['job_id'],'review_digest':record['review_digest'],'confirmed':True},
+                   1,endpoint,record['source'],record['configuration'],transport)
+    assert transport.closed and jobs.load(record['job_id'],1,endpoint)['state']=='reviewed'
