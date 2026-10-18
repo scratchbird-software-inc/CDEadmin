@@ -9,12 +9,15 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
   const [action, setAction] = useState('attach'), [alias, setAlias] = useState('');
   const [path, setPath] = useState(''), [readOnly, setReadOnly] = useState(true);
   const [conflict, setConflict] = useState('ERROR'), [create, setCreate] = useState(false), [missing, setMissing] = useState(false);
+  const [blockSize, setBlockSize] = useState(''), [rowGroupSize, setRowGroupSize] = useState('');
+  const [storageVersion, setStorageVersion] = useState(''), [compress, setCompress] = useState('');
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState(''), [confirmed, setConfirmed] = useState(false);
   const [awaitingReceipt, setAwaitingReceipt] = useState(false);
   const serial = useRef(0), previousSession = useRef(sessionId);
   const blocked = disabled || result?.session_reuse_blocked === true || result?.state === 'unknown_outcome';
   useEffect(() => {serial.current++; setAlias(''); setPath(''); setResult(null); setError('');
+    setBlockSize(''); setRowGroupSize(''); setStorageVersion(''); setCompress('');
     setConfirmed(false); setConfirmation(''); setBusy(false); setAwaitingReceipt(false);
     return () => {serial.current++;};}, [databaseTargetId, post]);
   useEffect(() => {
@@ -31,8 +34,11 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
     try {
       const active = sessionId || await ensureSession();
       if(token !== serial.current) return;
+      const options = {...(blockSize ? {block_size: blockSize} : {}), ...(rowGroupSize ? {row_group_size: rowGroupSize} : {}),
+        ...(storageVersion ? {storage_version: storageVersion} : {}), ...(path === ':memory:' && compress ? {compress: compress === 'true'} : {})};
       const request = operation === 'review' ? {operation, draft: {action, alias,
-        ...(action === 'attach' ? {path, read_only: readOnly, conflict, create_if_missing: create} : {if_exists: missing})}} :
+        ...(action === 'attach' ? {path, read_only: readOnly, conflict, create_if_missing: create,
+          ...(Object.keys(options).length ? {storage_options: options} : {})} : {if_exists: missing})}} :
         operation === 'inventory' ? {operation} : {operation, review_id: result.review_id,
           ...(operation === 'apply' ? {review_digest: result.review_digest, confirmation, confirmed} : {})};
       if(operation === 'apply') setAwaitingReceipt(true);
@@ -64,14 +70,24 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
       <TextField size="small" label="Native catalog alias" value={alias} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setAlias)} sx={{minWidth: 210}} />
       {action === 'attach' && <><TextField size="small" label="Absolute DuckDB file path" value={path} disabled={busy || blocked || awaitingReceipt}
-        onChange={change(setPath)} sx={{minWidth: 350}} />
+        onChange={event => {setPath(event.target.value); setCompress(''); if(event.target.value === ':memory:') setCreate(false); clear();}} sx={{minWidth: 350}}
+        helperText="Use :memory: for an authorized writable in-memory catalog." />
       <FormControlLabel label="Read only" control={<Checkbox checked={readOnly} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setReadOnly(event.target.checked); if(event.target.checked) setCreate(false); clear();}} />} />
       <TextField select size="small" label="Existing alias" value={conflict} disabled={busy || blocked || awaitingReceipt} onChange={change(setConflict)}>
         <MenuItem value="ERROR">Refuse</MenuItem><MenuItem value="IGNORE">IF NOT EXISTS</MenuItem><MenuItem value="REPLACE">OR REPLACE</MenuItem>
       </TextField>
-      <FormControlLabel label="Allow native file creation" control={<Checkbox checked={create} disabled={busy || blocked || awaitingReceipt || readOnly}
-        onChange={event => {setCreate(event.target.checked); clear();}} />} /></>}
+      <FormControlLabel label="Allow native file creation" control={<Checkbox checked={create} disabled={busy || blocked || awaitingReceipt || readOnly || path === ':memory:'}
+        onChange={event => {setCreate(event.target.checked); clear();}} />} />
+      <TextField size="small" label="Block size (bytes)" value={blockSize} disabled={busy || blocked || awaitingReceipt}
+        onChange={change(setBlockSize)} helperText="Optional native unsigned integer; blank uses the engine default." />
+      <TextField size="small" label="Row-group size (rows)" value={rowGroupSize} disabled={busy || blocked || awaitingReceipt}
+        onChange={change(setRowGroupSize)} helperText="Optional native unsigned integer." />
+      <TextField size="small" label="Storage version" value={storageVersion} disabled={busy || blocked || awaitingReceipt}
+        onChange={change(setStorageVersion)} helperText="Optional native version, for example v1.5.0 or latest." />
+      <TextField select size="small" label="In-memory compression" value={compress} disabled={busy || blocked || awaitingReceipt || path !== ':memory:'}
+        onChange={change(setCompress)}><MenuItem value="">Native default</MenuItem><MenuItem value="true">Compress</MenuItem><MenuItem value="false">Do not compress</MenuItem></TextField>
+      </>}
       {action === 'detach' && <FormControlLabel label="IF EXISTS" control={<Checkbox checked={missing} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setMissing(event.target.checked); clear();}} />} />}
       <Button disabled={busy || blocked || awaitingReceipt || !alias || (action === 'attach' && !path)} onClick={() => run('review')}>Review native attachment</Button>

@@ -181,3 +181,70 @@ def test_changed_target_confirmation_and_readonly_authorization_never_dispatch(f
     with pytest.raises(ValueError, match='writable authorization'):
         action(client, handle, {**route, 'read_only': True}, {'operation': 'review',
             'draft': {'action': 'attach', 'alias': 'writable', 'path': str(fixture[3]), 'read_only': False}})
+
+
+def test_native_storage_options_create_an_observed_file_without_deciding_user_transaction(fixture):
+    client, handle, route, other = fixture
+    path=other.parent/'storage.duckdb'
+    handle.execute('CREATE TEMP TABLE private_storage(value INT)')
+    transaction=handle.execute('SELECT current_transaction_id()').fetchone()[0]
+    requested={'block_size':'32768','row_group_size':'4096','storage_version':'v1.5.0'}
+    record=review(fixture,path=str(path),read_only=False,create_if_missing=True,storage_options=requested)
+    result=apply(fixture,record)
+    assert result['state']=='acknowledged' and result['rediscovery_verified']
+    selected=next(row for row in result['native_catalogs'] if row['name']==record['alias'])
+    assert all(selected['options'][key]==value for key,value in requested.items())
+    assert result['native_storage']['block_size']=='32768'
+    assert handle.execute('SELECT current_transaction_id()').fetchone()[0]==transaction
+    assert handle.execute("SELECT count(*) FROM duckdb_tables() WHERE temporary AND table_name='private_storage'").fetchone()==(1,)
+    handle.execute('CREATE TABLE "extra . "" é".main.data(id INT)')
+    handle.execute('INSERT INTO "extra . "" é".main.data SELECT * FROM range(9000)')
+    assert handle.execute('SELECT count(*) FROM "extra . "" é".main.data').fetchone()==(9000,)
+    assert apply(fixture,record)==result
+    handle.rollback()
+    assert path.exists() and record['alias'] not in [row['name'] for row in catalogs(handle)]
+
+
+def test_memory_compression_is_separately_authorized_and_observed(fixture):
+    client,handle,route,_=fixture
+    route['allow_memory']=True
+    client._attachment_contexts[id(handle)]['route']['allow_memory']=True
+    record=review(fixture,path=':memory:',read_only=False,storage_options={'compress':True})
+    result=apply(fixture,record)
+    assert result['rediscovery_verified'] and result['native_storage']['block_size']=='0'
+    assert next(row for row in result['native_catalogs'] if row['name']==record['alias'])['options']['compress']=='true'
+    handle.execute('CREATE TABLE "extra . "" é".main.data(id INT)')
+    handle.execute('INSERT INTO "extra . "" é".main.data VALUES (42)')
+    assert handle.execute('SELECT * FROM "extra . "" é".main.data').fetchall()==[(42,)]
+
+
+@pytest.mark.parametrize('options',[
+    {'block_size':True},{'row_group_size':4096},{'block_size':'18446744073709551616'},
+    {'block_size':'1;ROLLBACK'},{'storage_version':'v1.5.0\x00'},
+    {'compress':True},{'encryption_key':'must-not-enter-a-public-review'}])
+def test_storage_options_refuse_unsafe_representations_and_inapplicable_compression(fixture,options):
+    with pytest.raises(ValueError):
+        review(fixture,storage_options=options)
+
+
+def test_native_storage_refusal_is_terminal_without_retry_or_automatic_rollback(fixture):
+    client,handle,_,other=fixture
+    record=review(fixture,path=str(other.parent/'bad.duckdb'),read_only=False,
+        create_if_missing=True,storage_options={'row_group_size':'1'})
+    result=apply(fixture,record)
+    assert result['state']=='refused' and not result['native_acknowledged']
+    assert apply(fixture,record)==result
+    assert result['caller_transaction_decision_requested'] is False
+
+
+def test_detached_alias_cannot_be_reused_before_an_explicit_transaction_decision(fixture):
+    client,handle,route,other=fixture
+    attached=apply(fixture,review(fixture));client.control_transaction(handle,'commit')
+    detached=action(client,handle,route,{'operation':'review','draft':{
+        'action':'detach','alias':attached['alias'],'if_exists':False}})
+    assert apply(fixture,detached)['rediscovery_verified']
+    with pytest.raises(ValueError,match='current transaction'):
+        review(fixture)
+    assert not client.describe_transaction(handle)['session_reuse_blocked']
+    client.control_transaction(handle,'commit')
+    assert apply(fixture,review(fixture))['rediscovery_verified']

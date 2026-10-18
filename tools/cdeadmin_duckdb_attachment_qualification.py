@@ -26,6 +26,7 @@ def qualify(output):
         'full_product_complete': False, 'checks': [], 'source_sha256': {}}
     for name in ['tools/cdeadmin_duckdb_attachment_qualification.py',
             'web/pgadmin/cdeadmin/providers/duckdb/attachments.py',
+            'web/pgadmin/cdeadmin/providers/duckdb/catalog.py',
             'web/pgadmin/cdeadmin/providers/duckdb/driver.py',
             'web/pgadmin/cdeadmin/providers/duckdb/provider.py',
             'web/pgadmin/cdeadmin/data_studio/studio.py',
@@ -42,7 +43,7 @@ def qualify(output):
                 connection = duckdb.connect(str(path));connection.execute('CREATE TABLE data(id INT)')
                 connection.execute('INSERT INTO data VALUES (?)', (value,));connection.close()
             route = {'database': ':memory:' if memory else str(directory/'primary.duckdb'),
-                'filesystem_root': str(directory), 'allow_memory': memory}
+                'filesystem_root': str(directory), 'allow_memory': True}
             client = _create_client();permissions = SimpleNamespace(require=lambda *_: None)
             provider = DuckDBPilotProvider(SimpleNamespace(endpoint_id='owned-native', session_namespace='owned-native'), permissions, client)
             observer = None
@@ -102,6 +103,49 @@ def qualify(output):
                 else:
                     raise AssertionError('An attachment review moved to another native connection')
                 provider.close_session({'session_id':second['session_id']})
+                storage_file=directory/'native-storage.duckdb'
+                storage_options={'block_size':'32768','row_group_size':'4096','storage_version':'v1.5.0'}
+                handle.execute('INSERT INTO pending VALUES (43)')
+                transaction=handle.execute('SELECT current_transaction_id()').fetchone()[0]
+                storage_review=review({**draft,'path':str(storage_file),'read_only':False,
+                    'create_if_missing':True,'storage_options':storage_options})
+                storage_result=apply(storage_review)
+                assert storage_result['state']=='acknowledged' and storage_result['rediscovery_verified']
+                assert storage_result['native_storage']['block_size']=='32768'
+                assert handle.execute('SELECT id FROM pending').fetchall()==[(43,)]
+                assert observer.execute('SELECT id FROM pending').fetchall()==[]
+                assert handle.execute('SELECT current_transaction_id()').fetchone()[0]==transaction
+                client.control_transaction(handle,'rollback');assert storage_file.is_file()
+                storage_review=review({**draft,'path':str(storage_file),'read_only':False,
+                    'storage_options':storage_options})
+                assert apply(storage_review)['rediscovery_verified']
+                qualified=attachments.quote(alias)+'.main.'
+                handle.execute('CREATE TABLE '+qualified+'storage_rows(id INT, payload STRUCT("field . é" VARCHAR))')
+                handle.execute("INSERT INTO "+qualified+"storage_rows SELECT i, {'field . é':i::VARCHAR} FROM range(9000) r(i)")
+                client.control_transaction(handle,'commit')
+                assert handle.execute('SELECT count(*),sum(id) FROM '+qualified+'storage_rows').fetchone()==(9000,40495500)
+                assert apply(review({'action':'detach','alias':alias,'if_exists':False}))['rediscovery_verified']
+                try:
+                    review({**draft,'path':':memory:','read_only':False,'storage_options':{'compress':True}})
+                except ValueError as error:
+                    assert 'current transaction' in str(error)
+                else:
+                    raise AssertionError('A retired native alias was reused before the caller transaction decision')
+                client.control_transaction(handle,'commit')
+                memory_review=review({**draft,'path':':memory:','read_only':False,'storage_options':{'compress':True}})
+                memory_result=apply(memory_review)
+                assert memory_result['rediscovery_verified'] and memory_result['native_storage']['block_size']=='0'
+                assert next(row for row in memory_result['native_catalogs'] if row['name']==alias)['options']['compress']=='true'
+                handle.execute('CREATE TABLE '+qualified+'memory_rows AS SELECT 42 AS id')
+                assert handle.execute('SELECT id FROM '+qualified+'memory_rows').fetchone()==(42,)
+                client.control_transaction(handle,'rollback')
+                restored=duckdb.connect(str(storage_file),read_only=True)
+                try:
+                    assert restored.execute('SELECT count(*),sum(id) FROM storage_rows').fetchone()==(9000,40495500)
+                    assert restored.execute("SELECT payload.\"field . é\" FROM storage_rows WHERE id=8999").fetchone()==('8999',)
+                    assert restored.execute('SELECT block_size FROM pragma_database_size() WHERE database_name=current_database()').fetchone()==(32768,)
+                finally:restored.close()
+                record=review(draft)
                 before=attachments.catalogs(handle)
                 with patch.object(attachments,'catalogs',side_effect=[before,OSError('post-acknowledgement read failed'),before]):
                     uncertain=apply(record)
@@ -114,6 +158,9 @@ def qualify(output):
                     'attach_rollback_removes_alias':True,'detach_rollback_does_not_restore_alias':True,
                     'native_instance_catalog_visibility_observed':True,
                     'native_creation_ignore_replace_and_missing_ok_verified':True,
+                    'native_storage_options_pending_context_and_memory_compression_verified':True,
+                    'independently_reopened_file_data_and_block_size_verified':True,
+                    'retired_alias_refused_until_explicit_caller_decision':True,
                     'stale_namespace_refused_before_dispatch':True,
                     'review_bound_to_original_native_connection':True,
                     'post_acknowledgement_failure_retained_without_replay':True})

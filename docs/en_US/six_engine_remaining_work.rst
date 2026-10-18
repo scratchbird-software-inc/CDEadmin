@@ -147,6 +147,10 @@ native file attachment mutation now has a reviewed original-session workflow,
 including file creation, conflict modes and native rollback distinctions.
 Database/schema comment syntax that the native runtime rejects
 as unimplemented must not be presented as a supported management operation.
+Reviewed attachments also expose native block/row-group sizes, storage version
+and authorized in-memory compression, with observed storage facts and caller
+transaction ownership. Encrypted/remote attachments, copy-database and broader
+storage transformations remain open.
 
 SQLite
 ------

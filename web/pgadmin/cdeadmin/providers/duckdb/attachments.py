@@ -3,6 +3,7 @@ from copy import deepcopy
 import hashlib
 import json
 import os
+import re
 import stat
 import time
 import uuid
@@ -10,15 +11,17 @@ import uuid
 from ...sdk import RelationalClientError
 from ..embedded_route import contained_database
 
-QUERY = ('SELECT database_name,database_oid,path,type,readonly FROM duckdb_databases() '
+QUERY = ('SELECT database_name,database_oid,path,type,readonly,options FROM duckdb_databases() '
     'WHERE NOT internal ORDER BY database_name')
 
 
 def catalogs(connection):
-    keys = ('name', 'oid', 'path', 'type', 'read_only')
+    from .catalog import database_location
+    keys = ('name', 'oid', 'path', 'type', 'read_only', 'options')
     rows = [dict(zip(keys, row)) for row in connection.execute(QUERY).fetchall()]
     for row in rows:
         row['oid'] = str(row['oid'])
+        row.update(database_location(row['path'], row['type'], row['options']))
     return rows
 
 
@@ -32,6 +35,10 @@ def quote(value):
 
 
 def file_identity(route, value, *, create=False):
+    if value == ':memory:':
+        if route.get('allow_memory') is not True:
+            raise ValueError('In-memory attachment requires registered memory authorization')
+        return {'path': ':memory:', 'memory': True}
     if not isinstance(value, str) or not os.path.isabs(value) or '\x00' in value:
         raise ValueError('Select an absolute DuckDB file under the registered root')
     path = contained_database({**route, 'database': value})
@@ -55,11 +62,43 @@ def file_identity(route, value, *, create=False):
         os.close(descriptor)
 
 
+def storage_options(draft, memory):
+    value = draft.get('storage_options', {})
+    if not isinstance(value, dict) or set(value) - {'block_size', 'row_group_size', 'storage_version', 'compress'}:
+        raise ValueError('Select native block size, row-group size, storage version or memory compression')
+    source = []
+    for key in ('block_size', 'row_group_size'):
+        if key in value:
+            text = value[key]
+            if not isinstance(text, str) or not re.fullmatch(r'(?:0|[1-9][0-9]{0,19})', text) or int(text) > 2**64-1:
+                raise ValueError('Native storage sizes require exact unsigned 64-bit decimal text')
+            source.append(key.upper() + ' ' + text)
+    if 'storage_version' in value:
+        version = value['storage_version']
+        if not isinstance(version, str) or not version or len(version.encode()) > 128 or any(ord(c) < 32 for c in version):
+            raise ValueError('Select a bounded exact native storage version')
+        source.append("STORAGE_VERSION '" + version.replace("'", "''") + "'")
+    if 'compress' in value:
+        if type(value['compress']) is not bool or not memory:
+            raise ValueError('Native COMPRESS requires an authorized in-memory attachment and a Boolean choice')
+        source.append('COMPRESS ' + str(value['compress']).lower())
+    return source
+
+
+def alias_reuse(context, handle, compiled):
+    transaction = str(handle.execute('SELECT current_transaction_id()').fetchone()[0])
+    retired = context.setdefault('detached_aliases', {})
+    context['detached_aliases'] = {name: value for name, value in retired.items() if value == transaction}
+    if compiled['draft']['action'] == 'attach' and identifier_key(compiled['alias']) in context['detached_aliases']:
+        raise ValueError('This native alias was detached in the current transaction; commit or rollback before reusing it')
+    return transaction
+
+
 def compile_operation(route, draft, origin, before):
     if not isinstance(draft, dict) or draft.get('action') not in {'attach', 'detach'}:
         raise ValueError('Select native ATTACH or DETACH')
     attaching = draft['action'] == 'attach'
-    allowed = {'action', 'alias', 'path', 'read_only', 'conflict', 'create_if_missing'} if attaching else {'action', 'alias', 'if_exists'}
+    allowed = {'action', 'alias', 'path', 'read_only', 'conflict', 'create_if_missing', 'storage_options'} if attaching else {'action', 'alias', 'if_exists'}
     if set(draft) - allowed:
         raise ValueError('Unknown native attachment option')
     alias = draft.get('alias')
@@ -78,22 +117,26 @@ def compile_operation(route, draft, origin, before):
             raise ValueError('Select exact native access, creation and conflict options')
         if create and read_only or route.get('read_only') is True and not read_only:
             raise ValueError('Native file creation and writable attachment require writable authorization')
+        memory = draft.get('path') == ':memory:'
+        options = storage_options(draft, memory)
+        if memory and (read_only or route.get('allow_memory') is not True):
+            raise ValueError('In-memory attachment requires registered memory authorization and writable access')
         if target is not None and conflict == 'IGNORE':
             value = draft.get('path')
-            if not isinstance(value, str) or not os.path.isabs(value) or '\x00' in value:
+            if not isinstance(value, str) or (not memory and not os.path.isabs(value)) or '\x00' in value:
                 raise ValueError('Select an absolute native attachment path')
-            identity = {'path': contained_database({**route, 'database': value}), 'ignored': True}
+            identity = {'path': ':memory:' if memory else contained_database({**route, 'database': value}), 'ignored': True}
         else:
             identity = file_identity(route, draft.get('path'), create=create)
         primary = contained_database(route)
-        if not identity.get('ignored') and (identity['path'] == primary or any(
+        if not memory and not identity.get('ignored') and (identity['path'] == primary or any(
                 row['path'] == identity['path'] and row['name'] == origin[0] for row in before)):
             raise ValueError('The registered primary file cannot be reattached through another alias')
         if target is not None and conflict == 'ERROR':
             raise ValueError('The exact native catalog alias is already attached')
         prefix = 'ATTACH ' + ('IF NOT EXISTS ' if conflict == 'IGNORE' else 'OR REPLACE ' if conflict == 'REPLACE' else '')
         source = prefix + "'" + identity['path'].replace("'", "''") + "' AS " + quote(alias)
-        source += ' (READ_ONLY)' if read_only else ' (READ_WRITE)'
+        source += ' (' + ', '.join(['READ_ONLY' if read_only else 'READ_WRITE', *options]) + ')'
     else:
         missing_ok = draft.get('if_exists', False)
         if type(missing_ok) is not bool or target is None and not missing_ok:
@@ -148,12 +191,14 @@ def action(client, handle, route, request):
         if len(client._attachment_reviews) >= 256:
             raise ValueError('Close old attachment reviews before creating another')
         compiled = compile_operation(route, request.get('draft'), origin, before)
+        alias_reuse(context, handle, compiled)
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed', 'session_scope_id': scope,
             'deadline': now + 300, 'compiled': compiled, 'baseline': before,
             'source': compiled['source'], 'alias': compiled['alias'],
             'action': compiled['draft']['action'], 'file_identity': compiled['file_identity'],
             'automatic_retry': False, 'caller_transaction_decision_requested': False,
             'warnings': ['Changes use the original native session. Attached catalogs can be visible to other connections sharing its DuckDB instance.',
+                'Storage options follow native file creation/open rules. Existing file headers can retain their prior storage format; supplied options do not rewrite a file.',
                 'ATTACH follows its native transaction. Rollback does not restore a detached catalog or remove a file created by ATTACH.',
                 'Registered automatic attachments can be restored when another connection opens. External file/instance changes are not fenced.']}
         record['review_digest'] = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
@@ -169,6 +214,7 @@ def action(client, handle, route, request):
         raise ValueError('Confirm the current reviewed native attachment alias')
     try:
         rebuilt = compile_operation(route, record['compiled']['draft'], origin, before)
+        transaction = alias_reuse(context, handle, rebuilt)
     except (ValueError, RelationalClientError):
         record.update(state='refused', native_dispatched=False, native_acknowledged=False,
             reason='Native attachment namespace or file changed since review')
@@ -187,17 +233,28 @@ def action(client, handle, route, request):
         selected = next((row for row in after if row['name'] == record['alias']), None)
         if record['action'] == 'detach':
             verified = selected is None
+            if verified and any(identifier_key(row['name']) == identifier_key(record['alias']) for row in before):
+                context['detached_aliases'][identifier_key(record['alias'])] = transaction
         else:
             old = next((row for row in before if row['name'] == record['alias']), None)
             if record['compiled']['draft'].get('conflict') == 'IGNORE' and old is not None:
                 verified = selected == old
             else:
                 expected = record['compiled']['file_identity']['path']
-                verified = selected is not None and selected['path'] == expected and selected['read_only'] == record['compiled']['draft'].get('read_only', True)
+                memory = record['compiled']['file_identity'].get('memory', False)
+                verified = selected is not None and (selected['path'] is None if memory else selected['path'] == expected) and selected['read_only'] == record['compiled']['draft'].get('read_only', True)
                 if verified:
-                    record['observed_file_identity'] = file_identity(route, expected)
                     prior = record['compiled']['file_identity']
-                    verified = not prior['exists'] or all(prior[key] == record['observed_file_identity'][key] for key in ('device', 'inode'))
+                    if not memory:
+                        record['observed_file_identity'] = file_identity(route, expected)
+                        verified = not prior['exists'] or all(prior[key] == record['observed_file_identity'][key] for key in ('device', 'inode'))
+                    requested = record['compiled']['draft'].get('storage_options', {})
+                    verified = verified and all(str(selected['options'].get(key)).lower() == str(value).lower() for key, value in requested.items())
+                    storage = handle.execute(
+                        'SELECT database_name,block_size,total_blocks,used_blocks,free_blocks FROM pragma_database_size() WHERE database_name=?',
+                        [selected['name']]).fetchone()
+                    record['native_storage'] = dict(zip(('catalog', 'block_size', 'total_blocks', 'used_blocks', 'free_blocks'),
+                        (storage[0], *(str(value) for value in storage[1:])))) if storage else None
         client._observe(handle, blocked=not verified)
         record.update(state='acknowledged', native_catalogs=after, rediscovery_verified=verified)
     except Exception as error:

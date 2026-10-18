@@ -10,7 +10,7 @@ MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
 MAX_SECONDS = 30
 SAFE_OPTIONS = frozenset({'read_only', 'block_size', 'row_group_size',
-    'storage_version', 'compression', 'encryption_cipher'})
+    'storage_version', 'compression', 'compress', 'encryption_cipher'})
 
 
 def database_location(path, database_type, options):

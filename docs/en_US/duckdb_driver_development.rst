@@ -246,6 +246,27 @@ uncertain reply. A lost apply reply locks the form until the receipt is read.
 An uncertain native session remains blocked; a closed original connection cannot
 be replaced with another connection to continue that review.
 
+Attachment controls also support exact unsigned decimal ``BLOCK_SIZE`` and
+``ROW_GROUP_SIZE``, native ``STORAGE_VERSION``, and explicitly authorized writable
+``:memory:`` catalogs with optional Boolean ``COMPRESS``. Omitted options stay
+omitted; native defaults and semantic limits belong to DuckDB. COMPRESS is only
+offered for memory targets. Encryption keys and extension-specific options use
+separate admission paths and cannot enter these public reviews.
+
+Receipts retain the safe native attachment options and independently observed
+storage block counts/sizes as exact decimal text. Existing file headers can
+retain their original format: opening a file with an option does not establish
+that its storage has been rewritten. Remote paths and confidential attachment
+options are withheld. Native refusal and observation failure retain the usual
+one-use receipt and caller transaction rules.
+
+The pinned runtime can invalidate a connection when a detached alias is reused
+in the same transaction. The reviewed workflow retains successful detachment
+identities and refuses their reuse before dispatch until the caller explicitly
+commits or rolls back. It never makes that transaction decision itself. This
+guard covers detachments made through the attachment workflow; arbitrary SQL
+and administration by another connection retain native failure handling.
+
 Operations leave commit and rollback to the caller. In the pinned native engine,
 an attachment created in a transaction disappears on rollback; a detached
 catalog is not restored by rollback. A newly created file is not deleted by
@@ -259,6 +280,16 @@ The original SQL-preview endpoint remains available. Direct execution uses the
 new session-bound workflow. ``tools/cdeadmin_duckdb_attachment_qualification.py``
 exercises it for file and explicitly authorized memory roots, pending rows and
 temporary objects, creation/conflict modes, rollback distinctions, stale
-namespace refusal, original-session binding and failed observations. Encrypted
+namespace refusal, original-session binding and failed observations. Storage
+options are also checked against actual catalog facts, pending work and
+transaction identity. The qualifier writes and independently reopens 9,000 rows
+with a quoted nested type, checks native block size, and uses compressed memory
+attachments. Encrypted
 attachment options and remote extension-backed attachment types retain their
 separate capability and credential-admission obligations.
+
+Independent-file DDN fingerprints exclude transient table and column-owner OIDs
+while retaining their native catalog observations. Rebuilt-table verification
+compares exact column semantics and confirms the observed columns' owner OID
+matches the newly observed table. A new native table identity must not make a
+successful constraint rebuild fail its schema postconditions.

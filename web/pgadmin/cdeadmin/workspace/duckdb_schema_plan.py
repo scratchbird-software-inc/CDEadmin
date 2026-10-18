@@ -66,10 +66,13 @@ def _definition(row):
     native = row['native']
     indexes = native.get('indexes')
     catalog = {key: value for key, value in native.get('catalog_metadata', {}).items()
-               if key not in {'oid', 'last_value'}}
+               if key not in {'oid', 'owner_oid', 'last_value'}}
     return {'ddl': native.get('ddl'),
             'catalog': catalog,
-            'columns': native.get('columns') if row['kind'] in {'table', 'view'} else None,
+            'columns': ([{key: value for key, value in column.items() if key != 'owner_oid'}
+                if isinstance(column, dict) else column for column in native['columns']]
+                if isinstance(native.get('columns'), list) else native.get('columns'))
+                if row['kind'] in {'table', 'view'} else None,
             'constraints': native.get('constraints') if row['kind'] == 'table' else None,
             'indexes': ([{key: value for key, value in item.items() if key != 'oid'}
                 if isinstance(item, dict) else item for item in indexes]
