@@ -1322,7 +1322,19 @@ qualified without settling a separate user transaction. Authenticated API and
 browser checks verify native slot lifetime, inventory, confirmation/scope
 refusals and later independent cleanup.
 
-This scope covers retained SQL slot controls. Temporary logical text/binary
-peek/get and replication-protocol streams remain open, together with the wider
-product matrix. History testing remains deferred and Windows/macOS qualification
-remains with the platform teams.
+Temporary logical text/binary peek/get now runs on this same retained backend.
+Ordered plugin options, exact WAL positions and native transaction thresholds
+are reviewed before dispatch. Text and base64 binary records stream to private
+JSONL artifacts; the native acknowledgement is saved before file publication.
+A failed publication cannot undo consumption, and recovery inspects captured
+bytes without replaying the command or promoting an uncertain command outcome.
+
+Owned artifacts have bounded previews, streamed browser downloads, independent
+checksum inspection and confirmed removal with retained receipts. Inspection
+and removal serialize across application workers. Artifacts remain accessible
+after resource release. Native text and binary output is compared against
+independent permanent slots, including large integer identities, Unicode and
+binary payloads; authenticated API and browser checks cover these controls.
+Replication-protocol streams and the wider product matrix remain open. History
+testing remains deferred and Windows/macOS qualification remains with the
+platform teams.

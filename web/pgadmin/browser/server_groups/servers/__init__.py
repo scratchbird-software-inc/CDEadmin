@@ -2727,6 +2727,15 @@ class ServerNode(PGChildNodeView):
                     try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw'}.get(request.form['action'],'mysql'))
                     except (ValueError,TypeError,KeyError,OSError) as error:
                         return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
+                if request.form.get('action') == 'postgresql_temporary_slots_change_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_temporary_slot_service import change_download
+                    body=request.form.get('payload','')
+                    if len(body)>4096:return bad_request('File delivery request is too large')
+                    try:
+                        selected=json.loads(body);target=request.args.get('database_target_id')
+                        if target is not None and (not isinstance(selected,dict) or selected.get('database_target_id')!=target):raise ValueError('File delivery database scope does not match this workspace')
+                        return change_download(service,server,selected)
+                    except (ValueError,TypeError,KeyError,OSError):return bad_request('Invalid owned logical capture delivery request')
                 if request.form.get('action') == 'postgresql_continuity_change_download':
                     from pgadmin.cdeadmin.workspace.postgresql_continuity_service import change_download
                     from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
@@ -2773,7 +2782,7 @@ class ServerNode(PGChildNodeView):
                         'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
                         'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
                         'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
-                        'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_command_cancel',
+                        'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel',
                         'postgresql_recipe_read', 'postgresql_recipe_save',
                         'duckdb_recipe_read', 'duckdb_recipe_save',
                         'sqlite_recipe_read', 'sqlite_recipe_save',
@@ -3088,7 +3097,7 @@ class ServerNode(PGChildNodeView):
                                 'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact'}:
                     try:payload=service.postgresql_large_object_file(server,action.removeprefix('postgresql_large_object_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
-                elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_command_cancel'}:
+                elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel'}:
                     try:payload=service.postgresql_temporary_slots(server,action.removeprefix('postgresql_temporary_slots_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',

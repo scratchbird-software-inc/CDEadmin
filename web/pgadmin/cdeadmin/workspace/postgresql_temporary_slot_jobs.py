@@ -2,10 +2,13 @@
 from copy import deepcopy
 import hashlib
 from pathlib import Path
+import socket
 import threading
 import time
 
-from ..providers.postgresql.temporary_slots import TemporarySlotError,options
+import psutil
+
+from ..providers.postgresql.temporary_slots import TemporarySlotError,options,CHANGES
 from .mysql_binlog_jobs import MySQLBinlogJobs,DurableCancellation,review_digest
 
 
@@ -15,6 +18,21 @@ class TemporarySlotCommands(MySQLBinlogJobs):
     review_warnings=(
         'Temporary slots belong to one retained native backend. Native SQL errors can remove all temporary slots owned by that backend.',
         'A native command return and later slot liveness are separate facts. Uncertain commands are never replayed automatically.',)
+    _worker_maps_lock=MySQLBinlogJobs._maps_lock
+
+    def observed(self,record):
+        result=deepcopy(record)
+        if record.get('worker_io_closed'):return result
+        parent=self.resource_jobs.load(self.resource_id,record['owner'],record['endpoint_id'])
+        stopped=parent.get('worker_io_closed') is True
+        if not stopped and parent['execution_host']['hostname']==socket.gethostname():
+            pid,created=parent.get('worker_identity',(None,None))
+            try:stopped=pid is not None and psutil.Process(pid).create_time()!=created
+            except psutil.NoSuchProcess:stopped=True
+            except psutil.Error:pass
+        if stopped:
+            result.update(state='unknown' if record.get('native_dispatch_admitted') else 'not_dispatched',worker_io_closed=True)
+        return result
 
     def public(self,record):
         result=deepcopy({key:value for key,value in record.items() if key not in {'owner','configuration','source_state'}})
@@ -31,7 +49,9 @@ class TemporarySlotResources(MySQLBinlogJobs):
         'Application connection close and independently observed PostgreSQL backend/slot cleanup have separate receipts. Lost commands are never replayed.',)
 
     def commands(self,record):
-        return TemporarySlotCommands(str(self.path)+'.commands.'+record['job_id'],self.directory(record)/'commands')
+        commands=TemporarySlotCommands(str(self.path)+'.commands.'+record['job_id'],self.directory(record)/'commands')
+        commands.resource_jobs=self;commands.resource_id=record['job_id']
+        return commands
 
     def public(self,record):
         result=super().public(record)
@@ -61,7 +81,11 @@ class TemporarySlotResources(MySQLBinlogJobs):
                 reviewed=commands.review(owner,endpoint,{'operation':operation,'native_options':selected},
                     {'identity':{'resource_id':job_id},'state':{}},resource['configuration'],resource['program'])
                 child=commands.load(reviewed['job_id'],owner,endpoint)
-                commands.update(child,state='queued_'+kind,native_review_returned=False)
+                values={'state':'queued_'+kind,'native_review_returned':False}
+                if operation in CHANGES:
+                    values['operation']='wal_slot_sql_'+operation
+                    if operation.startswith('get_'):values['warnings']=[*child['warnings'],'Get consumes native changes. Captured bytes, publication and slot consumption have separate outcomes; a lost result is never replayed.']
+                commands.update(child,**values)
                 resource['pending_command']={'job_id':child['job_id'],'kind':kind}
                 return commands.get(child['job_id'],owner,endpoint)
             return store.change(change)
@@ -81,7 +105,7 @@ class TemporarySlotResources(MySQLBinlogJobs):
                         self.require_open(resource)
                         if not child.get('native_review_returned') or child['source'].get('resource_id')!=job_id or child['review_digest']!=request['review_digest'] or child['expires_at']<=time.time():
                             raise TemporarySlotError('The native temporary-slot review is unavailable, changed or expired')
-                        child.update(state='queued_execute',confirmed_at=time.time())
+                        child.update(state='queued_execute',confirmed_at=time.time(),worker_io_closed=False)
                         admitted=True
                         return commands.public(child)
                     child=child_store.change(admit)
@@ -176,7 +200,20 @@ class TemporarySlotResources(MySQLBinlogJobs):
                     if stopped():raise TemporarySlotError('Temporary-slot command stopped before native dispatch')
                     commands.update(child,state='active',native_dispatch_admitted=True,dispatched_at=time.time());armed.set()
                 def acknowledge(value):commands.update(child,native_command_acknowledged=True,native_acknowledgement=value)
-                result=native.command(child['source']['native_review'],acknowledge,dispatching=dispatching,finished=finish)
+                if selected['operation'] in CHANGES:
+                    from . import postgresql_slot_changes as changes
+                    def stream_acknowledge(value):
+                        commands.update(child,native_command_acknowledged=True,native_sql_acknowledged=True,native_sql_result=value)
+                        finish()
+                    def check_cancel():
+                        if stopped():raise InterruptedError('Native temporary logical output capture was stopped')
+                    with native.command_context(child['source']['native_review'],dispatching=dispatching,finished=finish):
+                        observed=changes.stream(native.connection,commands.directory(child),'wal_slot_sql_'+selected['operation'],selected['native_options'],
+                            acknowledge=stream_acknowledge,progress=lambda value:commands.update(child,progress=value),check_cancel=check_cancel)
+                    commands.update(child,change_artifact={**observed,'state':'verified','writer_closed':True})
+                    result={'native_output':observed,'slot_after':native.observation(selected['native_options']['slot']),
+                        'owned_temporary_slots':native.inventory()}
+                else:result=native.command(child['source']['native_review'],acknowledge,dispatching=dispatching,finished=finish)
                 commands.update(child,state='completed',result=result,finished_at=time.time(),worker_io_closed=True)
             return True
         except BaseException as error:
@@ -219,7 +256,8 @@ class TemporarySlotTransport:
                 with private_sql.cursor(connection) as query:query.execute('SET statement_timeout = 5000')
                 native=TemporarySlots(connection)
                 if (native.adapter_sha256!=record['program'].get('adapter_sha256') or
-                        hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=record['program'].get('channel_sha256')):
+                        hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=record['program'].get('channel_sha256') or
+                        hashlib.sha256(Path(__file__).with_name('postgresql_slot_changes.py').read_bytes()).hexdigest()!=record['program'].get('logical_output_sha256')):
                     raise TemporarySlotError('The native temporary-slot adapter changed before worker attachment')
                 jobs.update(record,native_resource_open_returned=True,native_resource_id=native.resource_id,
                     backend_pid=native.backend_pid,backend_started_epoch=native.backend_started_epoch,

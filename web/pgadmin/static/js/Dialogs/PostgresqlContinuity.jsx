@@ -107,7 +107,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   };
   return <Box aria-label="PostgreSQL continuity workspace" sx={{p:1,overflow:'auto',flex:1,minHeight:0,minWidth:0,height:'100%',boxSizing:'border-box'}}>
     <FormReference formKey="postgresql-continuity" />
-    <PostgresqlTemporarySlots post={post} databaseTargetId={databaseTargetId} />
+    <PostgresqlTemporarySlots post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} />
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

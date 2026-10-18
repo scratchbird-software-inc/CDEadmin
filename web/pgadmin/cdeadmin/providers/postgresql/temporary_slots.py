@@ -1,4 +1,5 @@
 """Native temporary slots bound to one independently owned PostgreSQL backend."""
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -12,7 +13,8 @@ class TemporarySlotError(ValueError):
     pass
 
 
-OPERATIONS={'physical_create','logical_create','physical_copy','logical_copy','advance','drop'}
+CHANGES={'peek_text','get_text','peek_binary','get_binary'}
+OPERATIONS={'physical_create','logical_create','physical_copy','logical_copy','advance','drop',*CHANGES}
 PROPERTIES="(pg_catalog.to_jsonb(s) || pg_catalog.jsonb_build_object('safe_wal_size',s.safe_wal_size::pg_catalog.text))"
 
 
@@ -25,6 +27,9 @@ def name(value):
 def options(operation,value):
     if not isinstance(operation,str) or operation not in OPERATIONS or not isinstance(value,dict):
         raise TemporarySlotError('Select a temporary native slot operation')
+    if operation in CHANGES:
+        from ...workspace.postgresql_slot_changes import options as change_options
+        return change_options(value)
     allowed={'slot','timeout_seconds'}
     if operation=='physical_create':allowed.add('reserve_wal')
     if operation=='logical_create':allowed.update(('plugin','two_phase'))
@@ -116,9 +121,10 @@ class TemporarySlots:
                 query.execute("SELECT pg_catalog.octet_length(pg_catalog.convert_to(%s::pg_catalog.text,pg_catalog.current_setting('server_encoding')::pg_catalog.name))",(selected['plugin'],))
                 if query.fetchone()[0]>63:raise TemporarySlotError('The output plugin name exceeds 63 bytes in this database encoding')
         target=self.observation(selected['slot'])
-        if operation in {'advance','drop'}:
+        if operation in {'advance','drop',*CHANGES}:
             if target is None or target['temporary'] is not True or str(target['active_pid'])!=self.backend_pid:
                 raise TemporarySlotError('Select a temporary slot owned by this retained backend')
+            if operation in CHANGES and target['slot_type']!='logical':raise TemporarySlotError('Select an owned temporary logical slot for decoding')
         elif target is not None:raise TemporarySlotError('The requested temporary slot name is already in use')
         source=self.observation(selected['source_slot']) if 'source_slot' in selected else None
         if 'source_slot' in selected and (source is None or source['slot_type']!=('logical' if operation.startswith('logical') else 'physical')):
@@ -126,8 +132,9 @@ class TemporarySlots:
         return {'operation':operation,'options':selected,'resource_id':self.resource_id,'backend_pid':self.backend_pid,
             'source':self.source,'slot_before':target,'copy_source_before':source,'adapter_sha256':self.adapter_sha256}
 
-    def command(self,reviewed,acknowledge,*,dispatching=None,finished=None):
-        """One native dispatch. The durable owner must never replay a lost result."""
+    @contextmanager
+    def command_context(self,reviewed,*,dispatching=None,finished=None):
+        """One owned native dispatch, with observer termination before later SQL."""
         current=self.review(reviewed['operation'],reviewed['options'])
         if current!=reviewed:raise TemporarySlotError('The retained backend, role or reviewed slot state changed')
         selected=reviewed['options'];timeout=selected['timeout_seconds']
@@ -137,16 +144,10 @@ class TemporarySlots:
         try:
             with cursor(self.connection) as query:
                 query.execute("SELECT pg_catalog.set_config('statement_timeout',%s,false)",('0' if timeout is None else str(timeout*1000),))
-                sql,bindings=statement(reviewed['operation'],selected)
                 safe_cleanup=False
                 try:
                     if dispatching is not None:dispatching()
-                    query.execute(sql,bindings);returned=query.fetchone()
-                    acknowledgement={'resource_id':self.resource_id,'backend_pid':self.backend_pid,'operation':reviewed['operation'],
-                        'slot':selected['slot'],'native_command_returned':True,
-                        'native_result':None if reviewed['operation']=='drop' else {'slot_name':returned[0],'lsn':returned[1]},
-                        'temporary':True,'connection_release_returned':False}
-                    acknowledge(acknowledgement)
+                    yield
                 finally:
                     # The resource owner joins its cancellation observer here,
                     # before restoring settings or reading later liveness.
@@ -159,6 +160,18 @@ class TemporarySlots:
                 try:
                     with cursor(self.connection) as query:query.execute("SELECT pg_catalog.set_config('statement_timeout',%s,false)",(prior,))
                 except BaseException:self.usable=False;raise
+
+    def command(self,reviewed,acknowledge,*,dispatching=None,finished=None):
+        """One native dispatch. The durable owner must never replay a lost result."""
+        with self.command_context(reviewed,dispatching=dispatching,finished=finished):
+            with cursor(self.connection) as query:
+                sql,bindings=statement(reviewed['operation'],reviewed['options'])
+                query.execute(sql,bindings);returned=query.fetchone()
+            acknowledgement={'resource_id':self.resource_id,'backend_pid':self.backend_pid,'operation':reviewed['operation'],
+                'slot':reviewed['options']['slot'],'native_command_returned':True,
+                'native_result':None if reviewed['operation']=='drop' else {'slot_name':returned[0],'lsn':returned[1]},
+                'temporary':True,'connection_release_returned':False}
+            acknowledge(acknowledgement)
         # This is a later liveness observation, distinct from native return.
-        return {'acknowledgement':acknowledgement,'slot_after':self.observation(selected['slot']),
+        return {'acknowledgement':acknowledgement,'slot_after':self.observation(reviewed['options']['slot']),
             'owned_temporary_slots':self.inventory()}

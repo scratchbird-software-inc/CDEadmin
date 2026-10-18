@@ -261,13 +261,14 @@ remains open for every engine; a scoped workflow is not the full denominator.
        reservation/copy, logical creation/copy and slot advancement on an
        explicitly selected database; native logical text/binary peek/get with
        exact artifacts and independent acknowledgement/publication recovery;
-       retained temporary physical/logical slot create/copy/advance/drop,
+       retained temporary physical/logical slot create/copy/advance/drop and
+       text/binary peek/get with independently verified retained artifacts,
        paged owner-backend inventory, explicit resource release and independent
        cleanup observation; additional native statistics collectors.
      - Production restore/cutover, archive retention/restart and replication-slot
        administration, remote-host lifecycle/upgrades and complete installed-
-       extension/language/HA coverage. Temporary logical decoding and native
-       replication-protocol streams require their remaining retained adapters.
+       extension/language/HA coverage. Native replication-protocol streams
+       require their remaining retained adapters.
    * - DuckDB 1.5.2
      - Native attached/session catalogs, functions/types/macros, retained
        completion, native parsing and nested/indexed/positional member binding,
@@ -2113,3 +2114,16 @@ retained changesets/patchsets. Native regressions and authenticated HTTP/browser
 qualification independently apply and verify output. The immediate native
 diff-into-existing-capture control retains its separate semantics. Transient DDN,
 installed-module and other product gaps remain open; history testing is deferred.
+
+PostgreSQL retained temporary logical output
+-------------------------------------------
+
+Temporary logical slots now provide reviewed native text/binary peek/get on
+their owning backend, with ordered plugin options and native transaction
+thresholds. Native acknowledgement precedes private artifact publication;
+uncertain consumption is never replayed. Retained bytes support bounded
+previews, streamed downloads, checksum recovery and confirmed removal after
+backend release. Recovery preserves the original command outcome. Independent
+permanent-slot comparisons and authenticated API/browser qualification cover
+this scope. Retained replication-protocol streams, broader continuity and the
+remaining product matrix remain open; ScratchBird history testing is deferred.

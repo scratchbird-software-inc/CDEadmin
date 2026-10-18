@@ -42,6 +42,10 @@ def options(value):
                 not isinstance(pair['value'], str) or '\x00' in pair['value'] or
                 len(pair['name']) > 1024 or len(pair['value']) > 1048576):
             raise ContinuityError('Native output plugin options require exact name/value strings')
+        try:
+            pair['name'].encode('utf8'); pair['value'].encode('utf8')
+        except UnicodeError:
+            raise ContinuityError('Native output plugin options require valid Unicode strings') from None
         selected['plugin_options'].append(dict(pair))
     return selected
 
@@ -118,11 +122,33 @@ def payload(jobs, record):
         yield source
 
 
+@contextmanager
+def artifact_lock(jobs, record):
+    """Serialize stopped-file inspection and removal across HTTP workers."""
+    from ..operations.fileio import exclusive_file_lock
+    path = jobs.directory(record)/'.logical-artifact.lock'
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        private_file(path)
+        with exclusive_file_lock(descriptor):
+            current = jobs.load(record['job_id'], record['owner'], record['endpoint_id'])
+            yield current
+    finally:
+        os.close(descriptor)
+
+
 def reconcile(jobs, record):
+    with artifact_lock(jobs, record) as current:
+        if current.get('artifact_removed'):
+            raise ContinuityError('The owned logical capture was removed')
+        return _reconcile(jobs, current)
+
+
+def _reconcile(jobs, record):
     """Inspect owned bytes; only an already recorded native ACK can prove completion."""
     if record['operation'] not in OPERATIONS:
         raise ContinuityError('Select a native logical change job')
-    if jobs.observed(record)['state'] not in {'unknown', 'completed', 'not_dispatched', 'cancelled'}:
+    if jobs.observed(record)['state'] not in {'unknown', 'completed', 'not_dispatched', 'cancelled', 'failed'}:
         raise ContinuityError('Wait for the native logical change writer to stop')
     with jobs._worker_maps_lock: worker = jobs.workers.get(record['job_id'])
     if worker is not None and worker[0].is_alive():

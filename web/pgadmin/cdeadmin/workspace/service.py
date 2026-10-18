@@ -1597,6 +1597,7 @@ class ProviderWorkspaceService:
         try:return action(self,server,operation,request)
         except (ValueError,ContinuityError,PostgreSQLProviderError) as error:raise ProviderWorkspaceError(str(error)) from None
         except NativeError as error:raise ProviderWorkspaceError('Native temporary-slot admission failed ('+(error.sqlstate or type(error).__name__)+')') from None
+        except OSError:raise ProviderWorkspaceError('The owned temporary-slot store or artifact is unavailable') from None
 
     def mysql_clone(self, server, operation, request):
         from .mysql_clone_service import action

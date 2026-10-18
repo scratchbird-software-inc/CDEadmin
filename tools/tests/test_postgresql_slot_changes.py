@@ -66,6 +66,8 @@ def test_native_output_is_lossless_and_ack_precedes_verified_artifact(decoding, 
     {'upto_lsn': '1/100000000'}, {'plugin_options': [{'name': 'x', 'value': None}]},
     {'plugin_options': [{'name': '', 'value': 'x'}]}, {'plugin_options': [{'name': 'x', 'value': 'a\x00b'}]},
     {'plugin_options': 'proto_version=4'}, {'unsafe_sql': 'SELECT 1'},
+    {'plugin_options': [{'name': 'x', 'value': '\ud800'}]},
+    {'plugin_options': [{'name': '\udfff', 'value': 'x'}]},
 ])
 def test_invalid_decoding_options_do_not_dispatch(options):
     with pytest.raises(ContinuityError): changes.options({'slot': 'owned_slot', **options})

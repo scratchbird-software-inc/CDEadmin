@@ -25,7 +25,7 @@ def qualify(output,*,browser_binary=None,driver_binary=None):
     from pgadmin.model import db,User,ServerGroup,Server
     from pgadmin.cdeadmin.workspace import service_for_app
     from flask import url_for
-    app=create_app('ScratchRobin-native-temporary-http');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start();client=app.test_client();jobs=None;proof={'complete':False,'history_testing':'not run','full_product_complete':False,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in [Path(__file__),ROOT/'web/pgadmin/cdeadmin/providers/postgresql/temporary_slots.py',*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('postgresql_temporary_slot*.py')),ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlTemporarySlots.jsx',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlContinuity.jsx']}}
+    app=create_app('ScratchRobin-native-temporary-http');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY='';app.run_before_app_start();client=app.test_client();jobs=None;proof={'complete':False,'history_testing':'not run','full_product_complete':False,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in [Path(__file__),ROOT/'web/pgadmin/cdeadmin/providers/postgresql/temporary_slots.py',*list((ROOT/'web/pgadmin/cdeadmin/workspace').glob('postgresql_temporary_slot*.py')),ROOT/'web/pgadmin/cdeadmin/workspace/postgresql_slot_changes.py',ROOT/'web/pgadmin/cdeadmin/workspace/service.py',ROOT/'web/pgadmin/browser/server_groups/servers/__init__.py',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlTemporarySlots.jsx',ROOT/'web/pgadmin/static/js/Dialogs/PostgresqlContinuity.jsx']}}
     try:
      with server(out/'fixture',server_options=('-c','wal_level=logical')) as (route,password,fixture):
       args={'host':route['host'],'port':route['port'],'user':route['user'],'dbname':route['database'],'password':password,'autocommit':True}
@@ -69,6 +69,43 @@ def qualify(output,*,browser_binary=None,driver_binary=None):
        assert observer.execute("SELECT temporary,active_pid::text FROM pg_replication_slots WHERE slot_name='sr_http_temporary'").fetchone()==(True,opened['backend_pid'])
        page=http('inventory',resource_id=rid,offset=0,limit=1);page=wait_child(page['job_id'],{'completed'})
        assert page['result']['total']==1 and page['result']['slots'][0]['slot_name']=='sr_http_temporary'
+       def run_command(operation,**options):
+        review=http('command_review',resource_id=rid,operation=operation,options=options)
+        review=wait_child(review['job_id'],{'reviewed'})
+        admitted={'resource_id':rid,'job_id':review['job_id'],'review_digest':review['review_digest'],'confirmed':True}
+        http('command_start',**admitted);done=wait_child(review['job_id'],{'completed'})
+        assert http('command_start',**admitted)['state']=='completed'
+        return done
+       observer.execute('CREATE TABLE sr_http_data(id bigint PRIMARY KEY,body text,payload bytea)')
+       observer.execute('CREATE PUBLICATION sr_http_publication FOR TABLE sr_http_data')
+       for suffix,plugin in [('text','test_decoding'),('binary','pgoutput')]:
+        observer.execute('SELECT * FROM pg_create_logical_replication_slot(%s,%s)',('sr_http_reference_'+suffix,plugin))
+        run_command('logical_create',slot='sr_http_'+suffix,plugin=plugin)
+       observer.execute('INSERT INTO sr_http_data VALUES(%s,%s,%s)',(9007199254740993,'native 😀 雪',b'\x00\x80\xff'))
+       saved_capture=None
+       for mode,pairs in [('text',[{'name':'include-xids','value':'0'},{'name':'skip-empty-xacts','value':'1'}]),('binary',[{'name':'proto_version','value':'4'},{'name':'publication_names','value':'sr_http_publication'},{'name':'binary','value':'true'}])]:
+        flattened=[part for pair in pairs for part in (pair['name'],pair['value'])]
+        function='pg_logical_slot_peek_binary_changes' if mode=='binary' else 'pg_logical_slot_peek_changes'
+        data="encode(data,'base64')" if mode=='binary' else 'data'
+        expected=observer.execute('SELECT lsn::text,xid::text,'+data+' FROM '+function+'(%s,NULL,NULL,VARIADIC %s::text[])',('sr_http_reference_'+mode,flattened)).fetchall()
+        assert expected
+        for operation in ('peek_'+mode,'get_'+mode,'get_'+mode):
+         done=run_command(operation,slot='sr_http_'+mode,upto_nchanges=None,plugin_options=pairs)
+         request={'database_target_id':target,'resource_id':rid,'job_id':done['job_id']}
+         response=client.post(url,data={'action':'postgresql_temporary_slots_change_download','payload':json.dumps(request)})
+         assert response.status_code==200 and response.headers['X-Export-Completeness']=='verified'
+         raw=response.get_data();response.close()
+         assert hashlib.sha256(raw).hexdigest()==done['change_artifact']['sha256']
+         assert [(row['lsn'],row['xid'],row['data']) for row in map(json.loads,raw.splitlines())]==expected
+         page=http('change_preview',resource_id=rid,job_id=done['job_id'],offset='0',limit=1)
+         assert len(page['rows'])==min(1,len(expected))
+         if operation.startswith('get_'):expected=[]
+         saved_capture=(done,request,raw)
+        observer.execute('SELECT pg_drop_replication_slot(%s)',('sr_http_reference_'+mode,))
+       # Keep one nonempty artifact for download after backend release below.
+       observer.execute("INSERT INTO sr_http_data VALUES(2,'offline artifact',NULL)")
+       done=run_command('get_text',slot='sr_http_text',upto_nchanges=None,plugin_options=[{'name':'include-xids','value':'0'},{'name':'skip-empty-xacts','value':'1'}])
+       saved_capture=(done,{'database_target_id':target,'resource_id':rid,'job_id':done['job_id']})
        other='postgresql-database:1' if target!='postgresql-database:1' else 'postgresql-database:2'
        refused=client.post(url,json={'action':'postgresql_temporary_slots_status','request':{'database_target_id':other,'job_id':rid}})
        assert refused.status_code<500 and (refused.status_code!=200 or not refused.get_json().get('success'))
@@ -80,6 +117,19 @@ def qualify(output,*,browser_binary=None,driver_binary=None):
         if observed['backend_cleanup_observation']['temporary_slot_cleanup_observed']:break
         assert time.monotonic()<deadline;time.sleep(.05)
        assert int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_http_temporary'").fetchone()[0])==0
+       done,request=saved_capture
+       response=client.post(url,data={'action':'postgresql_temporary_slots_change_download','payload':json.dumps(request)})
+       assert response.status_code==200 and response.get_data();response.close()
+       http('change_reconcile',resource_id=rid,job_id=done['job_id'])
+       bad=client.post(url,json={'action':'postgresql_temporary_slots_change_remove','request':{**request,'confirmation':'wrong'}})
+       assert bad.status_code<500 and (bad.status_code!=200 or not bad.get_json().get('success'))
+       removed=http('change_remove',resource_id=rid,job_id=done['job_id'],confirmation=done['job_id'])
+       assert removed['artifact_removed'] and http('change_remove',resource_id=rid,job_id=done['job_id'],confirmation=done['job_id'])['artifact_removed']
+       response=client.post(url,data={'action':'postgresql_temporary_slots_change_download','payload':json.dumps(request)})
+       assert response.status_code==400;response.close()
+       refused=client.post(url,json={'action':'postgresql_temporary_slots_change_reconcile','request':request})
+       assert refused.status_code<500 and (refused.status_code!=200 or not refused.get_json().get('success'))
+       proof.update(native_logical_text_and_binary_independently_compared=True,offline_artifact_download_and_confirmed_removal=True,duplicate_native_get_not_replayed=True)
        proof.update(complete=not bool(browser_binary),authenticated_native_resource_and_command_workflow=True,confirmation_and_database_scope_refusals=True,native_inventory_paging=True,independent_native_temporary_slot_verified=True,separate_local_close_and_backend_cleanup=True,original_command_outcomes_inferred=observed['backend_cleanup_observation']['original_command_outcomes_inferred'])
        if browser_binary:proof['browser']=browser(app,out,server_id,password,observer,browser_binary,driver_binary)
        proof['complete']=True
@@ -103,7 +153,7 @@ def browser(app,output,server_id,password,observer,binary,driver_binary):
     try:
         options=webdriver.ChromeOptions();options.binary_location=binary
         for flag in ('--headless=new','--no-sandbox','--disable-dev-shm-usage','--window-size=1800,1200','--user-data-dir='+str(output/'browser-profile')):options.add_argument(flag)
-        options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
+        options.add_experimental_option('prefs',{'download.default_directory':str(output/'downloads'),'download.prompt_for_download':False});options.set_capability('goog:loggingPrefs',{'browser':'ALL'})
         driver=webdriver.Chrome(options=options,service=Service(driver_binary) if driver_binary else Service())
         driver.get('http://127.0.0.1:'+str(http.server_port)+'/browser/');wait=WebDriverWait(driver,90,ignored_exceptions=(StaleElementReferenceException,))
         ensure_data_explorer(wait);expand(wait,'Connectors');expand(wait,'PostgreSQL')
@@ -182,6 +232,30 @@ def browser(app,output,server_id,password,observer,binary,driver_binary):
         click('Inspect owned temporary slots')
         inventory=receipt('Owned native temporary slots',lambda r:r.get('total')==1)
         assert inventory['slots'][0]['slot_name']=='sr_browser_temporary'
+        control=field('Temporary slot operation');control.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.get_attribute('textContent').strip()=='Create temporary logical slot'),None)).click()
+        from selenium.webdriver.common.keys import Keys
+        def replace_field(label,value):
+            control=field(label);control.send_keys(Keys.CONTROL,'a');control.send_keys(value)
+        replace_field('Exact temporary slot name','sr_browser_logical');replace_field('Temporary slot output plugin','test_decoding')
+        click('Review temporary slot command');checked('Confirm native temporary slot command');click('Run reviewed temporary slot command')
+        created=receipt('Native temporary slot command receipt',lambda r:r['state']=='completed' and r['options']['operation']=='logical_create')
+        observer.execute('INSERT INTO sr_http_data VALUES(%s,%s,NULL)',(3,'browser native 😀'))
+        control=field('Temporary slot operation');control.click()
+        wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.get_attribute('textContent').strip()=='Consume temporary logical text'),None)).click()
+        click('Add ordered temporary plugin option');replace_field('Temporary plugin option 1 name','include-xids');replace_field('Temporary plugin option 1 value','0')
+        click('Review temporary slot command');checked('Confirm native temporary slot command');click('Run reviewed temporary slot command')
+        logical=receipt('Native temporary slot command receipt',lambda r:r['state']=='completed' and r['options']['operation']=='get_text' and (r.get('change_artifact') or {}).get('state')=='verified')
+        click('Preview temporary logical records')
+        preview=receipt('Temporary logical output preview',lambda r:any('browser native' in row.get('data','') for row in r.get('rows',[])))
+        assert logical['native_sql_acknowledged'] and preview['native_sql_acknowledged']
+        click('Download temporary logical capture')
+        def downloaded(browser):
+            paths=list((output/'downloads').glob('slot-changes*.jsonl'))
+            return paths[0] if paths and not list((output/'downloads').glob('*.crdownload')) else False
+        downloaded=wait.until(downloaded);assert hashlib.sha256(downloaded.read_bytes()).hexdigest()==logical['change_artifact']['sha256']
+        checked('Remove this temporary logical capture; retain receipt');click('Remove temporary logical capture')
+        receipt('Native temporary slot command receipt',lambda r:r.get('artifact_removed') is True)
         checked('Release this backend and all its temporary slots');click('Release temporary slot resource')
         closed=receipt('Native temporary slot resource receipt',lambda r:r['state']=='closed' and r.get('worker_io_closed'))
         assert closed['native_owner_connection_close_returned'] and closed['remote_cleanup_inferred'] is False
@@ -192,7 +266,7 @@ def browser(app,output,server_id,password,observer,binary,driver_binary):
         console=[item for item in driver.get_log('browser') if item.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(console,indent=2)+'\n');assert not console,console
         return {'complete':True,'resource_id':resource['job_id'],'command_id':command['job_id'],'console_errors':0,
-            'native_temporary_slot_lifetime_verified':True,'native_inventory_verified':True,'independent_backend_cleanup_verified':True}
+            'native_temporary_slot_lifetime_verified':True,'native_inventory_verified':True,'logical_text_preview_download_and_remove_verified':True,'independent_backend_cleanup_verified':True}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

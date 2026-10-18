@@ -20,6 +20,7 @@ def program():
     from ..providers.postgresql import temporary_slots
     return {'kind':'native-postgresql-temporary-slot-resource','adapter_sha256':hashlib.sha256(Path(temporary_slots.__file__).read_bytes()).hexdigest(),
         'channel_sha256':hashlib.sha256(Path(__file__).with_name('postgresql_temporary_slot_jobs.py').read_bytes()).hexdigest(),
+        'logical_output_sha256':hashlib.sha256(Path(__file__).with_name('postgresql_slot_changes.py').read_bytes()).hexdigest(),
         'execution_host':{'kind':'application-host','hostname':socket.gethostname(),'platform':sys.platform}}
 
 
@@ -71,9 +72,35 @@ def action(service,server,operation,request):
     if operation=='reconcile':
         if set(fields)!={'job_id'}:raise TemporarySlotError('Select one temporary-slot resource cleanup observation')
         return reconcile(service,server,target,jobs,jobs.load(fields['job_id'],owner,endpoint))
-    if operation in {'inventory','command_status','command_list','command_cancel','command_review','command_start'}:
+    if operation in {'inventory','command_status','command_list','command_cancel','command_review','command_start','change_preview','change_reconcile','change_remove'}:
         resource=jobs.load(fields.get('resource_id'),owner,endpoint);commands=jobs.commands(resource)
         remaining={key:value for key,value in fields.items() if key!='resource_id'}
+        if operation in {'change_preview','change_reconcile','change_remove'}:
+            from . import postgresql_slot_changes as changes
+            child=commands.load(remaining.get('job_id'),owner,endpoint)
+            allowed={'job_id','offset','limit'} if operation=='change_preview' else {'job_id','confirmation'} if operation=='change_remove' else {'job_id'}
+            if set(remaining)-allowed or 'job_id' not in remaining:raise TemporarySlotError('Select exact native logical capture options')
+            if operation=='change_remove' and (set(remaining)!={'job_id','confirmation'} or remaining['confirmation']!=child['job_id']):
+                raise TemporarySlotError('Confirm removal of this owned logical capture')
+            if child.get('artifact_removed'):
+                if operation=='change_remove':return commands.public(commands.observed(child))
+                raise TemporarySlotError('The owned logical capture was removed')
+            if operation=='change_preview':return changes.preview(commands,child,remaining)
+            if operation=='change_reconcile':
+                if set(remaining)!={'job_id'}:raise TemporarySlotError('Select one native logical capture for inspection')
+                if commands.observed(child).get('worker_io_closed') is not True:raise TemporarySlotError('Wait for the native logical artifact writer to stop')
+                changes.reconcile(commands,child)
+                return commands.public(commands.observed(commands.load(child['job_id'],owner,endpoint)))
+            with changes.artifact_lock(commands,child) as current:
+                if current.get('artifact_removed'):return commands.public(commands.observed(current))
+                if commands.observed(current).get('worker_io_closed') is not True:raise TemporarySlotError('Wait for the native logical artifact writer to stop')
+                with changes.payload(commands,current) as stream:
+                    import os
+                    before=changes.file_identity(os.fstat(stream.fileno()))
+                path=commands.directory(current)/current['change_artifact']['filename']
+                if changes.file_identity(path.lstat())!=before:raise TemporarySlotError('The owned logical artifact changed before removal')
+                path.unlink();commands.update(current,artifact_removed=True,artifact_removed_at=time.time())
+            return commands.get(child['job_id'],owner,endpoint)
         if operation in {'inventory','command_review','command_start'} and resource['program']!=program():
             raise TemporarySlotError('The retained resource uses another application-host adapter; release it before opening a new resource')
         if operation=='inventory':
@@ -84,7 +111,7 @@ def action(service,server,operation,request):
             return commands.list(owner,endpoint,**remaining)
         if operation in {'command_status','command_cancel'}:
             if set(remaining)!={'job_id'}:raise TemporarySlotError('Select one temporary-slot command receipt')
-            return commands.get(remaining['job_id'],owner,endpoint) if operation=='command_status' else jobs.cancel_command(resource['job_id'],owner,endpoint,remaining['job_id'])
+            return commands.public(commands.observed(commands.load(remaining['job_id'],owner,endpoint))) if operation=='command_status' else jobs.cancel_command(resource['job_id'],owner,endpoint,remaining['job_id'])
         if operation=='command_start':return jobs.queue_execute(resource['job_id'],owner,endpoint,remaining)
         if set(remaining)!={'operation','options'}:raise TemporarySlotError('Review exact native temporary-slot command options')
         selected=options(remaining['operation'],remaining['options'])
@@ -121,6 +148,25 @@ def action(service,server,operation,request):
         return jobs.start(fields,owner,endpoint,{'source':source,'configuration':configuration,'program':native_program},TemporarySlotTransport(admitted))
     finally:
         if transport is not None:transport.close()
+
+
+def change_download(service,server,request):
+    from flask import send_file
+    from . import postgresql_slot_changes as changes
+    if not isinstance(request,dict) or set(request)!={'database_target_id','resource_id','job_id'}:
+        raise TemporarySlotError('Select one owned retained logical capture')
+    jobs,owner,endpoint=manager(service,server,request['database_target_id'])
+    resource=jobs.load(request['resource_id'],owner,endpoint);commands=jobs.commands(resource)
+    child=commands.load(request['job_id'],owner,endpoint)
+    if child.get('artifact_removed'):raise TemporarySlotError('The owned logical capture was removed')
+    opened=changes.payload(commands,child);stream=opened.__enter__();artifact=child['change_artifact']
+    try:
+        response=send_file(stream,mimetype='application/x-ndjson',as_attachment=True,download_name=artifact['filename'],conditional=False,max_age=0)
+        response.content_length=int(artifact['artifact_bytes']);response.direct_passthrough=False
+        response.headers.update({'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff',
+            'X-Content-SHA256':artifact['sha256'],'X-Export-Completeness':'verified' if artifact['state']=='verified' else 'incomplete'})
+        response.call_on_close(lambda:opened.__exit__(None,None,None));return response
+    except BaseException:opened.__exit__(None,None,None);raise
 
 
 def reconcile(service,server,target,jobs,record):
