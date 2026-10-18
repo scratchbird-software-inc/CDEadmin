@@ -146,6 +146,7 @@ def test_reconciliation_refuses_a_backup_writer_with_no_confirmed_termination(jo
     with pytest.raises(ContinuityError,match='termination is unconfirmed'):
         manager.require_stopped_writer(manager.load(record['job_id'],1,endpoint))
     manager.update(record,progress={'pid':999999999,'process_create_time':0})
+    manager.directory(record).mkdir(parents=True)
     manager.require_stopped_writer(manager.load(record['job_id'],1,endpoint))
 
 

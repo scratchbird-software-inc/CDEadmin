@@ -60,6 +60,7 @@ def action(service, server, operation, request):
     if operation=='list':
         if set(request)-{'offset','limit'}:raise ContinuityError('Invalid backup receipt page')
         return jobs.list(owner,endpoint,**request)
+    if operation=='reconcile_writer':return jobs.reconcile_writer(request,owner,endpoint)
     if operation in {'status','cancel'}:
         if set(request)!={'job_id'}:raise ContinuityError('Select one native continuity job')
         return (jobs.get if operation=='status' else jobs.cancel)(request['job_id'],owner,endpoint)

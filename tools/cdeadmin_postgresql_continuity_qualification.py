@@ -7,6 +7,7 @@ History and ScratchBird qualification are intentionally excluded.
 """
 import argparse
 import builtins
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pitr=False):
+def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pitr=False, reconcile_writer=False):
     from postgresql_qualification_support import server as owned_server
     import psycopg
     output=Path(output).resolve()
@@ -234,10 +235,40 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pit
         qualified_jobs=(full,incremental,combined,tar_base,tar_incremental,tar_combined,plain_incremental,mixed_combined,wrong_chain,*tar_jobs,verified,recovered,*chain_recoveries,full_recovery,latin_recovery,*tar_recoveries,wrong_count,no_result,*pitr_jobs)
         page=http('list',{'offset':0,'limit':2});assert page['total']==len(qualified_jobs) and len(page['jobs'])==2 and page['more']
         for path in Path(str(jobs.path)+'.jobs').glob('*.json'):assert password not in path.read_text()
-        if browser_binary:
-            proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary,
-                pitr_target=proof['pitr']['targets'][0]['target'] if pitr else None)
-            proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
+        from postgresql_qualification_support import waiting_native
+        from pgadmin.cdeadmin.providers.postgresql.continuity import binary_paths
+        import psutil
+        original=jobs.load(full['job_id'],uid,endpoint)
+        def interrupted(process):
+            jobs.update(original,state='active',worker_identity=[999999999,0],tool_observation=None,
+                verification_observation=None,writer_reconciliation=None,
+                progress={'pid':process.pid,'process_create_time':process.create_time()})
+        if reconcile_writer:
+            with waiting_native(jobs.directory(original),binary_paths(binary_path),orphan=True) as writer:
+                interrupted(writer)
+                assert http('status',{'job_id':full['job_id']})['state']=='unknown'
+                result=http('reconcile_writer',{'job_id':full['job_id'],'confirmed':True})
+                assert result['state']=='unknown' and not result['automatic_retry']
+                receipt=result['writer_reconciliation']
+                assert receipt['process_scope_stopped'] and not receipt['artifact_verified'] and not receipt['remote_finality_inferred']
+                assert receipt['processes'][0]['pid']==writer.pid
+                assert not writer.is_running() or writer.status()==psutil.STATUS_ZOMBIE
+                assert http('reconcile_writer',{'job_id':full['job_id'],'confirmed':True})['writer_reconciliation']==receipt
+                reverified=submit('verify',base_job_id=full['job_id'])
+                assert reverified['verification_scope']['wal']
+                qualified_jobs=(*qualified_jobs,reverified)
+            proof['checks'].append('offline-authenticated-http-native-orphan-writer-reconciliation-preserves-unknown-and-independent-backup-verification')
+        with waiting_native(jobs.directory(original),binary_paths(binary_path),orphan=True) if reconcile_writer and browser_binary else nullcontext() as writer:
+            if writer is not None:interrupted(writer)
+            if browser_binary:
+                proof['browser']=qualify_browser(app,output,verified['job_id'],browser_binary,driver_binary,
+                    pitr_target=proof['pitr']['targets'][0]['target'] if pitr else None,
+                    writer_job_id=full['job_id'] if writer is not None else None)
+                if writer is not None:
+                    assert not writer.is_running() or writer.status()==psutil.STATUS_ZOMBIE
+                    result=http('status',{'job_id':full['job_id']})
+                    assert result['state']=='unknown' and result['writer_reconciliation']['process_scope_stopped']
+                proof['checks'].append('native-browser-opens-offline-server-menu-loads-jobs-and-inspects-verification-receipt')
         proof.update(complete=True,job_ids=[value['job_id'] for value in qualified_jobs],
                      source=combined['source'],native_artifact_password_absent_from_receipts=True)
     finally:
@@ -260,7 +291,7 @@ def qualify(output, binary_path, *, browser_binary=None, driver_binary=None, pit
     return proof
 
 
-def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_target=None):
+def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_target=None, writer_job_id=None):
     """Exercise the actual disconnected-server callback and compiled panel."""
     import threading
     from werkzeug.serving import make_server
@@ -325,7 +356,32 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_
             wait.until(attempt)
         click('Load backup jobs')
         wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Native physical backup jobs"]'))
-        wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+job_id+'"]')).click()
+        def inspect(selected):
+            def move(direction):
+                control=driver.find_element(By.CSS_SELECTOR,'button[aria-label="Go to '+direction+' page"]')
+                if not control.is_enabled():return False
+                previous=driver.find_element(By.CSS_SELECTOR,'table[aria-label="Native physical backup jobs"]').text
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',control);control.click()
+                wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'table[aria-label="Native physical backup jobs"]').text!=previous)
+                return True
+            for _page in range(100):
+                if not move('previous'):break
+            for _page in range(100):
+                controls=driver.find_elements(By.CSS_SELECTOR,'button[aria-label="Inspect backup '+selected+'"]')
+                if controls:
+                    driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',controls[0]);controls[0].click();return
+                if not move('next'):break
+            raise AssertionError('Owned native receipt is unavailable in the paged browser list')
+        if writer_job_id:
+            inspect(writer_job_id)
+            control=wait.until(lambda browser:next((item for item in browser.find_elements(By.TAG_NAME,'button') if item.text.strip()=='Reconcile native writer'),None))
+            assert not control.is_enabled()
+            label=driver.find_element(By.XPATH,"//label[contains(.,\"Confirm stopping this job's remaining native utilities\")]")
+            driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',label)
+            label.click();click('Reconcile native writer')
+            wait.until(lambda browser:'Owned native utilities are stopped.' in browser.find_element(By.TAG_NAME,'body').text)
+            driver.save_screenshot(str(output/'writer-reconciliation.png'))
+        inspect(job_id)
         def receipt_message(text):
             for element in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'):
                 if text in element.get_attribute('textContent'):
@@ -374,6 +430,7 @@ def qualify_browser(app, output, job_id, browser_binary, driver_binary, *, pitr_
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n')
         assert not errors
         return {'complete':True,'source_server_stopped':True,'console_errors':0,'reviewed_native_recovery_drill':True,
+                'native_writer_reconciled':writer_job_id is not None,
                 'point_in_time_recovery':pitr_target is not None,
                 'console_scope':'offline-continuity-workspace-after-shell-startup',
                 'expected_native_password_admission_errors':sum(map(expected,messages)),'screenshot':'offline-continuity.png'}
@@ -477,9 +534,10 @@ if __name__=='__main__':
     parser.add_argument('--browser-binary')
     parser.add_argument('--driver-binary')
     parser.add_argument('--pitr',action='store_true')
+    parser.add_argument('--reconcile-writer',action='store_true')
     parser.add_argument('--resume-browser-from',type=Path)
     args=parser.parse_args()
     if args.resume_browser_from:
         resume_pitr_browser(args.resume_browser_from,args.evidence,args.binary_path,args.browser_binary,args.driver_binary)
     else:
-        qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,pitr=args.pitr)
+        qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,pitr=args.pitr,reconcile_writer=args.reconcile_writer)

@@ -612,6 +612,20 @@ as unknown and is never automatically restarted. Verification of uncertain
 artifacts requires observed writer termination. Receipt inspection and artifact
 verification remain available when the source server is offline.
 
+Interrupted native jobs expose an explicitly confirmed writer reconciliation
+action. It checks process creation identity, the job's owner/endpoint workspace
+and the reviewed utility's executable hash before stopping an owned process and
+its children. An orphaned native utility can be found even if the application
+worker stopped before saving its first process heartbeat. A reused process ID,
+different workspace or different executable never grants termination authority.
+New reviews bind the application hostname; another host cannot reconcile their
+writers. Legacy receipts without that identity require an observed owned local
+utility before reconciliation can establish the host. Reconciliation retains
+the uncertain job outcome and records local termination
+separately from native artifact verification and remote operation finality.
+Verification checks the reconciled workspace again before inspecting its files.
+This action works offline and never automatically repeats the interrupted job.
+
 ``tools/cdeadmin_postgresql_continuity_qualification.py`` exercises the
 application's authenticated HTTP routes against a uniquely owned PostgreSQL
 18.3 fixture. It independently restores the reconstructed chain, including

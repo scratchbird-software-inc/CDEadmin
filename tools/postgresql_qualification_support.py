@@ -118,3 +118,43 @@ def local_server(output,binary_path):
             else:proof['owned_server_stopped']=True
         (output/'fixture.json').write_text(json.dumps(proof,indent=2)+'\n')
         if process is not None and not proof['owned_server_stopped']:raise RuntimeError('Owned native PostgreSQL shutdown is unconfirmed')
+
+
+@contextmanager
+def waiting_native(directory, paths, *, orphan=False):
+    """A real pg_basebackup waits on this fixture's TCP socket, never a DB."""
+    import psutil
+    import sys
+    directory.mkdir(parents=True,exist_ok=True)
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(10)
+        arguments=[paths['pg_basebackup'],'--pgdata='+str(directory/'backup'),
+                   '--host=127.0.0.1','--port='+str(listener.getsockname()[1]),'--username=owned','--no-password']
+        environment={**os.environ,'PGSSLMODE':'disable','PGCONNECT_TIMEOUT':'120'}
+        process=None;connection=None;child=None
+        try:
+            with (directory/'fixture-tool.log').open('wb') as log:
+                if orphan:
+                    identity=directory/'fixture-process.json'
+                    program=('import json,os,pathlib,psutil,subprocess,sys; '
+                             'p=subprocess.Popen(sys.argv[2:],close_fds=True); '
+                             'pathlib.Path(sys.argv[1]).write_text(json.dumps({"pid":p.pid,"created":psutil.Process(p.pid).create_time()}))')
+                    subprocess.run([sys.executable,'-c',program,str(identity),*arguments],cwd=directory,
+                                   env=environment,stdout=log,stderr=log,check=True,timeout=10)
+                    value=json.loads(identity.read_text());process=psutil.Process(value['pid'])
+                    assert process.create_time()==value['created']
+                else:
+                    child=subprocess.Popen(arguments,cwd=directory,env=environment,stdout=log,stderr=log)
+                    process=psutil.Process(child.pid)
+                connection,_address=listener.accept()
+                yield process
+        finally:
+            if process is not None:
+                try:
+                    if process.is_running() and process.status()!=psutil.STATUS_ZOMBIE:
+                        process.kill();process.wait(timeout=5)
+                except psutil.NoSuchProcess:pass
+                except psutil.TimeoutExpired:
+                    assert process.status()==psutil.STATUS_ZOMBIE
+            if child is not None:child.wait(timeout=5)
+            if connection is not None:connection.close()

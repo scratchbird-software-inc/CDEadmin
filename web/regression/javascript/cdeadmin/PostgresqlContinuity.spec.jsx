@@ -44,6 +44,23 @@ describe('PostgreSQL native continuity jobs',() => {
     await waitFor(() => expect(screen.getByRole('button',{name:'Review native operation'})).toBeEnabled());
     expect(screen.queryByText('Complete cluster backup')).not.toBeInTheDocument();
   });
+  it('requires explicit writer cleanup confirmation and keeps an uncertain backup unverified',async () => {
+    const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'unknown'}],total:1,unavailable_job_ids:[]});
+    render(<Component post={post} />);
+    fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+    await screen.findByRole('table',{name:'Native physical backup jobs'});
+    post.mockResolvedValue({...reviewed,state:'unknown'});
+    fireEvent.click(screen.getByRole('button',{name:'Inspect backup native-job'}));
+    const reconcile=await screen.findByRole('button',{name:'Reconcile native writer'});
+    expect(reconcile).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox',{name:'Confirm stopping this job\'s remaining native utilities'}));
+    post.mockResolvedValue({...reviewed,state:'unknown',writer_reconciliation:{process_scope_stopped:true,artifact_verified:false}});
+    fireEvent.click(reconcile);
+    await screen.findByText('Owned native utilities are stopped. Backup verification and recovery retain separate receipts.');
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_reconcile_writer',request:{job_id:'native-job',confirmed:true}});
+    expect(screen.getByRole('button',{name:'Reconcile native writer'})).toBeDisabled();
+    expect(screen.queryByText(/Native file verification: yes/)).not.toBeInTheDocument();
+  });
 });
 
 it('preserves an explicit no-deadline selection in native review',async () => {

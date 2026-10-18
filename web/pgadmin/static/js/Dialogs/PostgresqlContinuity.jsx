@@ -16,14 +16,16 @@ export default function PostgresqlContinuity({post}) {
   const [walArchives,setWalArchives]=useState(null), [walArchive,setWalArchive]=useState('');
   const [page,setPage]=useState(0), [catalog,setCatalog]=useState(null), [review,setReview]=useState(null), [receipt,setReceipt]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
+  const [confirmStop,setConfirmStop]=useState(false);
   const generation=useRef(0);
   useEffect(() => {
     generation.current++;setOperation('full_backup');setOptions(defaults());setCopyMode('copy');setInputs([]);
     setRecoveryDatabase('postgres');setChecks([]);
     setTargetKind('');setTargetValue('');setTargetInclusive(true);setTargetTimeline('current');setWalArchives(null);setWalArchive('');
-    setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');
+    setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');setConfirmStop(false);
     return () => {generation.current++;};
   },[post]);
+  useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
   useEffect(() => {
     if(!receipt || !ACTIVE.has(receipt.state))return;
     let live=true, pending=false;
@@ -137,6 +139,12 @@ export default function PostgresqlContinuity({post}) {
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh receipt</Button>
       <Button onClick={download}>Download receipt</Button>
       <Button disabled={busy || (!ACTIVE.has(receipt.state) && receipt.state!=='reviewed')} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel native job</Button>
+      {['unknown','failed','cancelled'].includes(receipt.state) && <Box>
+        <Alert severity="info">Reconciliation stops reviewed native utilities still using this job&apos;s workspace on the application host. Then select this job as input to Verify existing backup. A stopped utility does not establish a complete backup.</Alert>
+        <FormControlLabel label="Confirm stopping this job's remaining native utilities" control={<Checkbox disabled={busy} checked={confirmStop} onChange={event => setConfirmStop(event.target.checked)} />} />
+        <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},result => {setReceipt(result);setConfirmStop(false);})}>Reconcile native writer</Button>
+      </Box>}
+      {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned native utilities are stopped. Backup verification and recovery retain separate receipts.</Alert>}
       <Box component="details"><summary>Native observations and artifact location</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:400}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
   </Box>;

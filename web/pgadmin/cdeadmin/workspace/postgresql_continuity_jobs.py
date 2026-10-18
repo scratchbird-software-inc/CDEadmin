@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import socket
 import threading
 import time
 import uuid
@@ -145,6 +146,10 @@ class PostgreSQLContinuityJobs:
         if record['state']=='verified':return
         if self.observed(record)['state'] not in {'unknown','failed','cancelled'}:
             raise ContinuityError('The backup artifact still has an active worker')
+        if (record.get('writer_reconciliation') or {}).get('process_scope_stopped') is True:
+            candidates,_absent=self.writer_processes(record)
+            if not candidates:return
+            raise ContinuityError('A reviewed native utility is still using this backup workspace; reconcile its writer again')
         receipt=record.get('tool_observation') or record.get('process_observation') or {}
         observation=receipt.get('process_observation',receipt)
         if observation.get('cleanup_confirmed') is True and observation.get('return_code') is not None:return
@@ -152,12 +157,129 @@ class PostgreSQLContinuityJobs:
         pid,created=progress.get('pid'),progress.get('process_create_time')
         if pid is None or created is None:
             raise ContinuityError('Backup writer termination is unconfirmed; reconcile its native process before verification')
+        stopped=False
         try:
             process=psutil.Process(pid)
-            if process.create_time()!=created or process.status() in {psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD}:return
-        except psutil.NoSuchProcess:return
+            stopped=process.create_time()!=created or process.status() in {psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD}
+        except psutil.NoSuchProcess:stopped=True
         except psutil.Error:pass
+        if stopped:
+            candidates,_absent=self.writer_processes(record)
+            if not candidates:return
         raise ContinuityError('Backup writer termination is unconfirmed; verification cannot inspect files while they may change')
+
+    def writer_processes(self, record):
+        """Inspect only this receipt's workspace and reviewed executable bytes."""
+        hostname=(record.get('execution_host') or {}).get('hostname') or (record.get('writer_reconciliation') or {}).get('hostname')
+        if hostname is not None and hostname!=socket.gethostname():
+            raise ContinuityError('Reconcile the native writer on the application host recorded by this job')
+        directory=self.directory(record)
+        if (not directory.is_dir() or directory.is_symlink() or directory.resolve()!=directory or
+                getattr(directory.lstat(),'st_file_attributes',0)&0x400):
+            raise ContinuityError('The native job workspace identity is unavailable')
+        allowed={value.get('executable_sha256'):name for name,value in record['tool_identities'].items()
+                 if value.get('available') is True and value.get('executable_sha256')}
+        if not allowed:raise ContinuityError('The reviewed native utility identities are unavailable')
+        progress=record.get('progress') or {}
+        observation=record.get('tool_observation') or record.get('process_observation') or {}
+        observation=observation.get('process_observation',observation)
+        expected_pid=progress.get('pid',observation.get('pid'))
+        expected_created=progress.get('process_create_time',observation.get('process_create_time'))
+        if (expected_pid is None)!=(expected_created is None):
+            raise ContinuityError('Recorded native process creation identity is incomplete')
+        candidates={};refusals=[];expected_absent=False
+        from ..providers.postgresql.continuity import file_sha256
+        for process in psutil.process_iter():
+            try:
+                created=process.create_time()
+                if process.pid==expected_pid and created!=expected_created:
+                    expected_absent=True;continue
+                if process.status() in {psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD}:
+                    if process.pid==expected_pid:expected_absent=True
+                    continue
+                is_expected=process.pid==expected_pid and created==expected_created
+                if Path(process.cwd()).resolve()!=directory:
+                    if is_expected:refusals.append('Recorded process no longer belongs to the native job workspace')
+                    continue
+                if created<float(record.get('started_at',record['created_at']))-1:
+                    if is_expected:refusals.append('Recorded process predates this native dispatch')
+                    continue
+                executable=Path(process.exe())
+                if not executable.is_file():
+                    if is_expected:refusals.append('Recorded process executable is unavailable')
+                    continue
+                tool=allowed.get(file_sha256(executable))
+                if tool is None:
+                    if is_expected:refusals.append('Recorded process does not match a reviewed native utility')
+                    continue
+                candidates[process.pid]=(process,created,tool)
+            except psutil.NoSuchProcess:
+                if process.pid==expected_pid:expected_absent=True
+            except (psutil.Error,OSError):
+                if process.pid==expected_pid:refusals.append('Recorded native process ownership could not be inspected')
+        if refusals:raise ContinuityError('; '.join(refusals))
+        if expected_pid is not None and expected_pid not in candidates:
+            try:
+                current=psutil.Process(expected_pid)
+                expected_absent=current.create_time()!=expected_created or current.status() in {psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD}
+            except psutil.NoSuchProcess:expected_absent=True
+            except psutil.Error:raise ContinuityError('Recorded native writer termination is unavailable') from None
+            if not expected_absent:raise ContinuityError('The recorded native writer was not admitted for reconciliation')
+        if hostname is None and not candidates:
+            raise ContinuityError('This legacy receipt has no application-host identity or locally observed owned utility')
+        return candidates,expected_absent
+
+    def reconcile_writer(self, request, owner, endpoint):
+        """Stop owned utilities without inferring SQL or artifact success."""
+        if not isinstance(request,dict) or set(request)!={'job_id','confirmed'} or request['confirmed'] is not True:
+            raise ContinuityError('Confirm reconciliation of one owned native job')
+        record=self.load(request['job_id'],owner,endpoint)
+        if self.observed(record)['state'] not in {'unknown','failed','cancelled'}:
+            raise ContinuityError('Cancel an active native job before reconciling its writer')
+        with self._worker_maps_lock:known=self.workers.get(record['job_id'])
+        if known is not None and known[0].is_alive():
+            raise ContinuityError('The local job worker is still stopping; refresh its receipt')
+        candidates,expected_absent=self.writer_processes(record)
+        if not candidates and (record.get('writer_reconciliation') or {}).get('process_scope_stopped') is True:
+            return self.get(record['job_id'],owner,endpoint)
+        stopped=[]
+        # Each captured Process checks creation identity before signalling. A
+        # reused PID is never selected merely because its number was recorded.
+        for process,created,tool in candidates.values():
+            children=[]
+            try:
+                if process.create_time()!=created:raise ContinuityError('Native process identity changed during reconciliation')
+                from ..providers.postgresql.continuity import file_sha256
+                if (Path(process.cwd()).resolve()!=self.directory(record) or
+                        file_sha256(Path(process.exe()))!=record['tool_identities'][tool]['executable_sha256']):
+                    raise ContinuityError('Native utility workspace or executable changed during reconciliation')
+                children=process.children(recursive=True)
+                for child in reversed(children):
+                    try:child.terminate()
+                    except psutil.NoSuchProcess:pass
+                try:process.terminate()
+                except psutil.NoSuchProcess:pass
+                _gone,alive=psutil.wait_procs([*children,process],timeout=3)
+                for child in alive:
+                    try:child.kill()
+                    except psutil.NoSuchProcess:pass
+                _gone,alive=psutil.wait_procs(alive,timeout=3)
+                if any(item.is_running() and item.status() not in {psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD} for item in alive):
+                    raise ContinuityError('Owned native utility termination is unconfirmed')
+                stopped.append({'pid':process.pid,'process_create_time':created,'tool':tool,'termination_confirmed':True})
+            except psutil.NoSuchProcess:
+                stopped.append({'pid':process.pid,'process_create_time':created,'tool':tool,'termination_confirmed':True,'already_absent':True})
+            except (psutil.Error,OSError):
+                raise ContinuityError('Owned native utility termination could not be confirmed') from None
+        remaining,_absent=self.writer_processes({**record,'writer_reconciliation':{'hostname':socket.gethostname()}})
+        if remaining:raise ContinuityError('A reviewed native utility is still using this backup workspace')
+        receipt={'process_scope_stopped':True,'processes':stopped,'recorded_process_absent':expected_absent,
+                 'hostname':socket.gethostname(),
+                 'remote_finality_inferred':False,'artifact_verified':False,'observed_at':time.time(),
+                 'scope':'reviewed native utilities in this owner/endpoint job workspace'}
+        state=record['state'] if record['state'] in {'unknown','failed','cancelled'} else 'unknown'
+        self.update(record,state=state,writer_reconciliation=receipt,automatic_retry=False)
+        return self.get(record['job_id'],owner,endpoint)
 
     def review(self, request, owner, endpoint, source, configuration, paths, *, runtime_limit=None):
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain'}:
@@ -210,7 +332,7 @@ class PostgreSQLContinuityJobs:
             'operation':operation, 'options':options, 'source':deepcopy(source), 'paths':deepcopy(paths),
             'inputs':inputs, 'state':'reviewed', 'created_at':time.time(), 'expires_at':time.time()+600,'runtime_limit':runtime_limit,
             'recovery_drill_complete':False,
-            'cancel_requested':False, 'execution_host':{'kind':'application-host','platform':os.name},
+            'cancel_requested':False, 'execution_host':{'kind':'application-host','platform':os.name,'hostname':socket.gethostname()},
             'warnings':['Physical backups include the complete native cluster, not only the selected database.',
                 'Artifacts are written on the application host. The database server may be on another host.',
                 'A utility exit does not establish a usable recovery. Native verification and recovery drills have distinct receipts.']}
