@@ -20,7 +20,7 @@ def compile_operation(kind, operation, draft, target):
     allowed = {'confirmation'} | (set() if operation == 'reset_persist' else {'value', 'value_mode', 'value_type'})
     if set(draft) - allowed: raise RelationalClientError('Unknown native variable option')
     name = (target or {}).get('display_name')
-    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', name) or len(name) > 128:
+    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)?', name) or len(name) > 128:
         raise RelationalClientError('Exact native variable name is required')
     quoted = '`' + name + '`'
     if operation == 'reset_persist': return {'source': 'RESET PERSIST ' + quoted, 'parameters': ()}

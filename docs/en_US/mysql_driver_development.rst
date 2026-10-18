@@ -1258,6 +1258,15 @@ implementations and SQL modes, exercises credential changes and omitted-option
 preservation, and verifies native refusal without SUPER. These receipts qualify
 their installed runtime and scope.
 
+Installed component variables use their exact native dotted names, such as
+``validate_password.length``, in the configuration controls. GLOBAL, PERSIST,
+PERSIST_ONLY and RESET PERSIST preserve that identity and keep values out of
+command previews. ``tools/cdeadmin_mysql_component_variables_qualification.py``
+installs the native validation component and verifies discovery and all four
+operations with both connectors and SQL modes, independently checking runtime
+and persisted values. This receipt does not cover undiscovered persisted-only
+variables after their owning component has been removed.
+
 Native spatial reference systems
 --------------------------------
 

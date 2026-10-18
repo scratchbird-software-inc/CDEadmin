@@ -49,3 +49,18 @@ def test_exact_numeric_text_keeps_native_numeric_type_and_avoids_json_rounding()
     assert result['parameters']==('0.1234567890123456789',) and 'CAST(%s AS DECIMAL(65,30))' in result['source']
     import json
     json.dumps(result)
+
+
+@pytest.mark.parametrize('operation',['set_global','set_persist','set_persist_only','reset_persist'])
+def test_component_variables_keep_the_exact_native_dotted_name(operation):
+    target={'display_name':'validate_password.length'}
+    draft={} if operation=='reset_persist' else {'value':12}
+    result=operations.compile_operation('system-variable',operation,draft,target)
+    assert '`validate_password.length`' in result['source']
+    assert result['parameters']==(() if operation=='reset_persist' else (12,))
+
+
+@pytest.mark.parametrize('name',['.length','validate_password.','a.b.c','a.; DROP TABLE t','a.`b`','a..b'])
+def test_component_variable_admission_refuses_ambiguous_or_injected_names(name):
+    with pytest.raises(RelationalClientError):
+        operations.compile_operation('system-variable','set_global',{'value':12},{'display_name':name})
