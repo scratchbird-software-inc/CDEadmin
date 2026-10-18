@@ -437,6 +437,12 @@ is preserved. Retention automation, PITR and
 physical continuity retain separate product
 acceptance.
 
+Private receiver inputs have paged, reviewed offline cleanup with exact
+postimages, shared adoption/removal filesystem claims and per-file intent and
+acknowledgement receipts. Lost acknowledgements remain unknown without an
+automatic repeat. Published archives and receipts remain retained. Scheduled
+and recovery-chain-aware archive retention remain separate requirements.
+
 
 Native archived-log replay
 -------------------------

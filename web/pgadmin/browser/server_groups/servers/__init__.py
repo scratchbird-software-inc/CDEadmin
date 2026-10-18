@@ -3009,7 +3009,11 @@ class ServerNode(PGChildNodeView):
                                 'mariadb_binlog_capture_start','mariadb_binlog_capture_status','mariadb_binlog_capture_list','mariadb_binlog_capture_cancel',
                                 'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer',
                                 'mysql_binlog_capture_tail_catalog','mysql_binlog_capture_tail_review','mysql_binlog_capture_tail_start',
-                                'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start'}:
+                                'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start',
+                                'mysql_binlog_capture_cleanup_catalog','mysql_binlog_capture_cleanup_review','mysql_binlog_capture_cleanup_start',
+                                'mysql_binlog_capture_cleanup_status','mysql_binlog_capture_cleanup_cancel','mysql_binlog_capture_cleanup_list',
+                                'mariadb_binlog_capture_cleanup_catalog','mariadb_binlog_capture_cleanup_review','mariadb_binlog_capture_cleanup_start',
+                                'mariadb_binlog_capture_cleanup_status','mariadb_binlog_capture_cleanup_cancel','mariadb_binlog_capture_cleanup_list'}:
                     family='mariadb' if action.startswith('mariadb_') else 'mysql'
                     try:payload=service.continuous_binlog(server,action.removeprefix(family+'_binlog_capture_'),data.get('request'),family)
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))

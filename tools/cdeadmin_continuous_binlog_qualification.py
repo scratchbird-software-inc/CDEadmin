@@ -279,7 +279,41 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                     proof['checks'].append('native-browser-reviews-starts-observes-cancels-receiver-and-opens-its-produced-archive')
                 print('Native '+family+' continuous reception, two sealed batches and cancellation passed',flush=True)
             finally:query.close();native.close()
-        assert fixture['owned_server_stopped'];proof['complete']=True
+        assert fixture['owned_server_stopped']
+        # Cleanup is a local execution-host operation. The source is now
+        # stopped; no SQL connection or native catalog fallback is available.
+        cleanup_page=http('cleanup_catalog',{'job_id':tail_parent['job_id'],'limit':1})
+        assert cleanup_page['native_catalog_checked'] is False and cleanup_page['files']
+        if cleanup_page['more']:
+            next_page=http('cleanup_catalog',{'job_id':tail_parent['job_id'],'after':cleanup_page['next_after'],'limit':1})
+            assert next_page['files'][0]['name']>cleanup_page['files'][0]['name']
+        names=[row['name'] for row in http('cleanup_catalog',{'job_id':tail_parent['job_id']})['files']]
+        cleanup_review=http('cleanup_review',{'job_id':tail_parent['job_id'],'file_names':names})
+        cleanup_request={'job_id':cleanup_review['job_id'],'review_digest':cleanup_review['review_digest'],'confirmed':True}
+        http('cleanup_start',{**cleanup_request,'confirmed':False},refused=True)
+        from pgadmin.cdeadmin.workspace.continuous_binlog_tails import file_claim
+        with file_claim(jobs.directory(tail_record)):
+            assert 'Another operation' in http('cleanup_start',cleanup_request,refused=True)['errormsg']
+        http('cleanup_start',cleanup_request)
+        deadline=time.monotonic()+30
+        while True:
+            cleaned=http('cleanup_status',{'job_id':cleanup_review['job_id']})
+            if cleaned['state']=='completed':break
+            assert cleaned['state'] in {'active','dispatching'},cleaned.get('error_message')
+            if time.monotonic()>deadline:raise TimeoutError('Private receiver cleanup deadline')
+            time.sleep(.05)
+        assert cleaned['result']['removed_files']==names and cleaned['result']['archives_removed'] is False
+        assert http('cleanup_start',cleanup_request)['state']=='completed'
+        assert not http('cleanup_catalog',{'job_id':tail_parent['job_id']})['files']
+        assert http('status',{'job_id':tail_parent['job_id']})['state']=='failed'
+        response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':adopt_review['job_id'],'path':tail_name})})
+        assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==row['sha256'];response.close()
+        proof['checks'].extend(['native-offline-private-file-cleanup-paginates-and-requires-reviewed-confirmation',
+            'native-private-file-cleanup-refuses-adoption-file-claim-contention-and-never-repeats-dispatch',
+            'native-private-file-cleanup-retains-parent-outcome-and-independent-sealed-archive-byte-download'])
+        proof['private_cleanup']={'complete':True,'source_offline':True,'job_id':cleanup_review['job_id'],
+            'removed_files':names,'removed_bytes':cleaned['result']['removed_bytes'],'sealed_archive_retained':True}
+        proof['complete']=True
     finally:
         if jobs is not None:jobs.close()
         (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
@@ -322,20 +356,20 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',summary);summary.click()
         def click(label):
             def attempt(browser):
-                from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException,NoSuchElementException
+                from selenium.common.exceptions import ElementClickInterceptedException,ElementNotInteractableException,StaleElementReferenceException,NoSuchElementException
                 try:
-                    node=next((node for node in browser.find_elements(By.TAG_NAME,'button') if node.is_enabled() and node.get_attribute('textContent').strip()==label),None)
-                    if node is None:return False
-                    browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node)
-                    if not node.is_displayed():
-                        # The workspace can finish its initial remount after
-                        # the first disclosure click. Reopen its current DOM
-                        # summary through the same user action before retrying.
-                        disclosure=node.find_element(By.XPATH,'ancestor::details[1]')
-                        if not disclosure.get_attribute('open'):disclosure.find_element(By.TAG_NAME,'summary').click()
-                        return False
-                    node.click();return True
-                except (ElementClickInterceptedException,StaleElementReferenceException,NoSuchElementException):return False
+                    matches=[node for node in browser.find_elements(By.TAG_NAME,'button') if node.is_enabled() and node.get_attribute('textContent').strip()==label]
+                    for node in matches:
+                        # The workbench clips offscreen content. Scroll before
+                        # testing visibility, including nested disclosures.
+                        browser.execute_script('arguments[0].scrollIntoView({block:"center"});',node)
+                        if node.is_displayed():node.click();return True
+                        for disclosure in node.find_elements(By.XPATH,'ancestor::details[not(@open)]'):
+                            heading=disclosure.find_element(By.XPATH,'./summary')
+                            browser.execute_script('arguments[0].scrollIntoView({block:"center"});',heading)
+                            if heading.is_displayed():heading.click();return False
+                    return False
+                except (ElementClickInterceptedException,ElementNotInteractableException,StaleElementReferenceException,NoSuchElementException):return False
             wait.until(attempt)
         click('Inspect receiver source')
         def field(label):
@@ -380,14 +414,21 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
             click('Confirm and adopt stopped logs')
             wait.until(lambda browser:any('adopted_stopped_files' in node.get_attribute('textContent') for node in browser.find_elements(By.TAG_NAME,'pre')))
             click('Load archive files')
+            click('Inspect private receiver files')
+            checkbox=wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'input[aria-label="Remove '+stopped_tail['log_name']+'"]'))
+            driver.execute_script('arguments[0].click();',checkbox);click('Review private-file removal')
+            wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'pre[aria-label="Private receiver removal review"]'))
+            click('Confirm and remove reviewed private files')
+            wait.until(lambda browser:any(node.get_attribute('textContent').startswith('Private cleanup ') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
         driver.save_screenshot(str(output/'native-continuous-binlogs.png'))
         errors=[node for node in driver.get_log('browser') if node.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'job_id':job_id,'produced_archive_job_id':archive_button.removeprefix('Inspect produced archive '),
-            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'stopped_tail_adopted':bool(stopped_tail),'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
+            'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'stopped_tail_adopted':bool(stopped_tail),'private_file_cleanup':bool(stopped_tail),'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'))
+            (output/'browser-failure.html').write_text(driver.page_source)
             (output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)
             (output/'browser-failure-console.json').write_text(json.dumps(driver.get_log('browser'),indent=2)+'\n')
         raise

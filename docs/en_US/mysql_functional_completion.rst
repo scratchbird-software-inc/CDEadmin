@@ -271,6 +271,13 @@ artifacts or authorize restart of an unknown outcome. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
 
+Private receiver inputs also have reviewed offline cleanup, including a paged
+inventory, exact file-postimage admission, a shared adoption/removal filesystem
+claim and per-file removal acknowledgements. Unknown/partial outcomes remain
+explicit and are never automatically repeated. Published archives and receipts
+are retained. This is separate from scheduled or recovery-chain-aware archive
+retention and native server log purging.
+
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an
 independently confirmed target. Select full replay or exact native transaction

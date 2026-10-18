@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
+import ReceiverFileCleanup from './ReceiverFileCleanup';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
@@ -73,6 +74,7 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},value => {setReceipt(value);setConfirmStop(false);})}>Reconcile receiver writers</Button>
       </Box>}
       {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned receiver and snapshot-parser utilities are stopped. This does not verify private tails or establish database recovery.</Alert>}
+      {['unknown','failed','cancelled','captured'].includes(receipt.state) && <ReceiverFileCleanup post={post} engine={engine} receiverJobId={receipt.job_id} />}
       {['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>
         <Button disabled={busy} onClick={() => run('tail_catalog',{job_id:receipt.job_id},value => {setTails(value);setTailFiles([]);setTailReview(null);})}>Inspect stopped receiver files</Button>
         {tails && <>

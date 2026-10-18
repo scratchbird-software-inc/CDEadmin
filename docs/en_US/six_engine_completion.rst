@@ -909,6 +909,20 @@ their own authenticated downloads, replay inputs and removal lifecycle. Parent
 unknown/failed outcomes remain unchanged; neither adoption nor a utility return
 establishes recovered database contents or a new continuity checkpoint.
 
+Private receiver inputs have a separate cleanup workspace. Its filename-cursor
+inventory is paged, includes incomplete/active input bytes as disposable private
+files and does not claim a native closed-log observation. Review binds exact
+file postimages, the owner/endpoint, execution hostname and filesystem adapter;
+confirmation permanently removes only that selection. Stopped-writer admission
+is required. Adoption workers and cleanup share a cancellable cross-process
+filesystem claim; every selected postimage is checked before the first removal.
+Intent and acknowledgement are recorded per file. A lost acknowledgement remains
+unknown, partial acknowledgements remain visible, and a consumed job is never
+automatically repeated. All published archives, source server logs and operation
+receipts remain independent. Cleanup works with the source server offline and
+does not certify power-loss durability, retention coverage or database recovery.
+Scheduled retention and recovery-chain-aware archive retention remain open.
+
 PostgreSQL manifest and runtime scaling increment
 ================================================
 

@@ -1,13 +1,41 @@
 """Reviewed adoption of stopped, complete native receiver files into archives."""
 from copy import deepcopy
+from contextlib import contextmanager,ExitStack
+import errno
+import os
 import socket
+import stat
 
+from ..operations.fileio import exclusive_file_lock,private_file
 from ..operations.native_writers import inspect,NativeWriterError
 from ..providers.mysql_family import continuous_binlog as native
 from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
 from ..sdk.tooling import ProviderToolGrant
 from .mysql_binlog_jobs import digest
 from .mysql_monitoring_host import MySQLMonitoringHost
+
+
+@contextmanager
+def file_claim(directory,cancel=None):
+    """Adoption and removal share one execution-host filesystem claim."""
+    path=directory/'.receiver-files.lock'
+    if path.is_symlink() or path.resolve()!=path or path.exists() and getattr(path.lstat(),'st_file_attributes',0)&0x400:
+        raise BinlogArchiveError('Receiver file claim cannot contain links or reparse points')
+    descriptor=os.open(path,os.O_RDWR|os.O_CREAT|getattr(os,'O_NOFOLLOW',0),0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):raise BinlogArchiveError('Receiver file claim must be a regular file')
+        private_file(path)
+        with ExitStack() as stack:
+            while True:
+                if cancel is not None and cancel.is_set():raise InterruptedError('Receiver file claim cancelled')
+                try:stack.enter_context(exclusive_file_lock(descriptor,blocking=False));break
+                except OSError as error:
+                    contention=(getattr(error,'winerror',None)==33 if os.name=='nt' else error.errno in {errno.EAGAIN,errno.EACCES})
+                    if not contention:raise
+                    if cancel is None:raise BinlogArchiveError('Another operation is using this receiver\'s private files') from None
+                    cancel.wait(.1)
+            yield
+    finally:os.close(descriptor)
 
 
 def stopped_parent(jobs,archives,job_id,owner,endpoint):
@@ -49,6 +77,10 @@ class StoppedTailTransport:
             owned=self.observer;self.observer=None;self.client._discard_failed_session(owned)
 
     def execute(self,record,directory,cancel,progress):
+        with file_claim(self.jobs.directory(self.parent),cancel):
+            return self.execute_claimed(record,directory,cancel,progress)
+
+    def execute_claimed(self,record,directory,cancel,progress):
         parent=stopped_parent(self.jobs,self.archives,self.parent['job_id'],record['owner'],record['endpoint_id'])
         captured=self.native.capture(self.observer)
         if captured['identity']!=record['source'] or parent['source']!=record['source']:
