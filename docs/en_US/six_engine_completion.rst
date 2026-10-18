@@ -2127,3 +2127,14 @@ backend release. Recovery preserves the original command outcome. Independent
 permanent-slot comparisons and authenticated API/browser qualification cover
 this scope. Retained replication-protocol streams, broader continuity and the
 remaining product matrix remain open; ScratchBird history testing is deferred.
+
+SQL_ASCII logical output preservation
+-------------------------------------
+
+PostgreSQL logical captures preserve uninterpreted SQL_ASCII text as labelled
+base64 native bytes, with separate server/client encoding observations. Both
+temporary and permanent SQL decoding use this shared adapter. Exact native
+metadata values returned as bytes are normalized strictly. Native permanent-slot
+comparisons cover text/binary peek/get across SQL_ASCII database and client
+modes. Arbitrarily encoded catalog identities still require their remaining
+adapters; this payload qualification does not close that catalog gap.

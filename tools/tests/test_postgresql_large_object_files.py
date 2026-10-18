@@ -10,6 +10,14 @@ from pgadmin.cdeadmin.providers.postgresql.large_object_files import LargeObject
 from pgadmin.cdeadmin.workspace.postgresql_large_object_jobs import PostgreSQLLargeObjectJobs
 
 
+def test_native_metadata_bytes_are_text_without_python_bytes_repr():
+    from pgadmin.cdeadmin.providers.postgresql.large_object_files import native_text
+    assert native_text(b'180003')=='180003'
+    assert native_text('native 雪'.encode())=='native 雪'
+    assert native_text(None) is None and native_text(9007199254740993)=='9007199254740993'
+    with pytest.raises(Error,match='not representable'):native_text(b'\xff')
+
+
 @pytest.fixture
 def jobs(tmp_path):
     manager=PostgreSQLLargeObjectJobs(tmp_path/'jobs',tmp_path/'files')

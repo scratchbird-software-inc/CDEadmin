@@ -21,6 +21,7 @@ def program():
     return {'kind':'native-postgresql-temporary-slot-resource','adapter_sha256':hashlib.sha256(Path(temporary_slots.__file__).read_bytes()).hexdigest(),
         'channel_sha256':hashlib.sha256(Path(__file__).with_name('postgresql_temporary_slot_jobs.py').read_bytes()).hexdigest(),
         'logical_output_sha256':hashlib.sha256(Path(__file__).with_name('postgresql_slot_changes.py').read_bytes()).hexdigest(),
+        'private_transport_sha256':hashlib.sha256(Path(private_sql.__file__).read_bytes()).hexdigest(),
         'execution_host':{'kind':'application-host','hostname':socket.gethostname(),'platform':sys.platform}}
 
 
@@ -196,6 +197,7 @@ def reconcile(service,server,target,jobs,record):
                     query.execute('SET statement_timeout=5000')
                     query.execute('SELECT EXTRACT(EPOCH FROM backend_start)::pg_catalog.text,datid::pg_catalog.text,usename,application_name FROM pg_catalog.pg_stat_activity WHERE pid=%s::pg_catalog.int4',(record['backend_pid'],))
                     backend=query.fetchone()
+                    if backend is not None:backend=tuple(map(private_sql.native_text,backend))
                     query.execute('SELECT pg_catalog.count(*) FROM pg_catalog.pg_replication_slots WHERE temporary AND active_pid=%s::pg_catalog.int4',(record['backend_pid'],))
                     remaining=int(query.fetchone()[0])
             finally:connection.close()

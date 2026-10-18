@@ -1338,3 +1338,21 @@ binary payloads; authenticated API and browser checks cover these controls.
 Replication-protocol streams and the wider product matrix remain open. History
 testing remains deferred and Windows/macOS qualification remains with the
 platform teams.
+
+Logical output in SQL_ASCII wire modes
+-------------------------------------
+
+When either the database or client encoding is SQL_ASCII, logical text output
+is converted to base64 inside PostgreSQL before client decoding. Captures label
+it ``base64-native-text`` and record both encodings. Binary output retains its
+separate ``base64`` label. Native WAL and transaction identities remain exact
+text even when the client returns metadata as bytes. No replacement characters
+or Python byte representations enter these artifacts.
+
+Independent permanent-slot comparisons qualify peek/get text and binary output
+for SQL_ASCII databases and UTF-8/LATIN1 databases with SQL_ASCII clients.
+SQL_ASCII databases with UTF-8 clients retain text output losslessly; pgoutput's
+native refusal of invalid UTF-8 bytes is preserved separately, including its
+removal of owned temporary slots. Uninterpreted payload bytes are preserved without
+guessing a character set. Identity metadata that is itself not representable
+as UTF-8 remains an explicit admission refusal and an open catalog limitation.

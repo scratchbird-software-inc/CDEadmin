@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import uuid
 
-from .large_object_files import cursor,identity
+from .large_object_files import cursor,identity,native_text
 
 
 class TemporarySlotError(ValueError):
@@ -84,7 +84,7 @@ class TemporarySlots:
         with cursor(connection) as query:
             query.execute('SELECT pg_catalog.pg_backend_pid()::pg_catalog.text,'
                 '(SELECT EXTRACT(EPOCH FROM backend_start)::pg_catalog.text FROM pg_catalog.pg_stat_activity WHERE pid=pg_catalog.pg_backend_pid())')
-            self.backend_pid,self.backend_started_epoch=query.fetchone()
+            self.backend_pid,self.backend_started_epoch=map(native_text,query.fetchone())
         self.adapter_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         if self.inventory()['total']:raise TemporarySlotError('Use a new independently owned backend without existing temporary slots')
 
@@ -139,7 +139,7 @@ class TemporarySlots:
         if current!=reviewed:raise TemporarySlotError('The retained backend, role or reviewed slot state changed')
         selected=reviewed['options'];timeout=selected['timeout_seconds']
         with cursor(self.connection) as query:
-            query.execute("SELECT pg_catalog.current_setting('statement_timeout')");prior=query.fetchone()[0]
+            query.execute("SELECT pg_catalog.current_setting('statement_timeout')");prior=native_text(query.fetchone()[0])
         safe_cleanup=True
         try:
             with cursor(self.connection) as query:
@@ -169,7 +169,7 @@ class TemporarySlots:
                 query.execute(sql,bindings);returned=query.fetchone()
             acknowledgement={'resource_id':self.resource_id,'backend_pid':self.backend_pid,'operation':reviewed['operation'],
                 'slot':reviewed['options']['slot'],'native_command_returned':True,
-                'native_result':None if reviewed['operation']=='drop' else {'slot_name':returned[0],'lsn':returned[1]},
+                'native_result':None if reviewed['operation']=='drop' else {'slot_name':native_text(returned[0]),'lsn':native_text(returned[1])},
                 'temporary':True,'connection_release_returned':False}
             acknowledge(acknowledgement)
         # This is a later liveness observation, distinct from native return.

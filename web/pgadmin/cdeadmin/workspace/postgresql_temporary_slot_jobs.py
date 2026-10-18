@@ -257,7 +257,8 @@ class TemporarySlotTransport:
                 native=TemporarySlots(connection)
                 if (native.adapter_sha256!=record['program'].get('adapter_sha256') or
                         hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=record['program'].get('channel_sha256') or
-                        hashlib.sha256(Path(__file__).with_name('postgresql_slot_changes.py').read_bytes()).hexdigest()!=record['program'].get('logical_output_sha256')):
+                        hashlib.sha256(Path(__file__).with_name('postgresql_slot_changes.py').read_bytes()).hexdigest()!=record['program'].get('logical_output_sha256') or
+                        hashlib.sha256(Path(private_sql.__file__).read_bytes()).hexdigest()!=record['program'].get('private_transport_sha256')):
                     raise TemporarySlotError('The native temporary-slot adapter changed before worker attachment')
                 jobs.update(record,native_resource_open_returned=True,native_resource_id=native.resource_id,
                     backend_pid=native.backend_pid,backend_started_epoch=native.backend_started_epoch,

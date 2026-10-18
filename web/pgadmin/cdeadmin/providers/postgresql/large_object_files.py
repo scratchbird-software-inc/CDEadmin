@@ -40,6 +40,14 @@ def cursor(connection):
     return Cursor(connection,row_factory=tuple_row)
 
 
+def native_text(value):
+    """Normalize metadata returned as bytes by a SQL_ASCII client, strictly."""
+    if isinstance(value, bytes):
+        try:return value.decode('utf8')
+        except UnicodeError:raise LargeObjectFileError('Native identity metadata is not representable as UTF-8 text') from None
+    return str(value) if value is not None else None
+
+
 def identity(connection):
     with cursor(connection) as query:
         query.execute("SELECT current_setting('server_version_num'),current_database(),"
@@ -49,7 +57,7 @@ def identity(connection):
         row=query.fetchone()
     if int(row[0])!=180003:raise LargeObjectFileError('File transfers require the selected native PostgreSQL 18.3 profile')
     return dict(zip(('server_version','database','database_oid','authenticated_principal','effective_principal',
-                     'postmaster_started_epoch','server_address','server_port'),(str(v) if v is not None else None for v in row)))
+                     'postmaster_started_epoch','server_address','server_port'),map(native_text,row)))
 
 
 def capture(provider,route,server,*,resolved_database=None,application_name='ScratchRobin large-object files'):

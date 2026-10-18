@@ -101,7 +101,7 @@ def capture(provider, route, server, selected, database_id):
             if found is None: raise ContinuityError('Selected native slot database is unavailable or CONNECT is not admitted')
         finally: provider.close_session(opened)
         identity, transport = private_sql.capture(provider, {**route, 'database_id': database_id}, server,
-            resolved_database=found[0], application_name='ScratchRobin native SQL slot admission')
+            resolved_database=private_sql.native_text(found[0]), application_name='ScratchRobin native SQL slot admission')
         if (identity['database_oid'] != str(database_id) or
                 {key: value for key, value in identity.items() if key not in {'database', 'database_oid'}} !=
                 {key: value for key, value in peer.items() if key not in {'database', 'database_oid'}}):
@@ -211,7 +211,7 @@ def run(jobs, record, transport, signal):
             if selected.get('plugin'):
                 with private_sql.cursor(connection) as query:
                     query.execute('SELECT %s::pg_catalog.name::pg_catalog.text', (selected['plugin'],))
-                    if query.fetchone()[0] != selected['plugin']:
+                    if private_sql.native_text(query.fetchone()[0]) != selected['plugin']:
                         raise ContinuityError('Native output plugin name would be truncated')
             current = jobs.load(record['job_id'], record['owner'], record['endpoint_id'])
             if signal.is_set() or current.get('cancel_requested') or deadline is not None and time.monotonic() >= deadline:
@@ -245,7 +245,7 @@ def run(jobs, record, transport, signal):
                 with private_sql.cursor(connection) as query:
                     query.execute(command, arguments)
                     row = query.fetchone()
-                result = {'slot_name': selected['slot']} if record['operation'].endswith('_drop') else {'slot_name': row[0], 'end_lsn': row[1]}
+                result = {'slot_name': selected['slot']} if record['operation'].endswith('_drop') else {'slot_name': private_sql.native_text(row[0]), 'end_lsn': private_sql.native_text(row[1])}
                 acknowledge(result)
             stopped.set()
             if observer is not None: observer.join(timeout=2)

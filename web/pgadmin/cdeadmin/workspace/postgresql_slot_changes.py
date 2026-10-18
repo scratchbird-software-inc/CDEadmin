@@ -50,11 +50,13 @@ def options(value):
     return selected
 
 
-def statement(operation, selected):
+def statement(operation, selected, *, raw_text=False):
     if operation not in OPERATIONS: raise ContinuityError('Native logical change operation is unavailable')
     binary = operation.endswith('_binary')
     function = ('pg_logical_slot_peek_' if '_peek_' in operation else 'pg_logical_slot_get_') + ('binary_changes' if binary else 'changes')
     data = "pg_catalog.encode(data,'base64')" if binary else 'data'
+    if raw_text and not binary:
+        data = "pg_catalog.encode(pg_catalog.convert_to(data,pg_catalog.current_setting('server_encoding')::pg_catalog.name),'base64')"
     command = ('SELECT lsn::pg_catalog.text,xid::pg_catalog.text,' + data +
                ' FROM pg_catalog.' + function + '(%s::pg_catalog.name,%s::pg_catalog.pg_lsn,%s::pg_catalog.int4,VARIADIC %s::pg_catalog.text[])')
     parameters = (selected['slot'], selected['upto_lsn'], selected['upto_nchanges'],
@@ -67,9 +69,13 @@ def file_identity(value):
 
 
 def stream(connection, directory, operation, selected, *, acknowledge, progress, check_cancel):
-    command, parameters = statement(operation, selected)
+    parameter_status = getattr(getattr(connection, 'pgconn', None), 'parameter_status', lambda _name: None)
+    server_encoding = private_sql.native_text(parameter_status(b'server_encoding'))
+    client_encoding = private_sql.native_text(parameter_status(b'client_encoding'))
+    raw_text = 'SQL_ASCII' in (server_encoding, client_encoding)
+    command, parameters = statement(operation, selected, raw_text=raw_text)
     checksum = hashlib.sha256(); rows = 0; size = 0
-    encoding = 'base64' if operation.endswith('_binary') else 'unicode-text'
+    encoding = 'base64' if operation.endswith('_binary') else 'base64-native-text' if raw_text else 'unicode-text'
     path = directory/PARTIAL; destination = directory/FILENAME
     if destination.exists() or destination.is_symlink():
         raise ContinuityError('Native change artifact already exists')
@@ -80,12 +86,14 @@ def stream(connection, directory, operation, selected, *, acknowledge, progress,
         with private_sql.cursor(connection) as query:
             for lsn, xid, data in query.stream(command, parameters, size=1):
                 check_cancel()
-                row = {'lsn': lsn, 'xid': xid, 'data_encoding': encoding, 'data': data}
+                row = {'lsn': private_sql.native_text(lsn), 'xid': private_sql.native_text(xid),
+                       'data_encoding': encoding, 'data': private_sql.native_text(data)}
                 payload = (json.dumps(row, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n').encode('utf8')
                 output.write(payload); checksum.update(payload); size += len(payload); rows += 1
                 progress({'rows': str(rows), 'artifact_bytes': str(size)})
         result = {'rows': str(rows), 'artifact_bytes': str(size), 'sha256': checksum.hexdigest(),
                   'filename': FILENAME, 'data_encoding': encoding,
+                  'native_server_encoding': server_encoding, 'native_client_encoding': client_encoding,
                   'native_threshold_is_hard_row_limit': False, 'client_buffering': 'one native row and its encoded artifact record'}
         # Exhausting the stream received the native command's final response.
         # Persist that fact before an application artifact flush can fail.

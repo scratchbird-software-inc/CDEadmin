@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -161,3 +162,24 @@ def test_damaged_partial_records_are_reported_as_raw_bytes_without_native_fields
     page = changes.preview(jobs, jobs.load(item['job_id'], 1, endpoint), {})
     assert page['rows'][0]['lsn'] == 'FFFFFFFF/FFFFFFFF'
     assert page['rows'][1]['native_values_previewed'] is False and 'lsn' not in page['rows'][1]
+
+
+@pytest.mark.parametrize('server_encoding,client_encoding', [
+    ('SQL_ASCII','UTF8'), ('SQL_ASCII','SQL_ASCII'), ('UTF8','SQL_ASCII'), ('LATIN1','SQL_ASCII')])
+@pytest.mark.parametrize('binary', [False, True])
+def test_ascii_wire_modes_preserve_exact_native_payload_bytes(decoding, server_encoding, client_encoding, binary):
+    jobs, _source, endpoint, connection = decoding
+    settings = {b'server_encoding': server_encoding.encode(), b'client_encoding': client_encoding.encode()}
+    connection.pgconn = SimpleNamespace(parameter_status=settings.get)
+    raw = b"native\x80\xff\x00\r\n"
+    connection.rows = [(b'FFFFFFFF/FFFFFFFF', b'4294967295', base64.b64encode(raw))]
+    item = review(decoding, 'wal_slot_sql_peek_binary' if binary else 'wal_slot_sql_peek_text')
+    start(decoding, item); result = finished(decoding, item)
+    assert result['native_sql_acknowledged'] and result['state']=='completed'
+    with changes.payload(jobs, jobs.load(item['job_id'], 1, endpoint)) as source: row=json.loads(source.read())
+    assert row['lsn']=='FFFFFFFF/FFFFFFFF' and row['xid']=='4294967295'
+    assert row['data_encoding']==('base64' if binary else 'base64-native-text')
+    assert base64.b64decode(row['data'])==raw
+    assert result['native_sql_result']['native_server_encoding']==server_encoding
+    assert result['native_sql_result']['native_client_encoding']==client_encoding
+    assert ('pg_catalog.convert_to(data,' in connection.calls[0][0]) is (not binary)
