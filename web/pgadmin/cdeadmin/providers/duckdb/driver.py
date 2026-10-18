@@ -212,6 +212,23 @@ class DuckDBClient(RelationalDBAPIClient):
         self._states = {}
         self._busy = set()
         self._closing = False
+        self._attachment_contexts = {}
+        self._attachment_reviews = {}
+
+    def open_session(self, request):
+        handle = super().open_session(request)
+        try:
+            row = handle.execute('SELECT database_name,database_oid,path FROM duckdb_databases() '
+                'WHERE database_name=current_database()').fetchone()
+            if not row:
+                raise RelationalClientError('Original DuckDB catalog identity is unavailable')
+            self._attachment_contexts[id(handle)] = {
+                'route': copy.deepcopy(self._route(request)), 'origin': tuple(row),
+                'session_scope_id': str(uuid.uuid4())}
+            return handle
+        except BaseException:
+            self._discard_failed_session(handle)
+            raise
 
     def _connect(self, request):
         with self._lock:
@@ -318,6 +335,7 @@ class DuckDBClient(RelationalDBAPIClient):
             raise RelationalClientError(
                 'DuckDB native release failed') from None
         self._forget_connection(handle)
+        self._attachment_contexts.pop(id(handle), None)
         self._states.pop(id(handle), None)
         self._executions = [token for token in self._executions
                             if token.connection is not handle]

@@ -152,6 +152,39 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def attachment_action(self, request, route):
+        from .attachments import action
+        self._require('execute')
+        if request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') not in {'inventory', 'receipt'}:
+            self._require('administer', 'resource')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            retained = self.client._attachment_reviews.get(request.get('review_id'))
+            reading = request.get('operation') == 'receipt' or (
+                request.get('operation') == 'apply' and retained is not None and retained['state'] != 'reviewed')
+            if not reading:
+                self.client._require_idle(handle)
+                self.client._busy.add(id(handle))
+            try:
+                return action(self.client, handle, route, {key: value for key, value in request.items()
+                    if key not in {'session_id', 'language_profile'}})
+            except (ValueError, RelationalClientError):
+                raise
+            except Exception as error:
+                from .driver import uncertain
+                try:
+                    self.client._observe(handle, blocked=uncertain(error))
+                except Exception:
+                    self.client._observe(handle, blocked=True)
+                raise RelationalClientError('Native DuckDB attachment workflow failed (' +
+                    type(error).__name__ + ')') from None
+            finally:
+                if not reading:
+                    self.client._busy.discard(id(handle))
+
     def script_statement_outcome(self, occurrence):
         from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
         result = occurrence.get('result') or {}

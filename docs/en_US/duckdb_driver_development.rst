@@ -171,3 +171,38 @@ installation refusal, corrupt-file refusal and retained transaction behavior.
 The receipt records the repository artifact and observed native status. Broader
 extension installation options and other installed capabilities retain their
 own inventory and qualification obligations.
+
+Reviewed native file attachments
+--------------------------------
+
+The attachment workspace can inspect, review and apply directly on its original
+retained query connection. It supports existing files, explicit native file
+creation, read-only/read-write access, IF NOT EXISTS, OR REPLACE and DETACH IF
+EXISTS under the registered filesystem policy. Exact native aliases, including
+long quoted Unicode names, retain DuckDB's ASCII case comparison. The original
+registered catalog and internal catalogs are protected from replacement/removal.
+
+Review binds the native connection identity, registration, original catalog OID,
+observed attachment namespace and applicable file identity. Dispatch checks those
+facts again. A changed namespace or file retires the review before dispatch.
+Repeated submissions return the stored session receipt, including after an
+uncertain reply. A lost apply reply locks the form until the receipt is read.
+An uncertain native session remains blocked; a closed original connection cannot
+be replaced with another connection to continue that review.
+
+Operations leave commit and rollback to the caller. In the pinned native engine,
+an attachment created in a transaction disappears on rollback; a detached
+catalog is not restored by rollback. A newly created file is not deleted by
+rollback. Catalog changes can be visible to other connections sharing the native
+instance. Registered automatic attachments may be restored when another
+connection opens. Native acknowledgement, rediscovery and possible catalog/file
+effects are recorded separately; external file/instance administration is not
+fenced and no failure authorizes automatic replay.
+
+The original SQL-preview endpoint remains available. Direct execution uses the
+new session-bound workflow. ``tools/cdeadmin_duckdb_attachment_qualification.py``
+exercises it for file and explicitly authorized memory roots, pending rows and
+temporary objects, creation/conflict modes, rollback distinctions, stale
+namespace refusal, original-session binding and failed observations. Encrypted
+attachment options and remote extension-backed attachment types retain their
+separate capability and credential-admission obligations.

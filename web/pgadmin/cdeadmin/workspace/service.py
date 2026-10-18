@@ -3164,10 +3164,16 @@ class ProviderWorkspaceService:
             source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
-        context, _endpoint, _root = self.endpoint_service.workspace(
+        context, endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'duckdb_attachments':
+                if (not isinstance(data.get('request'), dict) or
+                        not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
+                    raise ProviderWorkspaceError('Select a native DuckDB attachment request')
+                return self.studio_service.duckdb_attachment_action(context, data.get('session_id'),
+                    data['request'], endpoint['route'])
             if action=='sqlite_native_preupdate':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite preupdate request')
                 return self.studio_service.sqlite_native_preupdate_action(context,data.get('session_id'),data['request'])

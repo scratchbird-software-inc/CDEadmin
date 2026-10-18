@@ -2780,6 +2780,10 @@ class ServerNode(PGChildNodeView):
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
+                if scoped_target and action == 'duckdb_attachments':
+                    if data.get('database_target_id') not in (None, scoped_target):
+                        return bad_request('Native attachment database scope does not match this workspace.')
+                    data['database_target_id'] = scoped_target
                 if scoped_target and action in {
                         'sqlite_changeset_inspect_catalog', 'sqlite_changeset_inspect_review', 'sqlite_changeset_inspect_start', 'sqlite_changeset_inspect_status', 'sqlite_changeset_inspect_cancel', 'sqlite_changeset_inspect_result', 'sqlite_changeset_inspect_list', 'sqlite_changeset_inspect_files', 'sqlite_changeset_inspect_reconcile', 'sqlite_changeset_inspect_remove_artifact', 'sqlite_changeset_diff_catalog', 'sqlite_changeset_diff_tables', 'sqlite_changeset_diff_review', 'sqlite_changeset_diff_start', 'sqlite_changeset_diff_status', 'sqlite_changeset_diff_cancel', 'sqlite_changeset_diff_reconcile', 'sqlite_changeset_diff_list', 'sqlite_changeset_diff_files', 'sqlite_changeset_diff_remove_artifact', 'sqlite_changeset_transform_catalog', 'sqlite_changeset_transform_schemas', 'sqlite_changeset_transform_sources', 'sqlite_changeset_transform_review', 'sqlite_changeset_transform_start', 'sqlite_changeset_transform_status', 'sqlite_changeset_transform_cancel', 'sqlite_changeset_transform_list', 'sqlite_changeset_transform_files', 'sqlite_changeset_transform_reconcile', 'sqlite_changeset_transform_remove_artifact',
                         'sqlite_changeset_upload_catalog', 'sqlite_changeset_upload_create', 'sqlite_changeset_upload_chunk', 'sqlite_changeset_upload_seal', 'sqlite_changeset_upload_status', 'sqlite_changeset_upload_cancel', 'sqlite_changeset_upload_list', 'sqlite_changeset_upload_files', 'sqlite_changeset_upload_reconcile', 'sqlite_changeset_upload_remove_artifact',
@@ -2904,7 +2908,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
+                elif action in {'duckdb_attachments', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)

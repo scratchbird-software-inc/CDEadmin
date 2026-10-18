@@ -8304,7 +8304,10 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'duckdb-copy' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <DuckDBCopy key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} resourceId={initialContext.resource_id} />}
       {workspace && tab === 'duckdb-attachment' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
-        <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+        <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+          ensureSession={ensureSession} sessionId={sessionId}
+          disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+          onBlocked={() => setQuerySessionBlocked(true)} />}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
         (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
           <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}
