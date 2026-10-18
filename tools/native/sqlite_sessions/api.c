@@ -156,6 +156,133 @@ static void inspect_changeset(sqlite3_context *context,sqlite3_value **values,co
   }
 }
 
+/* Typed file inspection uses only protected public iterator values. Byte
+ * previews do not invent missing old values or native column names. */
+static void inspection_hex(sqlite3_str *builder,const void *data,int length){
+  const char digits[]="0123456789ABCDEF";const unsigned char *bytes=data;int index;
+  sqlite3_str_appendchar(builder,1,'"');
+  for(index=0;index<length;index++){char pair[2];pair[0]=digits[bytes[index]>>4];pair[1]=digits[bytes[index]&15];sqlite3_str_append(builder,pair,2);}
+  sqlite3_str_appendchar(builder,1,'"');
+}
+static int inspection_value(sqlite3_str *builder,sqlite3_value *value,sqlite3_int64 offset,int maximum){
+  int kind,length,take;const void *data;
+  if(!value){if(offset)return SQLITE_RANGE;sqlite3_str_appendall(builder,"{\"native_type\":\"undefined\"}");return SQLITE_OK;}
+  kind=sqlite3_value_type(value);
+  if(kind==SQLITE_NULL){if(offset)return SQLITE_RANGE;sqlite3_str_appendall(builder,"{\"native_type\":\"null\",\"data\":null}");return SQLITE_OK;}
+  if(kind==SQLITE_INTEGER){if(offset)return SQLITE_RANGE;sqlite3_str_appendf(builder,"{\"native_type\":\"integer\",\"data\":\"%lld\"}",sqlite3_value_int64(value));return SQLITE_OK;}
+  if(kind==SQLITE_FLOAT){if(offset)return SQLITE_RANGE;sqlite3_str_appendf(builder,"{\"native_type\":\"real\",\"data\":\"%!.17g\"}",sqlite3_value_double(value));return SQLITE_OK;}
+  data=kind==SQLITE_TEXT ? (const void*)sqlite3_value_text(value) : sqlite3_value_blob(value);length=sqlite3_value_bytes(value);
+  if(length && !data)return SQLITE_NOMEM;
+  if(offset>length)return SQLITE_RANGE;
+  take=length-(int)offset;if(take>maximum)take=maximum;
+  sqlite3_str_appendf(builder,"{\"native_type\":\"%s\",\"byte_length\":\"%d\",\"byte_offset\":\"%lld\",\"preview_byte_length\":\"%d\",\"truncated\":%s,\"hex\":",kind==SQLITE_TEXT?"text":"blob",length,offset,take,offset+take<length?"true":"false");
+  inspection_hex(builder,offset ? (const unsigned char*)data+(size_t)offset : data,take);sqlite3_str_appendchar(builder,1,'}');return SQLITE_OK;
+}
+static int inspection_row(sqlite3_str *builder,sqlite3_changeset_iter *iterator,sqlite3_int64 number,int preview,int budget,int cancel){
+  const char *table=0;unsigned char *primary=0;int columns,operation,indirect,primary_columns,index,side,result;
+  result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
+  if(result==SQLITE_OK)result=sqlite3changeset_pk(iterator,&primary,&primary_columns);
+  if(result!=SQLITE_OK)return result;
+  if(columns!=primary_columns || columns<1)return SQLITE_CORRUPT;
+  sqlite3_str_appendf(builder,"{\"record_number\":\"%lld\",\"operation\":\"%s\",\"column_count\":%d,\"indirect\":%s,\"table_hex\":",number,operation==SQLITE_INSERT?"insert":operation==SQLITE_UPDATE?"update":"delete",columns,indirect?"true":"false");
+  if((sqlite3_int64)strlen(table)*2+sqlite3_str_length(builder)>budget)return SQLITE_TOOBIG;
+  inspection_hex(builder,table,(int)strlen(table));sqlite3_str_appendall(builder,",\"primary_key\":[");
+  if((sqlite3_int64)columns*4+sqlite3_str_length(builder)>budget)return SQLITE_TOOBIG;
+  for(index=0;index<columns;index++){if(index)sqlite3_str_appendchar(builder,1,',');sqlite3_str_appendf(builder,"%d",primary[index]);}
+  sqlite3_str_appendchar(builder,1,']');
+  for(side=0;side<2;side++){
+    sqlite3_str_appendall(builder,side ? ",\"new_values\":" : ",\"old_values\":");
+    if((!side && operation==SQLITE_INSERT) || (side && operation==SQLITE_DELETE)){sqlite3_str_appendall(builder,"null");continue;}
+    sqlite3_str_appendchar(builder,1,'[');
+    for(index=0;index<columns;index++){
+      sqlite3_value *value=0;if(cancelled(cancel))return SQLITE_INTERRUPT;
+      if(index)sqlite3_str_appendchar(builder,1,',');
+      result=side ? sqlite3changeset_new(iterator,index,&value) : sqlite3changeset_old(iterator,index,&value);
+      if(result==SQLITE_OK)result=inspection_value(builder,value,0,preview);
+      if(result!=SQLITE_OK)return result;
+      if(sqlite3_str_length(builder)>budget)return SQLITE_TOOBIG;
+      if(sqlite3_str_errcode(builder)!=SQLITE_OK)return sqlite3_str_errcode(builder);
+    }
+    sqlite3_str_appendchar(builder,1,']');
+  }
+  sqlite3_str_appendchar(builder,1,'}');return SQLITE_OK;
+}
+static void inspect_page(sqlite3_context *context,sqlite3_value **values){
+  sqlite3_int64 fd=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),offset=sqlite3_value_int64(values[4]),number=0;
+  int limit=sqlite3_value_int(values[5]),preview=sqlite3_value_int(values[6]),budget=sqlite3_value_int(values[7]),written=0,more=0,complete=0,result,finished;
+  sqlite3_changeset_iter *iterator=0;Output source;sqlite3_str *builder;char *json;
+  if(fd<0 || fd>INT_MAX || cancel<-1 || cancel>INT_MAX || offset<0 || limit<1 || limit>100 || preview<0 || preview>65536 || budget<1 || budget>16777216){fail(context,SQLITE_MISUSE,"Select bounded native inspection descriptors and page limits");return;}
+  source.descriptor=(int)fd;source.cancel=(int)cancel;source.bytes=0;builder=sqlite3_str_new(sqlite3_context_db_handle(context));sqlite3_str_appendall(builder,"{\"rows\":[");
+  result=sqlite3changeset_start_v2_strm(&iterator,input,&source,0);
+  while(result==SQLITE_OK && (result=sqlite3changeset_next(iterator))==SQLITE_ROW){
+    if(cancelled(source.cancel)){result=SQLITE_INTERRUPT;break;}
+    if(number==LLONG_MAX){result=SQLITE_FULL;break;}
+    number++;
+    if(number<=offset){result=SQLITE_OK;continue;}
+    if(written==limit){more=1;result=SQLITE_OK;break;}
+    if(written)sqlite3_str_appendchar(builder,1,',');
+    result=inspection_row(builder,iterator,number,preview,budget,source.cancel);if(result!=SQLITE_OK)break;written++;
+  }
+  if(result==SQLITE_DONE){complete=1;result=SQLITE_OK;}
+  if(iterator){finished=sqlite3changeset_finalize(iterator);if(result==SQLITE_OK)result=finished;}
+  if(result==SQLITE_OK){sqlite3_str_appendf(builder,"],\"offset\":\"%lld\",\"rows_returned\":%d,\"native_rows_visited\":\"%lld\",\"native_bytes_read\":\"%lld\",\"more\":%s,\"native_iterator_complete\":%s}",offset,written,number,source.bytes,more?"true":"false",complete?"true":"false");result=sqlite3_str_errcode(builder);if(result==SQLITE_OK && sqlite3_str_length(builder)>budget)result=SQLITE_TOOBIG;}
+  json=sqlite3_str_finish(builder);if(!json && result==SQLITE_OK)result=SQLITE_NOMEM;
+  if(result!=SQLITE_OK){sqlite3_free(json);fail(context,result,"Native inspection did not produce a complete bounded page");return;}
+  sqlite3_result_text(context,json,-1,sqlite3_free);
+}
+static void inspect_cell(sqlite3_context *context,sqlite3_value **values){
+  sqlite3_int64 fd=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),wanted=sqlite3_value_int64(values[4]),offset=sqlite3_value_int64(values[7]),number=0;
+  int column=sqlite3_value_int(values[5]),side=sqlite3_value_int(values[6]),maximum=sqlite3_value_int(values[8]),result,finished,found=0;
+  sqlite3_changeset_iter *iterator=0;sqlite3_str *builder;Output source;char *json;
+  if(fd<0 || fd>INT_MAX || cancel<-1 || cancel>INT_MAX || wanted<1 || column<0 || (side!=0 && side!=1) || offset<0 || maximum<1 || maximum>65536){fail(context,SQLITE_MISUSE,"Select an exact native record, column, side and bounded byte range");return;}
+  source.descriptor=(int)fd;source.cancel=(int)cancel;source.bytes=0;builder=sqlite3_str_new(sqlite3_context_db_handle(context));
+  result=sqlite3changeset_start_v2_strm(&iterator,input,&source,0);
+  while(result==SQLITE_OK && (result=sqlite3changeset_next(iterator))==SQLITE_ROW){
+    const char *table;int columns,operation,indirect;sqlite3_value *value=0;
+    if(cancelled(source.cancel)){result=SQLITE_INTERRUPT;break;}
+    if(number==LLONG_MAX){result=SQLITE_FULL;break;}number++;
+    if(number!=wanted){result=SQLITE_OK;continue;}
+    result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
+    if(result==SQLITE_OK && (column>=columns || (!side && operation==SQLITE_INSERT) || (side && operation==SQLITE_DELETE)))result=SQLITE_RANGE;
+    if(result==SQLITE_OK)result=side ? sqlite3changeset_new(iterator,column,&value) : sqlite3changeset_old(iterator,column,&value);
+    if(result==SQLITE_OK)result=inspection_value(builder,value,offset,maximum);
+    found=result==SQLITE_OK;break;
+  }
+  if(result==SQLITE_DONE)result=SQLITE_NOTFOUND;
+  if(iterator){finished=sqlite3changeset_finalize(iterator);if(result==SQLITE_OK)result=finished;}
+  if(result==SQLITE_OK && !found)result=SQLITE_NOTFOUND;
+  if(result==SQLITE_OK)result=sqlite3_str_errcode(builder);
+  json=sqlite3_str_finish(builder);if(!json && result==SQLITE_OK)result=SQLITE_NOMEM;
+  if(result!=SQLITE_OK){sqlite3_free(json);fail(context,result,"Native cell inspection did not produce the selected value");return;}
+  sqlite3_result_text(context,json,-1,sqlite3_free);
+}
+
+static void extract_cell(sqlite3_context *context,sqlite3_value **values){
+  sqlite3_int64 fd=sqlite3_value_int64(values[2]),cancel=sqlite3_value_int64(values[3]),wanted=sqlite3_value_int64(values[4]),outfd=sqlite3_value_int64(values[7]),number=0;
+  int column=sqlite3_value_int(values[5]),side=sqlite3_value_int(values[6]),result,finished,found=0,kind=0,length=0;
+  sqlite3_changeset_iter *iterator=0;Output source,target;
+  if(fd<0 || fd>INT_MAX || cancel<-1 || cancel>INT_MAX || wanted<1 || column<0 || (side!=0 && side!=1) || outfd<0 || outfd>INT_MAX || outfd==fd){fail(context,SQLITE_MISUSE,"Select an exact native byte value and separate owned output descriptor");return;}
+  source.descriptor=(int)fd;source.cancel=(int)cancel;source.bytes=0;target.descriptor=(int)outfd;target.cancel=(int)cancel;target.bytes=0;
+  result=sqlite3changeset_start_v2_strm(&iterator,input,&source,0);
+  while(result==SQLITE_OK && (result=sqlite3changeset_next(iterator))==SQLITE_ROW){
+    const char *table;int columns,operation,indirect;sqlite3_value *value=0;const void *data;
+    if(cancelled(source.cancel)){result=SQLITE_INTERRUPT;break;}
+    if(number==LLONG_MAX){result=SQLITE_FULL;break;}number++;
+    if(number!=wanted){result=SQLITE_OK;continue;}
+    result=sqlite3changeset_op(iterator,&table,&columns,&operation,&indirect);
+    if(result==SQLITE_OK && (column>=columns || (!side && operation==SQLITE_INSERT) || (side && operation==SQLITE_DELETE)))result=SQLITE_RANGE;
+    if(result==SQLITE_OK)result=side ? sqlite3changeset_new(iterator,column,&value) : sqlite3changeset_old(iterator,column,&value);
+    if(result==SQLITE_OK){kind=value ? sqlite3_value_type(value) : 0;if(kind!=SQLITE_TEXT && kind!=SQLITE_BLOB)result=SQLITE_MISMATCH;}
+    if(result==SQLITE_OK){data=kind==SQLITE_TEXT ? (const void*)sqlite3_value_text(value) : sqlite3_value_blob(value);length=sqlite3_value_bytes(value);result=length && !data ? SQLITE_NOMEM : output(&target,data,length);}
+    found=result==SQLITE_OK;break;
+  }
+  if(result==SQLITE_DONE)result=SQLITE_NOTFOUND;
+  if(iterator){finished=sqlite3changeset_finalize(iterator);if(result==SQLITE_OK)result=finished;}
+  if(result==SQLITE_OK && !found)result=SQLITE_NOTFOUND;
+  if(result!=SQLITE_OK){fail(context,result,"Native byte-value extraction did not complete");return;}
+  {char *json=sqlite3_mprintf("{\"native_type\":\"%s\",\"record_number\":\"%lld\",\"column_index\":%d,\"side\":\"%s\",\"byte_length\":\"%d\",\"native_written_bytes\":\"%lld\",\"native_bytes_read\":\"%lld\",\"native_iterator_complete\":false}",kind==SQLITE_TEXT?"text":"blob",wanted,column,side?"new":"old",length,target.bytes,source.bytes);if(!json)fail(context,SQLITE_NOMEM,"Native extraction acknowledgement allocation failed");else sqlite3_result_text(context,json,-1,sqlite3_free);}
+}
+
 typedef struct Apply Apply;
 struct Apply { int choices[6],cancel;sqlite3_int64 conflicts[6],seen,included;const char *table; };
 
@@ -287,6 +414,9 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   Capture *capture,*previous=0;int result=SQLITE_OK;
   if(count<2 || !admitted(state,values[0])){fail(context,SQLITE_AUTH,"Native session capability is unavailable");return;}
   operation=text(values[1]);if(!operation){fail(context,SQLITE_MISUSE,"Select a native session operation");return;}
+  if(strcmp(operation,"extract_cell")==0 && count==8){extract_cell(context,values);return;}
+  if(strcmp(operation,"inspect_page")==0 && count==8){inspect_page(context,values);return;}
+  if(strcmp(operation,"inspect_cell")==0 && count==9){inspect_cell(context,values);return;}
   if(strcmp(operation,"inspect_file")==0 && count==4){inspect_changeset(context,values,0);return;}
   if(strcmp(operation,"inspect_selection")==0 && count==5){
     const char *selected=sqlite3_value_type(values[4])==SQLITE_NULL ? 0 : text(values[4]);
@@ -296,7 +426,7 @@ static void control(sqlite3_context *context,int count,sqlite3_value **values){
   if(strcmp(operation,"apply_file")==0 && count==12){apply_changeset(context,state,values);return;}
   if(strcmp(operation,"transform_file")==0 && count>=8){transform_changeset(context,state,count,values);return;}
   if(strcmp(operation,"identity")==0 && count==2){
-    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":5}",sqlite3_libversion(),sqlite3_sourceid());
+    char *identity=sqlite3_mprintf("{\"sqlite_version\":\"%s\",\"sqlite_source_id\":\"%s\",\"adapter_abi\":1,\"native_session_revision\":6}",sqlite3_libversion(),sqlite3_sourceid());
     if(!identity)sqlite3_result_error_nomem(context);else sqlite3_result_text(context,identity,-1,sqlite3_free);return;
   }
   if(strcmp(operation,"close_all")==0 && count==2){close_all(state);return;}

@@ -552,3 +552,45 @@ pending transaction. Authenticated HTTP/browser workflows exercise filters and
 attached-source comparison. These tools do not close interactive changeset
 inspection/decisions, remaining module coverage or the broader product matrix.
 History tests remain deferred.
+
+Typed native changeset inspection and value extraction
+------------------------------------------------------
+
+Verified capture, upload and transform files can now be inspected before
+application. The workspace shows native record operations, direct/indirect
+flags, primary-key positions and typed old/new values. Values omitted by the
+native format are explicitly undefined, distinct from SQL NULL and absent
+old/new vectors. Native files contain positions and key masks rather than
+original column names or declared SQL types; those facts are not invented.
+
+The pinned public streaming iterator supplies bounded record pages and exact
+cell byte ranges. Integer/record/offset identities remain decimal strings.
+TEXT previews preserve bytes even when a range splits UTF-8 or contains invalid
+UTF-8; decoded text is shown only for a valid prefix. Large TEXT/BLOB values can
+be extracted completely into a separately checksummed downloadable file without
+joining preview ranges. TEXT extraction uses the public API's UTF-8 value bytes.
+Numeric/null/undefined values are not presented as raw binary files.
+
+Inspection uses an independent in-memory helper connection and never changes a
+registered database or interactive transaction. Owner/endpoint/target checks,
+source-file seals and exact program identity bind each job. Source checksum
+verification and native input/output work have cancellation/deadline checks.
+Native return, file synchronization, sealing and publication remain separate.
+Lost publication can reconcile a sealed output without repeating native work;
+unsealed JSON/byte output remains diagnostic even when its current syntax or
+length appears valid. Retained receipts and files support offline inspection,
+verified downloads and confirmed cleanup. Inspection output is not an eligible
+changeset/apply input.
+
+UI requests preserve exact row/column/source identities, including when a
+retained inspection belongs to a different source from the current apply
+selection. Source changes discard stale asynchronous results. Native checks cover
+changesets/patchsets, missing versus NULL values, signed int64 data, split UTF-8,
+large byte ranges/full extraction, cancellation, sealed/unsealed recovery and
+pending SQL preservation. Authenticated HTTP and browser checks inspect records
+and download full native value bytes with independent comparisons.
+
+This scope leaves interactive per-row conflict decisions, transient schema
+bases, managed long-running session-diff progress/cancellation, remaining native
+module transformations and the broader product matrix open. History testing is
+still deferred; platform teams own Windows/macOS qualification.

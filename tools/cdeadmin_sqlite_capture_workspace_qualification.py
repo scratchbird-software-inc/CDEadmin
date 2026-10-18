@@ -72,6 +72,8 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     for path in [*list((ROOT/'web/pgadmin/cdeadmin/providers/sqlite').glob('preupdate*.py')),ROOT/'tools/native/sqlite_preupdate/api.c',ROOT/'tools/native/sqlite_preupdate/CMakeLists.txt',ROOT/'tools/native/sqlite_hook_ownership.h',ROOT/'web/pgadmin/static/js/Dialogs/SQLitePreupdate.jsx']:
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [ROOT/'web/pgadmin/cdeadmin/providers/sqlite/changeset_inspection.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_inspection_jobs.py',ROOT/'web/pgadmin/cdeadmin/workspace/sqlite_inspection_service.py',ROOT/'web/pgadmin/static/js/Dialogs/SQLiteChangesetInspection.jsx']:
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -224,6 +226,25 @@ def qualify(output,library,core,cli,*,browser_binary=None,driver_binary=None,arr
         assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==row['sha256']
         assert export('start',**request)['state']=='artifact_verified'
         proof['checks'].append('target-scope-refusal-pending-SQL-not-committed-no-replay-and-offline-reconcile-download-after-query-close')
+        def inspect_reference(reference,selected):
+            def inspection(operation,**fields):return post('sqlite_changeset_inspect_'+operation,request={'database_target_id':target,**fields})
+            review=inspection('review',input=reference,options=selected)
+            value=inspection('start',job_id=review['job_id'],review_digest=review['review_digest'],confirmed=True);deadline=time.monotonic()+30
+            while value['state'] in {'active','dispatching','publishing','cancel_requested'}:
+                assert time.monotonic()<deadline;time.sleep(.02);value=inspection('status',job_id=review['job_id'])
+            assert value['state']=='completed' and value['native_returned'],value
+            assert inspection('start',job_id=review['job_id'],review_digest=review['review_digest'],confirmed=True)['state']=='completed'
+            return value,inspection('result',job_id=review['job_id'])
+        reference={'database_target_id':target,'kind':'capture','job_id':exports['changeset'],'path':'capture.changeset'}
+        inspected,metadata=inspect_reference(reference,{'mode':'page','preview_bytes':4,'timeout_seconds':60})
+        row=metadata['inspection']['rows'][0]
+        assert row['new_values'][0]=={'native_type':'integer','data':'9007199254740993'} and row['primary_key']==[1,0,0]
+        assert metadata['inspection']['column_name_scope'] and metadata['apply_input'] is False
+        extracted,metadata=inspect_reference(reference,{'mode':'extract','record_number':row['record_number'],'column_index':1,'side':'new','timeout_seconds':60})
+        response=client.post(url,data={'action':'sqlite_changeset_inspect_download','payload':json.dumps({'database_target_id':target,'job_id':extracted['job_id'],'path':'value.bin'})})
+        assert response.status_code==200 and response.data==('native 😀'*300000).encode('utf8') and response.headers.get('X-Content-Type-Options')=='nosniff'
+        proof['native_inspection']={'page_job_id':inspected['job_id'],'extracted_job_id':extracted['job_id'],'extracted_bytes':len(response.data),'extracted_sha256':hashlib.sha256(response.data).hexdigest()}
+        proof['checks'].append('authenticated-native-typed-file-inspection-and-complete-text-byte-extraction-with-exact-independent-bytes-and-no-repeat')
         def apply_action(operation,**fields):
             return post('sqlite_changeset_'+operation,database_target_id=other,request={'database_target_id':other,**fields})
         for inverted in (False,True):
@@ -346,6 +367,7 @@ def browser(app,output,server_id,binary,driver_binary):
     from selenium.webdriver.chrome.service import Service
     from selenium.common.exceptions import StaleElementReferenceException,ElementClickInterceptedException,ElementNotInteractableException
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from cdeadmin_ui_evidence import ensure_data_explorer,expand,wait_for_tree_item,invoke_context_action
     from cdeadmin_sqlite_query_ui_gate import _run_query
@@ -441,7 +463,18 @@ def browser(app,output,server_id,binary,driver_binary):
         source_field=driver.find_element(By.ID,source_label.get_attribute('for'));expose(source_field);source_field.click()
         wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]')
             if node.is_displayed() and node.text.strip()=='native.sqlite'),None)).click()
-        click('Load verified source exports');click('Review native changeset application')
+        click('Load verified source exports')
+        click('SQLite typed changeset inspection','summary');click('Inspect typed native file support');click('Inspect selected native records')
+        click('Select native record 1')
+        position_label=driver.find_element(By.XPATH,'//label[normalize-space()="Native column position (first is 1)"]')
+        field=driver.find_element(By.ID,position_label.get_attribute('for'));expose(field);field.click();field.send_keys(Keys.CONTROL,'a');field.send_keys('2')
+        wait.until(lambda _browser:field.get_attribute('value')=='2')
+        click('Extract complete native TEXT or BLOB value')
+        wait.until(lambda browser:any('Native inspection ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        click('Load native inspection files');click('Download inspection value.bin')
+        extracted_value=downloads/'value.bin';wait.until(lambda _browser:extracted_value.is_file() and not list(downloads.glob('*.crdownload')))
+        assert extracted_value.stat().st_size==3000000 and hashlib.sha256(extracted_value.read_bytes()).hexdigest()==hashlib.sha256(b'x'*3000000).hexdigest()
+        click('Review native changeset application')
         confirmation=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Confirm native changes and commit to this destination")]//input'));expose(confirmation);confirmation.click()
         click('Apply reviewed native changeset')
         wait.until(lambda browser:any('Native apply ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
@@ -540,7 +573,7 @@ def browser(app,output,server_id,binary,driver_binary):
         return {'complete':True,'console_errors':0,'job_id':receipt['job_id'],'downloaded_bytes':artifact.stat().st_size,'downloaded_sha256':checksum,
             'native_apply_job_id':applied['job_id'],'native_apply_commit_returned':True,'independent_destination_rows_verified':True,'apply_metadata_download_verified':True,
             'external_upload_apply_job_id':uploaded_apply['job_id'],'external_upload_bytes':(output/'external.changeset').stat().st_size,
-            'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
+            'native_typed_inspection_and_value_download_verified':True,'native_capture_filter_and_diff_verified':True,'native_preupdate_verified':native_preupdate,'native_arrays_verified':native_arrays,'external_native_upload_and_apply_verified':True,'native_transform_and_apply_verified':True,'transformed_apply_job_id':transformed_apply['job_id']}
     except BaseException:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'));(output/'browser-failure-text.txt').write_text(driver.find_element(By.TAG_NAME,'body').text)

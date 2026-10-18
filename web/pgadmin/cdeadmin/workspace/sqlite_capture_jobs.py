@@ -1,5 +1,6 @@
 """Owned, once-only SQLite changeset exports; capture memory stays connection-local."""
 from copy import deepcopy
+from contextvars import ContextVar
 from contextlib import ExitStack,contextmanager
 import hashlib
 import json
@@ -11,9 +12,21 @@ import time
 
 import psutil
 
+from pathlib import Path
+
 from ..operations.fileio import durable_replace,private_directory,private_file
 from ..providers.sqlite.session_api import SessionAPIError
 from .mysql_binlog_jobs import MySQLBinlogJobs,DurableCancellation,digest
+
+
+_ARCHIVE_READ_CHECK=ContextVar('sqlite_archive_read_check',default=None)
+
+
+@contextmanager
+def checked_archive_reads(check):
+    token=_ARCHIVE_READ_CHECK.set(check)
+    try:yield
+    finally:_ARCHIVE_READ_CHECK.reset(token)
 
 
 class SQLiteCaptureJobs(MySQLBinlogJobs):
@@ -67,6 +80,29 @@ class SQLiteCaptureJobs(MySQLBinlogJobs):
         except psutil.Error:raise SessionAPIError('Native export owner-process termination cannot be inspected') from None
         if alive:raise SessionAPIError('Native export I/O termination is unconfirmed')
         self.update(record,worker_io_closed=True,owner_process_termination_observed=True)
+
+    @contextmanager
+    def download(self,job_id,owner,endpoint,relative):
+        record=self.load(job_id,owner,endpoint)
+        if record.get('artifact_removed') or record['state'] not in {'completed','artifact_verified'}:raise SessionAPIError('Select a retained verified native artifact')
+        artifact=(record.get('result') or {}).get('artifact') or {};selected=next((row for row in artifact.get('files',[]) if row['path']==relative),None)
+        if selected is None or not isinstance(relative,str) or Path(relative).name!=relative or relative in {'.','..'}:raise SessionAPIError('Select one exact native artifact filename')
+        root=self.directory(record)/'archive';info=root.lstat()
+        if not stat.S_ISDIR(info.st_mode) or root.resolve()!=root or getattr(info,'st_file_attributes',0)&0x400:raise SessionAPIError('Native artifact directory identity changed')
+        descriptor=os.open(root/relative,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0));check=_ARCHIVE_READ_CHECK.get()
+        with os.fdopen(descriptor,'rb') as stream:
+            before=os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or getattr(before,'st_file_attributes',0)&0x400:raise SessionAPIError('Native artifact file identity changed')
+            checksum=hashlib.sha256()
+            while True:
+                if check:check()
+                data=stream.read(1048576)
+                if not data:break
+                checksum.update(data)
+            after=os.fstat(descriptor)
+            if self.file_identity(before)!=self.file_identity(after) or after.st_size!=selected['size'] or checksum.hexdigest()!=selected['sha256']:
+                raise SessionAPIError('Native artifact bytes changed after verification')
+            stream.seek(0);yield stream,deepcopy(selected)
 
     def verify_artifact(self,record):
         artifact=(record.get('result') or {}).get('artifact') or (record.get('sealed_candidate') or {}).get('artifact')

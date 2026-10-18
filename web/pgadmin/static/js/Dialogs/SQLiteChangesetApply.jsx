@@ -4,6 +4,7 @@ import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mu
 import {startBrowserFileDownload} from './browserFileDownload';
 import SQLiteNativeUpload from './SQLiteNativeUpload';
 import SQLiteNativeTransforms from './SQLiteNativeTransforms';
+import SQLiteChangesetInspection from './SQLiteChangesetInspection';
 
 const active=state => ['dispatching','active','committing','cancel_requested'].includes(state);
 const kinds=['data','not_found','conflict','constraint','foreign_key'];
@@ -90,6 +91,9 @@ export default function SQLiteChangesetApply({post,databaseTargetId,endpointUrl,
         <Button disabled={blocked || sourceOffset===0} onClick={() => {const next=Math.max(0,sourceOffset-25);setSourceOffset(next);perform('sources',{...sourceFields,offset:next,limit:25});}}>Previous source exports</Button>
         <Button disabled={blocked || !sources.more} onClick={() => {setSourceOffset(sourceOffset+25);perform('sources',{...sourceFields,offset:sourceOffset+25,limit:25});}}>Next source exports</Button>
       </>}
+      <SQLiteChangesetInspection post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl}
+        disabled={blocked || disabled} reference={selected ? {database_target_id:sourceTarget,kind:sourceKind,job_id:input,
+          path:sourceKind==='capture' ? 'capture.'+selected.options.kind:selected.result.artifact.input_name} : null} />
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>{kinds.map(kind => <TextField key={kind} select size="small" label={'Native '+kind+' conflict response'} value={options.conflicts[kind]} disabled={blocked}
         onChange={event => change('conflicts',{...options.conflicts,[kind]:event.target.value})}>
         <MenuItem value="abort">Abort and roll back owned changes</MenuItem><MenuItem value="omit">{kind==='foreign_key' ? 'Keep changes, including foreign-key violations' : 'Omit conflicting change'}</MenuItem>

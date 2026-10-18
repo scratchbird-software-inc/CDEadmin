@@ -303,9 +303,19 @@ remains open for every engine; a scoped workflow is not the full denominator.
        base-column renames, including stars and nested source views.
        Offline native file recovery uses private WAL/journal images, exact
        typed transfer, reviewed new-file publication, durable outcomes and
-       registration/activation of recovered copies.
-     - Remaining attached/content-view alias shadowing, language identity and installed-module transformations and
-       complete native extension/feature and platform reconciliation.
+       registration/activation of recovered copies. Retained native session
+       captures provide streamed exports, attached-source diff and automatic
+       GLOB predicates. Verified external files feed native transforms/rebase
+       and reviewed independent apply. Typed inspection preserves missing/NULL
+       distinctions and offers exact ranges and full TEXT/BLOB extraction.
+       Connection-owned native CARRAY bindings cover all five native types;
+       bounded standalone preupdate diagnostics retain typed before-change
+       observations and explicit loss, without claiming commit.
+     - Interactive per-row changeset decisions, transient schema bases and
+       managed long-running session-diff progress/cancellation; remaining
+       attached/content-view alias shadowing, language identity and installed-
+       module transformations; complete independent native extension/feature
+       and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
        preparation, exact dialect context and native catalog completion.
@@ -2042,3 +2052,18 @@ pending transactions and source/destination table data. Explicit attachment
 metadata is labelled separately from SQLite's unenumerable internal automatic
 attachment list. Authenticated HTTP/browser checks qualify this scope; remaining
 changeset decisions and broader product requirements stay open.
+
+
+SQLite typed native-file inspection and byte-value extraction
+------------------------------------------------------------
+
+Verified native changeset/patchset files now have typed record pages, exact cell
+ranges and complete TEXT/BLOB byte extraction. Native key masks, indirect flags,
+int64 identities and undefined/NULL distinctions survive the browser boundary.
+Files do not supply original column names/types, and a bounded page never claims
+to validate an unvisited suffix. Jobs preserve query transactions, bind retained
+source identities and separate native acknowledgement from output publication.
+Cancellable checksums/I/O, sealed recovery, diagnostic unsealed files, verified
+downloads and cleanup accompany the workflow. Authenticated HTTP/browser checks
+compare full extracted bytes independently. Per-row conflict decisions and the
+other listed product gaps remain open; history qualification stays deferred.

@@ -45,6 +45,9 @@ def source(service,server,fields,owner,endpoint):
 
 def action(service,server,operation,request):
     from flask import current_app
+    if operation.startswith('inspect_'):
+        from .sqlite_inspection_service import action as native_inspection
+        return native_inspection(service,server,operation.removeprefix('inspect_'),request)
     if operation.startswith('upload_'):
         from .sqlite_upload_service import action as upload
         return upload(service,server,operation.removeprefix('upload_'),request)
