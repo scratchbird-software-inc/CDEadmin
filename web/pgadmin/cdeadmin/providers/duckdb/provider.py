@@ -163,7 +163,7 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
         handle = self._editor_session(request)
         with self.client._lock:
             retained = self.client._attachment_reviews.get(request.get('review_id'))
-            reading = request.get('operation') == 'receipt' or (
+            reading = request.get('operation') in {'receipt', 'discard'} or (
                 request.get('operation') == 'apply' and retained is not None and retained['state'] != 'reviewed')
             if not reading:
                 self.client._require_idle(handle)

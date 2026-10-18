@@ -267,6 +267,28 @@ commits or rolls back. It never makes that transaction decision itself. This
 guard covers detachments made through the attachment workflow; arbitrary SQL
 and administration by another connection retain native failure handling.
 
+Encrypted native files use a separately admitted private key bound to the
+native ATTACH parameter. Optional GCM/CTR selection preserves the engine's
+cipher and file-format rules. An unused review key is admitted for five minutes
+before dispatch; it expires unused, can be explicitly discarded,
+and is released after an attempted operation or session closure. Keys are absent
+from SQL previews, downloaded SQL, public review fingerprints and receipts.
+The native cipher and encrypted flag remain observable. Reading an encrypted
+file does not change its existing cipher or rekey the file.
+The pinned runtime requires explicit CTR selection when reopening a CTR file;
+choosing the native default does not bypass that security admission.
+The key text retains DuckDB's native VARCHAR-to-BLOB representation: non-ASCII
+bytes and literal backslashes use hexadecimal byte escapes. Invalid native
+encoding produces a safe ``native-key-encoding`` reason without the private
+input or native error text.
+
+The UI requires explicit encryption intent and clears the submitted key after
+review. It cannot silently replace an encrypted review with a plaintext review
+when that key field is cleared. Native wrong-key/crypto refusal retains the
+usual terminal receipt and never authorizes replay. Session-memory receipts
+still have the lifecycle limits described above; encrypted remote attachment
+types and encryption transformations require their own adapters.
+
 Operations leave commit and rollback to the caller. In the pinned native engine,
 an attachment created in a transaction disappears on rollback; a detached
 catalog is not restored by rollback. A newly created file is not deleted by

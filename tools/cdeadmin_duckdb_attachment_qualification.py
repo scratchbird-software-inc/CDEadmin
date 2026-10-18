@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import sys
+import weakref
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
@@ -145,6 +146,55 @@ def qualify(output):
                     assert restored.execute("SELECT payload.\"field . é\" FROM storage_rows WHERE id=8999").fetchone()==('8999',)
                     assert restored.execute('SELECT block_size FROM pragma_database_size() WHERE database_name=current_database()').fetchone()==(32768,)
                 finally:restored.close()
+                for cipher in ('GCM','CTR'):
+                    encrypted_file=directory/('encrypted-'+cipher+'.duckdb')
+                    key='owned native key '+cipher+" ' "+r'\xC3\xA9 \x5C'
+                    encrypted_alias='encrypted . " '+cipher+' é'
+                    encrypted_draft={**draft,'alias':encrypted_alias,'path':str(encrypted_file),
+                        'read_only':False,'create_if_missing':True,'encryption_key':key,'encryption_cipher':cipher}
+                    encrypted_review=review(encrypted_draft)
+                    assert key not in json.dumps(encrypted_review,ensure_ascii=False)
+                    encrypted_result=apply(encrypted_review)
+                    assert encrypted_result['state']=='acknowledged' and encrypted_result['rediscovery_verified']
+                    encrypted_facts=next(row for row in encrypted_result['native_catalogs'] if row['name']==encrypted_alias)
+                    assert encrypted_facts['encrypted'] and encrypted_facts['cipher']==cipher
+                    assert key not in json.dumps(encrypted_result,ensure_ascii=False)
+                    private=client._attachment_reviews[encrypted_review['review_id']]
+                    assert not private['compiled'].get('parameters') and 'encryption_key' not in private['compiled']['draft']
+                    qualified_encrypted=attachments.quote(encrypted_alias)+'.main.'
+                    handle.execute('CREATE TABLE '+qualified_encrypted+'protected(id BIGINT,value VARCHAR)')
+                    handle.execute('INSERT INTO '+qualified_encrypted+'protected VALUES (?,?)',[42,'encrypted native payload 119'])
+                    client.control_transaction(handle,'commit')
+                    assert apply(review({'action':'detach','alias':encrypted_alias,'if_exists':False}))['rediscovery_verified']
+                    client.control_transaction(handle,'commit')
+                    independent=duckdb.connect()
+                    try:
+                        independent.execute("ATTACH '"+str(encrypted_file).replace("'","''")+"' AS reopened (READ_ONLY,ENCRYPTION_KEY ?,ENCRYPTION_CIPHER '"+cipher+"')",[key])
+                        assert independent.execute('SELECT id,value FROM reopened.main.protected').fetchone()==(42,'encrypted native payload 119')
+                        assert independent.execute("SELECT encrypted,cipher FROM duckdb_databases() WHERE database_name='reopened'").fetchone()==(True,cipher)
+                    finally:independent.close()
+                    assert b'encrypted native payload 119' not in encrypted_file.read_bytes()
+                    wrong_client=_create_client()
+                    wrong_provider=DuckDBPilotProvider(SimpleNamespace(endpoint_id='owned-wrong-key',session_namespace='owned-wrong-key'),permissions,wrong_client)
+                    try:
+                        wrong_session=wrong_provider.open_session({'route':route})['session_id']
+                        def wrong(value):
+                            return wrong_provider.attachment_action({**value,'session_id':wrong_session,'language_profile':'duckdb-sql'},route)
+                        wrong_review=wrong({'operation':'review','draft':{**encrypted_draft,'create_if_missing':False,'read_only':True,'encryption_key':'owned incorrect key'}})
+                        wrong_request={'operation':'apply','review_id':wrong_review['review_id'],'review_digest':wrong_review['review_digest'],'confirmation':wrong_review['alias'],'confirmed':True}
+                        refused=wrong(wrong_request)
+                        assert not refused['native_acknowledged'] and not refused['rediscovery_verified']
+                        assert refused['state'] in {'refused','unknown_outcome'} and wrong(wrong_request)==refused
+                        assert not wrong_client._attachment_key_timers and 'owned incorrect key' not in json.dumps(refused)
+                    finally:wrong_client.close()
+                unused=review({**draft,'path':str(directory/'unused-key.duckdb'),'read_only':False,
+                    'create_if_missing':True,'encryption_key':'owned expiring key'})
+                attachments.expire_key(weakref.ref(client),unused['review_id'])
+                assert apply(unused)['state']=='credential_expired' and not (directory/'unused-key.duckdb').exists()
+                unused=review({**draft,'path':str(directory/'discarded-key.duckdb'),'read_only':False,
+                    'create_if_missing':True,'encryption_key':'owned discarded key'})
+                discarded=request({'operation':'discard','review_id':unused['review_id'],'review_digest':unused['review_digest']})
+                assert discarded['state']=='discarded' and not discarded['native_dispatched'] and apply(unused)==discarded
                 record=review(draft)
                 before=attachments.catalogs(handle)
                 with patch.object(attachments,'catalogs',side_effect=[before,OSError('post-acknowledgement read failed'),before]):
@@ -161,6 +211,9 @@ def qualify(output):
                     'native_storage_options_pending_context_and_memory_compression_verified':True,
                     'independently_reopened_file_data_and_block_size_verified':True,
                     'retired_alias_refused_until_explicit_caller_decision':True,
+                    'gcm_ctr_bound_private_keys_and_independent_encrypted_file_reopen_verified':True,
+                    'wrong_key_terminal_receipt_and_no_replay_verified':True,
+                    'private_keys_released_after_dispatch_expiry_and_discard':True,
                     'stale_namespace_refused_before_dispatch':True,
                     'review_bound_to_original_native_connection':True,
                     'post_acknowledgement_failure_retained_without_replay':True})

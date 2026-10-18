@@ -328,6 +328,10 @@ class DuckDBClient(RelationalDBAPIClient):
             return super().list_resources(request)
 
     def _forget_and_close(self, handle):
+        context = self._attachment_contexts.get(id(handle))
+        if context is not None:
+            from .attachments import release_session_keys
+            release_session_keys(self, context['session_scope_id'])
         try:
             handle.close()
         except Exception:

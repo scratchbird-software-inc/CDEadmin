@@ -23,6 +23,28 @@ const properties = post => ({post, databaseTargetId: 'file-1', sessionId: 'query
   ensureSession: jest.fn().mockResolvedValue('query-1'), onBusyChange: jest.fn(), onBlocked: jest.fn()});
 
 describe('DuckDB original-session attachment workflow', () => {
+  it('keeps encryption explicit, clears the submitted key, and discards its private review without SQL', async () => {
+    const encrypted={...review,key_bound:true,encryption_cipher_requested:'GCM',source:'ATTACH ... (ENCRYPTION_KEY ?)'};
+    const post=jest.fn().mockResolvedValueOnce(encrypted).mockResolvedValueOnce({...encrypted,state:'discarded',native_dispatched:false});
+    render(<Component {...properties(post)} />);enter();
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use native file encryption'}));
+    expect(screen.getByRole('button',{name:'Review native attachment'})).toBeDisabled();
+    const key=screen.getByLabelText('Native file encryption key');expect(key).toHaveAttribute('type','password');
+    fireEvent.change(key,{target:{value:'owned private key'}});
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'Encryption cipher'}));
+    fireEvent.click(screen.getByRole('option',{name:'GCM'}));
+    fireEvent.click(screen.getByRole('button',{name:'Review native attachment'}));
+    await screen.findByRole('textbox',{name:'Exact reviewed catalog alias'});
+    expect(post.mock.calls[0][0].request.draft).toMatchObject({encryption_key:'owned private key',encryption_cipher:'GCM'});
+    expect(screen.getByLabelText('Native file encryption key')).toHaveValue('');
+    expect(screen.getByRole('button',{name:'Review native attachment'})).toBeDisabled();
+    expect(screen.getByLabelText('Generated DuckDB attachment SQL').value).not.toContain('owned private key');
+    fireEvent.click(screen.getByRole('button',{name:'Discard encrypted attachment review'}));
+    await screen.findByLabelText('DuckDB attachment receipt');
+    expect(post.mock.calls[1][0].request).toEqual({operation:'discard',review_id:'review-1',review_digest:'digest-1'});
+    expect(screen.queryByText('owned private key')).not.toBeInTheDocument();
+  });
+
   it('preserves exact storage sizes and version without applying native defaults in the client', async () => {
     const post=jest.fn().mockResolvedValue(review);render(<Component {...properties(post)} />);enter();
     for(const [label,value] of [['Block size (bytes)','32768'],['Row-group size (rows)','4096'],['Storage version','v1.5.0']])

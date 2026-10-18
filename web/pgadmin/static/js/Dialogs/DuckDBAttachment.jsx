@@ -11,6 +11,8 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
   const [conflict, setConflict] = useState('ERROR'), [create, setCreate] = useState(false), [missing, setMissing] = useState(false);
   const [blockSize, setBlockSize] = useState(''), [rowGroupSize, setRowGroupSize] = useState('');
   const [storageVersion, setStorageVersion] = useState(''), [compress, setCompress] = useState('');
+  const [encryptionKey, setEncryptionKey] = useState(''), [cipher, setCipher] = useState('');
+  const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState(''), [confirmed, setConfirmed] = useState(false);
   const [awaitingReceipt, setAwaitingReceipt] = useState(false);
@@ -18,6 +20,7 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
   const blocked = disabled || result?.session_reuse_blocked === true || result?.state === 'unknown_outcome';
   useEffect(() => {serial.current++; setAlias(''); setPath(''); setResult(null); setError('');
     setBlockSize(''); setRowGroupSize(''); setStorageVersion(''); setCompress('');
+    setEncryptionKey(''); setCipher(''); setEncryptionEnabled(false);
     setConfirmed(false); setConfirmation(''); setBusy(false); setAwaitingReceipt(false);
     return () => {serial.current++;};}, [databaseTargetId, post]);
   useEffect(() => {
@@ -38,13 +41,16 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
         ...(storageVersion ? {storage_version: storageVersion} : {}), ...(path === ':memory:' && compress ? {compress: compress === 'true'} : {})};
       const request = operation === 'review' ? {operation, draft: {action, alias,
         ...(action === 'attach' ? {path, read_only: readOnly, conflict, create_if_missing: create,
+          ...(encryptionEnabled ? {encryption_key: encryptionKey, ...(cipher ? {encryption_cipher: cipher} : {})} : {}),
           ...(Object.keys(options).length ? {storage_options: options} : {})} : {if_exists: missing})}} :
         operation === 'inventory' ? {operation} : {operation, review_id: result.review_id,
-          ...(operation === 'apply' ? {review_digest: result.review_digest, confirmation, confirmed} : {})};
+          ...(operation === 'apply' ? {review_digest: result.review_digest, confirmation, confirmed} :
+            operation === 'discard' ? {review_digest: result.review_digest} : {})};
       if(operation === 'apply') setAwaitingReceipt(true);
       const value = await post({action: 'duckdb_attachments', database_target_id: databaseTargetId,
         session_id: active, request});
       if(token === serial.current) {
+        if(operation === 'review') setEncryptionKey('');
         setResult(value); setConfirmed(false); setConfirmation(''); setAwaitingReceipt(false);
         if(value.session_reuse_blocked) onBlocked?.();
       }
@@ -70,7 +76,7 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
       <TextField size="small" label="Native catalog alias" value={alias} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setAlias)} sx={{minWidth: 210}} />
       {action === 'attach' && <><TextField size="small" label="Absolute DuckDB file path" value={path} disabled={busy || blocked || awaitingReceipt}
-        onChange={event => {setPath(event.target.value); setCompress(''); if(event.target.value === ':memory:') setCreate(false); clear();}} sx={{minWidth: 350}}
+        onChange={event => {setPath(event.target.value); setCompress(''); if(event.target.value === ':memory:') {setCreate(false); setEncryptionKey(''); setCipher(''); setEncryptionEnabled(false);} clear();}} sx={{minWidth: 350}}
         helperText="Use :memory: for an authorized writable in-memory catalog." />
       <FormControlLabel label="Read only" control={<Checkbox checked={readOnly} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setReadOnly(event.target.checked); if(event.target.checked) setCreate(false); clear();}} />} />
@@ -87,14 +93,27 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
         onChange={change(setStorageVersion)} helperText="Optional native version, for example v1.5.0 or latest." />
       <TextField select size="small" label="In-memory compression" value={compress} disabled={busy || blocked || awaitingReceipt || path !== ':memory:'}
         onChange={change(setCompress)}><MenuItem value="">Native default</MenuItem><MenuItem value="true">Compress</MenuItem><MenuItem value="false">Do not compress</MenuItem></TextField>
+      <FormControlLabel label="Use native file encryption" control={<Checkbox checked={encryptionEnabled}
+        disabled={busy || blocked || awaitingReceipt || path === ':memory:'}
+        onChange={event => {setEncryptionEnabled(event.target.checked); setEncryptionKey(''); setCipher(''); clear();}} />} />
+      {encryptionEnabled && <><TextField size="small" type="password" autoComplete="off" label="Native file encryption key" value={encryptionKey}
+        disabled={busy || blocked || awaitingReceipt} onChange={change(setEncryptionKey)}
+        helperText={'Native key bytes: use \\xHH escapes for non-ASCII bytes and backslashes. Private for five minutes; omitted from SQL and receipts.'} />
+      <TextField select size="small" label="Encryption cipher" value={cipher}
+        disabled={busy || blocked || awaitingReceipt} onChange={change(setCipher)}>
+        <MenuItem value="">Native default</MenuItem><MenuItem value="GCM">GCM</MenuItem><MenuItem value="CTR">CTR</MenuItem>
+      </TextField></>}
       </>}
       {action === 'detach' && <FormControlLabel label="IF EXISTS" control={<Checkbox checked={missing} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setMissing(event.target.checked); clear();}} />} />}
-      <Button disabled={busy || blocked || awaitingReceipt || !alias || (action === 'attach' && !path)} onClick={() => run('review')}>Review native attachment</Button>
+      <Button disabled={busy || blocked || awaitingReceipt || !alias ||
+        (action === 'attach' && (!path || encryptionEnabled && !encryptionKey))}
+      onClick={() => run('review')}>Review native attachment</Button>
       <Button disabled={busy || !result?.source} onClick={download}>Save SQL script</Button>
     </Box>
     {result?.catalogs && <Box component="pre" aria-label="Current DuckDB catalogs" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(result.catalogs, null, 2)}</Box>}
     {result?.source && <><Alert severity="info">Native attachment review: {result.state}. Session scope: {result.session_scope_id}. Repeated submissions read the same receipt.</Alert>
+      {result.key_bound && <Alert severity="info">This review uses the privately bound encryption key. Its SQL and receipt omit the key. An unused key expires after five minutes; applying, discarding or closing the session releases it.</Alert>}
       <Box component="textarea" aria-label="Generated DuckDB attachment SQL" value={result.source} readOnly
         sx={{width: '100%', boxSizing: 'border-box', minHeight: 90, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem'}} />
       {(result.warnings || []).map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
@@ -104,6 +123,7 @@ export default function DuckDBAttachment({post, databaseTargetId, ensureSession,
         <Button disabled={busy || blocked || awaitingReceipt || !confirmed || confirmation !== result.alias} onClick={() => run('apply')}>Apply reviewed attachment once</Button>
       </>}
       <Button disabled={busy} onClick={() => run('receipt')}>Read attachment receipt</Button>
+      {result.state === 'reviewed' && result.key_bound && <Button disabled={busy || awaitingReceipt} onClick={() => run('discard')}>Discard encrypted attachment review</Button>}
       {result.state !== 'reviewed' && <Box component="pre" aria-label="DuckDB attachment receipt" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(result, null, 2)}</Box>}
     </>}
   </Box>;
