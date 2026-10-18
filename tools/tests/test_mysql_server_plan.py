@@ -181,3 +181,30 @@ def test_spatial_postconditions_compare_all_six_native_fields():
     assert effect(row,{'operation':'create'},live)
     facts['description']='unexpected external change'
     assert not effect(row,{'operation':'create'},live)
+
+
+def test_persistent_reset_distinguishes_redaction_disappearance_and_denied_catalog():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    row={'resource_id':'setting','kind':'system-variable','native':{
+        'catalog_row':{'variable_name':'component.option'},
+        'mysql_change':{'action':'reset_persist','draft':{}}}}
+    live={'rows':{'setting':{'native':{'catalog_row':{
+        'persisted_value':None,'persisted_present':1,'persisted_value_redacted':1}}}}}
+    assert not effect(row,{'operation':'reset_persist'},live)
+    live['rows']['setting']['native']['catalog_row']['persisted_present']=0
+    assert effect(row,{'operation':'reset_persist'},live)
+    del live['rows']['setting']
+    assert not effect(row,{'operation':'reset_persist'},live)
+    live['rows']['root']={'kind':'server','native':{'catalog_observations':[
+        {'section':'system-variables','available':False}]}}
+    assert not effect(row,{'operation':'reset_persist'},live)
+    live['rows']['root']['native']['catalog_observations'][0]['available']=True
+    assert effect(row,{'operation':'reset_persist'},live)
+
+
+def test_hidden_persisted_value_cannot_prove_a_set_postcondition():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    row={'resource_id':'setting','kind':'system-variable','native':{
+        'catalog_row':{},'mysql_change':{'draft':{'value_mode':'DEFAULT'}}}}
+    live={'rows':{'setting':{'native':{'catalog_row':{'persisted_value_redacted':1}}}}}
+    assert not effect(row,{'operation':'set_persist_only'},live)

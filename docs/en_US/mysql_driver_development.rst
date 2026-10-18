@@ -1264,8 +1264,25 @@ PERSIST_ONLY and RESET PERSIST preserve that identity and keep values out of
 command previews. ``tools/cdeadmin_mysql_component_variables_qualification.py``
 installs the native validation component and verifies discovery and all four
 operations with both connectors and SQL modes, independently checking runtime
-and persisted values. This receipt does not cover undiscovered persisted-only
-variables after their owning component has been removed.
+and persisted values.
+
+Configuration discovery unions the native runtime and persisted identities, so
+settings survive discovery after their component is unloaded. Facts distinguish
+``global_present``, ``persisted_present`` and ``persisted_value_redacted``. The
+persisted table does not identify sensitivity; persisted-only values are withheld
+even for a privileged caller, while exact names remain available in navigation
+and server DDN. Native privilege denial remains an unavailable observation.
+This does not classify arbitrary installed components' runtime values.
+
+RESET PERSIST uses the exact native name and can remove an unloaded component's
+override. Its review binds the observed identity and presence; a withheld value
+is not a value comparison or protection against concurrent external changes.
+Postconditions check persistence presence, including authoritative disappearance
+of the last native row. A withheld value cannot prove a successful SET. Durable
+DDN receipts distinguish acknowledgement from rediscovery and never redispatch
+after restart. ``tools/cdeadmin_mysql_persisted_variables_qualification.py``
+qualifies both connectors/modes, real component unload, independent observation,
+restricted discovery/denial and receipt reuse on an owned MySQL 9.7.0 server.
 
 Native spatial reference systems
 --------------------------------

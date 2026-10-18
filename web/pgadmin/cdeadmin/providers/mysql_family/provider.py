@@ -2486,15 +2486,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 record['processlist_id'] = str(record['processlist_id'])
                 record['thread_id'] = str(record['thread_id'])
                 add('session', ['Sessions'], record['processlist_id'], record)
-            for record in optional_records(
-                'SELECT g.VARIABLE_NAME, g.VARIABLE_VALUE AS GLOBAL_VALUE, '
-                'v.VARIABLE_SOURCE, v.VARIABLE_PATH, v.MIN_VALUE, v.MAX_VALUE, '
-                'v.SET_TIME, v.SET_USER, v.SET_HOST, p.VARIABLE_VALUE AS PERSISTED_VALUE '
-                'FROM performance_schema.global_variables g '
-                'LEFT JOIN performance_schema.variables_info v ON v.VARIABLE_NAME=g.VARIABLE_NAME '
-                'LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME '
-                'ORDER BY g.VARIABLE_NAME'
-            ):
+            from .system_variables import SELECT as variables_select
+            for record in optional_records(variables_select):
                 add('system-variable', ['Configuration'], record['variable_name'], record)
         if profile is MYSQL_PROFILE:
             for name, resource_type, enabled in optional(

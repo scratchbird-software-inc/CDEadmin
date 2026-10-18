@@ -84,8 +84,11 @@ installation, definition management and positive execution qualification remain
 open and require separate native admission. Foreign-server catalog, typed native
 management and credential-free server DDN migration generation/application are
 implemented. Server capture now includes every visible global variable and its native
-provenance; this does not close all installed-component or persisted-only state
-reconciliation.
+provenance. Persisted-only settings for unloaded components now retain their
+native identities and presence in navigation and server DDN, with withheld
+values and verified exact-name RESET PERSIST. Arbitrary installed components'
+runtime sensitivity classification and wider capability reconciliation remain
+open.
 
 MariaDB
 -------

@@ -5,6 +5,7 @@ import uuid
 
 from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
+from .system_variables import SELECT as VARIABLES_SELECT
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
@@ -21,7 +22,7 @@ SECTIONS = (
     ('storage-engines', 'storage-engine', 'SELECT ENGINE, SUPPORT, COMMENT, TRANSACTIONS, XA, SAVEPOINTS FROM information_schema.ENGINES ORDER BY ENGINE', ('engine',)),
     ('tablespaces', 'tablespace', 'SELECT s.SPACE, s.NAME, s.SPACE_TYPE, s.ROW_FORMAT, s.PAGE_SIZE, s.FS_BLOCK_SIZE, s.FILE_SIZE, s.ALLOCATED_SIZE, s.ENCRYPTION, s.STATE, s.AUTOEXTEND_SIZE, e.ENGINE_ATTRIBUTE FROM information_schema.INNODB_TABLESPACES s LEFT JOIN information_schema.TABLESPACES_EXTENSIONS e ON e.TABLESPACE_NAME=s.NAME ORDER BY s.NAME', ('name',)),
     ('resource-groups', 'resource-group', 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, RESOURCE_GROUP_ENABLED, VCPU_IDS, THREAD_PRIORITY FROM information_schema.RESOURCE_GROUPS ORDER BY RESOURCE_GROUP_NAME', ('resource_group_name',)),
-    ('system-variables', 'system-variable', 'SELECT g.VARIABLE_NAME,g.VARIABLE_VALUE AS GLOBAL_VALUE,v.VARIABLE_SOURCE,v.VARIABLE_PATH,v.MIN_VALUE,v.MAX_VALUE,v.SET_TIME,v.SET_USER,v.SET_HOST,p.VARIABLE_VALUE AS PERSISTED_VALUE FROM performance_schema.global_variables g LEFT JOIN performance_schema.variables_info v ON v.VARIABLE_NAME=g.VARIABLE_NAME LEFT JOIN performance_schema.persisted_variables p ON p.VARIABLE_NAME=g.VARIABLE_NAME ORDER BY g.VARIABLE_NAME', ('variable_name',)),
+    ('system-variables', 'system-variable', VARIABLES_SELECT, ('variable_name',)),
     ('foreign-servers', 'server-link', 'SELECT Server_name,Host,Db,Username,Port,Socket,Wrapper,Owner FROM mysql.servers ORDER BY Server_name', ('server_name',)),
     ('spatial-reference-systems', 'spatial-reference-system', 'SELECT SRS_NAME,SRS_ID,ORGANIZATION,ORGANIZATION_COORDSYS_ID,DEFINITION,DESCRIPTION FROM information_schema.ST_SPATIAL_REFERENCE_SYSTEMS', ('srs_id',)),
     ('replication-channels', 'replication-channel', 'SELECT CHANNEL_NAME,HOST,PORT,USER,AUTO_POSITION,CONNECTION_RETRY_INTERVAL,CONNECTION_RETRY_COUNT,HEARTBEAT_INTERVAL,TLS_VERSION,SSL_ALLOWED,SSL_VERIFY_SERVER_CERTIFICATE FROM performance_schema.replication_connection_configuration ORDER BY CHANNEL_NAME', ('channel_name',)),
@@ -139,6 +140,7 @@ def capture(connection, *, spatial_reference_ids=None):
     if len({row['resource_id'] for row in resources}) != len(resources):
         raise ValueError('Server catalog contains ambiguous native identities')
     warnings = ['Privilege-filtered observational server metadata; full coverage is not asserted.',
+        'Persisted-only settings retain identity and presence; their values are redacted because native sensitivity metadata is unavailable.',
         'Authentication strings, password hashes and replication-secret stores are excluded.',
         'Accounts without visible role edges are not classified as roles.',
         'Database captures are independent; this is not a consistent server backup or a migration.']

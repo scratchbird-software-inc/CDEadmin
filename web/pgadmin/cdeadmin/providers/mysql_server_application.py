@@ -33,6 +33,16 @@ def effect(row, operation, live):
         return observed is None and any(item['kind'] == 'user' and
             item['native']['catalog_row'].get('user') == draft['new_user'] and
             item['native']['catalog_row'].get('host') == draft['new_host'] for item in live['rows'].values())
+    if kind == 'system-variable' and action == 'reset_persist':
+        from .mysql_family.system_variables import persistence_present
+        if observed is not None:
+            return not persistence_present(facts)
+        # An unloaded component's last persisted setting has no runtime row.
+        # Absence is authoritative only after a successful section observation.
+        return any(item['kind'] == 'server' and any(
+            section.get('section') == 'system-variables' and section.get('available') is True
+            for section in item['native'].get('catalog_observations', ()))
+            for item in live['rows'].values())
     if observed is None:
         if kind == 'tablespace' and action == 'rename':
             return any(item['kind'] == 'tablespace' and item['native']['catalog_row'].get('name') == draft['new_name'] for item in live['rows'].values())
@@ -65,8 +75,8 @@ def effect(row, operation, live):
     if kind == 'privilege':
         return facts.get('is_grantable') == ('YES' if draft.get('grant_option') else 'NO')
     if kind == 'system-variable':
-        if action == 'reset_persist':
-            return facts.get('persisted_value') is None
+        if facts.get('persisted_value_redacted') and action in {'set_persist', 'set_persist_only'}:
+            return False
         if draft.get('value_mode', 'VALUE') == 'DEFAULT':
             return True  # Native DEFAULT acknowledgement, without guessing its value.
         keys = ['global_value'] if action == 'set_global' else ['persisted_value'] if action == 'set_persist_only' else ['global_value', 'persisted_value']
@@ -153,6 +163,8 @@ def apply_operation(connection, record, operation):
         observed = current()
         result['rediscovery_verified'] = effect(row, operation, observed)
         result['native_observation'] = state(observed['rows'].get(key))
+        if row['kind'] == 'system-variable' and row['native']['catalog_row'].get('persisted_value_redacted'):
+            result['reviewed_value_scope'] = 'identity-and-presence; persisted value redacted'
     except Exception as error:
         native_refusal = (isinstance(getattr(error, 'errno', None), int) and error.errno >= 1000 and
                           not 2000 <= error.errno < 3000 and isinstance(getattr(error, 'sqlstate', None), str))
