@@ -115,11 +115,13 @@ def mappings(connection, selected, rebindings):
     return result
 
 
-def rewrite(connection, declarations, selected, rebindings, *, view_columns=()):
+def rewrite(connection, declarations, selected, rebindings, *, view_columns=(),
+            schema_declarations=None,native_targets=(),edits_out=None):
     if connection.execute('SELECT sqlite_version(),sqlite_source_id()').fetchone() != ('3.53.0', SOURCE_ID):
         raise ValueError('The schema binding connection does not match the pinned SQLite profile')
     dependencies = [row for row in declarations if row['kind'] in {'view', 'trigger'}]
     changes = mappings(connection, selected, rebindings)
+    changes.extend(native_targets)
     views={row['name'] for row in dependencies if row['kind']=='view'}
     for name,index,replacement in view_columns:
         if name not in views or type(index) is not int or index<0 or not isinstance(replacement,str):
@@ -149,7 +151,8 @@ def rewrite(connection, declarations, selected, rebindings, *, view_columns=()):
                     if kind == 'column' else [text('main'), text(row['kind']), text(row['name']), text(source), text(name), text(marker), '0'])
             expressions.append('INSERT INTO ' + table + ' SELECT ' + str(number) + ',sqlite_rename_' + kind + '(' + ','.join(args) + '),NULL,NULL;')
     query = "SELECT json_group_array(json_object('probe',probe,'rewritten',rewritten,'version',version,'source_id',source_id)) FROM (SELECT * FROM " + table + ' ORDER BY probe);'
-    script = '.testctrl internal_functions\n' + '\n'.join(shell_statement(row['native']['ddl']) for row in declarations) + '\n' + '\n'.join(expressions) + '\n.mode list\n' + query + '\n'
+    materialized=declarations if schema_declarations is None else schema_declarations
+    script = '.testctrl internal_functions\n' + '\n'.join(shell_statement(row['native']['ddl']) for row in materialized) + '\n' + '\n'.join(expressions) + '\n.mode list\n' + query + '\n'
     if len(script.encode('utf8')) > LIMIT: raise ValueError('Native schema binding request is too large')
     try:
         with tempfile.TemporaryDirectory(prefix='cde-sqlite-bind-') as directory:
@@ -192,6 +195,7 @@ def rewrite(connection, declarations, selected, rebindings, *, view_columns=()):
         if source[previous_original:] != rewritten[previous_changed:]: raise ValueError('Native SQLite schema binding changed source suffix')
     definitions = []
     for row, changes in zip(dependencies, edits):
+        if edits_out is not None:edits_out[(row['kind'],row['name'])]=dict(changes)
         source = row['native']['ddl']
         for start, (stop, value) in sorted(changes.items(), reverse=True): source = source[:start] + value + source[stop:]
         definitions.append((row, source))

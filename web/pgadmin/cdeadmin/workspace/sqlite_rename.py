@@ -65,7 +65,7 @@ def options(renames):
     return result
 
 
-def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewrite_runtime=None):
+def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewrite_runtime=None,_freeze_views=()):
     """Run schema-only native rewriting in an empty independent database."""
     selected=options(renames);probe=sqlite3.connect(':memory:',cached_statements=0);rebindings=[];original=None;schema_ready=False
     try:
@@ -111,7 +111,9 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
             # schema and module settings. Keep its original native identities
             # for subsequent inferred view-column binding passes.
             probe.commit();original=sqlite3.connect(':memory:',cached_statements=0);probe.backup(original)
-            rewritten,runtime=rewrite(original,declarations,selected,rebindings)
+            from .sqlite_fts_views import preserve_columns
+            binding_declarations=[preserve_columns(row) if row['resource_id'] in _freeze_views else row for row in declarations]
+            rewritten,runtime=rewrite(original,binding_declarations,selected,rebindings)
             if _rewrite_runtime is not None:_rewrite_runtime.update(runtime)
             # Native ALTER cannot bind a virtual table's function invocation
             # after its replacement by an ordinary rewrite relation. Bind the
@@ -156,7 +158,7 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
                         if value!=inferred.get(key,old[1]):
                             inferred[key]=value;changed=True
                 if not changed:break
-                rebound,observed_runtime=rewrite(original,declarations,selected,rebindings,
+                rebound,observed_runtime=rewrite(original,binding_declarations,selected,rebindings,
                     view_columns=[(name,index,value) for (name,index),value in sorted(inferred.items())])
                 if observed_runtime!=runtime:raise ValueError('Native schema rewriter changed during derived-view binding')
                 for kind in ('trigger','view'):
@@ -171,6 +173,12 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
             else:raise ValueError('Native derived-view bindings did not converge')
             validate_dependencies(probe)
         generated=model(probe,baseline)
+        from .sqlite_fts_views import changed_columns
+        freeze=set(_freeze_views)|changed_columns(baseline,generated)
+        if freeze!=set(_freeze_views):
+            probe.close()
+            return generate(baseline,renames,fts_rebindings,_native_rebinding=True,
+                _rewrite_runtime=_rewrite_runtime,_freeze_views=freeze)
         if not _native_rebinding and view_reads:
             for row in declarations:
                 if row['kind']!='view':continue
@@ -183,16 +191,17 @@ def generate(baseline,renames,fts_rebindings=(),*,_native_rebinding=False,_rewri
                     # view column into a string literal instead of refusing it.
                     # Follow original native bindings before accepting a plan.
                     probe.close()
-                    return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime)
+                    return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime,_freeze_views=_freeze_views)
         desired=deepcopy(baseline)
         desired['rows']={identity:row for identity,row in desired['rows'].items() if row['kind'] not in KINDS}
         desired['rows'].update({identity:deepcopy(row) for identity,row in generated['rows'].items()
             if row['kind'] in KINDS and row['system']=='false'})
+        if _freeze_views and _rewrite_runtime is not None:_rewrite_runtime['preserved_fts_view_columns']=sorted(_freeze_views)
         return desired,selected,stages
     except sqlite3.Error as error:
         if not _native_rebinding and schema_ready:
             probe.close()
-            return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime)
+            return generate(baseline,renames,fts_rebindings,_native_rebinding=True,_rewrite_runtime=_rewrite_runtime,_freeze_views=_freeze_views)
         raise ValueError('Native SQLite rename refused ('+str(getattr(error,'sqlite_errorname','SQLITE_ERROR'))+'): '+str(error)) from None
     finally:
         probe.close()

@@ -289,10 +289,12 @@ remains open for every engine; a scoped workflow is not the full denominator.
        triggers; explicit output aliases remain stable.
        Ordinary-content row identity changes preserve native FTS document keys
        through FTS4 mapping views or FTS5 content_rowid rebinding.
+       FTS content views retain their named document/field projections during
+       base-column renames, including stars and nested source views.
        Offline native file recovery uses private WAL/journal images, exact
        typed transfer, reviewed new-file publication, durable outcomes and
        registration/activation of recovered copies.
-     - Remaining attached/content-view row-identity and installed-module transformations and
+     - Remaining attached/content-view alias shadowing, language identity and installed-module transformations and
        complete native extension/feature and platform reconciliation.
    * - Firebird 5.0.4
      - Independent network/embedded category/navigator work, native DSQL/PSQL
@@ -1658,3 +1660,21 @@ INTEGER PRIMARY KEY alias renames require no FTS4 reconstruction. Names already
 used or selected for renaming are reserved before generating mapping views.
 Content-view row identity, unavailable native expressions and wider installed
 module/attachment transformations retain separate acceptance.
+
+SQLite FTS content-view projection contracts
+--------------------------------------------
+
+Renaming base-table document or text columns now preserves the named projection
+contract of a retained FTS4/FTS5 content view. When native inference would rename
+its output columns, generation adds an explicit original column list to that
+view's admitted declaration. Its SELECT is still rewritten by the pinned native
+AST binder. Star projections, nested source views, comments and quoted names
+retain their native meaning. Existing index content and owner rows are not
+copied or reconstructed for this view-only contract preservation.
+
+The reviewed migration recreates views/triggers within the owned transaction
+and prepares final dependencies before commit. Native maintenance triggers bind
+to the renamed owner fields while the FTS view's public names remain stable.
+New implicit-alias shadowing through content views, distinct document/language
+bindings and wider attached/installed-module reconciliation remain separate
+acceptance.

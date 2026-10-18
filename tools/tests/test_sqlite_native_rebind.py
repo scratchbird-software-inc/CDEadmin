@@ -74,3 +74,22 @@ def test_unqualified_native_runtime_is_refused_before_returning_definitions(monk
         with pytest.raises(ValueError,match='unqualified reply'):
             rewrite(connection,rows,[{'kind':'column','table':'owner','from':'body','to':'text'}],
                 [{'source_name':'search','column_renames':[{'from':'body','to':'text'}]}])
+
+
+def test_native_span_probe_can_use_an_independent_empty_schema_without_changing_source_sql():
+    sources=[
+        {'kind':'table','name':'owner','native':{'ddl':'CREATE TABLE owner(tag,body)'}},
+        {'kind':'view','name':'mapped','native':{'ddl':'CREATE VIEW mapped(doc,tag,body) AS SELECT s.rowid AS doc,s.* FROM owner AS s'}},
+        {'kind':'trigger','name':'inserted','native':{'ddl':'CREATE TRIGGER inserted INSTEAD OF INSERT ON mapped BEGIN INSERT INTO owner(rowid,tag,body) VALUES(new.doc,new.tag,new.body); END'}}]
+    private=[
+        {'kind':'table','name':'owner','native':{'ddl':'CREATE TABLE owner(tag,body,rowid INTEGER PRIMARY KEY)'}},
+        {'kind':'view','name':'mapped','native':{'ddl':'CREATE VIEW mapped(doc,tag,body) AS SELECT NULL,NULL,NULL WHERE 0'}}]
+    with closing(sqlite3.connect(':memory:')) as connection:
+        for row in sources:connection.execute(row['native']['ddl'])
+        before=connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall();edits={}
+        result,_runtime=rewrite(connection,sources,[],[],schema_declarations=private,
+            native_targets=[('column','owner',2,'oid')],edits_out=edits)
+        assert result[0][1]=='CREATE VIEW mapped(doc,tag,body) AS SELECT s."oid" AS doc,s.* FROM owner AS s'
+        assert 'INSERT INTO owner("oid",tag,body)' in result[1][1]
+        assert edits[('view','mapped')] and edits[('trigger','inserted')]
+        assert connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before

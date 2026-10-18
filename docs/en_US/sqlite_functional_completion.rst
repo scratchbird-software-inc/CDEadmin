@@ -201,8 +201,10 @@ SQLITE-COMP-05: DDN design exchange
   observations, FTS4 content mapping views and FTS5 content_rowid rebinding.
   Generated row identifiers and new alias shadowing preserve document keys;
   harmless primary-key aliases avoid unnecessary FTS4 reconstruction. Content
-  views, unavailable native identities and attached environments retain separate
-  adapter acceptance. Native ALTER alone can leave an external-content search table
+  views retain their named row/document projections during base-column renames,
+  including stars and nested views, without reconstructing the retained index.
+  Implicit alias shadowing through views, unavailable native identities and
+  attached environments retain separate adapter acceptance. Native ALTER alone can leave an external-content search table
   unusable.
 
   The explorer's virtual-table creation form provides structured native
