@@ -168,9 +168,40 @@ automatic replay. An uncertain borrowed session is blocked from further use.
 installation directory and a signed native repository extension. It compares
 all native catalog fields, verifies individual/all update results, changed
 installation refusal, corrupt-file refusal and retained transaction behavior.
-The receipt records the repository artifact and observed native status. Broader
-extension installation options and other installed capabilities retain their
-own inventory and qualification obligations.
+The receipt records the repository artifact and observed native status.
+
+Original-session extension installation and loading
+---------------------------------------------------
+
+The SQL editor's Engine options panel provides typed native INSTALL and LOAD
+controls on its original query connection. Select a native name or an authorized local extension file.
+Installation supports FORCE, native repository aliases, public HTTP(S)
+repositories, authorized repository directories and exact version selection.
+Inline repository credentials are refused; authenticated/direct remote-source
+admission and wider installed-capability reconciliation remain separate work.
+
+Review retains all nine extension facts, installation/home directories, native
+signature/external-access settings and original catalog/session identity.
+Local sources and installed files selected for loading are bound to file bytes
+and identity. Native extension aliases resolve to the observed canonical name.
+Apply requires exact confirmation, rechecks the baseline and executes once.
+Receipts distinguish dispatch, native acknowledgement, observed effects and
+uncertain outcomes; a repeated request reads the receipt without executing again.
+An acknowledged operation can have unverified subsequent observations.
+
+Loaded code and installed files survive ordinary database rollback; the controls
+do not commit or roll back pending rows or temporary objects. FORCE replaces
+installation files while existing native code remains loaded. DuckDB can upgrade
+an HTTP repository URL to HTTPS after HTTPFS has loaded. Native signature,
+repository, external-access and compile-time policies remain engine decisions.
+Unknown outcomes block session reuse. Receipts remain bound to the live original
+session; durable reconciliation after closing that instance remains open.
+
+``tools/cdeadmin_duckdb_extension_actions_qualification.py`` uses an actual signed
+HTTPFS binary and owned repositories. It verifies local installation, canonical
+alias loading, HTTPFS execution, versioned repository/FORCE and directory
+installation, preserved pending rows and temporaries, rollback distinctions,
+changed-file/policy refusal and non-replay for file and authorized memory roots.
 
 Reviewed native file attachments
 --------------------------------

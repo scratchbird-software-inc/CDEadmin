@@ -41,6 +41,7 @@ import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
 import DuckDBAttachment from './DuckDBAttachment';
+import DuckDBExtensions from './DuckDBExtensions';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import PostgresqlServerCatalog from './PostgresqlServerCatalog';
@@ -8147,6 +8148,11 @@ export default function ProviderWorkspaceContent({
             key={sessionId || 'no-session'} sessionId={sessionId}
             disabled={busy || querySessionBlocked || !!occurrenceId}
             onExecute={(command) => execute(command, 'native', true)} />}
+          {languageProfile === 'duckdb-sql' && <DuckDBExtensions
+            key={'extensions:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
           {languageProfile === 'sqlite-sql' && <SQLiteExtensions
             key={queryDatabaseTargetId} post={post} ensureSession={ensureSession}
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}

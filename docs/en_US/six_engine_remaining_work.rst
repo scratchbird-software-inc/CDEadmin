@@ -135,8 +135,11 @@ DuckDB
 Native object-comment editing is implemented for the pinned engine's supported
 families; see :doc:`duckdb_driver_development`. Full native extension facts and
 reviewed individual/all extension-file updates are also implemented. This does
-not close encrypted/remote attachment options, wider extension installation
-options, copy-database or broader installed-capability reconciliation. Standard
+not close encrypted/remote attachment options, authenticated/direct remote
+extension-source admission, copy-database or broader installed-capability
+reconciliation. Original-session typed extension installation/loading includes
+local signed files, public repository/directory selection, versions and FORCE;
+its receipts do not yet survive closing the original native instance. Standard
 native file attachment mutation now has a reviewed original-session workflow,
 including file creation, conflict modes and native rollback distinctions.
 Database/schema comment syntax that the native runtime rejects
