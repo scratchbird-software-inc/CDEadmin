@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 import os
 import re
+import sqlite3
 import stat
 import uuid
 
@@ -73,6 +74,12 @@ class SQLiteSchemaApplications(SchemaApplications):
         if refused:raise SchemaApplyError(refused[0])
         for operation in operations:
             identity = operation['resource_id']
+            if operation.get('operation')=='append-columns':
+                from .sqlite_columns import plan_append
+                old,wanted=baseline['rows'].get(identity),desired['rows'].get(identity)
+                if old is None or wanted is None or plan_append(old,wanted,baseline,desired)!=operation:
+                    raise SchemaApplyError('SQLite appended column stages differ from the native desired catalog')
+                continue
             if operation.get('operation') == 'fts-configure':
                 from .sqlite_fts_settings import plan as configure
                 old, wanted = baseline['rows'].get(identity), desired['rows'].get(identity)
@@ -211,6 +218,17 @@ def apply_review(provider, route, record):
         baseline = record['baseline']['rows']
         for operation in record['plan']['operations']:
             identity = operation['resource_id']
+            if operation['operation']=='append-columns':
+                from .sqlite_columns import plan_append,children,_modeled
+                modeled={'rows':_modeled(list(observed.values()))}
+                old,wanted,now=baseline.get(identity),record['desired']['rows'].get(identity),modeled['rows'].get(identity)
+                if (old is None or wanted is None or now is None or
+                        digest(_definition(old))!=digest(_definition(now)) or
+                        children(modeled,old['path'])!=operation['baseline_child_sha256'] or
+                        plan_append(old,wanted,record['baseline'],record['desired'],connection)!=operation):
+                    connection.rollback()
+                    return {'state':'not_dispatched','reason':'SQLite column append source, children or reviewed stages changed'}
+                continue
             if operation['operation'] == 'fts-configure':
                 from .sqlite_fts_settings import plan as configure
                 old, wanted, now = baseline.get(identity), record['desired']['rows'].get(identity), observed.get(identity)
@@ -360,9 +378,11 @@ def apply_review(provider, route, record):
                 return {'state': 'not_dispatched',
                     'reason': 'SQLite virtual table module availability changed'}
             if row['kind'] in {'index', 'trigger', 'column'}:
-                new_owner = _created_owner(row, record['desired'], record['baseline'])
+                new_owner = _created_owner(row, record['desired'], record['baseline'],
+                    transformed={item['resource_id'] for item in record['plan']['operations']
+                                 if item['operation']=='append-columns'})
                 if new_owner is not None:
-                    if not any(item['operation']=='create' and
+                    if not any(item['operation'] in {'create','append-columns'} and
                                item['resource_id']==new_owner['resource_id']
                                for item in record['plan']['operations']):
                         connection.rollback()
@@ -382,7 +402,7 @@ def apply_review(provider, route, record):
             _compile_exact(connection, row, operation['source'])
         for operation in record['plan']['operations']:
             dispatched = True
-            if operation['operation'] == 'replace':
+            if operation['operation'] in {'replace','append-columns'}:
                 for stage in operation['stages']:
                     connection.execute(stage)
             elif operation['operation'] == 'rebuild':
@@ -427,7 +447,7 @@ def apply_review(provider, route, record):
             if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
                 raise _PreservationRefused('SQLite rebuild batch failed native foreign-key check')
         replacements = [operation for operation in record['plan']['operations'] if operation['operation'] == 'replace']
-        if replacements or any(operation['operation'] == 'rebuild' or
+        if replacements or any(operation['operation'] in {'rebuild','append-columns'} or
                 operation['operation'] == 'create' and operation['kind'] in {'view','trigger'}
                 for operation in record['plan']['operations']):
             from .sqlite_replace import matches
@@ -436,6 +456,13 @@ def apply_review(provider, route, record):
             # Validate the complete final schema, including newly created
             # views/triggers and replaced events in a mixed atomic batch.
             _validate_dependencies(connection, actual_objects)
+            from .sqlite_columns import verify as verify_columns,verify_views
+            for operation in record['plan']['operations']:
+                if operation['operation']=='append-columns' and not verify_columns(operation,list(actual_objects.values())):
+                    raise _PreservationRefused('SQLite appended native columns differ from the desired catalog')
+            if (any(operation['operation']=='append-columns' for operation in record['plan']['operations']) and
+                    not verify_views(record['desired'],list(actual_objects.values()))):
+                raise _PreservationRefused('SQLite derived view column facts differ from the desired native catalog')
             for operation in replacements:
                 actual = actual_objects.get(operation['resource_id'])
                 if actual is None or not matches(record['desired']['rows'][operation['resource_id']],
@@ -466,7 +493,10 @@ def apply_review(provider, route, record):
                     'rediscovery_verified': False}
             if not uncertain:
                 return {'state': 'rolled_back',
-                    'error_type': type(error).__name__, 'rediscovery_verified': False}
+                    'error_type': type(error).__name__, 'rediscovery_verified': False,
+                    **({'native_error':str(error)[:400],
+                        'native_error_name':getattr(error,'sqlite_errorname',None)}
+                       if isinstance(error,sqlite3.Error) else {})}
         except Exception:
             uncertain = True
         return {'state': 'unknown_outcome' if uncertain else 'not_dispatched',
@@ -493,6 +523,9 @@ def apply_review(provider, route, record):
             return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:TABLE|VIRTUAL\s+TABLE|VIEW|INDEX|TRIGGER)\s+)"main"\.',
                           r'\1', source.strip().rstrip(';'), count=1, flags=re.I)
         def matches(operation):
+            if operation['operation']=='append-columns':
+                from .sqlite_columns import verify,verify_views
+                return verify(operation,captured['resources']) and verify_views(record['desired'],captured['resources'])
             if operation['operation'] == 'replace':
                 from .sqlite_replace import matches as replacement_matches
                 row = by_id.get(operation['resource_id'])

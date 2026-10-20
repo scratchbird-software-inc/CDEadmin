@@ -313,17 +313,30 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
         aria-label="SQLite native schema preview" rows={[...schemaPlan.operations, ...schemaPlan.blockers, ...schemaPlan.conflicts]}
         rowKeyGetter={(row, index) => `${row.resource_id}/${row.operation || row.reason || index}`} columns={[
           {key: 'name', name: 'Native object', minWidth: 170}, {key: 'operation', name: 'Operation', width: 110},
-          {key: 'source', name: 'Native SQL', minWidth: 340}, {key: 'reason', name: 'Blocker or conflict', minWidth: 260},
+          {key: 'source', name: 'Native SQL', minWidth: 340,
+            renderCell: ({row}) => row.source || row.stages?.join(';\n') || ''},
+          {key: 'reason', name: 'Blocker or conflict', minWidth: 260},
         ]} /></Box>
       {schemaPlan.application_supported && !schemaReceipt &&
         <Button disabled={busy} onClick={reviewSchema}>Prepare native change review</Button>}
       {schemaPlan.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
       {schemaPlan.operations.some(item => item.operation==='rename-batch') && <Box component="details"><summary>Exact native rename statements and settings</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>{JSON.stringify(schemaPlan.operations,null,2)}</Box></Box>}
+      {schemaPlan.operations.some(item => item.operation!=='rename-batch' && item.stages?.length) &&
+        <Box component="details"><summary>Exact native migration statements</summary>
+          <Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>
+            {schemaPlan.operations.flatMap(item => item.stages || (item.source ? [item.source] : [])).join(';\n\n')}
+          </Box>
+        </Box>}
     </Box>}
     {schemaReceipt && <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
       <Alert severity={schemaReceipt.state === 'committed' ? 'success' : schemaReceipt.state === 'unknown_outcome' ? 'warning' : 'info'}>
         Native receipt {schemaReceipt.review_id}: {schemaReceipt.state}. Rediscovery {schemaReceipt.outcome?.rediscovery_verified ? 'verified' : 'unverified'}.
       </Alert>
+      {(schemaReceipt.outcome?.native_error || schemaReceipt.outcome?.reason || schemaReceipt.outcome?.error_type) &&
+        <Alert severity={schemaReceipt.state==='unknown_outcome' ? 'warning' : 'error'} aria-label="SQLite native outcome">
+          {schemaReceipt.outcome.native_error || schemaReceipt.outcome.reason || schemaReceipt.outcome.error_type}
+          {schemaReceipt.outcome.native_error_name && ` (${schemaReceipt.outcome.native_error_name})`}
+        </Alert>}
       {schemaReceipt.state === 'reviewed' && <FormControlLabel label="Confirm this reviewed SQLite change"
         control={<Checkbox checked={confirmApply} disabled={busy} onChange={event => setConfirmApply(event.target.checked)} />} />}
       {schemaReceipt.state === 'reviewed' && <Button disabled={busy || !confirmApply} onClick={applySchema}>Apply reviewed change</Button>}

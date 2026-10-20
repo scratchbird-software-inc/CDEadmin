@@ -143,3 +143,28 @@ catalog import through the authenticated application API, reviewed application,
 independent data/schema observations and retained-scope refusal. Use the pinned
 Python/SQLite runtime and a new external evidence directory. It does not start
 database servers or exercise deferred ScratchBird history.
+
+Catalog-derived column additions
+--------------------------------
+
+An existing table's desired native CREATE declaration and complete column and
+constraint records generate reviewed ADD COLUMN stages automatically. Untyped
+columns, declared types, defaults, CHECK/NOT NULL/REFERENCES constraints and
+virtual or stored generated columns retain their native definitions. Several
+columns can share an atomic batch, including generated expressions referring
+to an earlier added column, new indexes/triggers using those columns and native
+view projections. Existing columns, table constraints, STRICT/WITHOUT ROWID
+options, rows, indexes and triggers are preserved. A change to an existing
+definition requires its separately reviewed migration or table rebuild.
+
+Preview prepares native statements and executes them only on an owned empty
+prototype. This establishes the resulting schema, not suitability for existing
+rows. The real write transaction revalidates the parent and child definitions,
+then SQLite checks its actual data. In pinned SQLite 3.53 a stored generated
+column, nonconstant default or NOT NULL column without a non-NULL default can
+be added to an empty table; populated tables may refuse those operations.
+CHECK/STRICT and foreign-key checks also remain native. A refusal rolls back
+the entire batch, including earlier added columns, and records the native error.
+Duplicate requests return the durable result without replay. Native column and
+constraint facts are checked before commit and after independent rediscovery.
+This workflow retains the independent main-file scope boundary described above.

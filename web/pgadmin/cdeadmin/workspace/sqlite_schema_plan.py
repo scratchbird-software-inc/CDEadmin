@@ -181,7 +181,7 @@ def batch_blockers(operations, desired):
     return blockers
 
 
-def _created_owner(row, desired, baseline):
+def _created_owner(row, desired, baseline, *, transformed=()):
     """Bind a child to an ordinary relation added by this same native plan."""
     if row['kind'] not in {'index', 'trigger'}:
         return None
@@ -189,7 +189,7 @@ def _created_owner(row, desired, baseline):
     owners = [desired['rows'].get(_resource_id(kind, ['main'], row['path'][1]))
               for kind in kinds]
     owners = [owner for owner in owners if owner is not None and
-              owner['resource_id'] not in baseline['rows']]
+              (owner['resource_id'] not in baseline['rows'] or owner['resource_id'] in transformed)]
     if len(owners) > 1:
         raise ValueError('SQLite child has ambiguous new relation ownership')
     return owners[0] if owners else None
@@ -258,6 +258,28 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
     def derived_view_column(row):
         return (row['kind']=='column' and len(row['path'])==3 and row['path'][0]=='main' and
             _resource_id('view',['main'],row['path'][1]) in replaced_views)
+    append_candidates={identity for identity,row in after.items() if row['kind']=='table' and
+        identity in before and identity not in rebuilds and
+        not _equal(_definition(before[identity]),_definition(row))}
+    appended_tables=set()
+    from .sqlite_columns import plan_append,children as append_children
+    for identity in sorted(append_candidates):
+        old,wanted=before[identity],after[identity]
+        if (identity not in current or not _equal(_definition(old),_definition(current[identity])) or
+                append_children(baseline,old['path'])!=append_children(live,old['path'])):
+            conflicts.append({'resource_id':identity,'name':old['name'],
+                'reason':'SQLite column append source or children changed since baseline'})
+            continue
+        try:
+            operations.append(plan_append(old,wanted,baseline,desired,connection))
+            appended_tables.add(identity)
+        except (ValueError,sqlite3.Error) as error:
+            blockers.append({'resource_id':identity,'name':old['name'],'reason':str(error)[:400]})
+    def appended_child(row):
+        return row['kind'] in {'column','constraint'} and len(row['path'])==3 and row['path'][0]=='main' and (
+            _resource_id('table',['main'],row['path'][1]) in appended_tables)
+    if appended_tables:
+        replaced_views.update(identity for identity,row in after.items() if row['kind']=='view')
     for identity in sorted(rebuilds):
         old, wanted = before.get(identity), after.get(identity)
         if old is None or wanted is None or old['kind'] != 'table':
@@ -308,14 +330,15 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
             rebuilding_child = (len(row['path']) > 2 and
                 _resource_id('table', ['main'], row['path'][1]) in rebuilds and
                 row['kind'] in {'column', 'constraint', 'index', 'trigger'})
-            rebuilding_child = rebuilding_child or derived_view_column(row)
+            rebuilding_child = rebuilding_child or derived_view_column(row) or appended_child(row)
             if observed is None or not _equal(_definition(old), _definition(observed)):
                 if row['kind'] not in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                     conflicts.append({'resource_id': identity, 'name': row['name'],
                         'reason': 'Native baseline differs from the freshly observed file'})
             if row['kind'] in {'database', 'pragma', 'extension', 'metric', 'native-function', 'collation', 'compile-option'}:
                 continue
-            if not _equal(_definition(old), _definition(row)) and identity not in rebuilds and not rebuilding_child:
+            if (not _equal(_definition(old), _definition(row)) and identity not in rebuilds and
+                    identity not in append_candidates and not rebuilding_child):
                 if row['kind'] == 'fts-table' and observed is not None:
                     try:
                         from .sqlite_fts_settings import plan as configure
@@ -333,7 +356,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     blockers.append({'resource_id': identity, 'name': row['name'],
                         'reason': 'Changing an existing native definition requires a separately qualified SQLite migration'})
             continue
-        if derived_view_column(row):continue  # The defining SELECT owns its columns.
+        if derived_view_column(row) or appended_child(row):continue
         if (row['kind'] in {'index','trigger'} and len(row['path'])==3 and row['path'][0]=='main' and
                 _resource_id('table',['main'],row['path'][1]) in rebuilds):
             continue  # The coordinated rebuild compiles and creates this child.
@@ -368,7 +391,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                 owners={_resource_id(kind,['main'],row['path'][1]) for kind in ({'table','view'} if row['kind']=='trigger' else {'table'})}
                 if not owners & (set(before) | created_relations):
                     raise ValueError('SQLite child requires a retained or explicitly created owning relation')
-            new_owner = _created_owner(row, desired, baseline)
+            new_owner = _created_owner(row, desired, baseline,transformed=appended_tables)
             if new_owner is not None:
                 _compile_created_child(row, source, new_owner)
             else:
@@ -453,7 +476,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         covered_deletions.update(descendant_ids)
     for identity, row in sorted(before.items()):
         if identity not in after and row['kind'] not in {'metric', 'pragma', 'extension', 'native-function', 'collation', 'compile-option'}:
-            if derived_view_column(row):continue
+            if derived_view_column(row) or appended_child(row):continue
             if (len(row['path']) > 2 and row['kind'] in {'column', 'constraint'} and
                     _resource_id('table', ['main'], row['path'][1]) in rebuilds):
                 continue
@@ -462,6 +485,8 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
                     'reason': 'Absent DDN row is not an explicit SQLite deletion instruction'})
     if len(operations) > 32:
         raise ValueError('SQLite preview exceeds 32 native statements')
+    if sum(len(item['stages']) for item in operations if item['operation']=='append-columns')>32:
+        raise ValueError('SQLite preview exceeds 32 native appended columns')
     for reason in batch_blockers(operations,desired):
         blockers.append({'resource_id':'','name':'SQLite design batch','reason':reason})
     operations.sort(key=lambda item: (
@@ -476,4 +501,5 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         'operations': operations, 'blockers': blockers, 'conflicts': conflicts,
         'execution_sha256': digest(operations), 'native_grammar_validated': True,
         'ready_for_review': executable, 'application_supported': executable,
-        'warnings': ['Deletions require exact explicit identities; missing DDN rows alone never delete. Table and virtual-table deletions require a separate review. Explicit view, index and trigger removals can share a reviewed batch with admitted creations, replacements and rebuilds. Table rebuilds require explicit selection and their native preservation checks.']}
+        'warnings': ['Deletions require exact explicit identities; missing DDN rows alone never delete. Table and virtual-table deletions require a separate review. Explicit view, index and trigger removals can share a reviewed batch with admitted creations, replacements and rebuilds. Table rebuilds require explicit selection and their native preservation checks.',
+            'Native ADD COLUMN definitions are validated on an empty prototype. SQLite validates existing data during atomic apply; stored generated columns, nonconstant defaults and constraints may be refused for populated tables.']}

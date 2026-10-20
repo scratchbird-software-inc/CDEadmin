@@ -258,6 +258,13 @@ spellings to exact namespaces and owners without rewriting SQL bodies. The
 independent registered-file path can consume those declarations; original-session
 TEMP/attached DDN review and application remain open.
 
+Catalog-derived native main-file column additions now generate their own
+reviewed stages, preserving untyped/generated columns and dependencies. Native
+write-time checks distinguish empty and populated table capabilities; refusal
+rolls back earlier stages and is retained without replay. This closes that
+specific declaration-generation gap. It does not close original-session DDN
+application, broader module transformations or the independent SQLite inventory.
+
 Firebird network and embedded
 -----------------------------
 

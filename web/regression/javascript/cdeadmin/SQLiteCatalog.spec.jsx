@@ -11,6 +11,38 @@ const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
+it('shows exact appended-column stages and the native atomic refusal receipt', async () => {
+  const stages=['ALTER TABLE "main"."owned" ADD COLUMN untyped',
+    'ALTER TABLE "main"."owned" ADD COLUMN computed AS (id * 2) STORED'];
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[],provenance:{objects:0,coverage:'partial'}})
+    .mockResolvedValueOnce({operations:[{operation:'append-columns',resource_id:'owned',name:'owned',stages}],
+      blockers:[],conflicts:[],application_supported:true,execution_sha256:'native-plan',
+      warnings:['Native existing-row checks run during atomic apply.']})
+    .mockResolvedValueOnce({review_id:'columns',review_digest:'reviewed',state:'reviewed'})
+    .mockResolvedValueOnce({review_id:'columns',state:'rolled_back',outcome:{rediscovery_verified:false,
+      native_error:'cannot add a STORED column',native_error_name:'SQLITE_ERROR'}});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  const file=new File([JSON.stringify(snapshot)],'desired.json',{type:'application/json'});
+  file.text=jest.fn().mockResolvedValue(JSON.stringify(snapshot));
+  fireEvent.change(screen.getByLabelText('SQLite catalog DDN file'),{target:{files:[file]}});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  fireEvent.click(await screen.findByText('Exact native migration statements'));
+  const exact=screen.getByText(/ALTER TABLE/,{selector:'pre'});
+  expect(exact).toBeVisible();expect(exact).toHaveTextContent(stages[0]);expect(exact).toHaveTextContent(stages[1]);
+  expect(screen.getByText('Native existing-row checks run during atomic apply.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button',{name:'Prepare native change review'}));await screen.findByText(/Native receipt columns: reviewed/);
+  const apply=screen.getByRole('button',{name:'Apply reviewed change'});expect(apply).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox',{name:'Confirm this reviewed SQLite change'}));fireEvent.click(apply);
+  await screen.findByText(/Native receipt columns: rolled_back/);
+  expect(screen.getByLabelText('SQLite native outcome')).toHaveTextContent('cannot add a STORED column (SQLITE_ERROR)');
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_apply',request:{database_target_id:'file-1',
+    review_id:'columns',review_digest:'reviewed',confirmed:true}});
+  expect(screen.queryByRole('button',{name:'Apply reviewed change'})).not.toBeInTheDocument();
+});
+
 it('generates an FTS settings design for native preview and existing review controls', async () => {
   const post = jest.fn().mockResolvedValueOnce({snapshot, views: [{id: 'inventory_1', label: 'Inventory', entry: 'catalog.ddn'}],
     objects: [{resource_id: 'fts', kind: 'fts-table', name: 'search', path: ['main', 'search'],
