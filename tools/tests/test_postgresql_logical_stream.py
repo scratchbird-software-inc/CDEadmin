@@ -40,6 +40,26 @@ def test_receiver_does_not_silently_change_effective_principal():
     with pytest.raises(ContinuityError,match='authenticates directly'):stream.require_source(native,{'slot':'owned'})
 
 
+def replication_source():
+    return {'admission_interface':'logical-replication','sql_admission_performed':False,'database':'native',
+        'database_target_id':'postgresql-replication-database:'+b'native'.hex(),
+        'authenticated_principal':'native user','sql_identity':None,'slot_catalog_observed':False,
+        'slot_snapshot':None,'slot_identity':None}
+
+
+@pytest.mark.parametrize('change',[
+    {'slot_catalog_observed':True},{'slot_snapshot':{}},{'sql_identity':{}},
+    {'slot_identity':{}},{'sql_admission_performed':True},{'database_target_id':'other'},
+])
+def test_replication_only_stream_never_invents_sql_slot_facts(change):
+    source={**replication_source(),**change}
+    with pytest.raises(ContinuityError,match='unobserved SQL'):stream.require_source(source,{'slot':'owned'})
+
+
+def test_known_slot_name_can_be_admitted_with_unobserved_catalog():
+    stream.require_source(replication_source(),{'slot':'owned'})
+
+
 @pytest.mark.parametrize('version,expected',[('(PostgreSQL) 18.3','adapter'),('(PostgreSQL) 18.4','adapter'),('(PostgreSQL) 18.6','utility')])
 def test_native_client_quoting_revision_is_explicit(version,expected):
     assert stream.option_quoting({'version':version})==expected

@@ -1361,7 +1361,7 @@ Native logical replication receiver
 -----------------------------------
 
 The continuity workspace runs an independently owned ``pg_recvlogical`` receiver
-for an existing permanent logical slot in an explicit database. Review binds the
+for an existing permanent logical slot in an explicit database. SQL-admitted review binds the
 native slot, confirmed position, authenticated principal, application host and
 utility/adapter hashes. Native start/end positions, ordered plugin options,
 status/fsync intervals and deadlines are preserved. Direct native authentication
@@ -1383,9 +1383,25 @@ quoting revisions are refused explicitly. PostgreSQL 18.3 and 18.6 client checks
 compare complete text/binary output with independent SQL slots, including quoted
 Unicode database/publication names, cancellation, failed sealing and changed
 consumer positions. Authenticated API/browser checks cover review, start,
-preview and download. Replication-only credentials without SQL admission,
-retained temporary protocol streams, resumable archives and broader HA remain
+preview and download. Retained temporary protocol streams, resumable archives and broader HA remain
 open. History and platform qualification retain their existing ownership.
+
+Server workspaces also admit a known slot name through the saved registration's
+logical replication database without opening a SQL session. IDENTIFY_SYSTEM
+provides the native database name and cluster identity; the authenticated startup
+principal, UTF8 database identity and selected transport are retained. Review,
+start and the independent worker reauthenticate that exact peer. Passwords stay
+private and are cleared from the dialog at dispatch. Pinned SSH transports use
+the same registered host-key and credential boundaries as physical admission.
+
+This admission does not observe SQL slot facts: prior existence, plugin,
+temporary status, active consumer, slot replacement and confirmed flush position
+are unknown. The native receiver may refuse a missing, active, physical or
+incompatible slot. Its acknowledgement, cancellation and exact sealed bytes
+remain separate receipts; no catalog preflight or new-slot creation is inferred.
+The SQL-admitted path keeps its stronger slot-identity and checkpoint checks.
+The registered database cannot be replaced with a browser-supplied database name
+or SQL database target. Temporary slots still require their owning backend.
 
 Replication-only physical backup, WAL and slot admission
 -------------------------------------------------------

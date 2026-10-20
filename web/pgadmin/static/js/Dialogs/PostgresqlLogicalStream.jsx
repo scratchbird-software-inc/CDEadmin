@@ -10,15 +10,22 @@ export default function PostgresqlLogicalStream({post,databaseTargetId,endpointU
   const [target,setTarget]=useState(databaseTargetId || ''),[targets,setTargets]=useState([]),[options,setOptions]=useState(defaults);
   const [receipt,setReceipt]=useState(null),[catalog,setCatalog]=useState(null),[offset,setOffset]=useState(0),[preview,setPreview]=useState(null),[offsets,setOffsets]=useState(['0']);
   const [confirmed,setConfirmed]=useState(false),[stop,setStop]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [replicationOnly,setReplicationOnly]=useState(false),[password,setPassword]=useState('');
+  const [transport,setTransport]=useState(null),[hostKey,setHostKey]=useState(''),[sshSecret,setSSHSecret]=useState('');
   const serial=useRef(0),downloads=useRef([]);
   useEffect(() => {
     serial.current++;setTarget(databaseTargetId || '');setTargets([]);setOptions(defaults());setReceipt(null);setCatalog(null);setOffset(0);setPreview(null);setOffsets(['0']);setConfirmed(false);setStop(false);setBusy(false);setError('');
+    setReplicationOnly(false);setPassword('');setTransport(null);setHostKey('');setSSHSecret('');
     return () => {serial.current++;downloads.current.splice(0).forEach(close => close());};
   },[post,databaseTargetId]);
   const call=(action,request) => post({action:'postgresql_continuity_'+action,request});
   const perform=async (action,request,accept) => {
     const token=serial.current;setBusy(true);setError('');
-    try {const result=await call(action,request);if(token===serial.current)accept(result);}
+    const replication=action==='review' && replicationOnly || action==='start' && receipt?.source?.admission_interface==='logical-replication';
+    const access={...(password ? {password} : {}),...(transport?.ssh ? {ssh_host_key:hostKey,
+      ...(sshSecret ? {[transport.ssh.authentication==='private_key' ? 'ssh_private_key_password' : 'ssh_password']:sshSecret} : {})} : {})};
+    if(replication && action==='start'){setPassword('');setSSHSecret('');}
+    try {const result=await call(action,replication ? {...request,replication_access:access} : request);if(token===serial.current)accept(result);}
     catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message);}
     finally {if(token===serial.current)setBusy(false);}
   };
@@ -42,8 +49,26 @@ export default function PostgresqlLogicalStream({post,databaseTargetId,endpointU
   return <Box component="details" sx={{my:1}}><summary>PostgreSQL logical replication streams</summary>
     <Alert severity="info">Runs an independent native receiver for an existing permanent logical slot. Native feedback consumes the slot. Closing this viewer does not stop it. Automatic reconnect and replay are disabled. Captured files use native payload newline delimiters; they do not prove complete transactions or applied replication.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
-    <Button disabled={busy} onClick={() => perform('slot_databases',{},result => setTargets(result.databases || result.targets || []))}>Load logical stream databases</Button>
-    <TextField select size="small" label="Logical stream database" value={target} disabled={busy || Boolean(databaseTargetId) || active(receipt?.state)} onChange={event => {serial.current++;setTarget(event.target.value);setReceipt(null);setPreview(null);setConfirmed(false);setStop(false);}}>
+    <FormControlLabel label="Use registered logical replication database without SQL admission" control={<Checkbox
+      checked={replicationOnly} disabled={busy || Boolean(databaseTargetId) || active(receipt?.state)} onChange={event => {
+        serial.current++;setReplicationOnly(event.target.checked);setReceipt(null);setPreview(null);setConfirmed(false);setPassword('');setTransport(null);setHostKey('');setSSHSecret('');
+      }} />} />
+    {replicationOnly && <Box sx={{my:1}}>
+      <Alert severity="info">Uses the saved registration database and native principal through logical replication. The SQL slot catalog is unobserved. Review the exact slot name; native admission may refuse it. Passwords are private, used again before start and omitted from receipts.</Alert>
+      <TextField disabled={busy || active(receipt?.state)} size="small" type="password" autoComplete="off" label="Logical replication principal password" value={password} onChange={event => setPassword(event.target.value)} />
+      <Button disabled={busy || active(receipt?.state)} onClick={() => {
+        setTransport(null);setHostKey('');setSSHSecret('');setReceipt(current => current?.state==='reviewed' ? null : current);
+        perform('transport',{probe_ssh:true},value => {setTransport(value);setHostKey(value.ssh_peer?.openssh_key || '');});
+      }}>Inspect logical replication SSH transport</Button>
+      {transport?.ssh===null && <Alert severity="info">This registration uses a direct database transport.</Alert>}
+      {transport?.ssh && <Box>
+        <Alert severity="info">SSH peer: {transport.ssh.username}@{transport.ssh.host}:{transport.ssh.port}. Observed host key: {transport.ssh_peer?.fingerprint}. Each connection requires the expected public host key.</Alert>
+        <TextField disabled={busy || active(receipt?.state)} fullWidth size="small" label="Logical replication expected SSH public host key" value={hostKey} onChange={event => {setHostKey(event.target.value);setReceipt(current => current?.state==='reviewed' ? null : current);}} />
+        <TextField disabled={busy || active(receipt?.state)} size="small" type="password" autoComplete="off" label={transport.ssh.authentication==='private_key' ? 'Logical replication SSH private-key passphrase' : 'Logical replication SSH password'} value={sshSecret} onChange={event => setSSHSecret(event.target.value)} />
+      </Box>}
+    </Box>}
+    <Button disabled={busy || replicationOnly} onClick={() => perform('slot_databases',{},result => setTargets(result.databases || result.targets || []))}>Load logical stream databases</Button>
+    <TextField select size="small" label="Logical stream database" value={target} disabled={busy || replicationOnly || Boolean(databaseTargetId) || active(receipt?.state)} onChange={event => {serial.current++;setTarget(event.target.value);setReceipt(null);setPreview(null);setConfirmed(false);setStop(false);}}>
       {target && !targets.some(item => item.target_id===target) && <MenuItem value={target}>{target}</MenuItem>}
       {targets.map(item => <MenuItem key={item.target_id} value={item.target_id}>{item.display_name || item.name || item.target_id}</MenuItem>)}
     </TextField>
@@ -54,7 +79,7 @@ export default function PostgresqlLogicalStream({post,databaseTargetId,endpointU
       <Button disabled={busy || active(receipt?.state)} onClick={() => edit('plugin_options',options.plugin_options.filter((_entry,position) => position!==index))}>Remove logical receiver option {index+1}</Button>
     </Box>)}
     <Button disabled={busy || active(receipt?.state) || options.plugin_options.length>=128} onClick={() => edit('plugin_options',[...options.plugin_options,{name:'',value:''}])}>Add ordered logical receiver option</Button>
-    <Button disabled={busy || active(receipt?.state) || !target || !options.slot} onClick={() => perform('review',{operation:'logical_stream_capture',database_target_id:target,options},setReceipt)}>Review logical replication stream</Button>
+    <Button disabled={busy || active(receipt?.state) || !replicationOnly && !target || !options.slot} onClick={() => perform('review',{operation:'logical_stream_capture',database_target_id:replicationOnly ? 'registered-replication-database' : target,options},setReceipt)}>Review logical replication stream</Button>
     <Button disabled={busy} onClick={() => load(0)}>Load logical stream receipts</Button>
     {catalog && <Box>
       {catalog.jobs.filter(item => item.operation==='logical_stream_capture').map(item => <Button key={item.job_id} disabled={busy} onClick={() => perform('status',{job_id:item.job_id},setReceipt)}>Inspect logical stream {item.job_id}</Button>)}

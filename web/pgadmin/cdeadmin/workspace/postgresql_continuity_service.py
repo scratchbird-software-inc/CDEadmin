@@ -10,14 +10,17 @@ from ..providers.postgresql.provider import PROFILE_ID, PROFILE_VERSION, PROVIDE
 from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint,artifact_tablespaces
 from .postgresql_monitoring_host import PostgreSQLMonitoringHost
 
-REPLICATION_OPERATIONS={'wal_capture','full_backup','incremental_backup','wal_slot_create','wal_slot_drop'}
+REPLICATION_OPERATIONS={'wal_capture','full_backup','incremental_backup','wal_slot_create','wal_slot_drop','logical_stream_capture'}
 
 
 def replication_source(server,request,operation):
     from ..providers.postgresql.replication_admission import registered
-    source,transport=registered(server,request)
+    source,transport=registered(server,request,**({'logical':True} if operation=='logical_stream_capture' else {}))
     if operation in {'wal_slot_create','wal_slot_drop'}:
         source.update(slot_catalog_observed=False,slot_snapshot=None,slot_identity=None)
+    if operation=='logical_stream_capture':
+        from .postgresql_logical_stream import bind_source
+        source=bind_source(source)
     return source,transport
 
 
@@ -126,6 +129,10 @@ def action(service, server, operation, request):
                 if native_operation not in REPLICATION_OPERATIONS:
                     raise ContinuityError('Select a native backup, WAL or slot command for replication-only admission')
                 source,transport=replication_source(server,replication_access,native_operation)
+                if native_operation=='logical_stream_capture':
+                    if request.get('database_target_id')!='registered-replication-database':
+                        raise ContinuityError('Replication-only logical streams use the registered database without a SQL catalog target')
+                    request={**request,'database_target_id':source['database_target_id']}
                 return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
             if native_operation in sql_slots.OPERATIONS or native_operation=='logical_stream_capture':
                 from ..providers.postgresql.connection_target import database_oid
@@ -168,7 +175,7 @@ def action(service, server, operation, request):
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            replication_only = source.get('admission_interface') == 'physical-replication'
+            replication_only = source.get('admission_interface') in {'physical-replication','logical-replication'}
             if replication_access is not None and (not replication_only or reviewed['operation'] not in REPLICATION_OPERATIONS):
                 raise ContinuityError('Replication credentials do not match the reviewed native admission interface')
             if reviewed['state']=='reviewed' and replication_only and reviewed['operation'] in REPLICATION_OPERATIONS:

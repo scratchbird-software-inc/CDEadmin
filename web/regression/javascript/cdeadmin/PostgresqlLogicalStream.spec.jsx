@@ -56,3 +56,24 @@ it('continues polling after native return until the stopped file is sealed',asyn
   await screen.findByRole('button',{name:'Download native logical stream'});
   expect(post).toHaveBeenCalledWith({action:'postgresql_continuity_status',request:{job_id:'stream'}});
 });
+
+it('uses registered replication admission without loading a SQL catalog and clears private credentials on start',async () => {
+  const job={...reviewed,source:{admission_interface:'logical-replication',database:'native'}};
+  const post=jest.fn().mockResolvedValue(job);render(<Component post={post} />);
+  fireEvent.click(screen.getByText('PostgreSQL logical replication streams'));
+  fireEvent.click(screen.getByLabelText('Use registered logical replication database without SQL admission'));
+  expect(screen.getByRole('button',{name:'Load logical stream databases'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Logical replication principal password'),{target:{value:'private database password'}});
+  fireEvent.change(screen.getByLabelText('Logical receiver slot'),{target:{value:'known_slot'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review logical replication stream'}));
+  await screen.findByRole('button',{name:'Start reviewed logical stream'});
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:expect.objectContaining({
+    database_target_id:'registered-replication-database',replication_access:{password:'private database password'}})});
+  fireEvent.click(screen.getByLabelText('Confirm native logical stream consumption'));
+  post.mockResolvedValue({...job,state:'captured',logical_stream_artifact:{state:'sealed',bytes:'17'}});
+  fireEvent.click(screen.getByRole('button',{name:'Start reviewed logical stream'}));
+  await screen.findByRole('button',{name:'Preview native logical bytes'});
+  expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_start',request:{job_id:'stream',review_digest:'digest',confirmed:true,replication_access:{password:'private database password'}}});
+  expect(screen.getByLabelText('Logical replication principal password')).toHaveValue('');
+  expect(post.mock.calls.some(([request]) => request.action==='postgresql_continuity_slot_databases')).toBe(false);
+});

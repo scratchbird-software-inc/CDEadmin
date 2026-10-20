@@ -57,6 +57,14 @@ def option_quoting(identity):
 
 
 def require_source(source,selected):
+    if source.get('admission_interface')=='logical-replication':
+        database=source.get('database')
+        if (source.get('sql_admission_performed') is not False or source.get('slot_catalog_observed') is not False or
+                any(source.get(key) is not None for key in ('sql_identity','slot_snapshot','slot_identity')) or
+                not isinstance(database,str) or not database or not source.get('authenticated_principal') or
+                source.get('database_target_id')!='postgresql-replication-database:'+database.encode('utf8').hex()):
+            raise ContinuityError('Logical replication admission cannot claim unobserved SQL database or slot facts')
+        return
     native=source.get('slot_snapshot') or {};identity=source.get('sql_identity') or {}
     if native.get('slot_type')!='logical' or native.get('temporary') is not False or native.get('database')!=identity.get('database'):
         raise ContinuityError('Select an existing permanent logical slot in this database; temporary slots require their owning protocol backend')
@@ -73,6 +81,8 @@ def bind_source(source):
 def review(jobs,request,owner,endpoint,source,configuration,paths,runtime_limit):
     if set(request)!={'operation','options','database_target_id'}:raise ContinuityError('Select one explicit database and native logical stream')
     selected=options(request['options']);require_source(source,selected)
+    if source.get('admission_interface')=='logical-replication' and request['database_target_id']!=source['database_target_id']:
+        raise ContinuityError('The native logical stream belongs to another registered database')
     if runtime_limit is not None and (type(runtime_limit) is not int or runtime_limit<1 or selected['timeout_seconds'] is None or selected['timeout_seconds']>runtime_limit):
         raise ContinuityError('Application policy requires a bounded logical receiver duration')
     jobs.root.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -93,6 +103,8 @@ def review(jobs,request,owner,endpoint,source,configuration,paths,runtime_limit)
                 'The independent receiver uses UTF8 client encoding for native plugin options and output. User query connections and pending SQL stay separate.',
                 'Output remains on the application host. A checksummed file does not prove remote slot finality, transaction completeness, applied replication or recoverability.']}
     if selected['fsync_interval_seconds']==0:record['warnings'].append('Native file synchronization is disabled. Native flush feedback does not establish power-loss durability.')
+    if source.get('admission_interface')=='logical-replication':
+        record['warnings'].append('Replication-only admission identifies the registered database and native principal without SQL. The selected slot name governs dispatch; prior existence, plugin, temporary status, active consumer and flush position are unobserved. The native receiver may refuse the slot. Concurrent replacement or consumption is not detected by catalog preflight. Temporary slots require their owning backend.')
     record['artifact_location']=str(jobs.directory(record)/FILENAME)
     return jobs.save_review(record)
 
@@ -117,14 +129,24 @@ def run(jobs,record,tools,directory,transport,progress,signal):
     if client_identity()!=record['client_identity']:raise ContinuityError('The native logical receiver adapter changed after review')
     selected=record['options'];path=directory/FILENAME
     with transport.parameters() as parameters:
-        connection=private_sql.attach(parameters,record['source']['sql_identity'])
-        try:
-            with private_sql.cursor(connection) as query:query.execute('SET statement_timeout=5000')
-            observed=slots.enrich(record['source']['sql_identity'],connection,selected);require_source(observed,selected)
-            if observed['slot_identity']!=record['source']['slot_identity']:raise ContinuityError('The reviewed native slot changed before receiver dispatch')
-            if bind_source(observed)['logical_stream_confirmed_lsn']!=record['source']['logical_stream_confirmed_lsn']:
-                raise ContinuityError('The reviewed native slot consumption position changed before receiver dispatch')
-        finally:connection.close()
+        if record['source'].get('admission_interface')=='logical-replication':
+            from ..providers.postgresql.replication_admission import capture
+            observed,admission=capture(parameters,logical=True)
+            try:
+                keys=('system_identifier','timeline','server_version','authenticated_principal','database','database_target_id','admission_interface')
+                if any(observed.get(key)!=record['source'].get(key) for key in keys):
+                    raise ContinuityError('The reviewed native logical replication peer changed before receiver dispatch')
+                require_source(observed,selected)
+            finally:admission.close()
+        else:
+            connection=private_sql.attach(parameters,record['source']['sql_identity'])
+            try:
+                with private_sql.cursor(connection) as query:query.execute('SET statement_timeout=5000')
+                observed=slots.enrich(record['source']['sql_identity'],connection,selected);require_source(observed,selected)
+                if observed['slot_identity']!=record['source']['slot_identity']:raise ContinuityError('The reviewed native slot changed before receiver dispatch')
+                if bind_source(observed)['logical_stream_confirmed_lsn']!=record['source']['logical_stream_confirmed_lsn']:
+                    raise ContinuityError('The reviewed native slot consumption position changed before receiver dispatch')
+            finally:connection.close()
         current=jobs.load(record['job_id'],record['owner'],record['endpoint_id'])
         if signal.is_set() or current.get('cancel_requested'):
             jobs.update(record,state='cancelled',sql_dispatched=False,worker_io_closed=True);return

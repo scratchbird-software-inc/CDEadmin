@@ -84,7 +84,8 @@ def test_worker_transport_does_not_reuse_admission_loopback_or_forwarder(monkeyp
         def start(self):return self.port
         def close(self):self.closed=True
     monkeypatch.setattr(monitoring_ssh,'MonitoringSSHTunnel',Tunnel)
-    def observed(parameters):
+    def observed(parameters, *, logical=False):
+        assert not logical
         assert parameters['host']=='database.native' and parameters['hostaddr']=='127.0.0.1'
         return {'host':'database.native','port':parameters['port'],'server_version':180003},ContinuityTransport(parameters)
     monkeypatch.setattr(replication_admission,'_native_capture',observed)

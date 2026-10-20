@@ -152,6 +152,15 @@ Permanent physical-slot creation and known-name physical/logical-slot removal
 use the native utility without opening the SQL slot catalog. Prior existence,
 type and current identity remain unobserved. Native utility acknowledgement is
 saved before SSH release, separately from process cleanup and later catalog facts.
+Known-name logical stream capture also supports the registered database through
+native logical replication without SQL admission. Native IDENTIFY_SYSTEM binds
+the exact database and principal; the worker reauthenticates before dispatch.
+The SQL slot catalog, plugin, temporary status, active consumer and flush
+checkpoint remain unobserved. The native receiver governs refusal and feedback;
+its returned result and independently sealed payload bytes are separate facts.
+This path does not detect concurrent slot replacement/consumption or own another
+backend's temporary slot. The SQL-admitted path retains its stronger native
+catalog and checkpoint checks.
 
 DuckDB
 ------

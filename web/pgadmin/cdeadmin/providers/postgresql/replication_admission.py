@@ -1,4 +1,4 @@
-"""Physical replication admission without opening a SQL database connection."""
+"""Native physical/logical replication admission without SQL commands."""
 import re
 
 from .continuity import ContinuityError
@@ -16,7 +16,7 @@ def _bytes(value):
     return int(match[1]) * {'B': 1, 'kB': 1024, 'MB': 1024**2, 'GB': 1024**3, None: 1}[match[2]]
 
 
-def _native_capture(parameters):
+def _native_capture(parameters, *, logical=False):
     """Authenticate one physical walsender and seal its resolved native peer.
 
     IDENTIFY_SYSTEM and SHOW are replication commands here. No SQL session,
@@ -25,8 +25,9 @@ def _native_capture(parameters):
     import psycopg
     from psycopg.rows import tuple_row
     options = dict(parameters)
-    options.update(replication='true', autocommit=True, connect_timeout=5,
+    options.update(replication='database' if logical else 'true', autocommit=True, connect_timeout=5,
                    application_name='ScratchRobin replication-only WAL admission')
+    if logical:options['client_encoding']='UTF8'
     transport = None
     try:
         with psycopg.connect(**options) as connection:
@@ -35,8 +36,14 @@ def _native_capture(parameters):
             with psycopg.ClientCursor(connection, row_factory=tuple_row) as cursor:
                 cursor.execute('IDENTIFY_SYSTEM')
                 identity, timeline, lsn, database = cursor.fetchone()
-                if database is not None:
+                if not logical and database is not None:
                     raise ContinuityError('A physical replication connection is required')
+                if logical:
+                    try:database=database.decode('utf8') if isinstance(database,bytes) else database
+                    except UnicodeError:
+                        raise ContinuityError('The native replication database name is not UTF8') from None
+                    if not isinstance(database,str) or not database or database!=connection.info.dbname:
+                        raise ContinuityError('The registered logical replication database is unavailable')
                 identity, lsn = _text(identity), _text(lsn)
                 if not identity.isdigit() or not 0 < int(identity) < 2**64:
                     raise ContinuityError('Native replication system identity is unavailable')
@@ -70,6 +77,10 @@ def _native_capture(parameters):
                       'summarize_wal': summarize_wal,
                       'wal_segment_bytes': settings['wal_segment_size'],
                       'wal_block_bytes': settings['wal_block_size']}
+            if logical:
+                source.update(admission_interface='logical-replication',database=database,
+                    database_target_id='postgresql-replication-database:'+database.encode('utf8').hex(),
+                    sql_identity=None,slot_catalog_observed=False,slot_snapshot=None,slot_identity=None)
             transport = ContinuityTransport(resolved, secrets=secrets)
         return source, transport
     except psycopg.Error as error:
@@ -83,8 +94,8 @@ def _native_capture(parameters):
         raise
 
 
-def capture(parameters,*,ssh=None,ssh_secrets=None):
-    if ssh is None:return _native_capture(parameters)
+def capture(parameters,*,ssh=None,ssh_secrets=None,logical=False):
+    if ssh is None:return _native_capture(parameters,logical=logical)
     initial=dict(parameters);secrets=dict(ssh_secrets or {})
     for parameter,kind in (('password','database_password'),('sslpassword','tls_private_key_password')):
         value=initial.pop(parameter,None)
@@ -93,7 +104,7 @@ def capture(parameters,*,ssh=None,ssh_secrets=None):
     native=None;transport=None
     try:
         with admission.parameters() as routed:
-            source,native=_native_capture(routed)
+            source,native=_native_capture(routed,logical=logical)
             with native.parameters() as observed:
                 values=dict(observed);sealed=dict(ssh_secrets or {})
                 for parameter,kind in (('password','database_password'),('sslpassword','tls_private_key_password')):
@@ -115,7 +126,7 @@ def capture(parameters,*,ssh=None,ssh_secrets=None):
         admission.close()
 
 
-def registered(server, request):
+def registered(server, request, *, logical=False):
     """Resolve the saved registration, keeping credential material request-local."""
     from psycopg.conninfo import conninfo_to_dict
     from pgadmin.utils.driver.registry import DriverRegistry
@@ -150,9 +161,9 @@ def registered(server, request):
         parameters.pop('hostaddr',None)
     # Native connection options may select a libpq service's principal. Record
     # the actual authenticated startup user; never invent SQL role authority.
-    if ssh is None:return capture(parameters)
+    if ssh is None:return capture(parameters,logical=True) if logical else capture(parameters)
     try:
-        source,transport=capture(parameters,ssh=ssh,ssh_secrets=secrets)
+        source,transport=capture(parameters,ssh=ssh,ssh_secrets=secrets,**({'logical':True} if logical else {}))
         source['ssh_peer']=identity
         return source,transport
     except ContinuityError:raise

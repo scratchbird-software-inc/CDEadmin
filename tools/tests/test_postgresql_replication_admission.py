@@ -71,3 +71,38 @@ def test_credentials_cannot_override_registered_route(value):
 
 def test_unadmitted_sql_role_is_explicit():
     with pytest.raises(ContinuityError):module.registered(SimpleNamespace(role='administrator',use_ssh_tunnel=0),{})
+
+
+@pytest.mark.parametrize('reported_database',[b"Native database = \xc3\xbc '",b'other',None])
+def test_logical_admission_uses_registered_utf8_database_without_sql(monkeypatch,reported_database):
+    import psycopg
+    database="Native database = ü '";commands=[]
+    class Cursor:
+        def __init__(self,*_args,**_kwargs):pass
+        def __enter__(self):return self
+        def __exit__(self,*_args):pass
+        def execute(self,source):commands.append(source)
+        def fetchone(self):
+            return {'IDENTIFY_SYSTEM':(b'9007199254740993',b'1',b'0/A',reported_database),
+                'SHOW wal_segment_size':(b'16MB',),'SHOW wal_block_size':(b'8192',),'SHOW summarize_wal':(b'on',)}[commands[-1]]
+    info=SimpleNamespace(server_version=180003,host='native',hostaddr='127.0.0.1',port=6543,user='native user',dbname=database,
+        get_parameters=lambda:{'password':'secret','dbname':database})
+    @contextmanager
+    def connect(**options):
+        assert options['replication']=='database' and options['client_encoding']=='UTF8'
+        assert options['dbname']==database
+        yield SimpleNamespace(info=info,pgconn=SimpleNamespace(password=b'secret'))
+    monkeypatch.setattr(psycopg,'connect',connect);monkeypatch.setattr(psycopg,'ClientCursor',Cursor)
+    if reported_database!=database.encode('utf8'):
+        with pytest.raises(ContinuityError,match='registered logical replication database'):
+            module.capture({'dbname':database},logical=True)
+        assert commands==['IDENTIFY_SYSTEM'];return
+    source,transport=module.capture({'dbname':database},logical=True)
+    try:
+        assert source['admission_interface']=='logical-replication' and source['database']==database
+        assert source['database_target_id']=='postgresql-replication-database:'+database.encode().hex()
+        assert source['slot_catalog_observed'] is False and source['sql_identity'] is None
+        assert commands==['IDENTIFY_SYSTEM','SHOW wal_segment_size','SHOW wal_block_size','SHOW summarize_wal']
+        assert 'secret' not in repr(source)
+        with transport.parameters() as values:assert values['dbname']==database and values['password']=='secret'
+    finally:transport.close()
