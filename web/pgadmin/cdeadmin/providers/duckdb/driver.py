@@ -215,6 +215,7 @@ class DuckDBClient(RelationalDBAPIClient):
         self._attachment_contexts = {}
         self._attachment_reviews = {}
         self._extension_reviews = {}
+        self._database_copy_reviews = {}
 
     def open_session(self, request):
         handle = super().open_session(request)

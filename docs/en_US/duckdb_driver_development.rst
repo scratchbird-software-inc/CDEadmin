@@ -320,3 +320,42 @@ schema, table and column names retain their exact Unicode and punctuation,
 subject to the existing complete-catalog, SQL-source and durable-review bounds.
 Native create/review/apply qualification includes independent observation and
 data access through those names, with one-use receipt reuse.
+Reviewed native database copy
+-----------------------------
+
+The native attachment workspace also exposes copying between two attached
+DuckDB catalogs on the original authorized query session. Select exact source
+and destination aliases and schema, data, or schema-and-data mode. Review reads
+the native definitions and per-table row aggregates; apply revalidates catalog
+identities, file identities, transaction, definitions and data before dispatch.
+The destination must be writable and both catalogs must be within the registered
+file/memory authorization. Internal and extension-backed foreign catalogs are
+not admitted through this core DuckDB workflow.
+
+Schema-and-data mode dispatches explicit native COPY FROM DATABASE SCHEMA and
+DATA statements in order. It does not use the default pragma expansion's
+transaction wrapper. Native row conversion, constraints, conflicts and the
+one-writable-database-per-transaction rule remain native decisions. Data mode
+appends rows; no conflict is silently converted into replacement or an implicit
+commit. The original transaction owns copy effects and rollback remains the
+caller's decision.
+
+Review and application have background workers, phase receipts, cancellation,
+independent native acknowledgement for each copy step and no automatic replay.
+A failure after the schema step remains partial. A lost mutation reply remains
+unknown; a post-acknowledgement observation failure remains acknowledged but
+unverified and blocks further session use. Repeated apply requests read the
+existing receipt. Receipts are bound to the live session and do not survive its
+closure; durable receipt retention remains a separate acceptance gap.
+
+Postconditions compare native object identities and each table's native count,
+XOR and sum of native physical-row hashes. Virtual generated columns are
+recomputed by the engine and do not enter the fingerprints. DATA copies with different source/destination
+column names or types retain native conversion behavior and use row counts;
+cross-type hashes are not compared. Each receipt identifies its method. These
+bounded metadata and aggregate checks are not a collision-free data proof.
+Qualification additionally compares exact
+native nested/enum/decimal values, macros, views, indexes and sequences, observes
+pending/committed data on an independent connection and reopens the copied file.
+``tools/cdeadmin_duckdb_database_copy_qualification.py`` preserves the native
+file/in-memory-root evidence and source hashes outside the implementation tree.

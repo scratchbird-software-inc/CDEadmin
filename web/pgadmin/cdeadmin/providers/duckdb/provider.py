@@ -185,6 +185,28 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 if not reading:
                     self.client._busy.discard(id(handle))
 
+    def database_copy_action(self, request, route):
+        from .database_copy import action
+        self._require('execute')
+        self._require('data_read', 'resource')
+        if request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') not in {'inventory', 'receipt'}:
+            self._require('administer', 'resource')
+            self._require('data_write', 'resource')
+            self._require('filesystem')
+        handle = self._editor_session(request)
+        try:
+            return action(self.client, handle, route, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}})
+        except (ValueError, RelationalClientError):
+            raise
+        except Exception as error:
+            with self.client._lock:
+                self.client._states[id(handle)]['session_reuse_blocked'] = True
+            raise RelationalClientError('Native DuckDB database-copy workflow failed (' +
+                type(error).__name__ + ')') from None
+
     def extension_action(self, request, route):
         from .extension_actions import action
         self._require('execute')

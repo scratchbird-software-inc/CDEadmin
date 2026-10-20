@@ -582,6 +582,19 @@ class DataStudioService:
             raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def duckdb_database_copy_action(self, context, session_id, request, route):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'duckdb-sql' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            return binding.instance.database_copy_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile}, route)
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def duckdb_extension_action(self, context, session_id, request, route):
         from ..sdk import RelationalClientError
         session,binding=self._operational_session(context,session_id)
