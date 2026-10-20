@@ -13,7 +13,7 @@ export function nativeCatalogSnapshot(value) {
   return {format, entry, view, files};
 }
 
-export default function FirebirdCatalogDesigner({baseline, disabled, onReview, post, databaseTargetId, engine='firebird'}) {
+export default function FirebirdCatalogDesigner({baseline, disabled, onReview, post, databaseTargetId, engine='firebird',storage=true}) {
   const [open, setOpen] = useState(false), [error, setError] = useState('');
   const [draft, setDraft] = useState(null), [ready, setReady] = useState(false);
   const editor = useRef(null), seed = useRef(null);
@@ -58,10 +58,10 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
       finally {if (serial === epoch.current) setMerging(false);}
     }}>Merge latest native catalog into design</Button>
     {!open && error && <Alert severity="error">{error}</Alert>}
-    <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="catalog" engine={engine} disabled={disabled || merging || open || !initial}
+    {storage && <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="catalog" engine={engine} disabled={disabled || merging || open || !initial}
       capture={() => ({snapshot: draft || initial, baseline: original.current})}
       onLoad={value => {setDraft(value.snapshot); original.current = value.baseline; setError('');
-        setChanged(JSON.stringify(value.baseline) !== JSON.stringify(initial));}} />
+        setChanged(JSON.stringify(value.baseline) !== JSON.stringify(initial));}} />}
     <Dialog fullScreen open={open} onClose={() => {if (ready && !disabled) capture(false);}}>
       <Box sx={{display: 'flex', alignItems: 'center', gap: 1, p: 1}}>
         <FormReference formKey={`${engine}-catalog-designer`} />
@@ -82,4 +82,4 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
 }
 FirebirdCatalogDesigner.propTypes = {baseline: PropTypes.string, disabled: PropTypes.bool, onReview: PropTypes.func.isRequired,
   post: PropTypes.func, databaseTargetId: PropTypes.string,
-  engine: PropTypes.oneOf(['firebird', 'duckdb', 'sqlite'])};
+  engine: PropTypes.oneOf(['firebird', 'duckdb', 'sqlite']),storage:PropTypes.bool};

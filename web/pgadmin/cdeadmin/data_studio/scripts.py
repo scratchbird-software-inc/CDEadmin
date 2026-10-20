@@ -17,7 +17,18 @@ def serialized_execution(method):
         plan_id = kwargs.pop('_script_plan_id', None)
         with self.scripts.lock:
             self.scripts.check_execution(session_id, plan_id)
-            return method(self, context, session_id, *args, **kwargs)
+            try:
+                return method(self, context, session_id, *args, **kwargs)
+            finally:
+                session=getattr(self,'_sessions',{}).get(session_id)
+                request=args[0] if args and isinstance(args[0],dict) else kwargs.get('request',{})
+                operation=request.get('operation') if isinstance(request,dict) else None
+                mutating=(method.__name__ in {'execute','control_transaction','sqlite_transform_binding','sqlite_capture_binding'} or
+                    method.__name__ in {'sqlite_extension_action','sqlite_native_session_action','sqlite_native_array_action','sqlite_native_preupdate_action'} and
+                    operation not in {'inventory','status','receipt','events'})
+                if (mutating and session is not None and session.language_profile=='sqlite-sql' and
+                        session.provider_isolation_key is not None and session.provider_isolation_key==context.isolation_key):
+                    session.native_work_revision+=1
     return call
 
 

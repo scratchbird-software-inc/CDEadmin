@@ -41,7 +41,7 @@ def identity(value):
     return {key:item for key,item in value.items() if key!='native_format_version'}
 
 
-def statements(name,configuration):
+def statements(name,configuration,*,schema='main'):
     if not isinstance(configuration,dict) or configuration.get('available') is not True or configuration.get('restorable') is not True:
         raise ValueError('Capture complete restorable native FTS configuration first')
     module=configuration.get('module');commands=configuration.get('commands')
@@ -60,10 +60,10 @@ def statements(name,configuration):
         if not isinstance(key,str) or key not in (KEYS if module=='fts5' else {'automerge'}) or key in seen:
             raise ValueError('Invalid or repeated native FTS setting')
         seen.add(key)
-        if module=='fts5':result.append('INSERT INTO "main".'+quote(name)+'('+quote(name)+',rank) VALUES('+literal(key)+','+literal(value)+')')
+        if module=='fts5':result.append('INSERT INTO '+quote(schema)+'.'+quote(name)+'('+quote(name)+',rank) VALUES('+literal(key)+','+literal(value)+')')
         else:
             if type(value) is not int or not 0<=value<=2147483647:raise ValueError('Native FTS merge setting is invalid')
-            result.append('INSERT INTO "main".'+quote(name)+'('+quote(name)+') VALUES('+literal('automerge='+str(value))+')')
+            result.append('INSERT INTO '+quote(schema)+'.'+quote(name)+'('+quote(name)+') VALUES('+literal('automerge='+str(value))+')')
     return result
 
 

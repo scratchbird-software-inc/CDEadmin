@@ -233,9 +233,12 @@ SQLite
 ------
 
 * SQ-TRANSIENT-DESIGN: Generate and apply native DDN migrations on the original
-  authorized temporary/attached/uncommitted schema. Retained catalog capture
-  and native changegroup schema bases are already implemented. An independent
-  registered-file migration must continue refusing retained-session provenance.
+  authorized temporary/attached/uncommitted schema. Original-connection native
+  creation/removal, view/index/trigger replacement and structured column append
+  now have a separate reviewed workflow and durable receipts. Remaining
+  preservation transforms, native rename/rebuild integration, qualified module
+  transformations and large/partial-scope cases keep this item open. An
+  independent file migration must continue refusing retained-session provenance.
 * SQ-DEPENDENCIES: Close remaining attached/content-view alias-shadowing and
   language-identity cases with preserved native FTS/document/row identities.
 * SQ-MODULES: Close remaining installed-module transformations and native
@@ -255,8 +258,10 @@ to the same file cannot inspect, execute, roll back or close that session.
 
 Native catalog declaration generation now binds stored identifier
 spellings to exact namespaces and owners without rewriting SQL bodies. The
-independent registered-file path can consume those declarations; original-session
-TEMP/attached DDN review and application remain open.
+independent registered-file path can consume those declarations. The separate
+original-session workflow now preserves its caller transaction and exact
+namespace/authorization scope for its admitted native stages; broader retained
+transformations remain open.
 
 Catalog-derived native main-file column additions now generate their own
 reviewed stages, preserving untyped/generated columns and dependencies. Native

@@ -286,6 +286,7 @@ class StudioSession:
     execution_enabled: bool = True
     transaction_presentation: Mapping[str, Any] | None = None
     provider_isolation_key: tuple[str, ...] | None = field(default=None, repr=False)
+    native_work_revision: int = field(default=0, repr=False)
 
     @property
     def session_id(self) -> str:

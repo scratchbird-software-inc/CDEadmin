@@ -5711,6 +5711,10 @@
       "reference": "SR-F-010012",
       "title": "Firebird native process external connection pool"
     },
+    "sqlite-retained-schema": {
+      "reference": "SR-F-010013",
+      "title": "SQLite original-session DDN review, application and durable receipts"
+    },
     "sqlite-recovery": {
       "reference": "SR-F-010010",
       "title": "SQLite native file recovery and recovered-copy activation"

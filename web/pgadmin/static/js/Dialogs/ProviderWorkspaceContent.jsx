@@ -37,6 +37,7 @@ import SQLiteNativeSessions from './SQLiteNativeSessions';
 import SQLiteNativeArrays from './SQLiteNativeArrays';
 import SQLitePreupdate from './SQLitePreupdate';
 import SQLiteSessionFTS from './SQLiteSessionFTS';
+import SQLiteRetainedSchema from './SQLiteRetainedSchema';
 import DuckDBServerCatalog from './DuckDBServerCatalog';
 import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
@@ -8198,6 +8199,11 @@ export default function ProviderWorkspaceContent({
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
             onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
             renderAdministration={props => <VisualAdministration {...props} />} />}
+          {languageProfile === 'sqlite-sql' && queryDatabaseTargetId && <SQLiteRetainedSchema
+            key={'retained-ddl:'+queryDatabaseTargetId} post={post} ensureSession={ensureSession}
+            sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={()=>setQuerySessionBlocked(true)} />}
           </Box></Box>
           {languageProfile === 'dolt-sql' && <Alert severity="info" sx={{mt: 1}}>
             {gettext('SQL commit does not create a Dolt version-control commit. Cancelling aborts this connection and may leave an unknown outcome.')}

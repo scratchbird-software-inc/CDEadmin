@@ -187,3 +187,43 @@ owned preview adapters. The generator can reproduce core FTS3/4/5 and RTree
 declarations; it refuses an unknown module rather than invoking its arbitrary
 creation callback during schema-only generation. This is an explicit preview
 implementation boundary, not a declaration that the native module is absent.
+
+Original query-connection DDN
+----------------------------
+
+``Original-session SQLite design`` in the Query Tool's engine controls captures
+TEMP, attached and pending schema definitions from the existing query connection.
+Its DDN preview, review and application use that same handle. Begin a transaction
+with the Query Tool controls before preparing a review. No file reopening or
+namespace projection grants authority over these definitions. The independent
+registered-file migration continues refusing retained-session provenance.
+
+Native table/view/index/trigger creation, explicit removal, view/index/trigger
+replacement and ordinary-table column additions use ordered native stages.
+Structured column properties support main, TEMP and attached tables, including
+same-named relations in different namespaces. The DDN designer is the paired
+sister-project editor. An empty owned schema establishes native grammar and
+resulting facts without copying user rows or executing mutations on the query
+connection during preview. Native callbacks and actual write-time checks remain
+authoritative at each application stage. Unimplemented preservation transforms,
+unobservable trigger owners and unreproducible installed capabilities remain
+explicit gaps; they are not engine features to discard from the product matrix.
+
+Application owns only its nested savepoint and never commits the caller's
+transaction. The acknowledgement is ``applied_pending_caller_transaction``;
+later commit/rollback decisions are not inferred from closing a session. A
+review binds native schema/settings, attachments, authorization and the original
+request revision. Intervening query or transaction work requires a new review.
+SQLite cancellation/severe errors can end a whole transaction, so cancellation
+does not promise that every preexisting pending row survives. Receipts preserve
+the observed native transaction state, cleanup and unknown outcomes separately.
+
+Durable uncertainty precedes dispatch. Duplicate tokens never redispatch, and
+receipt inspection/retention does not require opening a SQL workspace after the
+original connection closes. Unresolved dispatch evidence is retained. Native
+acknowledgement is saved before releasing the session for reuse; receipt-storage
+failures do not erase a known engine acknowledgement. Constructor-observed
+virtual-module storage remains module managed even when SQLite's transient
+``table_list`` flags expose it as ordinary storage under namespace shadowing.
+Native table definitions and storage facts are verified separately from that
+classification. No name-suffix guess establishes module ownership.

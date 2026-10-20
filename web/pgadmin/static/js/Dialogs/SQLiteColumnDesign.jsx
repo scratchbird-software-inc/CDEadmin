@@ -18,15 +18,17 @@ export function structuredColumns(columns) {
     constraint_names:Object.fromEntries(Object.entries(row.names).filter(([,value])=>value))}));
 }
 
-export default function SQLiteColumnDesign({tables,objects,disabled,onGenerate}) {
+export default function SQLiteColumnDesign({tables,objects,disabled,onGenerate,sessionScope=false}) {
   const [table,setTable]=useState(''),[columns,setColumns]=useState([fresh()]);
   useEffect(()=>{if(!tables.some(item=>item.resource_id===table))setTable(tables[0]?.resource_id || '');},[tables,table]);
+  const namespace=tables.find(item=>item.resource_id===table)?.path?.[0] || 'main';
+  const references=tables.filter(item=>item.path?.[0]===namespace);
   const change=(index,key,value)=>setColumns(current=>current.map((row,i)=>i===index ? {...row,[key]:value}:row));
   return <Box component="details" sx={{mt:1}}>
     <summary>Native column additions</summary>
     <Alert severity="info">Generate a DDN design from column properties, then preview and review it. Blank declared types create native untyped columns. SQLite checks existing rows during apply.</Alert>
     <TextField disabled={disabled} select size="small" label="Column addition table" value={table} sx={{minWidth:220}}
-      onChange={event=>setTable(event.target.value)}>{tables.map(item=><MenuItem key={item.resource_id} value={item.resource_id}>{item.name}</MenuItem>)}</TextField>
+      onChange={event=>setTable(event.target.value)}>{tables.map(item=><MenuItem key={item.resource_id} value={item.resource_id}>{sessionScope ? item.path.join(' / '):item.name}</MenuItem>)}</TextField>
     {columns.map((row,index)=><Box component="fieldset" key={index} disabled={disabled} sx={{mt:1}}>
       <legend>Column {index+1}</legend>
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap'}}>
@@ -45,10 +47,10 @@ export default function SQLiteColumnDesign({tables,objects,disabled,onGenerate})
         <Box sx={{display:'flex',gap:1,flexWrap:'wrap'}}>
           <TextField disabled={disabled} select size="small" label={`Column ${index+1} referenced table`} value={row.referenceTable} sx={{minWidth:180}}
             onChange={event=>{change(index,'referenceTable',event.target.value);change(index,'referenceColumn','');}}>
-            <MenuItem value="">No reference</MenuItem>{tables.map(item=><MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}
+            <MenuItem value="">No reference</MenuItem>{references.map(item=><MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}
           </TextField>
           <TextField disabled={disabled} select size="small" label={`Column ${index+1} referenced column`} value={row.referenceColumn} sx={{minWidth:180}} onChange={event=>change(index,'referenceColumn',event.target.value)}>
-            <MenuItem value="">Native primary key</MenuItem>{objects.filter(item=>item.kind==='column' && item.path?.[0]==='main' && item.path?.[1]===row.referenceTable).map(item=><MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}
+            <MenuItem value="">Native primary key</MenuItem>{objects.filter(item=>item.kind==='column' && item.path?.[0]===namespace && item.path?.[1]===row.referenceTable).map(item=><MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}
           </TextField>
           {['on_update','on_delete'].map(key=><TextField disabled={disabled} key={key} select size="small" label={`Column ${index+1} ${key==='on_update' ? 'ON UPDATE':'ON DELETE'}`} value={row[key]} onChange={event=>change(index,key,event.target.value)}>
             {actions.map(action=><MenuItem key={action} value={action}>{action}</MenuItem>)}
@@ -72,4 +74,4 @@ export default function SQLiteColumnDesign({tables,objects,disabled,onGenerate})
   </Box>;
 }
 SQLiteColumnDesign.propTypes={tables:PropTypes.array.isRequired,objects:PropTypes.array.isRequired,
-  disabled:PropTypes.bool,onGenerate:PropTypes.func.isRequired};
+  disabled:PropTypes.bool,onGenerate:PropTypes.func.isRequired,sessionScope:PropTypes.bool};

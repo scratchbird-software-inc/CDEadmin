@@ -643,6 +643,56 @@ class DataStudioService:
         except (ValueError,RelationalClientError) as error:raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_retained_schema_action(self,context,session_id,request,archive,owner,scope_binding,target):
+        import sqlite3
+        from ..sdk import RelationalClientError
+        from ..workspace import sqlite_retained_schema as native
+        from ..workspace.firebird_catalog_import import read_catalog
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Select the original native SQLite query connection')
+        provider=binding.instance;provider._require('execute');provider._require('administer')
+        handle=provider._editor_session({'session_id':session.provider_session['session_id']})
+        operation=request.get('operation')
+        try:
+            with provider.client._lock:
+                if operation=='start':
+                    existing=archive.get(request['review_id'],owner,scope_binding)
+                    if request.get('confirmed') is not True or request.get('review_digest')!=existing['review_digest']:
+                        raise ValueError('Confirm the exact original-session SQLite DDL review')
+                    if existing['state']!='reviewed':return existing
+                provider.client._require_idle(handle)
+                if operation=='columns':
+                    baseline=read_catalog(request['baseline'],engine='sqlite')
+                    desired=native.generate_columns(provider.client,handle,baseline,context.endpoint_id,session.session_id,
+                        request['resource_id'],request['columns'])
+                    from ..workspace.firebird_catalog_export import build_export
+                    resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
+                        'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
+                    return build_export(resources,endpoint_id=context.endpoint_id,
+                        target_id='retained-session:'+session.session_id,generation='retained-native-column-design',
+                        include_system=False,refreshed=True,engine='sqlite')
+                if operation in {'preview','review'}:
+                    baseline=read_catalog(request['baseline'],engine='sqlite')
+                    desired=read_catalog(request['desired'],engine='sqlite')
+                    live=native.observe(provider.client,handle,context.endpoint_id,session.session_id)
+                    preview=native.plan(provider.client,handle,baseline,desired,live,context.endpoint_id,session.session_id,
+                        deletions=request.get('deletions',()))
+                    if operation=='preview':return preview
+                    if request['execution_sha256']!=preview['execution_sha256']:
+                        raise ValueError('Original native preview changed; inspect it before preparing another review')
+                    return archive.review(preview,baseline,desired,native.context(handle,session.native_work_revision),
+                        owner,scope_binding,target,session.session_id)
+                if operation=='start':
+                    revision=session.native_work_revision
+                    value=archive.start({key:request[key] for key in ('review_id','review_digest','confirmed')},
+                        owner,scope_binding,session.session_id,provider.client,handle,context.endpoint_id,revision)
+                    session.native_work_revision+=1
+                    return value
+                raise ValueError('Unknown original-session SQLite DDL action')
+        except (ValueError,RelationalClientError,sqlite3.Error) as error:raise DataStudioAccessError(str(error)[:400]) from None
+
+    @serialized_execution
     def sqlite_extension_action(self, context, session_id, request):
         session, binding = self._operational_session(context, session_id)
         if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':

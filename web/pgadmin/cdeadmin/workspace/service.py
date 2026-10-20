@@ -3172,6 +3172,10 @@ class ProviderWorkspaceService:
             source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
+        if action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
+            from .sqlite_retained_service import serve
+            try:return serve(self,server,action,data)
+            except (ValueError,KeyError,TypeError) as error:raise ProviderWorkspaceError(str(error)) from None
         if action in {'firebird_eds_pool','firebird_eds_pool_receipts'}:
             from .firebird_eds_pool_receipts import for_workspace
             if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native Firebird EDS request')

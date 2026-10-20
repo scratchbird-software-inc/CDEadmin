@@ -41,6 +41,14 @@ def qualify(output):
         'web/pgadmin/cdeadmin/workspace/sqlite_catalog_service.py',
         'web/pgadmin/cdeadmin/workspace/service.py',
         'web/pgadmin/browser/server_groups/servers/__init__.py',
+        'web/pgadmin/cdeadmin/providers/sqlite/ddl_prepare.py',
+        'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_retained_schema.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_retained_applications.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_retained_service.py',
+        'web/pgadmin/cdeadmin/data_studio/studio.py',
+        'web/pgadmin/cdeadmin/data_studio/models.py',
+        'web/pgadmin/cdeadmin/data_studio/scripts.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_schema_apply.py']
     proof={'complete':False,'full_product_complete':False,'history_testing':'not run','sqlite_version':sqlite3.sqlite_version,
         'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}}
@@ -221,10 +229,84 @@ def qualify(output):
         schema('plan',{'baseline':json.dumps(rebound['snapshot']),'desired':json.dumps(rebound['snapshot'])},True)
         schema('column_design',{'baseline':json.dumps(rebound['snapshot']),
             'resource_id':_resource_id('table',['main'],'owned'),'columns':[{'name':'never'}]},True)
+        execute('CREATE TABLE main.same_name(id INTEGER)');execute('INSERT INTO main.same_name VALUES(301)')
+        attached=str(output/'retained-attached.sqlite').replace("'","''")
+        execute("ATTACH DATABASE '"+attached+"' AS \"retained.雪\"")
+        execute('CREATE TABLE "retained.雪".same_name(id INTEGER)');execute('INSERT INTO "retained.雪".same_name VALUES(17)')
+        execute('SAVEPOINT original_design_guard')
+        receipts=[]
+        def retained_action(operation,fields=None,archived=False,**extra):
+            return post('sqlite_retained_schema_receipts' if archived else 'sqlite_retained_schema',
+                **({} if archived else {'session_id':session}),request={'operation':operation,**(fields or {})},**extra)
+        def prepare_columns(namespace,columns):
+            observed=post('source_catalog',session_id=session)
+            baseline=json.dumps(observed['document']['snapshot'])
+            if not proof.get('native_retained_grammar_refusal_before_mutation'):
+                native_model=read_catalog(baseline,engine='sqlite')
+                bad_id=_resource_id('table',['temp'],'never_created')
+                resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
+                    'display_path':row['path'],'native':row['native']} for row in native_model['rows'].values()]
+                resources.append({'resource_id':bad_id,'resource_kind':'table','display_name':'never_created',
+                    'display_path':['temp','never_created'],'native':{'system_object':False,
+                    'ddl':'CREATE TABLE "temp"."never_created"(id INTEGER,)','observation_scope':'retained-session-design',
+                    'catalog_metadata':{'schema_object_type':'table','table_name':'never_created','table_list_type':'table',
+                        'without_rowid':False,'strict':False}}})
+                invalid=build_export(resources,endpoint_id=native_model['provenance']['endpoint_id'],
+                    target_id='retained-session:'+session,generation='native-grammar-refusal',engine='sqlite')
+                post('sqlite_retained_schema',True,session_id=session,request={'operation':'preview','baseline':baseline,
+                    'desired':json.dumps(invalid['snapshot']),'deletions':[]})
+                assert execute("SELECT name FROM temp.sqlite_schema WHERE name='never_created'")==[]
+                proof['native_retained_grammar_refusal_before_mutation']=True
+            generated=retained_action('columns',{'baseline':baseline,
+                'resource_id':_resource_id('table',[namespace],'same_name'),'columns':columns})
+            options={'baseline':baseline,'desired':json.dumps(generated['snapshot']),'deletions':[]}
+            preview=retained_action('preview',options);assert preview['ready_for_review'],preview
+            review=retained_action('review',{**options,'execution_sha256':preview['execution_sha256']})
+            receipts.append(review['review_id'])
+            return {'review_id':review['review_id'],'review_digest':review['review_digest'],'confirmed':True}
+        def apply_retained(request):
+            value=retained_action('start',request);deadline=time.monotonic()+30
+            while not value['native_session_release_confirmed']:
+                assert time.monotonic()<deadline;time.sleep(.02)
+                value=retained_action('receipt',{'review_id':request['review_id']},True)
+            return value
+        request=prepare_columns('temp',[{'name':'native label','data_type':'TEXT','default':"'TEMP literal'"},
+            {'name':'native stored','generated':{'expression':'id * 4','storage':'stored'}}])
+        value=apply_retained(request)
+        assert value['state']=='applied_pending_caller_transaction' and value['outcome']['commit_dispatched'] is False,value
+        execute('INSERT INTO temp.same_name(id) VALUES(7)')
+        assert execute('SELECT "native label","native stored" FROM temp.same_name')==[['TEMP literal',28]]
+        assert execute('SELECT * FROM main.same_name')==[[301]]
+        request=prepare_columns('retained.雪',[{'name':'native computed','generated':{'expression':'id * 5','storage':'virtual'}}])
+        value=apply_retained(request);assert value['state']=='applied_pending_caller_transaction',value
+        assert execute('SELECT "native computed" FROM "retained.雪".same_name')==[[85]]
+        assert retained_action('start',request)['state']=='applied_pending_caller_transaction'
+        scoped=client.post(url+'?database_target_id='+target,json={'action':'sqlite_retained_schema_receipts',
+            'database_target_id':other,'request':{'operation':'list'}})
+        assert scoped.status_code==400
+        request=prepare_columns('main',[{'name':'must_not_dispatch'}])
+        execute('SELECT 1')  # Same schema/transaction/data; the original request revision changed.
+        value=apply_retained(request);assert value['state']=='not_dispatched',value
+        assert execute('SELECT count(*) FROM pragma_table_xinfo(\'same_name\',\'main\')')==[[1]]
+        execute('ROLLBACK TO original_design_guard');execute('RELEASE original_design_guard')
+        assert execute('SELECT * FROM main.same_name')==[[301]]
+        assert execute('SELECT * FROM "retained.雪".same_name')==[[17]]
+        assert execute('SELECT * FROM temp.same_name')==[]
+        proof.update(original_session_DDN_column_workflow=True,actual_temp_stored_and_attached_virtual_columns=True,
+            same_name_namespace_shadowing_preserved=True,original_caller_savepoint_preserved=True,
+            original_session_revision_drift_refused=True,retained_DDL_URL_scope_refused=True)
         assert execute('SELECT count(*) FROM owned WHERE id=99')==[[1]]
         with sqlite3.connect(path) as independent:assert independent.execute('SELECT count(*) FROM owned WHERE id=99').fetchone()==(0,)
         post('transaction_action',session_id=session,transaction_action='rollback')
         post('close_session',session_id=session);session=None
+        from unittest.mock import patch
+        workspace=app.extensions['cdeadmin_provider_workspace']
+        with patch.object(workspace.endpoint_service,'workspace',side_effect=AssertionError('archive must not resolve SQL workspace')):
+            for identity in receipts:
+                value=retained_action('receipt',{'review_id':identity},True)
+                assert value['native_session_release_confirmed'] and not value['native_sql_requested']
+            assert retained_action('list',archived=True)['total']==len(receipts)
+        proof['retained_DDL_archives_read_after_close_without_SQL_workspace']=True
         proof.update(retained_scope_not_promoted_to_independent_authority=True,original_pending_rows_preserved=True,complete=True)
     finally:
         if session:post('close_session',session_id=session)
