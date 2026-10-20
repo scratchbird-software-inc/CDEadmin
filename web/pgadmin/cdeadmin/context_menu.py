@@ -1318,6 +1318,9 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.attachment', 'Plan native DuckDB attachment...',
             'open_workspace', icon='action.connect', group='database', priority=47,
             arguments={**base, 'tab': 'duckdb-attachment'}))
+        actions.append(_action('database.duckdb.receipts','Saved DuckDB operation receipts...',
+            'open_workspace',icon='action.view',group='database',priority=48,
+            arguments={**base,'tab':'duckdb-session-receipts'}))
     if engine_id == 'sqlite':
         for tab, label in (('monitoring', 'SQLite database dashboard...'),
                            ('monitoring_policy', 'Configure SQLite monitoring collection...')):

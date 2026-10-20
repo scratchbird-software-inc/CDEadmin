@@ -22,12 +22,14 @@ import UrlDialogContent from './UrlDialogContent';
 import RenameTabContent from './RenameTabContent';
 import { BROWSER_PANELS } from '../../../browser/static/js/constants';
 import ErrorBoundary from '../helpers/ErrorBoundary';
+import {createCloseGuardRegistry, ModalCloseGuardContext} from '../helpers/ModalCloseGuard';
 import QuickSearch from '../QuickSearch';
 import ProviderWorkspaceContent from './ProviderWorkspaceContent';
 import {activateSQLConnection, registerSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FirebirdMonitoring from './FirebirdMonitoring';
 import PostgresqlMonitoring from './PostgresqlMonitoring';
 import PostgresqlContinuity from './PostgresqlContinuity';
+import DuckDBOperationReceipts from './DuckDBOperationReceipts';
 import MySQLClone from './MySQLClone';
 import MySQLBinlogArchives from './MySQLBinlogArchives';
 import MySQLBinlogReplay from './MySQLBinlogReplay';
@@ -290,8 +292,10 @@ export function showProviderWorkspace(
   }
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
+  const closeGuards = createCloseGuardRegistry();
   const onClose = () => workspace.close(panelId);
-  const serverTool=initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
+  const serverTool=initialTab==='duckdb-session-receipts' ? <DuckDBOperationReceipts databaseTargetId={databaseTargetId}
+    post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
     onTargetCatalogChanged={() => nodeObj.callbacks.refresh.call(nodeObj,null,itemNodeData)}
     post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?
     <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
@@ -300,10 +304,11 @@ export function showProviderWorkspace(
           <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
   const panel = {
     id: panelId,
+    beforeClose: closeGuards.beforeClose,
     title,
     closable: true,
     floatable: true,
-    content: <ErrorBoundary>{serverTool || (initialTab === 'firebird-registration' ?
+    content: <ModalCloseGuardContext.Provider value={closeGuards.register}><ErrorBoundary>{serverTool || (initialTab === 'firebird-registration' ?
       <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
         post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
           .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
@@ -349,7 +354,7 @@ export function showProviderWorkspace(
               onSuccess: retry,
             });
           }}
-        />)}</ErrorBoundary>,
+        />)}</ErrorBoundary></ModalCloseGuardContext.Provider>,
   };
   if (initialTab === 'studio') {
     activateSQLConnection({...connection, content: panel.content});

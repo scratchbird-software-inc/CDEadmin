@@ -233,8 +233,15 @@ def worker(client, handle, route, record, reviewing):
                     native_dispatched=True, native_catalog_or_data_effects_possible=True)
                 step = {'source': source, 'native_dispatched': True, 'native_acknowledged': False}
                 record['steps'].append(step)
+                try:client.publish_receipt(handle,'database_copy',public(record))
+                except Exception:
+                    step.update(native_dispatched=False)
+                    record['native_dispatched']=any(value['native_dispatched'] for value in record['steps'])
+                    record['native_catalog_or_data_effects_possible']=record['native_dispatched']
+                    raise
                 dispatch(handle, source)
                 step['native_acknowledged'] = True
+                client.publish_receipt(handle,'database_copy',public(record))
             record.update(native_acknowledged=True, phase='observing_destination')
             after = observe(handle, current['compiled']['destination']['catalog']['name'], record)
             observation = verify(current, after, current['compiled']['mode'])
@@ -267,7 +274,9 @@ def worker(client, handle, route, record, reviewing):
                 record.pop('baseline', None)
                 record.pop('draft', None)
             record['phase'] = 'finished'
-            client._busy.discard(id(handle))
+            try:client.publish_receipt(handle,'database_copy',public(record))
+            except Exception as error:record['receipt_recording_error_type']=type(error).__name__
+            finally:client._busy.discard(id(handle))
 
 
 def action(client, handle, route, request):
@@ -303,6 +312,7 @@ def action(client, handle, route, request):
             if operation == 'discard':
                 record.update(state='discarded')
                 record.pop('baseline', None)
+                client.publish_receipt(handle,'database_copy',public(record))
                 return public(record)
             if (record['deadline'] < time.monotonic() or request['confirmed'] is not True or
                     request['confirmation'] != record['destination_catalog']):
@@ -330,10 +340,11 @@ def action(client, handle, route, request):
                     'Review and revalidation read all selected tables to compare native row aggregates.',
                     'Data mode appends native rows. Schema mode creates native objects. Schema and data runs those two native steps in order.',
                     'Native conflicts and the one-writable-database-per-transaction restriction are returned without a fallback or implicit transaction decision.',
-                    'Receipts belong to this live session and do not survive closing it. Acknowledgement does not mean the caller committed.']}
+                    'Live review/application belongs to this original session. Durable receipts remain read-only after release. Acknowledgement does not mean the caller committed.']}
             records[record['review_id']] = record
         else:
             record.update(state='applying', phase='starting', cancel_requested=False)
+        client.publish_receipt(handle,'database_copy',public(record))
         client._busy.add(id(handle))
         thread = threading.Thread(target=worker, args=(client, handle, deepcopy(route), record, operation == 'review'),
             daemon=True, name='cdeadmin-duckdb-database-copy')

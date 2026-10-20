@@ -42,6 +42,7 @@ import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
 import DuckDBAttachment from './DuckDBAttachment';
 import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
+import DuckDBOperationReceipts from './DuckDBOperationReceipts';
 import MariaDBBackupStages from './MariaDBBackupStages';
 import DuckDBExtensions from './DuckDBExtensions';
 import MySQLServerCatalog from './MySQLServerCatalog';
@@ -8155,6 +8156,8 @@ export default function ProviderWorkspaceContent({
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
             onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'duckdb-sql' && queryDatabaseTargetId && <DuckDBOperationReceipts
+            post={post} databaseTargetId={queryDatabaseTargetId} />}
           {languageProfile === 'sqlite-sql' && <SQLiteExtensions
             key={queryDatabaseTargetId} post={post} ensureSession={ensureSession}
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
@@ -8324,7 +8327,8 @@ export default function ProviderWorkspaceContent({
         <DuckDBDatabaseCopy key={'copy-' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
           ensureSession={ensureSession} sessionId={sessionId}
           disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
-          onBlocked={() => setQuerySessionBlocked(true)} /></>}
+          onBlocked={() => setQuerySessionBlocked(true)} />
+        <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></>}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
         (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
           <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}

@@ -2784,7 +2784,7 @@ class ServerNode(PGChildNodeView):
                     if data.get('database_target_id') not in (None, scoped_target):
                         return bad_request('Native MariaDB database scope does not match this workspace.')
                     data['database_target_id'] = scoped_target
-                if scoped_target and action in {'duckdb_attachments','duckdb_extensions', 'duckdb_database_copy'}:
+                if scoped_target and action in {'duckdb_session_receipts','duckdb_attachments','duckdb_extensions', 'duckdb_database_copy'}:
                     if data.get('database_target_id') not in (None, scoped_target):
                         return bad_request('Native DuckDB database scope does not match this workspace.')
                     data['database_target_id'] = scoped_target
@@ -2912,7 +2912,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
+                elif action in {'duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)

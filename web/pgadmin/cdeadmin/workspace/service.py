@@ -3171,6 +3171,19 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action in {'duckdb_session_receipts','duckdb_database_copy','duckdb_extensions','duckdb_attachments'}:
+                from .duckdb_session_receipts import for_workspace,action as archived_action
+                if not isinstance(data.get('request'),dict):
+                    raise ProviderWorkspaceError('Select a native DuckDB operation request')
+                try:archive=for_workspace(self,server,context,data.get('database_target_id'))
+                except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+                if action=='duckdb_session_receipts':
+                    admitted=self.endpoint_service.provider_registry.admitted_permissions(context)
+                    if not {'execute','data_read'}<=set(admitted):
+                        raise ProviderWorkspaceError('Native DuckDB receipt access is unavailable')
+                    try:return archived_action(archive,data['request'])
+                    except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+                self.studio_service.bind_duckdb_receipt_archive(context,data.get('session_id'),archive,endpoint['route'])
             if action == 'mariadb_backup_stages':
                 if (not isinstance(data.get('request'), dict) or
                         not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):

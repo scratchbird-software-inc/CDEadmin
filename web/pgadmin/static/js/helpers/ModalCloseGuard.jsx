@@ -4,6 +4,17 @@ import React, {useContext, useLayoutEffect, useRef} from 'react';
 // Guards may await provider release; false keeps the task and its state open.
 export const ModalCloseGuardContext = React.createContext(null);
 
+export function createCloseGuardRegistry() {
+  const guards = new Set();
+  return {
+    register: guard => {guards.add(guard); return () => guards.delete(guard);},
+    beforeClose: async () => {
+      for(const guard of guards) {if(await guard() === false) return false;}
+      return true;
+    },
+  };
+}
+
 export function useModalCloseGuard(guard) {
   const register = useContext(ModalCloseGuardContext);
   const current = useRef(guard);

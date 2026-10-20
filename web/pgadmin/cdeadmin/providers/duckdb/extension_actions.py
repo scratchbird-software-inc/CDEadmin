@@ -171,8 +171,14 @@ def action(client,handle,route,request):
         record.update(state='refused',native_dispatched=False,native_acknowledged=False,reason='Native extension files, inventory or admission settings changed since review')
         return public(record)
     record.update(state='unknown_outcome',native_dispatched=True,native_acknowledged=False,native_file_or_code_effects_possible=True)
+    try:client.publish_receipt(handle,'extensions',public(record))
+    except Exception:
+        record.update(state='refused',native_dispatched=False,native_file_or_code_effects_possible=False,
+            reason='Durable native dispatch receipt could not be recorded')
+        raise
     try:
         handle.execute(record['source']);handle.fetchall();record['native_acknowledged']=True
+        client.publish_receipt(handle,'extensions',public(record))
         after=inventory(handle);selected=next((row for row in after if row['extension_name']==record['extension_name']),None)
         verified=selected is not None and selected['installed' if record['action']=='install' else 'loaded'] is True
         requested_version=record['compiled']['draft'].get('version')

@@ -223,6 +223,7 @@ export class LayoutDocker {
     this.layoutObj = null;
     this.eventBus = new EventBus();
     this.workspaceHost = createWorkspaceHost();
+    this.pendingCloseRequests = new Map();
   }
 
   close(panelId, force=false) {
@@ -232,6 +233,16 @@ export class LayoutDocker {
     }
     if(!panelData.internal?.closable) {
       return;
+    }
+    if(!force && typeof panelData.beforeClose === 'function') {
+      if(this.pendingCloseRequests.has(panelId)) return this.pendingCloseRequests.get(panelId);
+      const request = Promise.resolve().then(() => panelData.beforeClose()).then(allowed => {
+        if(allowed === false) return false;
+        this.close(panelId, true);
+        return true;
+      }).catch(() => false).finally(() => this.pendingCloseRequests.delete(panelId));
+      this.pendingCloseRequests.set(panelId, request);
+      return request;
     }
     if(panelData.internal?.manualClose && !force) {
       this.eventBus.fireEvent(LAYOUT_EVENTS.CLOSING, panelId);

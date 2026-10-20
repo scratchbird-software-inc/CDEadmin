@@ -166,7 +166,8 @@ not close remote attachment options, authenticated remote
 extension-source admission or broader installed-capability
 reconciliation. Original-session typed extension installation/loading includes
 local signed files, direct public installation URLs, public repository/directory selection, versions and FORCE;
-its receipts do not yet survive closing the original native instance. Standard
+its read-only receipts now survive closing the original native instance and
+application restart, without permitting replay or inferring commit. Standard
 native file attachment mutation now has a reviewed original-session workflow,
 including file creation, conflict modes and native rollback distinctions.
 Database/schema comment syntax that the native runtime rejects
@@ -179,8 +180,10 @@ file-header semantics. Native database copy now has an original-session typed
 review/apply workflow for schema, data and schema-and-data, background phase
 receipts, cancellation, native partial/unknown outcomes and verified native
 catalog/row aggregates. Independent qualification additionally checks exact
-native data and committed file reopening. Receipt retention after session
-closure, extension-backed foreign catalog copies, remote attachments, rekeying
+native data and committed file reopening. Attachment, extension and copy receipts
+have owner/endpoint/target-scoped durable storage, separate native release
+observations and read-only inspection without native admission. Extension-backed
+foreign catalog copies, remote attachments, rekeying
 and broader storage transformations remain open.
 
 SQLite

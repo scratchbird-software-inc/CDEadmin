@@ -152,6 +152,13 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def _discard_unverified_session(self, handle):
         self.client._discard_failed_session(handle)
 
+    def bind_receipt_archive(self, request, archive, route):
+        self._require('execute')
+        if request.get('language_profile')!='duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        handle=self._editor_session(request)
+        self.client.bind_receipt_archive(handle,archive,route)
+
     def attachment_action(self, request, route):
         from .attachments import action
         self._require('execute')
@@ -169,8 +176,10 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 self.client._require_idle(handle)
                 self.client._busy.add(id(handle))
             try:
-                return action(self.client, handle, route, {key: value for key, value in request.items()
+                result=action(self.client, handle, route, {key: value for key, value in request.items()
                     if key not in {'session_id', 'language_profile'}})
+                if result.get('review_id'):self.client.publish_receipt(handle,'attachments',result)
+                return result
             except (ValueError, RelationalClientError):
                 raise
             except Exception as error:
@@ -197,8 +206,11 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
             self._require('filesystem')
         handle = self._editor_session(request)
         try:
-            return action(self.client, handle, route, {key: value for key, value in request.items()
+            result=action(self.client, handle, route, {key: value for key, value in request.items()
                 if key not in {'session_id', 'language_profile'}})
+            if result.get('review_id') and result.get('phase')=='finished':
+                self.client.publish_receipt(handle,'database_copy',result)
+            return result
         except (ValueError, RelationalClientError):
             raise
         except Exception as error:
@@ -221,7 +233,9 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
             reading=request.get('operation')=='receipt' or (request.get('operation')=='apply' and retained is not None and retained['state']!='reviewed')
             if not reading:self.client._require_idle(handle);self.client._busy.add(id(handle))
             try:
-                return action(self.client,handle,route,{key:value for key,value in request.items() if key not in {'session_id','language_profile'}})
+                result=action(self.client,handle,route,{key:value for key,value in request.items() if key not in {'session_id','language_profile'}})
+                if result.get('review_id'):self.client.publish_receipt(handle,'extensions',result)
+                return result
             except (ValueError,RelationalClientError):raise
             except Exception as error:
                 from .driver import uncertain

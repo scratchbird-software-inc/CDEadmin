@@ -582,6 +582,18 @@ class DataStudioService:
             raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def bind_duckdb_receipt_archive(self, context, session_id, archive, route):
+        from ..sdk import RelationalClientError
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='duckdb-sql' or context.provider_id!='org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            binding.instance.bind_receipt_archive({'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},archive,route)
+        except (ValueError,RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def duckdb_attachment_action(self, context, session_id, request, route):
         from ..sdk import RelationalClientError
         session, binding = self._operational_session(context, session_id)

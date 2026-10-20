@@ -219,8 +219,9 @@ do not commit or roll back pending rows or temporary objects. FORCE replaces
 installation files while existing native code remains loaded. DuckDB can upgrade
 an HTTP repository URL to HTTPS after HTTPFS has loaded. Native signature,
 repository, external-access and compile-time policies remain engine decisions.
-Unknown outcomes block session reuse. Receipts remain bound to the live original
-session; durable reconciliation after closing that instance remains open.
+Unknown outcomes block session reuse. Live application remains bound to the
+original session. Read-only durable receipts retain its acknowledgements and
+observations after closing the instance; see the durable receipt scope below.
 
 ``tools/cdeadmin_duckdb_extension_actions_qualification.py`` uses an actual signed
 HTTPFS binary and owned repositories. It verifies local/direct-URL installation, canonical
@@ -285,8 +286,8 @@ input or native error text.
 The UI requires explicit encryption intent and clears the submitted key after
 review. It cannot silently replace an encrypted review with a plaintext review
 when that key field is cleared. Native wrong-key/crypto refusal retains the
-usual terminal receipt and never authorizes replay. Session-memory receipts
-still have the lifecycle limits described above; encrypted remote attachment
+usual terminal receipt and never authorizes replay. Archived observations never
+retain the private key or authorize another native session; encrypted remote attachment
 types and encryption transformations require their own adapters.
 
 Operations leave commit and rollback to the caller. In the pinned native engine,
@@ -345,8 +346,8 @@ independent native acknowledgement for each copy step and no automatic replay.
 A failure after the schema step remains partial. A lost mutation reply remains
 unknown; a post-acknowledgement observation failure remains acknowledged but
 unverified and blocks further session use. Repeated apply requests read the
-existing receipt. Receipts are bound to the live session and do not survive its
-closure; durable receipt retention remains a separate acceptance gap.
+existing live receipt. Durable observations survive original-session release and
+application restart without granting application on another session.
 
 Postconditions compare native object identities and each table's native count,
 XOR and sum of native physical-row hashes. Virtual generated columns are
@@ -359,3 +360,34 @@ native nested/enum/decimal values, macros, views, indexes and sequences, observe
 pending/committed data on an independent connection and reopens the copied file.
 ``tools/cdeadmin_duckdb_database_copy_qualification.py`` preserves the native
 file/in-memory-root evidence and source hashes outside the implementation tree.
+
+Durable original-session operation receipts
+-------------------------------------------
+
+The SQL editor and attachment workspace provide a saved-receipt browser for
+attachment, extension and database-copy operations. It reads owner, endpoint and
+database-target-scoped application storage without opening a native connection,
+including after the original session closes or the application restarts.
+The archive supports bounded pages and individual inspection. It never exposes
+apply, reconnect or replay operations.
+The registered database context menu opens this archive directly, bypassing live
+catalog bootstrap. Docked provider panels now run their registered close guards
+before removal, awaiting native session release and retaining busy or failed
+release tasks for inspection.
+
+Dispatch intent must be durably saved before native execution. Native command
+acknowledgements are saved before later rediscovery; database copies retain each
+step separately. A failure to save an intent refuses that dispatch. A failure
+after native return retains the in-memory acknowledgement and leaves the prior
+durable observation unresolved until an existing live receipt can be recorded.
+A stopped original process cannot establish an unrecorded outcome. Automatic
+replay is unavailable even when a receipt is incomplete.
+
+Confirmed native session release has a separate durable observation. A storage
+failure cannot prevent native connection cleanup; its close result reports
+whether the release observation was saved. Neither acknowledgement, rediscovery
+nor release establishes that the caller committed. Private encryption keys,
+compiled credential bindings and private schema/data baselines are excluded;
+common credential forms in native observations are redacted. These receipts are
+application operation evidence, separate from owner-deferred ScratchBird SQL
+and monitoring-history qualification.

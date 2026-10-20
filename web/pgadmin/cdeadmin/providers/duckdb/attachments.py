@@ -299,10 +299,17 @@ def action(client, handle, route, request):
         return public(record)
     record.update(state='unknown_outcome', native_dispatched=True, native_acknowledged=False,
         native_catalog_or_file_effects_possible=True)
+    try:client.publish_receipt(handle,'attachments',public(record))
+    except Exception:
+        release_key(client,record)
+        record.update(state='refused',native_dispatched=False,native_catalog_or_file_effects_possible=False,
+            reason='Durable native dispatch receipt could not be recorded')
+        raise
     try:
         handle.execute(record['source'], record['compiled'].get('parameters') or ())
         handle.fetchall()
         record['native_acknowledged'] = True
+        client.publish_receipt(handle,'attachments',public(record))
         after = catalogs(handle)
         selected = next((row for row in after if row['name'] == record['alias']), None)
         if record['action'] == 'detach':
