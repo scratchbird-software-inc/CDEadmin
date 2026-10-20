@@ -4,7 +4,7 @@ import re
 
 from .firebird_catalog_import import _equal
 from .firebird_schema_plan import digest
-from .sqlite_schema_plan import _source, _quote, _definition, _compile_exact
+from .sqlite_schema_plan import _source, _quote, _definition, _compile_exact, _normalized_ddl
 from ..providers.sqlite.provider import _resource_id
 
 DEPENDENCY_KINDS = {'table', 'view', 'index', 'trigger', 'fts-table', 'virtual-table'}
@@ -31,14 +31,16 @@ def dependencies(rows, excluded):
             if identity != excluded and row['kind'] in DEPENDENCY_KINDS and row['system'] == 'false'}
 
 
-def normalized(source):
+def normalized(source, row=None):
+    if row is not None:
+        return _normalized_ddl({**row,'native':{**row['native'],'ddl':source}})
     return re.sub(r'^(\s*CREATE\s+(?:UNIQUE\s+)?(?:VIEW|INDEX|TRIGGER)\s+)"main"\.',
                   r'\1', source.strip().rstrip(';'), count=1, flags=re.I)
 
 
 def matches(wanted, observed):
     return (all(wanted.get(key) == observed.get(key) for key in ('resource_id', 'kind', 'path', 'name', 'system')) and
-            normalized(wanted['native']['ddl']) == normalized(observed['native'].get('ddl') or '') and
+            normalized(wanted['native']['ddl'],wanted) == normalized(observed['native'].get('ddl') or '',observed) and
             _equal(wanted['native'].get('catalog_metadata'), observed['native'].get('catalog_metadata')) and
             (wanted['kind']!='view' or (_equal(wanted['native'].get('columns'),observed['native'].get('columns')) and
                 sorted((item['resource_id'],normalized(item['ddl'])) for item in wanted['native'].get('triggers',[]))==
@@ -74,7 +76,7 @@ def plan_replace(before, after, baseline, connection=None, *, probe_name=None):
             not isinstance(before['native'].get('ddl'), str) or not before['native']['ddl']):
         raise ValueError('SQLite replacement requires an observed explicit user view, index or trigger')
     source = _source(after)
-    if normalized(source) == normalized(before['native']['ddl']):
+    if normalized(source,after) == normalized(before['native']['ddl'],before):
         raise ValueError('SQLite replacement requires a changed native definition')
     owners = [row for row in baseline['rows'].values() if row['path'] == path[:2] and
               row['kind'] in ({'table'} if kind == 'index' else {'table', 'view'}) and row['system'] == 'false']

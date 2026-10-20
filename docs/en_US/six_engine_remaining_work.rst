@@ -253,6 +253,11 @@ Retained Data Studio operations also require the original complete provider
 scope, including the selected registration target. A different target pointing
 to the same file cannot inspect, execute, roll back or close that session.
 
+Native catalog declaration generation now binds stored identifier
+spellings to exact namespaces and owners without rewriting SQL bodies. The
+independent registered-file path can consume those declarations; original-session
+TEMP/attached DDN review and application remain open.
+
 Firebird network and embedded
 -----------------------------
 

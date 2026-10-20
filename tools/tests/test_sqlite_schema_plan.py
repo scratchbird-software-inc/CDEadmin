@@ -3,12 +3,13 @@
 from copy import deepcopy
 import json
 import sqlite3
+import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import test_cdeadmin_relational_providers  # noqa: F401
 from pgadmin.cdeadmin.providers.sqlite.provider import _resource_id, SQLiteProvider, _create_client
-from pgadmin.cdeadmin.workspace.sqlite_schema_plan import plan
+from pgadmin.cdeadmin.workspace.sqlite_schema_plan import plan, _compile_exact
 from pgadmin.cdeadmin.workspace.sqlite_schema_apply import SQLiteSchemaApplications, apply_review
 from pgadmin.cdeadmin.workspace.sqlite_rebuild import _autoincrement_table
 from pgadmin.cdeadmin.workspace.firebird_catalog_export import build_export
@@ -617,9 +618,11 @@ def test_native_authorizer_rejects_comment_spoofed_trigger_owner(tmp_path):
                        '/* ON "owned" */ ON "other" BEGIN SELECT NEW.id; END',
                 'catalog_metadata': {'table_name': 'owned'}}}
         with sqlite3.connect(path) as connection:
+            with pytest.raises(ValueError,match='different object or owner'):
+                _compile_exact(connection,desired['rows'][identity],desired['rows'][identity]['native']['ddl'])
             preview = plan(baseline, desired, baseline, connection)
         assert not preview['ready_for_review']
-        assert any('different object or owner' in item['reason']
+        assert any('another owning relation' in item['reason']
                    for item in preview['blockers'])
         with sqlite3.connect(path) as connection:
             assert not connection.execute(

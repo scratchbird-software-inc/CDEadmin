@@ -12,7 +12,7 @@ CREATABLE = {'table', 'view', 'index', 'trigger', 'fts-table', 'virtual-table'}
 
 
 def _quote(name):
-    if not isinstance(name, str) or not name or '\x00' in name or len(name.encode('utf8')) > 256:
+    if not isinstance(name, str) or not name or '\x00' in name or len(name.encode('utf8')) > 1024 * 1024:
         raise ValueError('Invalid SQLite schema identifier')
     return '"' + name.replace('"', '""') + '"'
 
@@ -36,12 +36,31 @@ def _definition(row):
         return None
     native = row['native']
     result={'kind': row['kind'], 'path': row['path'], 'name': row['name'],
-        'system': row['system'], 'ddl': native.get('ddl'),
+        'system': row['system'], 'ddl': _normalized_ddl(row),
         'catalog_metadata': native.get('catalog_metadata')}
     if row['kind']=='fts-table':
         from ..providers.sqlite.fts_configuration import identity
         result['fts_configuration']=identity(native.get('fts_configuration'))
     return result
+
+
+def _normalized_ddl(row, *, strict=False):
+    ddl=row['native'].get('ddl')
+    if row['kind'] not in CREATABLE or not isinstance(ddl,str) or not ddl:
+        return ddl
+    if not isinstance(row.get('path'),(list,tuple)) or not row['path']:
+        if strict:raise ValueError('Native SQLite declaration namespace is unavailable')
+        return ddl
+    from ..providers.sqlite.declarations import canonical_create
+    metadata=row['native'].get('catalog_metadata',{})
+    try:
+        source=canonical_create(ddl,row['kind'],row['path'][0],row['name'],
+            owner=metadata.get('table_name') if row['kind'] in {'index','trigger'} else None,
+            owner_schema=metadata.get('owner_database') if row['path'][0]=='temp' else row['path'][0])
+        return source if strict else source.strip().rstrip(';')
+    except ValueError:
+        if strict:raise
+        return ddl
 
 
 def _source(row):
@@ -57,7 +76,11 @@ def _source(row):
             len(ddl.encode('utf8')) > 1024 * 1024 or
             not sqlite3.complete_statement(ddl.rstrip() + ';' if not ddl.rstrip().endswith(';') else ddl)):
         raise ValueError('One bounded complete native SQLite CREATE statement is required')
-    exact = _quote('main') + '.' + _quote(name)
+    if kind in CREATABLE:
+        _quote(name)
+        if kind in {'index','trigger'} and row['native'].get('catalog_metadata',{}).get('table_name')!=path[1]:
+            raise ValueError('SQLite declaration owner differs from native metadata')
+        ddl=_normalized_ddl(row,strict=True)
     if kind == 'column':
         prefix = (r'^\s*ALTER\s+TABLE\s+' + re.escape(_quote('main') + '.' + _quote(path[1])) +
                   r'\s+ADD\s+COLUMN\s+' + re.escape(_quote(name)) + r'\s+')
@@ -68,8 +91,6 @@ def _source(row):
                 not metadata['data_type']):
             raise ValueError('SQLite column addition requires ordinary declared native type facts')
         pattern = prefix + re.escape(metadata['data_type']) + r'(?=\s|;|$)'
-    elif kind == 'table':
-        pattern = r'^\s*CREATE\s+TABLE\s+' + re.escape(exact) + r'\s*\('
     elif kind in {'fts-table', 'virtual-table'}:
         from ..providers.sqlite.modules import declaration
         native=declaration(ddl)
@@ -84,21 +105,11 @@ def _source(row):
             if configuration.get('module')!=native[1].lower():raise ValueError('Native FTS configuration belongs to another module')
             validate(configuration)
         return ddl
-    elif kind == 'view':
-        pattern = r'^\s*CREATE\s+VIEW\s+' + re.escape(exact) + r'(?=\s|\()'
-    elif kind == 'index':
-        owner = _quote(path[1])
-        if row['native'].get('catalog_metadata', {}).get('table_name') != path[1]:
-            raise ValueError('SQLite index owner differs from native metadata')
-        pattern = (r'^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+' + re.escape(exact) +
-                   r'\s+ON\s+' + re.escape(owner) + r'\s*\(')
     else:
-        owner = _quote(path[1])
-        if row['native'].get('catalog_metadata', {}).get('table_name') != path[1]:
-            raise ValueError('SQLite trigger owner differs from native metadata')
-        pattern = (r'^\s*CREATE\s+TRIGGER\s+' + re.escape(exact) +
-                   r'\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b[\s\S]+?\bON\s+' +
-                   re.escape(owner) + r'(?=\s|$)')
+        # Declaration names and owners are bound above; native EXPLAIN and its
+        # authorizer facts own grammar, including SQLite's optional timing and
+        # comments/spacing between header tokens.
+        return ddl
     if not re.match(pattern, ddl, re.I):
         raise ValueError('DDL must name the exact quoted SQLite object and owning table')
     # sqlite3.execute rejects multiple statements. EXPLAIN compiles the exact

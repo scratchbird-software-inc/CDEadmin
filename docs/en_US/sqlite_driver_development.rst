@@ -114,3 +114,32 @@ failure/deadline behavior, aliases, cleanup retry and session independence.
 Linux evidence does not prove native Windows/macOS behavior. Those teams run
 this gate with their packaged libraries and own UX, accessibility and platform
 release acceptance; native driver defects they find remain backend work.
+
+Native catalog declaration generation
+-------------------------------------
+
+DDN creation and replacement accept SQLite's stored declaration spellings,
+including bare, bracketed, backtick and quoted identifiers. Native compilation
+governs optional trigger timing and comments/spacing between header tokens.
+Generation binds the created name to the exact DDN namespace and uses the
+engine's identifier quoting. Identifier generation uses the statement byte budget;
+native names longer than 256 bytes remain supported. Keywords follow SQLite's
+ASCII case rules, preserving distinct Unicode identifier names.
+Explicit contradictory namespaces, names and owners are refused. Expression,
+constraint, SELECT and trigger bodies retain their original text. Header spelling
+is normalized for definition comparison; the exported catalog retains its native
+SQL. An existence clause is creation policy rather than an object property;
+reviewed generation creates the object explicitly and checks native outcomes.
+
+The declaration helper can bind TEMP and attached namespaces, with an explicit
+observed owner for TEMP triggers. This does not authorize an independent file
+migration from retained-session observations. That migration path continues
+requiring its registered main file, while original-session DDN application
+remains a separate implementation requirement. Native SQL compilation and
+authorization own grammar, extension/function/collation binding and execution.
+
+``tools/cdeadmin_sqlite_native_declaration_qualification.py`` qualifies native
+catalog import through the authenticated application API, reviewed application,
+independent data/schema observations and retained-scope refusal. Use the pinned
+Python/SQLite runtime and a new external evidence directory. It does not start
+database servers or exercise deferred ScratchBird history.
