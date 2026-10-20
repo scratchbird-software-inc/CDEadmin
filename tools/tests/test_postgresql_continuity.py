@@ -72,6 +72,46 @@ def test_backup_review_is_scoped_persistent_and_has_no_private_transport(jobs):
     assert 'password' not in json.dumps(restarted.get(reviewed['job_id'],1,endpoint))
 
 
+def test_replication_only_review_does_not_turn_unobserved_tablespaces_into_zero(jobs):
+    manager,source,endpoint=jobs
+    reviewed=manager.review({'operation':'full_backup'},1,endpoint,
+        {**source,'admission_interface':'physical-replication','tablespace_catalog_observed':False},'configuration',{})
+    assert manager.list(1,endpoint)['jobs'][0]['source']['tablespace_count'] is None
+    assert any('TAR' in warning and 'never opened' in warning for warning in reviewed['warnings'])
+
+
+@pytest.mark.parametrize('format',['plain','tar'])
+def test_replication_only_capture_uses_private_tar_and_preserves_ack_before_map_failure(jobs,monkeypatch,format):
+    from pgadmin.cdeadmin.workspace import postgresql_continuity_jobs as module
+    manager,source,endpoint=jobs;dispatch=[]
+    native_source={**source,'admission_interface':'physical-replication','tablespace_catalog_observed':False}
+    class Tools:
+        def __init__(self,_paths):pass
+        def identify(self,*_args):return {'available':True,'version':'PostgreSQL 18.3','executable_sha256':'a'*64}
+        def execute(self,name,directory,arguments,**kwargs):
+            dispatch.append((name,arguments));return {'return_code':0,'process_observation':{'cleanup_confirmed':True}}
+        def verify(self,*args,**kwargs):return {'return_code':0,'process_observation':{'cleanup_confirmed':True}}
+    monkeypatch.setattr(module,'PhysicalTools',Tools)
+    monkeypatch.setattr(module,'manifest',lambda *_args,**_kwargs:{'system_identifier':source['system_identifier']})
+    def unavailable(*_args,**_kwargs):raise ContinuityError('Owned map observation failed after native return')
+    monkeypatch.setattr(module,'tablespace_observation',unavailable)
+    reviewed=manager.review({'operation':'full_backup','options':{'format':format}},1,endpoint,native_source,'configuration',{})
+    request={'job_id':reviewed['job_id'],'review_digest':reviewed['review_digest'],'confirmed':True}
+    transport=ContinuityTransport({})
+    manager.start(request,1,endpoint,native_source,'configuration',transport)
+    deadline=time.monotonic()+5
+    while True:
+        result=manager.get(reviewed['job_id'],1,endpoint)
+        if result['state'] in {'failed','unknown'}:break
+        assert time.monotonic()<deadline;time.sleep(.01)
+    assert result['state']=='failed' and result['native_backup_acknowledged'] is True
+    assert '--format=tar' in dispatch[0][1] and len(dispatch)==1
+    assert not any(value.startswith('--tablespace-mapping=') for value in dispatch[0][1])
+    assert ('native-tar-capture' in next(value for value in dispatch[0][1] if value.startswith('--pgdata=')))==(format=='plain')
+    assert manager.start(request,1,endpoint,native_source,'configuration',ContinuityTransport({}))['state']=='failed'
+    assert len(dispatch)==1
+
+
 def test_changed_review_and_native_principal_refuse_dispatch(jobs):
     manager,source,endpoint=jobs
     reviewed=review(jobs)

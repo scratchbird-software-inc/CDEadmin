@@ -7,7 +7,7 @@ from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, binary_paths
 from ..providers.postgresql.continuity_transport import ContinuityTransport, capture
 from ..providers.postgresql.provider import PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION
-from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint
+from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint,artifact_tablespaces
 from .postgresql_monitoring_host import PostgreSQLMonitoringHost
 
 
@@ -43,7 +43,7 @@ def action(service, server, operation, request):
     replication_access = request.get('replication_access')
     if 'replication_access' in request:
         if operation not in {'review', 'start'} or not isinstance(replication_access, dict):
-            raise ContinuityError('Replication-only credentials apply to review/start of a native WAL capture')
+            raise ContinuityError('Replication-only credentials apply to review/start of native physical backup or WAL capture')
         if 'secret_read' not in permissions:
             raise ContinuityError('Native replication credential permission is unavailable')
         request = {key: value for key, value in request.items() if key != 'replication_access'}
@@ -105,8 +105,8 @@ def action(service, server, operation, request):
         if operation=='review':
             native_operation=request.get('operation')
             if replication_access is not None:
-                if native_operation != 'wal_capture':
-                    raise ContinuityError('Replication-only admission currently supports native WAL capture')
+                if native_operation not in {'wal_capture','full_backup','incremental_backup'}:
+                    raise ContinuityError('Select a native physical backup or WAL capture for replication-only admission')
                 from ..providers.postgresql.replication_admission import registered
                 source, transport = registered(server, replication_access)
                 return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
@@ -135,7 +135,11 @@ def action(service, server, operation, request):
             if native_operation in {'verify','combine','recovery_drill'}:
                 ids=request.get('chain') if native_operation=='combine' else [request.get('base_job_id')]
                 if not isinstance(ids,list) or not ids:raise ContinuityError('Select backup artifacts')
-                source=jobs.load(ids[-1],owner,endpoint)['source']
+                previous=jobs.load(ids[-1],owner,endpoint)
+                source=dict(previous['source'])
+                spaces=artifact_tablespaces(previous)
+                if spaces is not None and source.get('tablespace_catalog_observed') is False:
+                    source.update(tablespaces=spaces,tablespace_artifact_observed=True)
             else:
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance
@@ -148,11 +152,11 @@ def action(service, server, operation, request):
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
             replication_only = source.get('admission_interface') == 'physical-replication'
-            if replication_access is not None and not replication_only:
+            if replication_access is not None and (not replication_only or reviewed['operation'] not in {'wal_capture','full_backup','incremental_backup'}):
                 raise ContinuityError('Replication credentials do not match the reviewed native admission interface')
-            if reviewed['state']=='reviewed' and replication_only:
-                if reviewed['operation'] != 'wal_capture' or replication_access is None:
-                    raise ContinuityError('Reauthenticate the reviewed replication-only WAL capture before dispatch')
+            if reviewed['state']=='reviewed' and replication_only and reviewed['operation'] in {'wal_capture','full_backup','incremental_backup'}:
+                if replication_access is None:
+                    raise ContinuityError('Reauthenticate the reviewed replication-only backup or WAL capture before dispatch')
                 from ..providers.postgresql.replication_admission import registered
                 source, transport = registered(server, replication_access)
             elif reviewed['state']=='reviewed' and (reviewed['operation'] in sql_slots.OPERATIONS or reviewed['operation']=='logical_stream_capture'):

@@ -7,7 +7,7 @@ import threading
 import pytest
 
 from pgadmin.cdeadmin.providers.postgresql.continuity import ContinuityError
-from pgadmin.cdeadmin.providers.postgresql.continuity_tar import materialize
+from pgadmin.cdeadmin.providers.postgresql.continuity_tar import materialize,parse_tablespace_map,tablespace_observation
 
 
 def tar_bytes(entries):
@@ -30,6 +30,50 @@ def encode(data,suffix):
         from compression.zstd import compress
         return compress(b'')+compress(data)
     return data
+
+
+def test_native_map_preserves_escaped_newlines_backslashes_leading_spaces_and_exact_oids():
+    data=b'42  /source \\\n\\\r\\\\ Unicode \xc3\xa9\n4294967295 C:\\\\source path\r\n'
+    values=parse_tablespace_map(data)
+    assert values==[{'oid':42,'location':' /source \n\r\\ Unicode é','name_observed':False},
+        {'oid':4294967295,'location':'C:\\source path','name_observed':False}]
+
+
+@pytest.mark.parametrize('data',[b'42 /unterminated',b'42 /trailing\\',b'0 /zero\n',b'01 /zero\n',
+    b'4294967296 /overflow\n',b'42 /first\n42 /duplicate\n',b'42 \n',b'42 /nul\0byte\n',b'42 /invalid\xff\n'])
+def test_invalid_or_lossy_native_map_is_not_inferred(data):
+    with pytest.raises(ContinuityError):parse_tablespace_map(data)
+
+
+@pytest.mark.parametrize('suffix',['.tar','.tar.gz','.tar.lz4','.tar.zst'])
+def test_tablespace_observation_uses_verified_artifact_metadata_without_opening_source_paths(tmp_path,suffix):
+    source=tmp_path/'source';source.mkdir()
+    path='/never-open-source/space \n\\ é'
+    encoded=path.replace('\\','\\\\').replace('\n','\\\n').encode()
+    data=b'42 '+encoded+b'\n'
+    (source/('base'+suffix)).write_bytes(encode(tar_bytes([('backup_label',b'label'),('tablespace_map',data),('file',b'body')]),suffix))
+    (source/('42'+suffix)).write_bytes(encode(tar_bytes([('file',b'tablespace')]),suffix))
+    (source/'backup_manifest').write_bytes(b'verification is a separate native receipt')
+    result=tablespace_observation(source,progress=lambda _event:None,cancel_signal=threading.Event())
+    assert result['tablespaces']==[{'oid':42,'location':path,'name_observed':False}]
+    assert result['source_host_paths_opened'] is False and result['native_names_observed'] is False
+    assert result['tablespace_catalog_observed'] is False
+
+
+@pytest.mark.parametrize('fault',['missing-map','missing-archive','duplicate-archive','cancel','linked-map'])
+def test_tablespace_observation_refuses_missing_or_unsafe_native_facts(tmp_path,fault):
+    source=tmp_path/'source';source.mkdir();data=b'42 /source\n'
+    entries=[('backup_label',b'label')]
+    if fault=='linked-map':
+        link=tarfile.TarInfo('tablespace_map');link.type=tarfile.SYMTYPE;link.linkname='/source'
+        entries.append(('tablespace_map',link))
+    elif fault!='missing-map':entries.append(('tablespace_map',data))
+    (source/'base.tar').write_bytes(tar_bytes(entries))
+    if fault!='missing-archive':(source/'42.tar').write_bytes(tar_bytes([]))
+    if fault=='duplicate-archive':(source/'42.tar.gz').write_bytes(encode(tar_bytes([]),'.tar.gz'))
+    signal=threading.Event()
+    if fault=='cancel':signal.set()
+    with pytest.raises(ContinuityError):tablespace_observation(source,progress=lambda _event:None,cancel_signal=signal)
 
 
 @pytest.mark.parametrize('suffix',['.tar','.tar.gz','.tar.lz4','.tar.zst'])

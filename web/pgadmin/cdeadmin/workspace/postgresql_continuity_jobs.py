@@ -16,7 +16,7 @@ from ..operations.fileio import durable_replace, exclusive_file_lock, private_fi
 from ..operations.store import JsonOperationStore
 from ..providers.postgresql.continuity import ContinuityError, PhysicalTools, backup_options, backup_arguments, combine_options, combine_arguments, manifest
 from ..providers.postgresql.continuity_recovery import recovery_options, independent_copy, recovery_command, read_result
-from ..providers.postgresql.continuity_tar import materialize
+from ..providers.postgresql.continuity_tar import materialize,tablespace_observation
 from ..providers.postgresql import continuity_wal
 from ..sdk.tooling import ProviderToolError
 
@@ -32,6 +32,14 @@ REVIEW_FIELDS=('job_id','owner','endpoint_id','configuration','operation','optio
 
 def review_digest(record):
     return fingerprint({key:record.get(key) for key in REVIEW_FIELDS})
+
+
+def artifact_tablespaces(record):
+    observation=record.get('artifact_tablespace_observation')
+    if observation is not None:return deepcopy(observation['tablespaces'])
+    if (record['source'].get('tablespace_catalog_observed') is False and
+            record['source'].get('tablespace_artifact_observed') is not True):return None
+    return deepcopy(record['source'].get('tablespaces',[]))
 
 
 def job_identity(value):
@@ -82,7 +90,12 @@ class PostgreSQLContinuityJobs:
         if result.get('change_artifact'):result['change_artifact'].pop('file_identity',None)
         if result.get('logical_stream_artifact'):result['logical_stream_artifact'].pop('file_identity',None)
         if summary:
-            result['source']['tablespace_count']=len(result['source'].pop('tablespaces',[]))
+            spaces=artifact_tablespaces(record)
+            result['source'].pop('tablespaces',None)
+            result['source']['tablespace_count']=len(spaces) if spaces is not None else None
+            if result.get('artifact_tablespace_observation'):
+                result['artifact_tablespace_observation'].pop('tablespaces',None)
+                result['artifact_tablespace_observation']['tablespace_count']=len(spaces)
             for name in ('tool_observation','verification_observation','process_observation','input_verifications'):
                 result.pop(name,None)
         return result
@@ -329,7 +342,9 @@ class PostgreSQLContinuityJobs:
             if not uncertain and (previous['state']!='verified' or not previous.get('manifest')):
                 raise ContinuityError('Select verified, manifest-bearing backup artifacts')
             proof=previous.get('manifest')
+            spaces=artifact_tablespaces(previous)
             if previous['operation']=='verify':previous=self.load(previous['artifact_job_id'],owner,endpoint)
+            if spaces is None:spaces=artifact_tablespaces(previous)
             self.require_stopped_writer(previous)
             if previous['operation'] not in {'full_backup','incremental_backup','combine'}:
                 raise ContinuityError('Select a native physical backup artifact')
@@ -347,7 +362,7 @@ class PostgreSQLContinuityJobs:
                            'format':previous['options']['format'], 'operation':previous['operation'],
                            'wal_method':previous.get('artifact_wal_method',previous['options'].get('wal_method','stream')),
                            'manifest_checksums':previous['options']['manifest_checksums'],
-                           'tablespaces':deepcopy(previous['source'].get('tablespaces',[]))})
+                           'tablespaces':spaces})
         if operation=='incremental_backup' and source.get('summarize_wal')!='on':
             raise ContinuityError('The selected server must enable native WAL summarization before an incremental backup')
         if operation in {'verify','recovery_drill'}:
@@ -360,6 +375,8 @@ class PostgreSQLContinuityJobs:
             'warnings':['Physical backups include the complete native cluster, not only the selected database.',
                 'Artifacts are written on the application host. The database server may be on another host.',
                 'A utility exit does not establish a usable recovery. Native verification and recovery drills have distinct receipts.']}
+        if operation in {'full_backup','incremental_backup'} and source.get('admission_interface')=='physical-replication':
+            record['warnings'].append('Replication-only backups stream native TAR archives into private application-host storage. Tablespace OIDs and source paths come from the verified native tablespace_map; source-host paths are never opened. Requested plain output is materialized and verified separately, retaining the TAR capture as diagnostic evidence.')
         artifact_record=self.load(inputs[0]['job_id'],owner,endpoint) if operation=='verify' else record
         record['artifact_location']={'host':'application-host','path':str(self.directory(artifact_record)/('recovered-clone' if operation=='recovery_drill' else 'backup')),
                                      'format':options['format']}
@@ -537,6 +554,7 @@ class PostgreSQLContinuityJobs:
                 if item['manifest_sha256'] is None:self.update(record,observed_input_manifest=observed)
                 paths.append(path)
             operation=record['operation']; destination=directory/'backup'
+            capture_checked=None;observed_tablespaces=None
             if self.load(record['job_id'],record['owner'],record['endpoint_id'])['cancel_requested']:signal.set()
             if signal.is_set():
                 self.update(record,state='cancelled',artifact_complete=False)
@@ -547,10 +565,35 @@ class PostgreSQLContinuityJobs:
                 return
             if operation in {'full_backup','incremental_backup'}:
                 tablespaces=[(item['location'],directory/'tablespaces'/str(item['oid'])) for item in record['source'].get('tablespaces',[]) if item['location']]
+                replication_only=record['source'].get('admission_interface')=='physical-replication'
+                native_options={**record['options'],'format':'tar'} if replication_only else record['options']
+                native_destination=directory/'native-tar-capture' if replication_only and record['options']['format']=='plain' else destination
                 with transport.parameters() as parameters:
                     result=tools.execute('pg_basebackup',directory,
-                        backup_arguments(record['options'],destination,incremental_manifest=paths[0]/'backup_manifest' if paths else None,tablespaces=tablespaces),
+                        backup_arguments(native_options,native_destination,incremental_manifest=paths[0]/'backup_manifest' if paths else None,tablespaces=tablespaces),
                         parameters=parameters,timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
+                self.update(record,tool_observation=result,native_backup_acknowledged=result['return_code']==0,
+                    native_capture_format=native_options['format'],native_capture_location=str(native_destination))
+                if replication_only and result['return_code']==0 and not result['process_observation'].get('cancel_requested'):
+                    if result['process_observation'].get('cleanup_confirmed') is not True:
+                        self.update(record,state='unknown',artifact_complete=False,observation_blocker='Native backup writer termination is unconfirmed; archive reads are refused')
+                        return
+                    self.update(record,state='verifying',phase='verifying_native_tar_capture')
+                    checked=tools.verify(directory,native_destination,format='tar',parse_wal=False,
+                        timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
+                    self.update(record,native_capture_verification=checked)
+                    if checked['return_code']!=0 or signal.is_set() or checked['process_observation'].get('cleanup_confirmed') is not True:
+                        self.update(record,state='cancelled' if signal.is_set() else 'failed',artifact_complete=False)
+                        return
+                    if read_proof(native_destination)['system_identifier']!=record['source']['system_identifier']:
+                        raise ContinuityError('Native TAR capture belongs to another cluster')
+                    observed=tablespace_observation(native_destination,progress=file_progress,cancel_signal=signal)
+                    observed_tablespaces=observed;capture_checked=checked
+                    self.update(record,artifact_tablespace_observation=observed)
+                    if native_destination!=destination:
+                        copied=materialize(native_destination,destination,observed['tablespaces'],record['options']['wal_method'],
+                            progress=file_progress,cancel_signal=signal)
+                        self.update(record,materialization_observation=copied)
             elif operation=='combine':
                 self.update(record,state='verifying_inputs')
                 input_receipts=[]
@@ -567,7 +610,7 @@ class PostgreSQLContinuityJobs:
                     if item['format']=='tar':
                         plain=directory/'materialized-inputs'/item['job_id']/'backup'
                         previous=self.load(item['job_id'],record['owner'],record['endpoint_id'])
-                        copied=materialize(path,plain,item.get('tablespaces',previous['source'].get('tablespaces',[])),item['wal_method'],progress=file_progress,cancel_signal=signal)
+                        copied=materialize(path,plain,item.get('tablespaces',artifact_tablespaces(previous)),item['wal_method'],progress=file_progress,cancel_signal=signal)
                         identity=read_proof(plain)
                         if identity['manifest_sha256']!=item['manifest_sha256'] or identity['system_identifier']!=record['source']['system_identifier']:
                             raise ContinuityError('Materialized chain input differs from the reviewed backup')
@@ -601,19 +644,26 @@ class PostgreSQLContinuityJobs:
                 self.update(record,state='cancelled' if result['process_observation'].get('cancel_requested') else 'failed',
                             artifact_complete=False,remote_finality_inferred=False)
                 return
+            if result['process_observation'].get('cleanup_confirmed') is not True:
+                self.update(record,state='unknown',artifact_complete=False,observation_blocker='Native utility termination is unconfirmed; artifact reads are refused')
+                return
             identity=read_proof(destination)
             if identity['system_identifier']!=record['source']['system_identifier']:
                 raise ContinuityError('Native artifact belongs to another cluster')
             if operation!='verify':
                 self.update(record,state='verifying')
-                result=tools.verify(directory,destination,format=record['options']['format'],
+                result=capture_checked if capture_checked is not None and record['options']['format']=='tar' else tools.verify(directory,destination,format=record['options']['format'],
                     parse_wal=(record['inputs'][-1]['wal_method'] if operation=='combine' else record['options']['wal_method'])!='none',
                     timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
                 self.update(record,verification_observation=result)
-                if result['return_code']!=0 or signal.is_set():
+                if result['return_code']!=0 or signal.is_set() or result['process_observation'].get('cleanup_confirmed') is not True:
                     self.update(record,state='cancelled' if signal.is_set() else 'failed',artifact_complete=False)
                     return
-            self.update(record,state='verified',manifest=identity,artifact_complete=True,finished_at=time.time(),
+            if (record['source'].get('tablespace_catalog_observed') is False and
+                    observed_tablespaces is None and
+                    (record['inputs'][0]['format'] if operation=='verify' else record['options']['format'])=='tar'):
+                self.update(record,artifact_tablespace_observation=tablespace_observation(destination,progress=file_progress,cancel_signal=signal))
+            self.update(record,state='verified',phase='complete',manifest=identity,artifact_complete=True,finished_at=time.time(),
                         verification_scope={**result['verification_scope'],
                             'content_checksums':identity['files_with_checksums']>0,
                             'checksum_algorithms':identity['checksum_algorithms'],
@@ -643,8 +693,11 @@ class PostgreSQLContinuityJobs:
         verify(source,'input_verification',record['inputs'][0]['format'])
         self.update(record,state='active',phase='copying_recovery_artifact')
         if record['inputs'][0]['format']=='tar':
-            copied=materialize(source,clone,record['source'].get('tablespaces',[]),options['wal_method'],progress=file_progress,cancel_signal=signal)
-        else:copied=independent_copy(source,clone,record['source'].get('tablespaces',[]),progress=file_progress,cancel_signal=signal)
+            copied=materialize(source,clone,record['inputs'][0].get('tablespaces',record['source'].get('tablespaces',[])),options['wal_method'],progress=file_progress,cancel_signal=signal)
+        else:
+            spaces=record['inputs'][0].get('tablespaces',record['source'].get('tablespaces',[]))
+            if spaces is None:raise ContinuityError('Native plain backup tablespace metadata is unavailable')
+            copied=independent_copy(source,clone,spaces,progress=file_progress,cancel_signal=signal)
         self.update(record,copy_observation=copied,phase='verifying_recovery_copy')
         verified=verify(clone,'copy_verification')
         # Verification and copied manifest identity precede any clone edits.

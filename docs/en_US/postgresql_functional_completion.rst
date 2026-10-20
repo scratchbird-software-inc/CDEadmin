@@ -1387,10 +1387,10 @@ preview and download. Replication-only credentials without SQL admission,
 retained temporary protocol streams, resumable archives and broader HA remain
 open. History and platform qualification retain their existing ownership.
 
-Replication-only physical WAL admission
----------------------------------------
+Replication-only physical backup and WAL admission
+--------------------------------------------------
 
-Native WAL capture can explicitly authenticate the registered principal through
+Native full/incremental backup and WAL capture can authenticate the registered principal through
 physical replication without a SQL database connection. The continuity dialog
 is available while the SQL registration is disconnected. IDENTIFY_SYSTEM and
 replication SHOW bind the native cluster, timeline, principal, version and WAL
@@ -1403,8 +1403,23 @@ authenticating or repeating a dispatched receiver.
 
 Physical replication cannot apply SQL SET ROLE. Register its authenticated
 principal directly. Replication-only SSH requires an independently authenticated
-and pinned transport; this path refuses it explicitly. Physical-backup catalog
-metadata, logical replication and temporary protocol ownership retain their
-separate admission/workflow gaps. Native fixtures deny SQL in HBA for the
-replication principal and independently observe actual WAL capture, cancellation
-and restart. This scope does not establish full product completion.
+and pinned transport; this path refuses it explicitly.
+
+Physical backup streams native TAR archives into private application-host
+storage. After native verification, its tablespace_map supplies exact OIDs and
+escaped source paths; source-host paths are never opened or used as output
+destinations. Native tablespace names remain unobserved. Plain output is a
+separately materialized, verified artifact with managed tablespace links. TAR
+verification does not claim WAL parsing; final plain verification records its
+own scope. Original TAR bytes remain with the job as diagnostic evidence.
+
+Full/incremental plain and compressed TAR inputs enter native reconstruction
+and independent recovery without SQL admission. Offline verification and recovery
+use retained owner-bound artifacts and need no live replication credentials.
+Native utility acknowledgement precedes metadata observation/materialization;
+a later failure does not erase that acknowledgement or replay the backup.
+Cancellation retains its diagnostic files. Logical replication and temporary
+protocol ownership retain their separate admission/workflow gaps. Native
+fixtures deny SQL in HBA for the replication principal and independently observe
+actual backup, reconstruction, recovery, WAL capture and cancellation.
+This scope does not establish full product completion.

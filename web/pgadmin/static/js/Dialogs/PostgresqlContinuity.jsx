@@ -10,6 +10,7 @@ const ACTIVE = new Set(['dispatching', 'active', 'verifying', 'verifying_inputs'
 const CHANGES = new Set(['wal_slot_sql_peek_text','wal_slot_sql_get_text','wal_slot_sql_peek_binary','wal_slot_sql_get_binary']);
 const SQL_SLOTS = new Set(['wal_slot_sql_physical_create','wal_slot_sql_logical_create','wal_slot_sql_physical_copy','wal_slot_sql_logical_copy','wal_slot_sql_advance','wal_slot_sql_drop',...CHANGES]);
 const NO_INPUT = new Set(['full_backup','wal_capture','wal_slot_create','wal_slot_drop',...SQL_SLOTS]);
+const REPLICATION_ADMISSION = new Set(['full_backup','incremental_backup','wal_capture']);
 const defaults = () => ({format:'plain', wal_method:'stream', checkpoint:'fast', manifest_checksums:'SHA256',
   label:'ScratchRobin physical backup', compression:'', max_rate_kib:'', slot:'', create_slot:false, no_slot:false,
   write_recovery_conf:false, verify_page_checksums:true, progress:true, estimate_size:true, sync:true, sync_method:'fsync', timeout_seconds:3600});
@@ -61,8 +62,8 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   useEffect(() => {setChangePreview(null);setChangeOffsets(['0']);},[receipt?.job_id]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
-    const replication = (action==='review' && operation==='wal_capture' && replicationOnly) ||
-      (action==='start' && review?.source?.admission_interface==='physical-replication');
+    const replication = (action==='review' && REPLICATION_ADMISSION.has(operation) && replicationOnly) ||
+      (action==='start' && REPLICATION_ADMISSION.has(review?.operation) && review?.source?.admission_interface==='physical-replication');
     const nativeRequest=replication ? {...request,replication_access:replicationPassword ? {password:replicationPassword} : {}} : request;
     if(replication && action==='start')setReplicationPassword('');
     try {const result=await post({action:'postgresql_continuity_'+action,request:nativeRequest});if(token===generation.current)accept(result);}
@@ -198,13 +199,15 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
         {(backup ? ['create_slot','no_slot','write_recovery_conf','verify_page_checksums','progress','estimate_size','sync'] : ['sync']).map(name => <FormControlLabel key={name} label={name.replaceAll('_',' ')}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>
-    {operation==='wal_capture' && <Box sx={{my:1}}>
-      <FormControlLabel label="Use replication-only WAL admission" control={<Checkbox disabled={busy}
+    {REPLICATION_ADMISSION.has(operation) && <Box sx={{my:1}}>
+      <FormControlLabel label="Use replication-only backup and WAL admission" control={<Checkbox disabled={busy}
         checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setReplicationPassword('');setReview(null);}} />} />
       {replicationOnly && <>
         <Alert severity="info">Authenticates the registered native principal through physical replication without a SQL connection.
           Enter its password or use the saved registration credential/libpq authentication. Passwords are sent only for admission
-          and rechecked before start; they are omitted from job receipts. SQL SET ROLE and replication-only SSH require separate admission.</Alert>
+          and rechecked before start; they are omitted from job receipts. Backups stream TAR files into private application-host storage;
+          plain output is materialized and verified separately. Tablespace source paths are observed from native artifacts and are never opened.
+          SQL SET ROLE and replication-only SSH require separate admission.</Alert>
         <TextField disabled={busy} size="small" type="password" label="Replication principal password" autoComplete="off"
           value={replicationPassword} onChange={event => setReplicationPassword(event.target.value)} />
       </>}

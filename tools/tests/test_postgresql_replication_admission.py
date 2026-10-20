@@ -29,7 +29,7 @@ def test_capture_uses_only_native_replication_commands_and_seals_password(monkey
         def execute(self,source):commands.append(source)
         def fetchone(self):
             return {'IDENTIFY_SYSTEM':(b'9007199254740993',b'1',b'0/A',None),
-                'SHOW wal_segment_size':(b'16MB',),'SHOW wal_block_size':(b'8192',)}[commands[-1]]
+                'SHOW wal_segment_size':(b'16MB',),'SHOW wal_block_size':(b'8192',),'SHOW summarize_wal':(b'on',)}[commands[-1]]
     info=SimpleNamespace(server_version=180003,host='native.host',hostaddr='127.0.0.2',port=6543,user='replication user',dbname='replication',
         get_parameters=lambda:{'service':'saved','passfile':'private','password':'secret','sslmode':'verify-full'})
     @contextmanager
@@ -41,7 +41,8 @@ def test_capture_uses_only_native_replication_commands_and_seals_password(monkey
     try:
         assert source['authenticated_principal']=='replication user'
         assert source['sql_admission_performed'] is False and source['tablespace_catalog_observed'] is False
-        assert commands==['IDENTIFY_SYSTEM','SHOW wal_segment_size','SHOW wal_block_size']
+        assert commands==['IDENTIFY_SYSTEM','SHOW wal_segment_size','SHOW wal_block_size','SHOW summarize_wal']
+        assert source['summarize_wal']=='on'
         assert 'secret' not in repr(source) and 'secret' not in repr(transport)
         with transport.parameters() as values:
             assert values['password']=='secret' and values['hostaddr']=='127.0.0.2'

@@ -11,13 +11,47 @@ beforeEach(() => {originalHeight=window.innerHeight;window.innerHeight=1200;});
 afterEach(() => {window.innerHeight=originalHeight;});
 
 describe('PostgreSQL native continuity jobs',() => {
+  it.each(['full_backup','incremental_backup'])('reviews %s with explicit replication credentials and native options',async operation => {
+    const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'verified'}],total:1,unavailable_job_ids:[]});
+    render(<Component post={post} />);
+    if(operation==='incremental_backup') {
+      fireEvent.mouseDown(screen.getByRole('combobox',{name:'Continuity operation'}));
+      fireEvent.click(await screen.findByRole('option',{name:'Incremental physical backup'}));
+      fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+      fireEvent.click(await screen.findByRole('button',{name:'Select input'}));
+    }
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only backup and WAL admission'}));
+    fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'native-only'}});
+    post.mockResolvedValue({...reviewed,operation,source:{admission_interface:'physical-replication'}});
+    fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+    await screen.findByLabelText('Native backup review');
+    expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'postgresql_continuity_review',request:expect.objectContaining({operation,replication_access:{password:'native-only'},options:expect.objectContaining({format:'plain'})})}));
+    expect(screen.getByLabelText('Native backup review')).not.toHaveTextContent('native-only');
+  });
+
+  it('starts offline verification of a replication-only backup without new credentials or SQL admission',async () => {
+    const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'verified'}],total:1,unavailable_job_ids:[]});
+    render(<Component post={post} />);
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'Continuity operation'}));
+    fireEvent.click(await screen.findByRole('option',{name:'Verify existing backup'}));
+    fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Select input'}));
+    post.mockResolvedValue({...reviewed,operation:'verify',source:{admission_interface:'physical-replication'}});
+    fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+    await screen.findByLabelText('Native backup review');
+    post.mockResolvedValue({...reviewed,operation:'verify',state:'verified'});
+    fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+    await screen.findByRole('button',{name:'Refresh receipt'});
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_start',request:{job_id:'native-job',review_digest:'native-digest',confirmed:true}});
+  });
+
   it('admits WAL through replication without SQL and keeps credentials out of receipt requests',async () => {
     const nativeReview={...reviewed,operation:'wal_capture',source:{...reviewed.source,admission_interface:'physical-replication'}};
     const post=jest.fn().mockResolvedValue(nativeReview);
     render(<Component post={post} />);
     fireEvent.mouseDown(screen.getByLabelText('Continuity operation'));
     fireEvent.click(await screen.findByRole('option',{name:'Capture native WAL archive'}));
-    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only WAL admission'}));
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only backup and WAL admission'}));
     fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'ephemeral-native-secret'}});
     fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
     await screen.findByLabelText('Native backup review');
@@ -36,14 +70,14 @@ describe('PostgreSQL native continuity jobs',() => {
     const post=jest.fn();const mounted=render(<Component post={post} />);
     fireEvent.mouseDown(await screen.findByRole('combobox',{name:'Continuity operation'}));
     fireEvent.click(await screen.findByRole('option',{name:'Capture native WAL archive'}));
-    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only WAL admission'}));
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only backup and WAL admission'}));
     fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'private'}});
     fireEvent.mouseDown(await screen.findByRole('combobox',{name:'Continuity operation'}));
     fireEvent.click(await screen.findByRole('option',{name:'Full physical backup'}));
     expect(screen.queryByLabelText('Replication principal password')).not.toBeInTheDocument();
     fireEvent.mouseDown(await screen.findByRole('combobox',{name:'Continuity operation'}));
     fireEvent.click(await screen.findByRole('option',{name:'Capture native WAL archive'}));
-    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only WAL admission'}));
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only backup and WAL admission'}));
     expect(screen.getByLabelText('Replication principal password')).toHaveValue('');
     fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'private-again'}});
     mounted.rerender(<Component post={jest.fn()} />);

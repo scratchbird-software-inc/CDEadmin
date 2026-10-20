@@ -46,6 +46,8 @@ def capture(parameters):
                 for name in ('wal_segment_size', 'wal_block_size'):
                     cursor.execute('SHOW ' + name)
                     settings[name] = _bytes(cursor.fetchone()[0])
+                cursor.execute('SHOW summarize_wal')
+                summarize_wal = _text(cursor.fetchone()[0])
             info = connection.info
             resolved = {key: value for key, value in info.get_parameters().items()
                         if key not in {'service', 'passfile', 'replication', 'fallback_application_name'}}
@@ -65,6 +67,7 @@ def capture(parameters):
                       'server_version': info.server_version, 'authenticated_principal': info.user,
                       'host': info.host, 'port': info.port, 'admission_interface': 'physical-replication',
                       'sql_admission_performed': False, 'tablespace_catalog_observed': False,
+                      'summarize_wal': summarize_wal,
                       'wal_segment_bytes': settings['wal_segment_size'],
                       'wal_block_bytes': settings['wal_block_size']}
             transport = ContinuityTransport(resolved, secrets=secrets)
