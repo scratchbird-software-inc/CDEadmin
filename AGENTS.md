@@ -106,3 +106,17 @@ Owner correction, 2026-10-16: ScratchBird is under heavy development. Wire its
 client drivers and the history integration, but do not run history tests for now.
 Keep history qualification explicitly deferred until the owner resumes it; its
 absence must not block implementation of the rest of the six-engine matrix.
+
+## Beta edition and source scope (owner correction, 2026-10-20)
+
+Beta supports the open source and source available versions of the engines.
+Closed source Enterprise functionality is post beta and must be recorded with
+its native dependency and reason for deferral, separately from beta gaps.
+Inspect the implementation source, not just grammar, service interfaces or
+packaging references, before claiming source availability. Available native
+implementations need real tests; absent closed source implementations must not
+be replaced with application emulation or counted as beta completion blockers.
+MySQL dynamic masking policy administration/execution is post beta: the pinned
+community source contains core SQL hooks and column-reference handling, but no
+implementation of the required Enterprise object_policy component. Existing
+column-reference tests do not establish working masking.

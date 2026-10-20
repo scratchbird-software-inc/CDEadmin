@@ -10,6 +10,12 @@ owning engine contracts. No engine has full product acceptance, and this list
 is not an overall completion percentage. Independent inventory reconciliation
 must expose additional missing native capabilities as explicit backlog items.
 
+Owner scope correction, 2026-10-20: the beta denominator includes open source
+and source available engine versions. Closed source Enterprise functionality is
+post beta, with its dependency and reason recorded below. Source interfaces or
+accepted syntax do not prove an available implementation. Missing adapters for
+available native implementations remain beta gaps.
+
 Work order and closure rules
 ============================
 
@@ -75,13 +81,12 @@ MySQL
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;
 large catalogs use separate selected batches under the existing byte bounds.
-The first native source
-comparison also identifies component-backed global masking-policy definitions as
-an explicit adapter obligation. Full native column facts and reviewed column
-policy assignment/removal are implemented, including the native distinction
-between a policy reference and an unavailable policy component. Global policy
-installation, definition management and positive execution qualification remain
-open and require separate native admission. Foreign-server catalog, typed native
+Full native column facts and reviewed column policy assignment/removal are
+implemented and tested against community MySQL's native reference handling.
+Those receipts do not qualify working masking. Global policy installation,
+definition management and functioning masking depend on the closed source
+Enterprise component and are deferred as ``MY-POST-BETA-MASKING`` below.
+Foreign-server catalog, typed native
 management and credential-free server DDN migration generation/application are
 implemented. Server capture now includes every visible global variable and its native
 provenance. Persisted-only settings for unloaded components now retain their
@@ -174,6 +179,34 @@ Firebird network and embedded
   data, diagnostics, collector/dashboard and desktop/lifecycle workflows.
 * FB-EVIDENCE: Reconcile the expanded native capability evidence with current
   source. Existing FlameRobin parity/driver receipts retain their own scope.
+
+Post beta: closed source Enterprise functionality
+=================================================
+
+MY-POST-BETA-MASKING: MySQL dynamic masking policies
+---------------------------------------------------
+
+* Status: owner-deferred to post beta; excluded from beta completion blockers.
+* Native dependency: MySQL Enterprise ``object_policy`` component, its policy
+  storage and ``column_masking_policy_management`` /
+  ``column_masking_policy_retrieval`` service implementations.
+* Source evidence: the pinned MySQL 9.7.0 community tree provides
+  ``sql/sql_masking_policy.cc`` and
+  ``include/mysql/components/services/object_policy_service.h`` for the core SQL
+  hooks and service contracts. It contains no implementation of the required
+  component. Its ``mysql-test/t/masking_policy.test`` explicitly expects
+  component-unavailable errors for policy creation, deletion and lookup.
+  Oracle documents the dependency in the `MySQL 9.7 Enterprise masking guide
+  <https://dev.mysql.com/doc/refman/9.7/en/data-masking-dynamic-policies.html>`_.
+* Reason: the required closed source Enterprise implementation is unavailable
+  in the acquired source and falls outside the owner's beta edition scope.
+  Parser acceptance and successful column-reference assignment/removal cannot
+  establish working policy management or masked/unmasked query results.
+* Deferred work: component installation/lifecycle, policy catalog and definition
+  management, complete application workflows and positive native masking tests
+  with real users/roles and independently observed results on a supported
+  Enterprise installation after beta. Do not fabricate a replacement component
+  or claim execution success from mocked services.
 
 Shared acceptance
 =================

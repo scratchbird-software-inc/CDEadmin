@@ -1001,10 +1001,13 @@ services are configured; ordinary SQL exposes native execution diagnostics.
 
 The reference 9.7 source also parses global masking policy definitions. Their
 CREATE, DROP and definition lookup require an admitted object-policy component
-and native management privilege. That global policy administration remains an
-explicit adapter and qualification obligation. Column policy references have
-separate native support, described below; their successful assignment does not
-prove that policy execution is available.
+and native management privilege. The required Enterprise ``object_policy``
+implementation is absent from the acquired community source. Under the owner's
+2026-10-20 open source/source available beta scope, component installation,
+global policy administration and functioning masking are post beta
+(``MY-POST-BETA-MASKING`` in :doc:`six_engine_remaining_work`). Column policy
+references have separate open source native support, described below; their
+successful assignment does not prove that policy execution is available.
 
 Reviewed DDN library deployment
 -------------------------------
@@ -1351,5 +1354,12 @@ reading the masked column also fails natively until the reference is removed.
 Removing it preserves the stored data. This state is not a successful masking
 deployment. ``tools/cdeadmin_mysql_column_masking_qualification.py`` verifies all
 22 observed column fields, quoted identities, both connectors and SQL modes,
-stale-review refusal, native ALTER authority and preserved data. Positive policy
-definition/execution qualification still requires the owning component.
+stale-review refusal, native ALTER authority and preserved data. These are
+community column-reference and refusal tests, not positive masking tests.
+The community source's own ``mysql-test/t/masking_policy.test`` likewise expects
+component-unavailable errors for policy CREATE/DROP/SHOW. The tree includes core
+SQL handling and service interfaces but no implementation of the required
+Enterprise policy component. Positive definition/execution qualification and
+the complete policy administration workflow are therefore post beta, excluded
+from beta completion blockers, with the dependency and reason recorded under
+``MY-POST-BETA-MASKING``. No replacement masking implementation is in scope.

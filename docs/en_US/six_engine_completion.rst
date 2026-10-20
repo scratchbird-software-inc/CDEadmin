@@ -26,6 +26,28 @@ client-driver and archive integration wired, but do not run history tests until
 the owner resumes qualification. History acceptance is deferred; it must not
 hold up implementation of the other matrix items.
 
+Beta edition and source scope
+-----------------------------
+
+Owner correction, 2026-10-20: beta covers the open source and source available
+versions of all six engines. Closed source Enterprise functionality is post beta.
+Record each such feature separately with its native dependency, source evidence
+and reason for deferral; it is not a beta completion blocker or an engine feature
+to emulate in ScratchRobin.
+
+Source availability means access to the implementation needed to exercise the
+native feature. Grammar, service interfaces, packaging entries and native
+component-unavailable errors alone do not establish that availability. Native
+implementations with available source remain in scope and require real tests;
+missing adapters or test coverage for those implementations remain beta gaps.
+Apply this boundary to the inventories and acceptance areas below.
+
+MySQL dynamic masking policy administration and execution is recorded as
+``MY-POST-BETA-MASKING`` in :doc:`six_engine_remaining_work`: the required
+Enterprise ``object_policy`` implementation is absent from the acquired
+community source. Open source column-reference handling and its tests qualify
+only those native declarations, not functioning masking.
+
 Version and installation identity
 ---------------------------------
 
