@@ -3171,6 +3171,11 @@ class ProviderWorkspaceService:
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action == 'mariadb_backup_stages':
+                if (not isinstance(data.get('request'), dict) or
+                        not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
+                    raise ProviderWorkspaceError('Select a native MariaDB backup-stage request')
+                return self.studio_service.mariadb_backup_stage_action(context, data.get('session_id'), data['request'])
             if action == 'duckdb_database_copy':
                 if (not isinstance(data.get('request'), dict) or
                         not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):

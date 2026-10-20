@@ -12,25 +12,30 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
   const [confirmation, setConfirmation] = useState(''), [confirmed, setConfirmed] = useState(false);
   const [awaitingReceipt, setAwaitingReceipt] = useState(false), [catalogs, setCatalogs] = useState([]);
   const serial = useRef(0), previousSession = useRef(sessionId);
+  const ownsBusy = useRef(false);
   useEffect(() => {
     serial.current++; setRecord(null); setSource(''); setDestination(''); setCatalogs([]);
     setConfirmation(''); setConfirmed(false); setError(''); setBusy(false); setAwaitingReceipt(false);
-    return () => {serial.current++;};
-  }, [post, databaseTargetId]);
+    return () => {serial.current++; if(ownsBusy.current) onBusyChange(false); ownsBusy.current = false;};
+  }, [post, databaseTargetId, onBusyChange]);
   useEffect(() => {
     if(previousSession.current && previousSession.current !== sessionId) {
+      if(ownsBusy.current) onBusyChange(false);
+      ownsBusy.current = false;
       serial.current++; setRecord(null); setCatalogs([]); setBusy(false); setAwaitingReceipt(false);
       setConfirmation(''); setConfirmed(false);
       setError('The original copy session closed or changed. Its receipts cannot be applied on another session.');
     }
     previousSession.current = sessionId;
-  }, [sessionId]);
+  }, [sessionId, onBusyChange]);
   const receive = useCallback(value => {
+    ownsBusy.current = running(value);
     setRecord(value); setAwaitingReceipt(false);
     onBusyChange(running(value));
     if(value.session_reuse_blocked) onBlocked?.();
   }, [onBusyChange, onBlocked]);
   const send = async operation => {
+    ownsBusy.current = true;
     const token = ++serial.current; setBusy(true); setError(''); onBusyChange(true);
     let keepBusy = false;
     try {
@@ -53,7 +58,7 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message ||
         'Copy reply unavailable. Read the existing receipt before preparing another copy.');
-    } finally {if(token === serial.current) {setBusy(false); onBusyChange(keepBusy);}}
+    } finally {if(token === serial.current) {setBusy(false); ownsBusy.current = keepBusy; onBusyChange(keepBusy);}}
   };
   useEffect(() => {
     if(!running(record) || !sessionId || busy) return undefined;

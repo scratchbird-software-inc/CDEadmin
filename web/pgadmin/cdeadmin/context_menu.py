@@ -1340,6 +1340,9 @@ def database_target_context_actions(
         actions.append(_action('database.mariadb.catalog_ddn', 'MariaDB metadata and DDN diagrams...',
             'open_workspace', icon='action.export', group='database', priority=44,
             arguments={**base, 'tab': 'export'}))
+        actions.append(_action('database.mariadb.backup_stages', 'Native MariaDB backup stages...',
+            'open_workspace', icon='action.backup', group='backup',
+            mutation='admin', arguments={**base, 'tab': 'operations'}))
         actions.append(_action('database.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
             icon='action.edit', group='availability', mutation='write', arguments=base))
     if engine_id == 'mysql':

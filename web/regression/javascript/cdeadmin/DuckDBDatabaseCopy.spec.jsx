@@ -108,4 +108,14 @@ describe('native DuckDB database copy', () => {
     expect(screen.getByRole('button', {name: 'Review native database copy'})).toBeDisabled();
     expect(screen.getByRole('button', {name: 'Read database copy receipt'})).toBeEnabled();
   });
+
+  it('releases its busy ownership when the active copy view unmounts', async () => {
+    const post = jest.fn().mockResolvedValue({...reviewed, state: 'reviewing', phase: 'reading_source'});
+    const properties = props(post);const rendered = render(<Component {...properties} />);enter();
+    fireEvent.click(screen.getByRole('button', {name: 'Review native database copy'}));
+    await screen.findByText(/Phase: reading_source/);
+    expect(properties.onBusyChange).toHaveBeenLastCalledWith(true);
+    rendered.unmount();
+    expect(properties.onBusyChange).toHaveBeenLastCalledWith(false);
+  });
 });

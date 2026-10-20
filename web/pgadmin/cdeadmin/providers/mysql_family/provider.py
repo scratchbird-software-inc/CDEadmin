@@ -317,6 +317,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         from .mariadb_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
+        self._backup_stage_reviews = {}
+        self._backup_stage_handles = set()
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mariadb-binlog': os.environ.get('CDEADMIN_MARIADB_BINLOG_BINARY', 'mariadb-binlog'),
             'mariadb-dump': os.environ.get(
@@ -352,6 +354,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     def _discard_failed_session(self, connection):
         from .mariadb_connections import discard
+        self._backup_stage_handles.discard(id(connection))
         self._forget_connection(connection)
         discard(connection)
 
@@ -438,6 +441,17 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     def _close_idle_session(self, handle):
         from .mariadb_connections import discard
+        if id(handle) in getattr(self, '_backup_stage_handles', set()):
+            # BACKUP locks are connection-scoped and do not belong to a pool's
+            # next borrower, even when pool_reset_connection was disabled.
+            self._backup_stage_handles.discard(id(handle))
+            self._forget_connection(handle)
+            discard(handle)
+            self._uncertain_sessions.discard(id(handle))
+            return {'rollback_requested': False, 'connection_released': True,
+                'native_disconnect_requested': True, 'backup_session_discarded': True,
+                'lock_state_independently_observed': False, 'state': 'unknown',
+                'driver_observation_only': True, 'finality_interpreted_by_common_code': False}
         if id(handle) in self._uncertain_sessions:
             self._forget_connection(handle)
             discard(handle)
@@ -456,13 +470,14 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._executions.close()
         try:
             for handle in tuple(self._connections):
-                if id(handle) in self._uncertain_sessions:
+                if id(handle) in self._uncertain_sessions or id(handle) in self._backup_stage_handles:
                     self.close_session(handle)
             super().close()
         finally:
             self._mariadb_connector.close()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
+            self._backup_stage_handles.clear()
 
     @staticmethod
     def _workspace_path(workspace, value):
@@ -1640,6 +1655,25 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
 class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
+
+    def backup_stage_action(self, request):
+        from .mariadb_backup_stages import action
+        self._require('execute')
+        self._require('backup_admin')
+        if request.get('language_profile') != 'mariadb-sql':
+            raise RelationalClientError('Native MariaDB query session required')
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            raise RelationalClientError('Native MariaDB backup-stage client is unavailable')
+        handle = self._editor_session(request)
+        try:
+            return action(self.client, handle, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}})
+        except (ValueError, RelationalClientError):
+            raise
+        except Exception as error:
+            self.client._uncertain_sessions.add(id(handle))
+            raise RelationalClientError('Native MariaDB backup-stage workflow failed (' +
+                type(error).__name__ + ')') from None
 
     def apply_server_operation(self, route, record, operation):
         from ..mariadb_server_application import apply_operation

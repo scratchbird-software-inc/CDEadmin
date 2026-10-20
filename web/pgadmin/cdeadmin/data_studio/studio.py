@@ -569,6 +569,19 @@ class DataStudioService:
         return result
 
     @serialized_execution
+    def mariadb_backup_stage_action(self, context, session_id, request):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'mariadb-sql' or context.provider_id != 'org.cdeadmin.mariadb':
+            raise DataStudioAccessError('Native MariaDB query session required')
+        try:
+            return binding.instance.backup_stage_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def duckdb_attachment_action(self, context, session_id, request, route):
         from ..sdk import RelationalClientError
         session, binding = self._operational_session(context, session_id)

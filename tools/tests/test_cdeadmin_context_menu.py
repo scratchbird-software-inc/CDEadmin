@@ -506,6 +506,12 @@ class ContextMenuTests(unittest.TestCase):
             }
         )
         by_id = {item['command_id']: item for item in actions}
+        stages = by_id['database.mariadb.backup_stages']
+        self.assertEqual('backup', stages['menu_group'])
+        self.assertEqual('operations', stages['arguments']['tab'])
+        self.assertEqual('mariadb-one', stages['arguments']['database_target_id'])
+        self.assertEqual('open_workspace', stages['handler'])
+        self.assertFalse(stages['requires_confirmation'])
         expected = {
             'analyze_tables', 'check_objects', 'optimize_tables',
             'repair_objects', 'checksum_tables', 'backup_logical',

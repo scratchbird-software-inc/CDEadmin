@@ -107,8 +107,12 @@ MariaDB
 * MA-LANGUAGE-CAPABILITIES: Close wider procedural/Oracle-package scopes and
   installed engines/plugins, security and maintenance findings from INV-MARIADB.
 
-Include native backup stages/locks and their connection lifetime in continuity
-reconciliation. Asynchronous replication-channel controls do not establish the
+Native BACKUP STAGE and table BACKUP LOCK/UNLOCK now have original-session
+reviewed controls, native execution/cancellation and separate acknowledgement
+receipts. Active transactions are refused before their native implicit commits;
+backup connections are physically discarded on close even with pool reset
+disabled. Physical file copying, verification and recovery-chain orchestration
+remain separate continuity gaps. Asynchronous replication-channel controls do not establish the
 Galera topology/bootstrap/repair workflows for installations that provide them.
 
 PostgreSQL

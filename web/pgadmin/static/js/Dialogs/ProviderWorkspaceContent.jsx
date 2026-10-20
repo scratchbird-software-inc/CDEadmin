@@ -42,6 +42,7 @@ import DuckDBTestData from './DuckDBTestData';
 import DuckDBCopy from './DuckDBCopy';
 import DuckDBAttachment from './DuckDBAttachment';
 import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
+import MariaDBBackupStages from './MariaDBBackupStages';
 import DuckDBExtensions from './DuckDBExtensions';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
@@ -8292,7 +8293,12 @@ export default function ProviderWorkspaceContent({
           onRefresh={refreshResources} refreshing={loadingMore}
           onMutationApplied={reloadAfterAdministration}
           post={post} setError={setError} />
-        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}</>}
+        {workspace.endpoint?.profile_id === 'postgresql-native' && <PostgresqlContinuity post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
+        {workspace.endpoint?.profile_id === 'mariadb-native' && queryDatabaseTargetId &&
+          <MariaDBBackupStages key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />}</>}
       {workspace && tab === 'semantic' &&
         <SemanticModelWorkspace semantic={workspace.semantic_models}
           resources={resourcePage?.items || []}

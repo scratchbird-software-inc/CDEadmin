@@ -28,6 +28,8 @@ class Execution:
     statement_metrics: object = None
     cleanup_failed: bool = False
     poll_lock: object = field(default_factory=threading.Lock)
+    native_dispatched: bool = False
+    native_acknowledged: bool = False
 
 
 class Executions:
@@ -107,10 +109,12 @@ class Executions:
             cursor = Cursor(token.connection)
             started = time.perf_counter()
             try:
+                token.native_dispatched = True
                 if bound:
                     cursor.execute(source, bound)
                 else:
                     cursor.execute(source)
+                token.native_acknowledged = True
             finally:
                 token.statement_metrics = {
                     'dispatch_ms': round((time.perf_counter() - started) * 1000, 3),
