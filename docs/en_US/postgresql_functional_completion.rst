@@ -1403,6 +1403,29 @@ The SQL-admitted path keeps its stronger slot-identity and checkpoint checks.
 The registered database cannot be replaced with a browser-supplied database name
 or SQL database target. Temporary slots still require their owning backend.
 
+The continuity workspace also creates permanent logical slots through that
+registered native replication connection. It exposes native output-plugin
+identity, two-phase decoding, failover synchronization and if-not-exists.
+Native client revisions 18.3/18.4 require adapter identifier quoting; 18.6 quotes
+identifiers internally. Unqualified quoting revisions are refused. The native
+utility uses no-export-snapshot; exported snapshot ownership and temporary
+protocol resources remain separate work.
+The admitted quoting distinction follows the pinned 18.3 source and upstream
+`18.6 replication utility implementation
+<https://github.com/postgres/postgres/blob/REL_18_6/src/bin/pg_basebackup/streamutil.c>`_.
+The pinned 18.3 server replication scanner itself cannot consume an embedded
+double quote in a plugin identifier. Such names are refused before command
+dispatch and remain available through the separate native SQL logical-slot
+workflow. Spaces, Unicode, single quotes and backslashes retain their native
+protocol identities. Client-side quoting does not repair that server parser
+limitation, and the application does not emulate it.
+
+The reviewed peer, native utility and command adapter are bound before dispatch.
+The acknowledgement is durable before SSH release and never permits automatic
+replay. Prior existence and current catalog state remain unobserved. In
+particular, an if-not-exists acknowledgement can preserve another slot type,
+database or plugin unchanged; it does not prove new logical-slot creation.
+
 Replication-only physical backup, WAL and slot admission
 -------------------------------------------------------
 

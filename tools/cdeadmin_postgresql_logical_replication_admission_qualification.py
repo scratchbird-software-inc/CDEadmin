@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+import subprocess
 import sys
 import time
 from unittest.mock import patch
@@ -19,7 +20,7 @@ def released(jobs):
         return not any(worker.is_alive() for worker,_signal in jobs.workers.values()) and not jobs.pending_releases
 
 
-def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
+def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,slot_commands=False,slot_client_binary=None):
     import psycopg
     from psycopg import sql
     from postgresql_qualification_support import server as owned_server
@@ -34,7 +35,9 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
         'web/pgadmin/cdeadmin/workspace/postgresql_continuity_service.py',
         'web/pgadmin/cdeadmin/workspace/postgresql_continuity_jobs.py',
         'web/pgadmin/cdeadmin/workspace/postgresql_logical_stream.py',
-        'web/pgadmin/static/js/Dialogs/PostgresqlLogicalStream.jsx']
+        'web/pgadmin/cdeadmin/workspace/postgresql_logical_slot_command.py',
+        'web/pgadmin/static/js/Dialogs/PostgresqlLogicalStream.jsx',
+        'web/pgadmin/static/js/Dialogs/PostgresqlContinuity.jsx']
     proof['source_sha256']={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}
     builtins.SERVER_MODE=None
     import config
@@ -52,7 +55,8 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
     app=create_app('ScratchRobin owned logical replication admission');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY=''
     app.run_before_app_start();client=app.test_client();jobs=None
     try:
-        with owned_server(output/'fixture',server_options=('-c','wal_level=logical','-c','wal_sender_timeout=5s'),
+        with owned_server(output/'fixture',server_options=('-c','wal_level=logical','-c','wal_sender_timeout=5s',
+                *(('-c','max_prepared_transactions=10') if slot_commands else ())),
                 initdb_options=('--locale=C','--encoding=UTF8')) as (route,password,fixture):
             admin={'host':route['host'],'port':route['port'],'user':'postgres','password':password,'dbname':'postgres','autocommit':True}
             database="Native logical database = ü '";principal='owned_logical_replication';secret=secrets.token_urlsafe(32)
@@ -100,6 +104,8 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                 def no_sql(*_args,**_kwargs):raise AssertionError('SQL workspace admission was attempted')
                 with patch.object(psycopg,'connect',guarded),patch.object(service.endpoint_service,'workspace',no_sql),\
                         patch('pgadmin.cdeadmin.workspace.postgresql_continuity_service.capture',no_sql),patch.object(stream.private_sql,'attach',no_sql):
+                    if slot_commands:
+                        proof['native_slot_commands']=qualify_slot_commands(app,observer,http,wait,secret,fixture,slot_client_binary)
                     results={}
                     for mode,plugin,pairs in [('text','test_decoding',[{'name':'include-xids','value':'0'},{'name':'skip-empty-xacts','value':'1'}]),
                             ('binary','pgoutput',[{'name':'proto_version','value':'4'},{'name':'publication_names','value':sql.Identifier(publication).as_string(observer)},{'name':'binary','value':'true'}])]:
@@ -152,8 +158,12 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
                         observer.execute("SELECT * FROM pg_create_logical_replication_slot('browser_owned','test_decoding')")
                         observer.execute("INSERT INTO native_rows VALUES(4,'browser native logical admission',NULL)")
                         end=observer.execute('SELECT pg_current_wal_insert_lsn()::text').fetchone()[0]
-                        proof['browser']=qualify_browser(app,output,browser_binary,driver_binary,sid,secret,end)
+                        proof['browser']=qualify_browser(app,output,browser_binary,driver_binary,sid,secret,end,slot_commands=slot_commands)
                         observer.execute("SELECT pg_drop_replication_slot('browser_owned')")
+                        if slot_commands:
+                            properties=observer.execute("SELECT slot_type,plugin,two_phase,failover FROM pg_replication_slots WHERE slot_name='browser_created_slot'").fetchone()
+                            assert properties==('logical','pgoutput',True,True),properties
+                            observer.execute("SELECT pg_drop_replication_slot('browser_created_slot')")
                 assert admissions and all(item['mode']=='database' and item['database']==database for item in admissions)
                 assert not observer.execute("SELECT 1 FROM pg_stat_activity WHERE usename=%s AND backend_type='client backend'",(principal,)).fetchall()
                 assert released(jobs)
@@ -171,12 +181,64 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None):
     return proof
 
 
-def qualify_browser(app,output,browser_binary,driver_binary,sid,password,end_lsn):
+def qualify_slot_commands(app,observer,http,wait,password,fixture,extra_client):
+    # A real installed open source output-plugin implementation under quoted
+    # and Unicode native library identities, entirely inside the owned server.
+    library=subprocess.check_output(['docker','exec',fixture['owned_container_name'],'pg_config','--pkglibdir'],text=True,timeout=15).strip()
+    alias="Native ü ' \\";sql_alias='Native " ü'
+    subprocess.run(['docker','exec',fixture['owned_container_name'],'cp','--',library+'/test_decoding.so',library+'/'+alias+'.so'],check=True,timeout=15)
+    subprocess.run(['docker','exec',fixture['owned_container_name'],'cp','--',library+'/test_decoding.so',library+'/'+sql_alias+'.so'],check=True,timeout=15)
+    observer.execute('SELECT * FROM pg_create_logical_replication_slot(%s,%s)',('sql_native_quoted_plugin',sql_alias))
+    assert observer.execute("SELECT plugin FROM pg_replication_slots WHERE slot_name='sql_native_quoted_plugin'").fetchone()==(sql_alias,)
+    observer.execute("SELECT pg_drop_replication_slot('sql_native_quoted_plugin')")
+    http('review',{'operation':'logical_slot_create','options':{'slot':'unrepresentable_owned','plugin':sql_alias},
+        'replication_access':{'password':password}},refused=True)
+    original=app.config['CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH'];clients=[original]
+    if extra_client:clients.append(str(Path(extra_client).resolve().parent))
+    results=[]
+    try:
+        for index,path in enumerate(clients):
+            app.config['CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH']=path
+            def submit(slot,plugin,*,two_phase=False,failover=False,if_not_exists=False,acknowledged=True):
+                review=http('review',{'operation':'logical_slot_create','options':{'slot':slot,'plugin':plugin,
+                    'two_phase':two_phase,'failover':failover,'if_not_exists':if_not_exists},'replication_access':{'password':password}})
+                request={'job_id':review['job_id'],'review_digest':review['review_digest'],'confirmed':True,'replication_access':{'password':password}}
+                http('start',request)
+                done=wait(review,lambda r:r['state'] in {'completed','unknown','failed'})
+                assert done['native_utility_acknowledged'] is acknowledged,done
+                assert done['slot_existed_before'] is None and done['slot_observation'] is None and done['slot_observation_state']=='unavailable'
+                assert http('start',request)['state']==done['state']
+                return done
+            prefix='protocol_'+str(index)+'_'
+            created=submit(prefix+'flags','pgoutput',two_phase=True,failover=True)
+            properties=observer.execute('SELECT slot_type,plugin,two_phase,failover FROM pg_replication_slots WHERE slot_name=%s',(prefix+'flags',)).fetchone()
+            assert properties==('logical','pgoutput',True,True),properties
+            submit(prefix+'flags','test_decoding',acknowledged=False)
+            submit(prefix+'flags','test_decoding',if_not_exists=True)
+            assert observer.execute('SELECT plugin FROM pg_replication_slots WHERE slot_name=%s',(prefix+'flags',)).fetchone()==('pgoutput',)
+            quoted=submit(prefix+'quoted',alias)
+            assert observer.execute('SELECT plugin FROM pg_replication_slots WHERE slot_name=%s',(prefix+'quoted',)).fetchone()==(alias,)
+            observer.execute('SELECT * FROM pg_create_physical_replication_slot(%s)',(prefix+'existing_physical',))
+            submit(prefix+'existing_physical','pgoutput',if_not_exists=True)
+            assert observer.execute('SELECT slot_type FROM pg_replication_slots WHERE slot_name=%s',(prefix+'existing_physical',)).fetchone()==('physical',)
+            submit(prefix+'missing_plugin','absent plugin ü',acknowledged=False)
+            assert not observer.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s',(prefix+'missing_plugin',)).fetchall()
+            for name in (prefix+'flags',prefix+'quoted',prefix+'existing_physical'):observer.execute('SELECT pg_drop_replication_slot(%s)',(name,))
+            results.append({'tool':created['tool_identities']['pg_recvlogical'],'flags_native':True,
+                'quoted_unicode_native_plugin':quoted['job_id'],'duplicate_and_missing_plugin_refused':True,
+                'if_not_exists_preserves_other_type_and_plugin':True,'catalog_unobserved':True,'duplicate_start_does_not_replay':True,
+                'native_protocol_embedded_quote_refusal_and_SQL_support_distinct':True})
+    finally:app.config['CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH']=original
+    return results
+
+
+def qualify_browser(app,output,browser_binary,driver_binary,sid,password,end_lsn,*,slot_commands=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.common.exceptions import StaleElementReferenceException,ElementClickInterceptedException
     from cdeadmin_ui_evidence import ensure_data_explorer,expand
@@ -239,11 +301,35 @@ def qualify_browser(app,output,browser_binary,driver_binary,sid,password,end_lsn
         assert control('Logical replication principal password').get_attribute('value')==''
         click('Preview native logical bytes');wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'[aria-label="Native logical byte preview"]'))
         click('Download native logical stream')
+        if slot_commands:
+            control('Continuity operation').click()
+            wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.text.strip()=='Create logical slot through replication'),None)).click()
+            assert control('Use native replication-only admission').is_selected()
+            control('Replication slot name').send_keys('browser_created_slot')
+            plugin=control('Native logical output plugin');plugin.send_keys(Keys.CONTROL,'a');plugin.send_keys('pgoutput')
+            control('Logical slot two phase').click();control('Logical slot failover').click()
+            control('Replication principal password').send_keys(password)
+            click('Review native operation')
+            wait.until(lambda browser:'logical_slot_create' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').text)
+            click('Confirm and start reviewed operation')
+            def slot_returned(browser):
+                for node in browser.find_elements(By.TAG_NAME,'details'):
+                    summaries=node.find_elements(By.TAG_NAME,'summary')
+                    if not summaries or summaries[0].text.strip()!='Native observations and artifact location':continue
+                    values=node.find_elements(By.TAG_NAME,'pre')
+                    if not values:continue
+                    value=json.loads(values[0].get_attribute('textContent') or '{}')
+                    if value.get('operation')=='logical_slot_create' and value.get('state')=='completed':
+                        assert value['native_utility_acknowledged'] and value['slot_observation_state']=='unavailable'
+                        return value
+                return False
+            wait.until(slot_returned)
+            assert control('Replication principal password').get_attribute('value')==''
         driver.save_screenshot(str(output/'browser-logical-admission.png'))
         errors=[row for row in driver.get_log('browser') if row['level']=='SEVERE' and not ('/browser/server/connect/' in row.get('message','') and '428' in row.get('message',''))]
         assert not errors,errors;complete=True
         return {'complete':True,'console_errors':0,'job_id':done['job_id'],'native_review_start_preview_download':True,
-            'password_cleared_on_dispatch':True,'sql_catalog_unobserved':True}
+            'password_cleared_on_dispatch':True,'sql_catalog_unobserved':True,'logical_slot_creation':slot_commands}
     finally:
         if driver is not None:
             if not complete:
@@ -258,5 +344,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',required=True,type=Path)
     parser.add_argument('--binary-path',default='/usr/lib/postgresql/18/bin')
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
-    args=parser.parse_args();proof=qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary)
+    parser.add_argument('--slot-commands',action='store_true');parser.add_argument('--slot-client-binary')
+    args=parser.parse_args();proof=qualify(args.evidence,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,
+        slot_commands=args.slot_commands,slot_client_binary=args.slot_client_binary)
     print(json.dumps({'complete':proof['complete'],'history_testing':'not run','full_product_complete':False}))

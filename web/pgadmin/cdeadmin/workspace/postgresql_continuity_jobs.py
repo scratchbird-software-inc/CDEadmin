@@ -335,6 +335,9 @@ class PostgreSQLContinuityJobs:
         if not isinstance(request,dict) or set(request)-{'operation','options','base_job_id','chain','database_target_id'}:
             raise ContinuityError('Invalid native backup review')
         operation = request.get('operation')
+        if operation=='logical_slot_create':
+            from .postgresql_logical_slot_command import review
+            return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
         if operation=='logical_stream_capture':
             from .postgresql_logical_stream import review
             return review(self,request,owner,endpoint,source,configuration,paths,runtime_limit)
@@ -559,6 +562,9 @@ class PostgreSQLContinuityJobs:
                 return run(self,record,tools,directory,transport,progress,signal)
             if record['operation']=='logical_stream_capture':
                 from .postgresql_logical_stream import run
+                return run(self,record,tools,directory,transport,progress,signal)
+            if record['operation']=='logical_slot_create':
+                from .postgresql_logical_slot_command import run
                 return run(self,record,tools,directory,transport,progress,signal)
             next_manifest_progress=0
             def file_progress(event):

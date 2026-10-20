@@ -11,6 +11,27 @@ beforeEach(() => {originalHeight=window.innerHeight;window.innerHeight=1200;});
 afterEach(() => {window.innerHeight=originalHeight;});
 
 describe('PostgreSQL native continuity jobs',() => {
+  it('creates a logical slot through registered replication with native options and private reauthentication',async () => {
+    const nativeReview={...reviewed,operation:'logical_slot_create',source:{admission_interface:'logical-replication',slot_catalog_observed:false}};
+    const post=jest.fn().mockResolvedValue(nativeReview);render(<Component post={post} />);
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'Continuity operation'}));
+    fireEvent.click(await screen.findByRole('option',{name:'Create logical slot through replication'}));
+    expect(screen.getByRole('checkbox',{name:'Use native replication-only admission'})).toBeChecked();
+    expect(screen.getByRole('checkbox',{name:'Use native replication-only admission'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Load replication slots'})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Replication slot name'),{target:{value:'owned_logical'}});
+    fireEvent.change(screen.getByLabelText('Native logical output plugin'),{target:{value:'pgoutput'}});
+    fireEvent.click(screen.getByLabelText('Logical slot two phase'));fireEvent.click(screen.getByLabelText('Logical slot failover'));
+    fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'native-only'}});
+    fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));await screen.findByLabelText('Native backup review');
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_review',request:{operation:'logical_slot_create',
+      options:{slot:'owned_logical',if_not_exists:false,timeout_seconds:30,plugin:'pgoutput',two_phase:true,failover:true},replication_access:{password:'native-only'}}});
+    post.mockResolvedValue({...nativeReview,state:'completed',native_utility_acknowledged:true});
+    fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));await screen.findByRole('button',{name:'Refresh receipt'});
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_start',request:{job_id:reviewed.job_id,review_digest:reviewed.review_digest,confirmed:true,replication_access:{password:'native-only'}}});
+    expect(screen.getByLabelText('Replication principal password')).toHaveValue('');
+  });
+
   it.each(['wal_slot_create','wal_slot_drop'])('admits %s through physical replication without claiming catalog observations',async operation => {
     const nativeReview={...reviewed,operation,source:{admission_interface:'physical-replication',slot_catalog_observed:false}};
     const post=jest.fn().mockResolvedValue(nativeReview);

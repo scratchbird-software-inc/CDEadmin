@@ -9,13 +9,13 @@ import PostgresqlLogicalStream from './PostgresqlLogicalStream';
 const ACTIVE = new Set(['dispatching', 'active', 'verifying', 'verifying_inputs', 'cancel_requested']);
 const CHANGES = new Set(['wal_slot_sql_peek_text','wal_slot_sql_get_text','wal_slot_sql_peek_binary','wal_slot_sql_get_binary']);
 const SQL_SLOTS = new Set(['wal_slot_sql_physical_create','wal_slot_sql_logical_create','wal_slot_sql_physical_copy','wal_slot_sql_logical_copy','wal_slot_sql_advance','wal_slot_sql_drop',...CHANGES]);
-const NO_INPUT = new Set(['full_backup','wal_capture','wal_slot_create','wal_slot_drop',...SQL_SLOTS]);
-const REPLICATION_ADMISSION = new Set(['full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop']);
+const NO_INPUT = new Set(['full_backup','wal_capture','wal_slot_create','wal_slot_drop','logical_slot_create',...SQL_SLOTS]);
+const REPLICATION_ADMISSION = new Set(['full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop','logical_slot_create']);
 const defaults = () => ({format:'plain', wal_method:'stream', checkpoint:'fast', manifest_checksums:'SHA256',
   label:'ScratchRobin physical backup', compression:'', max_rate_kib:'', slot:'', create_slot:false, no_slot:false,
   write_recovery_conf:false, verify_page_checksums:true, progress:true, estimate_size:true, sync:true, sync_method:'fsync', timeout_seconds:3600});
 const walDefaults = () => ({archive:'',compression:'none',slot:'',synchronous:true,sync:true,status_interval_seconds:10,end_lsn:'',no_loop:false,timeout_seconds:null});
-const slotDefaults = () => ({slot:'',if_not_exists:false,timeout_seconds:30});
+const slotDefaults = () => ({slot:'',if_not_exists:false,timeout_seconds:30,plugin:'test_decoding',two_phase:false,failover:false});
 const sqlSlotDefaults = () => ({slot:'',source_slot:'',plugin:'pgoutput',reserve_wal:true,two_phase:false,failover:false,upto_lsn:'',upto_nchanges:100,plugin_options:[],timeout_seconds:30});
 
 export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}) {
@@ -65,7 +65,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     const replication = (action==='review' && REPLICATION_ADMISSION.has(operation) && replicationOnly) ||
-      (action==='start' && REPLICATION_ADMISSION.has(review?.operation) && review?.source?.admission_interface==='physical-replication');
+      (action==='start' && REPLICATION_ADMISSION.has(review?.operation) && ['physical-replication','logical-replication'].includes(review?.source?.admission_interface));
     const access={...(replicationPassword ? {password:replicationPassword} : {}),
       ...(replicationTransport?.ssh ? {ssh_host_key:replicationSSHKey,
         ...(replicationSSHSecret ? {[replicationTransport.ssh.authentication==='private_key' ? 'ssh_private_key_password' : 'ssh_password']:replicationSSHSecret} : {})} : {})};
@@ -80,7 +80,8 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   const editWal=(name,value) => {setWalOptions(current => ({...current,[name]:value}));setReview(null);};
   const editSlot=(name,value) => {setSlotOptions(current => ({...current,[name]:value}));setReview(null);};
   const editSqlSlot=(name,value) => {setSqlSlotOptions(current => ({...current,[name]:value}));setReview(null);};
-  const slots=['wal_slot_create','wal_slot_drop'].includes(operation);
+  const logicalSlot=operation==='logical_slot_create';
+  const slots=['wal_slot_create','wal_slot_drop','logical_slot_create'].includes(operation);
   const sqlSlots=SQL_SLOTS.has(operation);
   const changeOperation=CHANGES.has(operation);
   const loadSlots=next => run('slots',{offset:next*25,limit:25},result => {setSlotCatalog(result);setSlotPage(next);});
@@ -98,7 +99,9 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
       if(changeOperation)fields.push('upto_lsn','upto_nchanges','plugin_options');
       nativeOptions=Object.fromEntries(fields.map(name => [name,sqlSlotOptions[name]]));
     }
-    else if(slots)nativeOptions={...slotOptions,if_not_exists:operation==='wal_slot_create' && slotOptions.if_not_exists};
+    else if(slots)nativeOptions={slot:slotOptions.slot,timeout_seconds:slotOptions.timeout_seconds,
+      if_not_exists:operation!=='wal_slot_drop' && slotOptions.if_not_exists,
+      ...(logicalSlot ? Object.fromEntries(['plugin','two_phase','failover'].map(name => [name,slotOptions[name]])) : {})};
     else if(operation==='wal_capture')nativeOptions=walOptions;
     else if(operation==='combine')nativeOptions={format:'plain',copy_mode:copyMode,...Object.fromEntries(['manifest_checksums','sync','sync_method','timeout_seconds'].map(key => [key,options[key]]))};
     else if(operation==='recovery_drill')nativeOptions={database:recoveryDatabase,checks:checks.map(check => ({schema:check.schema,table:check.table,...(check.expected_rows==='' ? {} : {expected_rows:check.expected_rows})})),timeout_seconds:options.timeout_seconds,
@@ -125,8 +128,8 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
-      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);setReplicationOnly(false);setReplicationPassword('');setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}}>
-        {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['wal_capture','Capture native WAL archive'],['wal_slot_create','Create physical replication slot'],['wal_slot_drop','Drop replication slot'],
+      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);setReplicationOnly(event.target.value==='logical_slot_create');setReplicationPassword('');setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}}>
+        {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['wal_capture','Capture native WAL archive'],['wal_slot_create','Create physical replication slot'],['wal_slot_drop','Drop replication slot'],['logical_slot_create','Create logical slot through replication'],
           ['wal_slot_sql_physical_create','Create physical slot with SQL options'],['wal_slot_sql_logical_create','Create logical replication slot'],
           ['wal_slot_sql_physical_copy','Copy physical replication slot'],['wal_slot_sql_logical_copy','Copy logical replication slot'],
           ['wal_slot_sql_advance','Advance replication slot'],['wal_slot_sql_drop','Drop replication slot with SQL'],
@@ -175,7 +178,11 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
       </>}
       {slots && <>
         <TextField disabled={busy} size="small" label="Replication slot name" value={slotOptions.slot} onChange={event => editSlot('slot',event.target.value)} />
-        {operation==='wal_slot_create' && <FormControlLabel label="Accept existing slot unchanged" control={<Checkbox disabled={busy} checked={slotOptions.if_not_exists} onChange={event => editSlot('if_not_exists',event.target.checked)} />} />}
+        {operation!=='wal_slot_drop' && <FormControlLabel label="Accept existing slot unchanged" control={<Checkbox disabled={busy} checked={slotOptions.if_not_exists} onChange={event => editSlot('if_not_exists',event.target.checked)} />} />}
+        {logicalSlot && <>
+          <TextField disabled={busy} size="small" label="Native logical output plugin" value={slotOptions.plugin} onChange={event => editSlot('plugin',event.target.value)} />
+          {['two_phase','failover'].map(name => <FormControlLabel key={name} label={'Logical slot '+name.replaceAll('_',' ')} control={<Checkbox disabled={busy} checked={slotOptions[name]} onChange={event => editSlot(name,event.target.checked)} />} />)}
+        </>}
       </>}
       {sqlSlots && <>
         <Button disabled={busy} onClick={() => run('slot_databases',{},value => setSqlTargets(value.targets))}>Load slot databases</Button>
@@ -205,10 +212,10 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>
     {REPLICATION_ADMISSION.has(operation) && <Box sx={{my:1}}>
-      <FormControlLabel label="Use native replication-only admission" control={<Checkbox disabled={busy}
+      <FormControlLabel label="Use native replication-only admission" control={<Checkbox disabled={busy || logicalSlot}
         checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setSlotCatalog(null);setReplicationPassword('');setReview(null);setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}} />} />
       {replicationOnly && <>
-        <Alert severity="info">Authenticates the registered native principal through physical replication without a SQL connection.
+        <Alert severity="info">Authenticates the registered native principal through {logicalSlot ? 'logical replication in its registered database' : 'physical replication'} without a SQL connection.
           Enter its password or use the saved registration credential/libpq authentication. Passwords are sent only for admission
           and rechecked before start; they are omitted from job receipts. Backups stream TAR files into private application-host storage;
           plain output is materialized and verified separately. Tablespace source paths are observed from native artifacts and are never opened.

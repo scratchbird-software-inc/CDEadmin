@@ -10,12 +10,12 @@ from ..providers.postgresql.provider import PROFILE_ID, PROFILE_VERSION, PROVIDE
 from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint,artifact_tablespaces
 from .postgresql_monitoring_host import PostgreSQLMonitoringHost
 
-REPLICATION_OPERATIONS={'wal_capture','full_backup','incremental_backup','wal_slot_create','wal_slot_drop','logical_stream_capture'}
+REPLICATION_OPERATIONS={'wal_capture','full_backup','incremental_backup','wal_slot_create','wal_slot_drop','logical_stream_capture','logical_slot_create'}
 
 
 def replication_source(server,request,operation):
     from ..providers.postgresql.replication_admission import registered
-    source,transport=registered(server,request,**({'logical':True} if operation=='logical_stream_capture' else {}))
+    source,transport=registered(server,request,**({'logical':True} if operation in {'logical_stream_capture','logical_slot_create'} else {}))
     if operation in {'wal_slot_create','wal_slot_drop'}:
         source.update(slot_catalog_observed=False,slot_snapshot=None,slot_identity=None)
     if operation=='logical_stream_capture':
@@ -125,6 +125,8 @@ def action(service, server, operation, request):
             return catalog(source,transport,request)
         if operation=='review':
             native_operation=request.get('operation')
+            if native_operation=='logical_slot_create' and replication_access is None:
+                raise ContinuityError('Authenticate registered logical replication credentials before slot creation')
             if replication_access is not None:
                 if native_operation not in REPLICATION_OPERATIONS:
                     raise ContinuityError('Select a native backup, WAL or slot command for replication-only admission')

@@ -162,6 +162,12 @@ This path does not detect concurrent slot replacement/consumption or own another
 backend's temporary slot. The SQL-admitted path retains its stronger native
 catalog and checkpoint checks.
 
+Permanent logical slot creation now also has a registered replication-only
+workflow for native plugin, two-phase, failover and if-not-exists options.
+Utility acknowledgement remains separate from catalog state and prior existence.
+The native utility suppresses snapshot export; temporary protocol resources and
+exported snapshot ownership still require their own retained-backend workflow.
+
 DuckDB
 ------
 
