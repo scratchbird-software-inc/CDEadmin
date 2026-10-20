@@ -52,7 +52,8 @@ def qualify(args):
         def do_HEAD(self):self.reply(True)
         def do_GET(self):self.reply(False)
         def reply(self, head):
-            authorized = self.headers.get('Authorization') == 'Bearer '+token
+            authorized = self.headers.get('Authorization') == 'Bearer '+token and (
+                not args.typed_secret_properties or self.headers.get('X-CDE-Native-Property')=='native typed map')
             requests.append({'method': self.command, 'path': self.path, 'authorized': authorized,
                 'tls': isinstance(self.connection, ssl.SSLSocket)})
             if not authorized:self.send_error(401, error_canary);return
@@ -94,6 +95,9 @@ def qualify(args):
             'tools/cdeadmin_duckdb_authenticated_extensions_qualification.py','web/pgadmin/cdeadmin/providers/duckdb/extension_actions.py',
             'web/pgadmin/cdeadmin/providers/duckdb/provider.py','web/pgadmin/cdeadmin/providers/duckdb/provider_manifest.json','web/pgadmin/cdeadmin/providers/duckdb/driver.py',
             'web/pgadmin/cdeadmin/endpoints/service.py',
+            'web/pgadmin/cdeadmin/providers/duckdb/administration.py',
+            'web/pgadmin/cdeadmin/providers/duckdb/secret_values.py',
+            'web/pgadmin/cdeadmin/providers/relational_admin.py',
             'web/pgadmin/cdeadmin/data_studio/studio.py','web/pgadmin/cdeadmin/workspace/service.py',
             'web/pgadmin/cdeadmin/context_menu.py','web/pgadmin/static/js/Dialogs/DuckDBExtensions.jsx',
             'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx']}}
@@ -141,7 +145,23 @@ def qualify(args):
         effective='https://127.0.0.1:'+str(http.server_port)+'/native/v1.5.2/'+platform+'/httpfs.duckdb_extension.gz'
         handle.execute('CREATE SECRET broad (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?)',[broad_token,effective.rsplit('/',1)[0]+'/'])
         selected='owned exact . " é'
-        def seed(value):handle.execute('CREATE OR REPLACE SECRET "owned exact . "" é" (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?,VERIFY_SSL true)',[value,effective])
+        def seed(value):
+            if not args.typed_secret_properties:
+                handle.execute('CREATE OR REPLACE SECRET "owned exact . "" é" (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?,VERIFY_SSL true)',[value,effective])
+                return
+            handle.execute('DROP SECRET IF EXISTS "owned exact . "" é"')
+            request={'resource_kind':'secret','operation_id':'create','session_id':session_id,'database_target_id':target,
+                'draft':{'name':selected,'secret_type':'HTTP','properties':{'scope':[effective,'https://unused.example.test/'],
+                    'verify_ssl':True,'extra_http_headers':{'Authorization':'Bearer '+value,'X-CDE-Native-Property':'native typed map'}}}}
+            validated=post('visual_admin_validate',request);assert validated['valid'],validated
+            planned=post('visual_admin_plan',request)
+            assert value not in json.dumps(planned) and effective not in json.dumps(planned['command_preview'])
+            applied=post('visual_admin_apply',{'plan_id':planned['plan_id'],'plan_digest':planned['plan_digest'],
+                'confirmed':True,'session_id':session_id,'database_target_id':target})
+            assert applied['provider_result']['accepted'] and not applied['provider_result']['commit_requested'] and not applied['provider_result']['rollback_requested'],applied
+            proof['typed_secret_properties_api']={'native_header_map_and_boolean_and_scope_list':True,
+                'original_session_explicitly_bound':True,'private_properties_absent_from_public_plan':True,
+                'native_transaction_decision_not_requested':True}
         seed(token)
         count=len(requests)
         try:observer.execute("FORCE INSTALL '"+effective+"'")
@@ -181,7 +201,13 @@ def qualify(args):
         assert any(not row['authorized'] for row in requests)
         assert error_canary not in json.dumps(failed) and token not in json.dumps(failed)
         post('close_session',session_id=session_id)
-        observer.execute('CREATE OR REPLACE SECRET "owned exact . "" é" (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?,VERIFY_SSL true)',[token,effective])
+        if args.typed_secret_properties:
+            from pgadmin.cdeadmin.providers.duckdb.provider import ADMINISTRATION
+            source,_preview=ADMINISTRATION._duckdb_secret('"owned exact . "" é"',{'secret_type':'HTTP',
+                'scope':[effective,'https://unused.example.test/'],'verify_ssl':True,
+                'extra_http_headers':{'Authorization':'Bearer '+token,'X-CDE-Native-Property':'native typed map'}})
+            observer.execute('DROP SECRET IF EXISTS "owned exact . "" é"');observer.execute(source)
+        else:observer.execute('CREATE OR REPLACE SECRET "owned exact . "" é" (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?,VERIFY_SSL true)',[token,effective])
         proof.update(native_api_complete=True,native_longest_scope_selected=True,secret_read_denial_before_request=True,
             native_secret_reselection_refused_without_dispatch=True,native_pending_temp_and_caller_rollback_preserved=True,
             native_https_repository_install_verified=True,native_wrong_credential_refusal_and_no_replay=True,
@@ -192,6 +218,10 @@ def qualify(args):
         assert archives
         for archive in archives:
             for value in (token,broad_token,error_canary,'owned incorrect native bearer'):assert value.encode() not in archive.read_bytes()
+        if args.typed_secret_properties:
+            for path in (out/'app').rglob('*.json'):
+                for value in (token,broad_token,error_canary,'owned incorrect native bearer'):assert value.encode() not in path.read_bytes()
+            proof['typed_private_values_absent_from_application_json']=True
         proof['private_values_absent_from_durable_archives']=True
         proof['complete']=True
     finally:
@@ -289,4 +319,5 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',required=True,type=Path);parser.add_argument('--signed-extension',required=True,type=Path)
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+    parser.add_argument('--typed-secret-properties',action='store_true')
     value=qualify(parser.parse_args());print(json.dumps({'complete':value['complete'],'native_requests':len(value['native_requests'])}))

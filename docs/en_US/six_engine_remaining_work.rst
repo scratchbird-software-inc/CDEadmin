@@ -199,8 +199,11 @@ before dispatch. Credentials stay inside DuckDB. Scope-specific HTTPS repository
 qualification does not establish functioning direct HTTPS INSTALL on the pinned
 build: ``DU-NATIVE-HTTPS-DIRECT`` records the independently reproduced native
 local-filesystem refusal. HTTPFS's native HTTP-repository-to-HTTPS transport is
-qualified separately. Wider secret-property, remote attachment and installed
-capability reconciliation remains open.
+qualified separately. Secret constants now retain native scalars, scope lists and
+header maps, with private previews and a system-qualified map constructor.
+Borrowed query connections retain caller transaction decisions on administration
+refusal. Wider secret session/storage identities, native expressions, remote
+attachment and installed-capability reconciliation remains open.
 
 SQLite
 ------

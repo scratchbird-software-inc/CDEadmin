@@ -3324,7 +3324,7 @@ class RelationalAdministration:
                     failure.native_status_codes = failure.gds_codes
                     failure.task_rollback_unconfirmed = True
                     raise failure from None
-            else:
+            elif owns_connection:
                 rollback = getattr(connection, 'rollback', None)
                 if callable(rollback) and cursor is not None:
                     rollback_requested = True
@@ -3338,7 +3338,7 @@ class RelationalAdministration:
                         task_savepoint.rollback()
                 except Exception:
                     task_rollback_failed = True
-            else:
+            elif owns_connection:
                 rollback = getattr(connection, 'rollback', None)
                 if callable(rollback):
                     rollback_requested = True

@@ -386,6 +386,25 @@ For encrypted stores the other store's key must fail independently.
 Authenticated native extension sources
 ---------------------------------------
 
+Native secret properties preserve JSON scalar, list and map constants. Multiple
+scope strings can be supplied through the sensitive ``properties`` JSON object.
+Booleans remain native Boolean constants; HTTP headers use a native map rather
+than Python dictionary text. The native map constructor is explicitly qualified
+in the system catalog, preventing a same-named caller macro from running while
+constructing a constant. Preview SQL withholds property values and scopes.
+The compiler bounds statements to 1 MiB, 16,384 constant nodes and 32 traversal
+levels. This constant interface does not interpret text values as SQL expressions.
+Remaining session/storage identities and native expression workflows retain their
+own acceptance scope.
+
+Native administration errors do not authorize rollback of a borrowed query
+connection. The shared executor rolls back only connections it owns; Firebird's
+original task savepoint remains native and separate. Native statement/row-count
+refusals preserve caller decisions and any state the engine itself retains.
+DuckDB and SQLite failure qualification verifies pending rows remain until an
+explicit caller rollback. A native engine can still abort its transaction on its
+own errors; the application does not claim to undo that engine behavior.
+
 The database context menu opens ``Install or load DuckDB extensions...`` on an
 original native session. HTTP(S) source URLs and repositories exclude inline
 credentials, query strings and fragments. Existing native HTTP secrets supply

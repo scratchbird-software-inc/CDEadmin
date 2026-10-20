@@ -8,6 +8,10 @@ from ...sdk.relational import RelationalClientError
 
 
 class DuckDBAdministration(RelationalAdministration):
+    def _duckdb_secret(self, name, options):
+        from .secret_values import compile_secret
+        return compile_secret(self, name, options)
+
     def catalog(self, catalog):
         from .object_metadata import KINDS
         from .extension_updates import OPERATIONS
