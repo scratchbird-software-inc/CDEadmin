@@ -44,6 +44,7 @@ def qualify(output):
         'web/pgadmin/cdeadmin/providers/sqlite/ddl_prepare.py',
         'web/pgadmin/cdeadmin/providers/sqlite/fts_configuration.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_retained_schema.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_retained_alter.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_retained_applications.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_retained_service.py',
         'web/pgadmin/cdeadmin/data_studio/studio.py',
@@ -295,6 +296,64 @@ def qualify(output):
         proof.update(original_session_DDN_column_workflow=True,actual_temp_stored_and_attached_virtual_columns=True,
             same_name_namespace_shadowing_preserved=True,original_caller_savepoint_preserved=True,
             original_session_revision_drift_refused=True,retained_DDL_URL_scope_refused=True)
+        # Native3.53 ALTER forms use the same authenticated review, original
+        # handle, durable acknowledgement and caller-owned transaction path.
+        for namespace in ('main','temp','retained.雪'):
+            execute('CREATE TABLE "'+namespace+'".alter_source(id INTEGER,payload TEXT,removed INTEGER,nn TEXT NOT NULL DEFAULT \'x\',CONSTRAINT positive CHECK(id>0))')
+            execute('INSERT INTO "'+namespace+'".alter_source(id,payload,removed) VALUES(7,\'pending\',8)')
+        def prepare_alterations(changes):
+            observed=post('source_catalog',session_id=session)
+            baseline=json.dumps(observed['document']['snapshot'])
+            generated=retained_action('alter',{'baseline':baseline,'alterations':changes})
+            from pgadmin.cdeadmin.workspace.sqlite_retained_schema import KINDS
+            original_model=read_catalog(baseline,engine='sqlite')
+            generated_model=read_catalog(json.dumps(generated['snapshot']),engine='sqlite')
+            for key,row in original_model['rows'].items():
+                if row['kind'] not in KINDS:
+                    actual=generated_model['rows'][key]
+                    assert all(actual[field]==row[field] for field in ('kind','path','name','native'))
+            proof['native_alter_original_non_schema_observations_preserved']=True
+            options={'baseline':baseline,'desired':json.dumps(generated['snapshot']),'deletions':[],'alterations':changes}
+            preview=retained_action('preview',options);assert preview['ready_for_review'],preview
+            review=retained_action('review',{**options,'execution_sha256':preview['execution_sha256']})
+            receipts.append(review['review_id'])
+            return {'review_id':review['review_id'],'review_digest':review['review_digest'],'confirmed':True}
+        alterations={'rename-table':{'name':'renamed:雪'},'rename-column':{'column':'payload','name':'renamed:雪'},
+            'drop-column':{'column':'removed'},'drop-constraint':{'name':'positive'},'drop-not-null':{'column':'nn'},
+            'set-not-null':{'column':'payload','conflict':'ABORT'},'add-check':{'expression':'id < 10','name':'bounded','conflict':'FAIL'}}
+        native_alter_receipts=[]
+        for namespace in ('main','temp','retained.雪'):
+            for action,fields in alterations.items():
+                execute('SAVEPOINT native_alter_guard')
+                changes=[{'action':action,'resource_id':_resource_id('table',[namespace],'alter_source'),**fields}]
+                request=prepare_alterations(changes);value=apply_retained(request)
+                assert value['state']=='applied_pending_caller_transaction' and value['outcome']['rediscovery_verified'],value
+                name='renamed:雪' if action=='rename-table' else 'alter_source'
+                expected=[[7,'pending','x']] if action=='drop-column' else [[7,'pending',8,'x']]
+                assert execute('SELECT * FROM "'+namespace+'"."'+name+'"')==expected
+                assert retained_action('start',request)['state']=='applied_pending_caller_transaction'
+                execute('ROLLBACK TO native_alter_guard');execute('RELEASE native_alter_guard')
+                assert execute('SELECT * FROM "'+namespace+'".alter_source')==[[7,'pending',8,'x']]
+                native_alter_receipts.append({'namespace':namespace,'action':action,'review_id':request['review_id']})
+        identity=_resource_id('table',['temp'],'alter_source')
+        request=prepare_alterations([{'action':'add-check','resource_id':identity,'name':'"positive"','expression':'id < 10'}])
+        assert apply_retained(request)['state']=='applied_pending_caller_transaction'
+        request=prepare_alterations([{'action':'drop-constraint','resource_id':identity,'name':'"positive"'}])
+        assert apply_retained(request)['state']=='applied_pending_caller_transaction'
+        execute('INSERT INTO temp.alter_source(id,payload,removed) VALUES(20,\'exact constraint\',8)')
+        assert execute('SELECT id FROM temp.alter_source ORDER BY id')==[[7],[20]]
+        execute('DELETE FROM temp.alter_source WHERE id=20')
+        proof['native_constraint_literal_quote_identity_preserved']=True
+        execute('INSERT INTO temp.alter_source(id,payload,removed) VALUES(17,\'bad\',NULL)')
+        request=prepare_alterations([{'action':'rename-column','resource_id':identity,'column':'payload','name':'renamed'},
+            {'action':'set-not-null','resource_id':identity,'column':'removed'}])
+        value=apply_retained(request)
+        assert value['state']=='rolled_back_to_savepoint' and value['outcome']['completed_statements']==1,value
+        assert execute('SELECT id,payload,removed FROM temp.alter_source ORDER BY id')==[[7,'pending',8],[17,'bad',None]]
+        assert retained_action('start',request)['state']=='rolled_back_to_savepoint'
+        proof.update(native_original_session_alter_forms=native_alter_receipts,
+            actual_native_alter_in_main_temp_attached=True,native_alter_data_refusal_restored_prior_stage=True,
+            native_alter_receipts_never_replay=True)
         assert execute('SELECT count(*) FROM owned WHERE id=99')==[[1]]
         with sqlite3.connect(path) as independent:assert independent.execute('SELECT count(*) FROM owned WHERE id=99').fetchone()==(0,)
         post('transaction_action',session_id=session,transaction_action='rollback')

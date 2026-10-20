@@ -68,3 +68,52 @@ it('discards a capture reply after the original query session changes',async()=>
   expect(screen.queryByText('Native column additions')).not.toBeInTheDocument();
   expect(post).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  ['rename-table',{name:'new:雪'}],['rename-column',{column:'payload',name:'new:雪'}],
+  ['drop-column',{column:'payload'}],['drop-constraint',{name:'positive'}],
+  ['drop-not-null',{column:'payload'}],['set-not-null',{column:'payload',conflict:''}],
+  ['add-check',{name:'positive',expression:'payload IS NOT NULL',conflict:''}],
+])('generates the native %s design and preserves its typed intent through review',async(action,fields)=>{
+  const generated={...snapshot,files:{'catalog.ddn':'native altered '+action}};
+  const observed={...capture,resources:[...capture.resources,{resource_id:'payload',resource_kind:'column',
+    display_name:'payload',display_path:['temp','owned','payload'],native:{}}]};
+  const post=jest.fn().mockResolvedValueOnce(observed).mockResolvedValueOnce({snapshot:generated})
+    .mockResolvedValueOnce({operations:[{source:'Native '+action}],ready_for_review:true,execution_sha256:'altered',warnings:[]})
+    .mockResolvedValueOnce({review_id:'alter',review_digest:'digest',state:'reviewed',native_session_release_confirmed:true});
+  render(<Component post={post} ensureSession={jest.fn()} sessionId="original" databaseTargetId="file" />);
+  fireEvent.click(screen.getByText('Original-session SQLite design'));
+  fireEvent.click(screen.getByRole('button',{name:'Capture original-session DDN'}));
+  fireEvent.click(await screen.findByText('Native table alterations'));
+  fireEvent.change(screen.getByRole('combobox',{name:'Native table alteration'}).parentElement.querySelector('input'),{target:{value:action}});
+  if(fields.name)fireEvent.change(screen.getByRole('textbox',{name:action==='drop-constraint' ? 'Native constraint name':action==='add-check' ? 'CHECK name (optional)':'New native name'}),{target:{value:fields.name}});
+  if(fields.expression)fireEvent.change(screen.getByRole('textbox',{name:'Native CHECK expression'}),{target:{value:fields.expression}});
+  fireEvent.click(screen.getByRole('button',{name:'Generate native alteration design'}));
+  const changes=[{action,resource_id:'temporary',...fields}];
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'sqlite_retained_schema',database_target_id:'file',session_id:'original',
+    request:{operation:'alter',baseline:JSON.stringify(snapshot),alterations:changes}}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview original-session changes'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Preview original-session changes'}));
+  await screen.findByText('Native '+action);
+  fireEvent.click(screen.getByRole('button',{name:'Prepare original-session review'}));
+  await screen.findByText(/Original-session receipt alter: reviewed/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_retained_schema',database_target_id:'file',session_id:'original',
+    request:{operation:'review',baseline:JSON.stringify(snapshot),desired:JSON.stringify(generated),deletions:[],alterations:changes,execution_sha256:'altered'}});
+});
+
+it('discards a generated native alteration after changing original sessions',async()=>{
+  let resolve;
+  const pending=new Promise(done=>{resolve=done;});
+  const post=jest.fn().mockResolvedValueOnce(capture).mockReturnValueOnce(pending);
+  const props={post,ensureSession:jest.fn(),databaseTargetId:'file'};
+  const view=render(<Component {...props} sessionId="first" />);
+  fireEvent.click(screen.getByText('Original-session SQLite design'));
+  fireEvent.click(screen.getByRole('button',{name:'Capture original-session DDN'}));
+  fireEvent.click(await screen.findByText('Native table alterations'));
+  fireEvent.change(screen.getByRole('textbox',{name:'New native name'}),{target:{value:'late_name'}});
+  fireEvent.click(screen.getByRole('button',{name:'Generate native alteration design'}));
+  view.rerender(<Component {...props} sessionId="second" />);resolve({snapshot});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Capture original-session DDN'})).toBeEnabled());
+  expect(screen.queryByRole('button',{name:'Preview original-session changes'})).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(2);
+});

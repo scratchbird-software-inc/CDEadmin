@@ -20,7 +20,7 @@ def drop(row):
     return 'DROP '+kind+' '+quote(row['path'][0])+'.'+quote(row['name'])
 
 
-def prepare(client,connection,row,statement,*,operation='create'):
+def prepare(client,connection,row,statement,*,operation='create',authorization_column=None):
     """Compile an owned statement; never step its normal mutation program.
 
     Explicit temp.table/view declarations use the ordinary CREATE action. An
@@ -56,6 +56,12 @@ def prepare(client,connection,row,statement,*,operation='create'):
     elif operation=='add-column':
         action=sqlite3.SQLITE_ALTER_TABLE
         expected=(action,schema,row['path'][1],None)
+    elif operation=='native-alter':
+        if kind!='table':raise ValueError('Native alteration requires an ordinary original table')
+        action=sqlite3.SQLITE_ALTER_TABLE
+        # SQLite3.53 supplies the affected column in the fourth callback
+        # argument for DROP COLUMN and SET/DROP NOT NULL, not a database name.
+        expected=(action,schema,name,authorization_column)
     else:raise ValueError('Unknown retained SQLite DDL preparation operation')
     previous=connection._cdeadmin_authorizer;events=[];cursor=None
     def authorize(code,first,second,database,context):

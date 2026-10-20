@@ -236,9 +236,16 @@ SQLite
   authorized temporary/attached/uncommitted schema. Original-connection native
   creation/removal, view/index/trigger replacement and structured column append
   now have a separate reviewed workflow and durable receipts. Remaining
-  preservation transforms, native rename/rebuild integration, qualified module
+  preservation/rebuild transformations, qualified module
   transformations and large/partial-scope cases keep this item open. An
   independent file migration must continue refusing retained-session provenance.
+  Native ordinary-table and column renames, column removal, named constraint
+  removal, NOT NULL changes and CHECK additions now also have property-driven
+  original-session DDN generation and reviewed native application. Native
+  dependency rewriting and existing-data refusal retain the original caller
+  transaction. External-content FTS identity/projection transformations still
+  require their preservation adapter; native pinned-runtime refusals for quoted
+  constraint lookup and TEMP-shadowed trigger renames remain explicit.
 * SQ-DEPENDENCIES: Close remaining attached/content-view alias-shadowing and
   language-identity cases with preserved native FTS/document/row identities.
 * SQ-MODULES: Close remaining installed-module transformations and native

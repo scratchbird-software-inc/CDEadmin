@@ -36,9 +36,10 @@ def serve(service,server,action,data):
         if operation=='remove' and set(request)=={'operation','review_id','confirmed'}:
             return archive.remove(request['review_id'],owner,binding,confirmed=request['confirmed'])
         raise ValueError('Select a bounded retained SQLite receipt action')
-    fields={'preview':{'operation','baseline','desired','deletions'},
-        'review':{'operation','baseline','desired','deletions','execution_sha256'},
+    fields={'preview':{'operation','baseline','desired','deletions','alterations'},
+        'review':{'operation','baseline','desired','deletions','alterations','execution_sha256'},
         'columns':{'operation','baseline','resource_id','columns'},
+        'alter':{'operation','baseline','alterations'},
         'start':{'operation','review_id','review_digest','confirmed'}}
     if operation not in fields or set(request)-fields[operation]:raise ValueError('Invalid original-session SQLite DDL request')
     if operation=='start':

@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import SQLiteColumnDesign from './SQLiteColumnDesign';
+import SQLiteAlterDesign from './SQLiteAlterDesign';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
@@ -10,6 +11,7 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
   const [preview,setPreview]=useState(null),[receipt,setReceipt]=useState(null),[confirmed,setConfirmed]=useState(false);
   const [error,setError]=useState(''),[pending,setPending]=useState(false),[archiveBusy,setArchiveBusy]=useState(false);
   const [deletions,setDeletions]=useState([]),[listing,setListing]=useState(null),[offset,setOffset]=useState(0);
+  const [alterations,setAlterations]=useState([]);
   const [selected,setSelected]=useState(''),[removeConfirmed,setRemoveConfirmed]=useState(false);
   const serial=useRef(0),captured=useRef(null),live=useRef(false),active=useRef(true);
   const busyOwner=useRef(false);
@@ -20,7 +22,7 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
   },[pending,running,onBusyChange]);
   useEffect(()=>{
     serial.current++;captured.current=null;live.current=false;setCatalog(null);setBaseline('');setDesired('');
-    setPreview(null);setReceipt(null);setConfirmed(false);setPending(false);setError('');setDeletions([]);
+    setPreview(null);setReceipt(null);setConfirmed(false);setPending(false);setError('');setDeletions([]);setAlterations([]);
   },[post,databaseTargetId,sessionId]);
   useEffect(()=>{setListing(null);setSelected('');setOffset(0);setArchiveBusy(false);},[post,databaseTargetId]);
   useEffect(()=>{active.current=true;return()=>{active.current=false;serial.current++;if(busyOwner.current)onBusyChange?.(false);};},[onBusyChange]);
@@ -39,12 +41,12 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
         if(token!==serial.current || !active.current)return;
         if(!value.document)throw new Error(value.export_warning || 'Native session DDN is unavailable');
         captured.current=sessionId;setCatalog(value);setBaseline(JSON.stringify(value.document.snapshot));
-        setDesired('');setPreview(null);setReceipt(null);setDeletions([]);live.current=false;return;
+        setDesired('');setPreview(null);setReceipt(null);setDeletions([]);setAlterations([]);live.current=false;return;
       }
       if(!captured.current || captured.current!==sessionId)throw new Error('Capture this original query connection before reviewing DDL');
       let value;
       if(operation==='preview' || operation==='review') {
-        value=await invoke(operation,{baseline,desired,deletions,...(operation==='review' ? {execution_sha256:preview.execution_sha256}:{})});
+        value=await invoke(operation,{baseline,desired,deletions,...(alterations.length ? {alterations}:{}),...(operation==='review' ? {execution_sha256:preview.execution_sha256}:{})});
       } else if(operation==='start') {
         value=await invoke('start',{review_id:receipt.review_id,review_digest:receipt.review_digest,confirmed:true});
       }
@@ -57,9 +59,18 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
     const token=++serial.current;setPending(true);setError('');
     try {
       const value=await invoke('columns',{baseline,resource_id:identity,columns:definitions});
-      if(token===serial.current && active.current){setDesired(JSON.stringify(value.snapshot));setPreview(null);setReceipt(null);setConfirmed(false);setDeletions([]);live.current=false;}
+      if(token===serial.current && active.current){setDesired(JSON.stringify(value.snapshot));setPreview(null);setReceipt(null);setConfirmed(false);setDeletions([]);setAlterations([]);live.current=false;}
     } catch(failure) {if(token===serial.current && active.current)setError(failure.response?.data?.errormsg || failure.message);}
     finally {if(token===serial.current && active.current)setPending(false);}
+  };
+  const alter=async change=>{
+    const token=++serial.current;setPending(true);setError('');
+    try {
+      const selected=[change],value=await invoke('alter',{baseline,alterations:selected});
+      if(token===serial.current && active.current){setDesired(JSON.stringify(value.snapshot));setAlterations(selected);
+        setPreview(null);setReceipt(null);setConfirmed(false);setDeletions([]);live.current=false;}
+    } catch(failure){if(token===serial.current && active.current)setError(failure.response?.data?.errormsg || failure.message);}
+    finally{if(token===serial.current && active.current)setPending(false);}
   };
   const read=async (id,isLive=false)=>{
     const token=serial.current;
@@ -95,16 +106,18 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
     {baseline && <>
       <SQLiteColumnDesign key={sessionId} sessionScope objects={objects} tables={objects.filter(row=>row.kind==='table')}
         disabled={locked} onGenerate={columns} />
+      <SQLiteAlterDesign key={'alter:'+sessionId} objects={objects} tables={objects.filter(row=>row.kind==='table')}
+        disabled={locked} onGenerate={alter} />
       <FirebirdCatalogDesigner engine="sqlite" baseline={baseline} disabled={locked} storage={false}
-        onReview={(value,original)=>{setBaseline(original);setDesired(value);setPreview(null);setReceipt(null);setConfirmed(false);live.current=false;}} />
+        onReview={(value,original)=>{setBaseline(original);setDesired(value);setAlterations([]);setPreview(null);setReceipt(null);setConfirmed(false);live.current=false;}} />
       <Button component="label" disabled={locked}>Load desired session DDN<input hidden type="file" aria-label="Desired original-session DDN file" accept=".json,.ddn" onChange={async event=>{
         const file=event.target.files?.[0],token=serial.current;if(!file)return;
-        try {const value=await file.text();if(token===serial.current && active.current){setDesired(value);setPreview(null);setReceipt(null);setConfirmed(false);live.current=false;}}
+        try {const value=await file.text();if(token===serial.current && active.current){setDesired(value);setAlterations([]);setPreview(null);setReceipt(null);setConfirmed(false);live.current=false;}}
         catch(failure){if(token===serial.current && active.current)setError(failure.message);}
       }} /></Button>
       <Box component="details"><summary>Explicit original-session removals</summary>
         {objects.filter(row=>['table','view','index','trigger','fts-table','virtual-table'].includes(row.kind)).map(row=>
-          <FormControlLabel key={row.resource_id} label={`Remove ${row.kind}: ${row.path.join(' / ')}`} control={<Checkbox disabled={locked} checked={deletions.includes(row.resource_id)}
+          <FormControlLabel key={row.resource_id} label={`Remove ${row.kind}: ${row.path.join(' / ')}`} control={<Checkbox disabled={locked || !!alterations.length} checked={deletions.includes(row.resource_id)}
             onChange={event=>{setDeletions(current=>event.target.checked ? [...current,row.resource_id]:current.filter(id=>id!==row.resource_id));setPreview(null);setReceipt(null);setConfirmed(false);}} />} />)}
       </Box>
       <Button disabled={locked || !desired} onClick={()=>perform('preview')}>Preview original-session changes</Button>

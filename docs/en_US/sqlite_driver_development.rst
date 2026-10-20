@@ -227,3 +227,41 @@ virtual-module storage remains module managed even when SQLite's transient
 ``table_list`` flags expose it as ordinary storage under namespace shadowing.
 Native table definitions and storage facts are verified separately from that
 classification. No name-suffix guess establishes module ownership.
+
+Original-session native ALTER TABLE
+----------------------------------
+
+The original-session design controls generate desired DDN for ordinary native
+table/column renames, column removal, named constraint removal, SET/DROP NOT
+NULL and named/unnamed CHECK additions. Native constraint conflict policies are
+preserved. The selected table and its namespace come from the captured original
+catalog; same-named main, TEMP and attached relations remain distinct. Ordered
+backend batches bind later operations to the table's current native name.
+The native empty prototype uses the original foreign-key, legacy-alter and
+recursive-trigger modes. Generation and review do not mutate caller data.
+
+Application uses the original authorized handle and the retained DDL receipt
+workflow. Native column-removal effects and existing-row checks occur within
+the owned savepoint. Successful DDL stays pending the caller's commit/rollback;
+a later refused constraint restores earlier stages and caller work. Native
+authorizer column arguments for DROP COLUMN and SET/DROP NOT NULL are preserved
+exactly. Normal native dependency rewriting includes views, triggers, indexes
+and foreign keys. Identity/projection changes affecting external-content FTS
+require their explicit preservation adapter; unrelated namespaces remain usable.
+
+The pinned SQLite3.53.0 runtime refuses quoted DROP CONSTRAINT lookup and can
+refuse table rename with a dependent trigger when TEMP shadows the table name.
+Direct native reproductions establish these limitations. Constraint removal
+requires one identifier token whose raw spelling equals the actual name,
+including literal quote characters where present. Names requiring additional
+quoting need a preservation rebuild; they are refused before native dispatch.
+Other native refusals leave original state untouched during generation. These limitations,
+broader module transformations and original-session rebuild work remain visible
+in the product backlog. This workflow does not establish full SQLite acceptance.
+
+The native declaration qualification command additionally exercises all seven
+ALTER families through authenticated generation/preview/review/apply in main,
+TEMP and an attached namespace, original pending data/savepoint preservation,
+native data-dependent refusal and durable duplicate dispatch refusal. The
+source packet remains structurally complete rather than release proven;
+recorded runtime evidence qualifies only its stated installation and scope.

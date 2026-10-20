@@ -177,7 +177,11 @@ def _create_virtual(probe,row,ordinary):
             removed.update(collisions)
 
 
-def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=()):
+def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alterations=()):
+    if alterations:
+        if deletions:raise ValueError('Review native table alterations separately from object removal')
+        from . import sqlite_retained_alter
+        return sqlite_retained_alter.plan(client,handle,baseline,desired,live,endpoint,session,alterations)
     for document in (baseline,live):_scope(document,endpoint,session,observed=True)
     _scope(desired,endpoint,session)
     if (not isinstance(deletions,(list,tuple)) or len(deletions)>32 or
@@ -332,7 +336,8 @@ def apply(client,handle,record,endpoint,session,revision,*,cancel=None,acknowled
         handle.execute('SAVEPOINT '+guard);created=True
         for stage in record['plan']['operations']:
             if cancel is not None and cancel.is_set():raise InterruptedError('Retained DDL canceled before its next stage')
-            ddl_prepare.prepare(client,handle,stage['row'],stage['source'],operation=stage['operation'])
+            ddl_prepare.prepare(client,handle,stage['row'],stage['source'],operation=stage['operation'],
+                authorization_column=stage.get('authorization_column'))
             handle.execute(stage['source']);completed+=1
         actual=observe(client,handle,endpoint,session)
         if (schema(actual,storage)!=schema(record['desired'],storage) or

@@ -662,22 +662,26 @@ class DataStudioService:
                         raise ValueError('Confirm the exact original-session SQLite DDL review')
                     if existing['state']!='reviewed':return existing
                 provider.client._require_idle(handle)
-                if operation=='columns':
+                if operation in {'columns','alter'}:
                     baseline=read_catalog(request['baseline'],engine='sqlite')
-                    desired=native.generate_columns(provider.client,handle,baseline,context.endpoint_id,session.session_id,
-                        request['resource_id'],request['columns'])
+                    if operation=='columns':
+                        desired=native.generate_columns(provider.client,handle,baseline,context.endpoint_id,session.session_id,
+                            request['resource_id'],request['columns'])
+                    else:
+                        from ..workspace.sqlite_retained_alter import generate
+                        desired=generate(provider.client,handle,baseline,context.endpoint_id,session.session_id,request['alterations'])[0]
                     from ..workspace.firebird_catalog_export import build_export
                     resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
                         'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
                     return build_export(resources,endpoint_id=context.endpoint_id,
-                        target_id='retained-session:'+session.session_id,generation='retained-native-column-design',
+                        target_id='retained-session:'+session.session_id,generation='retained-native-column-design' if operation=='columns' else 'retained-native-alter-design',
                         include_system=False,refreshed=True,engine='sqlite')
                 if operation in {'preview','review'}:
                     baseline=read_catalog(request['baseline'],engine='sqlite')
                     desired=read_catalog(request['desired'],engine='sqlite')
                     live=native.observe(provider.client,handle,context.endpoint_id,session.session_id)
                     preview=native.plan(provider.client,handle,baseline,desired,live,context.endpoint_id,session.session_id,
-                        deletions=request.get('deletions',()))
+                        deletions=request.get('deletions',()),alterations=request.get('alterations',()))
                     if operation=='preview':return preview
                     if request['execution_sha256']!=preview['execution_sha256']:
                         raise ValueError('Original native preview changed; inspect it before preparing another review')
