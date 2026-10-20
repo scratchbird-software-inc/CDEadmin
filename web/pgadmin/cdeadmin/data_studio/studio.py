@@ -264,6 +264,7 @@ class DataStudioService:
             contribution.contribution_id,
             execution.contribution_id,
             completion.contribution_id if completion else None,
+            provider_isolation_key=context.isolation_key,
         )
         with self._lock:
             if session.session_id in self._sessions:
@@ -864,6 +865,10 @@ class DataStudioService:
         if session.fixture or not session.execution_enabled:
             raise FixtureExecutionError(
                 'non-production Data Studio fixtures cannot execute'
+            )
+        if session.provider_isolation_key != context.isolation_key:
+            raise DataStudioAccessError(
+                'Data Studio session belongs to another provider scope'
             )
         binding = self.provider_registry.resolve(context)
         # Evidence references describe qualification provenance. A provider's

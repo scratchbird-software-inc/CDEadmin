@@ -51,7 +51,9 @@ def native(tmp_path, libraries, monkeypatch):
     binding = SimpleNamespace(instance=provider, manifest=json.loads(
         Path(provider_module.__file__).with_name('provider_manifest.json').read_text()))
     studio = DataStudioService(SimpleNamespace(resolve=lambda _context: binding))
-    session = StudioSession(context.endpoint_id, PROFILE.language_profile, opened, None, None, None)
+    context.isolation_key = (context.endpoint_id, context.cache_namespace)
+    session = StudioSession(context.endpoint_id, PROFILE.language_profile, opened, None, None, None,
+        provider_isolation_key=context.isolation_key)
     studio._sessions[session.session_id] = session
     def action(operation, **options):
         return studio.sqlite_extension_action(context, session.session_id, {'operation': operation, **options})
@@ -115,7 +117,8 @@ def test_load_refused_before_native_dispatch_without_settling_work(native, reaso
         n.permissions.require = deny
     elif reason == 'foreign_session':
         other = StudioSession(n.context.endpoint_id, PROFILE.language_profile,
-            n.provider.open_session({'route': {'database': ':memory:', 'allow_memory': True}}), None, None, None)
+            n.provider.open_session({'route': {'database': ':memory:', 'allow_memory': True}}), None, None, None,
+            provider_isolation_key=n.context.isolation_key)
         n.studio._sessions[other.session_id] = other
         with pytest.raises(DataStudioAccessError, match='another or closed session'):
             n.studio.sqlite_extension_action(n.context, other.session_id, {'operation': 'load', **options})

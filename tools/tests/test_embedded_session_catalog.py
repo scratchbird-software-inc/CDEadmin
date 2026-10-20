@@ -181,7 +181,9 @@ def test_production_provider_and_data_studio_export_original_retained_context(tm
     handle=provider._sessions[opened['session_id']].handle
     binding=SimpleNamespace(instance=provider,manifest={'identity':provider._identity()})
     studio=DataStudioService(SimpleNamespace(resolve=lambda _context:binding))
-    session=StudioSession(context.endpoint_id,PROFILE.language_profile,opened,None,None,None)
+    context.isolation_key=(context.endpoint_id,context.cache_namespace)
+    session=StudioSession(context.endpoint_id,PROFILE.language_profile,opened,None,None,None,
+        provider_isolation_key=context.isolation_key)
     studio._sessions[session.session_id]=session
     try:
         handle.execute('CREATE TEMP TABLE "retained table"("exact column" INTEGER)')

@@ -285,6 +285,7 @@ class StudioSession:
     fixture: bool = False
     execution_enabled: bool = True
     transaction_presentation: Mapping[str, Any] | None = None
+    provider_isolation_key: tuple[str, ...] | None = field(default=None, repr=False)
 
     @property
     def session_id(self) -> str:

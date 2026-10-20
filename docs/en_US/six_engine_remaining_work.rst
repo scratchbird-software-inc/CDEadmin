@@ -222,6 +222,18 @@ SQLite
 * SQ-MODULES: Close remaining installed-module transformations and native
   extension/function/collation/build-specific findings from INV-SQLITE.
 
+TEMP triggers now retain an identity in their native TEMP namespace, independent
+of a same-named table in another schema. Native nonexecuting declaration prepare
+can identify a qualified owner in main, TEMP or an attached database, while
+preserving the original connection's authorization policy. The owning relation
+and navigator destination retain that observed database. An unqualified owner
+with multiple visible candidates remains explicitly unavailable; a same-named
+TEMP table never supplies an invented parent. This is declaration binding, not
+proof that the existing trigger ran, and does not close retained DDN application.
+Retained Data Studio operations also require the original complete provider
+scope, including the selected registration target. A different target pointing
+to the same file cannot inspect, execute, roll back or close that session.
+
 Firebird network and embedded
 -----------------------------
 

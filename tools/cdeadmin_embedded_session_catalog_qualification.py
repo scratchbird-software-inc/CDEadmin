@@ -23,14 +23,30 @@ def qualify(provider, route, receipt):
         handle.execute('CREATE TABLE "'+pending+'"(id INTEGER)')
         handle.execute('INSERT INTO "'+pending+'" VALUES (99)')
         if engine=='duckdb':handle.execute('CREATE SEQUENCE "'+sequence+'" START 9007199254740993 MAXVALUE 9223372036854775807')
+        if engine=='sqlite':
+            handle.execute('CREATE TEMP TRIGGER "'+temporary+'_trigger" AFTER INSERT ON "'+attached+'"."attached table" '
+                'BEGIN INSERT INTO "'+pending+'" VALUES(87); END')
         binding=SimpleNamespace(instance=provider,manifest={'identity':provider._identity()})
         studio=DataStudioService(SimpleNamespace(resolve=lambda _context:binding))
-        session=StudioSession(provider.context.endpoint_id,provider.profile.language_profile,opened,None,None,None)
+        # Portable component gates supply a small provider-context fixture;
+        # authenticated workspace qualification separately uses EndpointContext.
+        context=SimpleNamespace(**vars(provider.context))
+        context.isolation_key=getattr(provider.context,'isolation_key',
+            (context.endpoint_id,context.cache_namespace))
+        session=StudioSession(context.endpoint_id,provider.profile.language_profile,opened,None,None,None,
+            provider_isolation_key=context.isolation_key)
         studio._sessions[session.session_id]=session
         before=handle.execute('SELECT current_transaction_id()').fetchone() if engine=='duckdb' else handle.in_transaction
-        observed=studio.session_catalog(provider.context,session.session_id)
+        observed=studio.session_catalog(context,session.session_id)
         resources=observed['resources']
         if engine=='sqlite':
+            trigger=next(row for row in resources if row['resource_kind']=='trigger' and row['display_name']==temporary+'_trigger')
+            assert trigger['display_path']==['temp',temporary+'_trigger']
+            owner_binding=trigger['native']['owner_binding_observation']
+            assert owner_binding['available'] and owner_binding['database']==attached and owner_binding['table']=='attached table'
+            assert not owner_binding['existing_trigger_execution_observed']
+            receipt['temporary_trigger_owner']={'native_namespace':'temp','native_owner_database':attached,
+                'native_declaration_prepare':True,'catalog_did_not_execute_trigger':True}
             raw=handle.execute('PRAGMA temp.table_xinfo("'+temporary+'")').fetchall()
             expected={row[1]:{'ordinal_position':row[0],'data_type':row[2],'nullable':not bool(row[3]),
                              'default':row[4],'primary_key_position':row[5],'hidden':row[6]} for row in raw}

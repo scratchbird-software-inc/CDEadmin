@@ -522,6 +522,22 @@ class DataStudioLifecycleTests(unittest.TestCase):
         with self.assertRaises(DataStudioAccessError):
             self.service.poll(other, item['occurrence_id'])
 
+    def test_same_endpoint_other_target_cannot_dispatch_or_close_retained_session(self):
+        from dataclasses import replace
+        other = replace(self.ctx, cache_namespace=str(uuid.uuid4()))
+        before = list(self.provider.calls)
+        resolutions = self.service.provider_registry.resolve_calls
+        for action in (
+                lambda: self.service.control_transaction(other, 'session-one', 'rollback'),
+                lambda: self.service.session_catalog(other, 'session-one'),
+                lambda: self.service.close_session(other, 'session-one')):
+            with self.assertRaisesRegex(DataStudioAccessError, 'another provider scope'):
+                action()
+        self.assertEqual(before, self.provider.calls)
+        self.assertEqual(resolutions, self.service.provider_registry.resolve_calls)
+        self.assertEqual('session-one', self.service.session('session-one')['provider_session']['session_id'])
+        self.service.control_transaction(self.ctx, 'session-one', 'rollback')
+
 
 class DataStudioHistoryAndFixtureTests(unittest.TestCase):
 

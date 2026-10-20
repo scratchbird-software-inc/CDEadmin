@@ -653,6 +653,7 @@ def _resources(connection, request):
                     native.update({'columns': [], 'triggers': []})
                 owner_path = ([schema_name, str(table_name)]
                               if kind in {'index', 'trigger'} and
+                              not (kind == 'trigger' and schema_name == 'temp') and
                               (schema_name, str(table_name)) in relation_kinds
                               else [schema_name])
                 resource = add(kind, owner_path, name, native)
@@ -854,6 +855,8 @@ def _resources(connection, request):
                                 'name': constraint_name,
                                 **constraint['native']['catalog_metadata'],
                             })
+        from .trigger_owners import reconcile as reconcile_trigger_owners
+        reconcile_trigger_owners(connection, resources)
         cursor.execute('PRAGMA pragma_list')
         for (name,) in cursor.fetchall():
             add('pragma', [], name, {'native_name': name, 'scope': 'connection',

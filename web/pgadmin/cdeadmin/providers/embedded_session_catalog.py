@@ -31,6 +31,7 @@ def annotate(result, engine, session_id):
 
 def sqlite_catalog(client, connection, session_id, *, include_system=False):
     from .sqlite.provider import _resources
+    from .sqlite.trigger_owners import AuthorizationCleanupUnconfirmed
     original=connection.in_transaction
     guard='sr_catalog_'+uuid.uuid4().hex
     generation=str(uuid.uuid4())
@@ -68,6 +69,9 @@ def sqlite_catalog(client, connection, session_id, *, include_system=False):
     class Connection:
         def cursor(self):return Cursor()
         def execute(self,*args):return Cursor().execute(*args)
+        @property
+        def _cdeadmin_authorizer(self):return connection._cdeadmin_authorizer
+        def set_authorizer(self,callback):return connection.set_authorizer(callback)
     try:
         if not original:
             restore_deferred=bool(connection.execute('PRAGMA defer_foreign_keys').fetchone()[0])
@@ -96,6 +100,9 @@ def sqlite_catalog(client, connection, session_id, *, include_system=False):
         connection.execute('SAVEPOINT '+guard);created=True
         resources=_resources(Connection(),{'capability_generation':generation})
         for resource in resources:account(resource)
+    except AuthorizationCleanupUnconfirmed:
+        client._uncertain.add(id(connection))
+        raise
     except sqlite3.Error as error:
         if uncertain_error(error):client._uncertain.add(id(connection))
         raise RelationalClientError('SQLite session catalog could not be observed; no caller transaction was ended') from None
