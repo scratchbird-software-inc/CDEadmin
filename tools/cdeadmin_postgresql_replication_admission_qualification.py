@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'web'),str(ROOT/'tools')]
 
 
-def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=False,ssh_mode=None):
+def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=False,ssh_mode=None,slots=False):
     import psycopg
     from psycopg import sql
     from postgresql_qualification_support import server as owned_server
@@ -29,6 +29,7 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=
             'web/pgadmin/cdeadmin/workspace/postgresql_continuity_service.py',
             'web/pgadmin/cdeadmin/workspace/postgresql_continuity_jobs.py',
             'web/pgadmin/cdeadmin/workspace/postgresql_continuity_capture.py',
+            'web/pgadmin/cdeadmin/workspace/postgresql_continuity_slots.py',
             'tools/cdeadmin_postgresql_replication_admission_qualification.py',
             'tools/cdeadmin_postgresql_ssh_qualification.py',
             'web/pgadmin/browser/server_groups/servers/__init__.py',
@@ -50,7 +51,8 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=
     app=create_app('ScratchRobin-native-replication-only-admission');app.PGADMIN_RUNTIME=False;app.PGADMIN_INT_KEY=''
     app.run_before_app_start();client=app.test_client();jobs=None;peer=None;key_path=None;ssh_secret=None
     try:
-        with owned_server(output/'fixture',server_options=('-c','wal_keep_size=64MB','-c','summarize_wal=on'),
+        with owned_server(output/'fixture',server_options=('-c','wal_keep_size=64MB','-c','summarize_wal=on',
+                *(('-c','wal_level=logical') if slots else ())),
                 initdb_options=('--wal-segsize=1','--locale=C','--encoding=UTF8')) as (route,password,fixture):
             native_options={'host':route['host'],'port':route['port'],'user':'postgres','dbname':'postgres','password':password}
             with psycopg.connect(**native_options,autocommit=True) as native:
@@ -116,17 +118,18 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=
                     proof['ssh']={'mode':ssh_mode,'probe_sends_no_credentials':True,'peer_mismatch_precedes_authentication':True}
                 http('review',{**draft,'replication_access':{**access,'password':'incorrect-owned-password'}},refused=True)
                 http('review',{**draft,'replication_access':{**access,'host':'unregistered'}},refused=True)
-                http('review',{**draft,'operation':'wal_slot_create'},refused=True)
+                http('review',{**draft,'operation':'wal_slot_sql_logical_create'},refused=True)
                 first=http('review',draft)
                 assert first['source']['authenticated_principal']==principal and first['source']['sql_admission_performed'] is False
                 http('start',{'job_id':first['job_id'],'review_digest':first['review_digest'],'confirmed':True},refused=True)
                 start={'job_id':first['job_id'],'review_digest':first['review_digest'],'confirmed':True,'replication_access':access}
                 http('start',start)
                 deadline=time.monotonic()+20
-                while not native.execute('SELECT 1 FROM pg_stat_replication WHERE usename=%s',(principal,)).fetchall():
+                while not native.execute("SELECT 1 FROM pg_stat_replication WHERE usename=%s AND state='streaming'",(principal,)).fetchall():
                     assert time.monotonic()<deadline
                     time.sleep(.05)
-                for _step in range(3):native.execute('SELECT pg_switch_wal()');time.sleep(.05)
+                for _step in range(3):
+                    native.execute('SELECT pg_log_standby_snapshot()');native.execute('SELECT pg_switch_wal()');time.sleep(.05)
                 observed=wait(first['job_id'],lambda r:(r.get('archive_observation') or {}).get('new_files',0)>0)
                 http('cancel',{'job_id':first['job_id']})
                 stopped=wait(first['job_id'],lambda r:r['state']=='cancelled')
@@ -145,13 +148,14 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=
                 http('start',{'job_id':second['job_id'],'review_digest':second['review_digest'],'confirmed':True,'replication_access':access})
                 wait(second['job_id'],lambda r:r['state']=='active')
                 http('cancel',{'job_id':second['job_id']});wait(second['job_id'],lambda r:r['state']=='cancelled')
+                if slots:proof['slot_commands']=qualify_slot_commands(native,http,access)
                 if backups:
                     proof['physical_backups']=qualify_backups(native,native_options,fixture,http,access,jobs,uid,endpoint,output)
                 for path in (output/'app').rglob('*.json'):
                     assert replication_password.encode() not in path.read_bytes()
                 if browser_binary:
                     proof['browser']=qualify_browser(app,output,browser_binary,driver_binary,sid,replication_password,native,principal,backups=backups,
-                        ssh_mode=ssh_mode,ssh_secret=ssh_secret)
+                        ssh_mode=ssh_mode,ssh_secret=ssh_secret,slots=slots)
                 if peer is not None:
                     from pgadmin.utils.crypto import encrypt
                     with app.test_request_context('/'):
@@ -180,6 +184,52 @@ def qualify(output,binary_path,*,browser_binary=None,driver_binary=None,backups=
         if key_path is not None:key_path.unlink(missing_ok=True)
         (output/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
     return proof
+
+
+def qualify_slot_commands(native,http,access):
+    def stopped(job_id):
+        deadline=time.monotonic()+45
+        while True:
+            value=http('status',{'job_id':job_id})
+            if value['state'] not in {'reviewed','dispatching','active','cancel_requested'} and value.get('slot_observation_state')!='pending':return value
+            assert time.monotonic()<deadline,value
+            time.sleep(.05)
+    def command(operation,slot,*,expected='completed',**options):
+        reviewed=http('review',{'operation':operation,'options':{'slot':slot,**options},'replication_access':access})
+        assert reviewed['source']['slot_catalog_observed'] is False and reviewed['source']['slot_snapshot'] is None
+        request={'job_id':reviewed['job_id'],'review_digest':reviewed['review_digest'],'confirmed':True,'replication_access':access}
+        http('start',request);result=stopped(reviewed['job_id'])
+        assert result['state']==expected and result['slot_existed_before'] is None,result
+        assert result['slot_observation_state']=='unavailable' and result['slot_observation'] is None
+        assert result['native_utility_acknowledged']==(expected=='completed')
+        assert http('start',request)['job_id']==result['job_id']
+        return result['job_id']
+    physical='owned_replication_slot';logical='owned_replication_logical';receipts=[]
+    receipts.append(command('wal_slot_create',physical))
+    assert native.execute('SELECT slot_type FROM pg_replication_slots WHERE slot_name=%s',(physical,)).fetchone()==('physical',)
+    receipts.append(command('wal_slot_create',physical,if_not_exists=True))
+    receipts.append(command('wal_slot_create',physical,expected='unknown'))
+    native.execute('SELECT * FROM pg_create_logical_replication_slot(%s,%s)',(logical,'test_decoding'))
+    receipts.append(command('wal_slot_create',logical,if_not_exists=True))
+    assert native.execute('SELECT slot_type FROM pg_replication_slots WHERE slot_name=%s',(logical,)).fetchone()==('logical',)
+    receipts.append(command('wal_slot_drop',logical))
+    capture=http('review',{'operation':'wal_capture','options':{'archive':'slot-admission','slot':physical,'timeout_seconds':30},'replication_access':access})
+    http('start',{'job_id':capture['job_id'],'review_digest':capture['review_digest'],'confirmed':True,'replication_access':access})
+    deadline=time.monotonic()+20
+    while not native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s AND active',(physical,)).fetchall():
+        assert time.monotonic()<deadline;time.sleep(.05)
+    receipts.append(command('wal_slot_drop',physical,expected='unknown'))
+    assert native.execute('SELECT active FROM pg_replication_slots WHERE slot_name=%s',(physical,)).fetchone()==(True,)
+    http('cancel',{'job_id':capture['job_id']});assert stopped(capture['job_id'])['state']=='cancelled'
+    deadline=time.monotonic()+20
+    while native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name=%s AND active',(physical,)).fetchall():
+        assert time.monotonic()<deadline;time.sleep(.05)
+    receipts.append(command('wal_slot_drop',physical))
+    receipts.append(command('wal_slot_drop',physical,expected='unknown'))
+    assert not native.execute('SELECT 1 FROM pg_replication_slots WHERE slot_name IN (%s,%s)',(physical,logical)).fetchall()
+    return {'complete':True,'physical_create_and_drop':True,'duplicate_and_active_missing_refusals':True,
+        'if_not_exists_preserves_existing_physical_and_logical_types':True,'catalog_facts_remain_unobserved':True,
+        'independent_native_catalog_effects_verified':True,'no_replay':True,'job_ids':receipts}
 
 
 def qualify_backups(native,native_options,fixture,http,access,jobs,owner,endpoint,output):
@@ -267,12 +317,13 @@ def qualify_backups(native,native_options,fixture,http,access,jobs,owner,endpoin
         'native_backup_effect_and_file_verification_receipts_separate':True,'sql_admission_performed':False}
 
 
-def qualify_browser(app,output,browser_binary,driver_binary,sid,password,native,principal,*,backups=False,ssh_mode=None,ssh_secret=None):
+def qualify_browser(app,output,browser_binary,driver_binary,sid,password,native,principal,*,backups=False,ssh_mode=None,ssh_secret=None,slots=False):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.common.exceptions import StaleElementReferenceException,ElementClickInterceptedException
     from cdeadmin_ui_evidence import ensure_data_explorer,expand
@@ -308,7 +359,7 @@ def qualify_browser(app,output,browser_binary,driver_binary,sid,password,native,
             field('Continuity operation').click();return True
         wait.until(open_operation)
         wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.text.strip()=='Capture native WAL archive'),None)).click()
-        checkbox=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.text.strip()=='Use replication-only backup and WAL admission'),None))
+        checkbox=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.text.strip()=='Use native replication-only admission'),None))
         driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
         def credentials():
             field('Replication principal password').send_keys(password)
@@ -325,18 +376,49 @@ def qualify_browser(app,output,browser_binary,driver_binary,sid,password,native,
         def active(browser):
             return any('Job ' in node.text and ': active.' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
         wait.until(active)
-        wait.until(lambda _browser:native.execute('SELECT 1 FROM pg_stat_replication WHERE usename=%s',(principal,)).fetchall())
-        for _step in range(3):native.execute('SELECT pg_switch_wal()');time.sleep(.05)
+        wait.until(lambda _browser:native.execute("SELECT 1 FROM pg_stat_replication WHERE usename=%s AND state='streaming'",(principal,)).fetchall())
+        for _step in range(3):
+            native.execute('SELECT pg_log_standby_snapshot()');native.execute('SELECT pg_switch_wal()');time.sleep(.05)
         def published(browser):
             return any('Completed archive files observed:' in node.text and 'Newly published: 0.' not in node.text and 'Newly published:' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
         wait.until(published);click('Cancel native job')
         wait.until(lambda browser:any('Job ' in node.text and ': cancelled.' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        slot_jobs=[]
+        if slots:
+            for label,operation in [('Create physical replication slot','wal_slot_create'),('Drop replication slot','wal_slot_drop')]:
+                wait.until(open_operation)
+                wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.text.strip()==label),None)).click()
+                target=field('Replication slot name');target.send_keys(Keys.CONTROL,'a');target.send_keys('owned_browser_replication_slot')
+                checkbox=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.text.strip()=='Use native replication-only admission'),None))
+                driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
+                credentials();click('Review native operation')
+                wait.until(lambda browser:operation in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').text)
+                reviewed=json.loads(driver.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').text)
+                assert reviewed['source']['slot_catalog_observed'] is False
+                click('Confirm and start reviewed operation')
+                def slot_returned(browser):
+                    for node in browser.find_elements(By.TAG_NAME,'details'):
+                        summaries=node.find_elements(By.TAG_NAME,'summary')
+                        if not summaries or summaries[0].text.strip()!='Native observations and artifact location':continue
+                        values=node.find_elements(By.TAG_NAME,'pre')
+                        if not values:continue
+                        value=json.loads(values[0].get_attribute('textContent') or '{}')
+                        if (value.get('operation')==operation and value.get('state')=='completed' and
+                                value.get('slot_observation_state')=='unavailable'):
+                            assert value['native_utility_acknowledged'] is True and value['slot_existed_before'] is None
+                            return value['job_id']
+                    return False
+                job_id=wait.until(slot_returned)
+                found=native.execute("SELECT slot_type FROM pg_replication_slots WHERE slot_name='owned_browser_replication_slot'").fetchone()
+                assert found==(('physical',) if operation=='wal_slot_create' else None)
+                slot_jobs.append(job_id)
+                assert field('Replication principal password').get_attribute('value')==''
         backup_job=None
         if backups:
             import re
             wait.until(open_operation)
             wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.text.strip()=='Full physical backup'),None)).click()
-            checkbox=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.text.strip()=='Use replication-only backup and WAL admission'),None))
+            checkbox=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.text.strip()=='Use native replication-only admission'),None))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',checkbox);checkbox.click()
             credentials();click('Review native operation')
             wait.until(lambda browser:'full_backup' in browser.find_element(By.CSS_SELECTOR,'[aria-label="Native backup review"]').text)
@@ -356,6 +438,7 @@ def qualify_browser(app,output,browser_binary,driver_binary,sid,password,native,
         complete=True
         return {'complete':True,'console_errors':0,'expected_legacy_sql_credential_challenges':len(expected),
             'native_full_backup_verified_job':backup_job,
+            'replication_only_slot_create_drop_jobs':slot_jobs,
             'sql_disconnected_native_review_start_publish_cancel':True}
     finally:
         if driver is not None:
@@ -371,6 +454,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,required=True);parser.add_argument('--binary-path',type=Path,required=True)
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
     parser.add_argument('--backups',action='store_true')
+    parser.add_argument('--slots',action='store_true')
     parser.add_argument('--ssh-mode',choices=['password','private_key'])
-    args=parser.parse_args();result=qualify(args.output,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,backups=args.backups,ssh_mode=args.ssh_mode)
+    args=parser.parse_args();result=qualify(args.output,args.binary_path,browser_binary=args.browser_binary,driver_binary=args.driver_binary,backups=args.backups,ssh_mode=args.ssh_mode,slots=args.slots)
     raise SystemExit(0 if result['complete'] else 1)

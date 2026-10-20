@@ -10,7 +10,7 @@ const ACTIVE = new Set(['dispatching', 'active', 'verifying', 'verifying_inputs'
 const CHANGES = new Set(['wal_slot_sql_peek_text','wal_slot_sql_get_text','wal_slot_sql_peek_binary','wal_slot_sql_get_binary']);
 const SQL_SLOTS = new Set(['wal_slot_sql_physical_create','wal_slot_sql_logical_create','wal_slot_sql_physical_copy','wal_slot_sql_logical_copy','wal_slot_sql_advance','wal_slot_sql_drop',...CHANGES]);
 const NO_INPUT = new Set(['full_backup','wal_capture','wal_slot_create','wal_slot_drop',...SQL_SLOTS]);
-const REPLICATION_ADMISSION = new Set(['full_backup','incremental_backup','wal_capture']);
+const REPLICATION_ADMISSION = new Set(['full_backup','incremental_backup','wal_capture','wal_slot_create','wal_slot_drop']);
 const defaults = () => ({format:'plain', wal_method:'stream', checkpoint:'fast', manifest_checksums:'SHA256',
   label:'ScratchRobin physical backup', compression:'', max_rate_kib:'', slot:'', create_slot:false, no_slot:false,
   write_recovery_conf:false, verify_page_checksums:true, progress:true, estimate_size:true, sync:true, sync_method:'fsync', timeout_seconds:3600});
@@ -135,7 +135,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
           ['verify','Verify existing backup'],['combine','Reconstruct backup chain'],['recovery_drill','Recover isolated backup copy']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
       </TextField>
       <Button disabled={busy} onClick={() => load(page)}>Load backup jobs</Button>
-      <Button disabled={busy} onClick={() => loadSlots(slotPage)}>Load replication slots</Button>
+      <Button disabled={busy || replicationOnly} onClick={() => loadSlots(slotPage)}>Load replication slots</Button>
     </Box>
     {slotCatalog && <>
       <Table size="small" aria-label="Native replication slots"><TableHead><TableRow>
@@ -205,13 +205,14 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>
     {REPLICATION_ADMISSION.has(operation) && <Box sx={{my:1}}>
-      <FormControlLabel label="Use replication-only backup and WAL admission" control={<Checkbox disabled={busy}
-        checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setReplicationPassword('');setReview(null);setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}} />} />
+      <FormControlLabel label="Use native replication-only admission" control={<Checkbox disabled={busy}
+        checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setSlotCatalog(null);setReplicationPassword('');setReview(null);setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}} />} />
       {replicationOnly && <>
         <Alert severity="info">Authenticates the registered native principal through physical replication without a SQL connection.
           Enter its password or use the saved registration credential/libpq authentication. Passwords are sent only for admission
           and rechecked before start; they are omitted from job receipts. Backups stream TAR files into private application-host storage;
           plain output is materialized and verified separately. Tablespace source paths are observed from native artifacts and are never opened.
+          Known-name slot commands retain native utility acknowledgements; physical replication does not provide the SQL slot catalog.
           SQL SET ROLE is unavailable on physical replication connections.</Alert>
         <TextField disabled={busy} size="small" type="password" label="Replication principal password" autoComplete="off"
           value={replicationPassword} onChange={event => setReplicationPassword(event.target.value)} />

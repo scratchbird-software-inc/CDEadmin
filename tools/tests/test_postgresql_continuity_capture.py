@@ -80,6 +80,24 @@ def test_archive_claim_is_source_bound_and_refuses_an_unreconciled_previous_work
         with archive_claim(jobs,jobs.load(other['job_id'],1,endpoint)):pytest.fail('Archive cluster binding was replaced')
 
 
+def test_native_wal_return_is_retained_before_a_failed_ssh_release(fixture,monkeypatch):
+    jobs,source,endpoint,tools=fixture
+    monkeypatch.setattr(tools,'execute',lambda *_args,**_kwargs:{'return_code':0,
+        'process_observation':{'cleanup_confirmed':True}},raising=False)
+    class Transport:
+        @contextmanager
+        def parameters(self):
+            yield {}
+            raise ContinuityError('Owned native SSH release failed')
+        def close(self):pass
+    record=review(fixture)
+    jobs.start({'job_id':record['job_id'],'review_digest':record['review_digest'],'confirmed':True},
+        1,endpoint,source,'configuration',Transport())
+    result=wait(jobs,record,endpoint)
+    assert result['state']=='failed' and result['native_receiver_returned'] is True
+    assert result['worker_io_closed'] is True and result['tool_observation']['return_code']==0
+
+
 def test_unbound_existing_archive_is_never_silently_adopted(fixture):
     jobs,_source,endpoint,_tools=fixture
     record=review(fixture);directory=jobs.archive_directory(1,endpoint)/'owned';directory.mkdir(parents=True)

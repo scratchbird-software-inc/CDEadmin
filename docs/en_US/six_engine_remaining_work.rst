@@ -134,7 +134,7 @@ PostgreSQL
   other native security/maintenance findings. Arbitrarily encoded catalog
   identities remain separate from the qualified lossless SQL_ASCII payloads.
 
-Physical backup and WAL capture now offer explicit replication-only admission from the
+Physical backup, WAL capture and known-name slot commands now offer explicit replication-only admission from the
 saved registration without borrowing or opening a SQL session. Native
 IDENTIFY_SYSTEM and SHOW bind the cluster, principal and WAL geometry; dispatch
 reauthenticates the reviewed peer. Credentials are withheld from durable jobs.
@@ -147,7 +147,11 @@ acknowledgement, TAR/flat-file verification and recovery remain separate facts.
 SQL role substitution is refused. Replication-only SSH now uses inspected or
 operator-supplied public host keys, independent pinned worker tunnels and native
 password/private-key authentication, including saved credentials. Remaining
-slot/protocol resources still require separate admission/workflow closure.
+temporary/logical protocol resources still require separate admission/workflow closure.
+Permanent physical-slot creation and known-name physical/logical-slot removal
+use the native utility without opening the SQL slot catalog. Prior existence,
+type and current identity remain unobserved. Native utility acknowledgement is
+saved before SSH release, separately from process cleanup and later catalog facts.
 
 DuckDB
 ------

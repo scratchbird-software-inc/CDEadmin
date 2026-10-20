@@ -1387,10 +1387,10 @@ preview and download. Replication-only credentials without SQL admission,
 retained temporary protocol streams, resumable archives and broader HA remain
 open. History and platform qualification retain their existing ownership.
 
-Replication-only physical backup and WAL admission
---------------------------------------------------
+Replication-only physical backup, WAL and slot admission
+-------------------------------------------------------
 
-Native full/incremental backup and WAL capture can authenticate the registered principal through
+Native full/incremental backup, WAL capture and known-name slot commands can authenticate the registered principal through
 physical replication without a SQL database connection. The continuity dialog
 is available while the SQL registration is disconnected. IDENTIFY_SYSTEM and
 replication SHOW bind the native cluster, timeline, principal, version and WAL
@@ -1400,6 +1400,21 @@ from durable reviews, jobs and status requests. Saved registration credentials
 and native libpq authentication are also admitted. Credentials cannot override
 the registered route. Duplicate starts read the existing receipt without
 authenticating or repeating a dispatched receiver.
+
+Permanent physical-slot creation and known-name physical/logical-slot removal
+use the native pg_receivewal command without requiring or opening a SQL slot
+catalog connection. Prior existence, slot type and current identity remain
+unobserved rather than being reported as absent. An if-not-exists success can
+retain an existing slot unchanged, including a logical slot. PostgreSQL governs
+duplicate creation, active slots and missing-slot refusal. The slot catalog
+control is disabled in replication-only mode; SQL-admitted registrations retain
+their independent catalog and SQL slot controls.
+
+Native slot utility and physical/logical receiver returns are recorded before SSH release. A successful native return
+remains acknowledged even if later process cleanup or tunnel release is
+unconfirmed. Those observations do not claim a later catalog state and never
+authorize automatic replay. Retained temporary and logical replication-protocol
+resources remain separate acceptance work.
 
 Physical replication cannot apply SQL SET ROLE. Register its authenticated
 principal directly. Replication-only SSH uses independently authenticated,

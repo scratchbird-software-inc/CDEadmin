@@ -3,6 +3,8 @@ import json
 import threading
 import time
 import uuid
+from contextlib import contextmanager
+from unittest.mock import Mock
 
 import pytest
 
@@ -78,6 +80,47 @@ def test_native_slot_arguments_and_repeated_start_preserve_one_dispatch(fixture,
     assert tools.calls==[('pg_receivewal',expected)]
     lease=ContinuityTransport({});jobs.start(request(selected),1,endpoint,source,'configuration',lease)
     assert lease.closed and len(tools.calls)==1
+
+
+@pytest.mark.parametrize('operation',['wal_slot_create','wal_slot_drop'])
+def test_replication_only_slot_commands_preserve_unknown_catalog_facts_without_sql(fixture,monkeypatch,operation):
+    jobs,source,endpoint,_tools=fixture
+    source.update(slot_catalog_observed=False)
+    observed=Mock(side_effect=AssertionError('SQL observation attempted'))
+    monkeypatch.setattr(slots,'observe',observed)
+    selected=review(fixture,operation)
+    jobs.start(request(selected),1,endpoint,source,'configuration',ContinuityTransport({}))
+    result=wait(fixture,selected)
+    assert result['native_utility_acknowledged'] is True and result['state']=='completed'
+    assert result['slot_existed_before'] is None and result['slot_observation'] is None
+    assert result['slot_observation_state']=='unavailable' and 'No SQL connection' in result['slot_observation_blocker']
+    observed.assert_not_called()
+
+
+def test_returned_native_slot_acknowledgement_precedes_later_ssh_release_failure(fixture):
+    jobs,source,endpoint,_tools=fixture;selected=review(fixture)
+    class Transport:
+        @contextmanager
+        def parameters(self):
+            yield {}
+            raise ContinuityError('Owned tunnel release remains unconfirmed')
+        def close(self):pass
+    jobs.start(request(selected),1,endpoint,source,'configuration',Transport())
+    deadline=time.monotonic()+5
+    while True:
+        result=jobs.get(selected['job_id'],1,endpoint)
+        if result['state']=='failed':break
+        assert time.monotonic()<deadline;time.sleep(.01)
+    assert result['native_utility_acknowledged'] is True and result['tool_observation']['return_code']==0
+
+
+def test_native_slot_acknowledgement_is_distinct_from_unconfirmed_process_cleanup(fixture,monkeypatch):
+    jobs,source,endpoint,tools=fixture
+    monkeypatch.setattr(tools,'execute',lambda *_args,**_kwargs:{'return_code':0,'process_observation':{'cleanup_confirmed':False}})
+    selected=review(fixture)
+    jobs.start(request(selected),1,endpoint,source,'configuration',ContinuityTransport({}))
+    result=wait(fixture,selected)
+    assert result['state']=='unknown' and result['native_utility_acknowledged'] is True
 
 
 def test_slot_replacement_is_a_new_review_but_live_counters_do_not_change_identity(fixture):

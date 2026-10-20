@@ -37,7 +37,7 @@ def observe(transport,slot):
 
 def enrich(source,transport,slot):
     observed=observe(transport,slot)
-    return {**source,'slot_snapshot':observed,
+    return {**source,'slot_catalog_observed':True,'slot_snapshot':observed,
             'slot_identity':None if observed is None else {key:observed.get(key) for key in IDENTITY}}
 
 
@@ -84,6 +84,8 @@ def review(jobs,request,owner,endpoint,source,configuration,paths,runtime_limit)
         raise ContinuityError('Application runtime policy requires a bounded native slot utility duration')
     if source.get('slot_snapshot') is not None and source['slot_snapshot'].get('slot_name')!=selected['slot']:
         raise ContinuityError('Native slot observation does not match the reviewed name')
+    if source.get('slot_catalog_observed') is False and (source.get('slot_snapshot') is not None or source.get('slot_identity') is not None):
+        raise ContinuityError('Replication-only admission cannot claim SQL slot catalog facts')
     jobs.root.mkdir(parents=True,exist_ok=True,mode=0o700);private_directory(jobs.root)
     identity=PhysicalTools(paths).identify('pg_receivewal',jobs.root)
     if identity['available'] is not True:raise ContinuityError('Install PostgreSQL 18 pg_receivewal on the application host')
@@ -96,6 +98,8 @@ def review(jobs,request,owner,endpoint,source,configuration,paths,runtime_limit)
                 'Native replication-slot commands run on the selected cluster through the application host. The native slot name identifies the object; PostgreSQL governs concurrent use.',
                 'Native utility acknowledgement and current catalog observations are separate facts. An interrupted utility is never automatically repeated and local process cleanup does not establish its remote outcome.']}
     record['artifact_location']=str(jobs.directory(record))
+    if source.get('slot_catalog_observed') is False:
+        record['warnings'].append('This registration uses only physical replication. The SQL slot catalog, prior existence, type and current slot identity are unobserved. The exact reviewed slot name governs the native command. If-not-exists success does not distinguish new creation from an existing slot; current catalog state requires SQL observation.')
     if operation=='wal_slot_create':
         record['warnings'].append('This creates a permanent physical replication slot. Native WAL reservation starts when a receiver attaches; retained WAL can consume server storage while that receiver is stopped.')
         if selected['if_not_exists']:record['warnings'].append('Native if-not-exists accepts an existing slot unchanged, including another slot type. The receipt reports the observed type and does not claim a new physical slot was created.')
@@ -112,14 +116,18 @@ def run(jobs,record,tools,directory,transport,progress,signal):
     with transport.parameters() as parameters:
         result=tools.execute('pg_receivewal',directory,arguments,parameters=parameters,
             timeout=selected['timeout_seconds'],progress=progress,cancel_signal=signal)
-    jobs.update(record,tool_observation=result)
-    observation=result['process_observation']
-    if observation.get('cleanup_confirmed') is not True:state='unknown'
-    elif result['return_code']==0:state='completed'
-    else:state='unknown'
-    jobs.update(record,state=state,finished_at=time.time(),remote_finality_inferred=False,
-                native_utility_acknowledged=state=='completed',slot_observation_state='pending',automatic_retry=False,
-                slot_existed_before=record['source'].get('slot_snapshot') is not None)
+        observation=result['process_observation']
+        state='completed' if result['return_code']==0 and observation.get('cleanup_confirmed') is True else 'unknown'
+        # Preserve a returned native command before releasing its SSH route.
+        # Utility acknowledgement and confirmed process release are distinct.
+        jobs.update(record,tool_observation=result,state=state,finished_at=time.time(),remote_finality_inferred=False,
+                    native_utility_acknowledged=result['return_code']==0,slot_observation_state='pending',automatic_retry=False,
+                    slot_existed_before=None if record['source'].get('slot_catalog_observed') is False else record['source'].get('slot_snapshot') is not None)
+    if record['source'].get('slot_catalog_observed') is False:
+        jobs.update(record,slot_observation=None,slot_observation_state='unavailable',
+            slot_observation_blocker='Physical replication admission does not provide the SQL slot catalog. No SQL connection was opened.',
+            slot_observed_at=time.time())
+        return
     after=None;blocker=None
     try:after=observe(transport,selected['slot'])
     except ContinuityError as error:blocker=str(error)

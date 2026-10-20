@@ -139,12 +139,12 @@ def run(jobs,record,tools,directory,transport,progress,signal):
         jobs.update(record,state='active',phase='native_logical_replication_stream',native_receiver_dispatch_admitted=True)
         result=tools.execute('pg_recvlogical',directory,arguments(selected,path,quoting=option_quoting(record['tool_identities']['pg_recvlogical'])),parameters=native_parameters,
                              timeout=selected['timeout_seconds'],progress=tick,cancel_signal=signal)
-    observed=result['process_observation'];closed=observed.get('cleanup_confirmed') is True
-    state='unknown' if not closed else 'cancelled' if observed.get('cancel_requested') or signal.is_set() else 'failed' if result['return_code']!=0 else 'captured'
-    jobs.update(record,state=state,tool_observation=result,native_receiver_returned=result['return_code']==0,
-                worker_io_closed=closed,phase='logical_receiver_stopped',finished_at=time.time(),
-                logical_stream_artifact={'state':'sealing' if closed else 'unavailable','writer_closed':closed},
-                remote_finality_inferred=False,automatic_retry=False)
+        observed=result['process_observation'];closed=observed.get('cleanup_confirmed') is True
+        state='unknown' if not closed else 'cancelled' if observed.get('cancel_requested') or signal.is_set() else 'failed' if result['return_code']!=0 else 'captured'
+        jobs.update(record,state=state,tool_observation=result,native_receiver_returned=result['return_code']==0,
+                    worker_io_closed=closed,phase='logical_receiver_stopped',finished_at=time.time(),
+                    logical_stream_artifact={'state':'sealing' if closed else 'unavailable','writer_closed':closed},
+                    remote_finality_inferred=False,automatic_retry=False)
     if closed:
         try:reconcile(jobs,jobs.load(record['job_id'],record['owner'],record['endpoint_id']))
         except (OSError,ContinuityError):jobs.update(record,logical_stream_artifact={'state':'unavailable','writer_closed':True})

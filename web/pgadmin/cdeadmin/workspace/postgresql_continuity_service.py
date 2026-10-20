@@ -10,6 +10,16 @@ from ..providers.postgresql.provider import PROFILE_ID, PROFILE_VERSION, PROVIDE
 from .postgresql_continuity_jobs import PostgreSQLContinuityJobs, fingerprint,artifact_tablespaces
 from .postgresql_monitoring_host import PostgreSQLMonitoringHost
 
+REPLICATION_OPERATIONS={'wal_capture','full_backup','incremental_backup','wal_slot_create','wal_slot_drop'}
+
+
+def replication_source(server,request,operation):
+    from ..providers.postgresql.replication_admission import registered
+    source,transport=registered(server,request)
+    if operation in {'wal_slot_create','wal_slot_drop'}:
+        source.update(slot_catalog_observed=False,slot_snapshot=None,slot_identity=None)
+    return source,transport
+
 
 def artifact_context(server):
     endpoint=server.endpoint_profile
@@ -48,7 +58,7 @@ def action(service, server, operation, request):
     replication_access = request.get('replication_access')
     if 'replication_access' in request:
         if operation not in {'review', 'start'} or not isinstance(replication_access, dict):
-            raise ContinuityError('Replication-only credentials apply to review/start of native physical backup or WAL capture')
+            raise ContinuityError('Replication-only credentials apply to review/start of native backup, WAL or slot commands')
         if 'secret_read' not in permissions:
             raise ContinuityError('Native replication credential permission is unavailable')
         request = {key: value for key, value in request.items() if key != 'replication_access'}
@@ -113,10 +123,9 @@ def action(service, server, operation, request):
         if operation=='review':
             native_operation=request.get('operation')
             if replication_access is not None:
-                if native_operation not in {'wal_capture','full_backup','incremental_backup'}:
-                    raise ContinuityError('Select a native physical backup or WAL capture for replication-only admission')
-                from ..providers.postgresql.replication_admission import registered
-                source, transport = registered(server, replication_access)
+                if native_operation not in REPLICATION_OPERATIONS:
+                    raise ContinuityError('Select a native backup, WAL or slot command for replication-only admission')
+                source,transport=replication_source(server,replication_access,native_operation)
                 return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
             if native_operation in sql_slots.OPERATIONS or native_operation=='logical_stream_capture':
                 from ..providers.postgresql.connection_target import database_oid
@@ -160,13 +169,12 @@ def action(service, server, operation, request):
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
             replication_only = source.get('admission_interface') == 'physical-replication'
-            if replication_access is not None and (not replication_only or reviewed['operation'] not in {'wal_capture','full_backup','incremental_backup'}):
+            if replication_access is not None and (not replication_only or reviewed['operation'] not in REPLICATION_OPERATIONS):
                 raise ContinuityError('Replication credentials do not match the reviewed native admission interface')
-            if reviewed['state']=='reviewed' and replication_only and reviewed['operation'] in {'wal_capture','full_backup','incremental_backup'}:
+            if reviewed['state']=='reviewed' and replication_only and reviewed['operation'] in REPLICATION_OPERATIONS:
                 if replication_access is None:
-                    raise ContinuityError('Reauthenticate the reviewed replication-only backup or WAL capture before dispatch')
-                from ..providers.postgresql.replication_admission import registered
-                source, transport = registered(server, replication_access)
+                    raise ContinuityError('Reauthenticate the reviewed replication-only command before dispatch')
+                source,transport=replication_source(server,replication_access,reviewed['operation'])
             elif reviewed['state']=='reviewed' and (reviewed['operation'] in sql_slots.OPERATIONS or reviewed['operation']=='logical_stream_capture'):
                 from ..providers.postgresql.connection_target import database_oid
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)

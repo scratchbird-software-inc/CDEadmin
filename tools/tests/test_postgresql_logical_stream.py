@@ -2,6 +2,8 @@
 import base64
 import threading
 import uuid
+from contextlib import contextmanager
+from unittest.mock import Mock
 
 import pytest
 
@@ -104,3 +106,34 @@ def test_dead_sealing_worker_preserves_native_utility_outcome_for_offline_recove
     assert value['logical_stream_artifact']['state']=='unavailable'
     recovered=stream.reconcile(jobs,jobs.load(record['job_id'],1,record['endpoint_id']))
     assert recovered['state']=='captured' and recovered['logical_stream_artifact']['state']=='sealed'
+
+
+def test_logical_native_return_precedes_failed_tunnel_release_and_bytes_recover_offline(captured,monkeypatch):
+    jobs,record,data=captured;directory=jobs.directory(record);path=directory/stream.FILENAME
+    path.unlink()
+    admitted={**source(),'slot_identity':{'slot_name':'owned'},'logical_stream_confirmed_lsn':None}
+    fields={'client_identity':stream.client_identity(),'options':stream.options({'slot':'owned'}),'source':admitted,
+        'tool_identities':{'pg_recvlogical':{'version':'(PostgreSQL) 18.6'}}}
+    record.update(fields);jobs.update(record,**fields)
+    monkeypatch.setattr(stream.private_sql,'attach',lambda *_args:Mock())
+    @contextmanager
+    def query(_connection):yield Mock()
+    monkeypatch.setattr(stream.private_sql,'cursor',query)
+    monkeypatch.setattr(stream.slots,'enrich',lambda *_args:admitted)
+    class Tools:
+        def execute(self,*_args,**_kwargs):
+            path.write_bytes(data)
+            return {'return_code':0,'process_observation':{'cleanup_confirmed':True,'return_code':0}}
+    class Transport:
+        @contextmanager
+        def parameters(self):
+            yield {}
+            raise ContinuityError('Owned native tunnel release failed')
+    with pytest.raises(ContinuityError,match='tunnel release failed'):
+        stream.run(jobs,record,Tools(),directory,Transport(),lambda _event:None,threading.Event())
+    saved=jobs.load(record['job_id'],1,record['endpoint_id'])
+    assert saved['native_receiver_returned'] is True and saved['worker_io_closed'] is True
+    assert saved['tool_observation']['return_code']==0
+    recovered=stream.reconcile(jobs,saved)
+    assert recovered['logical_stream_artifact']['native_receiver_returned'] is True
+    with stream.payload(jobs,jobs.load(record['job_id'],1,record['endpoint_id'])) as incoming:assert incoming.read()==data

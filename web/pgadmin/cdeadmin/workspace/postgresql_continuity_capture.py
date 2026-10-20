@@ -198,7 +198,8 @@ def run(jobs,record,tools,directory,transport,progress,signal):
         with transport.parameters() as parameters:
             result=tools.execute('pg_receivewal',directory,arguments(record['options'],staging),parameters=parameters,
                 timeout=record['options']['timeout_seconds'],progress=tick,cancel_signal=signal)
-        jobs.update(record,tool_observation=result)
+            jobs.update(record,tool_observation=result,native_receiver_returned=result['return_code']==0,
+                worker_io_closed=result['process_observation'].get('cleanup_confirmed') is True)
         if publication_error:
             jobs.update(record,state='failed' if result['process_observation'].get('cleanup_confirmed') is True else 'unknown',error_type=type(publication_error[0]).__name__,
                         error_reason='Native WAL archive publication failed; reconcile the writer before resuming')
