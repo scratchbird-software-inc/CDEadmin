@@ -44,6 +44,7 @@ import DuckDBAttachment from './DuckDBAttachment';
 import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
 import DuckDBOperationReceipts from './DuckDBOperationReceipts';
 import MariaDBBackupStages from './MariaDBBackupStages';
+import FirebirdEDSPool from './FirebirdEDSPool';
 import DuckDBExtensions from './DuckDBExtensions';
 import DuckDBSessionSecrets from './DuckDBSessionSecrets';
 import MySQLServerCatalog from './MySQLServerCatalog';
@@ -8153,6 +8154,11 @@ export default function ProviderWorkspaceContent({
             key={sessionId || 'no-session'} sessionId={sessionId}
             disabled={busy || querySessionBlocked || !!occurrenceId}
             onExecute={(command) => execute(command, 'native', true)} />}
+          {languageProfile === 'firebird-sql' && queryDatabaseTargetId && <FirebirdEDSPool
+            key={'eds:' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            sessionId={sessionId} ensureSession={ensureSession}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
           {languageProfile === 'duckdb-sql' && <DuckDBExtensions
             key={'extensions:' + queryDatabaseTargetId} post={post} ensureSession={ensureSession}
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}

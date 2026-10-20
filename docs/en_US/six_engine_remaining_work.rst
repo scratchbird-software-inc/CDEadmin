@@ -56,6 +56,10 @@ Independent inventory
 * INV-FIREBIRD: Reconcile Firebird 5.0.4 network and embedded independently,
   including native catalog, PSQL, Services API, trace/profiling, events,
   authentication and backup-chain capabilities beyond the parity checklist.
+  Native EDS process-pool catalog facts and retained editor controls are now
+  implemented; their owning workflow and qualification command are recorded in
+  :doc:`firebird_functional_completion`. This closes that adapter gap only;
+  the broader independent Firebird inventory remains open.
 
 These six items reconcile the independent denominator. Existing category and
 navigator gates provide evidence inputs; their own declarations do not define

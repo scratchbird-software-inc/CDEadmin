@@ -892,3 +892,41 @@ ScratchBird history acceptance remain explicit separate release requirements.
 The release-candidate collector captures the three GitHub native hosts and the
 actual Linux run into one external evidence directory, binds the clean candidate
 and DDN dependency to the exact run/attempt, and retains failures across hosts.
+
+External connection pool administration
+--------------------------------------
+
+The Firebird SQL editor exposes native external connection pool observation,
+review, size and lifetime changes, clear-all and clear-expired operations on its
+original retained attachment. Database and server catalog metadata include the
+current attachment's native process pool identity, settings and counters. Network
+and embedded scopes are distinct: an embedded pool belongs to the application's
+native engine process. A network process can serve several databases; Classic,
+SuperClassic and SuperServer must not be assumed to have identical sharing.
+
+These commands require the native ``MODIFY_EXT_CONN_POOL`` system privilege.
+They take effect outside transaction rollback, do not decide the user's SQL
+transaction, and do not update configuration files. The review binds the native
+process, attachment, principal, role, database, settings, adapter and expiry.
+Apply requires explicit process confirmation and durably claims a review before
+dispatch. A native acknowledgement is retained before subsequent cancellation
+cleanup or observation. A lost acknowledgement remains unknown and cannot be
+replayed. Current counters, observed settings and transaction finality remain
+separate from acknowledgement.
+
+``CLEAR OLDEST`` removes expired idle entries. ``CLEAR ALL`` closes idle entries
+and removes active pool bindings without cancelling their external statements.
+The Firebird5.0.4 source parses a database-specific clear, but the execution case
+is unimplemented and the engine rejects it. No application emulation is offered.
+Native lifetime units and bounds are preserved. This feature administers the
+native EDS pool, not the application's connection pool.
+
+Owner/endpoint/registration-scoped receipts can be listed and read after closing
+the attachment without opening another SQL workspace. Saved receipts cannot
+authorize replay. Explicit retention removal affects only application evidence;
+unresolved dispatched operations cannot be removed. Native network and embedded
+qualification is reproducible with
+``tools/cdeadmin_firebird_eds_pool_qualification.py`` using a dedicated local
+Firebird5.0.4 runtime. Optional browser arguments exercise the production editor.
+The receipts qualify their recorded interfaces and host, not the full Firebird
+inventory, other platforms, human forms or deferred ScratchBird history.

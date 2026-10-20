@@ -230,15 +230,15 @@ def test_script_preview_rejects_foreign_or_missing_sessions(provider_id):
     )
     from pgadmin.cdeadmin.data_studio import DataStudioAccessError
     ctx, provider, _registry, service = harness()
-    service.open_session(ctx, endpoint_payload(ctx), 'example-sql')
-    provider.preview_script = Mock(return_value={'total_entries': 1})
     native_ctx = replace(ctx, provider_id=provider_id)
+    service.open_session(native_ctx, endpoint_payload(native_ctx), 'example-sql')
+    provider.preview_script = Mock(return_value={'total_entries': 1})
     service.preview_script(native_ctx, 'session-one', 'SELECT 1;')
     provider.preview_script.assert_called_once_with({
         'source': 'SELECT 1;', 'session_id': 'session-one'})
     with pytest.raises(DataStudioAccessError, match='another endpoint'):
         service.preview_script(context('other'), 'session-one', 'SELECT 1;')
-    with pytest.raises(DataStudioAccessError, match='not admitted'):
+    with pytest.raises(DataStudioAccessError, match='provider scope'):
         service.preview_script(ctx, 'session-one', 'SELECT 1;')
     with pytest.raises(DataStudioAccessError, match='unavailable'):
         service.preview_script(native_ctx, 'missing', 'SELECT 1;')

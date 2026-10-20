@@ -570,6 +570,17 @@ class DataStudioService:
         return result
 
     @serialized_execution
+    def firebird_eds_pool_action(self,context,session_id,request,archive):
+        from ..sdk import RelationalClientError
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='firebird-sql' or context.provider_id not in {'org.cdeadmin.firebird','org.cdeadmin.firebird.embedded'}:
+            raise DataStudioAccessError('Native Firebird EDS query session required')
+        try:
+            return binding.instance.eds_pool_action({**request,'session_id':session.provider_session['session_id'],
+                'language_profile':session.language_profile},archive)
+        except (ValueError,RelationalClientError) as error:raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def mariadb_backup_stage_action(self, context, session_id, request):
         from ..sdk import RelationalClientError
         session, binding = self._operational_session(context, session_id)
@@ -926,12 +937,12 @@ class DataStudioService:
                 'sessions': SessionContribution,
                 'executions': ExecutionContribution,
             }
-            registrars = {
-                'languages': self.contributions.register_language,
-                'completions': self.contributions.register_completion,
-                'sessions': self.contributions.register_session,
-                'executions': self.contributions.register_execution,
-            }
+            # Network and embedded interfaces can share an exact SQL contract.
+            # Stage the whole provider so a conflicting later port cannot leave
+            # an earlier language registered after admission failed. Callbacks
+            # are still endpoint-independent and receive the resolved binding.
+            staged = {name: dict(getattr(self.contributions, '_' + name))
+                      for name in expected}
             for collection, expected_type in expected.items():
                 for contribution in payload.get(collection, ()):
                     if not isinstance(contribution, expected_type):
@@ -939,7 +950,18 @@ class DataStudioService:
                             f'provider {collection} contribution is invalid'
                         )
                     self._reject_endpoint_bound_callbacks(contribution)
-                    registrars[collection](contribution)
+                    profiles = ((contribution.language_profile,)
+                                if collection == 'languages' else
+                                contribution.language_profiles)
+                    for profile in profiles:
+                        previous = staged[collection].get(profile)
+                        if previous is not None and previous != contribution:
+                            raise DataStudioError(
+                                'Conflicting Data Studio contribution for '
+                                f'{profile!r}')
+                        staged[collection][profile] = contribution
+            for collection, values in staged.items():
+                setattr(self.contributions, '_' + collection, values)
             self._provider_languages[key] = tuple(
                 item.language_profile
                 for item in payload.get('languages', ())

@@ -3167,10 +3167,28 @@ class ProviderWorkspaceService:
             source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
+        if action in {'firebird_eds_pool','firebird_eds_pool_receipts'}:
+            from .firebird_eds_pool_receipts import for_workspace
+            if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native Firebird EDS request')
+            try:
+                archive=for_workspace(self,server,data.get('database_target_id'))
+                request=data['request']
+                if action=='firebird_eds_pool_receipts':
+                    if set(request)=={'operation','review_id'} and request['operation']=='receipt':return {**archive.get(request['review_id']),'archived_read_only':True}
+                    if set(request)=={'operation','review_id','review_digest','confirmed'} and request['operation']=='remove':
+                        admitted=self.endpoint_service.provider_registry.admitted_permissions(self.endpoint_service._context(server.endpoint_profile,()))
+                        if 'administer' not in admitted:raise ValueError('Native EDS receipt removal permission is unavailable')
+                        return archive.remove(request['review_id'],request['review_digest'],request['confirmed'])
+                    if request.get('operation')=='list' and not set(request)-{'operation','offset','limit'}:
+                        return archive.recent(request.get('offset',0),request.get('limit',25))
+                    raise ValueError('Select a read-only native EDS receipt request')
+            except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
         context, endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=data.get('database_target_id'))
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
+            if action=='firebird_eds_pool':
+                return self.studio_service.firebird_eds_pool_action(context,data.get('session_id'),data['request'],archive)
             if action in {'duckdb_session_receipts','duckdb_database_copy','duckdb_extensions','duckdb_attachments'}:
                 from .duckdb_session_receipts import for_workspace,action as archived_action
                 if not isinstance(data.get('request'),dict):

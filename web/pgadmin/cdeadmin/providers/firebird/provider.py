@@ -248,6 +248,16 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         from .scripts import preview
         return preview(request.get('source'))
 
+    def eds_pool_action(self,request,archive):
+        self._require('execute')
+        if not isinstance(request,dict) or request.get('language_profile')!='firebird-sql':
+            raise RelationalClientError('Native Firebird EDS session is required')
+        if request.get('operation') not in {'inventory','receipt'}:self._require('administer')
+        handle=self._editor_session(request)
+        from .eds_pool import action
+        return action(self.client,handle,request['session_id'],
+            {key:value for key,value in request.items() if key not in {'session_id','language_profile'}},archive)
+
     def query_stream(self, request):
         self._require('execute')
         request = _mapping(request)
@@ -1956,6 +1966,13 @@ def _resources(connection, request):
         for setting in settings:
             add('configuration', [], setting[0],
                 configuration.metadata(setting))
+
+        from . import eds_pool
+        pool_rows=catalog_rows(eds_pool.SQL,'external connection pool',required=False)
+        pool_observation=(eds_pool.metadata(pool_rows[0]) if len(pool_rows)==1 else
+            {'available':False,'scope':'attachment-engine-process','reason':'Native EDS pool observation unavailable'})
+        database_native['external_connection_pool']=pool_observation
+        resources[_catalog_resource_id('server',[],'Firebird')]['native']['external_connection_pool']=pool_observation
 
         def routine_named(kind, name, package):
             name = str(name or '').rstrip(' ')

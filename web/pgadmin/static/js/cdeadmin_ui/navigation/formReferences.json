@@ -5707,6 +5707,10 @@
       "reference": "SR-F-010009",
       "title": "PostgreSQL physical backup, verification and chain reconstruction"
     },
+    "firebird-eds-pool": {
+      "reference": "SR-F-010012",
+      "title": "Firebird native process external connection pool"
+    },
     "sqlite-recovery": {
       "reference": "SR-F-010010",
       "title": "SQLite native file recovery and recovered-copy activation"
