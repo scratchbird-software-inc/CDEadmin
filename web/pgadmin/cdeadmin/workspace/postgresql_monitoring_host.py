@@ -56,6 +56,10 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         values['ssh_configuration'] = {name: getattr(server, name, None) for name in (
             'tunnel_host', 'tunnel_port', 'tunnel_username', 'tunnel_authentication',
             'tunnel_identity_file', 'tunnel_keep_alive', 'tunnel_password')}
+        # Saved encrypted credentials can be bytes (including immediately
+        # after native registration). Fingerprint their revision consistently
+        # with the database credential without serializing the binary value.
+        values['ssh_configuration']['tunnel_password'] = str(getattr(server, 'tunnel_password', None))
         return route_fingerprint(values)
 
     def _scope(self, owner, sid, target):

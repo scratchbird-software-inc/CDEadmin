@@ -34,6 +34,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   const [page,setPage]=useState(0), [catalog,setCatalog]=useState(null), [review,setReview]=useState(null), [receipt,setReceipt]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
   const [replicationOnly,setReplicationOnly]=useState(false), [replicationPassword,setReplicationPassword]=useState('');
+  const [replicationTransport,setReplicationTransport]=useState(null),[replicationSSHKey,setReplicationSSHKey]=useState(''),[replicationSSHSecret,setReplicationSSHSecret]=useState('');
   const [confirmStop,setConfirmStop]=useState(false);
   const generation=useRef(0);
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     setTargetKind('');setTargetValue('');setTargetInclusive(true);setTargetTimeline('current');setWalArchives(null);setWalArchive('');
     setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');setConfirmStop(false);
     setReplicationOnly(false);setReplicationPassword('');
+    setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');
     return () => {generation.current++;downloads.current.splice(0).forEach(close => close());};
   },[post,databaseTargetId]);
   useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
@@ -64,8 +66,11 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     const token=generation.current;setBusy(true);setError('');
     const replication = (action==='review' && REPLICATION_ADMISSION.has(operation) && replicationOnly) ||
       (action==='start' && REPLICATION_ADMISSION.has(review?.operation) && review?.source?.admission_interface==='physical-replication');
-    const nativeRequest=replication ? {...request,replication_access:replicationPassword ? {password:replicationPassword} : {}} : request;
-    if(replication && action==='start')setReplicationPassword('');
+    const access={...(replicationPassword ? {password:replicationPassword} : {}),
+      ...(replicationTransport?.ssh ? {ssh_host_key:replicationSSHKey,
+        ...(replicationSSHSecret ? {[replicationTransport.ssh.authentication==='private_key' ? 'ssh_private_key_password' : 'ssh_password']:replicationSSHSecret} : {})} : {})};
+    const nativeRequest=replication ? {...request,replication_access:access} : request;
+    if(replication && action==='start'){setReplicationPassword('');setReplicationSSHSecret('');}
     try {const result=await post({action:'postgresql_continuity_'+action,request:nativeRequest});if(token===generation.current)accept(result);}
     catch(failure) {if(token===generation.current)setError(failure.response?.data?.errormsg || failure.message || 'Native continuity request failed');}
     finally {if(token===generation.current)setBusy(false);}
@@ -120,7 +125,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
-      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);setReplicationOnly(false);setReplicationPassword('');}}>
+      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);setReplicationOnly(false);setReplicationPassword('');setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}}>
         {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['wal_capture','Capture native WAL archive'],['wal_slot_create','Create physical replication slot'],['wal_slot_drop','Drop replication slot'],
           ['wal_slot_sql_physical_create','Create physical slot with SQL options'],['wal_slot_sql_logical_create','Create logical replication slot'],
           ['wal_slot_sql_physical_copy','Copy physical replication slot'],['wal_slot_sql_logical_copy','Copy logical replication slot'],
@@ -201,15 +206,31 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     </Box>
     {REPLICATION_ADMISSION.has(operation) && <Box sx={{my:1}}>
       <FormControlLabel label="Use replication-only backup and WAL admission" control={<Checkbox disabled={busy}
-        checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setReplicationPassword('');setReview(null);}} />} />
+        checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setReplicationPassword('');setReview(null);setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');}} />} />
       {replicationOnly && <>
         <Alert severity="info">Authenticates the registered native principal through physical replication without a SQL connection.
           Enter its password or use the saved registration credential/libpq authentication. Passwords are sent only for admission
           and rechecked before start; they are omitted from job receipts. Backups stream TAR files into private application-host storage;
           plain output is materialized and verified separately. Tablespace source paths are observed from native artifacts and are never opened.
-          SQL SET ROLE and replication-only SSH require separate admission.</Alert>
+          SQL SET ROLE is unavailable on physical replication connections.</Alert>
         <TextField disabled={busy} size="small" type="password" label="Replication principal password" autoComplete="off"
           value={replicationPassword} onChange={event => setReplicationPassword(event.target.value)} />
+        <Button disabled={busy} onClick={() => {
+          setReplicationTransport(null);setReplicationSSHKey('');setReplicationSSHSecret('');setReview(null);
+          run('transport',{probe_ssh:true},value => {setReplicationTransport(value);setReplicationSSHKey(value.ssh_peer?.openssh_key || '');});
+        }}>Inspect registered SSH transport</Button>
+        {replicationTransport?.ssh===null && <Alert severity="info">This registration uses a direct native database transport.</Alert>}
+        {replicationTransport?.ssh && <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
+          <Alert severity="info">Registered SSH peer: {replicationTransport.ssh.username}@{replicationTransport.ssh.host}:{replicationTransport.ssh.port}.
+            Remote database: {replicationTransport.ssh.remote_host}:{replicationTransport.ssh.remote_port}.
+            Observed host key: {replicationTransport.ssh_peer?.fingerprint}.
+            Admission and each worker use independent connections pinned to the expected key; the probe sends no credentials.</Alert>
+          <TextField disabled={busy} size="small" fullWidth label="Expected SSH public host key" value={replicationSSHKey}
+            onChange={event => {setReplicationSSHKey(event.target.value);setReview(null);}} />
+          <TextField disabled={busy} size="small" type="password" autoComplete="off"
+            label={replicationTransport.ssh.authentication==='private_key' ? 'SSH private-key passphrase' : 'SSH password'}
+            value={replicationSSHSecret} onChange={event => setReplicationSSHSecret(event.target.value)} />
+        </Box>}
       </>}
     </Box>}
     {operation==='recovery_drill' && <Box sx={{my:1}}>
@@ -278,6 +299,10 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
         <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},result => {setReceipt(result);setConfirmStop(false);})}>Reconcile native writer</Button>
       </Box>}
       {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned native utilities are stopped. Backup verification and recovery retain separate receipts.</Alert>}
+      {receipt.transport_release?.state==='unconfirmed' && <Box>
+        <Alert severity="warning">The worker could not confirm release of its SSH transport. Native command acknowledgements remain recorded separately.</Alert>
+        <Button disabled={busy} onClick={() => run('release_transport',{job_id:receipt.job_id},setReceipt)}>Retry owned transport release</Button>
+      </Box>}
       <Box component="details"><summary>Native observations and artifact location</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:400}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
   </Box>;

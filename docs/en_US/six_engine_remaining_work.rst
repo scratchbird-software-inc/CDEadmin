@@ -144,8 +144,10 @@ tablespace maps supply exact OIDs and source paths without opening those paths
 or claiming SQL catalog names. Verified artifacts support reconstruction and
 isolated recovery while the SQL registration remains disconnected. Native backup
 acknowledgement, TAR/flat-file verification and recovery remain separate facts.
-SQL role substitution is refused. Replication-only SSH and remaining retained
-protocol resources still require separate admission/workflow closure.
+SQL role substitution is refused. Replication-only SSH now uses inspected or
+operator-supplied public host keys, independent pinned worker tunnels and native
+password/private-key authentication, including saved credentials. Remaining
+slot/protocol resources still require separate admission/workflow closure.
 
 DuckDB
 ------

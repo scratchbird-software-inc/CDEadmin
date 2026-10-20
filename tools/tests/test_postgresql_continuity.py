@@ -129,6 +129,54 @@ def test_changed_review_and_native_principal_refuse_dispatch(jobs):
     assert lease.closed
 
 
+def test_native_backup_acknowledgement_survives_later_transport_release_failure(jobs,monkeypatch):
+    from pgadmin.cdeadmin.workspace import postgresql_continuity_jobs as module
+    manager,source,endpoint=jobs;dispatch=[]
+    class Tools:
+        def __init__(self,_paths):pass
+        def identify(self,*_args):return {'available':True,'version':'PostgreSQL 18.3','executable_sha256':'a'*64}
+        def execute(self,*args,**kwargs):
+            dispatch.append(args);return {'return_code':0,'process_observation':{'cleanup_confirmed':True}}
+    class Transport:
+        closed=False;attempts=0
+        @contextmanager
+        def parameters(self):
+            yield {}
+            raise ContinuityError('Owned native tunnel release remains unconfirmed')
+        def close(self):
+            self.attempts+=1;self.closed=True
+            if self.attempts==1:raise ContinuityError('Owned tunnel release remains unconfirmed')
+    monkeypatch.setattr(module,'PhysicalTools',Tools)
+    reviewed=review(jobs);transport=Transport()
+    request={'job_id':reviewed['job_id'],'review_digest':reviewed['review_digest'],'confirmed':True}
+    manager.start(request,1,endpoint,source,'configuration',transport)
+    deadline=time.monotonic()+5
+    while True:
+        result=manager.get(reviewed['job_id'],1,endpoint)
+        if result['state']=='failed' and result.get('transport_release'):break
+        assert time.monotonic()<deadline;time.sleep(.01)
+    assert result['native_backup_acknowledged'] is True and result['tool_observation']['return_code']==0
+    assert 'release remains unconfirmed' in result['error_reason']
+    assert manager.start(request,1,endpoint,source,'configuration',ContinuityTransport({}))['state']=='failed'
+    assert len(dispatch)==1
+    assert result['transport_release']['state']=='unconfirmed'
+    assert manager.pending_releases[reviewed['job_id']][1] is transport
+    with pytest.raises(ContinuityError):manager.release_transport(reviewed['job_id'],2,endpoint)
+    assert manager.release_transport(reviewed['job_id'],1,endpoint)['transport_release']['state']=='released'
+    assert reviewed['job_id'] not in manager.pending_releases
+    assert transport.attempts==2 and len(dispatch)==1
+
+
+def test_lost_transport_owner_cannot_claim_release_or_replay_native_backup(jobs):
+    manager,source,endpoint=jobs;reviewed=review(jobs)
+    manager.update(manager.load(reviewed['job_id'],1,endpoint),state='failed',native_backup_acknowledged=True,
+        transport_release={'state':'unconfirmed'})
+    with pytest.raises(ContinuityError,match='original transport owner'):
+        manager.release_transport(reviewed['job_id'],1,endpoint)
+    result=manager.get(reviewed['job_id'],1,endpoint)
+    assert result['native_backup_acknowledged'] is True and result['state']=='failed'
+
+
 def test_duplicate_start_never_replays_and_cross_instance_cancel_reaches_worker(jobs):
     manager,source,endpoint=jobs
     reviewed=review(jobs)

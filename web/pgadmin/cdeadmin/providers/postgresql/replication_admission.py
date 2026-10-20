@@ -16,7 +16,7 @@ def _bytes(value):
     return int(match[1]) * {'B': 1, 'kB': 1024, 'MB': 1024**2, 'GB': 1024**3, None: 1}[match[2]]
 
 
-def capture(parameters):
+def _native_capture(parameters):
     """Authenticate one physical walsender and seal its resolved native peer.
 
     IDENTIFY_SYSTEM and SHOW are replication commands here. No SQL session,
@@ -83,19 +83,49 @@ def capture(parameters):
         raise
 
 
+def capture(parameters,*,ssh=None,ssh_secrets=None):
+    if ssh is None:return _native_capture(parameters)
+    initial=dict(parameters);secrets=dict(ssh_secrets or {})
+    for parameter,kind in (('password','database_password'),('sslpassword','tls_private_key_password')):
+        value=initial.pop(parameter,None)
+        if value:secrets[kind]=value
+    admission=ContinuityTransport(initial,ssh=ssh,secrets=secrets)
+    native=None;transport=None
+    try:
+        with admission.parameters() as routed:
+            source,native=_native_capture(routed)
+            with native.parameters() as observed:
+                values=dict(observed);sealed=dict(ssh_secrets or {})
+                for parameter,kind in (('password','database_password'),('sslpassword','tls_private_key_password')):
+                    value=values.pop(parameter,None)
+                    if value:sealed[kind]=value
+                # A new job opens its own pinned tunnel. Never retain this
+                # admission's ephemeral loopback address or forwarder.
+                values.update(host=parameters['host'],port=parameters['port'])
+                values.pop('hostaddr',None)
+                transport=ContinuityTransport(values,ssh=ssh,secrets=sealed)
+                source.update(host=parameters['host'],port=int(parameters['port']))
+        native.close();native=None;admission.close()
+        return source,transport
+    except BaseException:
+        if transport is not None:transport.close()
+        raise
+    finally:
+        if native is not None:native.close()
+        admission.close()
+
+
 def registered(server, request):
     """Resolve the saved registration, keeping credential material request-local."""
     from psycopg.conninfo import conninfo_to_dict
     from pgadmin.utils.driver.registry import DriverRegistry
-    if not isinstance(request, dict) or set(request) - {'password'}:
+    if not isinstance(request, dict) or set(request) - {'password','ssh_host_key','ssh_password','ssh_private_key_password'}:
         raise ContinuityError('Select registered physical replication credentials')
     password = request.get('password')
     if password is not None and (not isinstance(password, str) or '\x00' in password or len(password) > 8192):
         raise ContinuityError('Invalid physical replication credential')
     if server.role:
         raise ContinuityError('Physical replication cannot apply SQL SET ROLE; register the replication principal directly')
-    if server.use_ssh_tunnel:
-        raise ContinuityError('Replication-only SSH admission requires a separate peer-pinned tunnel; use the connected SQL route for this registration')
     manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
     if password is None:
         encrypted = getattr(manager, 'password', None) or server.password
@@ -105,10 +135,26 @@ def registered(server, request):
             present, key = get_crypt_key()
             if not present:
                 raise ContinuityError('Registered replication credential authority is unavailable')
-            password = decrypt(encrypted, key)
+            try:
+                password = decrypt(encrypted, key)
+                if isinstance(password,bytes):password=password.decode('utf8')
+            except Exception:
+                raise ContinuityError('Registered replication credential could not be unlocked') from None
     # Constructing conninfo resolves registered options and storage paths. It
     # does not invoke the SQL driver's connect() or its role/bootstrap queries.
     parameters = conninfo_to_dict(manager.create_connection_string(manager.db, server.username, password))
+    from .replication_ssh import material
+    ssh,secrets,identity=material(server,manager,request)
+    if ssh is not None:
+        parameters.update(host=server.host,port=server.port)
+        parameters.pop('hostaddr',None)
     # Native connection options may select a libpq service's principal. Record
     # the actual authenticated startup user; never invent SQL role authority.
-    return capture(parameters)
+    if ssh is None:return capture(parameters)
+    try:
+        source,transport=capture(parameters,ssh=ssh,ssh_secrets=secrets)
+        source['ssh_peer']=identity
+        return source,transport
+    except ContinuityError:raise
+    except Exception as error:
+        raise ContinuityError('Native replication SSH admission failed ('+type(error).__name__+')') from None

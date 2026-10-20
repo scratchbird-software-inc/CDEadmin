@@ -40,6 +40,11 @@ def action(service, server, operation, request):
     owner=service._principal_id(server);endpoint=server.endpoint_profile.id
     permissions=service.endpoint_service.provider_registry.admitted_permissions(artifact_context(server))
     if 'backup_admin' not in permissions:raise ContinuityError('Native backup administration permission is unavailable')
+    if operation=='transport':
+        if set(request)-{'probe_ssh'} or type(request.get('probe_ssh',False)) is not bool:
+            raise ContinuityError('Select inspection of the registered replication transport')
+        from ..providers.postgresql.replication_ssh import describe
+        return describe(server,probe=request.get('probe_ssh',False))
     replication_access = request.get('replication_access')
     if 'replication_access' in request:
         if operation not in {'review', 'start'} or not isinstance(replication_access, dict):
@@ -68,6 +73,9 @@ def action(service, server, operation, request):
         if set(request)-{'offset','limit'}:raise ContinuityError('Invalid backup receipt page')
         return jobs.list(owner,endpoint,**request)
     if operation=='reconcile_writer':return jobs.reconcile_writer(request,owner,endpoint)
+    if operation=='release_transport':
+        if set(request)!={'job_id'}:raise ContinuityError('Select one owned native transport release')
+        return jobs.release_transport(request['job_id'],owner,endpoint)
     if operation in {'status','cancel'}:
         if set(request)!={'job_id'}:raise ContinuityError('Select one native continuity job')
         return (jobs.get if operation=='status' else jobs.cancel)(request['job_id'],owner,endpoint)

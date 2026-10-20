@@ -1402,8 +1402,19 @@ the registered route. Duplicate starts read the existing receipt without
 authenticating or repeating a dispatched receiver.
 
 Physical replication cannot apply SQL SET ROLE. Register its authenticated
-principal directly. Replication-only SSH requires an independently authenticated
-and pinned transport; this path refuses it explicitly.
+principal directly. Replication-only SSH uses independently authenticated,
+pinned transports. The dialog can inspect the registered peer's public host key
+without sending credentials, or accept its expected OpenSSH public key.
+Native authentication occurs only after that key matches. Passwords and
+registered encrypted private keys can use explicit or saved passphrases;
+private-key bytes are read in the authorized request and sealed for the worker.
+Peer and client public-key fingerprints bind the review, while each job opens
+its own tunnel and preserves the database hostname for native TLS verification.
+Admission loopback ports and interactive SQL tunnels are never borrowed by jobs.
+Failed worker tunnel releases remain owned for explicit retry from the receipt,
+and application shutdown retries them. An unavailable original owner cannot
+claim release. Native backup acknowledgement is recorded before later tunnel
+release and remains unchanged by cleanup. Credentials are destroyed on close.
 
 Physical backup streams native TAR archives into private application-host
 storage. After native verification, its tablespace_map supplies exact OIDs and

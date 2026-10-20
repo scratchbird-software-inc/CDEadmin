@@ -53,6 +53,17 @@ def test_disabled_read_does_not_connect_or_lock(tmp_path, monkeypatch):
     finally: shared.close()
 
 
+def test_saved_binary_ssh_credentials_remain_fingerprintable_and_revoke_the_grant(tmp_path,monkeypatch):
+    host,shared,server=make_host(tmp_path,monkeypatch)
+    try:
+        server.tunnel_password=b'encrypted-binary-credential'
+        host.enable(1,7,None,{})
+        assert host.snapshot(1,7,None)['state']!='disabled'
+        server.tunnel_password=b'rotated-encrypted-binary-credential'
+        with pytest.raises(PermissionError):host.snapshot(1,7,None)
+    finally:shared.close()
+
+
 def test_grant_survives_without_browser_credentials_and_route_changes_revoke(tmp_path, monkeypatch):
     host, shared, server = make_host(tmp_path, monkeypatch)
     try:

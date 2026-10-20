@@ -69,6 +69,5 @@ def test_credentials_cannot_override_registered_route(value):
     with pytest.raises(ContinuityError):module.registered(SimpleNamespace(),value)
 
 
-@pytest.mark.parametrize('role,tunnel',[('administrator',0),('',1)])
-def test_unadmitted_role_or_ssh_is_explicit(role,tunnel):
-    with pytest.raises(ContinuityError):module.registered(SimpleNamespace(role=role,use_ssh_tunnel=tunnel),{})
+def test_unadmitted_sql_role_is_explicit():
+    with pytest.raises(ContinuityError):module.registered(SimpleNamespace(role='administrator',use_ssh_tunnel=0),{})

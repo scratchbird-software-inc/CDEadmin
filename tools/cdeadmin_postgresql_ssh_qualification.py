@@ -25,6 +25,7 @@ class ForwardingPeer:
         self.transports = []
         self.threads = []
         self.errors = []
+        self.auth_attempts = []
         self.lock = threading.Lock()
         self.listener = socket.socket()
         self.listener.bind(('127.0.0.1', 0))
@@ -55,8 +56,10 @@ class ForwardingPeer:
         class Admission(paramiko.ServerInterface):
             def get_allowed_auths(self, username): return 'password,publickey'
             def check_auth_password(self, username, password):
+                peer.auth_attempts.append(('password',username))
                 return paramiko.AUTH_SUCCESSFUL if username == 'fixture' and password == peer.password else paramiko.AUTH_FAILED
             def check_auth_publickey(self, username, key):
+                peer.auth_attempts.append(('publickey',username))
                 return paramiko.AUTH_SUCCESSFUL if username == 'fixture' and key == peer.client_key else paramiko.AUTH_FAILED
             def check_channel_direct_tcpip_request(self, chanid, origin, destination):
                 return paramiko.OPEN_SUCCEEDED if destination == peer.destination else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED

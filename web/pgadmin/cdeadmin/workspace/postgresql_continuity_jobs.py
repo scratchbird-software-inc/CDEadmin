@@ -52,6 +52,7 @@ def job_identity(value):
 
 class PostgreSQLContinuityJobs:
     _worker_maps = {}
+    _release_maps = {}
     _worker_maps_lock = threading.RLock()
 
     def __init__(self, path, root, archive_root=None):
@@ -60,6 +61,7 @@ class PostgreSQLContinuityJobs:
         self.lock = threading.RLock()
         with self._worker_maps_lock:
             self.workers=self._worker_maps.setdefault(str(self.path.resolve()),{})
+            self.pending_releases=self._release_maps.setdefault(str(self.path.resolve()),{})
         self.worker_identity = (os.getpid(), psutil.Process().create_time())
 
     @contextmanager
@@ -143,6 +145,31 @@ class PostgreSQLContinuityJobs:
     def get(self, job_id, owner, endpoint):
         record=self.load(job_id,owner,endpoint)
         return self.observed(record)
+
+    def release_transport(self, job_id, owner, endpoint):
+        record=self.load(job_id,owner,endpoint)
+        with self._worker_maps_lock:
+            worker=self.workers.get(job_id)
+            if worker is not None and worker[0].is_alive():
+                raise ContinuityError('The native worker still owns this transport')
+            pending=self.pending_releases.get(job_id)
+        if pending is None:
+            if (record.get('transport_release') or {}).get('state')=='unconfirmed':
+                raise ContinuityError('The original transport owner is unavailable; release cannot be confirmed on this process')
+        else:self._release_transport(record,pending[1])
+        return self.get(job_id,owner,endpoint)
+
+    def _release_transport(self, record, transport):
+        with self._worker_maps_lock:
+            self.pending_releases[record['job_id']]=(record,transport)
+            try:
+                transport.close()
+                self.update(record,transport_release={'state':'released','observed_at':time.time()})
+            except Exception as error:
+                self.update(record,transport_release={'state':'unconfirmed','error_type':type(error).__name__})
+                return False
+            self.pending_releases.pop(record['job_id'],None)
+            return True
 
     def observed(self, record):
         job_id=record['job_id']
@@ -572,8 +599,8 @@ class PostgreSQLContinuityJobs:
                     result=tools.execute('pg_basebackup',directory,
                         backup_arguments(native_options,native_destination,incremental_manifest=paths[0]/'backup_manifest' if paths else None,tablespaces=tablespaces),
                         parameters=parameters,timeout=record['options']['timeout_seconds'],progress=progress,cancel_signal=signal)
-                self.update(record,tool_observation=result,native_backup_acknowledged=result['return_code']==0,
-                    native_capture_format=native_options['format'],native_capture_location=str(native_destination))
+                    self.update(record,tool_observation=result,native_backup_acknowledged=result['return_code']==0,
+                        native_capture_format=native_options['format'],native_capture_location=str(native_destination))
                 if replication_only and result['return_code']==0 and not result['process_observation'].get('cancel_requested'):
                     if result['process_observation'].get('cleanup_confirmed') is not True:
                         self.update(record,state='unknown',artifact_complete=False,observation_blocker='Native backup writer termination is unconfirmed; archive reads are refused')
@@ -678,8 +705,9 @@ class PostgreSQLContinuityJobs:
         except Exception as error:
             self.update(record,state='failed',error_type=type(error).__name__,automatic_retry=False)
         finally:
-            transport.close()
-            with self._worker_maps_lock:self.workers.pop(record['job_id'],None)
+            try:self._release_transport(record,transport)
+            finally:
+                with self._worker_maps_lock:self.workers.pop(record['job_id'],None)
 
     def run_recovery(self, record, tools, source, progress, file_progress, signal):
         directory=self.directory(record);options=record['options'];clone=directory/'recovered-clone'
@@ -725,3 +753,5 @@ class PostgreSQLContinuityJobs:
         with self._worker_maps_lock:workers=list(self.workers.values())
         for _worker,signal in workers:signal.set()
         for worker,_signal in workers:worker.join(timeout=5)
+        with self._worker_maps_lock:pending=list(self.pending_releases.values())
+        for record,transport in pending:self._release_transport(record,transport)

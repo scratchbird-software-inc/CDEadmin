@@ -11,6 +11,7 @@ class ContinuityTransport:
         self._parameters = dict(parameters)
         self._ssh = ssh
         self._secrets = {key:SecretLease(value) for key,value in (secrets or {}).items() if value}
+        self._tunnels = set()
         self.closed = False
 
     def __repr__(self):
@@ -34,16 +35,24 @@ class ContinuityTransport:
                         raise ContinuityError('Continuity transport credential scope changed')
                     return self._secrets[kind].use(lambda value:SecretLease(value))
                 tunnel = MonitoringSSHTunnel(SimpleNamespace(acquire_secret=acquire),route)
+                self._tunnels.add(tunnel)
                 values.update(port=tunnel.start(),hostaddr='127.0.0.1')
             yield values
         finally:
             values.clear()
-            if tunnel is not None:tunnel.close()
+            if tunnel is not None:
+                tunnel.close()
+                self._tunnels.discard(tunnel)
 
     def close(self):
+        self.closed=True
+        errors=[]
+        for tunnel in tuple(self._tunnels):
+            try:tunnel.close();self._tunnels.discard(tunnel)
+            except Exception as error:errors.append(type(error).__name__)
         for lease in self._secrets.values():lease.close()
         self._parameters.clear()
-        self.closed=True
+        if errors:raise ContinuityError('Native continuity SSH release remains unconfirmed')
 
 
 def replication_identity(parameters):

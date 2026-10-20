@@ -3114,7 +3114,7 @@ class ServerNode(PGChildNodeView):
                 elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel'}:
                     try:payload=service.postgresql_temporary_slots(server,action.removeprefix('postgresql_temporary_slots_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
-                elif action in {'postgresql_continuity_review', 'postgresql_continuity_start',
+                elif action in {'postgresql_continuity_release_transport','postgresql_continuity_transport','postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
                                 'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',
                                 'postgresql_continuity_slot_databases','postgresql_continuity_change_preview',

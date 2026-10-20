@@ -11,6 +11,47 @@ beforeEach(() => {originalHeight=window.innerHeight;window.innerHeight=1200;});
 afterEach(() => {window.innerHeight=originalHeight;});
 
 describe('PostgreSQL native continuity jobs',() => {
+  it('releases an uncertain owned SSH transport without repeating its acknowledged native backup',async () => {
+    const record={...reviewed,state:'failed',native_backup_acknowledged:true,transport_release:{state:'unconfirmed'}};
+    const post=jest.fn().mockResolvedValue({jobs:[record],total:1,unavailable_job_ids:[]});
+    render(<Component post={post} />);
+    fireEvent.click(screen.getByRole('button',{name:'Load backup jobs'}));
+    const inspect=await screen.findByRole('button',{name:'Inspect backup native-job'});
+    post.mockResolvedValue(record);
+    fireEvent.click(inspect);
+    fireEvent.click(await screen.findByRole('button',{name:'Retry owned transport release'}));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_release_transport',request:{job_id:record.job_id}}));
+    expect(post.mock.calls.every(([value]) => value.action!=='postgresql_continuity_start')).toBe(true);
+  });
+
+  it.each(['password','private_key'])('uses the inspected registered SSH peer with %s authentication',async authentication => {
+    const metadata={ssh:{authentication,host:'ssh.native',port:22,username:'registered-user',remote_host:'db.native',remote_port:5432},
+      ssh_peer:{openssh_key:'ssh-rsa public-native-key',fingerprint:'SHA256:observed'}};
+    const nativeReview={...reviewed,source:{admission_interface:'physical-replication'}};
+    const post=jest.fn().mockImplementation(value => Promise.resolve(value.action==='postgresql_continuity_transport' ? metadata :
+      value.action==='postgresql_continuity_start' ? {...nativeReview,state:'cancelled'} : nativeReview));
+    render(<Component post={post} />);
+    fireEvent.click(screen.getByRole('checkbox',{name:'Use replication-only backup and WAL admission'}));
+    fireEvent.change(screen.getByLabelText('Replication principal password'),{target:{value:'db-credential'}});
+    fireEvent.click(screen.getByRole('button',{name:'Inspect registered SSH transport'}));
+    await screen.findByLabelText('Expected SSH public host key');
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_transport',request:{probe_ssh:true}});
+    const label=authentication==='private_key' ? 'SSH private-key passphrase' : 'SSH password';
+    fireEvent.change(screen.getByLabelText(label),{target:{value:'ssh-credential'}});
+    fireEvent.click(screen.getByRole('button',{name:'Review native operation'}));
+    await screen.findByLabelText('Native backup review');
+    const access={password:'db-credential',ssh_host_key:'ssh-rsa public-native-key',
+      [authentication==='private_key' ? 'ssh_private_key_password' : 'ssh_password']:'ssh-credential'};
+    expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'postgresql_continuity_review',request:expect.objectContaining({replication_access:access})}));
+    fireEvent.click(screen.getByRole('button',{name:'Confirm and start reviewed operation'}));
+    await screen.findByRole('button',{name:'Refresh receipt'});
+    expect(screen.getByLabelText(label)).toHaveValue('');
+    expect(screen.getByLabelText('Replication principal password')).toHaveValue('');
+    expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_start',request:{job_id:'native-job',review_digest:'native-digest',confirmed:true,replication_access:access}});
+    fireEvent.click(screen.getByRole('button',{name:'Refresh receipt'}));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'postgresql_continuity_status',request:{job_id:'native-job'}}));
+  });
+
   it.each(['full_backup','incremental_backup'])('reviews %s with explicit replication credentials and native options',async operation => {
     const post=jest.fn().mockResolvedValue({jobs:[{...reviewed,state:'verified'}],total:1,unavailable_job_ids:[]});
     render(<Component post={post} />);
