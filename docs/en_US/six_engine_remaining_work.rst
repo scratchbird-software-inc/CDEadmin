@@ -264,6 +264,10 @@ write-time checks distinguish empty and populated table capabilities; refusal
 rolls back earlier stages and is retained without replay. This closes that
 specific declaration-generation gap. It does not close original-session DDN
 application, broader module transformations or the independent SQLite inventory.
+Structured column-property controls now generate those DDN additions without
+requiring hand-written CREATE/ALTER commands. Installed custom module/function/
+collation preview adapters remain part of SQ-MODULES; unsupported reproduction
+is explicit and does not suppress the native capability from the denominator.
 
 Firebird network and embedded
 -----------------------------

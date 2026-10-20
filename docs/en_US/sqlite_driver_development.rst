@@ -168,3 +168,22 @@ the entire batch, including earlier added columns, and records the native error.
 Duplicate requests return the durable result without replay. Native column and
 constraint facts are checked before commit and after independent rediscovery.
 This workflow retains the independent main-file scope boundary described above.
+
+The catalog dialog's ``Native column additions`` controls generate the desired
+DDN from structured properties. Several columns can be designed together without
+writing a CREATE/ALTER command or constructing native_json. Fields preserve a
+blank declared type, nullability, default and generated expressions/storage,
+collation, CHECK expressions, named constraints and REFERENCES targets/actions,
+MATCH and deferrable/initial timing. Selecting no referenced column uses the
+native referenced primary key. Generation observes the registered baseline and
+materializes schema definitions only on an owned empty prototype; it never
+copies user rows or applies SQL to the registered file. The generated design
+uses the existing separate preview/review/confirmation and durable receipts.
+Changing targets discards late generator replies. Stale, retained-session and
+cross-target/URL-bound designs are refused by the backend.
+
+Installed functions/collations and custom virtual modules still need matching
+owned preview adapters. The generator can reproduce core FTS3/4/5 and RTree
+declarations; it refuses an unknown module rather than invoking its arbitrary
+creation callback during schema-only generation. This is an explicit preview
+implementation boundary, not a declaration that the native module is absent.

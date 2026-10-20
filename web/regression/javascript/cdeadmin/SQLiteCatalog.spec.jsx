@@ -11,6 +11,49 @@ const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 
+it('generates an untyped and computed column design from properties before native review', async () => {
+  const generated={...snapshot,files:{'catalog.ddn':'native typed additions'}};
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[{resource_id:'owned-id',kind:'table',name:'owned',path:['main','owned']}],provenance:{objects:1,coverage:'partial'}})
+    .mockResolvedValueOnce({snapshot:generated})
+    .mockResolvedValueOnce({operations:[],blockers:[],conflicts:[],application_supported:false});
+  render(<Component post={post} databaseTargetId="file-1" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  fireEvent.click(screen.getByText('Native column additions'));
+  fireEvent.change(screen.getByRole('textbox',{name:'Column 1 name'}),{target:{value:'untyped:雪'}});
+  fireEvent.click(screen.getByRole('button',{name:'Add another native column'}));
+  fireEvent.change(screen.getByRole('textbox',{name:'Column 2 name'}),{target:{value:'computed'}});
+  fireEvent.change(screen.getByRole('textbox',{name:'Column 2 generated expression'}),{target:{value:'id * 2'}});
+  fireEvent.click(screen.getByRole('button',{name:'Generate column design'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_column_design',request:{database_target_id:'file-1',
+    baseline:JSON.stringify(snapshot),resource_id:'owned-id',columns:[
+      {name:'untyped:雪',data_type:'',nullable:true,constraint_names:{}},
+      {name:'computed',data_type:'',nullable:true,generated:{expression:'id * 2',storage:'virtual'},constraint_names:{}}]}});
+  fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
+  await screen.findByText(/Native preview only/);
+  expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_plan',request:{database_target_id:'file-1',
+    baseline:JSON.stringify(snapshot),desired:JSON.stringify(generated,null,2),deletions:[],rebuilds:[],column_renames:[]}});
+});
+
+it('discards a late generated column design after changing database scope', async () => {
+  let finish;
+  const pending=new Promise(resolve=>{finish=resolve;});
+  const post=jest.fn().mockResolvedValueOnce({snapshot,views:[{id:'inventory_1',label:'Inventory',entry:'catalog.ddn'}],
+    objects:[{resource_id:'owned-id',kind:'table',name:'owned',path:['main','owned']}],provenance:{objects:1,coverage:'partial'}})
+    .mockReturnValueOnce(pending);
+  const view=render(<Component post={post} databaseTargetId="first-file" />);
+  fireEvent.click(screen.getByRole('button',{name:'Capture metadata'}));await screen.findByText('SQLite DDN viewer');
+  fireEvent.click(screen.getByText('Native column additions'));
+  fireEvent.change(screen.getByRole('textbox',{name:'Column 1 name'}),{target:{value:'private'}});
+  fireEvent.click(screen.getByRole('button',{name:'Generate column design'}));
+  view.rerender(<Component post={post} databaseTargetId="second-file" />);
+  finish({snapshot});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeDisabled());
+  expect(screen.queryByText('Native column additions')).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(2);
+});
+
 it('shows exact appended-column stages and the native atomic refusal receipt', async () => {
   const stages=['ALTER TABLE "main"."owned" ADD COLUMN untyped',
     'ALTER TABLE "main"."owned" ADD COLUMN computed AS (id * 2) STORED'];

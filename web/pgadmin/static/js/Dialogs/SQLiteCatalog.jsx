@@ -6,6 +6,7 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import NativeDataImport from './NativeDataImport';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
+import SQLiteColumnDesign from './SQLiteColumnDesign';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
@@ -131,6 +132,18 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'Native FTS settings design failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
+  const generateColumns=async (resource,columns)=>{
+    const token=++serial.current;setBusy(true);setError('');
+    try {
+      const value=await post({action:'sqlite_schema_column_design',request:{database_target_id:databaseTargetId,
+        baseline:baselineSource,resource_id:resource,columns}});
+      if(token===serial.current) {
+        setSource(JSON.stringify(value.snapshot,null,2));setNativeRenames([]);setFtsRebindings([]);
+        setDeletions([]);setRebuilds([]);setColumnRenames([]);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);
+      }
+    } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'Native column design failed');}
+    finally {if(token===serial.current)setBusy(false);}
+  };
   const readReceipt = async () => {
     const token = ++serial.current; setBusy(true); setError('');
     try {
@@ -196,6 +209,9 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       <Button disabled={busy || !result.objects?.some(item => item.resource_id === relation && item.kind === 'table')}
         onClick={exportDataScript}>Export table as native SQL</Button>
     </Box>}
+    {result && <SQLiteColumnDesign key={databaseTargetId} objects={result.objects || []}
+      tables={(result.objects || []).filter(item=>item.kind==='table' && item.path?.[0]==='main')}
+      disabled={busy || includeSystem || !baselineSource} onGenerate={generateColumns} />}
     {result && <Box component="details" sx={{my: 1}}>
       <summary>Native FTS configuration</summary>
       <Alert severity="info">Generate native settings without changing this file. Preview, review and confirm the resulting DDN change before applying. Existing settings remain unless explicitly reset to another native value. Index content is preserved.</Alert>

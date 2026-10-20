@@ -37,6 +37,10 @@ def qualify(output):
         'web/pgadmin/cdeadmin/workspace/sqlite_schema_plan.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_replace.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_columns.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_column_design.py',
+        'web/pgadmin/cdeadmin/workspace/sqlite_catalog_service.py',
+        'web/pgadmin/cdeadmin/workspace/service.py',
+        'web/pgadmin/browser/server_groups/servers/__init__.py',
         'web/pgadmin/cdeadmin/workspace/sqlite_schema_apply.py']
     proof={'complete':False,'full_product_complete':False,'history_testing':'not run','sqlite_version':sqlite3.sqlite_version,
         'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}}
@@ -155,6 +159,47 @@ def qualify(output):
             new_column_indexes_triggers_and_view_projections=True,stored_generated_column_on_empty_table=True,
             stored_generated_column_native_nonempty_refusal=True,prior_column_stage_rolled_back=True,
             column_receipts_never_replay=True)
+        with sqlite3.connect(path) as fixture:fixture.execute('CREATE TABLE column_parent(id INTEGER PRIMARY KEY)')
+        captured=post('sqlite_catalog_export',request={'database_target_id':target,'include_system':False})
+        from pgadmin.cdeadmin.providers.sqlite.provider import _resource_id
+        specs=[{'name':'property untyped:雪'},
+            {'name':'property generated','data_type':'INTEGER','generated':{'expression':'id * 3','storage':'virtual'},
+                'constraint_names':{'generated':'calculated value'}},
+            {'name':'property default','data_type':'TEXT','default':"'native, ON owned'",'nullable':False,
+                'check':'length("property default") > 2','collation':'NOCASE',
+                'constraint_names':{'not_null':'must exist','default':'native default','check':'length guard','collation':'case rule'}},
+            {'name':'property reference','data_type':'INTEGER','references':{'table':'column_parent','column':'id',
+                'on_update':'CASCADE','on_delete':'SET NULL','match':'simple','deferrable':True,'initially':'DEFERRED'},
+                'constraint_names':{'references':'native link'}}]
+        design_request={'baseline':json.dumps(captured['snapshot']),'resource_id':_resource_id('table',['main'],'owned'),'columns':specs}
+        with sqlite3.connect(path) as observer:before_sql=observer.execute("SELECT sql FROM sqlite_schema WHERE name='owned'").fetchone()[0]
+        generated=schema('column_design',design_request)
+        with sqlite3.connect(path) as observer:
+            assert observer.execute("SELECT sql FROM sqlite_schema WHERE name='owned'").fetchone()[0]==before_sql
+            assert observer.execute('SELECT id FROM owned ORDER BY id').fetchall()==[(73,),(81,)]
+        schema('column_design',{**design_request,'database_target_id':other},True)
+        response=client.post(url+'?database_target_id='+target,json={'action':'sqlite_schema_column_design',
+            'request':{**design_request,'database_target_id':other}})
+        assert response.status_code==400
+        options={'baseline':design_request['baseline'],'desired':json.dumps(generated['snapshot'])}
+        preview=schema('plan',options);assert preview['ready_for_review'],preview
+        reviewed=schema('review',{**options,'execution_sha256':preview['execution_sha256']})
+        request={'review_id':reviewed['review_id'],'review_digest':reviewed['review_digest'],'confirmed':True}
+        result=schema('apply',request);assert result['state']=='committed' and result['outcome']['rediscovery_verified'],result
+        assert schema('apply',request)['state']=='committed'
+        schema('column_design',design_request,True)
+        with sqlite3.connect(path) as observer:
+            assert observer.execute('SELECT "property generated","property default","property untyped:雪" FROM owned WHERE id=73').fetchone()==(219,'native, ON owned',None)
+            observer.execute('PRAGMA foreign_keys=ON');observer.execute('BEGIN')
+            observer.execute('UPDATE owned SET "property reference"=9 WHERE id=73')
+            observer.execute('INSERT INTO column_parent VALUES(9)');observer.commit()
+            observer.execute('UPDATE column_parent SET id=10')
+            assert observer.execute('SELECT "property reference" FROM owned WHERE id=73').fetchone()==(10,)
+            observer.execute('DELETE FROM column_parent')
+            assert observer.execute('SELECT "property reference" FROM owned WHERE id=73').fetchone()==(None,)
+        proof.update(structured_column_properties_generate_DDN=True,generation_does_not_mutate_registered_file=True,
+            structured_constraint_names_and_native_properties=True,native_deferred_reference_and_actions=True,
+            column_generation_target_and_URL_scope_refused=True,stale_column_generation_refused=True)
         session=post('open_session',language_profile='sqlite-sql')['session_id']
         def execute(source):
             started=post('execute',session_id=session,source=source,parameters={},history_sensitive=True)
@@ -174,6 +219,8 @@ def qualify(output):
             endpoint_id=baseline['provenance']['endpoint_id'],target_id=target,generation='owned-retained-rebinding-refusal',
             include_system=False,refreshed=True,engine='sqlite')
         schema('plan',{'baseline':json.dumps(rebound['snapshot']),'desired':json.dumps(rebound['snapshot'])},True)
+        schema('column_design',{'baseline':json.dumps(rebound['snapshot']),
+            'resource_id':_resource_id('table',['main'],'owned'),'columns':[{'name':'never'}]},True)
         assert execute('SELECT count(*) FROM owned WHERE id=99')==[[1]]
         with sqlite3.connect(path) as independent:assert independent.execute('SELECT count(*) FROM owned WHERE id=99').fetchone()==(0,)
         post('transaction_action',session_id=session,transaction_action='rollback')

@@ -1839,6 +1839,11 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_schema_column_design(self,server,request):
+        from .sqlite_catalog_service import column_design
+        try:return column_design(self,server,request)
+        except (ValueError,TypeError,KeyError) as error:raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_schema_rename_design(self, server, request):
         from .sqlite_catalog_service import schema_plan
         try:

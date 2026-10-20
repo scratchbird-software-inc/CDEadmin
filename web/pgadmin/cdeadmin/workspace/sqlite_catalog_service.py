@@ -77,6 +77,26 @@ def fts_configuration_design(service, server, request):
     return {'snapshot': result['snapshot'], 'scope': 'native settings normalized in a private empty FTS module; registered file unchanged'}
 
 
+def column_design(service,server,request):
+    import sqlite3
+    from .sqlite_column_design import generate
+    if not isinstance(request,dict) or set(request)!={'database_target_id','baseline','resource_id','columns'}:
+        raise ValueError('SQLite column design requires its exact baseline, table and structured definitions')
+    baseline=read_catalog(request['baseline'],engine='sqlite')
+    checked=schema_plan(service,server,{'database_target_id':request['database_target_id'],
+        'baseline':request['baseline'],'desired':request['baseline']})
+    if checked['conflicts']:raise ValueError('Native SQLite schema changed; capture a new baseline')
+    try:desired=generate(baseline,request['resource_id'],request['columns'])
+    except sqlite3.Error as error:raise ValueError('Native SQLite column design refused: '+str(error)[:400]) from None
+    resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
+        'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
+    result=build_export(resources,endpoint_id=baseline['provenance']['endpoint_id'],target_id=request['database_target_id'],
+        generation='native-structured-column-design',include_system=False,refreshed=True,engine='sqlite')
+    return {'snapshot':result['snapshot'],'columns':request['columns'],
+        'scope':'Native schema-only generation on an owned empty prototype; registered file unchanged',
+        'warnings':['Native existing-row checks run during reviewed atomic apply.']}
+
+
 def data(service, server, request):
     if not isinstance(request, dict) or set(request) != {
             'database_target_id', 'resource_id', 'mode', 'row_limit'}:
