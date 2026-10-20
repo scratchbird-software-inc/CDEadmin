@@ -43,6 +43,58 @@ def test_local_source_is_bound_to_root_and_file_bytes(tmp_path):
     with pytest.raises(Exception):module.file_identity(route,str(tmp_path.parent/'outside'))
 
 
+def test_native_http_secret_uses_exact_download_scope_and_requires_loading_and_authority():
+    import duckdb
+    from pgadmin.cdeadmin.sdk import RelationalClientError
+    handle=duckdb.connect()
+    try:
+        handle.execute('CREATE SECRET broad (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?)', ['private broad token','https://example.test/'])
+        handle.execute('CREATE SECRET "specific . é" (TYPE HTTP,BEARER_TOKEN ?,SCOPE ?)', ['private specific token','https://example.test/signed/'])
+        compiled=module.compile_operation({}, {'action':'install','extension_name':'httpfs','source_kind':'URL',
+            'source':'https://example.test/signed/httpfs.duckdb_extension','expected_http_secret':'specific . é'})
+        with pytest.raises(ValueError,match='Load native httpfs'):
+            module.source_access(handle,compiled,[],{},None)
+        public=module.source_access(handle,{**compiled,'draft':{key:value for key,value in compiled['draft'].items()
+            if key!='expected_http_secret'}},[],{},None)
+        assert public['selected_http_identity']['name']=='specific . é'
+        assert public['http_secret_transport_available'] is False
+        assert public['native_authentication_success_inferred'] is False
+        loaded=[{'extension_name':'httpfs','loaded':True}]
+        with pytest.raises(RelationalClientError,match='secret-read'):
+            module.source_access(handle,compiled,loaded,{},None)
+        calls=[]
+        def denied():
+            calls.append(True)
+            raise PermissionError('owned denied secret-read boundary')
+        with pytest.raises(PermissionError,match='denied secret-read'):
+            module.source_access(handle,compiled,loaded,{},denied)
+        assert calls==[True]
+        handle.execute('DROP SECRET "specific . é"')
+        with pytest.raises(ValueError,match='differs from the expected'):
+            module.source_access(handle,compiled,loaded,{},denied)
+        assert calls==[True]
+    finally:handle.close()
+
+
+def test_repository_source_access_resolves_native_platform_version_and_alias_without_network(fixture):
+    client,handle,route=fixture
+    compiled=module.compile_operation(route,{'action':'install','extension_name':'httpfs',
+        'repository_kind':'ALIAS','repository':'core','version':'13e18b3'})
+    observed=module.source_access(handle,compiled,module.inventory(handle),module.environment(handle),None)
+    assert observed['lookup_url']=='http://extensions.duckdb.org/httpfs/13e18b3/v1.5.2/'+handle.execute('PRAGMA platform').fetchone()[0]+'/httpfs.duckdb_extension.gz'
+    assert observed['selected_http_identity'] is None
+    assert observed['native_authentication_success_inferred'] is False
+    assert observed['credential_values_observed'] is False
+
+
+@pytest.mark.parametrize('expected',[False,[],{},'',42])
+def test_invalid_expected_http_secret_never_reaches_native_lookup(expected):
+    compiled=module.compile_operation({}, {'action':'install','extension_name':'httpfs','source_kind':'URL',
+        'source':'https://example.test/httpfs.duckdb_extension','expected_http_secret':expected})
+    with pytest.raises(ValueError,match='expected native HTTP secret'):
+        module.source_access(None,compiled,[],{},None)
+
+
 @pytest.fixture(params=['file','memory'])
 def fixture(tmp_path,request):
     route={'database':':memory:' if request.param=='memory' else str(tmp_path/'owned.duckdb'),

@@ -10,12 +10,16 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
   const [sourceKind, setSourceKind] = useState('NAME'), [source, setSource] = useState('');
   const [repositoryKind, setRepositoryKind] = useState('DEFAULT'), [repository, setRepository] = useState('');
   const [version, setVersion] = useState(''), [force, setForce] = useState(false);
+  const [expectedSecret, setExpectedSecret] = useState('');
   const [result, setResult] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState(''), [confirmed, setConfirmed] = useState(false);
   const [awaitingReceipt, setAwaitingReceipt] = useState(false);
   const serial = useRef(0), previousSession = useRef(sessionId);
   const blocked = disabled || result?.session_reuse_blocked === true || result?.state === 'unknown_outcome';
+  const remoteSource = action === 'install' && sourceKind !== 'FILE' &&
+    (sourceKind === 'URL' || repositoryKind !== 'DIRECTORY');
   useEffect(() => {serial.current++; setExtensionName(''); setSource(''); setResult(null); setError('');
+    setExpectedSecret('');
     setConfirmed(false); setConfirmation(''); setBusy(false); setAwaitingReceipt(false);
     return () => {serial.current++;};}, [databaseTargetId, post]);
   useEffect(() => {
@@ -35,6 +39,7 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
       const request = operation === 'review' ? {operation, draft: {action, extension_name: extensionName,
         source_kind: sourceKind, ...(sourceKind !== 'NAME' ? {source} : {}),
         ...(action === 'install' ? {force} : {}),
+        ...(remoteSource && expectedSecret ? {expected_http_secret: expectedSecret} : {}),
         ...(action === 'install' && sourceKind === 'NAME' ? {repository_kind: repositoryKind,
           ...(repositoryKind !== 'DEFAULT' ? {repository} : {}), ...(version ? {version} : {})} : {})}} :
         operation === 'inventory' ? {operation} : {operation, review_id: result.review_id,
@@ -64,27 +69,32 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
         onChange={change(setExtensionName)} />
       <TextField select size="small" label="Extension source" value={sourceKind} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setSourceKind)}><MenuItem value="NAME">Native name</MenuItem><MenuItem value="FILE">Authorized local file</MenuItem>
-        {action === 'install' && <MenuItem value="URL">Public HTTP(S) extension URL</MenuItem>}</TextField>
+        {action === 'install' && <MenuItem value="URL">HTTP(S) extension URL</MenuItem>}</TextField>
       {sourceKind === 'FILE' && <TextField size="small" label="Absolute native extension file" value={source} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setSource)} sx={{minWidth: 350}} />}
-      {sourceKind === 'URL' && <TextField size="small" label="Public native extension URL" value={source} disabled={busy || blocked || awaitingReceipt}
+      {sourceKind === 'URL' && <TextField size="small" label="Native extension URL" value={source} disabled={busy || blocked || awaitingReceipt}
         onChange={change(setSource)} sx={{minWidth: 350}} />}
       {action === 'install' && <FormControlLabel label="FORCE replacement of extension file" control={<Checkbox checked={force} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setForce(event.target.checked); clear();}} />} />}
       {action === 'install' && sourceKind === 'NAME' && <>
         <TextField select size="small" label="Repository kind" value={repositoryKind} disabled={busy || blocked || awaitingReceipt} onChange={change(setRepositoryKind)}>
           <MenuItem value="DEFAULT">Native default</MenuItem><MenuItem value="ALIAS">Native alias</MenuItem>
-          <MenuItem value="URL">Public HTTP(S) URL</MenuItem><MenuItem value="DIRECTORY">Authorized directory</MenuItem>
+          <MenuItem value="URL">HTTP(S) URL</MenuItem><MenuItem value="DIRECTORY">Authorized directory</MenuItem>
         </TextField>
         {repositoryKind !== 'DEFAULT' && <TextField size="small" label="Native extension repository" value={repository} disabled={busy || blocked || awaitingReceipt} onChange={change(setRepository)} />}
         <TextField size="small" label="Exact extension version (optional)" value={version} disabled={busy || blocked || awaitingReceipt} onChange={change(setVersion)} />
       </>}
+      {remoteSource && <TextField size="small" label="Expected native HTTP secret (optional)" value={expectedSecret}
+        disabled={busy || blocked || awaitingReceipt} onChange={change(setExpectedSecret)}
+        helperText="Use an existing native HTTP secret. Its exact name is checked for the download URL; credentials stay in DuckDB." />}
       <Button disabled={busy || blocked || awaitingReceipt || !extensionName || (sourceKind !== 'NAME' && !source)} onClick={() => run('review')}>Review native extension</Button>
     </Box>
     {result?.extensions && <Box component="pre" aria-label="Native DuckDB extensions" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(result.extensions, null, 2)}</Box>}
     {result?.source && <><Alert severity="info">Native extension review: {result.state}. Session scope: {result.session_scope_id}. Repeated submissions read the same receipt.</Alert>
       <Box component="textarea" aria-label="Generated DuckDB extension SQL" value={result.source} readOnly
         sx={{width: '100%', boxSizing: 'border-box', minHeight: 90, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem'}} />
+      {result.source_access && <Box component="pre" aria-label="DuckDB extension source access" sx={{whiteSpace: 'pre-wrap'}}>
+        {JSON.stringify(result.source_access, null, 2)}</Box>}
       {(result.warnings || []).map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
       {result.state === 'reviewed' && <>
         <TextField size="small" label="Exact reviewed extension name" value={confirmation} disabled={busy || blocked || awaitingReceipt} onChange={event => setConfirmation(event.target.value)} />

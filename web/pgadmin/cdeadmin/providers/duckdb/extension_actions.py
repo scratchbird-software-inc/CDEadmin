@@ -41,8 +41,60 @@ def text(value,label):
 def public_url(value):
     value=text(value,'repository URL');parsed=urlsplit(value)
     if any(ord(char)<32 or ord(char)==127 for char in value) or parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
-        raise ValueError('Use a public HTTP(S) repository without inline credentials, query or fragment')
+        raise ValueError('Use an HTTP(S) location without inline credentials, query or fragment; authentication uses native HTTP secrets')
     return value
+
+
+def source_access(handle, compiled, before, observed_environment, authorize_secret):
+    """Observe native credential selection without reading a secret value."""
+    draft = compiled['draft']
+    expected = draft.get('expected_http_secret')
+    if expected is not None:
+        text(expected, 'expected native HTTP secret name')
+    if draft['action'] != 'install' or draft.get('source_kind') == 'FILE' or draft.get('repository_kind') == 'DIRECTORY':
+        if expected is not None:raise ValueError('A native HTTP secret requires a remote installation source')
+        return {'remote': False}
+    loaded = any(row['extension_name'] == 'httpfs' and row['loaded'] for row in before)
+    kind = draft.get('source_kind', 'NAME')
+    if kind == 'URL':
+        url = public_url(draft['source'])
+    else:
+        repositories = {'core': 'http://extensions.duckdb.org',
+            'core_nightly': 'http://nightly-extensions.duckdb.org',
+            'community': 'http://community-extensions.duckdb.org'}
+        repository_kind = draft.get('repository_kind', 'DEFAULT')
+        if repository_kind == 'URL':base = public_url(draft['repository'])
+        elif repository_kind == 'ALIAS':base = repositories.get(draft['repository'])
+        else:base = observed_environment['settings']['custom_extension_repository'] or repositories['core']
+        if not base or not base.startswith(('http://', 'https://')):
+            if expected is not None:raise ValueError('Select an explicit HTTP(S) repository for native HTTP authentication')
+            return {'remote': False, 'repository_binding': 'native local or unresolved repository'}
+        public_url(base)
+        platform = handle.execute('PRAGMA platform').fetchone()[0]
+        version = draft.get('version', '')
+        name = compiled['extension_name']
+        suffix = '/' + name + '/' + version if version else ''
+        url = base + suffix + '/v1.5.2/' + platform + '/' + name + '.duckdb_extension.gz'
+        if base.startswith('http://') and loaded:url = 'https://' + url[len('http://'):]
+    public_url(url)
+    matches = handle.execute("SELECT name,persistent,storage FROM which_secret(?,'http')", [url]).fetchall()
+    if len(matches) > 1:raise ValueError('Native HTTP secret selection is ambiguous')
+    selected = dict(zip(('name', 'persistence', 'storage'), matches[0])) if matches else None
+    if expected is not None and (selected is None or selected['name'] != expected):
+        raise ValueError('The native HTTP secret selected for this exact download URL differs from the expected name')
+    if selected is not None and expected is not None and not loaded:
+        raise ValueError('Load native httpfs on this session before using an HTTP secret')
+    if selected is not None and loaded:
+        if authorize_secret is None:raise RelationalClientError('Native HTTP authentication requires secret-read authority')
+        authorize_secret()
+    settings = dict(handle.execute("SELECT name,value FROM duckdb_settings() WHERE name IN "
+        "('ca_cert_file','httpfs_client_implementation','enable_curl_server_cert_verification',"
+        "'enable_server_cert_verification','http_timeout','http_retries') ORDER BY name").fetchall()) if loaded else {}
+    return {'remote': True, 'lookup_url': url, 'httpfs_loaded': loaded,
+        'http_secret_transport_available': loaded,
+        'selected_http_identity': selected, 'native_transport_settings': settings,
+        'credential_values_observed': False, 'credential_value_changes_fenced': False,
+        'native_authentication_success_inferred': False}
 
 
 def file_identity(route,value,directory=False):
@@ -76,7 +128,7 @@ def file_identity(route,value,directory=False):
 
 
 def compile_operation(route,draft):
-    allowed={'action','extension_name','source_kind','source','force','repository_kind','repository','version'}
+    allowed={'action','extension_name','source_kind','source','force','repository_kind','repository','version','expected_http_secret'}
     if not isinstance(draft,dict) or set(draft)-allowed or draft.get('action') not in {'install','load'}:
         raise ValueError('Select a typed native extension INSTALL or LOAD operation')
     name=draft.get('extension_name')
@@ -114,7 +166,7 @@ def compile_operation(route,draft):
     return {'source':statement,'draft':deepcopy(draft),'file_identity':identity,'extension_name':name}
 
 
-def action(client,handle,route,request):
+def action(client,handle,route,request, *, authorize_secret=None):
     if not isinstance(request,dict):raise ValueError('Select a native extension workflow')
     operation=request.get('operation')
     allowed={'operation','draft'} if operation=='review' else {'operation','review_id','review_digest','confirmation','confirmed'} if operation=='apply' else {'operation','review_id'} if operation=='receipt' else {'operation'}
@@ -145,6 +197,7 @@ def action(client,handle,route,request):
                 # This path is observed from the native installed-extension
                 # catalog. Caller-selected files still require the route root.
                 compiled['installed_file_identity']=file_identity({**route,'filesystem_root':os.path.dirname(path)},path)
+        compiled['source_access'] = source_access(handle, compiled, before, observed_environment, authorize_secret)
         return compiled
     if operation=='inventory':return {'extensions':before,'context':observed_environment,'session_scope_id':scope,'caller_transaction_decision_requested':False}
     if operation=='review':
@@ -157,10 +210,13 @@ def action(client,handle,route,request):
             'compiled':compiled,'source':compiled['source'],'extension_name':compiled['extension_name'],
             'baseline':before,'environment':observed_environment,'action':compiled['draft']['action'],
             'file_identity':compiled['file_identity'],'automatic_retry':False,'caller_transaction_decision_requested':False,
+            'source_access':compiled['source_access'],
             'warnings':['INSTALL writes extension files outside database rollback. LOAD runs native code in the original database instance.',
                 'FORCE replaces installation files; already loaded code remains loaded until a new native database instance opens.',
                 'The native engine can upgrade an HTTP repository URL to HTTPS when httpfs is loaded.',
-                'Native signature, repository and external-access policies remain enforced. External repository/file changes are not fenced.']}
+                'Native signature, repository and external-access policies remain enforced. External repository/file changes are not fenced.',
+                'Remote authentication uses the original native HTTP secret selected for the exact download URL. Values are never read or copied into SQL or receipts; changes to those values are not fenced.',
+                'The selected secret and native transport settings are reobserved before dispatch. A selected secret does not establish successful authentication.']}
         record['review_digest']=hashlib.sha256(json.dumps(record,sort_keys=True).encode()).hexdigest();reviews[record['review_id']]=record
         return public(record)
     if record['deadline']<now or request.get('confirmed') is not True or request.get('confirmation')!=record['extension_name']:
@@ -168,7 +224,7 @@ def action(client,handle,route,request):
     try:rebuilt=reviewed_compilation(record['compiled']['draft'])
     except (OSError,ValueError,RelationalClientError):rebuilt=None
     if rebuilt!=record['compiled'] or before!=record['baseline'] or observed_environment!=record['environment']:
-        record.update(state='refused',native_dispatched=False,native_acknowledged=False,reason='Native extension files, inventory or admission settings changed since review')
+        record.update(state='refused',native_dispatched=False,native_acknowledged=False,reason='Native extension files, inventory, HTTP secret selection or admission settings changed since review')
         return public(record)
     record.update(state='unknown_outcome',native_dispatched=True,native_acknowledged=False,native_file_or_code_effects_possible=True)
     try:client.publish_receipt(handle,'extensions',public(record))
@@ -191,7 +247,13 @@ def action(client,handle,route,request):
         except Exception as observed_error:record['observation_error_type']=type(observed_error).__name__
         try:client._observe(handle,blocked=uncertain(error))
         except Exception:client._observe(handle,blocked=True)
+        remote = record.get('source_access', {}).get('remote')
+        # Remote errors can quote opaque native credentials or response bodies.
+        # The application has deliberately never read those credential values.
+        message = 'Native remote extension operation failed; inspect the native error type and observed source access.' if remote else redact_text(str(error))[:8192]
         record.update(state='acknowledged' if record['native_acknowledged'] else 'unknown_outcome' if uncertain(error) else 'refused',
-            error_type=type(error).__name__,native_message=redact_text(str(error))[:8192],rediscovery_verified=False)
+            error_type=type(error).__name__,native_message=message,rediscovery_verified=False)
+        status = getattr(error, 'status_code', None)
+        if remote and type(status) is int and 100 <= status <= 599:record['native_http_status'] = status
     record['session_reuse_blocked']=bool(client._states[id(handle)].get('session_reuse_blocked'))
     return public(record)

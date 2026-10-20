@@ -7913,6 +7913,7 @@ export default function ProviderWorkspaceContent({
           'duckdb-test-data': gettext('DuckDB Test Data'),
           'duckdb-copy': gettext('DuckDB Native COPY'),
           'duckdb-attachment': gettext('DuckDB Attachment'),
+          'duckdb-extensions': gettext('DuckDB Extension Sources'),
           'firebird-isql': gettext('External Firebird ISQL'),
           object: gettext('Object Browser'),
           resources: gettext('Resource Explorer'),
@@ -8330,6 +8331,14 @@ export default function ProviderWorkspaceContent({
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
             onBlocked={() => setQuerySessionBlocked(true)} />
           <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></Box>}
+      {workspace && tab === 'duckdb-extensions' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
+        <Box sx={{overflow: 'auto', flex: 1, minHeight: 0, minWidth: 0}}>
+          <DuckDBExtensions key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} />
+        </Box>}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
         (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
           <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}
@@ -8438,7 +8447,7 @@ ProviderWorkspaceContent.propTypes = {
     'object',
     'properties', 'resources', 'studio', 'data', 'administration', 'operations',
     'semantic', 'movement', 'streams', 'connections', 'export',
-    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment',
+    'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment', 'duckdb-extensions',
     'firebird-recovery',
   ]),
   initialContext: PropTypes.object,

@@ -1321,6 +1321,9 @@ def database_target_context_actions(
         actions.append(_action('database.duckdb.receipts','Saved DuckDB operation receipts...',
             'open_workspace',icon='action.view',group='database',priority=48,
             arguments={**base,'tab':'duckdb-session-receipts'}))
+        actions.append(_action('database.duckdb.extension_sources','Install or load DuckDB extensions...',
+            'open_workspace',icon='action.settings',group='database',priority=49,
+            arguments={**base,'tab':'duckdb-extensions'}))
     if engine_id == 'sqlite':
         for tab, label in (('monitoring', 'SQLite database dashboard...'),
                            ('monitoring_policy', 'Configure SQLite monitoring collection...')):

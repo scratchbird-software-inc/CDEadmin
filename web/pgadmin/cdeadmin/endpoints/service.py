@@ -134,7 +134,7 @@ EMBEDDED_VERIFY_PERMISSIONS = frozenset({
     'embedded_runtime', 'filesystem',
 })
 EMBEDDED_WORKSPACE_PERMISSIONS = frozenset({
-    'embedded_runtime', 'filesystem', 'data_read', 'data_write',
+    'embedded_runtime', 'filesystem', 'secret_read', 'data_read', 'data_write',
     'administer', 'execute', 'topology_admin', 'security_admin',
     'backup_admin', 'restore_admin', 'replication_admin',
     'maintenance_admin', 'upgrade_admin',

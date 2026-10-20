@@ -166,10 +166,9 @@ DuckDB
 Native object-comment editing is implemented for the pinned engine's supported
 families; see :doc:`duckdb_driver_development`. Full native extension facts and
 reviewed individual/all extension-file updates are also implemented. This does
-not close remote attachment options, authenticated remote
-extension-source admission or broader installed-capability
+not close remote attachment options or broader installed-capability
 reconciliation. Original-session typed extension installation/loading includes
-local signed files, direct public installation URLs, public repository/directory selection, versions and FORCE;
+local signed files, credential-free installation URLs, repository/directory selection, versions and FORCE;
 its read-only receipts now survive closing the original native instance and
 application restart, without permitting replay or inferring commit. Standard
 native file attachment mutation now has a reviewed original-session workflow,
@@ -194,6 +193,14 @@ post-copy storage observations and independent correct/wrong-key file reopening.
 The pinned implementation has no in-place SQL REKEY operation; do not invent one
 or count it as an unmet native capability. Source replacement/cutover is not
 implied by successful copy acknowledgement.
+Native HTTP-secret source admission now records exact native selection and
+effective version/platform URL, with secret-read authority and revalidation
+before dispatch. Credentials stay inside DuckDB. Scope-specific HTTPS repository
+qualification does not establish functioning direct HTTPS INSTALL on the pinned
+build: ``DU-NATIVE-HTTPS-DIRECT`` records the independently reproduced native
+local-filesystem refusal. HTTPFS's native HTTP-repository-to-HTTPS transport is
+qualified separately. Wider secret-property, remote attachment and installed
+capability reconciliation remains open.
 
 SQLite
 ------

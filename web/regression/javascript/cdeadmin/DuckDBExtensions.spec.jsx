@@ -22,12 +22,26 @@ const properties = post => ({post, databaseTargetId: 'file-1', sessionId: 'query
   ensureSession: jest.fn().mockResolvedValue('query-1'), onBusyChange: jest.fn(), onBlocked: jest.fn()});
 
 describe('DuckDB original-session extension workflow', () => {
+  it('submits an expected native HTTP secret name and shows observed access without requesting credentials', async () => {
+    const access = {remote:true,lookup_url:'https://example.test/v1.5.2/linux_amd64/httpfs.duckdb_extension.gz',
+      httpfs_loaded:true,selected_http_identity:{name:'private repository . é',persistence:'TEMPORARY',storage:'memory'},
+      credential_values_observed:false,credential_value_changes_fenced:false,native_authentication_success_inferred:false};
+    const post=jest.fn().mockResolvedValue({...review,source_access:access});
+    render(<Component {...properties(post)} />);enter();
+    fireEvent.change(screen.getByRole('textbox',{name:'Expected native HTTP secret (optional)'}),{target:{value:'private repository . é'}});
+    fireEvent.click(screen.getByRole('button',{name:'Review native extension'}));
+    const details=await screen.findByLabelText('DuckDB extension source access');
+    expect(JSON.parse(details.textContent)).toEqual(access);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({request:expect.objectContaining({
+      draft:expect.objectContaining({expected_http_secret:'private repository . é'})})}));
+  });
+
   it('reviews a direct public installation URL and returns to a native name for loading', async () => {
     const post=jest.fn().mockResolvedValue(review);
     render(<Component {...properties(post)} />);enter();
     fireEvent.mouseDown(screen.getByRole('combobox', {name:'Extension source'}));
-    fireEvent.click(screen.getByRole('option', {name:'Public HTTP(S) extension URL'}));
-    fireEvent.change(screen.getByRole('textbox', {name:'Public native extension URL'}), {target:{value:'https://example.test/httpfs.duckdb_extension'}});
+    fireEvent.click(screen.getByRole('option', {name:'HTTP(S) extension URL'}));
+    fireEvent.change(screen.getByRole('textbox', {name:'Native extension URL'}), {target:{value:'https://example.test/httpfs.duckdb_extension'}});
     fireEvent.click(screen.getByRole('checkbox', {name:'FORCE replacement of extension file'}));
     fireEvent.click(screen.getByRole('button', {name:'Review native extension'}));
     await screen.findByRole('textbox', {name:'Exact reviewed extension name'});
@@ -35,7 +49,7 @@ describe('DuckDB original-session extension workflow', () => {
       request:{operation:'review',draft:{action:'install',extension_name:'httpfs',source_kind:'URL',source:'https://example.test/httpfs.duckdb_extension',force:true}}});
     fireEvent.mouseDown(screen.getByRole('combobox', {name:'Extension action'}));
     fireEvent.click(screen.getByRole('option', {name:'Load native code'}));
-    expect(screen.queryByRole('textbox', {name:'Public native extension URL'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', {name:'Native extension URL'})).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', {name:'Extension source'})).toHaveTextContent('Native name');
     expect(screen.queryByRole('textbox', {name:'Exact reviewed extension name'})).not.toBeInTheDocument();
   });

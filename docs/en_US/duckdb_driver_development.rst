@@ -200,10 +200,11 @@ controls on its original query connection. Select a native name, an authorized
 local extension file or a direct public HTTP(S) installation URL. Direct remote
 files are installed before their native name is loaded; a remote URL is not
 passed to the desktop native loader.
-Installation supports FORCE, native repository aliases, public HTTP(S)
+Installation supports FORCE, native repository aliases, HTTP(S)
 repositories, authorized repository directories and exact version selection.
-Inline credentials, URL queries and fragments are refused; authenticated remote
-source admission and wider installed-capability reconciliation remain separate work.
+Inline credentials, URL queries and fragments are refused. Native HTTP-secret
+source admission is described below; wider installed-capability reconciliation
+remains separate work.
 
 Review retains all nine extension facts, installation/home directories, native
 signature/external-access settings and original catalog/session identity.
@@ -381,6 +382,48 @@ Qualification covers encrypt, decrypt and GCM/CTR encrypted-to-encrypted copies,
 caller-owned rollback/commit, original temporary state, repeated apply without
 replay, exact independent file data and reopening each store with its own key.
 For encrypted stores the other store's key must fail independently.
+
+Authenticated native extension sources
+---------------------------------------
+
+The database context menu opens ``Install or load DuckDB extensions...`` on an
+original native session. HTTP(S) source URLs and repositories exclude inline
+credentials, query strings and fragments. Existing native HTTP secrets supply
+authentication; their values are never read by this adapter or copied into its
+SQL and receipts. Using a selected secret requires secret-read authority and loaded
+native ``httpfs``. An optional expected name binds the review to the secret
+selected by native ``which_secret`` for the exact version/platform download
+URL, including more-specific scopes. Public sources can have no selected secret.
+
+Review exposes native selection identity, effective lookup URL and transport
+settings, separately from successful authentication. Before dispatch these facts
+are observed again. Selection changes refuse dispatch. Secret value changes and
+external certificate/repository changes are not fenced; no value fingerprint or
+authentication success is inferred. Remote failures retain native error type and
+available HTTP status without persisting opaque response text. Terminal receipts
+cannot replay installation and remain readable after original-session release.
+
+The native HTTPFS implementation used for qualification is source available:
+``duckdb/duckdb-httpfs`` revision
+``13e18b3c9f3810334f5972b76a3acc247b28e537`` under the MIT license. Its native
+HTTP parameter initialization consumes HTTP-secret bearer/proxy/header values.
+``tools/cdeadmin_duckdb_authenticated_extensions_qualification.py`` records the
+actual signed binary hash and version, an owned HTTPS repository with an
+explicitly trusted certificate, native longest-scope selection, secret-read
+denial, changed selection, native credential refusal, transaction ownership and
+credential absence from durable receipts. Browser qualification additionally
+uses the context-menu workflow and actual dock close.
+
+``DU-NATIVE-HTTPS-DIRECT`` records a pinned-engine limitation, separately from
+missing adapters: direct ``INSTALL 'https://...'`` and explicit HTTPS repository
+arguments in the qualified 1.5.2 build take a native local-filesystem path and
+refuse before an HTTP request. The native source's ``IsHTTP`` predicate in
+``src/main/extension/extension_install.cpp`` and independent native probes agree.
+An HTTP repository argument with HTTPFS loaded uses the engine's native HTTPS
+upgrade and its context-bound HTTP credentials; that HTTPS transport is
+independently qualified. ScratchRobin does not substitute its own downloader or
+report the failing direct-HTTPS interface as successful. Native HTTPS attachment
+and other installed-capability acceptance remain separate.
 
 Durable original-session operation receipts
 -------------------------------------------

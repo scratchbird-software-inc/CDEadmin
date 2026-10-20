@@ -233,7 +233,8 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
             reading=request.get('operation')=='receipt' or (request.get('operation')=='apply' and retained is not None and retained['state']!='reviewed')
             if not reading:self.client._require_idle(handle);self.client._busy.add(id(handle))
             try:
-                result=action(self.client,handle,route,{key:value for key,value in request.items() if key not in {'session_id','language_profile'}})
+                result=action(self.client,handle,route,{key:value for key,value in request.items() if key not in {'session_id','language_profile'}},
+                    authorize_secret=self._require_native_http_secret)
                 if result.get('review_id'):self.client.publish_receipt(handle,'extensions',result)
                 return result
             except (ValueError,RelationalClientError):raise
@@ -244,6 +245,14 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 raise RelationalClientError('Native DuckDB extension workflow failed ('+type(error).__name__+')') from None
             finally:
                 if not reading:self.client._busy.discard(id(handle))
+
+    def _require_native_http_secret(self):
+        # Missing optional authority is an ordinary operation refusal. Calling
+        # require for a permission known to be absent would quarantine the
+        # provider for violating its SDK admission contract.
+        if not self.permissions.allows('secret_read'):
+            raise RelationalClientError('Native HTTP credentials require secret-read authority')
+        self._require('secret_read')
 
     def script_statement_outcome(self, occurrence):
         from pgadmin.cdeadmin.data_studio.scripts import retained_outcome
