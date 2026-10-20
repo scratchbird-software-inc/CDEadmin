@@ -394,8 +394,27 @@ in the system catalog, preventing a same-named caller macro from running while
 constructing a constant. Preview SQL withholds property values and scopes.
 The compiler bounds statements to 1 MiB, 16,384 constant nodes and 32 traversal
 levels. This constant interface does not interpret text values as SQL expressions.
-Remaining session/storage identities and native expression workflows retain their
-own acceptance scope.
+The session secret controls in the extension workspace and SQL engine options
+reuse the native administration forms on the original editor connection. Empty
+catalogs permit creation. Temporary and persistent same-name objects retain
+distinct storage identities; DROP uses the exact observed storage and rechecks
+public metadata before dispatch. Values are never read, so replacing a secret
+with identical public metadata cannot be detected. Independent connections are
+refused for secret mutations.
+
+Creation exposes native DEFAULT, TEMPORARY and PERSISTENT modes, named storage,
+ERROR, IF NOT EXISTS and OR REPLACE conflict handling, and native default naming.
+The separate sensitive ``property_expressions`` JSON object accepts explicit
+native SQL expressions, including original-session variables, provider, scope
+and type expressions. DuckDB's expression parser checks one expression without
+binding or execution; evaluation occurs only at apply. Type expressions require
+an explicit name. Literal properties remain constants. Preview SQL withholds
+expressions. Native errors can abort the caller transaction; rollback remains an
+explicit caller action. Persistent secret file writes/deletions are external
+effects: rollback can restore the current catalog while a later native instance
+loads different file state. Neither acknowledgement nor catalog observation
+proves file rollback or final commit. A lost apply response retires the plan and
+blocks query reuse; operation receipts remain readable.
 
 Native administration errors do not authorize rollback of a borrowed query
 connection. The shared executor rolls back only connections it owns; Firebird's

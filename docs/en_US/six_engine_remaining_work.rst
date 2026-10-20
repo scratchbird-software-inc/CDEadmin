@@ -202,8 +202,13 @@ local-filesystem refusal. HTTPFS's native HTTP-repository-to-HTTPS transport is
 qualified separately. Secret constants now retain native scalars, scope lists and
 header maps, with private previews and a system-qualified map constructor.
 Borrowed query connections retain caller transaction decisions on administration
-refusal. Wider secret session/storage identities, native expressions, remote
-attachment and installed-capability reconciliation remains open.
+refusal. Original-session secret management now distinguishes same-name storage
+identities, observes exact DROP targets, supports native persistence/conflict
+modes and default naming, and separately parses explicit private property
+expressions without executing them during review. Native persistent file effects
+can survive rollback and remain separate from current catalog state. Remote
+attachment and installed-capability reconciliation remain open; this scoped
+secret workflow does not establish independent INV-DUCKDB completeness.
 
 SQLite
 ------

@@ -313,7 +313,7 @@ def _route_arguments(route):
 def _resource_id(kind, path, name, discriminator=None):
     identity = [kind, *[str(part) for part in path], str(name)]
     if discriminator is not None:
-        identity.append({'native_index': discriminator})
+        identity.append(discriminator if kind == 'secret' else {'native_index': discriminator})
     return 'duckdb:' + json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
 
 
@@ -700,7 +700,7 @@ def _resources(connection, request):
             'type': kind, 'provider': provider,
             'persistent': persistent, 'storage': storage,
             'scope': scope,
-        })
+        }, discriminator={'storage': storage, 'persistent': persistent})
     for resource in resources.values():
         path = resource['display_path']
         if resource['resource_kind'] == 'schema':

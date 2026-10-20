@@ -45,6 +45,7 @@ import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
 import DuckDBOperationReceipts from './DuckDBOperationReceipts';
 import MariaDBBackupStages from './MariaDBBackupStages';
 import DuckDBExtensions from './DuckDBExtensions';
+import DuckDBSessionSecrets from './DuckDBSessionSecrets';
 import MySQLServerCatalog from './MySQLServerCatalog';
 import MySQLTestData from './MySQLTestData';
 import PostgresqlServerCatalog from './PostgresqlServerCatalog';
@@ -8157,6 +8158,11 @@ export default function ProviderWorkspaceContent({
             sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
             onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)} />}
+          {languageProfile === 'duckdb-sql' && queryDatabaseTargetId && <DuckDBSessionSecrets
+            post={post} ensureSession={ensureSession} sessionId={sessionId} databaseTargetId={queryDatabaseTargetId}
+            catalog={workspace.visual_admin} disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
+            renderAdministration={props => <VisualAdministration {...props} />} />}
           {languageProfile === 'duckdb-sql' && queryDatabaseTargetId && <DuckDBOperationReceipts
             post={post} databaseTargetId={queryDatabaseTargetId} />}
           {languageProfile === 'sqlite-sql' && <SQLiteExtensions
@@ -8333,6 +8339,11 @@ export default function ProviderWorkspaceContent({
           <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></Box>}
       {workspace && tab === 'duckdb-extensions' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <Box sx={{overflow: 'auto', flex: 1, minHeight: 0, minWidth: 0}}>
+          <DuckDBSessionSecrets post={post} ensureSession={ensureSession} sessionId={sessionId}
+            databaseTargetId={queryDatabaseTargetId} catalog={workspace.visual_admin}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked}
+            onBusyChange={setBusy} onBlocked={() => setQuerySessionBlocked(true)}
+            renderAdministration={props => <VisualAdministration {...props} />} />
           <DuckDBExtensions key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
             ensureSession={ensureSession} sessionId={sessionId}
             disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}

@@ -36,6 +36,9 @@ class DuckDBAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind == 'secret' and operation == 'create':
+            from .secrets import form
+            return form(self._field)
         from .extension_updates import OPERATIONS, form
         if (kind, operation) in OPERATIONS:
             return form(kind, operation, self._field)
@@ -109,6 +112,13 @@ class DuckDBAdministration(RelationalAdministration):
             ]}
 
     def validate(self, request):
+        if request.get('resource_kind') == 'secret' and request.get('operation_id') in {'create', 'drop'}:
+            try:
+                from .secrets import compile_operation
+                compile_operation(self, request)
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_duckdb_secret', 'message': str(error)}]}
         from .extension_updates import OPERATIONS, compile_operation
         if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
             try:
@@ -137,6 +147,9 @@ class DuckDBAdministration(RelationalAdministration):
         return result
 
     def _compile(self, request):
+        if request.get('resource_kind') == 'secret' and request.get('operation_id') in {'create', 'drop'}:
+            from .secrets import compile_operation
+            return compile_operation(self, request)
         from .extension_updates import OPERATIONS, compile_operation
         if (request.get('resource_kind'), request.get('operation_id')) in OPERATIONS:
             return compile_operation(self, request)
@@ -147,6 +160,11 @@ class DuckDBAdministration(RelationalAdministration):
                 request['resource_kind'] in {'view', 'macro'}):
             return self._definition_replacement(request)
         return super()._compile(request)
+
+    def _normalize_draft(self, kind, operation, draft):
+        if kind == 'secret' and operation in {'create', 'drop'}:
+            return deepcopy(draft)
+        return super()._normalize_draft(kind, operation, draft)
 
     def plan(self, request):
         result = super().plan(request)
@@ -194,6 +212,9 @@ class DuckDBAdministration(RelationalAdministration):
 
     def apply(self, client, request, connection=None):
         with self._borrow(client, connection):
+            if 'duckdb_secret' in (request.get('provider_payload') or {}).get('compiled', {}):
+                from .secrets import apply
+                return apply(client, request, connection)
             if 'duckdb_extension_update' in (request.get('provider_payload') or {}).get('compiled', {}):
                 from .extension_updates import apply
                 return apply(self, client, request, connection)

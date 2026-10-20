@@ -1,4 +1,4 @@
-"""Typed JSON constants for native secret options; never evaluate expressions."""
+"""Native secret constants and explicitly selected, parse-only SQL expressions."""
 from collections.abc import Mapping
 import math
 
@@ -52,30 +52,72 @@ class Values:
         return ''.join(tokens)
 
 
-def compile_secret(adapter, name, options):
+def compile_secret(adapter, name, options, *, persistence_mode=None, on_conflict='ERROR', expressions=None, native_properties=None):
     persistent = options.get('persistent', False)
     if type(persistent) is not bool:
         raise RelationalClientError('Native secret persistence requires a Boolean choice')
+    mode = persistence_mode if persistence_mode is not None else ('PERSISTENT' if persistent else 'DEFAULT')
+    if not isinstance(mode, str) or mode not in {'DEFAULT', 'TEMPORARY', 'PERSISTENT'}:
+        raise RelationalClientError('Select a native secret persistence mode')
+    if persistence_mode is not None and 'persistent' in options:
+        raise RelationalClientError('Select one native secret persistence control')
+    if not isinstance(on_conflict, str) or on_conflict not in {'ERROR', 'IF NOT EXISTS', 'OR REPLACE'}:
+        raise RelationalClientError('Select a native secret conflict mode')
+    expressions = {} if expressions is None else expressions
+    if not isinstance(expressions, Mapping):
+        raise RelationalClientError('Native secret expressions require a JSON object')
     secret_type = options.get('secret_type')
-    if not isinstance(secret_type, str) or not secret_type:
+    if (not isinstance(secret_type, str) or not secret_type) and 'type' not in expressions:
         raise RelationalClientError('Select an exact native secret type')
-    secret_type = adapter._literal(secret_type)
+    if 'type' in expressions and (secret_type or not name):
+        raise RelationalClientError('A native secret type expression requires an explicit name and no literal type')
     storage = options.get('storage')
     storage_sql = ' IN ' + adapter._quote(storage) if storage else ''
-    properties = ['TYPE ' + secret_type]
+    properties = ['TYPE ' + adapter._literal(secret_type)] if secret_type else []
     preview_properties = list(properties)
+    property_bytes = sum(len(item.encode('utf8')) for item in properties)
+    def append(source, preview):
+        nonlocal property_bytes
+        property_bytes += len(source.encode('utf8')) + 2
+        if property_bytes > MAX_BYTES:
+            raise RelationalClientError('Native secret statement exceeds the SQL byte budget')
+        properties.append(source);preview_properties.append(preview)
     values = Values(adapter)
     scope = options.get('scope')
     if scope is not None:
         if not isinstance(scope, (str, list)) or isinstance(scope, list) and any(not isinstance(item, str) for item in scope):
             raise RelationalClientError('Native secret scope requires text or a list of text scopes')
-        properties.append('SCOPE ' + values.source(scope));preview_properties.append('SCOPE <redacted>')
-    for key, value in options.items():
-        if key in {'secret_type', 'scope', 'storage', 'persistent', 'parent'}:continue
+        append('SCOPE ' + values.source(scope), 'SCOPE <redacted>')
+    constants = {key: value for key, value in options.items()
+                 if key not in {'secret_type', 'scope', 'storage', 'persistent', 'parent'}}
+    occupied = {'type'} if secret_type else set()
+    if scope is not None:occupied.add('scope')
+    for key, value in (native_properties or {}).items():
+        if not isinstance(key, str) or not key or any(key.casefold() == old.casefold() for old in constants):
+            raise RelationalClientError('Native secret properties require distinct text names')
+        constants[key] = value
+    for key, value in constants.items():
+        if key.casefold() in occupied:
+            raise RelationalClientError('Native secret properties must have distinct names')
+        occupied.add(key.casefold())
         keyword = adapter._quote(key)
-        properties.append(keyword + ' ' + values.source(value))
-        preview_properties.append(keyword + ' <redacted>')
-    prefix = 'CREATE ' + ('PERSISTENT ' if persistent else '') + 'SECRET ' + name + storage_sql + ' ('
+        append(keyword + ' ' + values.source(value), keyword + ' <redacted>')
+    for key, source in expressions.items():
+        if not isinstance(key, str) or not key or key.casefold() in occupied:
+            raise RelationalClientError('Native secret properties must have distinct names across constants and expressions')
+        occupied.add(key.casefold())
+        if not isinstance(source, str) or not source or len(source.encode('utf8')) > MAX_BYTES:
+            raise RelationalClientError('Native secret expression exceeds the SQL byte budget or is empty')
+        try:
+            import duckdb
+            expression = str(duckdb.SQLExpression(source))
+        except Exception:
+            raise RelationalClientError('Native secret property requires one parseable SQL expression') from None
+        keyword = adapter._quote(key)
+        append(keyword + ' (' + expression + ')', keyword + ' <redacted expression>')
+    prefix = ('CREATE ' + ('OR REPLACE ' if on_conflict == 'OR REPLACE' else '') +
+        (mode + ' ' if mode != 'DEFAULT' else '') + 'SECRET ' +
+        ('IF NOT EXISTS ' if on_conflict == 'IF NOT EXISTS' else '') + name + storage_sql + ' (')
     source = prefix + ', '.join(properties) + ')'
     if len(source.encode('utf8')) > MAX_BYTES:
         raise RelationalClientError('Native secret statement exceeds the SQL byte budget')

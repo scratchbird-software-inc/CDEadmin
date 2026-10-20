@@ -96,6 +96,6 @@ def test_secret_constant_budgets_and_scope_persistence_types_are_explicit(native
     with pytest.raises(RelationalClientError,match='traversal budget'):Values(ADMINISTRATION).source(nested)
     with pytest.raises(RelationalClientError,match='byte budget'):Values(ADMINISTRATION).source('x'*(1024*1024+1))
     with pytest.raises(RelationalClientError,match='Boolean'):
-        plan(native,'invalid',{'persistent':'false'})
+        plan(native,'invalid',{},persistent='false')
     with pytest.raises(RelationalClientError,match='text scopes'):
         plan(native,'invalid',{},scope=[False])

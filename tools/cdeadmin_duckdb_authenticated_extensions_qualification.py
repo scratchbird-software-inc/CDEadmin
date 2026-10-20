@@ -19,6 +19,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'web'), str(ROOT / 'tools')]
 
 
 def qualify(args):
+    if args.session_secret_workflows:args.typed_secret_properties=True
     import builtins
     builtins.SERVER_MODE = None
     import config
@@ -97,9 +98,12 @@ def qualify(args):
             'web/pgadmin/cdeadmin/endpoints/service.py',
             'web/pgadmin/cdeadmin/providers/duckdb/administration.py',
             'web/pgadmin/cdeadmin/providers/duckdb/secret_values.py',
+            'web/pgadmin/cdeadmin/providers/duckdb/secrets.py',
+            'web/pgadmin/cdeadmin/providers/embedded_session_catalog.py',
             'web/pgadmin/cdeadmin/providers/relational_admin.py',
             'web/pgadmin/cdeadmin/data_studio/studio.py','web/pgadmin/cdeadmin/workspace/service.py',
             'web/pgadmin/cdeadmin/context_menu.py','web/pgadmin/static/js/Dialogs/DuckDBExtensions.jsx',
+            'web/pgadmin/static/js/Dialogs/DuckDBSessionSecrets.jsx',
             'web/pgadmin/static/js/Dialogs/ProviderWorkspaceContent.jsx']}}
     try:
         with app.test_request_context('/'):
@@ -151,8 +155,13 @@ def qualify(args):
                 return
             handle.execute('DROP SECRET IF EXISTS "owned exact . "" é"')
             request={'resource_kind':'secret','operation_id':'create','session_id':session_id,'database_target_id':target,
-                'draft':{'name':selected,'secret_type':'HTTP','properties':{'scope':[effective,'https://unused.example.test/'],
+                'draft':{'name':selected,'secret_type':'HTTP','persistence_mode':'TEMPORARY', 'properties':{'scope':[effective,'https://unused.example.test/'],
                     'verify_ssl':True,'extra_http_headers':{'Authorization':'Bearer '+value,'X-CDE-Native-Property':'native typed map'}}}}
+            if args.session_secret_workflows:
+                handle.execute('SET VARIABLE owned_http_scope=?',[[effective,'https://unused.example.test/']])
+                request['draft']['properties'].pop('scope')
+                request['draft']['properties'].pop('verify_ssl')
+                request['draft']['property_expressions']={'scope':"getvariable('owned_http_scope')", 'verify_ssl':'true'}
             validated=post('visual_admin_validate',request);assert validated['valid'],validated
             planned=post('visual_admin_plan',request)
             assert value not in json.dumps(planned) and effective not in json.dumps(planned['command_preview'])
@@ -163,6 +172,24 @@ def qualify(args):
                 'original_session_explicitly_bound':True,'private_properties_absent_from_public_plan':True,
                 'native_transaction_decision_not_requested':True}
         seed(token)
+        if args.session_secret_workflows:
+            secret_request={'resource_kind':'secret','operation_id':'create','session_id':session_id,'database_target_id':target,
+                'draft':{'name':selected,'secret_type':'HTTP','persistence_mode':'PERSISTENT', 'storage':'local_file',
+                    'properties':{'scope':['https://unused-persistent.example.test/'], 'bearer_token':token}}}
+            created=post('visual_admin_plan',secret_request)
+            post('visual_admin_apply',{'plan_id':created['plan_id'],'plan_digest':created['plan_digest'],
+                'confirmed':True,'session_id':session_id,'database_target_id':target})
+            found=[row for row in post('source_catalog',session_id=session_id)['resources'] if row['resource_kind']=='secret' and row['display_name']==selected]
+            assert len(found)==len({row['resource_id'] for row in found})==2
+            stored=next(row for row in found if (row.get('native') or row['extensions']['duckdb']['native'])['persistent'])
+            dropping=post('visual_admin_plan',{'resource_kind':'secret','operation_id':'drop','session_id':session_id,
+                'database_target_id':target,'target_resource':stored,'draft':{'confirmation':selected}})
+            dropped=post('visual_admin_apply',{'plan_id':dropping['plan_id'],'plan_digest':dropping['plan_digest'],
+                'confirmed':True,'session_id':session_id,'database_target_id':target})
+            assert dropped['provider_result']['accepted'] and not dropped['provider_result']['commit_requested']
+            assert [row['storage'] for row in dropped['provider_result']['native_storage_observation']['observation']['objects']]==['memory']
+            proof['native_session_secret_api']={'distinct_same_name_storage_identities':True,
+                'exact_persistent_drop_keeps_temporary':True,'explicit_expression_uses_original_session_variable':True}
         count=len(requests)
         try:observer.execute("FORCE INSTALL '"+effective+"'")
         except duckdb.Error as error:
@@ -217,10 +244,10 @@ def qualify(args):
         archives=list(Path(str(app.extensions['cdeadmin_operation_bus'].store.path)+'.duckdb-session-receipts').rglob('*.json'))
         assert archives
         for archive in archives:
-            for value in (token,broad_token,error_canary,'owned incorrect native bearer'):assert value.encode() not in archive.read_bytes()
+            for value in (token,broad_token,error_canary,'owned incorrect native bearer','owned private browser token'):assert value.encode() not in archive.read_bytes()
         if args.typed_secret_properties:
             for path in (out/'app').rglob('*.json'):
-                for value in (token,broad_token,error_canary,'owned incorrect native bearer'):assert value.encode() not in path.read_bytes()
+                for value in (token,broad_token,error_canary,'owned incorrect native bearer','owned private browser token'):assert value.encode() not in path.read_bytes()
             proof['typed_private_values_absent_from_application_json']=True
         proof['private_values_absent_from_durable_archives']=True
         proof['complete']=True
@@ -260,14 +287,27 @@ def browser_qualify(args,out,app,sid,primary,repository,selected,post,proof):
         def owned_server(browser):
             return next((node for node in browser.find_elements(By.CSS_SELECTOR,'.file-name') if node.is_displayed() and
                 browser.execute_script('const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);',node,sid)),None)
-        label=wait.until(owned_server).text;expand(wait,label,('Connectors','DuckDB'));base=('Connectors','DuckDB',label)
-        database=wait.until(lambda browser:named_tree_item(browser,primary.name,base))
+        def owned_database(browser):
+            node=owned_server(browser)
+            if node is None:return False
+            label=node.text
+            database=named_tree_item(browser,primary.name,('Connectors','DuckDB',label))
+            if database:return database
+            entry=node.find_element(By.XPATH,'ancestor::*[contains(concat(" ",normalize-space(@class)," ")," file-entry ")][1]')
+            buttons=entry.find_elements(By.CSS_SELECTOR,'button[aria-label="Expand '+label+'"]')
+            if buttons and buttons[0].is_enabled():buttons[0].click()
+            return False
+        database=wait.until(owned_database)
         invoke_context_action(wait,driver,database,('Database workspace','Install or load DuckDB extensions...'),handle_endpoint_prompt=False)
         def label_node(label):
             node=wait.until(lambda browser:browser.execute_script('return Array.from(document.querySelectorAll("label")).find(e => e.getClientRects().length && e.textContent.trim().replace(/\\*$/, "").trim()===arguments[0]) || null;',label))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node)
             return node
-        def field(label):return driver.find_element(By.ID,label_node(label).get_attribute('for'))
+        def field(label):
+            def ready(browser):
+                node=browser.find_element(By.ID,label_node(label).get_attribute('for'))
+                return node if node.is_enabled() and node.get_attribute('aria-disabled')!='true' else False
+            return wait.until(ready)
         def rendered(selector):
             node=wait.until(lambda browser:browser.execute_script('return Array.from(document.querySelectorAll(arguments[0])).find(e => e.getClientRects().length) || null;',selector))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node)
@@ -278,6 +318,37 @@ def browser_qualify(args,out,app,sid,primary,repository,selected,post,proof):
                 if node is None:return False
                 browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node);node.click();return True
             wait.until(attempt)
+        if args.session_secret_workflows:
+            wait.until(lambda browser:next((row for row in browser.find_elements(By.TAG_NAME,'summary') if row.is_displayed() and row.text=='DuckDB session secrets'),None)).click()
+            click('Inspect session secrets')
+            field('Secret name').send_keys('browser original secret')
+            field('Native secret type').send_keys('HTTP')
+            for label,value in [('Secret properties',{'bearer_token':'owned private browser token'}),
+                    ('Native property expressions',{'scope':"['https://owned-browser.example.test/']"})]:
+                node=field(label);node.send_keys(Keys.CONTROL,'a');node.send_keys(json.dumps(value))
+            click('Validate and preview')
+            secret_plan=json.loads(rendered('[aria-label="Provider plan preview"]').get_attribute('textContent'))
+            assert secret_plan['state']=='ready' and 'owned private browser token' not in json.dumps(secret_plan)
+            if secret_plan.get('confirmation_required'):label_node('I confirm this provider-planned operation.').click()
+            click('Apply provider plan')
+            created=json.loads(rendered('[aria-label="Provider operation result"]').get_attribute('textContent'))
+            assert created['accepted'] and created['native_storage_observation']['native_acknowledged']
+            assert created['native_storage_observation']['observation']['objects'][0]['storage']=='memory'
+            click('Inspect session secrets');field('Session secret storage target').click()
+            wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='browser original secret / memory / temporary'),None)).click()
+            field('Operation').click()
+            wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='Drop'),None)).click()
+            field('Confirmation').send_keys('browser original secret')
+            click('Validate and preview')
+            secret_drop=json.loads(rendered('[aria-label="Provider plan preview"]').get_attribute('textContent'))
+            assert secret_drop['state']=='ready' and 'FROM "memory"' in json.dumps(secret_drop).replace('\\"','"')
+            if secret_drop.get('confirmation_required'):label_node('I confirm this provider-planned operation.').click()
+            click('Apply provider plan')
+            deleted=json.loads(rendered('[aria-label="Provider operation result"]').get_attribute('textContent'))
+            assert deleted['accepted'] and deleted['native_storage_observation']['observation']['objects']==[]
+            click('Read session secret operation receipts')
+            proof['browser_session_secrets']={'complete':True,'native_create_and_exact_drop':True,
+                'private_expression_preview':True,'original_session_storage_observation':True}
         field('Exact native extension name').send_keys('httpfs')
         field('Repository kind').click()
         wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if node.is_displayed() and node.text.strip()=='HTTP(S) URL'),None)).click()
@@ -320,4 +391,5 @@ if __name__=='__main__':
     parser.add_argument('--output',required=True,type=Path);parser.add_argument('--signed-extension',required=True,type=Path)
     parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
     parser.add_argument('--typed-secret-properties',action='store_true')
+    parser.add_argument('--session-secret-workflows',action='store_true')
     value=qualify(parser.parse_args());print(json.dumps({'complete':value['complete'],'native_requests':len(value['native_requests'])}))

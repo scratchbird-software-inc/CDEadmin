@@ -19,7 +19,8 @@ def annotate(result, engine, session_id):
         native['observation_scope']='retained-session'
         path=resource.get('display_path',[])
         temporary=bool(path and path[0]=='temp' or native.get('catalog_metadata',{}).get('temporary'))
-        scope='temporary' if temporary else native.get('scope') if native.get('scope') in {'connection','runtime'} else 'attached-database' if path and path[0] in attached else 'database'
+        object_scope=native.get('scope')
+        scope='temporary' if temporary else object_scope if isinstance(object_scope,str) and object_scope in {'connection','runtime'} else 'attached-database' if path and path[0] in attached else 'database'
         native['session_scope_kind']=scope
         native['session_local']=scope in {'temporary','connection'}
     result.update(engine=engine,observation_scope='retained-session',
