@@ -80,6 +80,8 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
     <Typography variant="h6">Copy between attached DuckDB catalogs</Typography>
     <Alert severity="info">Copies run on the current native session. Schema and data uses two native steps.
       Data mode appends rows. Commit and rollback remain explicit; a failed copy can require rollback.</Alert>
+    <Alert severity="info">To encrypt, decrypt or change the key of a database copy, first attach a separate destination with its intended encryption settings.
+      Copy schema and data, commit, detach, then reopen the destination with its intended key to verify it before retiring the source.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     {awaitingReceipt && <Alert severity="warning">The apply reply is unavailable. Read this copy receipt before continuing.</Alert>}
     <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, my: 1}}>
@@ -98,6 +100,8 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
         Native database copy: {record.state}. Phase: {record.phase}. Acknowledgement does not mean committed.</Alert>
       {record.source && <Box component="textarea" aria-label="Reviewed DuckDB database copy SQL" readOnly value={record.source}
         sx={{width: '100%', minHeight: 80, fontFamily: 'monospace'}} />}
+      {record.storage && <Box component="pre" aria-label="Reviewed DuckDB copy storage" sx={{whiteSpace: 'pre-wrap'}}>
+        {JSON.stringify(record.storage, null, 2)}</Box>}
       {(record.warnings || []).map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
       {record.state === 'reviewed' && record.phase === 'finished' && <>
         <TextField size="small" label="Exact copy destination confirmation" value={confirmation}

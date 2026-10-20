@@ -361,6 +361,27 @@ pending/committed data on an independent connection and reopens the copied file.
 ``tools/cdeadmin_duckdb_database_copy_qualification.py`` preserves the native
 file/in-memory-root evidence and source hashes outside the implementation tree.
 
+Encryption transformations use that same native workflow. Attach a separate
+destination with the intended encryption key and cipher (or without encryption),
+review its observed storage facts, copy, explicitly commit, detach and reopen
+with the intended key before retiring the source. Reviews show both stores'
+native encryption/cipher facts and warn when encrypted source data will enter
+an unencrypted destination. Keys remain in the private attachment binding; copy
+SQL and durable copy receipts contain no keys. Native catalog identity, access,
+encryption and cipher are reobserved after acknowledgement, separately from the
+data/schema postconditions. A failed storage observation retains acknowledgement
+and blocks session reuse.
+
+The pinned source implements encrypted-to-encrypted changes through database
+copy (``test/sql/copy/encryption/reencrypt.test_slow`` and native COPY DATABASE
+execution). Its attachment storage options open/create stores with a key; they
+do not provide an in-place SQL REKEY operation. ScratchRobin does not replace
+the source file or infer whether two attached stores use different keys.
+Qualification covers encrypt, decrypt and GCM/CTR encrypted-to-encrypted copies,
+caller-owned rollback/commit, original temporary state, repeated apply without
+replay, exact independent file data and reopening each store with its own key.
+For encrypted stores the other store's key must fail independently.
+
 Durable original-session operation receipts
 -------------------------------------------
 

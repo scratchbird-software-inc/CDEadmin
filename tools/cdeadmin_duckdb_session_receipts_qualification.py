@@ -5,7 +5,9 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',required=True,type=Path);parser.add_argument('--browser-binary');parser.add_argument('--driver-binary')
+parser.add_argument('--encrypted-copy',action='store_true')
 parser.add_argument('--inspect-existing',action='store_true');args=parser.parse_args();out=args.output.resolve()
+if args.encrypted_copy and not args.browser_binary:parser.error('--encrypted-copy requires --browser-binary')
 if out==ROOT or ROOT in out.parents:raise ValueError('Evidence belongs outside source')
 out.mkdir(parents=True,exist_ok=args.inspect_existing,mode=0o700)
 sys.path[:0]=[str(ROOT),str(ROOT/'web'),str(ROOT/'tools')];builtins.SERVER_MODE=None
@@ -124,8 +126,12 @@ try:
     return next((node for node in browser.find_elements(By.CSS_SELECTOR,'.file-name') if node.is_displayed() and browser.execute_script('const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);',node,sid)),None)
    label=wait.until(owned_server).text;expand(wait,label,('Connectors','DuckDB'));base=('Connectors','DuckDB',label)
    database=wait.until(lambda browser:named_tree_item(browser,path.name,base));invoke_context_action(wait,driver,database,('Database workspace','Plan native DuckDB attachment...'),handle_endpoint_prompt=False)
+   def label_node(label):
+    node=wait.until(lambda browser:browser.execute_script('return Array.from(document.querySelectorAll("label")).find(e => e.getClientRects().length && e.textContent.trim().replace(/\\*$/, "").trim() === arguments[0]) || null;',label))
+    driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node)
+    return node
    def field(label):
-    node=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'label') if node.is_displayed() and node.text.strip().rstrip('*').strip()==label),None));return driver.find_element(By.ID,node.get_attribute('for'))
+    node=label_node(label);return driver.find_element(By.ID,node.get_attribute('for'))
    for label,value in [('Copy source catalog',source_alias),('Copy destination catalog',destination_alias)]:
     control=field(label);control.send_keys(Keys.CONTROL,'a');control.send_keys(value)
    def click(label):
@@ -134,18 +140,63 @@ try:
      if node is None:return False
      browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node);node.click();return True
     wait.until(attempt)
-   click('Review native database copy');field('Exact copy destination confirmation').send_keys(destination_alias)
-   confirmation=wait.until(lambda browser:next((row for row in browser.find_elements(By.TAG_NAME,'label') if row.is_displayed() and row.text.strip()=='I reviewed the native database copy and its transaction effects'),None));driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',confirmation);confirmation.click();click('Apply reviewed database copy once')
+   browser_destination=destination_alias
+   if args.encrypted_copy:
+    browser_destination='Browser encrypted . " é';browser_key='owned browser native key '+uuid.uuid4().hex
+    browser_file=out/'browser-encrypted-copy.duckdb'
+    def toggle(label):
+     node=label_node(label)
+     driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node);node.click()
+    for label,value in [('Native catalog alias',browser_destination),('Absolute DuckDB file path',str(browser_file))]:
+     control=field(label);control.send_keys(Keys.CONTROL,'a');control.send_keys(value)
+    toggle('Read only');toggle('Allow native file creation');toggle('Use native file encryption')
+    field('Native file encryption key').send_keys(browser_key)
+    click('Review native attachment')
+    field('Exact reviewed catalog alias').send_keys(browser_destination)
+    assert field('Native file encryption key').get_attribute('value')==''
+    toggle('I reviewed the native catalog and file effects');click('Apply reviewed attachment once')
+    def attachment_acknowledged(browser):
+     node=next((row for row in browser.find_elements(By.CSS_SELECTOR,'[aria-label="DuckDB attachment receipt"]') if row.is_displayed()),None)
+     if node is None:return False
+     value=json.loads(node.text);return value['native_acknowledged'] and value['rediscovery_verified']
+    wait.until(attachment_acknowledged)
+    browser_session=next(iter(app.extensions['cdeadmin_data_studio']._sessions))
+    post('transaction_action',session_id=browser_session,transaction_action='commit')
+    control=field('Copy destination catalog');control.send_keys(Keys.CONTROL,'a');control.send_keys(browser_destination)
+   click('Review native database copy');field('Exact copy destination confirmation').send_keys(browser_destination)
+   if args.encrypted_copy:
+    storage=wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Reviewed DuckDB copy storage"]') if node.is_displayed()),None))
+    facts=json.loads(storage.text);assert facts['destination']['encrypted'] and facts['destination']['cipher']=='GCM'
+   confirmation=label_node('I reviewed the native database copy and its transaction effects');confirmation.click();click('Apply reviewed database copy once')
    def acknowledged(browser):
     node=next((row for row in browser.find_elements(By.CSS_SELECTOR,'[aria-label="DuckDB database copy receipt"]') if row.is_displayed()),None)
     if node is None:return False
     value=json.loads(node.text);return value['phase']=='finished' and value['state']=='acknowledged' and value['rediscovery_verified']
    wait.until(acknowledged)
    browser_session=next(iter(app.extensions['cdeadmin_data_studio']._sessions))
-   assert observer.execute('SELECT count(*) FROM duckdb_tables() WHERE database_name=?',[destination_alias]).fetchone()==(0,)
+   assert observer.execute('SELECT count(*) FROM duckdb_tables() WHERE database_name=?',[browser_destination]).fetchone()==(0,)
    post('transaction_action',session_id=browser_session,transaction_action='commit')
-   assert observer.execute('SELECT id FROM "HTTP destination . "" é".main.data').fetchall()==[(7,)]
+   from pgadmin.cdeadmin.providers.duckdb.attachments import quote
+   assert observer.execute('SELECT id FROM '+quote(browser_destination)+'.main.data').fetchall()==[(7,)]
    click('Read database copy receipt');wait.until(acknowledged)
+   if args.encrypted_copy:
+    detached=post('duckdb_attachments',{'operation':'review','draft':{'action':'detach','alias':browser_destination,'if_exists':False}},session_id=browser_session)
+    detached=post('duckdb_attachments',{'operation':'apply','review_id':detached['review_id'],'review_digest':detached['review_digest'],'confirmation':browser_destination,'confirmed':True},session_id=browser_session)
+    assert detached['native_acknowledged'] and detached['rediscovery_verified']
+    post('transaction_action',session_id=browser_session,transaction_action='commit')
+    independent=duckdb.connect()
+    try:
+     sql="ATTACH '"+str(browser_file).replace("'","''")+"' AS reopened (READ_ONLY,ENCRYPTION_KEY ?)"
+     independent.execute(sql,[browser_key]);assert independent.execute('SELECT id FROM reopened.main.data').fetchall()==[(7,)]
+     assert independent.execute("SELECT encrypted,cipher FROM duckdb_databases() WHERE database_name='reopened'").fetchone()==(True,'GCM')
+    finally:independent.close()
+    wrong=duckdb.connect()
+    try:
+     try:wrong.execute(sql,['owned wrong browser key'])
+     except duckdb.Error as error:assert 'wrong encryption key' in str(error).lower(),type(error).__name__
+     else:raise AssertionError('Browser encrypted copy accepted a wrong key')
+    finally:wrong.close()
+    proof['browser_encrypted_copy']={'gui_attachment_and_copy_review_apply':True,'reviewed_native_storage_visible':True,'key_cleared_after_review':True,'independent_commit_detach_reopen_exact_data':True,'wrong_key_refused':True}
    tab=wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[data-cdeadmin-tab-id^="id-provider-workspace-"]') if node.is_displayed() and 'Plan native DuckDB attachment' in node.text),None))
    tab.find_element(By.TAG_NAME,'button').click()
    wait.until(lambda _browser:not app.extensions['cdeadmin_data_studio']._sessions)
@@ -171,6 +222,7 @@ try:
  assert len(archive_files)>=len(receipt_ids)+1
  for file in archive_files:
   assert encryption_canary.encode() not in file.read_bytes()
+  if args.encrypted_copy:assert browser_key.encode() not in file.read_bytes()
  hidden=out/'offline-primary.duckdb';path.rename(hidden)
  try:
   with (out/'restart.log').open('w') as log:

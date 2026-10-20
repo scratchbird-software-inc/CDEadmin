@@ -8320,15 +8320,16 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'duckdb-copy' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
         <DuckDBCopy key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} resourceId={initialContext.resource_id} />}
       {workspace && tab === 'duckdb-attachment' && workspace.endpoint?.profile_id === 'duckdb-native' && queryDatabaseTargetId &&
-        <><DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
-          ensureSession={ensureSession} sessionId={sessionId}
-          disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
-          onBlocked={() => setQuerySessionBlocked(true)} />
-        <DuckDBDatabaseCopy key={'copy-' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
-          ensureSession={ensureSession} sessionId={sessionId}
-          disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
-          onBlocked={() => setQuerySessionBlocked(true)} />
-        <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></>}
+        <Box aria-label="DuckDB attachment and copy workspace" sx={{overflow: 'auto', flex: 1, minHeight: 0, minWidth: 0}}>
+          <DuckDBAttachment key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBDatabaseCopy key={'copy-' + queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+            ensureSession={ensureSession} sessionId={sessionId}
+            disabled={busy || querySessionBlocked || !!occurrenceId || scriptLocked} onBusyChange={setBusy}
+            onBlocked={() => setQuerySessionBlocked(true)} />
+          <DuckDBOperationReceipts post={post} databaseTargetId={queryDatabaseTargetId} /></Box>}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'duckdb-native' &&
         (initialContext.server_catalog || !queryDatabaseTargetId ? <DuckDBServerCatalog post={post} /> :
           <DuckDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />)}

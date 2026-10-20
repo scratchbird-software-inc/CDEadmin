@@ -20,6 +20,19 @@ const confirm = () => {
 };
 
 describe('native DuckDB database copy', () => {
+  it('shows observed encryption and decryption effects in the review', async () => {
+    const value = {...reviewed, storage: {
+      source: {name: reviewed.source_catalog, encrypted: true, cipher: 'GCM'},
+      destination: {name: reviewed.destination_catalog, encrypted: false, cipher: null}},
+    warnings: ['Copied data will be stored without database encryption in the destination.']};
+    render(<Component {...props(jest.fn().mockResolvedValue(value))} />);enter();
+    fireEvent.click(screen.getByRole('button', {name: 'Review native database copy'}));
+    const storage = await screen.findByLabelText('Reviewed DuckDB copy storage');
+    expect(JSON.parse(storage.textContent)).toEqual(value.storage);
+    expect(screen.getAllByRole('alert').some(node => node.textContent.includes('Copied data will be stored without database encryption'))).toBe(true);
+    expect(screen.getByText(/first attach a separate destination/)).toBeInTheDocument();
+  });
+
   it('previews typed catalog intent and applies the exact review once', async () => {
     const post = jest.fn().mockResolvedValueOnce(reviewed).mockResolvedValueOnce(acknowledged).mockResolvedValue(acknowledged);
     render(<Component {...props(post)} />);enter();

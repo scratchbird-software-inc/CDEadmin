@@ -86,10 +86,13 @@ def test_complete_native_copy_preserves_rows_types_objects_and_original_transact
     before = handle.execute('SELECT * FROM ' + quote(native.aliases[0]) + '."area . é".rows').fetchall()
     record = review(native)
     assert record['state'] == 'reviewed', record
+    assert record['storage']['source']['encrypted'] is False
+    assert record['storage']['destination']['encrypted'] is False
     assert 'BEGIN' not in record['source'] and 'COMMIT' not in record['source']
     result = apply(native, record)
     assert result['state'] == 'acknowledged' and result['rediscovery_verified'], result
     assert all(step['native_acknowledged'] for step in result['steps'])
+    assert result['storage_observation']['verified']
     assert handle.execute('SELECT current_transaction_id()').fetchone()[0] == transaction
     assert handle.execute('SELECT * FROM ' + table(native)).fetchall() == before
     assert handle.execute('SELECT id FROM private_rows').fetchall() == [(42,)]
@@ -167,6 +170,16 @@ def test_native_effects_and_fault_receipts_are_never_replayed(native, fault):
         assert not result['rediscovery_verified'] and not result['automatic_retry']
     if fault != 'partial':
         assert result['session_reuse_blocked']
+
+
+def test_changed_storage_after_acknowledgement_blocks_reuse_without_replay(native):
+    record = review(native)
+    with patch.object(copying, 'observe_storage', return_value={'verified': False, 'catalogs': {}}):
+        result = apply(native, record)
+    assert result['state'] == 'acknowledged' and result['native_acknowledged']
+    assert not result['rediscovery_verified'] and result['session_reuse_blocked']
+    assert result['storage_observation']['verified'] is False
+    assert apply(native, record) == result
 
 
 def test_cancellation_before_dispatch_releases_busy_handle_and_reads_same_receipt(native):

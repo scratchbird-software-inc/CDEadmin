@@ -187,8 +187,13 @@ catalog/row aggregates. Independent qualification additionally checks exact
 native data and committed file reopening. Attachment, extension and copy receipts
 have owner/endpoint/target-scoped durable storage, separate native release
 observations and read-only inspection without native admission. Extension-backed
-foreign catalog copies, remote attachments, rekeying
-and broader storage transformations remain open.
+foreign catalog copies, remote attachments and broader storage transformations
+remain open. Native encrypt/decrypt/key-change-by-copy uses separately attached
+stores, reviewed native encryption/cipher facts, caller-owned commit/rollback,
+post-copy storage observations and independent correct/wrong-key file reopening.
+The pinned implementation has no in-place SQL REKEY operation; do not invent one
+or count it as an unmet native capability. Source replacement/cutover is not
+implied by successful copy acknowledgement.
 
 SQLite
 ------

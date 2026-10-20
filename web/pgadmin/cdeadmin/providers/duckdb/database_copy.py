@@ -179,6 +179,24 @@ def dispatch(handle, source):
     handle.fetchall()
 
 
+def storage_facts(compiled):
+    """Native observed encryption belongs to each attached store, never its SQL."""
+    return {side: {key: compiled[side]['catalog'][key]
+        for key in ('name', 'oid', 'path', 'read_only', 'encrypted', 'cipher')}
+        for side in ('source', 'destination')}
+
+
+def observe_storage(handle, compiled):
+    rows = catalogs(handle)
+    observed = {}
+    for side in ('source', 'destination'):
+        expected = compiled[side]['catalog']
+        row = next((row for row in rows if row['name'] == expected['name']), None)
+        observed[side] = {key: row[key] for key in ('name', 'oid', 'path', 'read_only', 'encrypted', 'cipher')} if row else None
+    return {'catalogs': observed, 'verified': observed == storage_facts(compiled),
+        'method': 'Native catalog identity, path, access, encryption and cipher; file reopening and commit remain separate observations'}
+
+
 def verify(before, after, mode):
     source, destination = before['source'], before['destination']
     object_checks = {}
@@ -218,8 +236,13 @@ def worker(client, handle, route, record, reviewing):
                 destination_catalog=compiled['destination']['catalog']['name'],
                 source=';\n'.join(compiled['statements']) + ';',
                 mode=compiled['mode'], deadline=time.monotonic() + 300,
+                storage=storage_facts(compiled),
                 source_table_rows={key: values[0] for key, values in current['source']['tables'].items()},
                 destination_table_rows={key: values[0] for key, values in current['destination']['tables'].items()})
+            if record['storage']['source']['encrypted'] and not record['storage']['destination']['encrypted']:
+                record['warnings'].append('The source is encrypted and the destination is not encrypted. Copied data will be stored without database encryption in the destination.')
+            if record['storage']['destination']['encrypted']:
+                record['warnings'].append('The destination keeps its attached native encryption key and cipher. Copy SQL and receipts contain no encryption keys. Commit, detach and independently reopen the new file with its intended key before retiring the source.')
             record['review_digest'] = hashlib.sha256(encoded(public(record)).encode()).hexdigest()
             record['state'] = 'reviewed'
         else:
@@ -245,8 +268,11 @@ def worker(client, handle, route, record, reviewing):
             record.update(native_acknowledged=True, phase='observing_destination')
             after = observe(handle, current['compiled']['destination']['catalog']['name'], record)
             observation = verify(current, after, current['compiled']['mode'])
-            record.update(state='acknowledged', observation=observation, rediscovery_verified=observation['verified'])
-            blocked = not observation['verified']
+            storage_observation = observe_storage(handle, current['compiled'])
+            verified = observation['verified'] and storage_observation['verified']
+            record.update(state='acknowledged', observation=observation,
+                storage_observation=storage_observation, rediscovery_verified=verified)
+            blocked = not verified
     except Exception as error:
         import duckdb
         cancelled = isinstance(error, (Cancelled, duckdb.InterruptException))
@@ -340,6 +366,7 @@ def action(client, handle, route, request):
                     'Review and revalidation read all selected tables to compare native row aggregates.',
                     'Data mode appends native rows. Schema mode creates native objects. Schema and data runs those two native steps in order.',
                     'Native conflicts and the one-writable-database-per-transaction restriction are returned without a fallback or implicit transaction decision.',
+                    'Encryption follows the source and destination stores. This copies into another attached catalog; it does not change a source key, replace a file or infer that two attached keys differ.',
                     'Live review/application belongs to this original session. Durable receipts remain read-only after release. Acknowledgement does not mean the caller committed.']}
             records[record['review_id']] = record
         else:
