@@ -1022,6 +1022,19 @@ exclusive change requires an operator-controlled DDL maintenance window.
 Native acknowledgements, uncertain outcomes, restart and non-replay follow the
 same per-operation durable receipt rules as table/view deployment.
 
+These community declaration receipts do not qualify JavaScript parsing or
+execution. The pinned core source stores a library declaration with a warning
+when ``external_library`` / ``external_library_ext`` are unavailable. External
+routine execution separately requires ``external_program_execution``. The
+acquired source contains their service contracts and core consumers, but no MLE
+service implementation in its component/plugin trees. Oracle's `MLE component
+documentation <https://dev.mysql.com/doc/refman/9.7/en/mle-component.html>`_
+identifies ``component_mle`` as Enterprise. Its JavaScript runtime, imports,
+language validation and corresponding complete workflows are post beta under
+``MY-POST-BETA-MLE`` in :doc:`six_engine_remaining_work`. Existing open source
+catalog, native declaration management and exact DDN support keep their recorded
+scope; do not equate SQL PREPARE success with JavaScript validity.
+
 Reviewed DDN events and time zones
 ----------------------------------
 

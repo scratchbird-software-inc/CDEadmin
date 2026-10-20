@@ -48,6 +48,13 @@ Enterprise ``object_policy`` implementation is absent from the acquired
 community source. Open source column-reference handling and its tests qualify
 only those native declarations, not functioning masking.
 
+MySQL MLE JavaScript execution and language validation are likewise recorded as
+``MY-POST-BETA-MLE``. The acquired source includes external-language service
+contracts and native library declaration handling, but no implementation of the
+required Enterprise MLE services. Community library/catalog/DDN receipts qualify
+their native declaration scope; they do not qualify the missing JavaScript
+parser/runtime. Open source SQL stored routines remain required for beta.
+
 Version and installation identity
 ---------------------------------
 

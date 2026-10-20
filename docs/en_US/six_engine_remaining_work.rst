@@ -259,6 +259,38 @@ MY-POST-BETA-MASKING: MySQL dynamic masking policies
   Enterprise installation after beta. Do not fabricate a replacement component
   or claim execution success from mocked services.
 
+MY-POST-BETA-MLE: MySQL JavaScript execution and language validation
+------------------------------------------------------------------
+
+* Status: owner-deferred to post beta under the beta edition/source rule.
+* Native dependency: Enterprise ``file://component_mle`` and the implementations
+  of ``external_program_execution``, ``external_library`` and
+  ``external_library_ext``. Oracle identifies MLE as an Enterprise component in
+  its `MySQL 9.7 MLE documentation
+  <https://dev.mysql.com/doc/refman/9.7/en/mle-component.html>`_.
+* Source evidence: the pinned community source contains the contracts in
+  ``include/mysql/components/services/language_service.h`` and the consumers in
+  ``sql/sp_head.cc`` and ``sql/sql_cmd_ddl.cc``. The acquired ``components`` and
+  ``plugin`` implementation trees contain no provider of those services.
+  ``sp_head::init_external_routine`` reports an unavailable language component
+  when its execution service is absent.
+* Reason: the JavaScript parser/runtime implementation is unavailable in the
+  acquired source and is outside beta scope. Core SQL grammar acceptance,
+  opaque-body framing, library catalog preservation and successful declaration
+  management cannot establish JavaScript validity or functioning imports,
+  execution or MLE runtime diagnostics and metrics.
+* Beta scope retained: native community library catalog, CREATE, comment-only
+  ALTER, DROP, exact text/binary DDN exchange, SQL framing/formatting and existing
+  nonexecuting MySQL grammar checks. In this pinned source, library creation
+  warns when its external-library services are absent and still stores the
+  declaration; this does not prove the missing services work. Preserve those
+  native warnings and distinguish a later engine build's behavior.
+* Deferred work: MLE installation/lifecycle, JavaScript and imported-library
+  validation/execution, language completion, native diagnostics and MLE metrics,
+  with positive native Enterprise tests after beta. Do not supply an application
+  JavaScript runtime as a replacement. Open source SQL stored routines and
+  loadable-function implementations remain in the beta denominator.
+
 Shared acceptance
 =================
 

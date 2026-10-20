@@ -105,7 +105,11 @@ consumed delimiter mismatches, comments, semicolons and placeholder-like text.
 Native formatting preserves these literal bytes, and SQL completion does not
 offer SQL keywords inside an external-language body. This SQL check does not
 validate JavaScript or other opaque external-language code. MariaDB retains its
-own native quoting rules. The retained native qualification
+own native quoting rules. MySQL's MLE JavaScript runtime and language validation
+depend on an unavailable Enterprise implementation and are post beta under
+``MY-POST-BETA-MLE`` in :doc:`six_engine_remaining_work`. Native community library
+declarations and their DDN/catalog handling remain separate beta workflows.
+The retained native qualification
 checks both connector implementations while preserving pending data/savepoints,
 and the workspace qualifier checks authenticated HTTP and visible source-check
 results without executing submitted SQL. Reproduce these scoped checks with::
