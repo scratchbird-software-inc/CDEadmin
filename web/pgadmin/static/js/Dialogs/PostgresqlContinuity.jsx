@@ -32,6 +32,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   const [walArchives,setWalArchives]=useState(null), [walArchive,setWalArchive]=useState('');
   const [page,setPage]=useState(0), [catalog,setCatalog]=useState(null), [review,setReview]=useState(null), [receipt,setReceipt]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
+  const [replicationOnly,setReplicationOnly]=useState(false), [replicationPassword,setReplicationPassword]=useState('');
   const [confirmStop,setConfirmStop]=useState(false);
   const generation=useRef(0);
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     setRecoveryDatabase('postgres');setChecks([]);
     setTargetKind('');setTargetValue('');setTargetInclusive(true);setTargetTimeline('current');setWalArchives(null);setWalArchive('');
     setPage(0);setCatalog(null);setReview(null);setReceipt(null);setBusy(false);setError('');setConfirmStop(false);
+    setReplicationOnly(false);setReplicationPassword('');
     return () => {generation.current++;downloads.current.splice(0).forEach(close => close());};
   },[post,databaseTargetId]);
   useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
@@ -59,7 +61,11 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
   useEffect(() => {setChangePreview(null);setChangeOffsets(['0']);},[receipt?.job_id]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
-    try {const result=await post({action:'postgresql_continuity_'+action,request});if(token===generation.current)accept(result);}
+    const replication = (action==='review' && operation==='wal_capture' && replicationOnly) ||
+      (action==='start' && review?.source?.admission_interface==='physical-replication');
+    const nativeRequest=replication ? {...request,replication_access:replicationPassword ? {password:replicationPassword} : {}} : request;
+    if(replication && action==='start')setReplicationPassword('');
+    try {const result=await post({action:'postgresql_continuity_'+action,request:nativeRequest});if(token===generation.current)accept(result);}
     catch(failure) {if(token===generation.current)setError(failure.response?.data?.errormsg || failure.message || 'Native continuity request failed');}
     finally {if(token===generation.current)setBusy(false);}
   };
@@ -113,7 +119,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
-      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);}}>
+      <TextField disabled={busy} select size="small" label="Continuity operation" value={operation} onChange={event => {setOperation(event.target.value);setInputs([]);setReview(null);setReplicationOnly(false);setReplicationPassword('');}}>
         {[['full_backup','Full physical backup'],['incremental_backup','Incremental physical backup'],['wal_capture','Capture native WAL archive'],['wal_slot_create','Create physical replication slot'],['wal_slot_drop','Drop replication slot'],
           ['wal_slot_sql_physical_create','Create physical slot with SQL options'],['wal_slot_sql_logical_create','Create logical replication slot'],
           ['wal_slot_sql_physical_copy','Copy physical replication slot'],['wal_slot_sql_logical_copy','Copy logical replication slot'],
@@ -192,6 +198,17 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
         {(backup ? ['create_slot','no_slot','write_recovery_conf','verify_page_checksums','progress','estimate_size','sync'] : ['sync']).map(name => <FormControlLabel key={name} label={name.replaceAll('_',' ')}
           control={<Checkbox disabled={busy} checked={options[name]} onChange={event => edit(name,event.target.checked)} />} />)}</>}
     </Box>
+    {operation==='wal_capture' && <Box sx={{my:1}}>
+      <FormControlLabel label="Use replication-only WAL admission" control={<Checkbox disabled={busy}
+        checked={replicationOnly} onChange={event => {setReplicationOnly(event.target.checked);setReplicationPassword('');setReview(null);}} />} />
+      {replicationOnly && <>
+        <Alert severity="info">Authenticates the registered native principal through physical replication without a SQL connection.
+          Enter its password or use the saved registration credential/libpq authentication. Passwords are sent only for admission
+          and rechecked before start; they are omitted from job receipts. SQL SET ROLE and replication-only SSH require separate admission.</Alert>
+        <TextField disabled={busy} size="small" type="password" label="Replication principal password" autoComplete="off"
+          value={replicationPassword} onChange={event => setReplicationPassword(event.target.value)} />
+      </>}
+    </Box>}
     {operation==='recovery_drill' && <Box sx={{my:1}}>
       <TextField disabled={busy} size="small" label="Recovery database" value={recoveryDatabase} onChange={event => {setRecoveryDatabase(event.target.value);setReview(null);}} />
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

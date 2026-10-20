@@ -40,6 +40,13 @@ def action(service, server, operation, request):
     owner=service._principal_id(server);endpoint=server.endpoint_profile.id
     permissions=service.endpoint_service.provider_registry.admitted_permissions(artifact_context(server))
     if 'backup_admin' not in permissions:raise ContinuityError('Native backup administration permission is unavailable')
+    replication_access = request.get('replication_access')
+    if 'replication_access' in request:
+        if operation not in {'review', 'start'} or not isinstance(replication_access, dict):
+            raise ContinuityError('Replication-only credentials apply to review/start of a native WAL capture')
+        if 'secret_read' not in permissions:
+            raise ContinuityError('Native replication credential permission is unavailable')
+        request = {key: value for key, value in request.items() if key != 'replication_access'}
     store=getattr(service.operation_bus,'store',None)
     if not isinstance(store,JsonOperationStore):raise ContinuityError('Continuity jobs require durable application storage')
     with service._semantic_lock:
@@ -97,6 +104,12 @@ def action(service, server, operation, request):
             return catalog(source,transport,request)
         if operation=='review':
             native_operation=request.get('operation')
+            if replication_access is not None:
+                if native_operation != 'wal_capture':
+                    raise ContinuityError('Replication-only admission currently supports native WAL capture')
+                from ..providers.postgresql.replication_admission import registered
+                source, transport = registered(server, replication_access)
+                return jobs.review(request,owner,endpoint,source,configuration,paths,runtime_limit=runtime_limit)
             if native_operation in sql_slots.OPERATIONS or native_operation=='logical_stream_capture':
                 from ..providers.postgresql.connection_target import database_oid
                 target=request.get('database_target_id')
@@ -134,7 +147,15 @@ def action(service, server, operation, request):
         if operation=='start':
             reviewed=jobs.load(request.get('job_id'),owner,endpoint)
             source=reviewed['source']
-            if reviewed['state']=='reviewed' and (reviewed['operation'] in sql_slots.OPERATIONS or reviewed['operation']=='logical_stream_capture'):
+            replication_only = source.get('admission_interface') == 'physical-replication'
+            if replication_access is not None and not replication_only:
+                raise ContinuityError('Replication credentials do not match the reviewed native admission interface')
+            if reviewed['state']=='reviewed' and replication_only:
+                if reviewed['operation'] != 'wal_capture' or replication_access is None:
+                    raise ContinuityError('Reauthenticate the reviewed replication-only WAL capture before dispatch')
+                from ..providers.postgresql.replication_admission import registered
+                source, transport = registered(server, replication_access)
+            elif reviewed['state']=='reviewed' and (reviewed['operation'] in sql_slots.OPERATIONS or reviewed['operation']=='logical_stream_capture'):
                 from ..providers.postgresql.connection_target import database_oid
                 context,payload,_root=service.endpoint_service.workspace(server,database_target_id=None)
                 provider=service.endpoint_service.provider_registry.resolve(context).instance

@@ -134,6 +134,13 @@ PostgreSQL
   other native security/maintenance findings. Arbitrarily encoded catalog
   identities remain separate from the qualified lossless SQL_ASCII payloads.
 
+Physical WAL capture now offers explicit replication-only admission from the
+saved registration without borrowing or opening a SQL session. Native
+IDENTIFY_SYSTEM and SHOW bind the cluster, principal and WAL geometry; dispatch
+reauthenticates the reviewed peer. Credentials are withheld from durable jobs.
+SQL role substitution is refused. Replication-only SSH, physical-backup metadata
+and protocol resources beyond WAL capture remain separate admission gaps.
+
 DuckDB
 ------
 

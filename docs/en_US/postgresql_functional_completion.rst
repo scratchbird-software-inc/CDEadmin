@@ -1386,3 +1386,25 @@ consumer positions. Authenticated API/browser checks cover review, start,
 preview and download. Replication-only credentials without SQL admission,
 retained temporary protocol streams, resumable archives and broader HA remain
 open. History and platform qualification retain their existing ownership.
+
+Replication-only physical WAL admission
+---------------------------------------
+
+Native WAL capture can explicitly authenticate the registered principal through
+physical replication without a SQL database connection. The continuity dialog
+is available while the SQL registration is disconnected. IDENTIFY_SYSTEM and
+replication SHOW bind the native cluster, timeline, principal, version and WAL
+geometry. Start repeats admission and checks the reviewed identity; a changed
+peer refuses dispatch. Explicit passwords remain request-local and are omitted
+from durable reviews, jobs and status requests. Saved registration credentials
+and native libpq authentication are also admitted. Credentials cannot override
+the registered route. Duplicate starts read the existing receipt without
+authenticating or repeating a dispatched receiver.
+
+Physical replication cannot apply SQL SET ROLE. Register its authenticated
+principal directly. Replication-only SSH requires an independently authenticated
+and pinned transport; this path refuses it explicitly. Physical-backup catalog
+metadata, logical replication and temporary protocol ownership retain their
+separate admission/workflow gaps. Native fixtures deny SQL in HBA for the
+replication principal and independently observe actual WAL capture, cancellation
+and restart. This scope does not establish full product completion.
