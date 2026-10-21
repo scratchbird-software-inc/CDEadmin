@@ -13,6 +13,18 @@ Preserve uncommitted files and staged changes in existing checkouts. Refresh DDN
 and run affected regression checks before publishing integrations. Report native
 qualification that is still running separately from completed verification.
 
+## Disposable build and verification artifacts
+
+Owner direction, 2026-10-21: remove superseded builds, detached verification
+snapshots, temporary database fixtures, browser profiles and test output when
+they are no longer needed. Git retains source history; do not accumulate a
+parallel history of build directories or artifacts. Keep only the current build,
+required runtime dependencies, active verification inputs and concise current
+verification evidence. Bound the number of snapshots used during verification
+and remove superseded copies after publication. Preserve other teams' working
+files, occupied branch checkouts and database data that is not a disposable
+fixture owned by this task.
+
 ## Firebird feature completion
 
 Owner direction, 2026-10-10: all functionality identified in the FlameRobin
