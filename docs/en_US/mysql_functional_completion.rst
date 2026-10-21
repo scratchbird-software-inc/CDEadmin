@@ -86,6 +86,24 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+MyISAM table maintenance includes reviewed native ``CACHE INDEX`` and
+``LOAD INDEX INTO CACHE`` operations, with all or selected exact index names,
+default or configured named caches, and ``IGNORE LEAVES``. Native instance,
+principal, table definition and index names are checked again before dispatch.
+An independently owned connection keeps these implicit commits separate from
+interactive transactions. Native status rows distinguish positive OK from notes
+and errors; a returned SQL acknowledgement alone does not establish successful
+preloading. For example, MySQL rejects ``IGNORE LEAVES`` when a table's indexes
+have different block sizes, even with an index selection. Lost replies and later
+observation failures retain separate dispatch/acknowledgement facts without
+automatic retry. Cache contents and physical recovery are not inferred.
+``tools/cdeadmin_mysql_key_cache_qualification.py --output <outside-repo>
+--application`` exercises both connectors and the authenticated reviewed workflow.
+The two generated-task receipts can be added to an existing contract with
+``tools/reference_engine_demos/supplement_mysql_key_cache_contract.py --evidence
+<native-summary.json>``; the supplement verifies actual connector classes,
+completed native receipts and unchanged source fingerprints.
+
 SQL source checking can use MySQL Shell's versioned server grammar library
 (``mysql_9.7.so`` or native Windows ``mysql_9.7.dll``). Its C ABI applies the
 observed native SQL mode, independently of the original connection, and runs in

@@ -6,12 +6,18 @@ from ...sdk import RelationalClientError
 from . import spatial_reference_systems as srs
 from . import foreign_servers
 from . import column_masking
+from . import mysql_key_cache
 
 
 class MySQLAdministration(RelationalAdministration):
     def catalog(self, catalog):
         value = deepcopy(catalog)
         for resource in value['objects']:
+            if resource['resource_kind'] == 'table':
+                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_key_cache.OPERATIONS] + [{
+                    'operation_id':operation,'title':mysql_key_cache.form(operation,self._field)['title'],
+                    'mutation_class':'admin','target_required':True,'confirmation_required':True,
+                } for operation in sorted(mysql_key_cache.OPERATIONS)]
             if resource['resource_kind'] == 'column':
                 resource['operations'] = [row for row in resource['operations']
                     if row['operation_id'] not in column_masking.OPERATIONS] + [{
@@ -39,6 +45,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind == 'table' and operation in mysql_key_cache.OPERATIONS:
+            return mysql_key_cache.form(operation,self._field)
         if kind == 'column' and operation in column_masking.OPERATIONS:
             fields = []
             if operation == 'set_masking_policy':
@@ -53,6 +61,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'table' and operation in mysql_key_cache.OPERATIONS:return deepcopy(draft)
         if kind == 'column' and operation in column_masking.OPERATIONS:
             return deepcopy(draft)
         if ((kind == srs.KIND and operation in srs.OPERATIONS) or
@@ -61,6 +70,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind')=='table' and request.get('operation_id') in mysql_key_cache.OPERATIONS:
+            try:
+                mysql_key_cache.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
+                return {'errors':[]}
+            except RelationalClientError as error:
+                return {'errors':[{'field_id':None,'code':'invalid_mysql_key_cache','message':str(error)}]}
         if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
             try:
                 column_masking.compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
@@ -82,6 +97,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind')=='table' and request.get('operation_id') in mysql_key_cache.OPERATIONS:
+            return mysql_key_cache.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
         if request.get('resource_kind') == 'column' and request.get('operation_id') in column_masking.OPERATIONS:
             return column_masking.compile_operation(request['operation_id'], request['draft'], request.get('target_resource'))
         if request.get('resource_kind') == foreign_servers.KIND and request.get('operation_id') in foreign_servers.OPERATIONS:
@@ -91,6 +108,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_key_cache' in (request.get('provider_payload') or {}).get('compiled',{}):
+            return mysql_key_cache.apply(client,request,connection)
         if 'mysql_column_masking' in (request.get('provider_payload') or {}).get('compiled', {}):
             return column_masking.apply(client, request, connection)
         if 'mysql_foreign_server' in (request.get('provider_payload') or {}).get('compiled', {}):

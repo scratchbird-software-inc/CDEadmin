@@ -134,6 +134,9 @@ MySQL
   statement's expected mode and stops on drift. Runtime-dependent future context
   remains unconfirmed without executing submitted SQL. Remaining installed
   capability reconciliation and catalog/privilege semantics require their work.
+  Native MyISAM index-cache assignment and preloading now have typed reviewed
+  workflows, exact source/table/index rechecks and explicit native result-row
+  outcomes. These additions do not close the wider installed feature inventory.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
   editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately

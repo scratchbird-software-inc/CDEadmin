@@ -186,6 +186,8 @@ def _administration(profile):
     if profile is MYSQL_PROFILE:
         from .column_masking import OPERATIONS as column_masking_operations
         common['column'] = common['column'] | column_masking_operations
+        from .mysql_key_cache import OPERATIONS as key_cache_operations
+        common['table'] = common['table'] | key_cache_operations
         common['spatial-reference-system'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         common['server-link'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         for kind in ('character-set', 'collation', 'storage-engine'):
@@ -961,6 +963,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_key_cache' in compiled:
+            from .mysql_key_cache import bind_review
+            return bind_review(self,planned)
         if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':
             from .mysql_dump_verification import bind_review
             return bind_review(self, planned)
