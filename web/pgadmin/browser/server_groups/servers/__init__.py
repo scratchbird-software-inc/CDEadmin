@@ -3167,7 +3167,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_binlog_catalog','mysql_binlog_review','mysql_binlog_start','mysql_binlog_status',
                                 'mysql_binlog_list','mysql_binlog_cancel','mysql_binlog_reconcile','mysql_binlog_files','mysql_binlog_remove_artifact',
                                 'mysql_binlog_pin','mysql_binlog_removal_reconcile','mysql_binlog_retention_list','mysql_binlog_retention_status',
-                                'mysql_binlog_retention_cancel','mysql_binlog_retention_review','mysql_binlog_retention_start','mysql_binlog_retention_reconcile'}:
+                                'mysql_binlog_retention_cancel','mysql_binlog_retention_review','mysql_binlog_retention_start','mysql_binlog_retention_reconcile',
+                                'mysql_binlog_retention_schedule_review','mysql_binlog_retention_schedule_enable','mysql_binlog_retention_schedule_disable',
+                                'mysql_binlog_retention_schedule_list','mysql_binlog_retention_schedule_status','mysql_binlog_retention_schedule_scan'}:
                     try:payload=service.mysql_binlog(server,action.removeprefix('mysql_binlog_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_binlog_capture_catalog','mysql_binlog_capture_review','mysql_binlog_capture_start','mysql_binlog_capture_status',
@@ -3188,7 +3190,9 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_raw_binlog_catalog','mysql_raw_binlog_review','mysql_raw_binlog_start','mysql_raw_binlog_status',
                                 'mysql_raw_binlog_list','mysql_raw_binlog_cancel','mysql_raw_binlog_reconcile','mysql_raw_binlog_files','mysql_raw_binlog_remove_artifact',
                                 'mysql_raw_binlog_pin','mysql_raw_binlog_removal_reconcile','mysql_raw_binlog_retention_list','mysql_raw_binlog_retention_status',
-                                'mysql_raw_binlog_retention_cancel','mysql_raw_binlog_retention_review','mysql_raw_binlog_retention_start','mysql_raw_binlog_retention_reconcile'}:
+                                'mysql_raw_binlog_retention_cancel','mysql_raw_binlog_retention_review','mysql_raw_binlog_retention_start','mysql_raw_binlog_retention_reconcile',
+                                'mysql_raw_binlog_retention_schedule_review','mysql_raw_binlog_retention_schedule_enable','mysql_raw_binlog_retention_schedule_disable',
+                                'mysql_raw_binlog_retention_schedule_list','mysql_raw_binlog_retention_schedule_status','mysql_raw_binlog_retention_schedule_scan'}:
                     try:payload=service.mysql_raw_binlog(server,action.removeprefix('mysql_raw_binlog_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_binlog_replay_sources','mysql_binlog_replay_archives','mysql_binlog_replay_boundaries','mysql_binlog_replay_inspect',

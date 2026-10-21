@@ -198,13 +198,13 @@ def policy(value):
     return dict(value)
 
 
-def candidates(jobs, owner, endpoint, selected):
+def candidates(jobs, owner, endpoint, selected, *, native_source=None):
     """Scan every receipt, retaining bounded candidate and per-source heaps."""
     selected = policy(selected)
     directory = jobs.scope(owner, endpoint) / 'index'
     by_source, oldest = {}, []
     counts = {'pinned': 0, 'unavailable_or_unverified': 0, 'already_removed': 0,
-              'minimum_count': 0, 'within_retention_age': 0, 'pending_removal': 0}
+              'minimum_count': 0, 'within_retention_age': 0, 'pending_removal': 0, 'outside_source': 0}
     cutoff = time.time() - selected['retention_days'] * 86400
     eligible_count = 0
     if directory.exists():
@@ -218,6 +218,8 @@ def candidates(jobs, owner, endpoint, selected):
                     raise BinlogArchiveError('Archive retention index identity changed')
                 job_id = identity(entry.name.split('_', 1)[-1])
                 record = jobs.load(job_id, owner, endpoint)
+                if native_source is not None and record['source'] != native_source:
+                    counts['outside_source'] += 1; continue
                 if record.get('artifact_removed'):
                     counts['already_removed'] += 1; continue
                 if record.get('artifact_removal'):
@@ -322,6 +324,23 @@ def binding(archives):
                         'execution_host': {'kind': 'application-host', 'platform': os.name, 'hostname': socket.gethostname()}}}
 
 
+def prepare(jobs, archives, owner, endpoint, selected, *, native_source=None, scheduled_policy_id=None):
+    current = binding(archives)
+    eligible, counts, cutoff, total = candidates(archives, owner, endpoint, selected, native_source=native_source)
+    if not eligible:
+        return None
+    for item in eligible:
+        record = archives.load(item['job_id'], owner, endpoint)
+        if digest(archives.native_verify(archives.directory(record) / 'archive', record['source'])) != item['artifact_digest']:
+            raise BinlogArchiveError('Archive bytes differ from the verification receipt; retention refused')
+    continuation = {'archives': eligible, 'eligible_count': total, 'excluded': counts,
+                    'cutoff_time': cutoff, 'total_bytes': str(sum(int(item['bytes']) for item in eligible))}
+    if scheduled_policy_id is not None:
+        continuation['scheduled_policy_id'] = scheduled_policy_id
+    return jobs.review(owner, endpoint, selected, {'identity': current['source'], 'state': {}},
+                        current['configuration'], current['program'], continuation)
+
+
 def action(service, archives, owner, endpoint, operation, request):
     if operation == 'pin':
         if set(request) != {'job_id', 'pinned'}:
@@ -346,19 +365,14 @@ def action(service, archives, owner, endpoint, operation, request):
         if set(request) != {'policy'}:
             raise BinlogArchiveError('Review one exact archive retention policy')
         selected = policy(request['policy'])
-        eligible, counts, cutoff, total = candidates(archives, owner, endpoint, selected)
-        if not eligible:
+        result = prepare(jobs, archives, owner, endpoint, selected)
+        if result is None:
             raise BinlogArchiveError('No retained archives match this retention policy')
-        plan = eligible[:100]
-        for item in plan:
-            record = archives.load(item['job_id'], owner, endpoint)
-            if digest(archives.native_verify(archives.directory(record) / 'archive', record['source'])) != item['artifact_digest']:
-                raise BinlogArchiveError('Archive bytes differ from the verification receipt; retention refused')
-        return jobs.review(owner, endpoint, selected, {'identity': current['source'], 'state': {}},
-                           current['configuration'], current['program'],
-                           {'archives': plan, 'eligible_count': total, 'excluded': counts,
-                            'cutoff_time': cutoff, 'total_bytes': str(sum(int(item['bytes']) for item in plan))})
+        return result
     if operation == 'retention_start':
+        reviewed = jobs.load(request.get('job_id'), owner, endpoint)
+        if (reviewed.get('continuation') or {}).get('scheduled_policy_id') and reviewed['state'] == 'reviewed':
+            raise BinlogArchiveError('Scheduled retention dispatch requires its active delegated policy')
         return jobs.start(request, owner, endpoint, current, RetentionTransport(archives))
     if operation == 'retention_reconcile':
         if set(request) != {'job_id', 'confirmed'} or request['confirmed'] is not True:

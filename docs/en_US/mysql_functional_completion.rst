@@ -319,6 +319,30 @@ Protect every archive required by a base backup or recovery target: age/count
 rules do not infer a recoverable chain. No scheduled deletion or native server
 log purge is implied.
 
+Scheduled age/count retention is available separately for Shell and raw archives.
+Inspect a retained verified archive to select its exact native source, principal
+and role, review the age/minimum count, scan interval and policy lifetime, and
+explicitly authorize future archive removal. The policy can include newly
+published archives of that identity, expires within 365 days and can be disabled.
+Scans run without an open viewer or database connection and restore from durable
+policy markers when the application starts. Each occurrence freezes at most 100
+candidates, verifies native sealed bytes and records its own ordinary retention
+receipt before removal. Protections and the minimum retained count are rechecked
+at every dispatch. Other native identities never enter the policy.
+
+Owner deactivation, permission/registration changes, changed adapter or execution
+host, expired authority, interrupted preparation and unresolved prior occurrences
+suspend scheduling. An interrupted occurrence is never restarted automatically:
+reconcile its recorded removal intents, then review a new policy. Disabling
+revokes future dispatches and requests cancellation of its active occurrence;
+an already admitted file removal can finish. Native API qualification covers both
+Connector/Python interfaces, both archive formats, background removal with the
+source paused, scheduler restart and later actual native publications under the
+original policy. Independent source observations and retained archive bytes are
+unchanged. The production browser reviews, enables, observes and disables a
+policy while the source is paused. These are local retention workflows; backup
+dependency discovery and recoverable-chain protection remain separate work.
+
 Retention verifies sealed archive bytes before review and again before removal.
 Receipt/protection changes invalidate removal; new archives never enter an
 existing review. Removal persists an owner/endpoint/host-bound intent before
@@ -372,8 +396,8 @@ checksum NONE, native shutdown/STOP and same-instance restart, independent
 comparison with server file bytes, and once-only dispatch. The production
 browser inspects and selects the retained checkpoint, reviews and starts its
 new reader, observes a sealed batch and cancels it. Complete backup/log recovery
-and production cutover remain separate acceptance work; scheduled,
-recovery-chain-aware retention remains open.
+and production cutover remain separate acceptance work; automatic discovery and
+protection of backup/log-chain dependencies remains open.
 
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an

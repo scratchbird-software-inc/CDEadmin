@@ -1,9 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import MySQLRetentionSchedule from './MySQLRetentionSchedule';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
-export default function MySQLArchiveRetention({post,prefix}) {
+export default function MySQLArchiveRetention({post,prefix,sourceArchive}) {
   const [days,setDays]=useState(30),[keep,setKeep]=useState(1);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -61,6 +62,7 @@ export default function MySQLArchiveRetention({post,prefix}) {
       <Button disabled={busy || ACTIVE.has(receipt.state) || receipt.state==='reviewed'} onClick={() => run('retention_reconcile',{job_id:receipt.job_id,confirmed:true},setReceipt)}>Reconcile recorded removals</Button>
       <Box component="details"><summary>Archive retention observations</summary><Box component="pre" aria-label="Archive retention observations" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
     </Box>}
+    <MySQLRetentionSchedule post={post} prefix={prefix} sourceArchive={sourceArchive} days={days} keep={keep} onOccurrence={setReceipt} />
   </Box>;
 }
-MySQLArchiveRetention.propTypes={post:PropTypes.func.isRequired,prefix:PropTypes.string.isRequired};
+MySQLArchiveRetention.propTypes={post:PropTypes.func.isRequired,prefix:PropTypes.string.isRequired,sourceArchive:PropTypes.object};

@@ -24,7 +24,10 @@ def qualify(output, shell, decoder, *, use_c=False, browser_binary=None, driver_
     for name in ('web/pgadmin/cdeadmin/workspace/mysql_archive_retention.py',
                  'web/pgadmin/cdeadmin/workspace/mysql_raw_binlog_service.py',
                  'web/pgadmin/cdeadmin/workspace/mysql_binlog_service.py',
+                 'web/pgadmin/cdeadmin/workspace/mysql_retention_schedule.py',
+                 'web/pgadmin/cdeadmin/workspace/service.py',
                  'web/pgadmin/static/js/Dialogs/MySQLArchiveRetention.jsx',
+                 'web/pgadmin/static/js/Dialogs/MySQLRetentionSchedule.jsx',
                  'web/pgadmin/static/js/Dialogs/MySQLBinlogArchives.jsx',
                  'web/pgadmin/browser/server_groups/servers/__init__.py',
                  'tools/cdeadmin_mysql_archive_retention_qualification.py'):
@@ -35,6 +38,7 @@ def qualify(output, shell, decoder, *, use_c=False, browser_binary=None, driver_
     import config
     config.SERVER_MODE = False; config.TESTING = True; config.WTF_CSRF_ENABLED = False
     config.MASTER_PASSWORD_REQUIRED = False; config.USE_OS_SECRET_STORAGE = False
+    config.CDEADMIN_MYSQL_RETENTION_POLL_SECONDS = .2
     for name, path in {'DATA_DIR': 'app', 'SQLITE_PATH': 'app/application.db',
                        'SESSION_DB_PATH': 'app/sessions', 'STORAGE_DIR': 'app/storage',
                        'LOG_FILE': 'app/application.log', 'AZURE_CREDENTIAL_CACHE_DIR': 'app/azure',
@@ -158,6 +162,65 @@ def qualify(output, shell, decoder, *, use_c=False, browser_binary=None, driver_
                         assert archives.native_verify(archives.directory(record) / 'archive', record['source']) == record['result']['artifact']
                     (output / (family + '-retention-receipt.json')).write_text(json.dumps(reconciled, indent=2) + '\n')
                     proof['checks'].append(family + '-offline-interrupted-detach-explicit-reconciliation-and-unchanged-protected-bytes')
+                policies = {}
+                # Create actual additional native archives while the source
+                # runs; evaluate and remove only local files while paused.
+                def additional_archives():
+                    nonlocal paused
+                    subprocess.run(['docker', 'unpause', native_name], check=True, timeout=30, stdout=subprocess.DEVNULL); paused = False
+                    values = {}
+                    for family, (prefix, archives, _existing) in captured.items():
+                        options = {'log_names': [start]} if family == 'raw' else {'start_file': start, 'compression': 'zstd', 'threads': 1}
+                        value = wait(prefix, http(prefix, 'start', accepted(http(prefix, 'review', {'options': options}))), 'completed')
+                        record = archives.load(value['job_id'], uid, value['endpoint_id'])
+                        archives.update(record, created_at=time.time() - 200 * 86400)
+                        values[family] = value
+                    subprocess.run(['docker', 'pause', native_name], check=True, timeout=30, stdout=subprocess.DEVNULL); paused = True
+                    return values
+                def scheduled(prefix, policy_id, removed_id):
+                    deadline = time.monotonic() + 30
+                    while True:
+                        value = http(prefix, 'retention_schedule_status', {'job_id': policy_id})
+                        occurrence = value.get('last_occurrence') or {}
+                        if occurrence.get('state') == 'completed' and removed_id in occurrence.get('result', {}).get('removed_job_ids', []):
+                            return value
+                        assert value['state'] in {'enabled', 'preparing'}, value
+                        assert occurrence.get('state') not in {'unknown', 'interrupted'}, occurrence
+                        if time.monotonic() > deadline: raise TimeoutError('Unattended native retention deadline')
+                        time.sleep(.05)
+                first = additional_archives()
+                for family, (prefix, _archives, values) in captured.items():
+                    policy = http(prefix, 'retention_schedule_review', {'anchor_job_id': values[-1]['job_id'],
+                        'options': {'policy': {'retention_days': 30, 'keep_latest': 1}, 'interval_seconds': 3600, 'expires_after_days': 1}})
+                    http(prefix, 'retention_schedule_enable', {**accepted(policy), 'confirmed': False}, refused=True)
+                    http(prefix, 'retention_schedule_enable', accepted(policy), refused=True, endpoint_url=other_url)
+                    http(prefix, 'retention_schedule_enable', accepted(policy))
+                    policies[family] = scheduled(prefix, policy['job_id'], first[family]['job_id'])
+                    proof['checks'].append(family + '-background-policy-removes-native-archive-offline-with-no-viewer')
+                second = additional_archives()
+                host = service.mysql_retention_scheduler
+                assert host.close()
+                for family, value in policies.items():
+                    record = host.jobs.load(value['job_id'], uid, value['endpoint_id'])
+                    host.jobs.update(record, next_scan_at=0)
+                from pgadmin.cdeadmin.workspace.mysql_retention_schedule import ScheduleHost
+                resumed = service.mysql_retention_scheduler = ScheduleHost(app, service)
+                resumed.start()
+                proof['schedules'] = {}
+                for family, (prefix, archives, values) in captured.items():
+                    prior = policies[family]
+                    result = scheduled(prefix, prior['job_id'], second[family]['job_id'])
+                    assert result['last_occurrence']['job_id'] != prior['last_occurrence']['job_id']
+                    assert http(prefix, 'retention_status', {'job_id': prior['last_occurrence']['job_id']}) == prior['last_occurrence']
+                    assert http(prefix, 'retention_schedule_disable', {'job_id': prior['job_id'], 'confirmed': True})['state'] == 'disabled'
+                    for item in (values[0], values[-1]):
+                        record = archives.load(item['job_id'], uid, item['endpoint_id'])
+                        assert archives.native_verify(archives.directory(record) / 'archive', record['source']) == record['result']['artifact']
+                    proof['schedules'][family] = {'complete': True, 'source_paused': True, 'without_viewer': True,
+                        'policy_id': prior['job_id'], 'restored_scheduler': True, 'future_native_archive_removed': True,
+                        'prior_occurrence_unchanged': True, 'protected_and_latest_preserved': True,
+                        'disabled': True, 'first_occurrence_id': prior['last_occurrence']['job_id'], 'second_occurrence_id': result['last_occurrence']['job_id']}
+                    proof['checks'].append(family + '-restarted-scheduler-removes-later-native-publication-under-original-policy-and-preserves-prior-receipt')
                 if browser_binary:
                     proof['browser'] = browser(app, output, sid, browser_binary, driver_binary)
                 subprocess.run(['docker', 'unpause', native_name], check=True, timeout=30, stdout=subprocess.DEVNULL)
@@ -168,6 +231,7 @@ def qualify(output, shell, decoder, *, use_c=False, browser_binary=None, driver_
                 assert query.fetchall() == [('9007199254740993', 'native 😀 雪', '00FF')]
                 proof['checks'].append('independent-native-source-gtids-log-inventory-and-exact-data-unchanged')
             finally:
+                service.mysql_retention_scheduler.close()
                 if paused:
                     subprocess.run(['docker', 'unpause', native_name], check=True, timeout=30, stdout=subprocess.DEVNULL)
                     paused = False
@@ -227,21 +291,38 @@ def browser(app, output, sid, binary, driver_binary):
         # The oldest protected archive and the newest retained archive remain.
         # Unprotect through the ordinary archive controls, then review deletion.
         click('Load archive jobs')
-        row = wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[aria-label="Native MySQL archive jobs"] tbody tr') if 'completed' in node.text), None))
-        row.find_element(By.TAG_NAME, 'button').click()
+        wait.until(lambda browser: browser.find_elements(By.CSS_SELECTOR, '[aria-label="Native MySQL archive jobs"] tbody tr'))
         # Choose the protected receipt by inspecting each surviving archive.
         for candidate in driver.find_elements(By.CSS_SELECTOR, '[aria-label="Native MySQL archive jobs"] tbody tr'):
-            candidate.find_element(By.TAG_NAME, 'button').click()
-            time.sleep(.15)
-            buttons = [node for node in driver.find_elements(By.TAG_NAME, 'button') if node.is_displayed() and node.text.strip() == 'Unprotect archive from removal']
+            job_id = candidate.find_elements(By.TAG_NAME, 'td')[0].text.strip()
+            button = candidate.find_element(By.TAG_NAME, 'button')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});', button)
+            wait.until(lambda _browser: button.is_enabled()); button.click()
+            wait.until(lambda browser: any(('Archive ' + job_id + ':') in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+            buttons = [node for node in driver.find_elements(By.TAG_NAME, 'button') if node.get_attribute('textContent').strip() == 'Unprotect archive from removal']
             if buttons:
-                driver.execute_script('arguments[0].scrollIntoView({block:"center"});', buttons[0]); buttons[0].click(); break
+                # The selected protected archive anchors a native source,
+                # while its exact bytes remain protected from every scan.
+                summary = driver.find_element(By.XPATH, '//summary[normalize-space()="Scheduled archive retention"]')
+                driver.execute_script('arguments[0].scrollIntoView({block:"center"});', summary); summary.click()
+                click('Review scheduled retention policy')
+                wait.until(lambda browser: browser.find_element(By.CSS_SELECTOR, 'pre[aria-label="Scheduled retention review"]'))
+                checkbox = driver.find_element(By.XPATH, '//label[contains(normalize-space(),"Authorize future archive removal")]/span/input')
+                driver.execute_script('arguments[0].click();', checkbox)
+                click('Confirm and enable scheduled retention')
+                wait.until(lambda browser: any(': enabled.' in node.get_attribute('textContent') and node.get_attribute('textContent').startswith('Scheduled retention ') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+                wait.until(lambda browser: 'last_scan_at' in browser.find_element(By.CSS_SELECTOR, 'pre[aria-label="Scheduled retention receipt"]').get_attribute('textContent'))
+                click('Disable scheduled retention')
+                wait.until(lambda browser: any(': disabled.' in node.get_attribute('textContent') and node.get_attribute('textContent').startswith('Scheduled retention ') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+                proof['reviewed_future_policy_enabled_observed_and_disabled'] = True
+                driver.save_screenshot(str(output / 'mysql-retention-schedule.png'))
+                click('Unprotect archive from removal'); break
         else:
             raise AssertionError('Owned protected native archive was not reachable')
         click('Review archive retention')
         wait.until(lambda browser: browser.find_element(By.CSS_SELECTOR, '[aria-label="Reviewed archive retention candidates"]'))
         click('Confirm removal of reviewed archives')
-        wait.until(lambda browser: any('Retention ' in node.text and ': completed.' in node.text for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        wait.until(lambda browser: any('Retention ' in node.get_attribute('textContent') and ': completed.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         driver.save_screenshot(str(output / 'mysql-archive-retention.png'))
         errors = [entry for entry in driver.get_log('browser') if entry['level'] == 'SEVERE']
         (output / 'browser-console.json').write_text(json.dumps(errors, indent=2) + '\n')

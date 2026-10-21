@@ -32,6 +32,10 @@ def action(service,server,operation,request):
     from mysql.connector import Error as NativeError
     if not isinstance(request,dict):raise native.BinlogArchiveError('Select a native archive request')
     jobs,owner,endpoint,_context=manager(service,server)
+    if operation.startswith('retention_schedule_'):
+        host=getattr(service,'mysql_retention_scheduler',None)
+        if host is None:raise native.BinlogArchiveError('Durable archive scheduling is unavailable')
+        return host.action(server,jobs,owner,endpoint.id,operation,request)
     if operation in {'pin','remove_artifact','removal_reconcile','retention_list','retention_status',
                      'retention_cancel','retention_review','retention_start','retention_reconcile'}:
         from .mysql_archive_retention import action as retention_action

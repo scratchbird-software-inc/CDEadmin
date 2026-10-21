@@ -3611,6 +3611,8 @@ def init_app(
     import atexit
     atexit.register(service.firebird_events.close)
     app.extensions[APP_EXTENSION_KEY] = service
+    from .mysql_retention_schedule import init_app as init_mysql_retention_schedule
+    init_mysql_retention_schedule(app, service)
     return service
 
 
