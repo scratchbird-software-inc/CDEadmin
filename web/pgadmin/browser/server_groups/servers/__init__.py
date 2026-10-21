@@ -3159,6 +3159,9 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile'}:
+                    try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_clone_review','mysql_clone_start','mysql_clone_status','mysql_clone_list','mysql_clone_cancel','mysql_clone_reconcile','mysql_clone_donors'}:
                     try:
                         payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))

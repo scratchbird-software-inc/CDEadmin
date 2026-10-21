@@ -17,7 +17,7 @@ const SAFE_HANDLERS = new Set([
   'forget_endpoint', 'open_workspace', 'open_firebird_fleet', 'open_mysql_fleet', 'open_mysql_dashboard_editor', 'open_postgresql_fleet', 'open_postgresql_dashboard_editor', 'open_firebird_docker', 'open_firebird_dashboard_editor', 'refresh_node',
   'open_mariadb_fleet', 'open_mariadb_dashboard_editor', 'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
   'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
-  'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
+  'open_mysql_host', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
 ]);
 
@@ -91,6 +91,8 @@ function dispatch(action, args, context) {
   const serverNode = pgAdmin.Browser.Nodes.server;
   const endpoint = serverSelection(item);
   switch(action.handler) {
+  case 'open_mysql_host':
+    return serverNode.callbacks.open_mysql_host.call(serverNode,{item:endpoint.item});
   case 'open_mysql_local_clone':
     return serverNode.callbacks.open_mysql_local_clone.call(serverNode,{item:endpoint.item});
   case 'open_mysql_raw_binlogs':

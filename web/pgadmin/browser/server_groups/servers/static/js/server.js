@@ -249,6 +249,11 @@ define('pgadmin.node.server', [
           label: gettext('PostgreSQL physical backup and verification...'), priority: 9,
           enable: node => !node.cde_endpoint || node.cde_profile_id === 'postgresql-native',
         }, {
+          name: 'mysql_host', node: 'server', module: this,
+          applies: ['object','context'], callback: 'open_mysql_host',
+          label: gettext('MySQL database-host diagnostics...'), priority: 9,
+          enable: node => node.cde_profile_id === 'mysql-native',
+        }, {
           name: 'mysql_local_clone', node: 'server', module: this,
           applies: ['object','context'], callback: 'open_mysql_local_clone',
           label: gettext('MySQL physical clone...'), priority: 9,
@@ -473,6 +478,12 @@ define('pgadmin.node.server', [
           const item = args?.item || pgBrowser.tree.selected();
           const data = pgBrowser.tree.itemData(item);
           showProviderWorkspace(gettext('PostgreSQL physical backup and verification'), this, data, item, 'postgresql-continuity');
+          return false;
+        },
+        open_mysql_host: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL database-host diagnostics'),this,data,item,'mysql-host');
           return false;
         },
         open_mysql_local_clone: function(args) {

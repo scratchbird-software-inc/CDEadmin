@@ -112,6 +112,10 @@ MySQL
   separate from the qualified age/count policies and operator-reviewed workflow.
 * MY-HA-LIFECYCLE: Complete independently observed topology/bootstrap/failover/
   repair and authorized server-host configuration, lifecycle and upgrades.
+  Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID
+  and expose reviewed native configuration validation with durable remote
+  receipts. Complete included-configuration attestation, server initialize/start/
+  stop/service control, upgrades and physical recovery remain separate work.
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.

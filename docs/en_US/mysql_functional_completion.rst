@@ -86,6 +86,45 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Database-host diagnostics now have an explicit SSH execution path. The
+authenticated peer's hostname and native ``auto.cnf`` UUID must match the
+independently observed MySQL host and data directory. An SSH bastion and the
+application host are not substituted. The public SSH key is pinned before
+authentication. Credentials remain transient and do not enter command arguments,
+operation reviews or durable receipts. A private-key file can be loaded in the
+dedicated desktop form.
+
+The initial native action is ``mysqld --validate-config`` on MySQL9.7.0. Review
+binds the selected native executable hash/version and root configuration-file
+hash. The helper rechecks these before native execution, records its intent
+before dispatch, and persists process exit, timeout and bounded native output
+before returning the SSH reply. Duplicate job delivery reads the existing
+receipt. Explicit reconciliation keeps the original SSH acknowledgement separate
+from subsequently read native process facts. Closing a viewer never revokes an
+admitted remote action.
+
+The host requires Python3.9 or later; only the standard library and the shipped
+ScratchRobin permission helper are transferred over SSH. POSIX and native
+Windows PowerShell launches have separate argument framing. Linux native
+qualification does not establish Windows/macOS acceptance, which remains with
+the platform teams. Included configuration files are not fully attested. Native
+configuration acceptance is separate from server readiness, initialize/start/
+stop/service management, upgrades and physical backup/recovery; these broader
+host workflows remain required.
+
+The owned qualification runs through authenticated workspace HTTP routes and
+real SSH/native MySQL9.7 processes. It checks wrong-host/key refusal, changed
+configuration admission, native error exits, separate lost-reply reconciliation,
+password and encrypted-key authentication, registration isolation and offline
+receipts. Use ``tools/cdeadmin_mysql_host_qualification.py --output <outside-repo>
+--prepare-fixture`` to build its disposable OpenSSH/Python/MySQL fixture, or supply
+``--fixture-image`` with ``--ssh-private-key`` for an existing owned fixture.
+Run ``--use-c`` separately for Connector/Python's C interface. Optional
+``--browser-binary`` and ``--driver-binary`` exercise the built desktop context
+menu, review, confirmation and receipt reconciliation. Stop/remove its owned
+fixture image, private key and output when no longer needed. These checks do not
+qualify native Windows/macOS execution or the remaining lifecycle operations.
+
 Group Replication recovery credentials retain MySQL's native distinction
 between account characters and password bytes. Recovery usernames accept up
 to 32 characters within the native 96-byte buffer; passwords retain their

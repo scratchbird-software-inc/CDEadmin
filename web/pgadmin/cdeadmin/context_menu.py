@@ -33,7 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
-    'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
+    'open_mysql_host', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
@@ -772,6 +772,9 @@ def endpoint_context_actions(
             icon='action.edit', group='availability', mutation='write', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
+        actions.append(_action('endpoint.mysql.host', 'MySQL database-host diagnostics...', 'open_mysql_host',
+            icon='command.default', group='diagnostics', mutation='admin', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its database SSH host.'))
         actions.append(_action('endpoint.mysql.raw_binlogs', 'MySQL raw binary-log archives...', 'open_mysql_raw_binlogs',
             icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer native raw archive jobs.'))
