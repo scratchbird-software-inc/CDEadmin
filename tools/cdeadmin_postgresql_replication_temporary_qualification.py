@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+from decimal import Decimal
 import sys
 import time
 from unittest.mock import patch
@@ -42,6 +43,8 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
              'web/pgadmin/cdeadmin/workspace/postgresql_replication_temporary_service.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_replication_stream.py',
              'web/pgadmin/cdeadmin/providers/postgresql/replication_stream_options.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/replication_snapshot_copy.py',
+             'web/pgadmin/cdeadmin/workspace/postgresql_snapshot_copy.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_temporary_slot_jobs.py',
              'web/pgadmin/cdeadmin/workspace/service.py',
              'web/pgadmin/browser/server_groups/servers/__init__.py',
@@ -54,7 +57,8 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
     app.PGADMIN_RUNTIME = False; app.PGADMIN_INT_KEY = ''; app.run_before_app_start()
     client = app.test_client(); service = service_for_app(app); resources = []; flow_finished = False
     try:
-        with server(output / 'fixture', server_options=('-c', 'wal_level=logical', '-c', 'wal_sender_timeout=5s')) as (route, password, owned):
+        with server(output / 'fixture', server_options=('-c', 'wal_level=logical', '-c', 'wal_sender_timeout=5s'),
+                    initdb_options=('--auth-host=scram-sha-256',)) as (route, password, owned):
             original_connect = psycopg.connect
             parameters = {'host': route['host'], 'port': route['port'], 'user': 'postgres',
                           'password': password, 'dbname': 'postgres', 'autocommit': True}
@@ -82,11 +86,24 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                                         'application_name': kwargs.get('application_name')})
                     return original_connect(*args, **kwargs)
                 native_execute = psycopg.ClientCursor.execute
+                native_copy = psycopg.ClientCursor.copy
+                def replication_copy(cursor, command, *args, **kwargs):
+                    if cursor.connection.info.get_parameters().get('replication') == 'database':
+                        assert cursor.connection.info.transaction_status.name == 'INTRANS'
+                        text = command.as_string(cursor.connection) if isinstance(command, sql.Composable) else str(command)
+                        assert text.startswith('COPY (') and secret not in text
+                        protocol_commands.append('COPY')
+                    return native_copy(cursor, command, *args, **kwargs)
                 def replication_command(cursor, command, *args, **kwargs):
                     if cursor.connection.info.get_parameters().get('replication') == 'database':
                         text = command.as_string(cursor.connection) if isinstance(command, sql.Composable) else str(command)
                         kind = text.lstrip().split(None, 1)[0]
-                        assert kind in {'IDENTIFY_SYSTEM', 'SHOW', 'CREATE_REPLICATION_SLOT', 'DROP_REPLICATION_SLOT'}, text
+                        assert kind in {'IDENTIFY_SYSTEM', 'SHOW', 'CREATE_REPLICATION_SLOT', 'DROP_REPLICATION_SLOT',
+                                        'BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT', 'LOCK', 'WITH'}, text
+                        if kind in {'SELECT', 'LOCK', 'COMMIT', 'ROLLBACK', 'WITH'}:
+                            assert cursor.connection.info.transaction_status.name == 'INTRANS'
+                        if kind == 'BEGIN':
+                            assert cursor.connection.info.transaction_status.name == 'IDLE'
                         assert secret not in text
                         protocol_commands.append(kind)
                     return native_execute(cursor, command, *args, **kwargs)
@@ -125,6 +142,9 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                     http('start', job_id=identity, review_digest=reviewed['review_digest'], confirmed=True)
                     return wait_resource(identity, lambda result: result.get('ready'))
                 def run(resource, operation, options, *, failed=False):
+                    if operation == 'snapshot_copy':
+                        inspected = run(resource, 'snapshot_inspect', {'relation_oid': options['relation_oid']})
+                        assert inspected['state'] == 'completed'
                     reviewed = http('command_review', resource_id=resource, operation=operation, options=options)
                     reviewed = wait_child(resource, reviewed['job_id'], {'reviewed'})
                     request = {'resource_id': resource, 'job_id': reviewed['job_id'], 'review_digest': reviewed['review_digest'], 'confirmed': True}
@@ -141,7 +161,8 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                         assert observer.execute('SELECT id FROM snapshot_rows ORDER BY id').fetchall() == expected
                 with patch.object(service.endpoint_service, 'workspace', side_effect=AssertionError('Ordinary SQL bootstrap forbidden')), \
                         patch('psycopg.connect', side_effect=replication_only), \
-                        patch.object(psycopg.ClientCursor, 'execute', replication_command):
+                        patch.object(psycopg.ClientCursor, 'execute', replication_command), \
+                        patch.object(psycopg.ClientCursor, 'copy', replication_copy):
                     scope = http('scope')
                     assert scope['database_target_id'] == target and scope['sql_admission_performed'] is False
                     opened = open_resource(); resource = opened['job_id']
@@ -330,13 +351,223 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                     while int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_stream_cancel'").fetchone()[0]):
                         assert time.monotonic() < deadline; time.sleep(.03)
                     proof['checks'].append('native-stream-cancellation-closes-original-owner-and-partial-bytes-never-establish-command-completion')
+                    schema = 'Native snapshot ü ".schema'; table = 'Rows ü ".table'
+                    relation_name = sql.Identifier(schema, table)
+                    observer.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(schema)))
+                    domain_name = sql.Identifier(schema, 'Amount domain ü')
+                    enum_name = sql.Identifier(schema, 'Enum ü')
+                    observer.execute(sql.SQL('CREATE DOMAIN {} AS numeric(50,10) CHECK(VALUE>=0)').format(domain_name))
+                    observer.execute(sql.SQL("CREATE TYPE {} AS ENUM ('雪','plain')").format(enum_name))
+                    observer.execute(sql.SQL('CREATE TABLE {} (id integer primary key,big bigint,amount numeric(50,10),payload bytea,label text,tags text[],occurred timestamptz,document jsonb,ip inet,domain_amount {},native_enum {})').format(relation_name, domain_name, enum_name))
+                    observer.execute(sql.SQL('GRANT USAGE ON SCHEMA {} TO {}').format(sql.Identifier(schema), sql.Identifier(principal)))
+                    observer.execute(sql.SQL('GRANT SELECT ON {} TO {}').format(relation_name, sql.Identifier(principal)))
+                    materialized = sql.Identifier(schema, 'Materialized ü ".rows')
+                    foreign = sql.Identifier(schema, 'Foreign ü ".rows')
+                    observer.execute('CREATE EXTENSION postgres_fdw')
+                    observer.execute(sql.SQL("CREATE SERVER native_snapshot_remote FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '127.0.0.1',port '5432',dbname {},sslmode 'disable')").format(sql.Literal(database)))
+                    observer.execute(sql.SQL("CREATE USER MAPPING FOR {} SERVER native_snapshot_remote OPTIONS(user 'postgres',password {})").format(sql.Identifier(principal), sql.Literal(password)))
+                    observer.execute(sql.SQL('GRANT USAGE ON FOREIGN SERVER native_snapshot_remote TO {}').format(sql.Identifier(principal)))
+                    observer.execute(sql.SQL('CREATE FOREIGN TABLE {}(id integer,label text) SERVER native_snapshot_remote OPTIONS(schema_name {},table_name {})').format(foreign, sql.Literal(schema), sql.Literal(table)))
+                    observer.execute(sql.SQL('INSERT INTO {} VALUES(%s,%s,%s,%s,%s,%s,%s::timestamptz,%s::jsonb,%s::inet,%s,%s)').format(relation_name),
+                        (1, 9223372036854775807, Decimal('1234567890123456789012345678901234567890.1234567890'),
+                         b'\0\xff\n,\t"\\', 'Native 雪 ü \' " \n \t \\N', ['雪', 'comma,x', None, ''],
+                         '2026-10-20 12:34:56.999999-04', '{"native":[1,null,"雪"]}', '2001:db8::1/64',
+                         Decimal('1234567890123456789012345678901234567890.1234567890'), '雪'))
+                    expected_row = observer.execute(sql.SQL('SELECT * FROM {} WHERE id=1').format(relation_name)).fetchone()
+                    observer.execute(sql.SQL('CREATE MATERIALIZED VIEW {} AS SELECT id,label FROM {}').format(materialized, relation_name))
+                    observer.execute(sql.SQL('GRANT SELECT ON {},{} TO {}').format(materialized, foreign, sql.Identifier(principal)))
+                    use = open_resource(); use_id = use['job_id']
+                    used = run(use_id, 'logical_create', {'slot': 'sr_snapshot_use', 'plugin': 'test_decoding', 'snapshot': 'use'})
+                    assert used['native_phase_acknowledgements'][0]['phase'] == 'snapshot_transaction_begin'
+                    assert used['native_acknowledgement']['used_snapshot']['native_snapshot_installed']
+                    assert http('status', job_id=use_id)['latest_native_inventory']['owns_snapshot_transaction']
+                    observer.execute(sql.SQL('INSERT INTO {}(id,label) VALUES(2,%s)').format(relation_name), ('after original snapshot',))
+                    listed = run(use_id, 'snapshot_tables', {'schema': schema, 'offset': 0, 'limit': 25})
+                    page = listed['native_acknowledgement']['native_result']
+                    selected_relation = next(row for row in page['relations'] if row['schema'] == schema and row['name'] == table)
+                    assert selected_relation['can_select'] and not selected_relation['row_security_active'] and not page['more']
+                    deliveries = []
+                    for format, copy_options in [('binary', {}), ('text', {'delimiter': '|', 'null_string': '~null~'}),
+                        ('csv', {'delimiter': ';', 'null_string': '~null~', 'header': True, 'force_quote': 'all', 'quote': '"', 'escape': '"', 'encoding': 'UTF8'})]:
+                        copied = run(use_id, 'snapshot_copy', {'relation_oid': selected_relation['relation_oid'], 'format': format,
+                                                             'copy_options': copy_options, 'include_descendants': True})
+                        assert copied['state'] == 'completed' and copied['native_command_acknowledged']
+                        artifact = copied['snapshot_copy_artifact']
+                        assert artifact['rows'] == '1' and artifact['copy_format'] == format
+                        domain_column = next(column for column in artifact['source']['columns'] if column['name'] == 'domain_amount')
+                        assert domain_column['type_oid'] != domain_column['wire_type_oid'] and domain_column['wire_type_modifier'] > 0
+                        response = client.post(url, data={'action': 'postgresql_replication_temporary_copy_download',
+                            'payload': json.dumps({'database_target_id': target, 'resource_id': use_id, 'job_id': copied['job_id']})})
+                        assert response.status_code == 200
+                        raw = response.data; response.close()
+                        assert hashlib.sha256(raw).hexdigest() == artifact['sha256']
+                        observer.execute('CREATE TEMP TABLE delivered_snapshot (LIKE ' + relation_name.as_string(observer) + ' INCLUDING ALL)')
+                        native_options = [sql.SQL('FORMAT {}').format(sql.SQL(format))]
+                        for key, value in copy_options.items():
+                            if key == 'force_quote':
+                                continue
+                            native_options.append(sql.SQL('{} {}').format(sql.SQL({'null_string': 'NULL'}.get(key, key.upper())),
+                                sql.SQL('true') if value is True else sql.Literal(value)))
+                        with observer.cursor().copy(sql.SQL('COPY delivered_snapshot FROM STDIN ({})').format(sql.SQL(', ').join(native_options))) as loading:
+                            loading.write(raw)
+                        assert observer.execute('SELECT * FROM delivered_snapshot').fetchall() == [expected_row]
+                        observer.execute('DROP TABLE delivered_snapshot')
+                        sample = http('copy_preview', resource_id=use_id, job_id=copied['job_id'], offset='0', length=16)
+                        assert base64.b64decode(sample['data_base64']) == raw[:16]
+                        deliveries.append({'format': format, 'rows': artifact['rows'], 'exact_native_import_verified': True})
+                    for native_kind, name, expected in [('m', 'Materialized ü ".rows', [(1, expected_row[4])]),
+                        ('f', 'Foreign ü ".rows', [(1, expected_row[4]), (2, 'after original snapshot')])]:
+                        source = next(row for row in page['relations'] if row['name'] == name)
+                        assert source['native_kind'] == native_kind
+                        copied = run(use_id, 'snapshot_copy', {'relation_oid': source['relation_oid']})
+                        assert copied['state'] == 'completed'
+                        response = client.post(url, data={'action': 'postgresql_replication_temporary_copy_download',
+                            'payload': json.dumps({'database_target_id': target, 'resource_id': use_id, 'job_id': copied['job_id']})})
+                        assert response.status_code == 200
+                        raw = response.data; response.close()
+                        observer.execute('CREATE TEMP TABLE delivered_snapshot_aux(id integer,label text)')
+                        with observer.cursor().copy('COPY delivered_snapshot_aux FROM STDIN (FORMAT binary)') as loading:
+                            loading.write(raw)
+                        assert observer.execute('SELECT * FROM delivered_snapshot_aux ORDER BY id').fetchall() == expected
+                        observer.execute('DROP TABLE delivered_snapshot_aux')
+                        deliveries.append({'native_kind': native_kind, 'format': 'binary', 'rows': copied['snapshot_copy_artifact']['rows'],
+                            'exact_native_import_verified': True, 'remote_snapshot_synchronization_observed': False if native_kind == 'f' else None})
+                    ended = run(use_id, 'snapshot_end', {'decision': 'commit'})
+                    assert ended['native_command_acknowledged'] and not ended['native_acknowledgement']['used_snapshot']
+                    assert not http('status', job_id=use_id)['latest_native_inventory']['owns_snapshot_transaction']
+                    assert observer.execute("SELECT active_pid::text FROM pg_replication_slots WHERE slot_name='sr_snapshot_use'").fetchone() == (use['backend_pid'],)
+                    bridge = run(use_id, 'logical_stream', {'slot': 'sr_snapshot_use', 'max_messages': 3})
+                    assert bridge['state'] == 'completed' and bridge['native_command_acknowledged']
+                    bridged = http('stream_preview', resource_id=use_id, job_id=bridge['job_id'], offset='0', limit=25)
+                    assert any(b'id[integer]:2' in base64.b64decode(row['payload_base64']) for row in bridged['rows'])
+                    http('release', job_id=use_id, confirmation=use_id)
+                    wait_resource(use_id, lambda value: value.get('worker_io_closed'))
+                    proof['snapshot_copy_formats'] = deliveries
+                    proof['checks'].append('owned-SNAPSHOT-USE-first-command-native-type-exact-binary-text-CSV-initial-copies-and-same-backend-WAL-bridge')
+                    observer.execute('CREATE TABLE native_snapshot_rls(id integer)')
+                    observer.execute('INSERT INTO native_snapshot_rls VALUES(1),(2)')
+                    observer.execute('ALTER TABLE native_snapshot_rls ENABLE ROW LEVEL SECURITY')
+                    observer.execute(sql.SQL('CREATE POLICY selected_native_rows ON native_snapshot_rls TO {} USING(id=1)').format(sql.Identifier(principal)))
+                    observer.execute(sql.SQL('GRANT SELECT ON native_snapshot_rls TO {}').format(sql.Identifier(principal)))
+                    observer.execute('CREATE TABLE native_snapshot_denied(id integer)')
+                    observer.execute('INSERT INTO native_snapshot_denied VALUES(999)')
+                    rls = open_resource(); rls_id = rls['job_id']
+                    run(rls_id, 'logical_create', {'slot': 'sr_snapshot_rls', 'plugin': 'test_decoding', 'snapshot': 'use'})
+                    listed = run(rls_id, 'snapshot_tables', {'schema': 'public', 'offset': 0, 'limit': 100})
+                    public = listed['native_acknowledgement']['native_result']['relations']
+                    secured = next(row for row in public if row['name'] == 'native_snapshot_rls')
+                    denied = next(row for row in public if row['name'] == 'native_snapshot_denied')
+                    assert secured['row_security_active'] and not denied['can_select']
+                    copied = run(rls_id, 'snapshot_copy', {'relation_oid': secured['relation_oid'], 'format': 'text'})
+                    response = client.post(url, data={'action': 'postgresql_replication_temporary_copy_download',
+                        'payload': json.dumps({'database_target_id': target, 'resource_id': rls_id, 'job_id': copied['job_id']})})
+                    assert response.status_code == 200 and response.data == b'1\n'; response.close()
+                    assert copied['snapshot_copy_artifact']['source']['row_security_active']
+                    run(rls_id, 'snapshot_end', {'decision': 'rollback'})
+                    assert observer.execute("SELECT temporary,active_pid::text FROM pg_replication_slots WHERE slot_name='sr_snapshot_rls'").fetchone() == (True, rls['backend_pid'])
+                    proof['checks'].append('native-RLS-filters-copy-without-hiding-denied-catalog-objects-and-explicit-rollback-keeps-session-slot')
+                    run(rls_id, 'logical_create', {'slot': 'sr_snapshot_denied', 'plugin': 'test_decoding', 'snapshot': 'use'})
+                    refused = run(rls_id, 'snapshot_copy', {'relation_oid': denied['relation_oid']}, failed=True)
+                    assert refused['native_error_sqlstate'] == '42501' and not refused.get('native_command_acknowledged')
+                    wait_resource(rls_id, lambda value: value.get('worker_io_closed'))
+                    inspected = http('copy_reconcile', resource_id=rls_id, job_id=refused['job_id'])
+                    assert inspected['snapshot_copy_artifact']['state'] == 'partial' and inspected['snapshot_copy_artifact']['artifact_bytes'] == '0'
+                    proof['checks'].append('native-COPY-permission-denial-preserves-SQLSTATE-closes-owner-and-never-publishes-hidden-row-data')
+                    phase = open_resource(); phase_id = phase['job_id']
+                    native_update = ReplicationTemporaryCommands.update
+                    def fail_after_begin(commands, record, **values):
+                        result = native_update(commands, record, **values)
+                        if values.get('native_phase_acknowledgements'):
+                            raise OSError('owned publication failure after native BEGIN acknowledgement')
+                        return result
+                    with patch.object(ReplicationTemporaryCommands, 'update', fail_after_begin):
+                        uncertain_begin = run(phase_id, 'logical_create', {'slot': 'sr_before_create_failure', 'snapshot': 'use'})
+                    assert uncertain_begin['state'] == 'unknown' and not uncertain_begin.get('native_command_acknowledged')
+                    assert uncertain_begin['native_phase_acknowledgements'][0]['phase'] == 'snapshot_transaction_begin'
+                    wait_resource(phase_id, lambda value: value.get('worker_io_closed'))
+                    assert int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_before_create_failure'").fetchone()[0]) == 0
+                    proof['checks'].append('durable-native-BEGIN-ack-is-distinct-from-never-dispatched-slot-creation-and-owner-ends-without-replay')
+                    observer.execute('CREATE TABLE native_snapshot_reused(id integer)')
+                    observer.execute('INSERT INTO native_snapshot_reused VALUES(1)')
+                    observer.execute(sql.SQL('GRANT SELECT ON native_snapshot_reused TO {}').format(sql.Identifier(principal)))
+                    old_oid = observer.execute("SELECT 'native_snapshot_reused'::regclass::oid::text").fetchone()[0]
+                    reused = open_resource(); reused_id = reused['job_id']
+                    run(reused_id, 'logical_create', {'slot': 'sr_snapshot_reused', 'snapshot': 'use', 'plugin': 'test_decoding'})
+                    run(reused_id, 'snapshot_inspect', {'relation_oid': old_oid})
+                    queued = http('command_review', resource_id=reused_id, operation='snapshot_copy', options={'relation_oid': old_oid})
+                    reviewed = wait_child(reused_id, queued['job_id'], {'reviewed'})
+                    observer.execute('ALTER TABLE native_snapshot_reused RENAME TO native_snapshot_reused_moved')
+                    observer.execute('CREATE TABLE native_snapshot_reused(id integer)')
+                    observer.execute('INSERT INTO native_snapshot_reused VALUES(999)')
+                    observer.execute(sql.SQL('GRANT SELECT ON native_snapshot_reused TO {}').format(sql.Identifier(principal)))
+                    assert observer.execute("SELECT 'native_snapshot_reused'::regclass::oid::text").fetchone()[0] != old_oid
+                    http('command_start', resource_id=reused_id, job_id=reviewed['job_id'], review_digest=reviewed['review_digest'], confirmed=True)
+                    changed = wait_child(reused_id, reviewed['job_id'], {'failed', 'unknown'})
+                    assert not changed.get('native_command_acknowledged')
+                    wait_resource(reused_id, lambda value: value.get('worker_io_closed'))
+                    assert observer.execute('SELECT id FROM native_snapshot_reused').fetchall() == [(999,)]
+                    assert observer.execute('SELECT id FROM native_snapshot_reused_moved').fetchall() == [(1,)]
+                    proof['checks'].append('current-locked-regclass-OID-rejects-a-reused-name-even-when-the-original-snapshot-sees-old-catalog-facts')
+                    copy_publication = open_resource(); copy_publication_id = copy_publication['job_id']
+                    run(copy_publication_id, 'logical_create', {'slot': 'sr_snapshot_copy_publication', 'snapshot': 'use', 'plugin': 'test_decoding'})
+                    with patch('pgadmin.cdeadmin.workspace.postgresql_snapshot_copy.durable_replace', side_effect=OSError('owned snapshot COPY publication failure')):
+                        uncertain_copy = run(copy_publication_id, 'snapshot_copy', {'relation_oid': selected_relation['relation_oid']})
+                    assert uncertain_copy['state'] == 'unknown' and uncertain_copy['native_command_acknowledged']
+                    wait_resource(copy_publication_id, lambda value: value.get('worker_io_closed'))
+                    before = len(connections)
+                    inspected = http('copy_reconcile', resource_id=copy_publication_id, job_id=uncertain_copy['job_id'])
+                    assert inspected['state'] == 'unknown' and inspected['snapshot_copy_artifact']['state'] == 'verified'
+                    assert len(connections) == before
+                    http('copy_remove', resource_id=copy_publication_id, job_id=uncertain_copy['job_id'], confirmation='other', refused=True)
+                    removed = http('copy_remove', resource_id=copy_publication_id, job_id=uncertain_copy['job_id'], confirmation=uncertain_copy['job_id'])
+                    assert removed['artifact_removed']
+                    assert http('copy_remove', resource_id=copy_publication_id, job_id=uncertain_copy['job_id'], confirmation=uncertain_copy['job_id'])['artifact_removed']
+                    http('copy_preview', resource_id=copy_publication_id, job_id=uncertain_copy['job_id'], offset='0', length=16, refused=True)
+                    proof['checks'].append('native-COPY-ack-and-exact-offline-publication-recovery-keep-unknown-outcome-with-confirmed-idempotent-removal')
+                    observer.execute('CREATE VIEW native_snapshot_slow AS SELECT id,pg_sleep(30)::text AS paused FROM snapshot_rows')
+                    observer.execute(sql.SQL('GRANT SELECT ON native_snapshot_slow,snapshot_rows TO {}').format(sql.Identifier(principal)))
+                    slow_oid = observer.execute("SELECT 'native_snapshot_slow'::regclass::oid::text").fetchone()[0]
+                    slow = open_resource(); slow_id = slow['job_id']
+                    run(slow_id, 'logical_create', {'slot': 'sr_snapshot_copy_cancel', 'snapshot': 'use', 'plugin': 'test_decoding'})
+                    run(slow_id, 'snapshot_inspect', {'relation_oid': slow_oid})
+                    queued = http('command_review', resource_id=slow_id, operation='snapshot_copy', options={'relation_oid': slow_oid})
+                    reviewed = wait_child(slow_id, queued['job_id'], {'reviewed'})
+                    http('command_start', resource_id=slow_id, job_id=reviewed['job_id'], review_digest=reviewed['review_digest'], confirmed=True)
+                    deadline = time.monotonic() + 10
+                    while observer.execute('SELECT wait_event FROM pg_stat_activity WHERE pid=%s', (int(slow['backend_pid']),)).fetchone() != ('PgSleep',):
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    http('command_cancel', resource_id=slow_id, job_id=reviewed['job_id'])
+                    cancelled_copy = wait_child(slow_id, reviewed['job_id'], {'failed', 'unknown'})
+                    assert not cancelled_copy.get('native_command_acknowledged') and cancelled_copy['native_error_sqlstate'] == '57014'
+                    wait_resource(slow_id, lambda value: value.get('worker_io_closed'))
+                    inspected = http('copy_reconcile', resource_id=slow_id, job_id=cancelled_copy['job_id'])
+                    assert inspected['snapshot_copy_artifact']['state'] == 'partial' and not inspected.get('native_command_acknowledged')
+                    deadline = time.monotonic() + 10
+                    while int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_snapshot_copy_cancel'").fetchone()[0]):
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    proof['checks'].append('independently-observed-active-native-COPY-cancellation-retains-57014-and-partial-bytes-never-prove-completion')
                     if browser_binary:
                         observer.execute('TRUNCATE snapshot_rows')
                         observer.execute('INSERT INTO snapshot_rows VALUES(1),(2)')
+                        def verify_browser_copy(resource_id, command_id, expected_rows):
+                            value = http('command_status', resource_id=resource_id, job_id=command_id)
+                            assert value['native_command_acknowledged'] and value['snapshot_copy_artifact']['copy_format'] == 'binary'
+                            response = client.post(url, data={'action': 'postgresql_replication_temporary_copy_download',
+                                'payload': json.dumps({'database_target_id': target, 'resource_id': resource_id, 'job_id': command_id})})
+                            assert response.status_code == 200
+                            raw = response.data; response.close()
+                            assert hashlib.sha256(raw).hexdigest() == value['snapshot_copy_artifact']['sha256']
+                            observer.execute('CREATE TEMP TABLE browser_snapshot_delivered(id integer)')
+                            with observer.cursor().copy('COPY browser_snapshot_delivered FROM STDIN (FORMAT binary)') as loading:
+                                loading.write(raw)
+                            assert observer.execute('SELECT id FROM browser_snapshot_delivered ORDER BY id').fetchall() == expected_rows
+                            observer.execute('DROP TABLE browser_snapshot_delivered')
                         proof['browser'] = qualify_browser(app, output, browser_binary, driver_binary, sid,
                             secret, database, lambda identity: http('status', job_id=identity),
                             lambda snapshot: import_snapshot(snapshot, [(1,), (2,)]),
-                            lambda: observer.execute('INSERT INTO snapshot_rows VALUES(4)'))
+                            lambda: observer.execute('INSERT INTO snapshot_rows SELECT COALESCE(max(id),0)+1 FROM snapshot_rows'),
+                            lambda: observer.execute('SELECT id FROM snapshot_rows ORDER BY id').fetchall(),
+                            verify_browser_copy)
                     proof['application_connections'] = connections
                     proof['native_protocol_command_kinds'] = protocol_commands
         proof['owned_server_stopped'] = owned['owned_server_stopped']
@@ -346,7 +577,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
         closed = [manager.close(timeout=10) for manager in managers.values()]
         proof['owned_workers_closed'] = all(closed)
         proof['complete'] = bool(flow_finished and proof.get('owned_server_stopped') and
-                                 proof.get('owned_workers_closed') and len(proof['checks']) == 11)
+                                 proof.get('owned_workers_closed') and len(proof['checks']) == 18)
         (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
     proof['owned_server_stopped'] = owned['owned_server_stopped']
     proof['complete'] &= proof['owned_server_stopped']
@@ -355,7 +586,8 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
     return proof
 
 
-def qualify_browser(app, output, binary, driver_binary, sid, password, database, resource_status, import_snapshot, produce_changes):
+def qualify_browser(app, output, binary, driver_binary, sid, password, database, resource_status, import_snapshot, produce_changes,
+                    expected_rows, verify_copy):
     import re
     import threading
     from selenium import webdriver
@@ -400,6 +632,21 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
                     return True
                 browser.execute_script('arguments[0].scrollIntoView({block:"nearest"});', summary); summary.click(); return True
             wait.until(reveal)
+        def choose(label, text, *, prefix=False):
+            control(label).click()
+            wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="option"]')
+                if node.is_displayed() and (node.text.strip().startswith(text) if prefix else node.text.strip() == text)), None)).click()
+        def run_command():
+            button('Review retained replication command')
+            wait.until(lambda browser: 'Confirm retained replication command' in browser.find_element(By.TAG_NAME, 'body').text)
+            control('Confirm retained replication command').click(); button('Run reviewed replication command')
+            def complete(browser):
+                for node in browser.find_elements(By.CSS_SELECTOR, '[role="alert"]'):
+                    match = re.search(r'Retained replication command ([0-9a-f-]{36}): completed', node.text)
+                    if match:
+                        return match[1]
+                return False
+            return wait.until(complete)
         def workspace():
             ensure_data_explorer(wait); expand(wait, 'Connectors'); expand(wait, 'PostgreSQL')
             node = wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '.file-name')
@@ -463,11 +710,52 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         while not resource_status(resource).get('worker_io_closed'):
             assert time.monotonic() < deadline; time.sleep(.05)
         driver.save_screenshot(str(output / 'replication-snapshot-released.png'))
+        details('Registered replication credentials')
+        control('Temporary replication password').send_keys(password)
+        limit = control('Replication resource maximum seconds'); limit.clear(); limit.send_keys('300')
+        button('Review temporary replication resource')
+        wait.until(lambda browser: 'Confirm original replication resource' in browser.find_element(By.TAG_NAME, 'body').text)
+        control('Confirm original replication resource').click(); button('Open reviewed replication resource')
+        use_resource = wait.until(identity)
+        choose('Retained replication command', 'Create temporary logical slot')
+        slot = control('Exact retained replication slot'); slot.clear(); slot.send_keys('sr_ui_use')
+        choose('Native replication snapshot', 'Use snapshot in an owned read-only transaction')
+        run_command()
+        wait.until(lambda browser: 'The original backend owns a read-only repeatable-read SNAPSHOT USE' in browser.find_element(By.TAG_NAME, 'body').text)
+        expected = expected_rows()
+        produce_changes()
+        choose('Retained replication command', 'Read original snapshot relation catalog')
+        control('Original snapshot schema name (empty for all)').send_keys('public')
+        run_command()
+        wait.until(lambda browser: 'Native snapshot relation page:' in browser.find_element(By.TAG_NAME, 'body').text)
+        choose('Retained replication command', 'Inspect original snapshot relation')
+        choose('Original snapshot relation', 'public.snapshot_rows — OID ', prefix=True)
+        run_command()
+        choose('Retained replication command', 'Copy relation from original snapshot')
+        copied_command = run_command()
+        button('Preview original snapshot COPY bytes')
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR,
+            '[aria-label="Original snapshot COPY byte preview"]') if node.is_displayed() and 'data_base64' in node.text), None))
+        verify_copy(use_resource, copied_command, expected)
+        driver.save_screenshot(str(output / 'snapshot-use-native-copy.png'))
+        choose('Retained replication command', 'End owned snapshot transaction')
+        run_command()
+        wait.until(lambda browser: 'The original backend owns a read-only repeatable-read SNAPSHOT USE' not in browser.find_element(By.TAG_NAME, 'body').text)
+        choose('Retained replication command', 'Capture original temporary logical stream')
+        run_command(); button('Preview original replication frames')
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR,
+            '[aria-label="Original replication frame preview"]') if node.is_displayed() and 'payload_base64' in node.text), None))
+        control('Release this replication backend and snapshot').click(); button('Release retained replication resource')
+        deadline = time.monotonic() + 15
+        while not resource_status(use_resource).get('worker_io_closed'):
+            assert time.monotonic() < deadline; time.sleep(.05)
         completed = True
         result.update(complete=True, browser_version=driver.capabilities['browserVersion'],
             driver_version=driver.capabilities.get('chrome', {}).get('chromedriverVersion'),
             original_backend_preserved_after_reload=True, native_snapshot_import_verified=True,
             original_backend_stream_captured_and_previewed=True,
+            owned_snapshot_use_native_copy_import_verified=True, explicit_snapshot_transaction_end=True,
+            original_backend_stream_after_initial_copy=True,
             explicit_release_completed=True, sql_bootstrap_performed=False)
     finally:
         if driver is not None:

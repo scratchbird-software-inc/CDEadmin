@@ -134,8 +134,9 @@ PostgreSQL
   implemented independent native recovery drills and recovery targets.
 * PG-ARCHIVES: Complete retention, interrupted-stream restart and log/archive
   management beyond the qualified physical WAL and logical receiver captures.
-* PG-TEMP-PROTOCOL: Complete SNAPSHOT USE and application snapshot-consumption /
-  initial-copy workflows, plus installed output-plugin qualification. Retained
+* PG-TEMP-PROTOCOL: Complete independent application consumers of exported
+  snapshots, destination orchestration/cutover beyond selected native initial
+  relation copies, and installed output-plugin qualification. Retained
   original-backend logical streaming and temporary physical/logical creation,
   export/no-export snapshot ownership and safe owned-slot removal now have a
   separate reviewed replication-only resource. Existing SQL temporary-slot
@@ -193,9 +194,20 @@ unobserved catalog/health facts and no command automatically replays. This
 resource also supports native logical COPY BOTH capture on its original backend,
 reviewed bounds and optional fsynced-only flush feedback, exact frame delivery,
 inspection and removal. Native completion, artifact publication and unknown
-outcomes remain separate, with no automatic replay. These receipts do not close
-native SNAPSHOT USE, application snapshot consumption, installed plugin
-qualification or the independent PostgreSQL inventory.
+outcomes remain separate, with no automatic replay. Owned SNAPSHOT USE now starts
+a native read-only repeatable-read transaction, creates its slot as the first
+command, and supports explicit cancellable relation discovery/inspection and
+typed binary/text/CSV COPY on that original backend. Declared domain identities
+and their actual wire type/modifier remain separate. Native locks, current OID,
+column facts, SELECT permission and RLS bind the selected output. Materialized
+and foreign relations retain their native locking/snapshot rules. Native BEGIN,
+slot creation, COPY return, byte publication and transaction end have separate
+outcomes. Explicit commit/rollback retains session slots under native rules for
+later streaming; failed/uncertain commands end this owner. Exact private delivery,
+offline inspection and confirmed removal never replay a capture or promote an
+unknown operation. Independent exported-snapshot consumers, destination
+orchestration/cutover, installed plugin acceptance and the independent PostgreSQL
+inventory remain open.
 
 DuckDB
 ------

@@ -138,17 +138,22 @@ def action(service, server, operation, request):
     resource = jobs.load(fields.get('resource_id'), owner, endpoint)
     commands = jobs.commands(resource)
     remaining = {key: value for key, value in fields.items() if key != 'resource_id'}
-    if operation in {'stream_preview', 'stream_reconcile', 'stream_remove'}:
-        from . import postgresql_replication_stream as stream
-        allowed = {'job_id', 'offset', 'limit'} if operation == 'stream_preview' else {'job_id', 'confirmation'} if operation == 'stream_remove' else {'job_id'}
+    if operation in {'stream_preview', 'stream_reconcile', 'stream_remove', 'copy_preview', 'copy_reconcile', 'copy_remove'}:
+        copy = operation.startswith('copy_')
+        if copy:
+            from . import postgresql_snapshot_copy as stream
+        else:
+            from . import postgresql_replication_stream as stream
+        suffix = operation.split('_', 1)[1]
+        allowed = {'job_id', 'offset', 'length' if copy else 'limit'} if suffix == 'preview' else {'job_id', 'confirmation'} if suffix == 'remove' else {'job_id'}
         if set(remaining) - allowed or 'job_id' not in remaining:
             raise TemporarySlotError('Select one owned native replication capture')
         child = commands.load(remaining['job_id'], owner, endpoint)
-        if child['options']['operation'] != 'logical_stream':
-            raise TemporarySlotError('Select an original-backend logical stream command')
-        if operation == 'stream_preview':
+        if child['options']['operation'] != ('snapshot_copy' if copy else 'logical_stream'):
+            raise TemporarySlotError('Select an original-backend capture of this native kind')
+        if suffix == 'preview':
             return stream.preview(commands, child, remaining)
-        if operation == 'stream_reconcile':
+        if suffix == 'reconcile':
             return stream.reconcile(commands, child)
         if set(remaining) != {'job_id', 'confirmation'} or remaining['confirmation'] != child['job_id']:
             raise TemporarySlotError('Confirm removal of this owned native replication capture')
@@ -159,7 +164,7 @@ def action(service, server, operation, request):
                 raise TemporarySlotError('Wait for the original replication writer to stop')
             with stream.payload(commands, current) as source:
                 before = stream.file_identity(os.fstat(source.fileno()))
-            path = commands.directory(current) / current['protocol_stream_artifact']['filename']
+            path = commands.directory(current) / current['snapshot_copy_artifact' if copy else 'protocol_stream_artifact']['filename']
             if stream.file_identity(path.lstat()) != before:
                 raise TemporarySlotError('Native replication bytes changed before removal')
             path.unlink()
@@ -195,9 +200,12 @@ def action(service, server, operation, request):
     raise TemporarySlotError('Temporary replication resource action is unavailable')
 
 
-def stream_download(service, server, request):
+def stream_download(service, server, request, *, copy=False):
     from flask import send_file
-    from . import postgresql_replication_stream as stream
+    if copy:
+        from . import postgresql_snapshot_copy as stream
+    else:
+        from . import postgresql_replication_stream as stream
     if not isinstance(request, dict) or set(request) != {'database_target_id', 'resource_id', 'job_id'}:
         raise TemporarySlotError('Select one owned original-backend native replication capture')
     jobs, owner, endpoint = manager(service, server, request['database_target_id'])
@@ -206,9 +214,9 @@ def stream_download(service, server, request):
     child = commands.load(request['job_id'], owner, endpoint)
     opened = stream.payload(commands, child)
     source = opened.__enter__()
-    artifact = child['protocol_stream_artifact']
+    artifact = child['snapshot_copy_artifact' if copy else 'protocol_stream_artifact']
     try:
-        response = send_file(source, mimetype='application/x-ndjson', as_attachment=True,
+        response = send_file(source, mimetype='application/octet-stream' if copy else 'application/x-ndjson', as_attachment=True,
             download_name=artifact['filename'], conditional=False, max_age=0)
         response.content_length = int(artifact['artifact_bytes'])
         response.direct_passthrough = False

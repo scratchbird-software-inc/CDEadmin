@@ -12,8 +12,8 @@ from .postgresql_temporary_slot_jobs import TemporarySlotCommands, TemporarySlot
 
 
 def program():
-    from ..providers.postgresql import replication_admission, replication_temporary_slots, replication_stream_options
-    from . import postgresql_temporary_slot_jobs, postgresql_replication_stream
+    from ..providers.postgresql import replication_admission, replication_temporary_slots, replication_stream_options, replication_snapshot_copy
+    from . import postgresql_temporary_slot_jobs, postgresql_replication_stream, postgresql_snapshot_copy
     return {'kind': 'native-postgresql-replication-temporary-slot-resource',
             'adapter_sha256': hashlib.sha256(Path(replication_temporary_slots.__file__).read_bytes()).hexdigest(),
             'channel_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -22,6 +22,8 @@ def program():
             'admission_sha256': hashlib.sha256(Path(replication_admission.__file__).read_bytes()).hexdigest(),
             'stream_options_sha256': hashlib.sha256(Path(replication_stream_options.__file__).read_bytes()).hexdigest(),
             'stream_capture_sha256': hashlib.sha256(Path(postgresql_replication_stream.__file__).read_bytes()).hexdigest(),
+            'snapshot_options_sha256': hashlib.sha256(Path(replication_snapshot_copy.__file__).read_bytes()).hexdigest(),
+            'snapshot_copy_sha256': hashlib.sha256(Path(postgresql_snapshot_copy.__file__).read_bytes()).hexdigest(),
             'execution_host': {'kind': 'application-host', 'hostname': socket.gethostname(), 'platform': sys.platform}}
 
 
@@ -29,9 +31,11 @@ class ReplicationTemporaryCommands(TemporarySlotCommands):
     operation = 'postgresql_replication_temporary_slot_command'
     review_warnings = (
         'Dispatch one command on this original native replication backend. A native error can remove all its temporary slots.',
-        'A new command invalidates its earlier exported snapshot. Review and status do not send native commands.',
+        'A new command invalidates its earlier exported snapshot. Review and local status send no native command. Explicit snapshot relation inspection reads the owned USE transaction catalog before COPY review.',
         'Native acknowledgement is distinct from current slot/snapshot liveness. Unknown commands never replay.',
         'Logical streaming captures native frames on this backend. Optional flush feedback advances only to fsynced data-start positions; it can consume slot output. No application apply position is reported.',
+        'SNAPSHOT USE starts an owned read-only repeatable-read transaction, then creates its slot as the first command. Native BEGIN and slot acknowledgement remain separate. End that transaction explicitly before replication streaming.',
+        'Snapshot COPY uses the native SELECT permission and row-security scope. Native metadata and a locked relation identity bind its native binary/text/CSV artifact. Views, foreign sources and concurrent DDL retain their native snapshot limitations.',
     )
 
 
@@ -39,7 +43,7 @@ class ReplicationTemporaryResources(TemporarySlotResources):
     operation = 'postgresql_replication_temporary_slot_resource'
     review_warnings = (
         'Retain one native database replication connection. Temporary slots disappear on its termination or a native error; an old backend is never reconnected.',
-        'An exported snapshot requires this original connection and expires on its next native command. Status, review and acknowledgement pages send no native command.',
+        'An exported snapshot requires this original connection and expires on its next native command. Local status, review and acknowledgement pages send no native command. Explicit snapshot relation inspection reads the owned USE transaction catalog.',
         'Acknowledgements are not a SQL slot catalog or a current health check. Closing the viewer does not release this resource. WAL retention can consume server storage.',
         'Native command acknowledgement, local connection close and independently observed backend cleanup remain separate facts. Lost commands never replay.',
     )
@@ -61,8 +65,28 @@ class ReplicationTemporaryResources(TemporarySlotResources):
             return False
         commands = self.commands(current)
         child = commands.load(pending['job_id'], record['owner'], record['endpoint_id'])
-        if pending['kind'] != 'execute' or child['options']['operation'] != 'logical_stream':
+        if pending['kind'] != 'execute':
             return super().process(record, native, cancel, expired)
+        native.phase_acknowledge = lambda phases: commands.update(child, native_phase_acknowledgements=phases)
+        if child['options']['operation'] == 'snapshot_copy':
+            from . import postgresql_snapshot_copy
+            def snapshot_capture(connection, source, selected, acknowledge, dispatching):
+                artifact = postgresql_snapshot_copy.capture(connection, commands.directory(child), source, selected,
+                    acknowledge=acknowledge, progress=lambda value: commands.update(child, progress=value),
+                    dispatching=dispatching)
+                commands.update(child, snapshot_copy_artifact=artifact)
+                return artifact
+            native.snapshot_copy_capture = snapshot_capture
+            try:
+                return super().process(record, native, cancel, expired)
+            finally:
+                del native.snapshot_copy_capture
+                del native.phase_acknowledge
+        if child['options']['operation'] != 'logical_stream':
+            try:
+                return super().process(record, native, cancel, expired)
+            finally:
+                del native.phase_acknowledge
         from . import postgresql_replication_stream
         def capture(connection, selected, acknowledge, dispatching):
             artifact = postgresql_replication_stream.capture(connection, commands.directory(child), selected,
@@ -75,6 +99,7 @@ class ReplicationTemporaryResources(TemporarySlotResources):
             return super().process(record, native, cancel, expired)
         finally:
             del native.stream_capture
+            del native.phase_acknowledge
 
 
 class ReplicationTemporaryTransport:

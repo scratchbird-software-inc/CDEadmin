@@ -126,9 +126,9 @@ independent observer after idle/status reads, provider/database isolation,
 foreign-name protection, native errors, release and offline receipts. Optional
 ``--browser-binary`` and ``--driver-binary`` exercise the production controls and
 retention across viewer reload. Evidence belongs outside source. The owning
-remaining-work matrix keeps native SNAPSHOT USE and application
-snapshot-consumption/initial-copy workflows open; the snapshot
-consumer in the qualification tool is independent test evidence.
+remaining-work matrix retains independent consumers of exported snapshots,
+destination orchestration and installed-plugin acceptance. The snapshot consumer
+in the qualification tool is independent test evidence.
 
 The same retained resource can capture an acknowledged logical temporary slot
 through native START_REPLICATION / COPY BOTH. Native plugin options and the
@@ -164,3 +164,63 @@ completions; it is never represented as a reached client bound or caught-up
 checkpoint. ScratchRobin does not issue hidden physical commands, reconnect or
 recreate a temporary slot to work around that native behavior. A continuously
 retained first stream can use no local capture bounds under application policy.
+
+Owned SNAPSHOT USE and initial relation COPY
+--------------------------------------------
+
+The same resource offers native SNAPSHOT USE. Its reviewed logical-slot command
+starts an owned read-only repeatable-read transaction and creates the slot as
+the first command inside that transaction. Native BEGIN acknowledgement is
+journalled separately from slot creation. A failure between those commands never
+claims slot creation or automatically repeats it. The original backend retains
+the installed snapshot across local status reads and viewer changes.
+
+An explicit native snapshot catalog operation lists relation identities with
+bounded paging, exact schema filtering, native SELECT permission and row-security
+facts. Explicit relation inspection records the native column identities,
+declared types, modifiers and applicable flags. Declared domains remain distinct
+from the base wire type and modifier used by native RowDescription. Inspection
+runs as a cancellable command with its own deadline. COPY review and local status
+send no native query. The backend retains the latest 100 inspected sources;
+complete inspection receipts remain separately paged. Inspect an evicted source
+again before reviewing its copy.
+
+Reviewed relation COPY stays on this original snapshot transaction. Native locks,
+current regclass identity and actual RowDescription bind the selected source
+before bytes are captured. Plain/partitioned tables and views use native LOCK
+TABLE. Materialized and foreign relations use a zero-row SELECT to obtain their
+native AccessShareLock, with current identity checks before and after. This
+preserves their native eligibility when LOCK TABLE itself rejects those kinds.
+Native SELECT permissions, row security, view behavior and foreign-server
+authentication remain authoritative. Foreign sources retain their own remote
+snapshot semantics; a local decoding snapshot does not establish remote snapshot
+synchronization.
+
+The application streams exact native binary, text or CSV COPY output into private
+artifacts. Typed COPY TO options expose delimiter, NULL marker, header, quote,
+escape, FORCE_QUOTE and encoding. Native format/option refusal remains a native
+failure. Receipts preserve the selected relation, type facts, format/options,
+native row count and byte hash. Native command acknowledgement is saved before
+artifact flush/publication. Bounded byte preview, exact download, explicit
+stopped-file inspection and confirmed removal remain available after the original
+backend ends. Inspecting bytes cannot promote an unknown native command outcome
+or infer completeness without its recorded acknowledgement.
+
+Explicit commit or rollback ends the owned read-only transaction. Temporary
+slots remain session-owned under native rules; subsequent native streaming can
+use the original slot/backend. A native error or uncertain command ends this
+owner and releases its locks instead of reconnecting, recreating slots or
+replaying COPY. Selected relation captures, database backup, destination loading,
+logical application and production cutover retain their separate receipts.
+
+The qualification command covers exact native values and domain identities,
+binary/text/CSV roundtrips through independent native COPY imports, materialized
+and postgres_fdw relations, native RLS/privilege refusal, explicit transaction
+end and a same-backend post-snapshot logical stream. It also exercises the
+BEGIN/creation boundary, reused relation names, publication failure, offline
+inspection/removal and independently observed native COPY cancellation. Its
+browser path creates the owned snapshot, inspects/copies a relation, verifies
+the delivered bytes through an independent native import, ends the transaction
+and streams on the original backend. Evidence qualifies the recorded installation
+and selected scopes; independent exported-snapshot consumers, destination
+orchestration/cutover and wider installed-plugin acceptance remain open.

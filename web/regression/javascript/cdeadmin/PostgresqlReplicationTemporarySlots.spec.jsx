@@ -105,3 +105,56 @@ it('reviews native stream feedback explicitly and keeps capture preview and deli
   fireEvent.click(screen.getByRole('button',{name:'Download original replication frames'}));
   expect(startBrowserFileDownload).toHaveBeenCalledWith('/owned-server/workspace',{database_target_id:target,resource_id:'resource',job_id:'command'},expect.objectContaining({action:'postgresql_replication_temporary_stream_download'}));
 });
+
+it('uses the original snapshot catalog, native COPY options and an explicit transaction end',async () => {
+  const base=api();let resource=opened,selected,count=0;
+  const post=jest.fn(payload => {
+    const action=payload.action.replace('postgresql_replication_temporary_','');
+    if(action==='status')return Promise.resolve(resource);
+    if(action==='command_review'){
+      selected={job_id:'snapshot-command-'+(++count),state:'reviewed',review_digest:'native-review',options:{operation:payload.request.operation,native_options:payload.request.options}};
+      return Promise.resolve(selected);
+    }
+    if(action==='command_start'){
+      const operation=selected.options.operation;
+      if(operation==='logical_create')resource={...opened,latest_native_inventory:{owns_snapshot_transaction:true,used_snapshot:{slot:'sr_use'}}};
+      if(operation==='snapshot_end')resource={...opened,latest_native_inventory:{owns_snapshot_transaction:false,used_snapshot:null}};
+      selected={...selected,state:'completed',worker_io_closed:true,native_command_acknowledged:true,native_acknowledgement:{operation,
+        native_result:operation==='snapshot_tables' ? {relations:[{relation_oid:'7',schema:'public',name:'exact',native_kind:'r',can_select:true,row_security_active:false}],offset:0,limit:25,more:false} : null},
+      ...(operation==='snapshot_copy' ? {snapshot_copy_artifact:{state:'verified',copy_format:'csv',rows:'1'}} : {})};
+      return Promise.resolve({...selected,state:'active'});
+    }
+    if(action==='command_status')return Promise.resolve(selected);
+    if(action==='copy_preview')return Promise.resolve({data_base64:'Y29weQ==',next_offset:null,copy_format:'csv',native_values_decoded:false});
+    return base(payload);
+  });
+  const choose=(label,value) => fireEvent.change(screen.getByLabelText(label).parentElement.querySelector('input'),{target:{value}});
+  const run=async () => {
+    fireEvent.click(screen.getByRole('button',{name:'Review retained replication command'}));
+    await screen.findByRole('button',{name:'Run reviewed replication command'});
+    fireEvent.click(screen.getByLabelText('Confirm retained replication command'));
+    fireEvent.click(screen.getByRole('button',{name:'Run reviewed replication command'}));
+    await screen.findByText(new RegExp('Retained replication command snapshot-command-'+count+': completed'));
+  };
+  await open(post,{endpointUrl:'/owned-server/workspace'});
+  fireEvent.change(screen.getByLabelText('Exact retained replication slot'),{target:{value:'sr_use'}});
+  choose('Native replication snapshot','use');await run();
+  await screen.findByText(/The original backend owns a read-only repeatable-read SNAPSHOT USE/);
+  choose('Retained replication command','snapshot_tables');
+  fireEvent.change(screen.getByLabelText('Original snapshot schema name (empty for all)'),{target:{value:'public'}});
+  await run();await screen.findByText(/Native snapshot relation page:/);
+  choose('Retained replication command','snapshot_inspect');
+  choose('Original snapshot relation','7');await run();
+  choose('Retained replication command','snapshot_copy');choose('Original snapshot COPY format','csv');
+  fireEvent.change(screen.getByLabelText('Native snapshot COPY TO options (JSON)'),{target:{value:'{"header":true,"force_quote":"all"}'}});
+  await run();
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'snapshot_copy',options:{timeout_seconds:30,invalidate_snapshot:false,relation_oid:'7',include_descendants:true,format:'csv',copy_options:{header:true,force_quote:'all'}}}});
+  fireEvent.click(screen.getByRole('button',{name:'Preview original snapshot COPY bytes'}));
+  await screen.findByLabelText('Original snapshot COPY byte preview');
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_copy_preview',request:{database_target_id:target,resource_id:'resource',job_id:'snapshot-command-4',offset:'0',length:4096}});
+  fireEvent.click(screen.getByRole('button',{name:'Download original snapshot COPY'}));
+  expect(startBrowserFileDownload).toHaveBeenCalledWith('/owned-server/workspace',expect.objectContaining({job_id:'snapshot-command-4'}),expect.objectContaining({action:'postgresql_replication_temporary_copy_download'}));
+  choose('Retained replication command','snapshot_end');await run();
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'snapshot_end',options:{timeout_seconds:30,invalidate_snapshot:false,decision:'commit'}}});
+  await waitFor(() => expect(screen.queryByText(/The original backend owns a read-only repeatable-read SNAPSHOT USE/)).not.toBeInTheDocument());
+});

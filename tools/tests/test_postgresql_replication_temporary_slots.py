@@ -1,5 +1,5 @@
 """Original replication ownership and nonintrusive snapshot admission."""
-from collections import deque
+from collections import deque, OrderedDict
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -26,7 +26,7 @@ from pgadmin.cdeadmin.workspace.postgresql_replication_temporary_service import 
     ('logical_create', {'slot': 'native', 'plugin': '\ud800'}),
     ('logical_create', {'slot': 'native', 'plugin': 'embedded"quote'}),
     ('logical_create', {'slot': 'native', 'snapshot': []}),
-    ('logical_create', {'slot': 'native', 'snapshot': 'use'}),
+    ('logical_create', {'slot': 'native', 'snapshot': 'invalid-native-mode'}),
     ('logical_create', {'slot': 'native', 'two_phase': 1}),
 ])
 def test_native_options_refuse_unadmitted_modes_and_lossy_or_untyped_values(operation, value):
@@ -66,6 +66,7 @@ def native():
     value.acknowledgement_count = 0
     value.owned_slots = {'original'}
     value.owned_slot_kinds = {'original': 'logical'}
+    value.copy_sources = OrderedDict()
     return value
 
 
@@ -188,3 +189,66 @@ def test_stream_artifact_refusal_before_dispatch_keeps_original_snapshot_and_bac
         value.command(reviewed, Mock(), dispatching=dispatching)
     dispatching.assert_not_called()
     assert value.snapshot == before and value.usable
+
+
+def test_snapshot_use_records_native_begin_before_a_failed_slot_without_claiming_final_ack():
+    from psycopg.errors import UndefinedFile
+    value = native()
+    reviewed = value.review('logical_create', {'slot': 'new_slot', 'snapshot': 'use', 'invalidate_snapshot': True})
+    phases = []
+    value.phase_acknowledge = phases.append
+    cursor = Mock()
+    def execute(command):
+        if command == 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY':
+            value.connection.info.transaction_status = TransactionStatus.INTRANS
+        else:
+            assert phases[0][0]['phase'] == 'snapshot_transaction_begin'
+            raise UndefinedFile('owned plugin unavailable')
+    cursor.execute.side_effect = execute
+    factory = Mock()
+    factory.return_value.__enter__ = Mock(return_value=cursor)
+    factory.return_value.__exit__ = Mock(return_value=False)
+    acknowledge = Mock()
+    with patch('psycopg.ClientCursor', factory), pytest.raises(TemporarySlotError) as error:
+        value.command(reviewed, acknowledge)
+    assert error.value.sqlstate == '58P01' and len(phases) == 1
+    acknowledge.assert_not_called()
+    assert value.owns_snapshot_transaction and not value.usable
+
+
+@pytest.mark.parametrize('operation,selected', [
+    ('snapshot_end', {}), ('snapshot_end', {'decision': 'automatic'}),
+    ('snapshot_end', {'decision': 'commit', 'slot': 'native'}),
+    ('snapshot_tables', {'offset': True}), ('snapshot_tables', {'limit': 101}),
+    ('snapshot_copy', {'relation_oid': '0'}), ('snapshot_copy', {'relation_oid': '0007'}),
+    ('snapshot_copy', {'relation_oid': '4294967296'}), ('snapshot_copy', {'relation_oid': '1;SELECT'}),
+    ('snapshot_copy', {'relation_oid': '7', 'include_descendants': 1}),
+])
+def test_owned_snapshot_options_require_exact_native_scope(operation, selected):
+    with pytest.raises(TemporarySlotError):
+        options(operation, selected)
+
+
+def test_original_snapshot_copy_and_end_require_the_owned_native_transaction():
+    value = native()
+    with pytest.raises(TemporarySlotError, match='No owned'):
+        value.review('snapshot_copy', {'relation_oid': '7', 'invalidate_snapshot': True})
+    value.snapshot = None
+    value.owns_snapshot_transaction = True
+    value.used_snapshot = {'slot': 'original', 'consistent_point': '0/1234'}
+    value.connection.info.transaction_status = TransactionStatus.INTRANS
+    with pytest.raises(TemporarySlotError, match='End the original'):
+        value.review('logical_stream', {'slot': 'original'})
+    with pytest.raises(TemporarySlotError, match='Inspect the selected relation'):
+        value.review('snapshot_copy', {'relation_oid': '7'})
+    value.copy_sources['7'] = {'relation_oid': '7'}
+    with patch('pgadmin.cdeadmin.providers.postgresql.replication_snapshot_copy.relation', side_effect=AssertionError('Native SQL during review')) as relation:
+        reviewed = value.review('snapshot_copy', {'relation_oid': '7'})
+    assert reviewed['copy_source'] == {'relation_oid': '7', 'used_snapshot': value.used_snapshot,
+                                      'copy_format': 'binary', 'copy_options': {}, 'include_descendants': True}
+    relation.assert_not_called()
+    reviewed = value.review('snapshot_end', {'decision': 'rollback'})
+    assert reviewed['used_snapshot_before'] == value.used_snapshot
+    value.connection.info.transaction_status = TransactionStatus.IDLE
+    with pytest.raises(TemporarySlotError, match='unavailable'):
+        value.review('snapshot_end', {'decision': 'commit'})
