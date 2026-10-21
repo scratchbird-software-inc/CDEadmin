@@ -870,7 +870,7 @@ class RelationalInventoryTests(unittest.TestCase):
             operation_calls[0][2]['secret_argument'],
         )
 
-    def test_mysql_shell_backup_uses_workspace_and_stdin_secret(self):
+    def test_mysql_shell_backup_uses_workspace_and_private_json_secret(self):
         observations = {}
         leases = []
 
@@ -878,9 +878,12 @@ class RelationalInventoryTests(unittest.TestCase):
             def run(self, grant, arguments, **kwargs):
                 observations['grant'] = grant
                 observations['arguments'] = arguments
-                observations['input'] = kwargs['input_bytes']
+                observations['input'] = kwargs.get('input_bytes', b'')
                 observations['redact_values'] = kwargs['redact_values']
-                source = kwargs['secret_config'].decode('utf-8')
+                observations['credentials'] = json.loads(kwargs['secret_config'])
+                script = Path(next(item.split('=', 1)[1] for item in arguments if item.startswith('--file=')))
+                observations['script'] = script
+                source = script.read_text(encoding='utf8')
                 observations['source'] = source
                 observations['secret_argument'] = kwargs['secret_argument']
                 encoded_path = source.split(
@@ -941,7 +944,9 @@ class RelationalInventoryTests(unittest.TestCase):
             self.assertGreater(result['artifact_total_bytes'], 0)
             self.assertEqual('', result['stdout'])
             self.assertTrue((Path(temporary).resolve() / 'backup-one').is_dir())
-        self.assertEqual(b'mysql-shell-secret-canary\n', observations['input'])
+        self.assertEqual(b'', observations['input'])
+        self.assertEqual({'password': 'mysql-shell-secret-canary'}, observations['credentials'])
+        self.assertFalse(observations['script'].exists())
         self.assertNotIn(
             'mysql-shell-secret-canary', ' '.join(observations['arguments'])
         )
@@ -958,8 +963,8 @@ class RelationalInventoryTests(unittest.TestCase):
         self.assertNotIn('util.dumpSchemas', ' '.join(
             observations['arguments']
         ))
-        self.assertEqual('--file={path}', observations['secret_argument'])
-        self.assertIn('--ssl-mode=DISABLED', observations['arguments'])
+        self.assertIsNone(observations['secret_argument'])
+        self.assertIn('"ssl-mode": "DISABLED"', source)
 
     def test_mysql_shell_paths_and_restore_completion_fail_closed(self):
         config = RelationalClientConfig(

@@ -1445,20 +1445,10 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 *operands, shell_options,
             )),
         )
-        arguments = self._shell_connection_arguments(route)
-        grant = self._tool_grant(route)
-
         def invoke(passwords):
-            input_bytes = (
-                ''.join(password + '\n' for password in passwords)
-            ).encode('utf-8')
             try:
-                observation = self._tool_runner.run(
-                    grant, arguments, input_bytes=input_bytes,
-                    secret_config=source.encode('utf-8'),
-                    secret_argument='--file={path}', secret_suffix='.js',
-                    redact_values=tuple(passwords),
-                )
+                from .mysql_shell_tools import run
+                observation = run(self, route, source, passwords)
             except ProviderToolError as exc:
                 raise RelationalClientError(str(exc)) from None
             if observation['return_code'] != 0:

@@ -27,12 +27,13 @@ def qualify(output, shell, use_c=False, browser_binary=None, driver_binary=None)
              'mysql_interface': 'c' if use_c else 'pure', 'source_sha256': {}}
     for name in ('web/pgadmin/cdeadmin/providers/mysql_family/mysql_dump_verification.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/provider.py',
+                 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_shell_tools.py',
                  'web/pgadmin/cdeadmin/providers/relational_admin.py',
                  'web/pgadmin/cdeadmin/context_menu.py',
                  'web/pgadmin/cdeadmin/visual_admin/portfolio_catalog.json',
                  'tools/cdeadmin_mysql_dump_verification_qualification.py'):
         proof['source_sha256'][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-    password = 'sr-owned-' + secrets.token_urlsafe(24)
+    password = 'backup LF\nquote"slash\\雪-' + secrets.token_urlsafe(24)
     client = _create_client(MYSQL_PROFILE,
         SimpleNamespace(acquire_secret=lambda *_args: SecretLease(password.encode('utf8'))), SimpleNamespace())
     runner = client._tool_runner.run
@@ -65,7 +66,7 @@ def qualify(output, shell, use_c=False, browser_binary=None, driver_binary=None)
                     {'path': 'dump', 'confirmation': 'sr_accept', 'drop_existing_objects': True,
                      'reset_progress': True, 'enable_local_infile': True, 'show_progress': False})
                 assert restored['restore_postcondition']['schema_postcondition_passed']
-                proof['checks'].append('actual-native-Shell-checksummed-backup-mutation-and-independent-restore')
+                proof['checks'].append('actual-native-Shell-checksummed-backup-mutation-and-independent-restore-with-exact-LF-Unicode-credentials')
                 query.execute('CREATE DATABASE sr_renamed CHARACTER SET utf8mb4')
                 renamed = {**selected, 'database': 'sr_renamed'}
                 client.run_database_operation(None, renamed, 'restore_logical',

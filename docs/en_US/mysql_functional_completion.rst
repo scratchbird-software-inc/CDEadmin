@@ -266,6 +266,16 @@ allowlist and privilege admission. Native completion, file verification and
 independent recovery remain separate outcomes. Active-directory replacement,
 production cutover and the wider physical continuity surface remain open.
 
+Logical backup and restore use a private temporary JSON credential file for
+native Shell authentication. Password newlines, carriage returns, quotes,
+backslashes and Unicode retain their exact values; second/third factors retain
+their registered positions. Credentials are absent from command arguments and
+generated operation scripts. The registered native TLS/compression policy
+applies to the utility connection. Script and credential files are released
+after the utility call, including failures; a missing return never retries the
+backup or restore. Native factor dispatch wiring and installed authentication
+plugin acceptance retain their separate qualification scopes.
+
 Database Restore includes a separate **Verify restored dump data** operation.
 It compares the selected database with a completed checksummed MySQL Shell dump,
 including a renamed target schema. The native utility runs with definition,
