@@ -6,10 +6,12 @@ import uuid
 from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 from .system_variables import SELECT as VARIABLES_SELECT
+from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
 
 MAX_FACTS = 20000
 MAX_BYTES = 8 * 1024 * 1024
 SECTIONS = (
+    ('prepared-transactions', 'prepared-transaction', XA_RECOVER, ('format_id','gtrid_hex','bqual_hex')),
     ('databases', 'database', 'SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME, DEFAULT_ENCRYPTION FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME', ('schema_name',)),
     ('accounts', 'user', "SELECT User, Host, account_locked, password_expired, password_lifetime, max_questions, max_updates, max_connections, max_user_connections, CONCAT(QUOTE(User),'@',QUOTE(Host)) AS grantee_identity FROM mysql.user ORDER BY User, Host", ('user','host')),
     ('role-edges', 'role-membership', 'SELECT FROM_USER, FROM_HOST, TO_USER, TO_HOST, WITH_ADMIN_OPTION FROM mysql.role_edges ORDER BY FROM_USER, FROM_HOST, TO_USER, TO_HOST', ('from_user','from_host','to_user','to_host')),
@@ -60,7 +62,9 @@ def capture(connection, *, spatial_reference_ids=None):
     def read(source, parameters=None):
         cursor = connection.cursor(buffered=False)
         try:
-            if parameters is None:
+            if source == XA_RECOVER:
+                execute_recovery(cursor)
+            elif parameters is None:
                 cursor.execute(source)
             else:
                 cursor.execute(source, parameters)
@@ -69,7 +73,7 @@ def capture(connection, *, spatial_reference_ids=None):
                 rows = cursor.fetchmany(128)
                 if not rows: break
                 for row in rows:
-                    value = {key: _value(item) for key, item in zip(names,row)}
+                    value = decode_xa(row) if source == XA_RECOVER else {key: _value(item) for key, item in zip(names,row)}
                     account(value)
                     yield value
         finally:
@@ -115,9 +119,13 @@ def capture(connection, *, spatial_reference_ids=None):
             else:
                 rows = list(read(source))
         except Exception as error:
-            if getattr(error,'errno',None) not in DENIED:raise
+            conditions = getattr(error, 'native_conditions', [])
+            xa_denied = (section == 'prepared-transactions' and getattr(error, 'errno', None) == 1401
+                and any(row['code'] == 1227 for row in conditions))
+            if getattr(error,'errno',None) not in DENIED and not xa_denied:raise
             observations.append({'section':section,'available':False,'error_code':error.errno,
-                'sqlstate':getattr(error,'sqlstate',None)})
+                'sqlstate':getattr(error,'sqlstate',None),
+                **({'native_conditions': conditions} if conditions else {})})
         else:
             if section == 'accounts':
                 account_rows = rows
@@ -143,7 +151,8 @@ def capture(connection, *, spatial_reference_ids=None):
         'Persisted-only settings retain identity and presence; their values are redacted because native sensitivity metadata is unavailable.',
         'Authentication strings, password hashes and replication-secret stores are excluded.',
         'Accounts without visible role edges are not classified as roles.',
-        'Database captures are independent; this is not a consistent server backup or a migration.']
+        'Database captures are independent; this is not a consistent server backup or a migration.',
+        'Prepared XA identities are live server-local observations; they do not attest a branch generation or the global transaction decision.']
     root={'resource_id':'mysql-server:'+json.dumps([server_uuid,'server'],separators=(',',':')),
         'resource_kind':'server','display_name':'MySQL '+server_uuid,'display_path':[server_uuid],
         'native':{'system_object':False,'catalog_row':instance,'server_uuid':server_uuid,

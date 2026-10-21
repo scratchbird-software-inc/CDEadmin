@@ -773,6 +773,13 @@ def endpoint_context_actions(
             disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
         if profile.get('profile_id')=='mysql-native':
+            from .providers.mysql_family.mysql_xa import OPERATIONS as xa_operations
+            for operation,title in xa_operations.items():
+                actions.append(_action('endpoint.mysql.'+operation,title+'...',
+                    'open_workspace',icon='action.settings',group='maintenance',mutation='read' if operation=='inspect_prepared_xa' else 'destructive',
+                    confirmation=operation!='inspect_prepared_xa',macro=False,arguments={'tab':'administration','resource_kind':'server',
+                        'operation_id':operation,'database_target_id':None},enabled=ready and can_manage,
+                    disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can manage prepared XA transactions.'))
             from .providers.mysql_family.mysql_key_cache_lifecycle import OPERATIONS as cache_operations
             for operation,title in cache_operations.items():
                 actions.append(_action('endpoint.mysql.'+operation,title+'...',

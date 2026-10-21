@@ -178,6 +178,27 @@ The source-only refresh tool is
 <native-9.7-source>``. It retains existing runtime facts and qualified task
 receipts, records source hashes and avoids relabelling the original artifact.
 
+Prepared XA inspection and explicit commit/rollback recovery workflows are
+available under the native server Maintenance menu. They use separate owned
+connections, ``XA RECOVER CONVERT XID`` and binary hexadecimal literals for both
+XID parts, preserving embedded NULs, non-ASCII bytes and exact decimal format IDs.
+Server catalog exchange includes prepared branch identities. Inspection requires
+the native ``XA_RECOVER_ADMIN`` privilege; the primary RMERR and supplementary
+access-denied condition are retained, and denied catalog access is unavailable
+rather than an empty transaction list.
+
+Resolution requires the exact server name and a transaction manager decision or
+authorized recovery instruction. The reviewed instance, actor and prepared XID
+are rechecked immediately before requesting native resolution. Acknowledgement
+and subsequent recovery-list observations are separate. An absent XID does not
+establish the global decision, and the recovery list cannot distinguish reuse of
+the same XID from its original branch. Native attached-branch and concurrent
+resolution errors remain engine decisions. Operations are never automatically
+replayed or executed on a borrowed user attachment. Native qualification is
+``tools/cdeadmin_mysql_xa_qualification.py --output <outside-repo> --application``;
+the companion ``tools/cdeadmin_mysql_xa_ui_qualification.py`` checks the built
+desktop workflow. These receipts do not close the wider product inventory.
+
 For admitted independent-observer profiles, predictive editor metadata now reads
 the committed native catalog on that same-instance authenticated peer. The
 source's current database, SQL mode and client charset are observed privately;

@@ -50,6 +50,10 @@ Independent inventory
   excluded. Native type parsing, declaration and completion receipts qualify
   that scope. Installed capabilities and complete management workflows still
   need their independent reconciliation; these counts are not a denominator.
+  Native prepared XA inspection and explicit branch resolution now have dedicated
+  server workflows and binary identity catalog exchange. Their native receipts
+  qualify branch operations, not a distributed transaction coordinator or global
+  recovery decision.
 * INV-MARIADB: Reconcile MariaDB 12.2.2 core, storage engines/plugins, normal and
   Oracle modes, native utilities and optional physical-continuity components.
 * INV-POSTGRESQL: Reconcile PostgreSQL 18.3 core, server/database/session scopes,
