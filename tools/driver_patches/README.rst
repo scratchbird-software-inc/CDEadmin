@@ -37,6 +37,17 @@ return denotes exhaustion. This correction applies to all cursors.
 MySQL Connector/Python native query attributes
 =============================================
 
+Linux development setup and ``bootstrap.py --install-python`` now install this
+correction through ``python -m tools.cdeadmin_install_mysql_driver --receipt
+<current-receipt.json>``. The installer builds in a disposable external directory,
+checks the resulting native ABI/client version and keeps a current receipt. Use
+``--mysql-capi`` or ``SCRATCHROBIN_MYSQL_CAPI`` for an existing matching SDK;
+otherwise Linux x86_64/glibc2.39+ can extract the three pinned official Ubuntu24.04
+SDK packages without installing OS packages. Native Windows/macOS setup retains
+its separate platform SDK acquisition. Local installation is separate from
+engine functionality qualification and from binary redistribution; preserve
+corresponding source and notices when distributing a built binary.
+
 ``mysql-connector-python-26.7.0-query-attributes.patch`` targets the official
 ``mysql_connector_python-26.7.0.tar.gz`` source distribution, SHA-256
 ``d8ff5ee236ea46661ee639336323e124ed868e37f3ea991bdc5de5a146f39fd5``.

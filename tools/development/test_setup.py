@@ -129,6 +129,9 @@ class SetupTests(unittest.TestCase):
             self.root / 'requirements.txt', '-r',
             manage.DEMO / 'requirements.txt'])
         self.assertEqual(run.call_args_list[1].args[0],
+                         [self.python, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
+                          '--receipt', self.root / '.devstate/mysql-driver.json'])
+        self.assertEqual(run.call_args_list[2].args[0],
                          [self.python, '-m', 'pip', 'check'])
 
     def test_frontend_preserves_lockfile(self):

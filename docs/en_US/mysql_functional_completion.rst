@@ -233,6 +233,15 @@ roundtrip guarantee.
 
 Native C query attributes require the source correction built by
 ``tools/cdeadmin_build_mysql_driver.py`` against the matching MySQL 9.7.0 SDK.
+Linux development's ``python`` stage and demo ``--install-python`` now build and
+install that correction automatically through
+``tools.cdeadmin_install_mysql_driver``. It checks the installed native ABI,
+connector/client versions and extension hash before accepting or reusing a
+receipt. A temporary pinned SDK can be extracted on Linux x86_64/glibc2.39+;
+another matching native SDK can be selected explicitly. No database server or
+OS package is installed by this connector step. Build intermediates are removed,
+with one bounded current failure log retained when compilation fails. Import
+qualification remains separate from actual native query/functionality tests.
 The corrected extension exposes an ABI marker and keeps TIME duration signs and
 microseconds, unsigned 64-bit integers, source-charset names, float64 precision,
 exact decimals and NULL values in the native C binding path. It clears native

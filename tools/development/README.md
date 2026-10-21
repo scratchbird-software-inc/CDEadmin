@@ -199,8 +199,20 @@ bash tools/development/dev.sh clients
 ```
 
 - `python` creates a repository-local `.venv`, installs the application and demo
-  requirements together, and runs `pip check`. It does not use `pip --user` or
+  requirements together, builds the corrected native MySQL connector, and runs
+  `pip check`. It does not use `pip --user` or
   modify global Python packages. Dependency conflicts are failures, not ignored.
+  The connector build verifies the pinned official Connector/Python26.7.0 source
+  and MySQL9.7.0 SDK packages, applies the repository's native query-attribute
+  correction and checks the installed ABI/client version. Automatic SDK
+  extraction supports Linux x86_64 with glibc2.39+ and `dpkg-deb`; it does not
+  install OS packages or start a server. Another matching native SDK can be
+  selected with `SCRATCHROBIN_MYSQL_CAPI=/absolute/sdk/path`. A compiler, Python
+  headers, setuptools, wheel, packaging and Git are required for this build.
+  Temporary source/SDK/build files are removed. `.devstate/mysql-driver.json`
+  records the current installed extension and input hashes; one bounded failure
+  log is retained if compilation fails. Repeated setup reuses a matching receipt
+  only after checking the installed extension bytes and native version/ABI.
 - `frontend` uses `corepack yarn install --immutable`, compiles the theme, and
   builds production assets. Peer warnings must be assessed separately from a
   successful build. Do not use a blind Yarn upgrade or `npm audit fix --force`.

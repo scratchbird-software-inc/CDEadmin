@@ -52,6 +52,8 @@ def install_python_requirements():
         sys.executable, "-m", "pip", "install", "-r",
         ROOT / "requirements.txt",
     ])
+    run([sys.executable, '-B', '-m', 'tools.cdeadmin_install_mysql_driver',
+         '--receipt', REPOSITORY / '.devstate/mysql-driver.json'], cwd=REPOSITORY)
 
 
 def _sqlite_runtime_ready(prefix):
