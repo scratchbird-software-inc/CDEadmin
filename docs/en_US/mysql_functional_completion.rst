@@ -104,6 +104,29 @@ The two generated-task receipts can be added to an existing contract with
 <native-summary.json>``; the supplement verifies actual connector classes,
 completed native receipts and unchanged source fingerprints.
 
+Server Maintenance commands also inspect a selected cache prefix, configure
+each of its four native variables and release its buffer. Configuration accepts
+exact unsigned decimal text or native DEFAULT and applies one setting per
+review. The server owns bounds, allocation, rounding and warnings; receipts
+preserve actual values as decimal strings, including values above JavaScript's
+safe integer range. Named prefixes and variable identifiers are quoted
+separately. Changed settings stop a reviewed mutation, while a fresh read-only
+inspection reports current values. All connections belong to the operation.
+
+Release uses native ``key_buffer_size=0``: MySQL moves assigned tables to the
+default cache and retains the prefix's other parameters. The default cache is
+protected by native error 1438. All-zero values for an unknown prefix do not
+prove that a named cache exists. SHOW GLOBAL VARIABLES does not enumerate named
+caches; selected-prefix inspection does not claim a complete cache catalog.
+These runtime settings are not server configuration persistence. Native 9.7
+deprecation and rounding warnings remain visible. Use
+``tools/cdeadmin_mysql_key_cache_lifecycle_qualification.py --output
+<outside-repo> --application`` for native pure/C and reviewed API evidence.
+The pure connector's native warning handler is retained with a private text
+warning port so application regex filters can process its Exception-derived
+warning objects. Native warning rows, raise-on-warnings behavior and Python
+warning policy remain intact; process-wide warning functions are unchanged.
+
 SQL source checking can use MySQL Shell's versioned server grammar library
 (``mysql_9.7.so`` or native Windows ``mysql_9.7.dll``). Its C ABI applies the
 observed native SQL mode, independently of the original connection, and runs in

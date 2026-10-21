@@ -8,6 +8,7 @@ from . import foreign_servers
 from . import column_masking
 from . import mysql_key_cache
 from . import mysql_instance
+from . import mysql_key_cache_lifecycle as cache_lifecycle
 
 
 class MySQLAdministration(RelationalAdministration):
@@ -19,6 +20,10 @@ class MySQLAdministration(RelationalAdministration):
                     'operation_id':operation,'title':mysql_instance.OPERATIONS[operation][0],
                     'mutation_class':'admin','target_required':True,'confirmation_required':True,
                 } for operation in mysql_instance.OPERATIONS]
+                resource['operations']=[row for row in resource['operations'] if row['operation_id'] not in cache_lifecycle.OPERATIONS]+[{
+                    'operation_id':operation,'title':title,'mutation_class':'read' if operation=='inspect_key_cache' else 'admin',
+                    'target_required':True,'confirmation_required':operation!='inspect_key_cache',
+                } for operation,title in cache_lifecycle.OPERATIONS.items()]
             if resource['resource_kind'] == 'table':
                 resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_key_cache.OPERATIONS] + [{
                     'operation_id':operation,'title':mysql_key_cache.form(operation,self._field)['title'],
@@ -51,6 +56,7 @@ class MySQLAdministration(RelationalAdministration):
         return super().catalog(value)
 
     def _form(self, kind, operation):
+        if kind=='server' and operation in cache_lifecycle.OPERATIONS:return cache_lifecycle.form(operation,self._field)
         if kind=='server' and operation in mysql_instance.OPERATIONS:return mysql_instance.form(operation,self._field)
         if kind == 'table' and operation in mysql_key_cache.OPERATIONS:
             return mysql_key_cache.form(operation,self._field)
@@ -68,6 +74,7 @@ class MySQLAdministration(RelationalAdministration):
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
+        if kind=='server' and operation in cache_lifecycle.OPERATIONS:return deepcopy(draft)
         if kind=='server' and operation in mysql_instance.OPERATIONS:return deepcopy(draft)
         if kind == 'table' and operation in mysql_key_cache.OPERATIONS:return deepcopy(draft)
         if kind == 'column' and operation in column_masking.OPERATIONS:
@@ -78,6 +85,12 @@ class MySQLAdministration(RelationalAdministration):
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
+        if request.get('resource_kind')=='server' and request.get('operation_id') in cache_lifecycle.OPERATIONS:
+            try:
+                cache_lifecycle.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
+                return {'errors':[]}
+            except RelationalClientError as error:
+                return {'errors':[{'field_id':None,'code':'invalid_mysql_key_cache_lifecycle','message':str(error)}]}
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_instance.OPERATIONS:
             try:
                 mysql_instance.compile_operation(request['operation_id'],request.get('draft'),request.get('target_resource'))
@@ -111,6 +124,8 @@ class MySQLAdministration(RelationalAdministration):
         return super().validate(request)
 
     def _compile(self, request):
+        if request.get('resource_kind')=='server' and request.get('operation_id') in cache_lifecycle.OPERATIONS:
+            return cache_lifecycle.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
         if request.get('resource_kind')=='server' and request.get('operation_id') in mysql_instance.OPERATIONS:
             return mysql_instance.compile_operation(request['operation_id'],request['draft'],request.get('target_resource'))
         if request.get('resource_kind')=='table' and request.get('operation_id') in mysql_key_cache.OPERATIONS:
@@ -124,6 +139,8 @@ class MySQLAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        if 'mysql_key_cache_lifecycle' in (request.get('provider_payload') or {}).get('compiled',{}):
+            return cache_lifecycle.apply(client,request,connection)
         if 'mysql_instance' in (request.get('provider_payload') or {}).get('compiled',{}):
             return mysql_instance.apply(client,request,connection)
         if 'mysql_key_cache' in (request.get('provider_payload') or {}).get('compiled',{}):

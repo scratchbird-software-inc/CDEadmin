@@ -191,6 +191,9 @@ def install(native):
         construction=creating_cursor.set(True)
         try:cursor=factory(owner,*args,**kwargs)
         finally:creating_cursor.reset(construction)
+        if c_api is None:
+            from .mysql_warnings import install as install_warnings
+            install_warnings(cursor)
         if any('Prepared' in cls.__name__ for cls in type(cursor).__mro__):return cursor
         cursor_reference=weakref.ref(cursor)
         def adapted(method,many=False):

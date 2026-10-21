@@ -137,6 +137,11 @@ MySQL
   Native MyISAM index-cache assignment and preloading now have typed reviewed
   workflows, exact source/table/index rechecks and explicit native result-row
   outcomes. These additions do not close the wider installed feature inventory.
+  Named-cache inspection, all four runtime settings and DEFAULT, and native
+  buffer release are also implemented with exact decimal observations, native
+  rounding/warnings, changed-state refusal and default-cache protection. Native
+  MySQL has no SHOW GLOBAL VARIABLES enumeration of named prefixes; that absence
+  is explicit, and all-zero observations do not assert native cache existence.
   Native per-query attributes now have editor inputs, scoped native execution,
   retained private script policies and installed runtime-UDF completion. The
   pure connector corrects NULL metadata and negative TIME framing. Connector26.7

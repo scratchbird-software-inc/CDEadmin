@@ -192,6 +192,8 @@ def _administration(profile):
         common['table'] = common['table'] | key_cache_operations
         from .mysql_instance import OPERATIONS as instance_operations
         common['server'] = common['server'] | frozenset(instance_operations)
+        from .mysql_key_cache_lifecycle import OPERATIONS as cache_lifecycle_operations
+        common['server'] = common['server'] | frozenset(cache_lifecycle_operations)
         common['spatial-reference-system'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         common['server-link'] = frozenset({'inspect', 'create', 'alter', 'drop'})
         for kind in ('character-set', 'collation', 'storage-engine'):
@@ -967,6 +969,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_key_cache_lifecycle' in compiled:
+            from .mysql_key_cache_lifecycle import bind_review
+            return bind_review(self,planned)
         if 'mysql_instance' in compiled:
             from .mysql_instance import bind_review
             return bind_review(self,planned)
