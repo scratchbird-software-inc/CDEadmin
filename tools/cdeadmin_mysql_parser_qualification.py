@@ -30,6 +30,7 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_parser_worker.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_native_validation.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_script_modes.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_completion.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_script.py',
         'web/pgadmin/cdeadmin/data_studio/scripts.py',
         'tools/cdeadmin_mysql_family_editor_workspace_qualification.py',
@@ -100,20 +101,34 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                     if not value['diagnostics'] or expected is not None:
                         assert value.get('native_parser',{}).get('parser_version')=='9.7.0',value
                     return value
+                def completion():
+                    before=traffic_count()
+                    value=post('source_complete',session_id=session_id,source='SELECT t.',source_before_cursor='SELECT t.')['editor_context']
+                    assert traffic_count()==before,'Completion sent a hidden command to the source'
+                    assert value['original_session_commands_sent']==0 and value['original_diagnostics_preserved']
+                    assert not value['complete'] and not value['original_session_catalog_binding_validated']
+                    assert any(row['section']=='retained-session-overlays' and not row['available'] for row in value['observations'])
+                    assert value['context']['active_role'] is None and not value['context']['original_temporary_objects_observed']
+                    return value
                 decisions=[]
                 for mode in ('','ANSI_QUOTES','NO_BACKSLASH_ESCAPES','ANSI_QUOTES,NO_BACKSLASH_ESCAPES','ANSI','PIPES_AS_CONCAT,HIGH_NOT_PRECEDENCE,IGNORE_SPACE'):
                     sql("SET SESSION sql_mode='"+mode+"'")
                     sql('UPDATE t SET value=value+1')
                     grammar=check('SELECT id FROM future_not_created',True)
+                    catalog=completion()
+                    assert catalog['context']['sql_mode']==grammar['sql_mode'] and catalog['context']['default_schema']=='sr_workspace'
+                    assert any(row['resource_kind']=='column' and row['display_path']==['sr_workspace','t','id'] for row in catalog['resources'])
                     assert sql('SELECT ROW_COUNT()')==[[2]]
                     assert grammar['native_parser']['database_connection_opened'] is False
                     check('CREATE PROCEDURE not_created() BEGIN DECLARE n INT; SET n=1; SELECT n; END',True)
                     check('CREATE PROCEDURE not_created() BEGIN SELEC 1; END',False)
                     sql("SELECT CAST('owned-warning' AS SIGNED)")
                     check('SELEC 1',False)
+                    completion()
                     assert any(row[1]==1292 for row in sql('SHOW WARNINGS'))
                     sql('SELECT absent_column FROM t',refused=True)
                     check('DROP TABLE t',True)
+                    completion()
                     assert any(row[1]==1054 for row in sql('SHOW ERRORS'))
                     quotes='ANSI' in mode or 'ANSI_QUOTES' in mode
                     check('CREATE TABLE not_created("two words" INT)',quotes)
@@ -130,6 +145,7 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                 proof['checks'].append('compound-procedure-and-future-catalog-syntax-without-execution-privilege-or-catalog-binding-claims')
                 proof['checks'].append('actual-original-ROW_COUNT-warning-and-error-areas-survive-valid-invalid-and-procedural-native-checks')
                 proof['checks'].append('exact-native-ANSI-backslash-and-expanded-mode-behavior-with-separate-native-optimizer-hint-warnings')
+                proof['checks'].append('private-native-completion-through-six-live-modes-preserves-original-row-count-warning-and-error-areas-with-explicit-role-and-temporary-overlay-limits')
                 sql("SET SESSION sql_mode=''")
                 global_mode=sql('SELECT @@GLOBAL.sql_mode')[0][0]
                 for text in (
@@ -177,7 +193,19 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                 post('native_script_discard',plan_id=drift['plan_id'])
                 sql("SET sql_mode=''")
                 proof['checks'].append('retained-seven-statement-native-script-rechecks-intentional-contexts-restores-saved-mode-and-does-not-replay-stale-revisions-or-dispatch-on-unexpected-drift')
+                query.execute('CREATE DATABASE sr_other')
+                query.execute('CREATE TABLE sr_other.other_table(other_id INT)')
+                sql('USE sr_other');catalog=completion()
+                assert catalog['context']['default_schema']=='sr_other'
+                assert any(row['display_path']==['sr_other','other_table','other_id'] for row in catalog['resources'])
+                sql('USE sr_workspace')
+                assert completion()['context']['default_schema']=='sr_workspace'
+                sql('SET NAMES latin1')
+                assert completion()['context']['character_set_client']=='latin1'
+                sql('SET NAMES utf8mb4')
+                proof['checks'].append('private-completion-follows-live-source-database-and-client-charset-without-changing-either-source-setting')
                 sql('SET autocommit=0');sql('INSERT INTO t VALUES(3,1)');sql('SAVEPOINT sr_parser')
+                completion()
                 check('COMMIT',True);check('ROLLBACK',True);check('ALTER TABLE t ADD COLUMN not_added INT',True)
                 query.execute('SELECT COUNT(*) FROM sr_workspace.t');assert query.fetchone()[0]==2
                 sql('ROLLBACK TO SAVEPOINT sr_parser');sql('ROLLBACK');sql('SET autocommit=1')
@@ -187,7 +215,7 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                 query.execute('SET GLOBAL general_log=OFF')
                 if browser_binary:
                     from cdeadmin_mysql_family_editor_workspace_qualification import browser
-                    proof['browser']=browser(app,output,'mysql',sid,browser_binary,driver_binary,password,script_modes=True)
+                    proof['browser']=browser(app,output,'mysql',sid,browser_binary,driver_binary,password,script_modes=True,private_completion=True)
                     proof['checks'].append('built-native-editor-source-tools-valid-invalid-procedural-and-library-checks-with-zero-browser-errors')
                 post('close_session',session_id=session_id);session_id=None
                 proof.update(complete=True,modes=decisions,independent_observer=admitted)

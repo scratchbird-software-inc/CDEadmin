@@ -117,6 +117,17 @@ evidence. The owned native qualifier is
 --library <native-library>``, with ``--use-c`` run independently and optional
 browser/driver paths for the built editor.
 
+For admitted independent-observer profiles, predictive editor metadata now reads
+the committed native catalog on that same-instance authenticated peer. The
+source's current database, SQL mode and client charset are observed privately;
+completion sends no original-session command and preserves ROW_COUNT, warnings,
+errors and pending work. Private context loss or denied observation refuses the
+request without substituting an original-session query. Source active-role and
+temporary-object overlays are explicitly unobserved, so the returned metadata is
+marked incomplete. The peer's role is labelled separately and never presented
+as the source's active role. Unadmitted legacy profiles remain separately
+unqualified for diagnostic preservation.
+
 Database-host diagnostics now have an explicit SSH execution path. The
 authenticated peer's hostname and native ``auto.cnf`` UUID must match the
 independently observed MySQL host and data directory. An SSH bastion and the

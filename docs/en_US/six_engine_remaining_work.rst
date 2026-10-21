@@ -150,7 +150,12 @@ MySQL
   same-instance peer using observed source mode/database context and preserve
   source diagnostic state. This includes live database switches and denied
   private parser context; original active-role/temporary-object binding remains
-  unqualified. See :doc:`mysql_driver_development` for the execution scope;
+  unqualified. Committed-catalog completion now uses that private peer with
+  source-observed database, mode and charset, preserving original diagnostic
+  areas and pending work. It marks source role/temporary-object overlays
+  incomplete and never substitutes an original read after private failure.
+  Unadmitted profiles and wider retained catalog consumers remain open.
+  See :doc:`mysql_driver_development` for the execution scope;
   these execution receipts do not close browser coverage or INV-MYSQL.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID

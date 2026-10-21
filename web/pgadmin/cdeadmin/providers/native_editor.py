@@ -525,6 +525,9 @@ class NativeEditorProvider:
         handle = self._editor_session(request)
         engine = self.profile.engine_id
         with session_access(self.client, handle, engine) as transaction:
+            if engine == 'mysql':
+                from .mysql_family.mysql_completion import complete
+                return {'editor_context': complete(self.client, handle)}
             return {'editor_context': metadata(handle, engine, transaction, request.get('client_sql_dialect'))}
 
     def capture_session_catalog(self, request):

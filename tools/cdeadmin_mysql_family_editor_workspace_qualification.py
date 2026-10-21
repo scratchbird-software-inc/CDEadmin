@@ -168,7 +168,7 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
     return proof
 
 
-def browser(app, output, engine, sid, binary, driver_binary, password, *, script_modes=False):
+def browser(app, output, engine, sid, binary, driver_binary, password, *, script_modes=False, private_completion=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -255,6 +255,21 @@ def browser(app, output, engine, sid, binary, driver_binary, password, *, script
                 value=wait.until(formatted)
                 assert literal in value
                 checks.append({'name':'dollar-library-format','native_literal_bytes_preserved':True})
+        if engine == 'mysql' and private_completion:
+            from selenium.webdriver.common.keys import Keys
+            _set_query(driver,wait,'SELECT t. FROM sr_workspace.t t')
+            wait.until(lambda browser:click(browser,'Refresh metadata completion'))
+            wait.until(lambda browser:any(node.is_displayed() and
+                'Committed native catalog on a private same-instance authenticated peer' in node.text
+                for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            editor=wait.until(_query_editor);editor.click()
+            editor.send_keys(Keys.CONTROL,Keys.HOME)
+            editor.send_keys(Keys.ARROW_RIGHT*len('SELECT t.'))
+            editor.send_keys(Keys.CONTROL,' ')
+            wait.until(lambda browser:any(node.is_displayed() and node.text=='id'
+                for node in browser.find_elements(By.CSS_SELECTOR,'.cm-tooltip-autocomplete .cm-completionLabel')))
+            editor.send_keys(Keys.ESCAPE)
+            checks.append({'name':'native-browser-private-committed-catalog-column-prediction','column':'id','source-overlays':'explicitly-unconfirmed'})
         if engine == 'mysql' and script_modes:
             _set_query(driver,wait,"SET sql_mode='ANSI_QUOTES'; SELECT 7301 AS \"native_mode_result\"; SET sql_mode=''")
             wait.until(lambda browser:click(browser,'Preview script'))
