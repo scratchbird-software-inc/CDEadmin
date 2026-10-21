@@ -16,6 +16,15 @@ class ReceiverJobs(MySQLBinlogJobs):
         'Choose a receiver server ID unique among clients and replicas on this source. A conflicting native replication ID can disconnect another receiver; the source does not expose every unregistered client ID.',
         'Stopping or losing this receiver does not restart it automatically. Published archives remain independent; an unclosed private file is not a complete archive or proof of a recoverable transaction.',)
 
+    def recollection_parent(self,job_id,owner,endpoint,archives,selected):
+        from .continuous_binlog_tails import stopped_parent
+        record=stopped_parent(self,archives,job_id,owner,endpoint)
+        if self.get(job_id,owner,endpoint)['state'] not in {'unknown','failed'}:
+            raise BinlogArchiveError('Select an unresolved receiver for a separate full recollection')
+        if selected['start_file']!=record['options']['start_file']:
+            raise BinlogArchiveError('Full recollection must start at the original native file; an unresolved cursor cannot authorize skipping logs')
+        return record
+
     def restart_checkpoint(self,job_id,owner,endpoint,archives):
         from ..operations.native_writers import inspect,NativeWriterError
         record=self.load(job_id,owner,endpoint)
@@ -151,6 +160,29 @@ def program_identity(native_adapter, client, route, scope):
     return {**result, 'execution_host': {**result['execution_host'], 'hostname': socket.gethostname()}}
 
 
+def recollection_checkpoint(parent,captured,connection):
+    """Admit a new full read; never convert an unknown cursor into a checkpoint."""
+    if parent['source']!=captured['identity']:
+        raise BinlogArchiveError('The unresolved receiver belongs to a different native source identity')
+    old_mode=parent['source_state'].get('gtid_mode')
+    mode=captured['state'].get('gtid_mode')
+    if old_mode not in {'ON','ON_PERMISSIVE','OFF','OFF_PERMISSIVE'}:
+        raise BinlogArchiveError('The unresolved receiver has no native GTID-mode observation')
+    if mode!=old_mode:
+        raise BinlogArchiveError('Native GTID mode changed since the unresolved receiver; prepare an independent collection')
+    checked=False
+    if mode in {'ON','ON_PERMISSIVE'}:
+        from ..providers.mysql_family.mysql_clone import rows
+        baseline=parent['source_state'].get('gtid_executed')
+        if not isinstance(baseline,str) or rows(connection,'SELECT GTID_SUBSET(%s,@@global.gtid_executed) AS valid',(baseline,))[0]['valid']!=1:
+            raise BinlogArchiveError('Native GTID lineage changed since the unresolved receiver; recollection refused')
+        checked=True
+    return {'kind':'full-original-file-recollection','receiver_job_id':parent['job_id'],
+        'start_file':parent['options']['start_file'],'unresolved_cursor_used':False,
+        'parent_outcome_rewritten':False,'native_gtid_baseline_checked':checked,
+        'binary_log_epoch_verified':False,'database_recovery_verified':False}
+
+
 def action(service, server, operation, request, family):
     from flask import current_app
     if not isinstance(request, dict): raise BinlogArchiveError('Select a native continuous receiver request')
@@ -169,13 +201,20 @@ def action(service, server, operation, request, family):
         return (jobs.get if operation == 'status' else jobs.cancel)(request['job_id'], owner, endpoint.id)
     if operation=='reconcile_writer':return jobs.reconcile_writer(request,owner,endpoint.id,archives)
     adapter = native.adapter(family)
-    previous=None
+    previous=None;recollect=False
     if operation == 'review':
-        if set(request) not in ({'options'},{'options','resume_job_id'}): raise BinlogArchiveError('Review exact native receiver options')
+        accepted=({'options'},{'options','resume_job_id'})
+        if family=='mysql':accepted+=({'options','recollect_job_id','acknowledge_recollection'},)
+        if set(request) not in accepted: raise BinlogArchiveError('Review exact native receiver options')
         selected = native.options(family, request['options'])
         if 'resume_job_id' in request:
             previous,checkpoint=jobs.restart_checkpoint(request['resume_job_id'],owner,endpoint.id,archives)
             if selected['start_file']!=checkpoint:raise BinlogArchiveError('Restart from the stopped receiver\'s exact next native log')
+        if 'recollect_job_id' in request:
+            if request['acknowledge_recollection'] is not True:
+                raise BinlogArchiveError('Acknowledge full recollection and possible duplicate archives; the old outcome remains unresolved')
+            previous=jobs.recollection_parent(request['recollect_job_id'],owner,endpoint.id,archives,selected)
+            recollect=True
     elif operation == 'start':
         reviewed = jobs.load(request.get('job_id'), owner, endpoint.id)
         if reviewed['state'] != 'reviewed': return jobs.start(request, owner, endpoint.id, {}, None)
@@ -184,6 +223,11 @@ def action(service, server, operation, request, family):
         if previous_id:
             previous,checkpoint=jobs.restart_checkpoint(previous_id,owner,endpoint.id,archives)
             if selected['start_file']!=checkpoint:raise BinlogArchiveError('The stopped receiver checkpoint changed; prepare a new review')
+        recovered_id=(reviewed.get('continuation') or {}).get('recollected_receiver_job_id')
+        if recovered_id:
+            if family!='mysql' or previous_id:raise BinlogArchiveError('Native receiver recollection scope is invalid')
+            previous=jobs.recollection_parent(recovered_id,owner,endpoint.id,archives,selected)
+            recollect=True
     elif operation == 'catalog':
         if request: raise BinlogArchiveError('Native receiver catalog takes no browser route')
         selected = None
@@ -210,6 +254,9 @@ def action(service, server, operation, request, family):
             native.admit(captured, selected)
             if previous is not None and previous['source']!=captured['identity']:
                 raise BinlogArchiveError('The stopped receiver belongs to a different native source identity')
+            recollected=recollection_checkpoint(previous,captured,connection) if recollect else None
+            if operation=='start' and recollect and recollected!=reviewed['continuation'].get('recollection_checkpoint'):
+                raise BinlogArchiveError('The reviewed recollection admission changed; prepare a new review')
             program = program_identity(adapter, client, route, jobs.prepare_scope(owner, endpoint.id))
             runtime_limit = current_app.config.get('CDEADMIN_' + family.upper() + '_CONTINUOUS_BINLOG_MAX_RUNTIME_SECONDS')
             if runtime_limit is not None and (type(runtime_limit) is not int or not 1 <= runtime_limit <= 2147483647 or
@@ -217,8 +264,16 @@ def action(service, server, operation, request, family):
                 raise BinlogArchiveError('Application policy requires a bounded native receiver duration')
             configuration = digest({'registration': MySQLMonitoringHost._configuration(server),
                 'collector_root': str(jobs.root), 'archive_root': str(archives.root), 'runtime_limit': runtime_limit})
-            if operation == 'review': return jobs.review(owner, endpoint.id, selected, captured, configuration, program,
-                continuation={'writer_scope_index':1,**({'previous_receiver_job_id':previous['job_id']} if previous else {})})
+            if operation == 'review':
+                continuation={'writer_scope_index':1,**({'recollected_receiver_job_id':previous['job_id'],
+                    'recollection_checkpoint':recollected} if recollect else {'previous_receiver_job_id':previous['job_id']} if previous else {})}
+                result=jobs.review(owner,endpoint.id,selected,captured,configuration,program,continuation=continuation)
+                if recollect:
+                    record=jobs.load(result['job_id'],owner,endpoint.id)
+                    jobs.update(record,warnings=[*record['warnings'],
+                        'This is a new full collection from the original native file. Previously archived events may be collected again. The old receiver and cursor remain unresolved; no archive is automatically replayed and no database recovery or binary-log epoch is inferred.'])
+                    return jobs.get(result['job_id'],owner,endpoint.id)
+                return result
             transport = native.ReceiverTransport(family, client, route, adapter.delegate_credentials(client, route), connection, archives)
             connection = None
             admitted = transport; transport = None

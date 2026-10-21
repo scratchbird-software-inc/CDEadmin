@@ -25,6 +25,8 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     for directory in ('web/pgadmin/cdeadmin/providers/mysql_family','web/pgadmin/cdeadmin/workspace'):
         for path in (ROOT/directory).glob('*binlog*.py'):
             proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in (Path(__file__),ROOT/'web/pgadmin/static/js/Dialogs/ContinuousBinlog.jsx'):
+        proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     decoder=Path(decoder).resolve(strict=True)
     os.environ['CDEADMIN_'+('MYSQL_BINLOG_BINARY' if family=='mysql' else 'MARIADB_BINLOG_BINARY')]=str(decoder)
     builtins.SERVER_MODE=None
@@ -197,6 +199,43 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                     refused=http('review',{'resume_job_id':interrupted['job_id'],'options':{'start_file':latest,'receiver_server_id':4000000105}},refused=True)
                     assert 'clean stopped' in refused['errormsg']
                 proof['checks'].append('native-orphan-before-first-heartbeat-stopped-through-owned-HTTP-reconciliation-while-neighbor-survives-and-unknown-cannot-restart')
+                if family=='mysql':
+                    recollection={'recollect_job_id':interrupted['job_id'],'acknowledge_recollection':True,
+                        'options':{'start_file':latest,'receiver_server_id':4000000107,'timeout_seconds':None}}
+                    assert 'Acknowledge' in http('review',{**recollection,'acknowledge_recollection':False},refused=True)['errormsg']
+                    assert 'original native file' in http('review',{**recollection,'options':{**recollection['options'],'start_file':'unconfirmed.999999'}},refused=True)['errormsg']
+                    recollect_review=http('review',recollection)
+                    assert recollect_review['continuation']['recollected_receiver_job_id']==interrupted['job_id']
+                    checkpoint=recollect_review['continuation']['recollection_checkpoint']
+                    assert checkpoint['unresolved_cursor_used'] is False and checkpoint['parent_outcome_rewritten'] is False
+                    assert checkpoint['binary_log_epoch_verified'] is False and checkpoint['database_recovery_verified'] is False
+                    assert checkpoint['native_gtid_baseline_checked']==(gtid_mode=='ON')
+                    recollect_request={'job_id':recollect_review['job_id'],'review_digest':recollect_review['review_digest'],'confirmed':True}
+                    with patch.object(native_adapter,'capture',different_source):
+                        assert 'different native source' in http('review',recollection,refused=True)['errormsg']
+                        assert 'different native source' in http('start',recollect_request,refused=True)['errormsg']
+                    started=http('start',recollect_request)
+                    recollect_record=jobs.load(started['job_id'],uid,endpoint);receiving=jobs.directory(recollect_record)/'receiving'
+                    wait(lambda r:r['state']=='active' and (receiving/latest).is_file())
+                    query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254740998,'Full recollection 😀',b'\x00\xfc'))
+                    query.execute('FLUSH BINARY LOGS')
+                    recollected=wait(lambda r:r.get('progress',{}).get('published_batches',0)>=1)
+                    http('cancel',{'job_id':started['job_id']});recollected=wait(lambda r:r['state']=='cancelled')
+                    assert recollected['native_process_termination_confirmed'] is True
+                    assert http('start',recollect_request)['state']=='cancelled'
+                    assert http('status',{'job_id':interrupted['job_id']})['state']=='unknown'
+                    archive=http('status',{'job_id':recollected['result']['last_archive_job_ids'][0]},archive=True)
+                    assert archive['result']['artifact']['start_from']['file']==latest
+                    files=http('files',{'job_id':archive['job_id']},archive=True)['files']
+                    sealed=next(row for row in files if row['path']==latest)
+                    response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':archive['job_id'],'path':latest})})
+                    data=response.data;assert response.status_code==200 and hashlib.sha256(data).hexdigest()==sealed['sha256'];response.close()
+                    original_bytes=subprocess.run(['docker','exec',container,'cat',native_directory+'/'+latest],check=True,capture_output=True,timeout=15).stdout
+                    left,right=bytearray(data),bytearray(original_bytes);left[21]&=254;right[21]&=254;assert left==right
+                    proof['checks'].extend(['native-unresolved-recollection-requires-explicit-ack-original-file-stopped-writers-and-current-source',
+                        'native-new-full-recollection-seals-original-file-bytes-preserves-old-unknown-and-never-replays-SQL'])
+                    proof['unknown_recollection']={'receiver_job_id':interrupted['job_id'],'new_receiver_job_id':recollected['job_id'],
+                        'archive_job_id':archive['job_id'],'start_file':latest,'checkpoint':checkpoint,'source_bytes_verified':True}
                 started=original
                 # Lose publication after a real native rotation, retaining a
                 # complete closed file plus its following local native file.
@@ -275,7 +314,9 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                         query.execute('FLUSH BINARY LOGS')
                         return selected['job_id']
                     proof['browser']=browser(app,output,registered_id,family,browser_start,browser_binary,driver_binary,browser_started,
-                        stopped_tail=proof['stopped_tail'])
+                        stopped_tail=proof['stopped_tail'],unknown_recollection=proof.get('unknown_recollection'))
+                    if proof.get('unknown_recollection'):
+                        assert http('status',{'job_id':proof['unknown_recollection']['receiver_job_id']})['state']=='unknown'
                     proof['checks'].append('native-browser-reviews-starts-observes-cancels-receiver-and-opens-its-produced-archive')
                 print('Native '+family+' continuous reception, two sealed batches and cancellation passed',flush=True)
             finally:query.close();native.close()
@@ -320,7 +361,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     return proof
 
 
-def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None):
+def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None,unknown_recollection=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -405,6 +446,27 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         wait.until(lambda browser:any('previous_receiver_job_id' in node.get_attribute('textContent') for node in browser.find_elements(By.TAG_NAME,'pre')))
         click(archive_button);click('Load archive files')
         wait.until(lambda browser:browser.find_elements(By.CSS_SELECTOR,'table[aria-label="Verified native archive files"]'))
+        recollected_browser_job=None
+        if unknown_recollection:
+            click('Load binary-log receivers');click('Inspect receiver '+unknown_recollection['receiver_job_id'])
+            selected=field('Unique receiver server ID')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',selected)
+            selected.send_keys(Keys.CONTROL,'a');selected.send_keys(Keys.BACKSPACE);selected.send_keys('4000000108')
+            checkbox=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(normalize-space(),"Acknowledge full recollection")]/span/input'))
+            driver.execute_script('arguments[0].click();',checkbox)
+            click('Review full recollection from original log')
+            wait.until(lambda browser:any('recollected_receiver_job_id' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'pre[aria-label="Native continuous receiver review"]')))
+            click('Confirm and start continuous receiver')
+            def recollection_started(browser):
+                node=browser.find_element(By.XPATH,'//summary[normalize-space()="Native continuous receiver observations"]/../pre')
+                value=json.loads(node.get_attribute('textContent'))
+                if value['job_id']!=unknown_recollection['receiver_job_id'] and value['state']=='active':return value['job_id']
+                return False
+            recollected_browser_job=wait.until(recollection_started)
+            wait.until(published)
+            click('Cancel continuous receiver')
+            wait.until(lambda browser:any(('Receiver '+recollected_browser_job+': cancelled.') in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            driver.save_screenshot(str(output/'native-mysql-recollection.png'))
         if stopped_tail:
             click('Load binary-log receivers');click('Inspect receiver '+stopped_tail['receiver_job_id'])
             click('Inspect stopped receiver files')
@@ -424,6 +486,7 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         errors=[node for node in driver.get_log('browser') if node.get('level')=='SEVERE']
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'job_id':job_id,'produced_archive_job_id':archive_button.removeprefix('Inspect produced archive '),
+            'unknown_recollection_reviewed_and_dispatched':bool(unknown_recollection),'recollected_receiver_job_id':recollected_browser_job,
             'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'stopped_tail_adopted':bool(stopped_tail),'private_file_cleanup':bool(stopped_tail),'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
     except Exception:
         if driver is not None:

@@ -271,7 +271,17 @@ the parent outcome and recovery acceptance remain independent. Clean stopped
 receivers now support a separately reviewed restart from their exact retained
 next-log checkpoint, with source and native-writer rechecks. Interrupted writers
 have an explicit owned-process reconciliation which does not verify their
-artifacts or authorize restart of an unknown outcome. MariaDB's
+artifacts or authorize checkpoint restart of an unknown outcome. MySQL also
+offers a separate, explicitly acknowledged full recollection from the original
+native starting file. It requires stopped writers and a currently available
+original file, rechecks source identity and GTID mode, and checks the prior GTID
+baseline natively when GTIDs are enabled. A missing/purged original file, changed
+source/mode, or lost GTID lineage refuses admission. It never uses an uncertain
+next-file cursor, modifies the old receiver outcome, or replays SQL. Previously
+published changes can be collected again into independent archives. Native GTID
+admission is distinct from binary-log epoch proof and database recovery; neither
+is inferred, including on GTID-disabled profiles. Recovery using sealed-archive
+checkpoints after the original native file is purged remains open. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
 
@@ -313,8 +323,13 @@ retention with the server paused; independent native observations verify
 unchanged source GTIDs, logs and exact wide-integer/Unicode/binary data.
 Fault tests separately cover partial deletion, lost acknowledgements, a new
 application process, changed files/directories and bounded large inventories.
-These receipts qualify archive retention; unresolved receiver checkpoint
-recovery, complete backup/log chains and production cutover remain open.
+These receipts qualify archive retention. Native receiver qualification also
+covers explicit full recollection through both client interfaces and GTID ON/OFF
+profiles, including independent source-file comparison and preservation of the
+unknown parent. The production browser reviews and dispatches a new collection,
+observes its verified archive and cancels it independently. Recovery using
+sealed-archive checkpoints after source purging, complete backup/log chains and
+production cutover remain open.
 
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an

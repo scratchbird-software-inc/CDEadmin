@@ -11,13 +11,14 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[page,setPage]=useState(0);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [confirmStop,setConfirmStop]=useState(false);
+  const [confirmRecollect,setConfirmRecollect]=useState(false);
   const [tails,setTails]=useState(null),[tailFiles,setTailFiles]=useState([]),[tailReview,setTailReview]=useState(null);
   const generation=useRef(0);
   useEffect(() => {
     generation.current++;setCatalog(null);setStartFile('');setServerId('');setTimeoutValue(null);setReview(null);setReceipt(null);setJobs(null);setPage(0);setBusy(false);setError('');setConfirmStop(false);
     return () => {generation.current++;};
   },[post,engine]);
-  useEffect(() => {setConfirmStop(false);},[receipt?.job_id,receipt?.state]);
+  useEffect(() => {setConfirmStop(false);setConfirmRecollect(false);},[receipt?.job_id,receipt?.state]);
   useEffect(() => {setTails(null);setTailFiles([]);setTailReview(null);},[post,engine,receipt?.job_id]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
@@ -74,6 +75,12 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <Button disabled={busy || !confirmStop} onClick={() => run('reconcile_writer',{job_id:receipt.job_id,confirmed:true},value => {setReceipt(value);setConfirmStop(false);})}>Reconcile receiver writers</Button>
       </Box>}
       {receipt.writer_reconciliation?.process_scope_stopped && <Alert severity="info">Owned receiver and snapshot-parser utilities are stopped. This does not verify private tails or establish database recovery.</Alert>}
+      {engine==='mysql' && ['unknown','failed'].includes(receipt.state) && (receipt.writer_reconciliation?.process_scope_stopped || receipt.native_process_termination_confirmed) && <Box>
+        <Alert severity="info">A separate full collection can read the original native file again if it is still available. Existing archive batches may be duplicated. The unresolved receiver and cursor stay unchanged; no SQL is replayed.</Alert>
+        <FormControlLabel label="Acknowledge full recollection and possible duplicate archives" control={<Checkbox disabled={busy} checked={confirmRecollect} onChange={event => {setConfirmRecollect(event.target.checked);setReview(null);}} />} />
+        <Button disabled={busy || !confirmRecollect} onClick={() => run('review',{recollect_job_id:receipt.job_id,acknowledge_recollection:true,
+          options:{start_file:receipt.options.start_file,receiver_server_id:Number(serverId),timeout_seconds:timeout}},value => {setStartFile(value.options.start_file);setReview(value);})}>Review full recollection from original log</Button>
+      </Box>}
       {['unknown','failed','cancelled','captured'].includes(receipt.state) && <ReceiverFileCleanup post={post} engine={engine} receiverJobId={receipt.job_id} />}
       {['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>
         <Button disabled={busy} onClick={() => run('tail_catalog',{job_id:receipt.job_id},value => {setTails(value);setTailFiles([]);setTailReview(null);})}>Inspect stopped receiver files</Button>

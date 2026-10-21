@@ -78,6 +78,16 @@ it('does not offer restart for an uncertain receiver even after its writers were
   post.mockResolvedValue(unknown);fireEvent.click(screen.getByRole('button',{name:'Inspect receiver owned-receiver'}));
   await screen.findByText(/Receiver owned-receiver: unknown/);
   expect(screen.queryByRole('button',{name:'Review restart from stopped receiver'})).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Review full recollection from original log'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Unique receiver server ID'),{target:{value:'44'}});
+  fireEvent.click(screen.getByLabelText('Acknowledge full recollection and possible duplicate archives'));
+  post.mockResolvedValue({...reviewed,job_id:'new-recollection',continuation:{recollected_receiver_job_id:'owned-receiver'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review full recollection from original log'}));
+  await screen.findByText('Explicit native receiver ID');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_review',request:{recollect_job_id:'owned-receiver',acknowledge_recollection:true,
+    options:{start_file:'native.000001',receiver_server_id:44,timeout_seconds:null}}});
+  expect(screen.getByLabelText('Native continuous receiver review')).toHaveTextContent('recollected_receiver_job_id');
+  expect(screen.getByText(/Receiver owned-receiver: unknown/)).toBeInTheDocument();
 });
 
 it('selects complete stopped files and dispatches a separate reviewed archive without rewriting the receiver',async () => {
