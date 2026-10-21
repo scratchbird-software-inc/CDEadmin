@@ -772,6 +772,14 @@ def endpoint_context_actions(
             icon='action.edit', group='availability', mutation='write', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
+        if profile.get('profile_id')=='mysql-native':
+            from .providers.mysql_family.mysql_instance import OPERATIONS as instance_operations
+            for operation,(title,_source) in instance_operations.items():
+                actions.append(_action('endpoint.mysql.'+operation,title+'...',
+                    'open_workspace',icon='action.settings',group='maintenance',mutation='admin',
+                    confirmation=True,macro=False,arguments={'tab':'administration','resource_kind':'server',
+                        'operation_id':operation,'database_target_id':None},enabled=ready and can_manage,
+                    disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can maintain this native instance.'))
         actions.append(_action('endpoint.mysql.host', 'MySQL database-host diagnostics...', 'open_mysql_host',
             icon='command.default', group='diagnostics', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer its database SSH host.'))

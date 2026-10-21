@@ -3077,7 +3077,7 @@ class RelationalVisualAdministrationTests(unittest.TestCase):
     def test_relational_dialects_publish_fail_closed_concept_status(self):
         cases = (
             ('mysql', '9.7.0', MYSQL_ADMINISTRATION, {
-                'servers': 'read_only',
+                'servers': 'supported',
                 'schemas': 'supported',
                 'materialized_views': 'supported',
                 'extensions_and_plugins': 'supported',

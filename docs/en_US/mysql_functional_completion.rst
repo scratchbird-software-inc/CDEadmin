@@ -175,6 +175,28 @@ Run the owned qualifier independently with and without ``--use-c``:
 ``tools/cdeadmin_mysql_query_attributes_qualification.py --output <outside-repo>
 --application``. Optional browser and driver paths qualify the built editor.
 
+Native instance maintenance exposes all six Community ``ALTER INSTANCE``
+actions through server Maintenance context commands and reviewed native plans:
+InnoDB/binlog master-key rotation, TLS context reload, keyring reload and InnoDB
+redo enable/disable. TLS selects the native main/admin channel and explicit
+rollback-on-error behavior. Review binds the native server UUID, authenticated
+actor, active roles and observed state; TLS also captures configured variable
+values separately from the active context. Changed state refuses dispatch.
+Disabling redo requires acknowledgement that the instance is dedicated to an
+initial load; crash recovery remains unavailable until redo is re-enabled.
+Native privileges and installed services own permission/capability decisions.
+
+Each operation uses its own connection, records native warnings and separates
+SQL acknowledgement from later observation failure. An acknowledged key
+rotation is never replayed to resolve a lost observation. Redo receipts report
+the observed ON/OFF postcondition; TLS acknowledgement does not attest certificate
+file contents or reconnect existing clients. The native Community file-keyring
+fixture qualifies real key-ID rotation, encrypted-table readability, redo state
+transitions, changed configured TLS paths and native privilege refusals with
+both connectors. Use ``tools/cdeadmin_mysql_instance_qualification.py --output
+<outside-repo> --application``. Host startup, services, upgrades and complete
+recovery remain separate work.
+
 Database-host diagnostics now have an explicit SSH execution path. The
 authenticated peer's hostname and native ``auto.cnf`` UUID must match the
 independently observed MySQL host and data directory. An SSH bastion and the

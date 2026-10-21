@@ -144,6 +144,11 @@ MySQL
   signed 64-bit range and names whose current source bytes differ from UTF-8;
   these cases refuse dispatch rather than silently changing values or names.
   These are beta driver gaps, separate from closed-source Enterprise scope.
+  All six Community ALTER INSTANCE actions now have reviewed owned-connection
+  workflows, native key rotation and redo-state receipts, TLS main/admin and
+  rollback options, changed-state refusal and explicit native ACK handling.
+  Host lifecycle, file/configuration deployment and remaining installed native
+  capabilities continue under their separate inventory and lifecycle work.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
   editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately
