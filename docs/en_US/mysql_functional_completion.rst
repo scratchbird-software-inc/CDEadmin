@@ -150,6 +150,37 @@ dispatch retains completed results and pending work. Undelimited compound native
 programs retain their whole-command port; future-state source preflight and
 wider procedural/contextual coverage retain separate acceptance.
 
+Admitted retained-session observers now also support native syntax preparation
+on their independently authenticated connection. The exact source UUID,
+principal, version, native thread and handshake nonce bind the observation.
+Performance Schema supplies the source's current SQL mode and selected database;
+only the private peer receives settings, database selection, user variables,
+PREPARE, deallocation and cleanup. The source's row count, warning/error areas,
+transaction and connection remain untouched. Live USE changes preserve exact
+Unicode/backtick database identities. Parser errors and catalog/permission
+failures retain their separate native classifications. Original-session active
+roles, temporary objects and catalog binding are not inferred from the private
+peer, and future-state script preflight remains separate acceptance.
+
+This path requires observation access to performance_schema.threads in addition
+to the existing variables_by_thread and session_account_connect_attrs views.
+Denied/lost private parser context never substitutes an original-session query;
+authenticated renewal acquires only a new private peer. Lost original identity
+blocks source reuse. Profiles without an admitted observer retain explicitly
+unqualified diagnostic-preservation status. Other retained metadata/completion
+consumers, disabled/denied observer admission and native C mode acknowledgement
+mismatches remain open.
+
+Both Connector/Python interfaces are natively qualified across the four live
+ANSI_QUOTES/NO_BACKSLASH_ESCAPES combinations, quoted Unicode SQL, database
+switches, denied context and private-peer renewal. Native general logs confirm
+no hidden parser/settings or PING commands on the source. Independent catalogs
+confirm that future procedure/event/library definitions and DROP preparation
+never execute. Event and library declarations have qualified native post-parse
+classification on MySQL9.7.0. Library bodies remain opaque: their SQL declaration
+syntax does not establish JavaScript validity or MLE execution, which remains
+post beta. Native MySQL rejects dollar-quoted general SELECT literals.
+
 Pure-client text escaping now represents NUL as a native backslash escape when
 that language mode permits it, preserving loadable stored SQL definitions.
 NO_BACKSLASH_ESCAPES keeps its native behavior. On the selected MySQL9.7 server,

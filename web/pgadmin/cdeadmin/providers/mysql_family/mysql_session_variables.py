@@ -6,6 +6,7 @@ is recorded separately; the pre-existing unqualified observation path remains
 available for those profiles until its own workflow is completed.
 """
 from copy import deepcopy
+from contextlib import contextmanager
 import re
 import threading
 import weakref
@@ -46,6 +47,7 @@ class SessionVariables:
         self.connection = None
         self.opened = False
         self.needs_connection_refresh = False
+        self.parser_database = None
         self.lock = threading.RLock()
 
     def observe(self):
@@ -61,8 +63,12 @@ class SessionVariables:
         if self.connection is None:
             if self.opened:
                 raise ObserverUnavailable('The independent MySQL observation connection is closed')
-            self.connection = self.connector()
+            peer = self.connector()
+            if peer is source or getattr(peer, 'connection_id', None) == self.identity['connection_id']:
+                raise ObserverUnavailable('The MySQL observer must own a different native connection')
+            self.connection = peer
             self.opened = True
+            self.parser_database = None
         connection = self.connection
         cursor = None
         try:
@@ -131,6 +137,48 @@ class SessionVariables:
                 raise
             self.needs_connection_refresh = False
             return result
+
+    @contextmanager
+    def parser_session(self):
+        """Borrow only the private peer; never send a command on the source."""
+        with self.lock:
+            self.cached = None
+            cursor = None
+            try:
+                observed = self._observe()
+                cursor = self.connection.cursor()
+                cursor.execute('SELECT t.PROCESSLIST_DB FROM performance_schema.threads AS t '
+                    'JOIN performance_schema.session_account_connect_attrs AS a ON a.PROCESSLIST_ID=t.PROCESSLIST_ID '
+                    'WHERE t.THREAD_ID=%s AND t.PROCESSLIST_ID=%s AND a.ATTR_NAME=%s AND a.ATTR_VALUE=%s',
+                    (self.identity['thread_id'], self.identity['connection_id'], self.attribute['name'], self.attribute['value']))
+                rows = cursor.fetchall()
+                if len(rows) != 1 or rows[0][0] is not None and not isinstance(rows[0][0], str):
+                    raise SourceIdentityUnavailable('The original MySQL parser database identity is unavailable')
+                database = rows[0][0]
+                cursor.close(); cursor = None
+                if database is None and self.parser_database is not None:
+                    # The observer connector deliberately omits a database and
+                    # init command. A new private peer restores the empty scope.
+                    observed = self.renew()
+                if database is not None and database != self.parser_database:
+                    cursor = self.connection.cursor()
+                    cursor.execute('USE `' + database.replace('`', '``') + '`')
+                    cursor.close(); cursor = None
+                    self.parser_database = database
+                self.connection.sql_mode = observed['variables']['sql_mode']
+                yield self.connection, {**observed, 'default_schema': database,
+                    'database_observation_source': 'native-performance-schema-threads-and-source-handshake',
+                    'original_active_roles_observed': False, 'original_temporary_objects_observed': False}
+            except BaseException:
+                self.needs_connection_refresh = True
+                try: self.close()
+                except Exception: pass
+                # The connection owns the failed cursor. Closing it again
+                # must not replace the original identity/context failure.
+                cursor = None
+                raise
+            finally:
+                if cursor is not None: cursor.close()
 
 
 def install(client, handle, request):

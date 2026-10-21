@@ -92,6 +92,9 @@ def qualify(engine, output, *, mysql_interface='pure'):
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_charsets.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_connections.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_session_variables.py',
+             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_native_validation.py',
+             'web/pgadmin/cdeadmin/providers/mysql_family/prepare_classification.py',
+             'web/pgadmin/cdeadmin/providers/native_editor.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_values.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_execution.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mariadb_execution.py']
@@ -133,9 +136,14 @@ def qualify(engine, output, *, mysql_interface='pure'):
                     cursor.execute("GRANT ALL PRIVILEGES ON sr_diagnostics.* TO 'sr_diagnostics'@'%'")
                     cursor.execute("GRANT SELECT ON performance_schema.variables_by_thread TO 'sr_diagnostics'@'%'")
                     cursor.execute("GRANT SELECT ON performance_schema.session_account_connect_attrs TO 'sr_diagnostics'@'%'")
+                    cursor.execute("GRANT SELECT ON performance_schema.threads TO 'sr_diagnostics'@'%'")
                 else:
                     cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_diagnostics'@'%'")
                 cursor.execute('CREATE DATABASE sr_diagnostics')
+                if engine == 'mysql':
+                    cursor.execute('CREATE DATABASE `sr_diag``雪`')
+                    cursor.execute("GRANT ALL PRIVILEGES ON `sr_diag``雪`.* TO 'sr_diagnostics'@'%'")
+                    cursor.execute('CREATE TABLE `sr_diag``雪`.`binding test`(value INT)')
                 cursor.execute('CREATE TABLE sr_diagnostics.t(id INT PRIMARY KEY,value INT)')
                 cursor.execute('INSERT INTO sr_diagnostics.t VALUES(1,1),(2,1)')
                 # This routine changes policy before returning ERR. Last OK
@@ -276,6 +284,67 @@ def qualify(engine, output, *, mysql_interface='pure'):
                         assert sql('SELECT ROW_COUNT(),%s AS `€cœur ÿ`', ['€ Œ œ Ÿ ÿ']) == [[2, '€ Œ œ Ÿ ÿ']]
                     sql('SET NAMES utf8mb4')
                     proof['checks'].append('independent-C-or-pure-charset-observation-preserves-native-latin1-identities-values-and-NULL-result-charset')
+                    for mode in ('', 'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES', 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
+                        sql("SET SESSION sql_mode='" + mode + "'")
+                        sql('UPDATE t SET value=value+1')
+                        parsed = post('source_validate', session_id=session_id, source='SELECT id FROM t')
+                        assert parsed['grammar_valid'] is True and parsed['authority'] == 'mysql-native-independent-prepare', parsed
+                        assert parsed['original_diagnostics_preserved'] and parsed['original_session_commands_sent'] == 0
+                        assert parsed['parser_observation']['default_schema'] == 'sr_diagnostics'
+                        assert parsed['parser_observation']['connection_id'] == str(source_connection_id)
+                        assert isinstance(parsed['parser_observation']['thread_id'], str)
+                        literal = post('source_validate', session_id=session_id, source="SELECT 'quote'' slash\\ snow雪' AS value")
+                        assert literal['grammar_valid'] is True, literal
+                        # MySQL permits dollar quotes for external routine and
+                        # library bodies, not as general SELECT literals.
+                        unsupported_literal = post('source_validate', session_id=session_id, source='SELECT $$text$$')
+                        assert unsupported_literal['grammar_valid'] is False, unsupported_literal
+                        library = post('source_validate', session_id=session_id,
+                            source="CREATE LIBRARY sr_future_quoted_library LANGUAGE JAVASCRIPT AS $parser$quote' slash\\ 雪;$parser$")
+                        assert library['grammar_valid'] is True and library['external_language_bodies_parsed'] is False, library
+                        assert sql('SELECT ROW_COUNT()') == [[2]]
+                        sql("SELECT CAST('owned-warning' AS SIGNED)")
+                        rejected = post('source_validate', session_id=session_id, source='SELEC 1')
+                        assert rejected['grammar_valid'] is False
+                        assert any(row[1] == 1292 for row in sql('SHOW WARNINGS'))
+                        sql('SELECT absent_column FROM t', expected_errno=1054)
+                        checked = post('source_validate', session_id=session_id,
+                            source='CREATE PROCEDURE sr_future_parser() BEGIN DECLARE n INT; SET n=1; SELECT n; END')
+                        assert checked['grammar_valid'] is True, checked
+                        event = post('source_validate', session_id=session_id,
+                            source='CREATE EVENT sr_future_parser_event ON SCHEDULE EVERY 1 DAY DO BEGIN SELECT 1; END')
+                        assert event['grammar_valid'] is True, event
+                        broken_event = post('source_validate', session_id=session_id,
+                            source='CREATE EVENT sr_future_parser_event ON SCHEDULE EVERY 1 DAY DO BEGIN SELECT 1; END invalid trailing input')
+                        assert broken_event['grammar_valid'] is False, broken_event
+                        assert any(row[1] == 1054 for row in sql('SHOW ERRORS'))
+                    proof['checks'].append('private-native-prepare-valid-and-invalid-source-preserves-row-count-warning-and-error-areas-across-four-live-modes')
+                    cursor.execute("SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA='sr_diagnostics' AND ROUTINE_NAME='sr_future_parser'")
+                    assert cursor.fetchone()[0] == 0
+                    cursor.execute("SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA='sr_diagnostics' AND EVENT_NAME='sr_future_parser_event'")
+                    assert cursor.fetchone()[0] == 0
+                    cursor.execute("SELECT COUNT(*) FROM information_schema.LIBRARIES WHERE LIBRARY_SCHEMA='sr_diagnostics' AND LIBRARY_NAME='sr_future_quoted_library'")
+                    assert cursor.fetchone()[0] == 0
+                    sql("SET SESSION sql_mode=''")
+                    assert post('source_validate', session_id=session_id, source='DROP TABLE t')['grammar_valid'] is True
+                    cursor.execute('SELECT COUNT(*) FROM sr_diagnostics.t'); assert cursor.fetchone()[0] == 2
+                    proof['checks'].append('private-native-stored-program-and-destructive-DDL-validation-never-executes-submitted-source')
+                    sql('USE `sr_diag``雪`')
+                    sql('INSERT INTO `binding test` VALUES(17)')
+                    scoped = post('source_validate', session_id=session_id, source='SELECT value FROM `binding test`')
+                    assert scoped['grammar_valid'] is True and scoped['parser_observation']['default_schema'] == 'sr_diag`雪', scoped
+                    assert sql('SELECT ROW_COUNT()') == [[1]]
+                    sql('USE sr_diagnostics')
+                    assert post('source_validate', session_id=session_id, source='SELECT id FROM t')['parser_observation']['default_schema'] == 'sr_diagnostics'
+                    proof['checks'].append('private-native-parser-follows-live-USE-with-exact-Unicode-and-backtick-database-identity')
+                    sql('UPDATE t SET value=value+1')
+                    cursor.execute("REVOKE SELECT ON performance_schema.threads FROM 'sr_diagnostics'@'%'")
+                    refused = client.post(url, json={'action': 'source_validate', 'database_target_id': target,
+                        'session_id': session_id, 'source': 'SELECT 1'}).get_json()
+                    assert not refused.get('success'), refused
+                    cursor.execute("GRANT SELECT ON performance_schema.threads TO 'sr_diagnostics'@'%'")
+                    assert sql('SELECT ROW_COUNT(),%s', [42]) == [[2, 42]]
+                    proof['checks'].append('denied-private-parser-context-preserves-source-diagnostics-and-renews-only-private-peer-on-authenticated-request')
                     sql('UPDATE t SET value=value+1')
                     cursor.execute("REVOKE SELECT ON performance_schema.variables_by_thread FROM 'sr_diagnostics'@'%'")
                     started = post('execute', session_id=session_id, source='SELECT ROW_COUNT(),%s', parameters=[42], history_sensitive=True)
@@ -369,7 +438,9 @@ def qualify(engine, output, *, mysql_interface='pure'):
                     traffic = [(_kind.decode('ascii') if isinstance(_kind, bytes) else _kind,
                                 bytes(_text).decode('latin1') if isinstance(_text, (bytes, bytearray)) else _text)
                                for _kind, _text in traffic]
-                    forbidden = ('select version(), @@session.sql_mode', 'select @@session.character_set_client')
+                    forbidden = ('select version(), @@session.sql_mode', 'select @@session.character_set_client',
+                        'select version(), @@sql_mode, @@session.lock_wait_timeout', 'set session lock_wait_timeout',
+                        'set @sr_check_', 'prepare sr_check_', 'deallocate prepare sr_check_')
                     unexpected = [statement for kind, statement in traffic if kind == 'Ping' or
                                   kind == 'Query' and re.sub(r'\s+', ' ', statement).strip().lower().startswith(forbidden)]
                     assert not unexpected, unexpected

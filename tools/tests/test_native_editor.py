@@ -448,6 +448,9 @@ def test_native_syntax_context_permission_and_unsupported_are_distinct(code, exp
 
 @pytest.mark.parametrize('source,family',[
     ('# Comment\r\nCREATE PROCEDURE p() BEGIN SELECT 1; END','procedure'),
+    ('CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO BEGIN SELECT 1; END','event'),
+    ('CREATE LIBRARY lib LANGUAGE JAVASCRIPT AS $$opaque body$$','library'),
+    ('CREATE DEFINER=CURRENT_USER EVENT ev ON SCHEDULE AT CURRENT_TIMESTAMP DO SELECT 1','event'),
     ('CREATE /* header */ DEFINER=CURRENT_USER() PROCEDURE p() BEGIN SELECT 1; END','procedure'),
     ("CREATE DEFINER='odd\\\'user'@'host.example' FUNCTION f() RETURNS INT RETURN 1",'function'),
     ('CREATE DEFINER=`odd``user`@`host` TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET @v=1','trigger'),

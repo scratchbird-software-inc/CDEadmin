@@ -98,7 +98,7 @@ MySQL
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
-  editor/catalog/native-validation consumers and denied/disabled observer
+  editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately
   authenticated retained observer for current native language/charset facts in
   parameter binding, script framing and C charset adaptation. Identity discovery,
@@ -107,7 +107,11 @@ MySQL
   execution scope. Permission/connection loss refuses affected commands without
   intrusive fallback; authenticated observer renewal does not reconnect the
   original session or replay user SQL. Native C mode-acknowledgement mismatches
-  still refuse binding. See :doc:`mysql_driver_development` for exact scope;
+  still refuse binding. Admitted native syntax checks now prepare on the private
+  same-instance peer using observed source mode/database context and preserve
+  source diagnostic state. This includes live database switches and denied
+  private parser context; original active-role/temporary-object binding remains
+  unqualified. See :doc:`mysql_driver_development` for the execution scope;
   these execution receipts do not close browser coverage or INV-MYSQL.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID

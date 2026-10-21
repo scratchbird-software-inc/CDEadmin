@@ -7,7 +7,7 @@ the caller must have observed the native 1295 response from that preparation.
 import re
 
 
-FAMILIES={'PROCEDURE','FUNCTION','TRIGGER','VIEW','DATABASE','SCHEMA','TABLE',
+FAMILIES={'PROCEDURE','FUNCTION','TRIGGER','EVENT','LIBRARY','VIEW','DATABASE','SCHEMA','TABLE',
           'TABLESPACE','ROLE'}
 
 

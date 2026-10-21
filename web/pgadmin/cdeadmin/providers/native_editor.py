@@ -548,6 +548,9 @@ class NativeEditorProvider:
         handle = self._editor_session(request)
         engine = self.profile.engine_id
         with session_access(self.client, handle, engine) as transaction:
+            if engine == 'mysql':
+                from .mysql_family.mysql_native_validation import validate
+                return validate(self.client, handle, source, request.get('script', False))
             if engine in {'mysql', 'mariadb'}:
                 return validate_mysql(self.client, handle, source, engine, request.get('script', False))
             if engine != 'firebird':
