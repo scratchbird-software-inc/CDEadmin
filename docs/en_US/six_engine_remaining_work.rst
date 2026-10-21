@@ -73,9 +73,14 @@ MySQL
 
 * MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
   targets, independent restore verification and reviewed production cutover.
-* MY-ARCHIVES: Complete unresolved receiver/checkpoint recovery, archive
-  retention and cleanup/restart reconciliation beyond the published receiver
-  restart and stopped-tail adoption workflows.
+* MY-ARCHIVES: Complete unresolved receiver/checkpoint recovery and wider
+  cleanup/restart reconciliation beyond the published receiver restart and
+  stopped-tail adoption workflows. Reviewed Shell/raw archive retention,
+  explicit archive protection and durable interrupted-removal reconciliation
+  are implemented and native/API/browser qualified. Age/count policies retain
+  exact reviewed files and receipts; they do not infer backup/log recovery
+  coverage or purge native server logs. Scheduled recovery-chain-aware retention
+  remains separate from this operator-reviewed workflow.
 * MY-HA-LIFECYCLE: Complete independently observed topology/bootstrap/failover/
   repair and authorized server-host configuration, lifecycle and upgrades.
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor

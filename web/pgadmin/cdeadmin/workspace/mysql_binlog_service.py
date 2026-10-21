@@ -83,6 +83,10 @@ def action(service,server,operation,request):
     from mysql.connector import Error as NativeError
     if not isinstance(request,dict):raise BinlogArchiveError('A native binary-log archive request is required')
     jobs,owner,endpoint,context=manager(service,server)
+    if operation in {'pin','remove_artifact','removal_reconcile','retention_list','retention_status',
+                     'retention_cancel','retention_review','retention_start','retention_reconcile'}:
+        from .mysql_archive_retention import action as retention_action
+        return retention_action(service,jobs,owner,endpoint.id,operation,request)
     if operation=='list':
         if set(request)-{'offset','limit'}:raise BinlogArchiveError('Invalid native archive page')
         return jobs.list(owner,endpoint.id,**request)
@@ -92,9 +96,6 @@ def action(service,server,operation,request):
     if operation=='files':
         if set(request)-{'job_id','offset','limit'} or 'job_id' not in request:raise BinlogArchiveError('Select a native archive file page')
         return jobs.files(request['job_id'],owner,endpoint.id,request.get('offset',0),request.get('limit',100))
-    if operation=='remove_artifact':
-        if set(request)!={'job_id','confirmation'}:raise BinlogArchiveError('Select and confirm one native archive')
-        return jobs.remove_artifact(request['job_id'],owner,endpoint.id,request['confirmation'])
     if operation=='start':
         reviewed=jobs.load(request.get('job_id'),owner,endpoint.id)
         if reviewed['state']!='reviewed':return jobs.start(request,owner,endpoint.id,{},None)

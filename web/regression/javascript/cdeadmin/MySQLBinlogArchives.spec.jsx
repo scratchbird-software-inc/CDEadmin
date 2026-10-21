@@ -68,6 +68,25 @@ it('keeps uncertain termination explicit and exposes verification without replay
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_reconcile',request:{job_id:'owned-job'}}));
 });
 
+it('protects an archive and exposes explicit reconciliation of a pending file removal',async () => {
+  const post=jest.fn().mockResolvedValue({jobs:[{...review,state:'completed'}],total:1,unavailable_job_ids:[]});
+  render(<Component post={post} endpointUrl="/workspace" />);
+  fireEvent.click(screen.getByRole('button',{name:'Load archive jobs'}));await screen.findByRole('table',{name:'Native MySQL archive jobs'});
+  post.mockResolvedValue({...review,state:'completed'});fireEvent.click(screen.getByRole('button',{name:'Inspect archive owned-job'}));
+  await screen.findByRole('button',{name:'Protect archive from removal'});
+  post.mockResolvedValue({...review,state:'completed',retention_pinned:true});
+  fireEvent.click(screen.getByRole('button',{name:'Protect archive from removal'}));
+  await screen.findByRole('button',{name:'Unprotect archive from removal'});
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_pin',request:{job_id:'owned-job',pinned:true}});
+  expect(screen.queryByRole('button',{name:'Remove application archive files'})).not.toBeInTheDocument();
+  post.mockResolvedValue({...review,state:'completed',artifact_removal:{state:'pending'}});
+  fireEvent.click(screen.getByRole('button',{name:'Refresh archive receipt'}));
+  await screen.findByRole('button',{name:'Reconcile archive file removal'});
+  post.mockResolvedValue({...review,state:'completed',artifact_removed:true,artifact_removal:{state:'completed'}});
+  fireEvent.click(screen.getByRole('button',{name:'Reconcile archive file removal'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_removal_reconcile',request:{job_id:'owned-job',confirmation:'owned-job'}}));
+});
+
 it('uses native closed-log identities in server order for MariaDB without MySQL dump options',async () => {
   const post=jest.fn().mockResolvedValue({status:'available',logs:[{Log_name:'native.1',File_size:'600',closed:true},
     {Log_name:'native.2',File_size:'700',closed:true},{Log_name:'native.3',File_size:'800',closed:false}]});

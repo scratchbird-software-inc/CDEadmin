@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
 import ContinuousBinlog from './ContinuousBinlog';
+import MySQLArchiveRetention from './MySQLArchiveRetention';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw=false}) {
@@ -57,6 +58,7 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
       <Button disabled={busy} onClick={() => load(page)}>Load archive jobs</Button>
     </Box>
     {closed && <Box component="details"><summary>Continuous native binary-log collection</summary><ContinuousBinlog post={post} engine={engine} onInspectArchive={id => inspect({job_id:id})} /></Box>}
+    {!maria && <Box component="details"><summary>Archive retention</summary><MySQLArchiveRetention post={post} prefix={prefix} /></Box>}
     {catalog && <Box component="details"><summary>Native source, GTID state and available logs: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       {closed ? <TextField select size="small" label="Native closed binary logs" value={logNames} SelectProps={{multiple:true}} sx={{minWidth:280}} onChange={event => {setLogNames((catalog?.logs || []).filter(row => event.target.value.includes(row.Log_name)).map(row => row.Log_name));setReview(null);}}>
@@ -90,17 +92,21 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
         {receipt.state==='unknown' && ' Native process termination is uncertain. This operation will not be replayed.'}
         {receipt.state==='no_new_snapshot' && ' The native utility produced no new archive; the continuation cursor was not advanced.'}
         {receipt.artifact_removed && ' Application archive files were removed; the receipt is retained.'}
+        {receipt.artifact_removal?.state==='pending' && ' Archive file removal was interrupted. Reconcile the recorded removal intent.'}
+        {receipt.retention_pinned && ' This archive is protected from file removal.'}
       </Alert>
       <Button disabled={busy} onClick={() => inspect(receipt)}>Refresh archive receipt</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state) || receipt.artifact_removed} onClick={() => run('reconcile',{job_id:receipt.job_id},setReceipt)}>Verify archive again</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed'} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel archive</Button>
       <Button disabled={busy || !['completed','artifact_verified'].includes(receipt.state) || receipt.artifact_removed} onClick={() => loadFiles(0)}>Load archive files</Button>
       <Button onClick={saveReceipt}>Download archive receipt</Button>
+      {!maria && !receipt.artifact_removed && !receipt.artifact_removal && ['completed','artifact_verified'].includes(receipt.state) && <Button disabled={busy} onClick={() => run('pin',{job_id:receipt.job_id,pinned:!receipt.retention_pinned},setReceipt)}>{receipt.retention_pinned ? 'Unprotect archive from removal' : 'Protect archive from removal'}</Button>}
+      {!maria && receipt.artifact_removal?.state==='pending' && <Button disabled={busy} onClick={() => run('removal_reconcile',{job_id:receipt.job_id,confirmation:receipt.job_id},setReceipt)}>Reconcile archive file removal</Button>}
       {files && !receipt.artifact_removed && <>
         <Table size="small" aria-label="Verified native archive files"><TableHead><TableRow>{['Relative path','Bytes','SHA256','Download'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>{files.files.map(row => <TableRow key={row.path}><TableCell>{row.path}</TableCell><TableCell>{row.size}</TableCell><TableCell>{row.sha256}</TableCell><TableCell><Button aria-label={'Download '+row.path} onClick={() => download(row)}>Download file</Button></TableCell></TableRow>)}</TableBody></Table>
         <TablePagination component="div" count={files.total} rowsPerPage={100} rowsPerPageOptions={[100]} page={files.offset/100} onPageChange={(_event,next) => loadFiles(next*100)} />
       </>}
-      {!receipt.artifact_removed && !ACTIVE.has(receipt.state) && <Box sx={{display:'flex',gap:1,my:1}}>
+      {!receipt.artifact_removed && !receipt.artifact_removal && !receipt.retention_pinned && !ACTIVE.has(receipt.state) && <Box sx={{display:'flex',gap:1,my:1}}>
         <TextField size="small" label="Confirm job identity to remove archive files" value={confirmation} onChange={event => setConfirmation(event.target.value)} />
         <Button disabled={busy || confirmation!==receipt.job_id} onClick={() => run('remove_artifact',{job_id:receipt.job_id,confirmation},value => {setReceipt(value);setFiles(null);})}>Remove application archive files</Button>
       </Box>}

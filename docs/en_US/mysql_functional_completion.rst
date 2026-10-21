@@ -263,8 +263,8 @@ Utility return, native GTID coverage and independent recovered-data verification
 remain distinct. The source can be offline after the archive has been sealed.
 
 These are scoped archive/replay workflows. A compatible restored base is required;
-complete end-to-end PITR, physical continuity, production cutover and
-retention retains separate product acceptance. Complete stopped closed-log files
+complete end-to-end PITR, physical continuity and production cutover retain
+separate product acceptance. Complete stopped closed-log files
 can be separately reviewed, checked against native source/file postimages and
 adopted into ordinary verified archives. Active/incomplete files are refused;
 the parent outcome and recovery acceptance remain independent. Clean stopped
@@ -281,6 +281,40 @@ claim and per-file removal acknowledgements. Unknown/partial outcomes remain
 explicit and are never automatically repeated. Published archives and receipts
 are retained. This is separate from scheduled or recovery-chain-aware archive
 retention and native server log purging.
+
+MySQL Shell and raw archive workspaces now provide reviewed retention and
+explicit protection of individual archives. Set an age threshold and a minimum
+retained count for each exact native source/principal/role, inspect the oldest
+100 eligible archives and their byte totals, then confirm that exact review.
+The inventory scans all receipts and fails closed on unreadable receipts.
+Protected, active, uncertain, unverified and already removed archives are
+excluded; protection applies to ordinary single-archive removal as well.
+Protect every archive required by a base backup or recovery target: age/count
+rules do not infer a recoverable chain. No scheduled deletion or native server
+log purge is implied.
+
+Retention verifies sealed archive bytes before review and again before removal.
+Receipt/protection changes invalidate removal; new archives never enter an
+existing review. Removal persists an owner/endpoint/host-bound intent before
+detaching a private directory, keeps operation receipts, and acknowledges the
+final absence separately. Explicit reconciliation resumes only recorded intents
+belonging to that retention job and reports unattempted archives and other
+removal authorities separately. It does not run a new retention scan. Added or
+changed entries, replaced directories, links/reparse points, and an unconfirmed
+native process refuse removal. Single-archive cleanup has the same durable
+intent and explicit reconciliation. These workflows remain available while the
+source is offline.
+
+Qualification covers native MySQL9.7.0 Shell and raw archives through both
+Connector/Python interfaces, authenticated ownership/registration boundaries,
+protection changed after review, interrupted detachment and explicit
+reconciliation with the server paused. The production browser also performs
+retention with the server paused; independent native observations verify
+unchanged source GTIDs, logs and exact wide-integer/Unicode/binary data.
+Fault tests separately cover partial deletion, lost acknowledgements, a new
+application process, changed files/directories and bounded large inventories.
+These receipts qualify archive retention; unresolved receiver checkpoint
+recovery, complete backup/log chains and production cutover remain open.
 
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an
