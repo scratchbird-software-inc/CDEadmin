@@ -63,6 +63,12 @@ class Executions:
             except RelationalClientError:
                 self.client._uncertain_sessions.add(id(handle))
                 raise
+            from .mysql_session_variables import prepare, SourceIdentityUnavailable
+            try:
+                prepare(handle)
+            except SourceIdentityUnavailable:
+                self.client._uncertain_sessions.add(id(handle))
+                raise
             token = Execution(handle, copy.deepcopy(session_request), identity=identity)
             token.worker = threading.Thread(
                 target=self._run, args=(token, source, bound), daemon=True,
@@ -90,6 +96,17 @@ class Executions:
             commands = exc.commands_dispatched
             result['query_dispatch'] = 'partially_started' if commands else 'not_started'
             result['commands_dispatched'] = commands
+            if getattr(exc, 'original_diagnostics_preserved', False):
+                result['original_diagnostics_preserved'] = True
+                result['native_observer_error_type'] = exc.native_observer_error_type
+                result['message_primary'] = ('Independent MySQL session-variable observation is unavailable. '
+                    'This command was not sent; the original session diagnostics are preserved.')
+                if type(getattr(exc, 'native_observer_errno', None)) is int:
+                    result['native_observer_errno'] = exc.native_observer_errno
+            if getattr(exc, 'original_session_identity_unconfirmed', False):
+                result['original_session_identity_unconfirmed'] = True
+                result['message_primary'] = ('The original MySQL session identity could not be confirmed. '
+                    'This command was not sent; close this session.')
             if commands:
                 result['message_primary'] = ('Earlier commands ran. This command was not sent because its '
                     'parameters or script framing could not be admitted. Review completed results before running the script again.')
@@ -160,7 +177,9 @@ class Executions:
                             not 2000 <= errno < 3000 and
                             isinstance(sqlstate, str) and len(sqlstate) == 5)
             if isinstance(exc, MySQLParameterAdmissionError):
-                pass  # Binding failed after a complete metadata response.
+                # A private observer failure leaves the source protocol alone.
+                # Missing exact source identity still forbids reusing it.
+                token.cleanup_failed = bool(getattr(exc, 'original_session_identity_unconfirmed', False))
             elif not server_error:
                 token.cleanup_failed = True
             else:

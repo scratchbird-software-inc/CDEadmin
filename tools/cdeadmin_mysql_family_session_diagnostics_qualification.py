@@ -1,7 +1,8 @@
 """Original-session diagnostics through authenticated execution/status APIs.
 
-This qualifies MariaDB text/parameter execution and MySQL pure unbound text.
-MySQL bound/script language probes and C charset probes are separate gaps.
+This qualifies MariaDB text/parameter execution and admitted MySQL independent
+session-variable observation with both native client interfaces. Other retained
+editor/catalog consumers and unavailable observer profiles remain separate gaps.
 """
 import argparse
 import builtins
@@ -9,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+import re
 import sys
 import threading
 import time
@@ -70,14 +72,14 @@ def native_fetch_matrix(route):
     return result
 
 
-def qualify(engine, output):
+def qualify(engine, output, *, mysql_interface='pure'):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents:
         raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
     proof = {'complete': False, 'full_product_complete': False,
              'engine': engine, 'history_testing': 'not run', 'checks': [],
-             'scope': 'MySQL pure unbound text' if engine == 'mysql' else
+             'scope': 'MySQL ' + mysql_interface + ' text/parameter/script execution with independent native session-variable observation' if engine == 'mysql' else
                       'MariaDB unbound and parameterized text'}
     paths = [str(Path(__file__).relative_to(ROOT)),
              'tools/driver_patches/mariadb-1.1.14-exact-temporals.patch',
@@ -88,6 +90,8 @@ def qualify(engine, output):
              'web/pgadmin/cdeadmin/providers/mysql_family/mariadb_values.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/provider.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_charsets.py',
+             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_connections.py',
+             'web/pgadmin/cdeadmin/providers/mysql_family/mysql_session_variables.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_values.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mysql_execution.py',
              'web/pgadmin/cdeadmin/providers/mysql_family/mariadb_execution.py']
@@ -125,7 +129,12 @@ def qualify(engine, output):
             try:
                 password = secrets.token_urlsafe(32)
                 cursor.execute("CREATE USER 'sr_diagnostics'@'%' IDENTIFIED BY %s", (password,))
-                cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_diagnostics'@'%'")
+                if engine == 'mysql':
+                    cursor.execute("GRANT ALL PRIVILEGES ON sr_diagnostics.* TO 'sr_diagnostics'@'%'")
+                    cursor.execute("GRANT SELECT ON performance_schema.variables_by_thread TO 'sr_diagnostics'@'%'")
+                    cursor.execute("GRANT SELECT ON performance_schema.session_account_connect_attrs TO 'sr_diagnostics'@'%'")
+                else:
+                    cursor.execute("GRANT ALL PRIVILEGES ON *.* TO 'sr_diagnostics'@'%'")
                 cursor.execute('CREATE DATABASE sr_diagnostics')
                 cursor.execute('CREATE TABLE sr_diagnostics.t(id INT PRIMARY KEY,value INT)')
                 cursor.execute('INSERT INTO sr_diagnostics.t VALUES(1,1),(2,1)')
@@ -134,6 +143,8 @@ def qualify(engine, output):
                 cursor.execute("CREATE PROCEDURE sr_diagnostics.fail_after_policy() BEGIN SET autocommit=0; SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='owned diagnostic'; END")
                 selected = {**route, 'database': 'sr_diagnostics', 'autocommit': True,
                             'user': 'sr_diagnostics', 'credential_kinds': ['database_password']}
+                if engine == 'mysql':
+                    selected['use_pure'] = mysql_interface == 'pure'
                 with app.test_request_context('/'):
                     user = User.query.first(); uid = user.id
                     group = ServerGroup.query.filter_by(user_id=uid).first()
@@ -162,6 +173,13 @@ def qualify(engine, output):
                     return result['data']
 
                 session_id = post('open_session', language_profile=engine + '-sql')['session_id']
+                if engine == 'mysql':
+                    initial = post('transaction', session_id=session_id)['provider_payload']['session_variable_observer']
+                    assert initial['admitted'] and initial['original_session_commands_sent'] == 0, initial
+                    source_connection_id = int(initial['connection_id'])
+                    cursor.execute("SET GLOBAL log_output='TABLE'")
+                    cursor.execute('SET GLOBAL general_log=ON')
+                    proof['independent_observer_admission'] = initial
 
                 def observation():
                     value = post('transaction', session_id=session_id)['provider_payload']
@@ -181,11 +199,16 @@ def qualify(engine, output):
                     assert final is not None, 'Native execution did not terminate'
                     return rows, final
 
+                source_requests = 0
                 def sql(source, parameters=None, expected_errno=None):
+                    nonlocal source_requests
+                    source_requests += 1
                     started = post('execute', session_id=session_id, source=source,
                                    parameters=parameters or [], history_sensitive=True)
                     rows, final = collect(started['occurrence_id'])
                     assert not final.get('session_reuse_blocked'), final
+                    if expected_errno is None:
+                        assert not final.get('error'), final
                     assert (final.get('error') or {}).get('errno') == expected_errno, final
                     observation()  # Matches the desktop's automatic terminal refresh.
                     return rows
@@ -193,7 +216,8 @@ def qualify(engine, output):
                 assert observation()['autocommit'] is True
                 for suffix in ('', ';', '; \n-- native tail\n', '; /* native tail */ \n'):
                     sql('UPDATE t SET value=value+1' + suffix)
-                    assert sql('SELECT ROW_COUNT()') == [[2]], suffix
+                    counted = sql('SELECT ROW_COUNT()')
+                    assert counted == [[2]], (suffix, counted)
                 proof['checks'].append('row-count-survives-execution-and-automatic-status')
                 sql('UPDATE t SET value=value+1')
                 sql('GET DIAGNOSTICS @sr_native_rows=ROW_COUNT')
@@ -233,6 +257,47 @@ def qualify(engine, output):
                     sql('UPDATE t SET value=value+1')
                     assert sql('SELECT ROW_COUNT(),?', [42]) == [[2, 42]]
                     proof['checks'].append('bound-row-count-survives-execution-and-status')
+                else:
+                    supplied = "quote ' double \" slash \\ é\n"
+                    for mode in ('', 'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES', 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
+                        sql("SET SESSION sql_mode='" + mode + "'")
+                        for statement, bindings in [('SELECT ROW_COUNT(),%s AS supplied', [supplied]),
+                                                    ('SELECT ROW_COUNT(),%(value)s AS supplied', {'value': supplied})]:
+                            sql('UPDATE t SET value=value+1')
+                            assert sql(statement, bindings) == [[2, supplied]], (mode, mysql_interface)
+                    proof['checks'].append('positional-and-named-bound-row-count-retains-native-values-across-four-live-native-quote-modes')
+                    sql("SET SESSION sql_mode=''")
+                    assert sql('UPDATE t SET value=value+1; GET DIAGNOSTICS @sr_script_rows=ROW_COUNT; SELECT @sr_script_rows,%s', [42]) == [[2, 42]]
+                    proof['checks'].append('native-row-count-survives-parameter-script-command-boundaries-without-original-session-language-probes')
+                    sql('SET NAMES latin1 COLLATE latin1_general_cs')
+                    for result_charset in ('latin1', 'NULL'):
+                        sql('SET character_set_results=' + result_charset)
+                        sql('UPDATE t SET value=value+1')
+                        assert sql('SELECT ROW_COUNT(),%s AS `€cœur ÿ`', ['€ Œ œ Ÿ ÿ']) == [[2, '€ Œ œ Ÿ ÿ']]
+                    sql('SET NAMES utf8mb4')
+                    proof['checks'].append('independent-C-or-pure-charset-observation-preserves-native-latin1-identities-values-and-NULL-result-charset')
+                    sql('UPDATE t SET value=value+1')
+                    cursor.execute("REVOKE SELECT ON performance_schema.variables_by_thread FROM 'sr_diagnostics'@'%'")
+                    started = post('execute', session_id=session_id, source='SELECT ROW_COUNT(),%s', parameters=[42], history_sensitive=True)
+                    rows, final = collect(started['occurrence_id'])
+                    error = final['error']
+                    assert not rows and error['query_dispatch'] == 'not_started' and error['commands_dispatched'] == 0
+                    assert error['original_diagnostics_preserved'] and error['native_observer_errno'] == 1142
+                    assert not final['session_reuse_blocked']
+                    cursor.execute("GRANT SELECT ON performance_schema.variables_by_thread TO 'sr_diagnostics'@'%'")
+                    assert sql('SELECT ROW_COUNT(),%s', [42]) == [[2, 42]]
+                    proof['checks'].append('observer-revocation-refuses-current-command-without-source-probes-and-native-row-count-survives-permission-restoration')
+                    sql('UPDATE t SET value=value+1')
+                    cursor.execute("SELECT PROCESSLIST_ID FROM performance_schema.session_connect_attrs WHERE ATTR_NAME='scratchrobin_observer' AND ATTR_VALUE=%s", (str(source_connection_id),))
+                    observers = cursor.fetchall()
+                    assert len(observers) == 1 and int(observers[0][0]) != source_connection_id, observers
+                    cursor.execute('KILL CONNECTION ' + str(int(observers[0][0])))
+                    started = post('execute', session_id=session_id, source='SELECT ROW_COUNT(),%s', parameters=[42], history_sensitive=True)
+                    rows, final = collect(started['occurrence_id'])
+                    assert not rows and final['error']['query_dispatch'] == 'not_started'
+                    assert final['error']['original_diagnostics_preserved'] and not final['session_reuse_blocked']
+                    assert sql('SELECT ROW_COUNT(),%s', [42]) == [[2, 42]]
+                    proof['checks'].append('independent-observer-connection-loss-and-authenticated-renewal-preserve-original-transaction-and-diagnostics-without-user-command-replay')
                 # Compare cancellation diagnostics with an independent raw
                 # native session. MariaDB can return a successful SLEEP result
                 # while retaining an interrupted-query condition in its area.
@@ -295,7 +360,33 @@ def qualify(engine, output):
                 assert observation()['connection_usable'] is False
                 proof['checks'].append('unread-disconnect-detected-by-next-command-and-never-replayed')
                 post('close_session', session_id=session_id); session_id = None; released = True
+                if engine == 'mysql':
+                    cursor.execute("SELECT PROCESSLIST_ID FROM performance_schema.session_connect_attrs WHERE ATTR_NAME='scratchrobin_observer' AND ATTR_VALUE=%s", (str(source_connection_id),))
+                    assert not cursor.fetchall(), 'A private observer survived closing its source session'
+                    proof['checks'].append('retained-private-observer-is-closed-with-source-session')
+                    cursor.execute('SELECT command_type,argument FROM mysql.general_log WHERE thread_id=%s ORDER BY event_time', (source_connection_id,))
+                    traffic = cursor.fetchall()
+                    traffic = [(_kind.decode('ascii') if isinstance(_kind, bytes) else _kind,
+                                bytes(_text).decode('latin1') if isinstance(_text, (bytes, bytearray)) else _text)
+                               for _kind, _text in traffic]
+                    forbidden = ('select version(), @@session.sql_mode', 'select @@session.character_set_client')
+                    unexpected = [statement for kind, statement in traffic if kind == 'Ping' or
+                                  kind == 'Query' and re.sub(r'\s+', ' ', statement).strip().lower().startswith(forbidden)]
+                    assert not unexpected, unexpected
+                    proof['original_session_query_count'] = sum(kind == 'Query' for kind, _ in traffic)
+                    assert proof['original_session_query_count'] >= source_requests
+                    proof['unexpected_original_metadata_or_ping_commands'] = len(unexpected)
+                    cursor.execute('SET GLOBAL general_log=OFF')
+                    proof['checks'].append('native-general-log-confirms-no-hidden-language-charset-or-ping-commands-on-original-session-after-admission')
             finally:
+                if engine == 'mysql' and 'source_connection_id' in locals():
+                    try:
+                        cursor.execute('SELECT command_type,argument FROM mysql.general_log WHERE thread_id=%s ORDER BY event_time', (source_connection_id,))
+                        traffic = [(kind, bytes(text).decode('latin1') if isinstance(text, (bytes, bytearray)) else text)
+                                   for kind, text in cursor.fetchall()]
+                        (output / 'original-session-traffic.json').write_text(json.dumps(traffic, indent=2).replace(password, '<redacted>') + '\n')
+                    except Exception as error:
+                        proof['original_traffic_capture_error'] = type(error).__name__
                 if session_id is not None:
                     post('close_session', session_id=session_id)
                 cursor.close(); oracle.close()
@@ -303,6 +394,8 @@ def qualify(engine, output):
                      owned_server_stopped=owned['owned_server_stopped'],
                      native_version=owned['engine_version'], owned_sessions_released=released)
     finally:
+        if 'owned' in locals():
+            proof['owned_server_stopped'] = owned.get('owned_server_stopped', False)
         (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
     assert proof['complete']
     return proof
@@ -312,5 +405,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--engine', choices=('mysql', 'mariadb'), required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--mysql-interface', choices=('pure', 'c'), default='pure')
     arguments = parser.parse_args()
-    print(json.dumps(qualify(arguments.engine, arguments.output), indent=2))
+    print(json.dumps(qualify(arguments.engine, arguments.output, mysql_interface=arguments.mysql_interface), indent=2))

@@ -3,6 +3,7 @@
 Identity discovery belongs to session opening. PING and SELECT are commands:
 neither is a harmless way to observe a user's diagnostics area or ROW_COUNT().
 """
+from copy import deepcopy
 from ...sdk import RelationalClientError
 
 
@@ -56,6 +57,10 @@ def transaction_observation(handle, engine, identities, uncertain):
               'finality_interpreted_by_common_code': False,
               'connection_health_checked': False,
               'observation_source': 'last-native-protocol-status'}
+    if engine == 'MySQL':
+        observer = getattr(handle, '_cdeadmin_session_variable_observer_status', None)
+        if isinstance(observer, dict):
+            result['session_variable_observer'] = deepcopy(observer)
     if id(handle) in uncertain:
         return dict(result, state='unknown', connection_usable=False)
     try:

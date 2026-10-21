@@ -73,6 +73,11 @@ def install(native):
     def refresh_c_variables():
         owner=reference()
         if owner is None:raise RelationalClientError('MySQL character-set connection is unavailable')
+        from .mysql_session_variables import observe
+        observed = observe(owner)
+        if observed is not None:
+            owner._cdeadmin_charset_variables = {key: observed['variables'][key] for key in owner._cdeadmin_charset_variables}
+            return
         metadata=factory(owner,raw=True)
         try:
             metadata.execute('SELECT @@SESSION.character_set_client,@@SESSION.character_set_connection,@@SESSION.character_set_results')
@@ -222,4 +227,5 @@ def install(native):
     CharsetConnection.__name__='Charset'+base.__name__
     native.__class__=CharsetConnection
     native.cursor=owned_cursor
+    native._cdeadmin_sync_charset=sync
     sync()

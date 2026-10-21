@@ -319,17 +319,39 @@ Decoded server errors establish a command boundary without a recovery PING.
 Finishing a framed script does not send an extra language observation for an
 empty or comment-only tail, including after a statement terminator.
 
+For admitted MySQL Performance Schema profiles, parameter binding, script
+framing and C charset adaptation read the original thread's variables through
+a separately authenticated retained connection. Admission binds the native
+instance, authenticated principal, exact connection/thread IDs and a random
+handshake attribute. Complete current SQL mode and charset facts are required;
+no diagnostic function is emulated or rewritten. The original connection's
+transaction status continues to come from its own native protocol responses.
+The observer's status is an admission fact, not an original-session health probe.
+
+The account needs SELECT on ``performance_schema.variables_by_thread`` and
+``performance_schema.session_account_connect_attrs``; the original connection's
+handshake attribute must be visible. The observer is closed with its query
+session and is not borrowed from the user's pool. Loss or denial after admission
+refuses the affected command without an original-session metadata fallback. A
+later authenticated execution request can renew a lost observer, without
+reconnecting the original session or replaying a command. Denied/disabled
+admission retains the existing intrusive path and is explicitly unqualified for
+diagnostic preservation. A native C escaping-mode flag that disagrees with the
+observed SQL mode refuses binding rather than guessing.
+An unconfirmed original handshake identity quarantines that source session;
+an independent observer connection failure alone does not establish its loss.
+
 ``tools/cdeadmin_mysql_family_session_diagnostics_qualification.py --engine mysql``
-exercises native ROW_COUNT, GET DIAGNOSTICS, error/warning areas, a routine that
+accepts ``--mysql-interface pure`` and ``--mysql-interface c``. It exercises
+native ROW_COUNT, GET DIAGNOSTICS, error/warning areas, parameter and script
+framing, charset changes, observer permission/connection loss, a routine that
 changes autocommit before failing, cancellation and unread disconnects through
-the authenticated original-session API. Its MySQL scope is the pure connector's
-unbound diagnostic cases and passive transaction observation. Parameter binding
-and context/script framing still read current native language before dispatch,
-including unbound SET/CALL and DML routed through framing because it contains
-SET. This can affect diagnostic expressions inside those commands. The C charset
-adapter still reads session charset variables. Those commands can
-replace diagnostic state; ``MY-DIAGNOSTICS`` remains open for those paths and
-other editor/session consumers. No diagnostic function is emulated or rewritten.
+the authenticated original-session API. Native source-session command capture
+checks that these admitted execution paths do not substitute language/charset
+queries or PINGs. Other retained editor/catalog/native-validation consumers and
+unqualified admission profiles remain open under ``MY-DIAGNOSTICS``. This receipt
+does not establish browser diagnostics coverage or close the independent native
+inventory.
 
 DDN to native metadata export
 -----------------------------

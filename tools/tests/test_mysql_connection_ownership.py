@@ -45,6 +45,27 @@ def test_reset_preference_does_not_enable_global_pool():
     assert module.connect.call_args_list[1].kwargs == {'host': 'two'}
 
 
+def test_real_driver_identity_attribute_fits_native_limits_and_preserves_operator_attributes():
+    module = SimpleNamespace(__name__='mysql.connector', connect=Mock(side_effect=lambda **_options: Mock(_cmysql=None)))
+    owner = Connector(module)
+    attributes = {'application': 'operator supplied'}
+    first = owner(use_pure=True, conn_attrs=attributes)
+    second = owner(use_pure=True, conn_attrs=attributes)
+    assert attributes == {'application': 'operator supplied'}
+    values = []
+    for native, call in zip((first, second), module.connect.call_args_list):
+        supplied = call.kwargs['conn_attrs']
+        assert supplied['application'] == 'operator supplied'
+        added = set(supplied) - set(attributes)
+        assert len(added) == 1
+        key = added.pop(); value = supplied[key]
+        assert len(key) <= 32 and not key.startswith('_')
+        assert len(value) == 48 and bytes.fromhex(value).hex() == value
+        assert native._cdeadmin_observer_attribute == {'name': key, 'value': value}
+        values.append(value)
+    assert values[0] != values[1]
+
+
 def test_private_generation_rotation_and_outstanding_old_lease():
     module = factory()
     owner = Connector(module)

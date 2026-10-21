@@ -52,7 +52,8 @@ def live_sql_mode_conversion(native):
         def escape(self,value,sql_mode=None):
             connection=reference()
             if connection is None:raise RelationalClientError('MySQL parameter connection is unavailable')
-            sql_mode='NO_BACKSLASH_ESCAPES' if connection._cdeadmin_server_status & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES else ''
+            selected = getattr(connection, '_cdeadmin_parameter_sql_mode', None)
+            sql_mode = selected if isinstance(selected, str) else ('NO_BACKSLASH_ESCAPES' if connection._cdeadmin_server_status & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES else '')
             escaped=super().escape(value,sql_mode)
             # Connector/Python26.7 leaves raw NUL in this text-protocol path.
             # Native routine definitions cannot retain that source byte.
@@ -195,12 +196,22 @@ class Connector:
             return pool.checkout(options)
 
     def _native_connect(self,*args,**options):
+        attribute = None
+        if getattr(self.module, '__name__', '').startswith('mysql.connector'):
+            attributes = dict(options.get('conn_attrs') or {})
+            key = 'scratchrobin_' + secrets.token_hex(8)
+            while key in attributes:
+                key = 'scratchrobin_' + secrets.token_hex(8)
+            attribute = {'name': key, 'value': secrets.token_hex(24)}
+            options['conn_attrs'] = {**attributes, key: attribute['value']}
         if options.get('use_pure') is True and getattr(self.module,'__name__','').startswith('mysql.connector'):
             from mysql.connector.constants import ClientFlag
             flags=options.get('client_flags')
             options['client_flags']=[*flags,ClientFlag.SESSION_TRACK] if isinstance(flags,(tuple,list)) else (ClientFlag.get_default() if flags is None else flags)|ClientFlag.SESSION_TRACK
         native=self.module.connect(*args,**options)
         try:
+            if attribute is not None:
+                native._cdeadmin_observer_attribute = attribute
             live_sql_mode_conversion(native)
             from .mysql_charsets import install
             install(native)

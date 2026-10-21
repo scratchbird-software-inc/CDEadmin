@@ -190,12 +190,17 @@ def parameters(items):
 
 
 class MySQLParameterAdmissionError(RelationalClientError):
-    """The current command was refused after complete native metadata replies."""
+    """The current command was refused by native language/metadata admission."""
     commands_dispatched = 0
 
 
 def observed_language(connection):
     """Read the retained native language without changing session policy."""
+    from .mysql_session_variables import observe
+    observed = observe(connection)
+    if observed is not None:
+        connection._sql_mode = observed['variables']['sql_mode']
+        return observed['version'], observed['variables']['sql_mode']
     observation = connection.cursor()
     try:
         observation.execute('SELECT VERSION(), @@SESSION.sql_mode')
@@ -254,12 +259,23 @@ def bound_source(connection, cursor, source, params):
         from .mysql_charsets import parameter_values
         native_params = parameter_values(dict(params) if named else params,
                                          connection.charset)
-        if getattr(connection, '_cmysql', None) is not None:
-            converted = connection.prepare_for_mysql(native_params)
-        elif named:
-            converted = cursor._process_params_dict(native_params)
-        else:
-            converted = cursor._process_params(native_params)
+        previous_mode = getattr(connection, '_cdeadmin_parameter_sql_mode', None)
+        connection._cdeadmin_parameter_sql_mode = mode
+        try:
+            if getattr(connection, '_cmysql', None) is not None:
+                from mysql.connector.constants import ServerFlag
+                from .mysql_session_variables import SessionVariables
+                if isinstance(getattr(connection, '_cdeadmin_session_variable_observer', None), SessionVariables):
+                    native_no_backslash = bool(connection._cmysql.st_server_status() & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES)
+                    if native_no_backslash != ('NO_BACKSLASH_ESCAPES' in modes):
+                        raise MySQLParameterAdmissionError('The native C client SQL-mode acknowledgement differs from the independently observed session; read native diagnostics before parameter binding')
+                converted = connection.prepare_for_mysql(native_params)
+            elif named:
+                converted = cursor._process_params_dict(native_params)
+            else:
+                converted = cursor._process_params(native_params)
+        finally:
+            connection._cdeadmin_parameter_sql_mode = previous_mode
         pieces = []; previous = 0
         for index, (start, end, name) in enumerate(spans):
             pieces.append(source[previous:start].encode(connection.python_charset))
@@ -269,6 +285,8 @@ def bound_source(connection, cursor, source, params):
             pieces.append(bytes(literal)); previous = end
         pieces.append(source[previous:].encode(connection.python_charset))
         return b''.join(pieces)
+    except MySQLParameterAdmissionError:
+        raise
     except Exception:
         raise MySQLParameterAdmissionError('MySQL parameter conversion failed before query dispatch') from None
 
@@ -404,12 +422,20 @@ class Cursor:
                 if self._native_c_api is not None else
                 {'read_timeout':self.native._read_timeout,'write_timeout':self.native._write_timeout})
             self._commands_dispatched += 1
-            self.native._handle_result(self.connection.cmd_query(operation, **options))
+            from .mysql_session_variables import invalidate
+            try:
+                self.native._handle_result(self.connection.cmd_query(operation, **options))
+            finally:
+                invalidate(self.connection)
             return None
         self._commands_dispatched += 1
-        if params is None:
-            return self.native.execute(operation, *args, **kwargs)
-        return self.native.execute(operation, params, *args, **kwargs)
+        from .mysql_session_variables import invalidate
+        try:
+            if params is None:
+                return self.native.execute(operation, *args, **kwargs)
+            return self.native.execute(operation, params, *args, **kwargs)
+        finally:
+            invalidate(self.connection)
 
     def __getattr__(self, name):
         return getattr(self.native, name)

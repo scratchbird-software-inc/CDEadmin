@@ -322,3 +322,17 @@ def test_changed_native_identity_refuses_dispatch_and_quarantines_session():
     native.execute.assert_not_called()
     assert id(connection) in owner.client._uncertain_sessions
     assert not owner.tokens
+
+
+def test_missing_source_identity_during_authenticated_observer_renewal_prevents_worker_start(monkeypatch):
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables import SourceIdentityUnavailable
+    owner, connection, native = harness([[1]])
+    native.execute = Mock()
+    def unavailable(_handle):
+        raise SourceIdentityUnavailable('Original source identity is unavailable')
+    monkeypatch.setattr('pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables.prepare', unavailable)
+    with pytest.raises(SourceIdentityUnavailable):
+        owner.execute(connection, {'source': 'must not dispatch'}, {})
+    native.execute.assert_not_called()
+    connection.ping.assert_not_called()
+    assert id(connection) in owner.client._uncertain_sessions and not owner.tokens

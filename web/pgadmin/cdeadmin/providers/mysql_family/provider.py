@@ -1061,6 +1061,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             handle = super().open_session(request)
             try:
                 self._executions.sessions.register(handle)
+                from .mysql_session_variables import install
+                install(self, handle, request)
             except BaseException:
                 self._discard_failed_session(handle)
                 raise
@@ -1146,6 +1148,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def close_session(self, handle):
         with self._executions.lock:
             self._executions.require_idle(handle)
+            from .mysql_session_variables import uninstall
+            uninstall(handle)
             self._session_requests.pop(id(handle), None)
             self._executions.sessions.forget(handle)
             return self._close_idle_session(handle)
@@ -1169,7 +1173,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def close(self):
         self._executions.close()
         try:
+            from .mysql_session_variables import uninstall
             for handle in tuple(self._connections):
+                uninstall(handle)
                 if id(handle) in self._uncertain_sessions:
                     self.close_session(handle)
             super().close()

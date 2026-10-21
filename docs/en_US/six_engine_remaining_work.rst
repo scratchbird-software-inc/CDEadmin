@@ -81,14 +81,18 @@ MySQL
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
-* MY-DIAGNOSTICS: Remove intrusive language/charset observations from retained
-  parameter binding, context/script framing (including unbound commands routed
-  through it) and the C charset adapter
-  without guessing current SQL mode or weakening exact charset handling. Audit
-  other retained editor/session consumers. Identity discovery, cursor creation,
-  decoded-error cleanup, empty script tails and automatic transaction observation
-  now preserve diagnostic state on the qualified pure/unbound path. This scope
-  does not qualify the remaining paths or close INV-MYSQL.
+* MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
+  editor/catalog/native-validation consumers and denied/disabled observer
+  profiles. Admitted Performance Schema profiles now use a separately
+  authenticated retained observer for current native language/charset facts in
+  parameter binding, script framing and C charset adaptation. Identity discovery,
+  cursor creation, decoded-error cleanup, empty script tails and automatic
+  transaction observation also preserve diagnostic state in their qualified
+  execution scope. Permission/connection loss refuses affected commands without
+  intrusive fallback; authenticated observer renewal does not reconnect the
+  original session or replay user SQL. Native C mode-acknowledgement mismatches
+  still refuse binding. See :doc:`mysql_driver_development` for exact scope;
+  these execution receipts do not close browser coverage or INV-MYSQL.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;
