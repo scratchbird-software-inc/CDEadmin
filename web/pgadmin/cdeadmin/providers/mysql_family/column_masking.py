@@ -71,7 +71,7 @@ def compile_operation(operation, draft, target):
         source += ' DROP MASKING POLICY'
     return {'statements': [{'source': source, 'parameters': ()}],
         'mysql_column_masking': {'operation': operation, 'draft': dict(draft), 'target': deepcopy(dict(target))},
-        'warnings': ['Native column masking references can exist without an available policy component. Reading a masked value can then fail in MySQL.',
+        'warnings': ['Working masking and policy administration require the post-beta Enterprise object_policy component; its implementation is absent from the pinned Community source. Community MySQL stores the column reference and can refuse reads while that component is unavailable.',
             'This DDL uses an independent connection and never decides an interactive session transaction.']}
 
 

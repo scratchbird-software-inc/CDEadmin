@@ -16,7 +16,7 @@ class MySQLAdministration(RelationalAdministration):
                 resource['operations'] = [row for row in resource['operations']
                     if row['operation_id'] not in column_masking.OPERATIONS] + [{
                         'operation_id': operation,
-                        'title': 'Assign native masking policy' if operation == 'set_masking_policy' else 'Remove native masking policy reference',
+                        'title': 'Assign native masking policy reference' if operation == 'set_masking_policy' else 'Remove native masking policy reference',
                         'mutation_class': 'admin', 'target_required': True, 'confirmation_required': True,
                     } for operation in sorted(column_masking.OPERATIONS)]
         value['objects'] = [row for row in value['objects'] if row['resource_kind'] != srs.KIND]
@@ -42,10 +42,10 @@ class MySQLAdministration(RelationalAdministration):
         if kind == 'column' and operation in column_masking.OPERATIONS:
             fields = []
             if operation == 'set_masking_policy':
-                fields.append({**self._field('policy_name', 'Exact native masking policy name', 'text', True),
+                fields.append({**self._field('policy_name', 'Exact native policy reference name', 'text', True),
                     'initial_value_path': ['masking_policy', 'name']})
             fields.append(self._field('confirmation', 'Exact native column name', 'text', True))
-            return {'form_id': 'mysql.column.' + operation, 'title': 'Native column masking policy', 'fields': fields}
+            return {'form_id': 'mysql.column.' + operation, 'title': 'Native column policy reference', 'fields': fields}
         if kind == srs.KIND and operation in srs.OPERATIONS:
             return srs.form(operation, self._field)
         if kind == foreign_servers.KIND and operation in foreign_servers.OPERATIONS:
