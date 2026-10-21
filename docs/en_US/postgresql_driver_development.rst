@@ -92,3 +92,40 @@ route or against a production database.
 Platform UX, accessibility, installer signing and OS-specific authentication
 qualification remain with the platform teams. A Linux gate receipt is not
 Windows or macOS execution evidence.
+
+Retained replication slots and exported snapshots
+-------------------------------------------------
+
+The server continuity workspace includes a separate temporary replication
+resource. It uses the saved registration's exact database, native principal and
+an independently retained database replication connection. Ordinary SQL startup,
+role substitution and the SQL slot catalog are not required. Resource and command
+reviews bind the native identity, original backend, provider isolation scope and
+adapter. Credentials are withheld from durable receipts.
+
+Typed commands create native temporary physical/logical slots, select WAL
+reservation, logical two-phase decoding and export/no-export snapshot modes,
+and drop only slots acknowledged and still owned by that original backend.
+Prior creation receipts cannot authorize deletion of a subsequently reused name.
+Native plugin/permission/configuration errors remain native failures. An error
+ends this owner rather than reconnecting or recreating its temporary state.
+
+An exported snapshot requires that original connection and expires on its next
+native command or termination. Status, reviews, acknowledgement pages and viewer
+reloads send no native command. Another command requires explicit confirmation
+to invalidate the current snapshot. Recent acknowledgements are bounded to100;
+complete command receipts have their own paging. Neither is a SQL slot catalog
+or a current health check. Viewer close does not release the resource; confirmed
+release and its configured lifetime do. Native command acknowledgement, local
+connection close and independently observed server cleanup remain separate.
+Uncertain commands never replay, including after a later storage failure.
+
+``tools/cdeadmin_postgresql_replication_temporary_qualification.py --output``
+exercises authenticated original-backend creation, snapshot import by an
+independent observer after idle/status reads, provider/database isolation,
+foreign-name protection, native errors, release and offline receipts. Optional
+``--browser-binary`` and ``--driver-binary`` exercise the production controls and
+retention across viewer reload. Evidence belongs outside source. The owning
+remaining-work matrix keeps retained logical streaming, native SNAPSHOT USE and
+application snapshot-consumption/initial-copy workflows open; the snapshot
+consumer in the qualification tool is independent test evidence.

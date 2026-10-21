@@ -107,6 +107,11 @@ from pgadmin.cdeadmin.workspace import (
 from pgadmin.utils.server_access import get_server, \
     get_user_server_query, get_server_group
 
+POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS = frozenset(
+    'postgresql_replication_temporary_' + suffix for suffix in (
+        'scope', 'review', 'start', 'status', 'list', 'release', 'inventory',
+        'command_review', 'command_start', 'command_status', 'command_list', 'command_cancel'))
+
 
 # File-path keys in connection_params that are per-user and must
 # not be copied from the owner to a new SharedServer or leaked
@@ -2780,6 +2785,9 @@ class ServerNode(PGChildNodeView):
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
                 scoped_target = request.args.get('database_target_id')
+                if scoped_target and action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
+                    return bad_request(gettext(
+                        'Open the server continuity workspace for its registered replication database.'))
                 if scoped_target and action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
                     if data.get('database_target_id') not in (None,scoped_target):
                         return bad_request('Retained SQLite database scope does not match this workspace.')
@@ -3124,6 +3132,11 @@ class ServerNode(PGChildNodeView):
                 elif action in {'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel'}:
                     try:payload=service.postgresql_temporary_slots(server,action.removeprefix('postgresql_temporary_slots_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
+                    try:
+                        payload = service.postgresql_replication_temporary(server, action.removeprefix('postgresql_replication_temporary_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_release_transport','postgresql_continuity_transport','postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
                                 'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',

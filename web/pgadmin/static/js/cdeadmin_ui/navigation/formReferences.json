@@ -5715,6 +5715,10 @@
       "reference": "SR-F-010013",
       "title": "SQLite original-session DDN review, application and durable receipts"
     },
+    "postgresql-replication-temporary": {
+      "reference": "SR-F-010014",
+      "title": "PostgreSQL retained replication slots and exported snapshots"
+    },
     "sqlite-recovery": {
       "reference": "SR-F-010010",
       "title": "SQLite native file recovery and recovered-copy activation"

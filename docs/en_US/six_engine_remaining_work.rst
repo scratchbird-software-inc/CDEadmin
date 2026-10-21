@@ -134,9 +134,12 @@ PostgreSQL
   implemented independent native recovery drills and recovery targets.
 * PG-ARCHIVES: Complete retention, interrupted-stream restart and log/archive
   management beyond the qualified physical WAL and logical receiver captures.
-* PG-TEMP-PROTOCOL: Implement retained temporary replication-protocol resources
-  and streams. Existing independently retained SQL temporary-slot controls and
-  SQL text/binary peek/get are implemented; the permanent-slot native receiver
+* PG-TEMP-PROTOCOL: Complete native logical streaming on its original retained
+  replication backend, SNAPSHOT USE and application snapshot-consumption /
+  initial-copy workflows. Retained temporary physical/logical creation,
+  export/no-export snapshot ownership and safe owned-slot removal now have a
+  separate reviewed replication-only resource. Existing SQL temporary-slot
+  controls and text/binary peek/get remain separate. A permanent-slot receiver
   does not own another backend's temporary slot.
 * PG-REPLICATION-ADMISSION: Support applicable replication-only registrations
   without requiring SQL admission and preserve the exact native principal.
@@ -159,7 +162,8 @@ acknowledgement, TAR/flat-file verification and recovery remain separate facts.
 SQL role substitution is refused. Replication-only SSH now uses inspected or
 operator-supplied public host keys, independent pinned worker tunnels and native
 password/private-key authentication, including saved credentials. Remaining
-temporary/logical protocol resources still require separate admission/workflow closure.
+retained streams and transaction snapshot-consumer workflows still require
+separate admission/workflow closure.
 Permanent physical-slot creation and known-name physical/logical-slot removal
 use the native utility without opening the SQL slot catalog. Prior existence,
 type and current identity remain unobserved. Native utility acknowledgement is
@@ -177,8 +181,17 @@ catalog and checkpoint checks.
 Permanent logical slot creation now also has a registered replication-only
 workflow for native plugin, two-phase, failover and if-not-exists options.
 Utility acknowledgement remains separate from catalog state and prior existence.
-The native utility suppresses snapshot export; temporary protocol resources and
-exported snapshot ownership still require their own retained-backend workflow.
+The native utility suppresses snapshot export. A separate retained native
+replication resource now owns temporary slots and exported snapshots without
+ordinary SQL admission. Status, review and acknowledgement pages do not send
+commands that would invalidate the export. Another command requires explicit
+invalidation confirmation. The original native database, backend and complete
+provider isolation scope bind command admission. Historical creation cannot
+authorize a drop after the name was released and reused elsewhere. Native error
+ends this owner; acknowledgements and later local close remain separate from
+unobserved catalog/health facts and no command automatically replays. These
+receipts do not close retained streaming, native SNAPSHOT USE, application
+snapshot consumption or the independent PostgreSQL inventory.
 
 DuckDB
 ------
