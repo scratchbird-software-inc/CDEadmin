@@ -106,8 +106,10 @@ MySQL
   transaction observation also preserve diagnostic state in their qualified
   execution scope. Permission/connection loss refuses affected commands without
   intrusive fallback; authenticated observer renewal does not reconnect the
-  original session or replay user SQL. Native C mode-acknowledgement mismatches
-  still refuse binding. Admitted native syntax checks now prepare on the private
+  original session or replay user SQL. Native C escape-mode acknowledgement
+  mismatches now borrow the private peer's stock C converter with independently
+  observed settings and verified private acknowledgement; unconfirmed private
+  context still refuses dispatch. Admitted native syntax checks now prepare on the private
   same-instance peer using observed source mode/database context and preserve
   source diagnostic state. This includes live database switches and denied
   private parser context; original active-role/temporary-object binding remains

@@ -48,6 +48,7 @@ class SessionVariables:
         self.opened = False
         self.needs_connection_refresh = False
         self.parser_database = None
+        self.escaping_context = None
         self.lock = threading.RLock()
 
     def observe(self):
@@ -69,6 +70,7 @@ class SessionVariables:
             self.connection = peer
             self.opened = True
             self.parser_database = None
+            self.escaping_context = None
         connection = self.connection
         cursor = None
         try:
@@ -146,6 +148,9 @@ class SessionVariables:
             cursor = None
             try:
                 observed = self._observe()
+                self.escaping_context = None
+                if self.connection.charset != 'utf8mb4':
+                    self.connection.set_charset_collation('utf8mb4')
                 cursor = self.connection.cursor()
                 cursor.execute('SELECT t.PROCESSLIST_DB FROM performance_schema.threads AS t '
                     'JOIN performance_schema.session_account_connect_attrs AS a ON a.PROCESSLIST_ID=t.PROCESSLIST_ID '
@@ -179,6 +184,30 @@ class SessionVariables:
                 raise
             finally:
                 if cursor is not None: cursor.close()
+
+    def native_literals(self, parameters, mode):
+        """Use the same C driver on the private peer for verified escaping."""
+        from mysql.connector.constants import ServerFlag
+        with self.lock:
+            try:
+                observed = self._observe()
+                if observed['variables']['sql_mode'] != mode or getattr(self.connection, '_cmysql', None) is None:
+                    raise ObserverUnavailable('The private native C conversion context is unavailable')
+                charset = observed['variables']['character_set_client']
+                context = charset, mode
+                if self.escaping_context != context:
+                    self.connection.set_charset_collation(charset)
+                    self.connection.sql_mode = mode
+                    self.escaping_context = context
+                acknowledged = bool(self.connection._cmysql.st_server_status() & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES)
+                if acknowledged != ('NO_BACKSLASH_ESCAPES' in mode.split(',')):
+                    raise ObserverUnavailable('The private C client did not acknowledge the observed native escape mode')
+                return self.connection.prepare_for_mysql(parameters)
+            except BaseException:
+                self.needs_connection_refresh = True
+                try: self.close()
+                except Exception: pass
+                raise
 
 
 def install(client, handle, request):

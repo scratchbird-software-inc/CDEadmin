@@ -264,12 +264,24 @@ def bound_source(connection, cursor, source, params):
         try:
             if getattr(connection, '_cmysql', None) is not None:
                 from mysql.connector.constants import ServerFlag
-                from .mysql_session_variables import SessionVariables
-                if isinstance(getattr(connection, '_cdeadmin_session_variable_observer', None), SessionVariables):
+                from .mysql_session_variables import SessionVariables, SourceIdentityUnavailable
+                observer = getattr(connection, '_cdeadmin_session_variable_observer', None)
+                separate = False
+                if isinstance(observer, SessionVariables):
                     native_no_backslash = bool(connection._cmysql.st_server_status() & ServerFlag.STATUS_NO_BACKSLASH_ESCAPES)
                     if native_no_backslash != ('NO_BACKSLASH_ESCAPES' in modes):
-                        raise MySQLParameterAdmissionError('The native C client SQL-mode acknowledgement differs from the independently observed session; read native diagnostics before parameter binding')
-                converted = connection.prepare_for_mysql(native_params)
+                        try:
+                            converted = observer.native_literals(native_params, mode)
+                        except Exception as error:
+                            failure = MySQLParameterAdmissionError('Private native C parameter conversion is unavailable; the user command was not dispatched')
+                            failure.original_session_identity_unconfirmed = isinstance(error, SourceIdentityUnavailable)
+                            failure.original_diagnostics_preserved = not failure.original_session_identity_unconfirmed
+                            failure.native_observer_errno = getattr(error, 'errno', None)
+                            failure.native_observer_error_type = type(error).__name__
+                            raise failure from None
+                        separate = True
+                if not separate:
+                    converted = connection.prepare_for_mysql(native_params)
             elif named:
                 converted = cursor._process_params_dict(native_params)
             else:

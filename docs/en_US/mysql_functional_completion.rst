@@ -168,8 +168,21 @@ Denied/lost private parser context never substitutes an original-session query;
 authenticated renewal acquires only a new private peer. Lost original identity
 blocks source reuse. Profiles without an admitted observer retain explicitly
 unqualified diagnostic-preservation status. Other retained metadata/completion
-consumers, disabled/denied observer admission and native C mode acknowledgement
-mismatches remain open.
+consumers and disabled/denied observer admission remain open.
+
+When the retained C client's escape-mode acknowledgement differs from the
+independently observed native language, parameter conversion now borrows the
+retained private connection's stock C converter. Only that peer receives the
+observed client character set and SQL mode; its native acknowledgement is checked
+before conversion. Values retain the selected C driver's types and literal
+conversion. The application does not invent literals, reconnect the source,
+change its settings or infer transaction finality. Failure to confirm the private
+conversion context refuses the current command and renews only the private peer
+on a later authenticated request. Native fault qualification covers stale escape
+status in four modes and utf8mb4/latin1, with exact quote/backslash/newline/NUL/
+non-ASCII values and preserved source row counts. The source's converter is
+prohibited during these fault cases, and native logs confirm no hidden source
+metadata/settings commands.
 
 Both Connector/Python interfaces are natively qualified across the four live
 ANSI_QUOTES/NO_BACKSLASH_ESCAPES combinations, quoted Unicode SQL, database

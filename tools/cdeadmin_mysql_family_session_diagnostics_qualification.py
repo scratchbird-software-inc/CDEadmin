@@ -337,6 +337,43 @@ def qualify(engine, output, *, mysql_interface='pure'):
                     sql('USE sr_diagnostics')
                     assert post('source_validate', session_id=session_id, source='SELECT id FROM t')['parser_observation']['default_schema'] == 'sr_diagnostics'
                     proof['checks'].append('private-native-parser-follows-live-USE-with-exact-Unicode-and-backtick-database-identity')
+                    if mysql_interface == 'c':
+                        from pgadmin.cdeadmin.providers.mysql_family import mysql_values
+                        convert = mysql_values.bound_source
+                        exercised = []
+                        class StaleEscapeStatus:
+                            def __init__(self, native): self.native = native
+                            def __getattr__(self, name): return getattr(self.native, name)
+                            def st_server_status(self):
+                                from mysql.connector.constants import ServerFlag
+                                return self.native.st_server_status() ^ ServerFlag.STATUS_NO_BACKSLASH_ESCAPES
+                            def convert_to_mysql(self, *_args):
+                                raise AssertionError('The unconfirmed original C converter was used')
+                        def stale_ack(connection, native_cursor, source, values):
+                            if 'sr_stale_escape' not in source:
+                                return convert(connection, native_cursor, source, values)
+                            actual = connection._cmysql
+                            connection._cmysql = StaleEscapeStatus(actual)
+                            try:
+                                result = convert(connection, native_cursor, source, values)
+                                exercised.append(True)
+                                return result
+                            finally: connection._cmysql = actual
+                        mysql_values.bound_source = stale_ack
+                        try:
+                            payload = "C quote' slash\\ LF\n NUL\x00 é"
+                            for charset in ('utf8mb4', 'latin1'):
+                                sql('SET NAMES ' + charset)
+                                for mode in ('', 'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES', 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'):
+                                    sql("SET SESSION sql_mode='" + mode + "'")
+                                    sql('UPDATE t SET value=value+1')
+                                    assert sql('SELECT ROW_COUNT(),%s AS sr_stale_escape', [payload]) == [[2, payload]]
+                            assert len(exercised) == 8
+                            sql('SET NAMES utf8mb4')
+                            checked = post('source_validate', session_id=session_id, source='SELECT id FROM t')
+                            assert checked['grammar_valid'] is True
+                        finally: mysql_values.bound_source = convert
+                        proof['checks'].append('fault-injected-original-C-escape-status-mismatch-uses-private-native-C-converter-across-four-modes-and-two-charsets-without-source-probes')
                     sql('UPDATE t SET value=value+1')
                     cursor.execute("REVOKE SELECT ON performance_schema.threads FROM 'sr_diagnostics'@'%'")
                     refused = client.post(url, json={'action': 'source_validate', 'database_target_id': target,
