@@ -4,6 +4,7 @@ import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,T
 import {startBrowserFileDownload} from './browserFileDownload';
 import ContinuousBinlog from './ContinuousBinlog';
 import MySQLArchiveRetention from './MySQLArchiveRetention';
+import MySQLSourceLogs from './MySQLSourceLogs';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw=false}) {
@@ -59,6 +60,7 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
     </Box>
     {closed && <Box component="details"><summary>Continuous native binary-log collection</summary><ContinuousBinlog post={post} engine={engine} onInspectArchive={id => inspect({job_id:id})} /></Box>}
     {!maria && <Box component="details"><summary>Archive retention</summary><MySQLArchiveRetention post={post} prefix={prefix} sourceArchive={receipt} /></Box>}
+    {!maria && <Box component="details"><summary>Native server log administration</summary><MySQLSourceLogs post={post} /></Box>}
     {catalog && <Box component="details"><summary>Native source, GTID state and available logs: {catalog.status}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       {closed ? <TextField select size="small" label="Native closed binary logs" value={logNames} SelectProps={{multiple:true}} sx={{minWidth:280}} onChange={event => {setLogNames((catalog?.logs || []).filter(row => event.target.value.includes(row.Log_name)).map(row => row.Log_name));setReview(null);}}>

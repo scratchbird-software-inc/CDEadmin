@@ -316,6 +316,33 @@ are exposed. The registered TLS policy and multi-factor credentials apply to
 the utility's independent session; credentials travel in a private temporary
 JSON file that preserves newline and Unicode passwords and is erased afterward.
 
+Its separate **Native server log administration** section integrates native
+``PURGE BINARY LOGS TO`` and ``PURGE BINARY LOGS BEFORE``. TO uses the server's
+ordered log index and retains the selected boundary. BEFORE uses an explicit
+UTC session and the native server's file-timestamp evaluation; the review lists
+potential closed logs, without inventing file modification times in the
+application. Both GTID-enabled and disabled native servers are supported.
+Reviews bind the source UUID, principal/role, registration, adapter and observed
+log index. Changed indices or observed native GTID lineage require a new review.
+
+Explicitly confirmed purges have durable, owner/registration-bound receipts.
+The native SQL acknowledgement is recorded before warning collection or
+independent postcondition reads. A missing acknowledgement stays unknown through
+reconciliation, even when files are now absent, and a duplicate start never
+replays the command. Cancellation requests native KILL QUERY only for the
+confirmed private native thread, connection, handshake and active purge command;
+removed files are not rolled back. Unavailable cancellation authority is exposed.
+Native warnings, errors and observed removed/retained filenames remain separate
+facts. Admitted connections belong to the job and are independent of interactive
+client shutdown; closing a viewer does not cancel authorized work. Status and
+saved receipts are available offline.
+
+This server administration action leaves application archive bytes and their
+retention policies separate. Operators must check backup and replica requirements
+in an exclusive administration window. The action does not discover recovery
+dependencies, attest a native log-generation epoch, or establish recovery/cutover
+acceptance. Those broader product requirements remain open.
+
 Completed archives reconcile native completion metadata, source UUID, every
 file's size/SHA256, streaming v4 event framing and CRC32 where the native log
 contains checksums. Native checksum-disabled logs are identified explicitly.

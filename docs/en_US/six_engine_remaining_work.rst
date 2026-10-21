@@ -79,7 +79,11 @@ MySQL
   artifact/native identities. It does not establish physical recovery, object
   definition equality, later log replay or production cutover.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
-  retention. Scheduled age/count policies for exact native source/principal/role
+  retention. Separate native source-log administration now exposes reviewed TO
+  and BEFORE purges, independent observations, durable acknowledgement and
+  explicit unknown-outcome reconciliation; it does not discover backup or
+  offline-replica dependencies or attest log-generation epochs.
+  Scheduled age/count policies for exact native source/principal/role
   are implemented with independent occurrence receipts, expiry, revocation,
   restart and unresolved-outcome suspension. They preserve explicit pins and
   do not discover base-backup dependencies or prove recoverability. Interrupted
