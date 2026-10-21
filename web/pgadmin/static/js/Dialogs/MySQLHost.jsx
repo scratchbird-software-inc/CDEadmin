@@ -39,6 +39,7 @@ export default function MySQLHost({post}) {
     setAuthentication(connection.authentication);setPlatform(connection.platform);setPython(connection.python);
   };
   const observed=receipt?.reconciliation?.remote_receipt || receipt?.remote_receipt;
+  const configurationAfter=observed?.configuration_after_process;
   const decode=value => {try{return new TextDecoder().decode(Uint8Array.from(atob(value || ''),char => char.charCodeAt(0)));}catch{return 'Inspect the original encoded native output in the receipt.';}};
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
     <Alert severity="info">Run native MySQL configuration diagnostics on the database server through an explicitly selected SSH host. The native UUID, hostname and data directory must match; an SSH bastion is not assumed to be the database host. Python 3.9 or later is required on that host. This action checks configuration and does not start, stop or upgrade the server.</Alert>
@@ -85,6 +86,10 @@ export default function MySQLHost({post}) {
     </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next) => load(next*25)} /></>}
     {receipt && <Box>
       <Alert severity={receipt.state==='native_process_returned' && observed?.result?.return_code===0 ? 'success' : 'warning'}>Native host job {receipt.job_id}: {receipt.state}. {receipt.state==='unknown' && 'The original SSH reply is unconfirmed. Reconciliation never repeats the native command.'}</Alert>
+      {configurationAfter && (configurationAfter.observed!==true || configurationAfter.matches_review!==true) &&
+        <Alert severity="warning">{configurationAfter.observed===true ?
+          'Configuration files changed after review. The native process result is retained; review the current configuration before relying on that result.' :
+          'Configuration files could not be observed after execution. The native process result is retained; the current configuration is unconfirmed.'}</Alert>}
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh native host receipt</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state) || receipt.state==='reviewed'} onClick={() => run('reconcile',{job_id:receipt.job_id,credentials:credentials()},setReceipt)}>Reconcile native host receipt</Button>
       <Button disabled={busy || receipt.state!=='reviewed'} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel unstarted native host check</Button>

@@ -34,3 +34,16 @@ it('loads an uncertain offline receipt and reconciles without issuing another na
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_host_reconcile',request:{job_id:'host-job',credentials:{password:'renewed-native-secret'}}}));
   expect(post.mock.calls.some(([value])=>value.action==='mysql_host_start')).toBe(false);
 });
+
+it.each(['changed','unreadable'])('keeps the native result and warns about %s configuration without replay',async outcome => {
+  const receipt={...review,state:'native_process_returned',remote_receipt:{result:{return_code:0},
+    configuration_after_process:{observed:outcome==='changed',matches_review:false}}};
+  const post=jest.fn().mockResolvedValue({jobs:[receipt],total:1,offset:0});render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load native host receipts'}));
+  await screen.findByRole('table',{name:'Native host diagnostic receipts'});
+  post.mockResolvedValue(receipt);fireEvent.click(screen.getByRole('button',{name:'Inspect native host job host-job'}));
+  await screen.findByText(/Native host job host-job: native_process_returned/);
+  expect(screen.getByText(outcome==='changed' ? /Configuration files changed after review/ : /Configuration files could not be observed/)).toBeVisible();
+  expect(screen.getByText(/Native diagnostic output: exit 0/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_host_start')).toBe(false);
+});

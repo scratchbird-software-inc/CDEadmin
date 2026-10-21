@@ -26,6 +26,9 @@ except ModuleNotFoundError:
     from ...operations.fileio import durable_replace, private_directory, private_file
 
 MAX_OUTPUT = 512 * 1024
+MAX_CONFIGURATION_BYTES = 4 * 1024 * 1024
+MAX_CONFIGURATION_ENTRIES = 512
+LATIN1_SPACE = b' \t\n\v\f\r\xa0'
 
 
 class Refused(ValueError):
@@ -49,10 +52,23 @@ def regular(path):
     return info
 
 
+def regular_stream(path):
+    # A replacement between stat and open must not turn a host observation into
+    # a blocking FIFO/device read. Check the opened descriptor itself.
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NONBLOCK', 0))
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+            raise Refused('The selected native host file is not regular')
+        return os.fdopen(descriptor, 'rb')
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def file_hash(path):
-    regular(path)
     value = hashlib.sha256()
-    with path.open('rb') as stream:
+    with regular_stream(path) as stream:
         while True:
             data = stream.read(1024 * 1024)
             if not data:
@@ -103,10 +119,17 @@ def environment(executable, workspace):
             'TMPDIR': str(workspace), 'PATH': os.pathsep.join((str(executable.parent), os.defpath))}
 
 
-def process(executable, arguments, workspace, timeout):
+def process(executable, arguments, workspace, timeout, configuration_context=None):
     started = time.time()
-    child = subprocess.Popen([str(executable), *arguments], cwd=str(workspace),
-        env=environment(executable, workspace), stdin=subprocess.DEVNULL,
+    native_environment = environment(executable, workspace)
+    working_directory = workspace
+    if configuration_context is not None:
+        working_directory = configuration_context['working_directory']
+        native_environment['HOME'] = configuration_context['home_directory']
+        if os.name == 'nt':
+            native_environment['USERPROFILE'] = configuration_context['home_directory']
+    child = subprocess.Popen([str(executable), *arguments], cwd=str(working_directory),
+        env=native_environment, stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
     observations = {}
     def read(name, stream):
@@ -139,6 +162,147 @@ def process(executable, arguments, workspace, timeout):
             'native_process_termination_observed': child.returncode is not None}
 
 
+def configuration_graph(filename, context):
+    """Observe native option-file inputs, without interpreting option values.
+
+    Authority: MySQL9.7 mysys/my_default.cc search_default_file_with_ext,
+    remove_end_comment/check_file_permissions and mysys/my_lib.cc my_dir.
+    The bounds refuse admission; they never turn a partial scan into proof.
+    """
+    entries = []; total = 0
+    extensions = {'.cnf', '.ini'} if os.name == 'nt' else {'.cnf'}
+
+    def path_for(value, directory=False):
+        # includedir is passed directly to my_dir. Its selected child filenames
+        # subsequently go through fn_format, including native tilde expansion.
+        if not directory:
+            drive, name = os.path.splitdrive(value)
+            if drive and not os.path.isabs(value):
+                raise Refused('Select a fully qualified native configuration drive path')
+            if os.name == 'nt':
+                name = name.replace('/', os.sep)
+            parent, leaf = os.path.split(name)
+            absolute = parent.startswith(os.sep); parts = []
+            for part in parent.split(os.sep):
+                if part in ('', '.'):
+                    continue
+                if part == '~':
+                    parts = ['~']; absolute = False
+                elif part == '..' and parts and parts[-1] == '~':
+                    expanded = Path(context['home_directory']).parent
+                    drive, expanded_name = os.path.splitdrive(str(expanded))
+                    absolute = expanded_name.startswith(os.sep)
+                    parts = [p for p in expanded_name.split(os.sep) if p]
+                elif part == '..' and parts and parts[-1] != '..' and not parts[-1].startswith('~'):
+                    parts.pop()
+                elif part != '..' or not absolute or parts:
+                    parts.append(part)
+            parent = (os.sep if absolute else '') + os.sep.join(parts)
+            if parent == '~' or parent.startswith('~' + os.sep):
+                parent = context['home_directory'] + parent[1:]
+            elif parent.startswith('~') and os.name != 'nt':
+                parent = os.path.expanduser(parent)
+            value = drive + os.path.join(parent, leaf)
+        if len(os.fsencode(value)) >= 509:
+            raise Refused('The native configuration path exceeds the attested filename bound')
+        path = Path(value)
+        if not path.is_absolute():
+            path = Path(context['working_directory']) / path
+        return path
+
+    def entry(path, kind, parent, line, depth):
+        if len(entries) >= MAX_CONFIGURATION_ENTRIES:
+            raise Refused('The native configuration graph exceeds its observation bound')
+        row = {'path': str(path), 'resolved_path': str(path.resolve()), 'kind': kind,
+               'parent': parent, 'line': line, 'depth': depth}
+        entries.append(row)
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            row['state'] = 'missing'
+            return row, None
+        row['mode'] = stat.S_IMODE(info.st_mode)
+        return row, info
+
+    def argument(raw):
+        quote = escape = 0
+        for index, byte in enumerate(raw):
+            if byte in (34, 39) and not escape:
+                quote = byte if not quote else 0 if byte == quote else quote
+            if not quote and byte == 35:
+                raw = raw[:index]; break
+            escape = bool(quote and byte == 92 and not escape)
+        # Native does not unquote include filenames or treat ';' as inline comment.
+        raw = raw.strip(LATIN1_SPACE)
+        if not raw:
+            raise Refused('The native configuration contains an empty include directive')
+        return os.fsdecode(raw)
+
+    def visit(value, parent=None, line=0, depth=0):
+        nonlocal total
+        path = path_for(value)
+        row, info = entry(path, 'file', parent, line, depth)
+        if info is None:
+            return
+        if not stat.S_ISREG(info.st_mode):
+            raise Refused('The native configuration graph contains a nonregular file')
+        if os.name != 'nt' and info.st_mode & stat.S_IWOTH:
+            row['state'] = 'ignored_world_writable'
+            return
+        if info.st_size > MAX_CONFIGURATION_BYTES - total:
+            raise Refused('The native configuration graph exceeds its byte bound')
+        with regular_stream(path) as stream:
+            opened = os.fstat(stream.fileno())
+            row['mode'] = stat.S_IMODE(opened.st_mode)
+            if os.name != 'nt' and opened.st_mode & stat.S_IWOTH:
+                row['state'] = 'ignored_world_writable'
+                return
+            data = stream.read(MAX_CONFIGURATION_BYTES - total + 1)
+        total += len(data)
+        if total > MAX_CONFIGURATION_BYTES or b'\0' in data:
+            raise Refused('The native configuration exceeds its byte bound or contains NUL')
+        row.update(state='read', sha256=hashlib.sha256(data).hexdigest(), bytes=len(data))
+        # Split on LF only, like native fgets. CR, VT and NEL are not line breaks.
+        for number, raw in enumerate(data.split(b'\n'), 1):
+            raw = raw.lstrip(LATIN1_SPACE)
+            if not raw.startswith(b'!'):
+                continue
+            raw = raw[1:].lstrip(LATIN1_SPACE)
+            if depth >= 10:
+                # Native skips every directive at its recursion limit.
+                row.setdefault('directives_skipped_at_native_depth_limit', []).append(number)
+                continue
+            for keyword in (b'includedir', b'include'):
+                if raw.startswith(keyword) and len(raw) > len(keyword) and raw[len(keyword)] in LATIN1_SPACE:
+                    value = argument(raw[len(keyword):])
+                    if keyword == b'include':
+                        visit(value, str(path), number, depth + 1)
+                    else:
+                        directory = path_for(value, directory=True)
+                        listing, status = entry(directory, 'directory', str(path), number, depth + 1)
+                        if status is None:
+                            break
+                        if not stat.S_ISDIR(status.st_mode):
+                            raise Refused('The native includedir target is not a directory')
+                        names = []
+                        for item in directory.iterdir():
+                            if len(names) >= MAX_CONFIGURATION_ENTRIES:
+                                raise Refused('The native configuration directory exceeds its observation bound')
+                            names.append(item.name)
+                        names.sort(key=os.fsencode)
+                        selected = [name for name in names if '.' in name and name[name.rfind('.'):] in extensions]
+                        listing.update(state='listed', selected_names=selected)
+                        for name in selected:
+                            visit(str(Path(value) / name), str(path), number, depth + 1)
+                    break
+
+    visit(str(filename))
+    return {'schema': 'cdeadmin.mysql-option-files.v1', 'entries': entries,
+            'working_directory': context['working_directory'], 'home_directory': context['home_directory'],
+            'observation_scope': 'selected defaults-file graph; not persisted mysqld-auto.cnf or startup/service arguments',
+            'atomic_native_file_read_snapshot': False}
+
+
 def inspect(request, expected=None):
     host = binding(request['binding'])
     selected = text(request.get('executable', 'mysqld'))
@@ -155,8 +319,12 @@ def inspect(request, expected=None):
         path = Path(text(config))
         if not path.is_absolute():
             raise Refused('Select an absolute native configuration filename')
-        path = path.resolve(strict=True)
+        path = Path(os.path.normpath(str(path)))
         configuration = {'path': str(path), 'sha256': file_hash(path)}
+        context = {'working_directory': str(path.parent.resolve(strict=True)),
+                   'home_directory': str(path.parent.resolve(strict=True))}
+        configuration['context'] = context
+        configuration['graph'] = configuration_graph(path, context)
     if expected is not None and (host != expected.get('host') or
             str(executable) != expected.get('program', {}).get('path') or
             checksum != expected.get('program', {}).get('sha256') or
@@ -168,8 +336,10 @@ def inspect(request, expected=None):
     import re
     if version['return_code'] != 0 or not re.search(r'\bVer\s+9\.7\.0(?:\s|[-(])', output):
         raise Refused('Select the native MySQL9.7.0 mysqld on this database host')
+    if configuration and configuration_graph(configuration['path'], configuration['context']) != configuration['graph']:
+        raise Refused('The native configuration graph changed during inspection')
     return {'host': host, 'program': {'path': str(executable), 'sha256': checksum, 'version_output': output.strip()},
-            'configuration': configuration, 'included_configuration_files_attested': False}
+            'configuration': configuration, 'included_configuration_files_attested': True}
 
 
 def save(path, value):
@@ -226,7 +396,19 @@ def dispatch(request):
     save(receipt, value)
     configuration = observed['configuration']
     arguments = ['--defaults-file=' + configuration['path']] if configuration else ['--no-defaults']
-    result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout)
+    result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
+                     configuration_context=configuration['context'] if configuration else None)
     value.update(state='native_process_returned', result=result)
+    # Persist native completion before making any later filesystem observation.
     save(receipt, value)
+    if configuration:
+        try:
+            graph = configuration_graph(configuration['path'], configuration['context'])
+            value['configuration_after_process'] = {'observed': True,
+                'matches_review': graph == configuration['graph'], 'graph': graph,
+                'atomic_native_file_read_snapshot': False}
+        except Exception as error:
+            value['configuration_after_process'] = {'observed': False, 'error_type': type(error).__name__,
+                'atomic_native_file_read_snapshot': False}
+        save(receipt, value)
     return value

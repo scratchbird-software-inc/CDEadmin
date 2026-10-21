@@ -134,8 +134,12 @@ MySQL
   repair and authorized server-host configuration, lifecycle and upgrades.
   Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID
   and expose reviewed native configuration validation with durable remote
-  receipts. Complete included-configuration attestation, server initialize/start/
-  stop/service control, upgrades and physical recovery remain separate work.
+  receipts. Selected option-file graphs now capture nested includes, directory
+  membership, resolved paths and native permission/depth rules, with review and
+  dispatch rechecks and a separate post-process observation. This does not freeze
+  concurrent configuration writers. Persisted settings/service arguments,
+  configuration deployment, server initialize/start/stop/service control,
+  upgrades and physical recovery remain separate work.
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.

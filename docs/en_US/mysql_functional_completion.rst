@@ -290,20 +290,35 @@ operation reviews or durable receipts. A private-key file can be loaded in the
 dedicated desktop form.
 
 The initial native action is ``mysqld --validate-config`` on MySQL9.7.0. Review
-binds the selected native executable hash/version and root configuration-file
-hash. The helper rechecks these before native execution, records its intent
+binds the selected native executable hash/version and configuration-file graph.
+The graph records nested ``!include`` and ``!includedir`` inputs, eligible sorted
+directory members, resolved paths, file hashes and native ignored/missing states.
+It follows native case-sensitive directives/extensions, quote-aware ``#``
+comments, literal include filenames, the ten-level include limit and POSIX
+world-writable-file exclusion. Relative includes resolve from the native process
+working directory; they do not resolve from each included file's parent.
+For an explicit root file, the process working directory and ``HOME`` are the
+root file's resolved parent directory, shown in the review. The private job
+directory continues to hold temporary files and receipts.
+
+The helper rechecks the graph before native execution, records its intent
 before dispatch, and persists process exit, timeout and bounded native output
 before returning the SSH reply. Duplicate job delivery reads the existing
 receipt. Explicit reconciliation keeps the original SSH acknowledgement separate
 from subsequently read native process facts. Closing a viewer never revokes an
-admitted remote action.
+admitted remote action. Native completion is persisted before the separate
+post-process graph observation. Changed or unreadable later inputs do not erase
+the native exit result. These file observations do not freeze concurrent writers
+or establish an atomic snapshot of the native parser's file reads. Graph byte,
+entry and filename bounds refuse admission rather than accept partial evidence.
+Persisted ``mysqld-auto.cnf`` settings and service/startup arguments remain
+separate inputs; this graph covers the selected option-file load.
 
 The host requires Python3.9 or later; only the standard library and the shipped
 ScratchRobin permission helper are transferred over SSH. POSIX and native
 Windows PowerShell launches have separate argument framing. Linux native
 qualification does not establish Windows/macOS acceptance, which remains with
-the platform teams. Included configuration files are not fully attested. Native
-configuration acceptance is separate from server readiness, initialize/start/
+the platform teams. Native configuration acceptance is separate from server readiness, initialize/start/
 stop/service management, upgrades and physical backup/recovery; these broader
 host workflows remain required.
 

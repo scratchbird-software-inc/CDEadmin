@@ -51,7 +51,8 @@ class HostJobs(MySQLBinlogJobs):
     operation = 'mysql_database_host_configuration_validation'
     review_warnings = (
         'Runs the selected native mysqld configuration check on the authenticated database-server SSH host. The application host is not the execution host.',
-        'The native source UUID, host and data-directory identity, SSH public key, executable bytes and selected root configuration file bind this review. Included configuration files are not fully attested.',
+        'The native source UUID, host and data-directory identity, SSH public key, executable bytes and selected configuration graph bind this review. Includes, eligible directory members, permissions and resolved paths are rechecked before dispatch.',
+        'For a selected configuration file, the native process working directory and HOME are its resolved parent directory, shown in the review. File observations before and after execution do not freeze concurrent writers or prove an atomic native read snapshot. Persisted settings and service arguments remain separate inputs.',
         'This checks native configuration acceptance. It does not start or stop a database, prove server readiness, qualify upgrades or verify physical recovery.',
         'Closing the viewer does not stop an admitted remote diagnostic. A lost SSH reply remains unknown; reconciliation reads its durable remote receipt without repeating the command.',
     )

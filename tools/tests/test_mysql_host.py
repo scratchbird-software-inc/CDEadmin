@@ -24,7 +24,7 @@ def host(tmp_path, monkeypatch):
     executable = tmp_path / 'mysqld'; executable.write_bytes(b'owned native executable fixture'); executable.chmod(0o700)
     configuration = tmp_path / 'selected.cnf'; configuration.write_text('[mysqld]\n')
     calls = []
-    def process(executable, arguments, workspace, timeout):
+    def process(executable, arguments, workspace, timeout, **kwargs):
         calls.append((str(executable), list(arguments)))
         output = b'mysqld Ver 9.7.0 for owned unit fixture\n' if '--version' in arguments else b'configuration accepted\n'
         return {'return_code': 0, 'timed_out': False, 'streams_closed': True,

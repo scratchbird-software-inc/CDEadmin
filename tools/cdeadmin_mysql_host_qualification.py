@@ -178,6 +178,68 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
         invalid = wait(http('start', admitted(review(configured))))
         assert invalid['ssh_reply_observed'] and invalid['remote_receipt']['result']['return_code'] != 0
         proof['checks'].append('actual-native-configuration-error-is-a-returned-process-with-nonzero-exit')
+        def remote(script):
+            return _run(['docker', 'exec', name, 'python3', '-c', script])
+        remote('from pathlib import Path;p=Path("/tmp/srconfig");p.mkdir();(p/"parts").mkdir();'
+            '(p/"parts/a.cnf").write_text("[mysqld]\\nmax_connections=153\\n");'
+            '(p/"parts/z.cnf").write_text("[mysqld]\\nmax_connections=154\\n");'
+            '(p/"parts/ignored.CNF").write_text("[mysqld]\\nunknown_uppercase_extension=1\\n");'
+            '(p/"parts/world.cnf").write_text("[mysqld]\\nunknown_world_writable=1\\n");(p/"parts/world.cnf").chmod(0o666);'
+            '(p/"chain.cnf").write_text("!include srconfig/leaf.cnf\\n!include ~/srconfig/home.cnf\\n");'
+            '(p/"leaf.cnf").write_text("[mysqld]\\nmax_connections=155\\n");'
+            '(p/"home.cnf").write_text("[mysqld]\\nmax_connections=156\\n");'
+            '(p/"linked.cnf").symlink_to(p/"leaf.cnf")')
+        config('!includedir /tmp/srconfig/parts\n!include /tmp/srconfig/chain.cnf\n!include /tmp/srconfig/linked.cnf\n[mysqld]\n')
+        graph_review = review(configured)
+        graph = graph_review['remote_observation']['configuration']['graph']
+        assert graph_review['remote_observation']['included_configuration_files_attested']
+        assert graph['working_directory'] == '/tmp' and graph['home_directory'] == '/tmp'
+        assert not graph['atomic_native_file_read_snapshot']
+        assert any(row.get('selected_names') == ['a.cnf', 'world.cnf', 'z.cnf'] for row in graph['entries'])
+        assert any(row['state'] == 'ignored_world_writable' for row in graph['entries'])
+        graph_result = wait(http('start', admitted(graph_review)))
+        assert graph_result['remote_receipt']['result']['return_code'] == 0
+        assert graph_result['remote_receipt']['configuration_after_process']['matches_review']
+        proof['checks'].append('actual-native-nested-relative-and-home-includes-directory-order-case-and-world-writable-ignore')
+        for changed, script in (
+            ('included-bytes', 'from pathlib import Path;Path("/tmp/srconfig/leaf.cnf").write_text("[mysqld]\\nmax_connections=157\\n")'),
+            ('new-directory-member', 'from pathlib import Path;Path("/tmp/srconfig/parts/new.cnf").write_text("[mysqld]\\n")'),
+            ('removed-directory-member', 'from pathlib import Path;Path("/tmp/srconfig/parts/new.cnf").unlink()'),
+            ('symlink-target', 'from pathlib import Path;p=Path("/tmp/srconfig/linked.cnf");p.unlink();p.symlink_to("/tmp/srconfig/home.cnf")'),
+            ('native-ignore-mode', 'from pathlib import Path;Path("/tmp/srconfig/parts/world.cnf").chmod(0o600)'),
+        ):
+            stale = review(configured); remote(script)
+            http('start', admitted(stale), refused=True)
+            assert http('status', {'job_id': stale['job_id']})['state'] == 'reviewed'
+            http('cancel', {'job_id': stale['job_id']})
+            proof['checks'].append('configuration-graph-refuses-changed-'+changed+'-before-admission')
+        # Once its native ignore bit is removed, the same included unknown
+        # option must be rejected by the actual mysqld parser.
+        invalid_include = wait(http('start', admitted(review(configured))))
+        assert invalid_include['remote_receipt']['result']['return_code'] != 0
+        assert invalid_include['remote_receipt']['configuration_after_process']['matches_review']
+        proof['checks'].append('actual-native-included-option-error-remains-native-process-result')
+        remote('from pathlib import Path;Path("/tmp/srconfig/parts/world.cnf").chmod(0o666)')
+        config('!include /tmp/srconfig/cycle.cnf\n[mysqld]\n')
+        remote('from pathlib import Path;Path("/tmp/srconfig/cycle.cnf").write_text("!include /tmp/srconfig/cycle.cnf\\n[mysqld]\\n")')
+        cycle = review(configured); cycle_entries = cycle['remote_observation']['configuration']['graph']['entries']
+        assert len(cycle_entries) == 11 and cycle_entries[-1]['depth'] == 10
+        assert cycle_entries[-1]['directives_skipped_at_native_depth_limit'] == [1]
+        cycled = wait(http('start', admitted(cycle)))
+        assert cycled['remote_receipt']['result']['return_code'] == 0
+        proof['checks'].append('actual-native-tenth-recursion-limit-without-infinite-graph-traversal')
+        remote('from pathlib import Path;p=Path("/tmp/srconfig");(p/"alias").symlink_to("/tmp",target_is_directory=True);'
+            'Path("/tmp/~").mkdir();Path("/tmp/~/home.cnf").write_text("[mysqld]\\nunknown_literal_tilde=1\\n");'
+            'Path("/tmp/home.cnf").write_text("[mysqld]\\nmax_connections=158\\n")')
+        config('!include /tmp/srconfig/alias/../home.cnf\n!include /missing/~/home.cnf\n!includedir ~\n[mysqld]\n')
+        paths = review(configured)
+        path_entries = paths['remote_observation']['configuration']['graph']['entries']
+        assert path_entries[1]['path'] == '/tmp/srconfig/home.cnf'
+        assert path_entries[2]['path'] == '/tmp/home.cnf'
+        assert path_entries[3]['path'] == '/tmp/~' and path_entries[4]['path'] == '/tmp/home.cnf'
+        normalized = wait(http('start', admitted(paths)))
+        assert normalized['remote_receipt']['result']['return_code'] == 0
+        proof['checks'].append('actual-native-file-path-normalization-before-symlinks-and-distinct-includedir-tilde-handling')
         original = native.Transport.request; calls = []
         def lost(transport, request, *args, **kwargs):
             value = original(transport, request, *args, **kwargs)
