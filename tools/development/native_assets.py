@@ -27,6 +27,8 @@ ASSETS = {
                         'fbc30cdbfcfa42c78fe7bddd3fd37ab8995369a31d39097a5d0633296c0b6e65'),
     'mariadb-c': ('https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.4.8.tar.gz',
                   'ced7e5063c91fe2bfafd9d63a759490fe53e81df80599a9abad01c570c202f0c'),
+    'mysql-python': ('https://files.pythonhosted.org/packages/f2/ce/a53b169388f8c6a595cfa9a653138381f3afef1d2af60f5c1972d015f52f/mysql_connector_python-26.7.0.tar.gz',
+                     'd8ff5ee236ea46661ee639336323e124ed868e37f3ea991bdc5de5a146f39fd5'),
     'mariadb-python': ('https://files.pythonhosted.org/packages/c4/ba/cedef19833be88e07bfff11964441cda8a998f1628dd3b2fa3e7751d36e0/mariadb-1.1.14.tar.gz',
                        'e6d702a53eccf20922e47f2f45cfb5c7a0c2c6c0a46e4ee2d8a80d0ff4a52f34'),
     'pglast': ('https://files.pythonhosted.org/packages/62/b1/8f87ff97d3ebb6f6635f96e67f33863952ba73354890f77280dd371540c7/pglast-8.5.tar.gz',
@@ -119,7 +121,7 @@ def kerberos_libraries():
 
 def paths(env):
     selected = dict(env)
-    additions = [STATE / 'mariadb-c/bin', STATE / 'mariadb-c/lib',
+    additions = [STATE / 'mysql/bin', STATE / 'mysql/lib', STATE / 'mariadb-c/bin', STATE / 'mariadb-c/lib',
                  STATE / 'postgres/pgsql/bin', STATE / 'firebird']
     kerberos = STATE / 'kerberos'
     if kerberos.exists():
@@ -167,11 +169,26 @@ def paths(env):
         selected.setdefault('CDEADMIN_FIREBIRD_CLIENT_LIBRARY', str(firebird / 'lib/libfbclient.dylib'))
         selected.setdefault('FIREBIRD', str(firebird))
         selected['DYLD_LIBRARY_PATH'] = os.pathsep.join([
+            str(STATE / 'mysql/lib'), str(STATE / 'mysql/lib/private'),
             str(STATE / 'sqlite'), str(STATE / 'mariadb-c/lib/mariadb'),
             str(STATE / 'mariadb-c/lib'),
             str(firebird / 'lib'), str(firebird),
             selected.get('DYLD_LIBRARY_PATH', '')])
     return selected
+
+
+def mysql_capi():
+    """Provision the pinned native SDK kit without starting a server."""
+    if __package__:
+        from .native_servers import SERVER_ASSETS, unpack
+    else:
+        from native_servers import SERVER_ASSETS, unpack
+    if platform.system() not in ('Windows', 'Darwin'):
+        raise RuntimeError('Use a native MySQL 9.7.0 development kit on this platform')
+    ASSETS.update(SERVER_ASSETS)
+    suffix = 'windows' if platform.system() == 'Windows' else 'macos-' + ('arm64' if platform.machine() == 'arm64' else 'x64')
+    unpack('mysql-' + suffix, STATE / 'mysql')
+    return STATE / 'mysql'
 
 
 def firebird_kit(evidence):

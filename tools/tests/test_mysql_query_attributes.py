@@ -58,7 +58,8 @@ def test_unnegotiated_native_capability_never_silently_drops_attributes():
     assert native.query_attrs==[('previous',17)] and not native.sent
 
 
-def test_c_connector_uses_actual_negotiated_native_flags_instead_of_requested_python_flags():
+def test_c_connector_uses_actual_negotiated_native_flags_instead_of_requested_python_flags(monkeypatch):
+    monkeypatch.setattr(attrs,'c_attributes_abi',lambda:1)
     native=Native();native.client_flags=0
     native._cmysql=SimpleNamespace(st_client_flag=lambda:ClientFlag.CLIENT_QUERY_ATTRIBUTES)
     scope=attrs.Scope(native,{'label':None});scope.install()
@@ -98,30 +99,25 @@ def test_negative_duration_uses_absolute_native_time_fields_and_explicit_sign():
     assert encoded[21:]==b'SELECT 1'
 
 
-def test_c_time_duration_is_refused_before_touching_native_driver_state():
+@pytest.mark.parametrize('value',[None,1.2345678901234567,{'encoding':'integer','data':'18446744073709551615'},{'encoding':'time','data':'-25:00:00.123400'}])
+def test_stock_c_attribute_port_is_refused_before_touching_native_driver_state(monkeypatch,value):
+    monkeypatch.setattr(attrs,'c_attributes_abi',lambda:0)
+    native=Native();native._cmysql=SimpleNamespace(st_client_flag=lambda:ClientFlag.CLIENT_QUERY_ATTRIBUTES)
+    with pytest.raises(attrs.AttributeAdmissionError,match='corrected Connector/Python'):
+        attrs.Scope(native,attrs.decoded({'value':value})).install()
+    assert native.query_attrs==[('previous',17)] and not native.sent
+
+
+def test_patched_c_port_keeps_native_types_and_source_charset_names_without_pure_wire_hook(monkeypatch):
     import datetime
-    native=Native();native._cmysql=SimpleNamespace(st_client_flag=lambda:ClientFlag.CLIENT_QUERY_ATTRIBUTES)
-    with pytest.raises(attrs.AttributeAdmissionError,match='cannot safely encode TIME'):
-        attrs.Scope(native,{'t':datetime.timedelta(hours=25)}).install()
-    assert native.query_attrs==[('previous',17)] and not native.sent
-
-
-def test_c_unsigned_integer_overflow_is_refused_before_touching_native_driver_state():
-    native=Native();native._cmysql=SimpleNamespace(st_client_flag=lambda:ClientFlag.CLIENT_QUERY_ATTRIBUTES)
-    with pytest.raises(attrs.AttributeAdmissionError,match='signed 64-bit'):
-        attrs.Scope(native,{'n':2**64-1}).install()
-    assert native.query_attrs==[('previous',17)] and not native.sent
-
-
-def test_c_non_utf8_attribute_names_are_refused_instead_of_silently_misbound(monkeypatch):
+    monkeypatch.setattr(attrs,'c_attributes_abi',lambda:1)
     monkeypatch.setattr('pgadmin.cdeadmin.providers.mysql_family.mysql_session_variables.observe',lambda _:{'variables':{'character_set_client':'latin1'}})
     native=Native();native._cmysql=SimpleNamespace(st_client_flag=lambda:ClientFlag.CLIENT_QUERY_ATTRIBUTES)
-    scope=attrs.Scope(native,{'é':None});scope.install()
-    try:
-        with pytest.raises(attrs.AttributeAdmissionError,match='matching UTF-8 source bytes'):scope.bind()
-        assert not native.sent
-    finally:scope.restore()
-    assert native.query_attrs==[('previous',17)]
+    values={'é':None,'n':2**64-1,'t':datetime.timedelta(hours=-25),'double':1.2345678901234567}
+    scope=attrs.Scope(native,values);scope.install();scope.bind()
+    assert native.query_attrs==list(values.items()) and native.query_attrs[0][0].encode('utf8')==b'\xe9'
+    assert not scope.send_override and '_send_cmd' not in native.__dict__
+    scope.restore();assert native.query_attrs==[('previous',17)]
 
 
 @pytest.mark.parametrize('encoding,value',[('date','2026-02-30'),('datetime','2026-10-21T12:34:56+04:00'),

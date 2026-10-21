@@ -67,34 +67,27 @@ def qualify(output, use_c=False, application=False, browser_binary=None, driver_
                     scalar="SELECT mysql_query_attribute_string('label'),mysql_query_attribute_string('null') IS NULL,mysql_query_attribute_string('integer'),mysql_query_attribute_string('decimal'),HEX(mysql_query_attribute_string('binary')),mysql_query_attribute_string('day'),mysql_query_attribute_string('stamp')"
                     expected=[('é €',1,'9007199254740993','1.2300','7820275C','2026-10-21','2026-10-21 12:34:56.123456')]
                     if use_c:
-                        from pgadmin.cdeadmin.providers.mysql_family.mysql_query_attributes import Scope,decoded,AttributeAdmissionError
-                        refused=Scope(handle,decoded({'duration':sample.pop('duration')}))
-                        try:refused.install()
-                        except AttributeAdmissionError:pass
-                        else:raise AssertionError('Unsafe native C TIME duration must not dispatch')
-                        assert handle.query_attrs==original
-                        proof['native_driver_gaps']=['TIME durations read with datetime.time layout','unsigned integers above signed64 use a signed conversion','attribute names always use UTF8 even when source charset differs']
-                    else:
-                        scalar+=",mysql_query_attribute_string('duration')";expected=[expected[0]+('-25:00:00.123400',)]
+                        import _mysql_connector
+                        assert _mysql_connector.CDEADMIN_QUERY_ATTRIBUTES_ABI==1
+                        proof['native_query_attributes_abi']=1
+                        proof['native_extension_sha256']=hashlib.sha256(Path(_mysql_connector.__file__).read_bytes()).hexdigest()
+                        proof['native_client_version']=handle._cmysql.get_client_info()
+                        proof['native_driver_gaps']=[]
+                    scalar+=",mysql_query_attribute_string('duration')";expected=[expected[0]+('-25:00:00.123400',)]
                     for charset in ('utf8mb4','latin1'):
                         execute('SET NAMES '+charset)
                         actual=execute(scalar,sample);assert actual==expected,(charset,actual,expected)
                         assert execute("SELECT mysql_query_attribute_string('only_null') IS NULL",{'only_null':None})==[(1,)]
-                        if use_c and charset=='latin1':
-                            refused=Scope(handle,{'clé €':'named é €'});refused.install()
-                            try:refused.bind()
-                            except AttributeAdmissionError:pass
-                            else:raise AssertionError('C native names must not silently use UTF8 in latin1')
-                            finally:refused.restore()
-                            assert handle.query_attrs==original
-                        else:
-                            named=execute('SELECT mysql_query_attribute_string(%s)',{'clé €':'named é €'},['clé €'])
-                            assert named==[('named é €',)],(charset,named)
+                        named=execute('SELECT mysql_query_attribute_string(%s)',{'clé €':'named é €'},['clé €'])
+                        assert named==[('named é €',)],(charset,named)
+                        precise=execute("SELECT mysql_query_attribute_string('double'),mysql_query_attribute_string('tiny'),mysql_query_attribute_string('zero'),mysql_query_attribute_string('positive')",{
+                            'double':1.2345678901234567,'tiny':{'encoding':'time','data':'-00:00:00.000001'},
+                            'zero':{'encoding':'time','data':'00:00:00.000000'},'positive':{'encoding':'time','data':'838:59:59.999999'}})
+                        assert precise==[('1.2345678901234567','-00:00:00.000001','00:00:00.000000','838:59:59.999999')],(charset,precise)
                     assert execute("SET NAMES utf8mb4; SELECT mysql_query_attribute_string('label'); SET NAMES latin1; SELECT mysql_query_attribute_string('label'); SET NAMES utf8mb4",{'label':'é €'})==[('é €',),('é €',)]
-                    if not use_c:
-                        assert execute("SELECT mysql_query_attribute_string('maximum'),mysql_query_attribute_string('minimum')",
+                    assert execute("SELECT mysql_query_attribute_string('maximum'),mysql_query_attribute_string('minimum')",
                             {'maximum':{'encoding':'integer','data':'18446744073709551615'},'minimum':{'encoding':'integer','data':'-9223372036854775808'}})==[('18446744073709551615','-9223372036854775808')]
-                    proof['checks'].append('native-NULL-and-exact-scalar-attributes-in-utf8mb4-and-latin1; Unicode-names-and-TIME-supported-by-pure; C-unsafe-native-values-refused-before-dispatch')
+                    proof['checks'].append('native-NULL-exact-decimal-and-float64-unsigned64-signed64-Unicode-names-and-negative-zero-positive-TIME-in-utf8mb4-and-latin1-through-actual-selected-pure-or-patched-C-interface')
                     proof['checks'].append('one-execution-follows-actual-native-charset-switches-before-every-submitted-command-with-native-value-encoding')
                     execute('SELECT absent_column FROM t',{'label':'owned error'},expected_error=1054)
                     raw=handle.cursor();raw.execute('SHOW ERRORS');assert any(row[1]==1054 for row in raw.fetchall());raw.close()
@@ -216,11 +209,17 @@ def browser(app,output,sid,password,binary,driver_binary):
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',node);node.click()
         tab('Engine options')
         marker='native attributes é €'
-        fill_fields(wait,['MySQL query attributes (JSON object)='+json.dumps({'label':marker,'nil':None})])
+        ui_attributes={'label':marker,'nil':None,'duration':{'encoding':'time','data':'-25:00:00.123400'},
+            'maximum':{'encoding':'integer','data':'18446744073709551615'},'clé €':'named é €','double':1.2345678901234567}
+        fill_fields(wait,['MySQL query attributes (JSON object)='+json.dumps(ui_attributes)])
         sensitive=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(.,"Omit this sensitive source from SQL history")]'))
         if not sensitive.find_element(By.CSS_SELECTOR,'input').is_selected():sensitive.click()
         tab('Data Output')
         _run_query(driver,wait,"SELECT mysql_query_attribute_string('label') AS native_value,mysql_query_attribute_string('nil') IS NULL AS native_null",marker,'MySQL',output)
+        typed_sql="SELECT mysql_query_attribute_string('duration') AS native_time,mysql_query_attribute_string('maximum') AS native_unsigned,mysql_query_attribute_string('clé €') AS native_name,mysql_query_attribute_string('double') AS native_double"
+        _run_query(driver,wait,typed_sql,'18446744073709551615','MySQL',output)
+        wait.until(lambda browser:all(value in browser.find_element(By.TAG_NAME,'body').text for value in
+            ('-25:00:00.123400','18446744073709551615','named é €','1.2345678901234567')))
         summary=wait.until(lambda browser:next((node for node in browser.find_elements(By.TAG_NAME,'summary') if node.is_displayed() and node.text=='Source tools'),None));summary.click()
         _set_query(driver,wait,"SET NAMES latin1; SELECT mysql_query_attribute_string('label'); SET NAMES utf8mb4")
         click('Preview script')
@@ -233,7 +232,7 @@ def browser(app,output,sid,password,binary,driver_binary):
         final=progress(driver);assert len(final['history'])==3 and all(row['outcome']=='success' for row in final['history'])
         driver.save_screenshot(str(output/'native-query-attributes.png'))
         errors=[row for row in driver.get_log('browser') if row['level']=='SEVERE'];assert not errors,errors
-        return {'complete':True,'version':driver.capabilities['browserVersion'],'checks':['native-editor-attribute-input-and-NULL-query-output','native-retained-script-attributes-across-latin1-and-utf8mb4'],'console_errors':errors}
+        return {'complete':True,'version':driver.capabilities['browserVersion'],'checks':['native-editor-attribute-input-and-NULL-query-output','native-editor-typed-negative-TIME-unsigned64-Unicode-name-and-float64-values','native-retained-script-attributes-across-latin1-and-utf8mb4'],'console_errors':errors}
     except Exception:
         if driver is not None:
             driver.save_screenshot(str(output/'browser-failure.png'))

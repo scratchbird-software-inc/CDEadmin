@@ -49,6 +49,8 @@ def child(name, evidence, port):
         import pyarrow
         import firebird.driver as firebird
         import mariadb
+        import _mysql_connector
+        assert getattr(_mysql_connector, 'CDEADMIN_QUERY_ATTRIBUTES_ABI', None) == 1, 'Build the corrected native MySQL connector'
         from pglast import parser
         assert getattr(parser, 'CDEADMIN_PARSE_OPTIONS_REVISION', None) == 2, 'Build the native PostgreSQL parser options patch'
         assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_exact_temporals'), 'Stock MariaDB connector is insufficient'

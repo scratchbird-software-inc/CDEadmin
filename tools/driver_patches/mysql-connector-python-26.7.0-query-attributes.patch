@@ -1,0 +1,429 @@
+--- a/src/mysql_capi.c
++++ b/src/mysql_capi.c
+@@ -2101,248 +2101,212 @@
+ PyObject *
+ MySQL_query(MySQL *self, PyObject *args, PyObject *kwds)
+ {
+-    PyObject *buffered = NULL, *raw = NULL, *raw_as_string = NULL, *query_attrs = NULL,
+-             *retval = NULL;
+-    int i = 0, res = 0;
+-    Py_ssize_t stmt_length;
++    PyObject *buffered = NULL, *raw = NULL, *raw_as_string = NULL;
++    PyObject *query_attrs = NULL, *retval = NULL;
++    Py_ssize_t stmt_length, size = 0, i;
+     char *stmt = NULL;
+-    static char *kwlist[] = {"statement", "buffered", "raw",
+-                             "raw_as_string", "query_attrs", NULL};
+-
+-    IS_CONNECTED(self);
+-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s#|O!O!O!O!", kwlist, &stmt, &stmt_length,
+-                                     &PyBool_Type, &buffered, &PyBool_Type, &raw, &PyBool_Type,
+-                                     &raw_as_string, &PyList_Type, &query_attrs)) {
+-        return NULL;
+-    }
+-
++    int res, bound = 0;
+     MYSQL_BIND *mybinds = NULL;
+     struct MySQL_binding *bindings = NULL;
+-    Py_ssize_t size = 0;
+-    if ((query_attrs != NULL) && PyList_Size(query_attrs)) {
+-        size = PyList_Size(query_attrs);
++    const char **names = NULL;
++    static char *kwlist[] = {"statement", "buffered", "raw", "raw_as_string", "query_attrs", NULL};
++
++    IS_CONNECTED(self);
++    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s#|O!O!O!O!", kwlist,
++            &stmt, &stmt_length, &PyBool_Type, &buffered, &PyBool_Type, &raw,
++            &PyBool_Type, &raw_as_string, &PyList_Type, &query_attrs)) {
++        return NULL;
++    }
++    if (query_attrs != NULL) size = PyList_Size(query_attrs);
++    if (size > 65535) {
++        PyErr_SetString(PyExc_ValueError, "Too many native query attributes");
++        return NULL;
++    }
++    if (size) {
+         mybinds = calloc(size, sizeof(MYSQL_BIND));
+         bindings = calloc(size, sizeof(struct MySQL_binding));
+-        const char **names = calloc(size, sizeof(char *));
+-
+-        for (i = 0; i < (int)size; i++) {
++        names = calloc(size, sizeof(char *));
++        if (mybinds == NULL || bindings == NULL || names == NULL) {
++            PyErr_NoMemory();
++            goto cleanup;
++        }
++        for (i = 0; i < size; i++) {
+             struct MySQL_binding *pbind = &bindings[i];
+             MYSQL_BIND *mbind = &mybinds[i];
+-            PyObject *attr_tuple = PyList_GetItem(query_attrs, i);
+-            PyObject *attr_name = PyTuple_GetItem(attr_tuple, 0);
+-            names[i] = PyUnicode_AsUTF8(attr_name);
+-            PyObject *value = PyTuple_GetItem(attr_tuple, 1);
+-
+-            if (value == NULL) {
++            PyObject *tuple = PyList_GetItem(query_attrs, i);
++            PyObject *name, *value;
++            if (!PyTuple_Check(tuple) || PyTuple_Size(tuple) != 2) {
++                PyErr_SetString(PyExc_TypeError, "Query attributes require name/value tuples");
+                 goto cleanup;
+             }
+-
+-            /* None is SQL's NULL */
++            name = PyTuple_GetItem(tuple, 0);
++            value = PyTuple_GetItem(tuple, 1);
++            if (!PyUnicode_Check(name)) {
++                PyErr_SetString(PyExc_TypeError, "Query attribute names require text");
++                goto cleanup;
++            }
++            /* Honor a source-charset encoder supplied by a str subclass. Plain
++               strings retain the upstream UTF-8 behavior. Keep encoded names
++               alive until the synchronous native command has consumed them. */
++            pbind->name_value = PyObject_CallMethod(name, "encode", "s", "utf8");
++            if (pbind->name_value == NULL) goto cleanup;
++            if (!PyBytes_Check(pbind->name_value)) {
++                PyErr_SetString(PyExc_TypeError, "Encoded attribute names require bytes");
++                goto cleanup;
++            }
++            names[i] = PyBytes_AsString(pbind->name_value);
++            if (memchr(names[i], '\0', PyBytes_Size(pbind->name_value)) != NULL) {
++                PyErr_SetString(PyExc_ValueError, "Attribute names cannot contain NUL");
++                goto cleanup;
++            }
++            mbind->is_null = &pbind->is_null;
+             if (value == Py_None) {
++                pbind->is_null = 1;
+                 mbind->buffer_type = MYSQL_TYPE_NULL;
+-                mbind->buffer = "NULL";
+-                mbind->is_null = (bool_ *)1;
+                 continue;
+             }
+-
+-            /* LONG AND LONGLONG */
+             if (PyLong_Check(value)) {
+-                pbind->buffer.l = PyLong_AsLongLong(value);
+-                mbind->buffer = &pbind->buffer.l;
++                int overflow = 0;
++                pbind->buffer.l = PyLong_AsLongLongAndOverflow(value, &overflow);
++                if (overflow > 0) {
++                    pbind->buffer.u = PyLong_AsUnsignedLongLong(value);
++                    mbind->buffer = &pbind->buffer.u;
++                    mbind->is_unsigned = 1;
++                } else {
++                    if (overflow < 0) PyErr_SetString(PyExc_OverflowError, "Attribute integer is below signed 64-bit range");
++                    mbind->buffer = &pbind->buffer.l;
++                }
++                if (PyErr_Occurred()) goto cleanup;
+                 mbind->buffer_type = MYSQL_TYPE_LONGLONG;
+-                mbind->is_null = (bool_ *)0;
+-                if (mbind->length) {
+-                    *mbind->length = sizeof(mbind->buffer_type);
+-                }
+                 continue;
+             }
+-
+-            /* FLOAT */
+             if (PyFloat_Check(value)) {
+-                pbind->buffer.f = (float)PyFloat_AsDouble(value);
+-                mbind->buffer = &pbind->buffer.f;
+-                mbind->buffer_type = MYSQL_TYPE_FLOAT;
+-                mbind->is_null = (bool_ *)0;
+-                mbind->length = 0;
++                pbind->buffer.d = PyFloat_AsDouble(value);
++                if (PyErr_Occurred()) goto cleanup;
++                mbind->buffer = &pbind->buffer.d;
++                mbind->buffer_type = MYSQL_TYPE_DOUBLE;
+                 continue;
+             }
+-
+-            /* STRING */
+-            if (PyUnicode_Check(value) || PyUnicode_Check(value) || PyBytes_Check(value)) {
++            if (PyUnicode_Check(value) || PyBytes_Check(value)) {
+                 pbind->str_value = value;
++                Py_INCREF(value);
+                 mbind->buffer_type = MYSQL_TYPE_STRING;
+-            }
+-            /* DATETIME */
+-            else if (PyDateTime_Check(value)) {
+-                MYSQL_TIME *datetime = &pbind->buffer.t;
+-                datetime->year = PyDateTime_GET_YEAR(value);
+-                datetime->month = PyDateTime_GET_MONTH(value);
+-                datetime->day = PyDateTime_GET_DAY(value);
+-                datetime->hour = PyDateTime_DATE_GET_HOUR(value);
+-                datetime->minute = PyDateTime_DATE_GET_MINUTE(value);
+-                datetime->second = PyDateTime_DATE_GET_SECOND(value);
+-                if (PyDateTime_DATE_GET_MICROSECOND(value)) {
+-                    datetime->second_part = PyDateTime_DATE_GET_MICROSECOND(value);
+-                }
+-                else {
+-                    datetime->second_part = 0;
+-                }
+-
++            } else if (PyDateTime_Check(value)) {
++                MYSQL_TIME *time = &pbind->buffer.t;
++                time->year = PyDateTime_GET_YEAR(value);
++                time->month = PyDateTime_GET_MONTH(value);
++                time->day = PyDateTime_GET_DAY(value);
++                time->hour = PyDateTime_DATE_GET_HOUR(value);
++                time->minute = PyDateTime_DATE_GET_MINUTE(value);
++                time->second = PyDateTime_DATE_GET_SECOND(value);
++                time->second_part = PyDateTime_DATE_GET_MICROSECOND(value);
++                time->time_type = MYSQL_TIMESTAMP_DATETIME;
+                 mbind->buffer_type = MYSQL_TYPE_DATETIME;
+-                mbind->buffer = datetime;
+-                mbind->is_null = (bool_ *)0;
++                mbind->buffer = time;
+                 continue;
+-            }
+-            /* DATE */
+-            else if (PyDate_Check(value)) {
+-                MYSQL_TIME *date = &pbind->buffer.t;
+-                date->year = PyDateTime_GET_YEAR(value);
+-                date->month = PyDateTime_GET_MONTH(value);
+-                date->day = PyDateTime_GET_DAY(value);
+-
++            } else if (PyDate_Check(value)) {
++                MYSQL_TIME *time = &pbind->buffer.t;
++                time->year = PyDateTime_GET_YEAR(value);
++                time->month = PyDateTime_GET_MONTH(value);
++                time->day = PyDateTime_GET_DAY(value);
++                time->time_type = MYSQL_TIMESTAMP_DATE;
+                 mbind->buffer_type = MYSQL_TYPE_DATE;
+-                mbind->buffer = date;
+-                mbind->is_null = (bool_ *)0;
++                mbind->buffer = time;
+                 continue;
+-            }
+-            /* TIME */
+-            else if (PyTime_Check(value)) {
++            } else if (PyTime_Check(value)) {
+                 MYSQL_TIME *time = &pbind->buffer.t;
+                 time->hour = PyDateTime_TIME_GET_HOUR(value);
+                 time->minute = PyDateTime_TIME_GET_MINUTE(value);
+                 time->second = PyDateTime_TIME_GET_SECOND(value);
+-                if (PyDateTime_TIME_GET_MICROSECOND(value)) {
+-                    time->second_part = PyDateTime_TIME_GET_MICROSECOND(value);
+-                }
+-                else {
+-                    time->second_part = 0;
+-                }
+-
++                time->second_part = PyDateTime_TIME_GET_MICROSECOND(value);
++                time->time_type = MYSQL_TIMESTAMP_TIME;
+                 mbind->buffer_type = MYSQL_TYPE_TIME;
+                 mbind->buffer = time;
+-                mbind->is_null = (bool_ *)0;
+-                mbind->length = 0;
+                 continue;
+-            }
+-            /* datetime.timedelta is TIME */
+-            else if (PyDelta_Check(value)) {
++            } else if (PyDelta_Check(value)) {
+                 MYSQL_TIME *time = &pbind->buffer.t;
+-                time->hour = PyDateTime_TIME_GET_HOUR(value);
+-                time->minute = PyDateTime_TIME_GET_MINUTE(value);
+-                time->second = PyDateTime_TIME_GET_SECOND(value);
+-                if (PyDateTime_TIME_GET_MICROSECOND(value)) {
+-                    time->second_part = PyDateTime_TIME_GET_MICROSECOND(value);
++                long long seconds = (long long)PyDateTime_DELTA_GET_DAYS(value) * 86400
++                    + PyDateTime_DELTA_GET_SECONDS(value);
++                unsigned long microseconds = PyDateTime_DELTA_GET_MICROSECONDS(value);
++                time->neg = seconds < 0;
++                if (time->neg) {
++                    seconds = -seconds;
++                    if (microseconds) {
++                        seconds--;
++                        microseconds = 1000000 - microseconds;
++                    }
+                 }
+-                else {
+-                    time->second_part = 0;
+-                }
+-
++                time->day = (unsigned int)(seconds / 86400);
++                time->hour = (unsigned int)(seconds % 86400 / 3600);
++                time->minute = (unsigned int)(seconds % 3600 / 60);
++                time->second = (unsigned int)(seconds % 60);
++                time->second_part = microseconds;
++                time->time_type = MYSQL_TIMESTAMP_TIME;
+                 mbind->buffer_type = MYSQL_TYPE_TIME;
+                 mbind->buffer = time;
+-                mbind->is_null = (bool_ *)0;
+-                mbind->length = 0;
+                 continue;
+-            }
+-            /* DECIMAL */
+-            else if (is_decimal_instance(value)) {
++            } else if (is_decimal_instance(value)) {
+                 pbind->str_value = pytomy_decimal(value);
+-                mbind[i].buffer_type = MYSQL_TYPE_DECIMAL;
+-            }
+-            else {
+-                PyErr_Format(PyExc_ValueError, "Python type %s cannot be converted",
+-                             (value)->ob_type->tp_name);
++                mbind->buffer_type = MYSQL_TYPE_DECIMAL;
++            } else {
++                PyErr_Format(PyExc_ValueError, "Python type %s cannot be converted", Py_TYPE(value)->tp_name);
+                 goto cleanup;
+             }
+-
+-            if (!pbind->str_value) {
+-                PyErr_Format(PyExc_ValueError, "Failed converting Python '%s'",
+-                             (value)->ob_type->tp_name);
++            if (pbind->str_value == NULL) goto cleanup;
++            if (PyBytes_Check(pbind->str_value)) {
++                mbind->buffer = PyBytes_AsString(pbind->str_value);
++                mbind->buffer_length = (unsigned long)PyBytes_Size(pbind->str_value);
++            } else if (PyUnicode_Check(pbind->str_value)) {
++                Py_ssize_t length;
++                mbind->buffer = (void *)PyUnicode_AsUTF8AndSize(pbind->str_value, &length);
++                if (mbind->buffer == NULL) goto cleanup;
++                mbind->buffer_length = (unsigned long)length;
++            } else {
++                PyErr_SetString(PyExc_ValueError, "Failed to bind native query attribute");
+                 goto cleanup;
+             }
+-
+-            /* Some conversions could return None instead of raising errors */
+-            if (pbind->str_value == Py_None) {
+-                mbind->buffer = "NULL";
+-                mbind->buffer_type = MYSQL_TYPE_NULL;
+-                mbind->is_null = (bool_ *)0;
+-            }
+-            else if (PyBytes_Check(pbind->str_value)) {
+-                mbind->buffer = PyBytes_AsString(pbind->str_value);
+-                mbind->buffer_length = (unsigned long)PyBytes_Size(pbind->str_value);
+-                mbind->length = &mbind->buffer_length;
+-                mbind->is_null = (bool_ *)0;
+-            }
+-            else if (PyUnicode_Check(pbind->str_value)) {
+-                Py_ssize_t len;
+-                mbind->buffer = (char *)PyUnicode_AsUTF8AndSize(pbind->str_value, &len);
+-                mbind->buffer_length = (unsigned long)len;
+-                mbind->length = &mbind->buffer_length;
+-                mbind->is_null = (bool_ *)0;
+-            }
+-            else {
+-                PyErr_SetString(PyExc_ValueError, "Failed to bind query attribute");
+-                goto cleanup;
+-            }
+-        }
+-        int status;
+-        /* bind attributes */
+-        status = mysql_bind_param(&self->session, (int)size, mybinds, names);
+-        if (status) {
++            mbind->length = &mbind->buffer_length;
++        }
++        if (mysql_bind_param(&self->session, (unsigned int)size, mybinds, names)) {
+             PyErr_SetString(PyExc_ValueError, "Failed to bind query attributes");
+             goto cleanup;
+         }
+-    }
+-
++        bound = 1;
++    }
+     Py_BEGIN_ALLOW_THREADS
+     res = mysql_real_query(&self->session, stmt, stmt_length);
+     Py_END_ALLOW_THREADS
+-
+     if (res != 0) {
+         raise_with_session(&self->session, NULL);
+-        return NULL;
+-    }
+-
++        goto cleanup;
++    }
+     if ((&self->session)->field_count == 0) {
+-        Py_XDECREF(MySQL_reset_result(self));
++        PyObject *reset = MySQL_reset_result(self);
++        if (reset == NULL) goto cleanup;
++        Py_DECREF(reset);
+         self->have_result_set = Py_False;
+-        Py_RETURN_TRUE;
+-    }
+-
+-    if (raw_as_string) {
+-        self->raw_as_string = raw_as_string;
+-    }
+-
+-    if (buffered) {
+-        self->buffered = buffered;
+-    }
+-    else {
+-        self->buffered = self->buffered_at_connect;
+-    }
+-
+-    if (raw) {
+-        self->raw = raw;
+-    }
+-    else {
+-        self->raw = self->raw_at_connect;
+-    }
+-
++        retval = Py_True;
++        Py_INCREF(retval);
++        goto cleanup;
++    }
++    if (raw_as_string) self->raw_as_string = raw_as_string;
++    self->buffered = buffered ? buffered : self->buffered_at_connect;
++    self->raw = raw ? raw : self->raw_at_connect;
+     mysql_get_character_set_info(&self->session, &self->cs);
+     retval = MySQL_handle_result(self);
+-
+ cleanup:
+-    for (i = 0; i < size; i++) {
+-        switch (mybinds[i].buffer_type) {
+-            case MYSQL_TYPE_DECIMAL:
+-                Py_XDECREF(bindings[i].str_value);
+-                break;
+-            default:
+-                break;
+-        }
+-    }
+-    if (bindings != NULL)
++    /* Native bindings contain borrowed buffer pointers. Clear them before any
++       owned names/values are freed, including non-result and error replies. */
++    if (bound) mysql_bind_param(&self->session, 0, NULL, NULL);
++    if (bindings != NULL) {
++        for (i = 0; i < size; i++) {
++            Py_XDECREF(bindings[i].name_value);
++            Py_XDECREF(bindings[i].str_value);
++        }
+         free(bindings);
+-    if (mybinds != NULL)
+-        free(mybinds);
++    }
++    free(names);
++    free(mybinds);
+     return retval;
+ }
+ 
+--- a/src/include/mysql_capi.h
++++ b/src/include/mysql_capi.h
+@@ -247,9 +247,13 @@
+ 
+ struct MySQL_binding {
+     PyObject *str_value;
++    PyObject *name_value;
++    bool_ is_null;
+     union {
+         long long l;
++        unsigned long long u;
+         float f;
++        double d;
+         MYSQL_TIME t;
+     } buffer;
+ };
+--- a/src/mysql_connector.c
++++ b/src/mysql_connector.c
+@@ -347,5 +347,10 @@
+     Py_INCREF(&MySQLPrepStmtType);
+     PyModule_AddObject(mod, "MySQLPrepStmt", (PyObject *)&MySQLPrepStmtType);
+ 
++    if (PyModule_AddIntConstant(mod, "CDEADMIN_QUERY_ATTRIBUTES_ABI", 1) < 0) {
++        Py_DECREF(mod);
++        return MODULE_ERROR_VALUE;
++    }
++
+     return MODULE_SUCCESS_VALUE(mod);
+ }

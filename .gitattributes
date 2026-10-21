@@ -13,3 +13,6 @@ web/pgadmin/static/vendor/ddn/**/*.html whitespace=-blank-at-eol
 # uses CommonMark two-space hard line breaks and is verified by SHA-256.
 web/pgadmin/static/js/cdeadmin_ui/specifications/ai_discovery_zero_grey/*.md whitespace=-blank-at-eol
 web/pgadmin/static/js/cdeadmin_ui/specifications/ai_discovery_zero_grey/**/*.md whitespace=-blank-at-eol
+
+# Unified patches preserve a single context prefix on otherwise blank lines.
+tools/driver_patches/mysql-connector-python-26.7.0-query-attributes.patch whitespace=-blank-at-eol

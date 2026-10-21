@@ -6,6 +6,7 @@ foundationdb==7.3.77
 # ScratchRobin query use requires the patched same-version wheel; see
 # docs/en_US/mariadb_driver_development.rst (stock pin is for reference tooling).
 mariadb==1.1.14
+# Full native C attributes require tools/cdeadmin_build_mysql_driver.py; native setup applies the source correction.
 mysql-connector-python==26.7.0
 neo4j==6.3.0
 psycopg==3.3.4

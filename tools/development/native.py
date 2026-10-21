@@ -313,6 +313,16 @@ def stage(name, evidence):
         command([PYTHON, '-m', 'pip', 'install', '--no-deps',
                  '--force-reinstall', wheels[0]], env=env,
                 log=evidence / 'mariadb-python-install.log')
+        from native_assets import mysql_capi
+        mysql_build = Path(tempfile.mkdtemp(prefix='mysql-parent-', dir=evidence)) / 'build'
+        command([PYTHON, '-m', 'tools.cdeadmin_build_mysql_driver',
+                 '--archive', download('mysql-python'), '--mysql-capi', mysql_capi(),
+                 '--output', mysql_build], env=env, log=evidence / 'mysql-python-build.log')
+        mysql_wheels = list((mysql_build / 'wheels').glob('*.whl'))
+        if len(mysql_wheels) != 1:
+            raise RuntimeError('Expected one patched native MySQL connector wheel')
+        command([PYTHON, '-m', 'pip', 'install', '--no-deps', '--force-reinstall', mysql_wheels[0]],
+                env=env, log=evidence / 'mysql-python-install.log')
         parser_build = Path(tempfile.mkdtemp(prefix='pglast-parent-', dir=evidence)) / 'build'
         command([PYTHON, '-m', 'tools.cdeadmin_build_postgresql_parser',
                  '--archive', download('pglast'), '--library-archive', download('libpg-query'),

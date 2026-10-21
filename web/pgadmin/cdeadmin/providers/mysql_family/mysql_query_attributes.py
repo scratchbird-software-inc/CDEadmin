@@ -37,11 +37,19 @@ def decoded(value):
 
 
 class AttributeName(str):
-    """Keep the selected source-charset bytes through the pure SDK encoder."""
+    """Keep selected source-charset bytes through the native SDK encoders."""
     def __new__(cls,value,wire=None):
         result=super().__new__(cls,value);result.wire=wire
         return result
     def encode(self, *_args, **_kwargs):return self.wire if self.wire is not None else str(self).encode('utf8')
+
+
+def c_attributes_abi():
+    try:
+        import _mysql_connector
+    except ImportError:
+        return 0
+    return 1 if getattr(_mysql_connector, 'CDEADMIN_QUERY_ATTRIBUTES_ABI', None) == 1 else 0
 
 
 def packet(protocol, source, attributes):
@@ -82,10 +90,8 @@ class Scope:
             if self.values:raise AttributeAdmissionError('This MySQL client has no native query-attribute port')
             return
         if self.values:
-            if getattr(connection,'_cmysql',None) is not None and any(isinstance(value,datetime.timedelta) for value in self.values.values()):
-                raise AttributeAdmissionError('Connector/Python 26.7 C query attributes cannot safely encode TIME durations; select the pure connector for typed TIME attributes')
-            if getattr(connection,'_cmysql',None) is not None and any(type(value) is int and value>2**63-1 for value in self.values.values()):
-                raise AttributeAdmissionError('Connector/Python 26.7 C integer query attributes require signed 64-bit values; select the pure connector for unsigned integer attributes')
+            if getattr(connection,'_cmysql',None) is not None and c_attributes_abi() != 1:
+                raise AttributeAdmissionError('Native C query attributes require the corrected Connector/Python 26.7 extension; build it with cdeadmin_build_mysql_driver')
             from mysql.connector.constants import ClientFlag
             flags=getattr(connection,'client_flags',0);handshake=getattr(connection,'_handshake',{}) or {}
             native_flags=getattr(getattr(connection,'_cmysql',None),'st_client_flag',None)
@@ -135,8 +141,6 @@ class Scope:
         try:
             for name,value in self.values.items():
                 native_name=name.encode(codec(charset))
-                if getattr(connection,'_cmysql',None) is not None and native_name!=name.encode('utf8'):
-                    raise AttributeAdmissionError('Connector/Python 26.7 C attribute names require matching UTF-8 source bytes; select the pure connector for names in another character set')
                 if isinstance(value,str):value=value.encode(codec(charset))
                 connection.query_attrs_append((AttributeName(name,native_name),value))
             if self.send_override:packet(connection._protocol,b'',connection.query_attrs)

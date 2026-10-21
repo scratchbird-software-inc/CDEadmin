@@ -154,10 +154,12 @@ MySQL
   Native per-query attributes now have editor inputs, scoped native execution,
   retained private script policies and installed runtime-UDF completion. The
   pure connector corrects NULL metadata and negative TIME framing. Connector26.7
-  C still needs native fixes for TIME durations, unsigned attributes above
-  signed 64-bit range and names whose current source bytes differ from UTF-8;
-  these cases refuse dispatch rather than silently changing values or names.
-  These are beta driver gaps, separate from closed-source Enterprise scope.
+  C attribute execution now requires the corrected native extension built from
+  pinned source with the matching SDK. The native patch covers TIME durations,
+  unsigned64, source-charset names, float64 and binding ownership. Native runtime
+  receipts and platform acceptance qualify their recorded scope; stock C builds
+  are refused before attribute dispatch. These corrections remain beta work,
+  separate from closed-source Enterprise scope.
   All six Community ALTER INSTANCE actions now have reviewed owned-connection
   workflows, native key rotation and redo-state receipts, TLS main/admin and
   rollback options, changed-state refusal and explicit native ACK handling.

@@ -231,10 +231,16 @@ installed runtime UDFs appear in predictive metadata. The component's own string
 UDF uses a bounded C string, so its NUL/truncation behavior is not a binary
 roundtrip guarantee.
 
-The pinned C connector cannot safely bind TIME durations, unsigned integers above
-signed 64-bit range, or attribute names whose source-charset bytes differ from
-UTF-8. These cases are explicitly refused before dispatch and remain beta driver
-gaps; the pure connector supports them. They are not Enterprise deferrals.
+Native C query attributes require the source correction built by
+``tools/cdeadmin_build_mysql_driver.py`` against the matching MySQL 9.7.0 SDK.
+The corrected extension exposes an ABI marker and keeps TIME duration signs and
+microseconds, unsigned 64-bit integers, source-charset names, float64 precision,
+exact decimals and NULL values in the native C binding path. It clears native
+binding pointers and releases owned names/values on result, non-result and error
+returns. A stock extension is refused before attribute dispatch; ordinary C
+queries remain available. Native development setup builds this extension from
+the pinned official source and verifies its marker. Platform qualification
+remains separately owned; the marker alone is not runtime evidence.
 Run the owned qualifier independently with and without ``--use-c``:
 ``tools/cdeadmin_mysql_query_attributes_qualification.py --output <outside-repo>
 --application``. Optional browser and driver paths qualify the built editor.
