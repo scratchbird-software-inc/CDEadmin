@@ -65,6 +65,7 @@ def native():
     value.acknowledgements = deque(maxlen=100)
     value.acknowledgement_count = 0
     value.owned_slots = {'original'}
+    value.owned_slot_kinds = {'original': 'logical'}
     return value
 
 
@@ -130,3 +131,60 @@ def test_cancelled_before_dispatch_does_not_invalidate_the_held_native_snapshot(
         value.command(reviewed, Mock(), dispatching=Mock(side_effect=TemporarySlotError('cancelled before dispatch')))
     cursor.execute.assert_not_called()
     assert value.usable and value.snapshot == before and value.owned_slots == {'original'}
+
+
+@pytest.mark.parametrize('fields', [
+    {'start_lsn': '0/0;SQL'}, {'start_lsn': '100000000/0'}, {'start_lsn': None},
+    {'acknowledge_flush': 1}, {'max_messages': 0}, {'max_capture_bytes': True},
+    {'max_duration_seconds': -1}, {'plugin_options': {}},
+    {'plugin_options': [{'name': 'x', 'value': 'x', 'secret': True}]},
+    {'plugin_options': [{'name': 'embedded"quote', 'value': 'x'}]},
+    {'plugin_options': [{'name': 'x', 'value': 'nul\0'}]},
+    {'plugin_options': [{'name': '\ud800', 'value': 'x'}]},
+])
+def test_stream_admission_preserves_native_lsn_switches_and_option_grammar(fields):
+    with pytest.raises(TemporarySlotError):
+        options('logical_stream', {'slot': 'original', **fields})
+
+
+def test_stream_review_requires_current_logical_ownership_and_explicit_export_invalidation():
+    value = native()
+    with pytest.raises(TemporarySlotError, match='invalidation'):
+        value.review('logical_stream', {'slot': 'original'})
+    selected = {'slot': 'original', 'invalidate_snapshot': True, 'acknowledge_flush': True,
+                'start_lsn': 'a/ff', 'max_messages': None, 'max_capture_bytes': None,
+                'max_duration_seconds': None, 'plugin_options': [{'name': 'include-xids', 'value': '0'}]}
+    reviewed = value.review('logical_stream', selected)
+    assert reviewed['options']['start_lsn'] == 'A/FF' and value.snapshot is not None
+    value.owned_slot_kinds['original'] = 'physical'
+    with pytest.raises(TemporarySlotError, match='logical temporary slot'):
+        value.review('logical_stream', selected)
+
+
+def test_stream_ack_is_recorded_before_artifact_publication_failure_without_fabricating_new_slot():
+    value = native()
+    reviewed = value.review('logical_stream', {'slot': 'original', 'invalidate_snapshot': True})
+    acknowledged = []
+    def capture(_connection, _selected, acknowledge, dispatching):
+        dispatching()
+        acknowledge({'messages': '3', 'native_command_completions': 2})
+        raise OSError('owned publication failure after native completion')
+    value.stream_capture = capture
+    with pytest.raises(OSError):
+        value.command(reviewed, acknowledged.append)
+    assert acknowledged[0]['capture']['native_command_completions'] == 2
+    assert value.acknowledgement_count == 1 and value.owned_slots == {'original'}
+    assert value.owned_slot_kinds == {'original': 'logical'}
+    assert value.snapshot is None and not value.usable
+
+
+def test_stream_artifact_refusal_before_dispatch_keeps_original_snapshot_and_backend():
+    value = native()
+    before = value.snapshot.copy()
+    reviewed = value.review('logical_stream', {'slot': 'original', 'invalidate_snapshot': True})
+    value.stream_capture = Mock(side_effect=OSError('owned artifact directory unavailable'))
+    dispatching = Mock()
+    with pytest.raises(OSError):
+        value.command(reviewed, Mock(), dispatching=dispatching)
+    dispatching.assert_not_called()
+    assert value.snapshot == before and value.usable

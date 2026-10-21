@@ -1,6 +1,8 @@
 """Authenticated original-backend replication slots without SQL admission."""
 import hashlib
+import os
 from pathlib import Path
+import time
 
 from ..operations.store import JsonOperationStore
 from ..providers.postgresql.replication_admission import registered
@@ -136,6 +138,33 @@ def action(service, server, operation, request):
     resource = jobs.load(fields.get('resource_id'), owner, endpoint)
     commands = jobs.commands(resource)
     remaining = {key: value for key, value in fields.items() if key != 'resource_id'}
+    if operation in {'stream_preview', 'stream_reconcile', 'stream_remove'}:
+        from . import postgresql_replication_stream as stream
+        allowed = {'job_id', 'offset', 'limit'} if operation == 'stream_preview' else {'job_id', 'confirmation'} if operation == 'stream_remove' else {'job_id'}
+        if set(remaining) - allowed or 'job_id' not in remaining:
+            raise TemporarySlotError('Select one owned native replication capture')
+        child = commands.load(remaining['job_id'], owner, endpoint)
+        if child['options']['operation'] != 'logical_stream':
+            raise TemporarySlotError('Select an original-backend logical stream command')
+        if operation == 'stream_preview':
+            return stream.preview(commands, child, remaining)
+        if operation == 'stream_reconcile':
+            return stream.reconcile(commands, child)
+        if set(remaining) != {'job_id', 'confirmation'} or remaining['confirmation'] != child['job_id']:
+            raise TemporarySlotError('Confirm removal of this owned native replication capture')
+        with stream.artifact_lock(commands, child) as current:
+            if current.get('artifact_removed'):
+                return commands.public(commands.observed(current))
+            if stream.commands_running(commands, current):
+                raise TemporarySlotError('Wait for the original replication writer to stop')
+            with stream.payload(commands, current) as source:
+                before = stream.file_identity(os.fstat(source.fileno()))
+            path = commands.directory(current) / current['protocol_stream_artifact']['filename']
+            if stream.file_identity(path.lstat()) != before:
+                raise TemporarySlotError('Native replication bytes changed before removal')
+            path.unlink()
+            commands.update(current, artifact_removed=True, artifact_removed_at=time.time())
+        return commands.public(commands.observed(commands.load(child['job_id'], owner, endpoint)))
     if operation in {'inventory', 'command_review', 'command_start'} and resource['program'] != program():
         raise TemporarySlotError('The retained replication adapter changed; release it before opening another resource')
     if operation in {'command_review', 'command_start'} and resource['source'].get('provider_isolation_key') != list(artifact_context(server).isolation_key):
@@ -164,3 +193,30 @@ def action(service, server, operation, request):
             raise TemporarySlotError('Application policy requires a bounded replication command deadline')
         return jobs.queue_review(resource['job_id'], owner, endpoint, remaining['operation'], selected)
     raise TemporarySlotError('Temporary replication resource action is unavailable')
+
+
+def stream_download(service, server, request):
+    from flask import send_file
+    from . import postgresql_replication_stream as stream
+    if not isinstance(request, dict) or set(request) != {'database_target_id', 'resource_id', 'job_id'}:
+        raise TemporarySlotError('Select one owned original-backend native replication capture')
+    jobs, owner, endpoint = manager(service, server, request['database_target_id'])
+    resource = jobs.load(request['resource_id'], owner, endpoint)
+    commands = jobs.commands(resource)
+    child = commands.load(request['job_id'], owner, endpoint)
+    opened = stream.payload(commands, child)
+    source = opened.__enter__()
+    artifact = child['protocol_stream_artifact']
+    try:
+        response = send_file(source, mimetype='application/x-ndjson', as_attachment=True,
+            download_name=artifact['filename'], conditional=False, max_age=0)
+        response.content_length = int(artifact['artifact_bytes'])
+        response.direct_passthrough = False
+        response.headers.update({'Cache-Control': 'no-store, private', 'X-Content-Type-Options': 'nosniff',
+            'X-Content-SHA256': artifact['sha256'],
+            'X-Export-Completeness': 'verified-capture' if artifact['state'] == 'verified' else 'incomplete'})
+        response.call_on_close(lambda: opened.__exit__(None, None, None))
+        return response
+    except BaseException:
+        opened.__exit__(None, None, None)
+        raise

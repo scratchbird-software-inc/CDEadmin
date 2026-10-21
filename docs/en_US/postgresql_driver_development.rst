@@ -113,7 +113,7 @@ ends this owner rather than reconnecting or recreating its temporary state.
 An exported snapshot requires that original connection and expires on its next
 native command or termination. Status, reviews, acknowledgement pages and viewer
 reloads send no native command. Another command requires explicit confirmation
-to invalidate the current snapshot. Recent acknowledgements are bounded to100;
+to invalidate the current snapshot. Recent acknowledgements are bounded to 100;
 complete command receipts have their own paging. Neither is a SQL slot catalog
 or a current health check. Viewer close does not release the resource; confirmed
 release and its configured lifetime do. Native command acknowledgement, local
@@ -126,6 +126,41 @@ independent observer after idle/status reads, provider/database isolation,
 foreign-name protection, native errors, release and offline receipts. Optional
 ``--browser-binary`` and ``--driver-binary`` exercise the production controls and
 retention across viewer reload. Evidence belongs outside source. The owning
-remaining-work matrix keeps retained logical streaming, native SNAPSHOT USE and
-application snapshot-consumption/initial-copy workflows open; the snapshot
+remaining-work matrix keeps native SNAPSHOT USE and application
+snapshot-consumption/initial-copy workflows open; the snapshot
 consumer in the qualification tool is independent test evidence.
+
+The same retained resource can capture an acknowledged logical temporary slot
+through native START_REPLICATION / COPY BOTH. Native plugin options and the
+requested start LSN are reviewed with optional message, artifact-byte and
+duration bounds. A bound can split a native transaction and does not establish
+a complete WAL archive. Exact XLogData frames are stored as base64 JSONL records
+in private storage; preview is bounded, download preserves every captured byte,
+and stopped captures have explicit inspection and confirmed removal controls.
+
+Flush feedback is disabled by default. When explicitly selected, feedback
+advances only to data-start positions from frames already flushed and fsynced.
+Server WAL-end hints never advance it, and the application apply position stays
+zero. A locally sent feedback message does not establish a current server flush
+checkpoint. Native completion requires both CommandComplete responses and the
+final idle protocol boundary. It is saved before artifact publication, separately
+from durable bytes, later publication failures and inspected partial captures.
+The original backend remains usable after a successful bounded capture;
+cancellation, native error or uncertain publication ends the owner. Neither a
+capture nor its inspection automatically replays a stream or recreates a slot.
+
+The native qualification also exercises original-backend streaming, default and
+selected flush feedback, exact delivery/preview, byte bounds, cancellation and
+publication failure. Its browser path captures and previews a temporary logical
+stream after retaining a snapshot across reload. These receipts qualify their
+recorded plugin and installation; installed output plugins need their own native
+payload/language acceptance.
+
+The pinned server can terminate a later START_REPLICATION immediately after an
+earlier logical stream on the same backend. Its source resets the stream-end
+flags in physical startup but not in logical startup. A clean native end is
+recorded as ``native_stream_end`` with its actual frames and both native command
+completions; it is never represented as a reached client bound or caught-up
+checkpoint. ScratchRobin does not issue hidden physical commands, reconnect or
+recreate a temporary slot to work around that native behavior. A continuously
+retained first stream can use no local capture bounds under application policy.

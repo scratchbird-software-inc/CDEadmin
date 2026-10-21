@@ -1,6 +1,7 @@
 """Original replication backend, exported snapshots and authenticated receipts."""
 import argparse
 import builtins
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -39,6 +40,8 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
              'web/pgadmin/cdeadmin/providers/postgresql/replication_temporary_slots.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_replication_temporary_jobs.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_replication_temporary_service.py',
+             'web/pgadmin/cdeadmin/workspace/postgresql_replication_stream.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/replication_stream_options.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_temporary_slot_jobs.py',
              'web/pgadmin/cdeadmin/workspace/service.py',
              'web/pgadmin/browser/server_groups/servers/__init__.py',
@@ -225,10 +228,115 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                     assert len(connections) == before
                     proof['checks'].append('explicit-release-invalidates-native-export-and-offline-receipts-do-not-reconnect')
                     observer.execute("SELECT pg_drop_replication_slot('sr_reused')")
+                    streamed = open_resource(); stream_id = streamed['job_id']
+                    run(stream_id, 'logical_create', {'slot': 'sr_stream', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
+                    observer.execute('INSERT INTO snapshot_rows VALUES(3)')
+                    before_flush = observer.execute("SELECT confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name='sr_stream'").fetchone()[0]
+                    def captured(value):
+                        artifact = value['protocol_stream_artifact']
+                        response = client.post(url, data={'action': 'postgresql_replication_temporary_stream_download',
+                            'payload': json.dumps({'database_target_id': target, 'resource_id': stream_id, 'job_id': value['job_id']})})
+                        assert response.status_code == 200 and response.mimetype == 'application/x-ndjson'
+                        raw = response.data
+                        response.close()
+                        assert hashlib.sha256(raw).hexdigest() == artifact['sha256']
+                        return [base64.b64decode(json.loads(line)['wire_base64'], validate=True) for line in raw.splitlines()]
+                    selected = {'slot': 'sr_stream', 'max_messages': 3, 'max_duration_seconds': 3,
+                                'plugin_options': [{'name': 'include-xids', 'value': '0'}]}
+                    first = run(stream_id, 'logical_stream', selected)
+                    assert first['state'] == 'completed' and first['native_command_acknowledged']
+                    frames = captured(first)
+                    assert len(frames) == 3 and all(frame[:1] == b'w' for frame in frames)
+                    assert any(b'snapshot_rows' in frame[25:] and b'id[integer]:3' in frame[25:] for frame in frames)
+                    assert first['native_acknowledgement']['capture']['native_command_completions'] == 2
+                    assert observer.execute("SELECT confirmed_flush_lsn::text,active_pid::text FROM pg_replication_slots WHERE slot_name='sr_stream'").fetchone() == (before_flush, streamed['backend_pid'])
+                    repeated = run(stream_id, 'logical_stream', selected)
+                    assert captured(repeated) == []
+                    assert repeated['protocol_stream_artifact']['stop_reason'] == 'native_stream_end'
+                    proof['checks'].append('original-backend-COPY-BOTH-native-frame-capture-and-two-command-completions-without-replay-or-default-flush-advance')
+                    http('release', job_id=stream_id, confirmation=stream_id)
+                    wait_resource(stream_id, lambda value: value.get('worker_io_closed'))
+                    streamed = open_resource(); stream_id = streamed['job_id']
+                    run(stream_id, 'logical_create', {'slot': 'sr_stream_flush', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
+                    observer.execute('INSERT INTO snapshot_rows VALUES(4)')
+                    selected['slot'] = 'sr_stream_flush'
+                    flushed = run(stream_id, 'logical_stream', {**selected, 'acknowledge_flush': True})
+                    flush_frames = captured(flushed)
+                    receipt = flushed['native_acknowledgement']['capture']
+                    positions = [int.from_bytes(frame[1:9], 'big') for frame in flush_frames]
+                    maximum = max(positions)
+                    assert receipt['last_sent_flush_lsn'] == f'{maximum >> 32:X}/{maximum & 0xffffffff:X}'
+                    assert receipt['last_sent_flush_lsn'] == receipt['last_durable_data_start_lsn'] and receipt['application_apply_lsn'] == '0/0'
+                    assert observer.execute("SELECT confirmed_flush_lsn >= %s::pg_lsn FROM pg_replication_slots WHERE slot_name='sr_stream_flush'", (receipt['last_sent_flush_lsn'],)).fetchone() == (True,)
+                    preview = http('stream_preview', resource_id=stream_id, job_id=flushed['job_id'], offset='0', limit=1)
+                    assert base64.b64decode(preview['rows'][0]['payload_base64']) == flush_frames[0][25:25 + 3072]
+                    assert preview['next_offset']
+                    next_page = http('stream_preview', resource_id=stream_id, job_id=flushed['job_id'], offset=preview['next_offset'], limit=1)
+                    assert base64.b64decode(next_page['rows'][0]['payload_base64']) == flush_frames[1][25:25 + 3072]
+                    refused = client.post(url + '?database_target_id=postgresql-database:1', data={
+                        'action': 'postgresql_replication_temporary_stream_download',
+                        'payload': json.dumps({'database_target_id': target, 'resource_id': stream_id, 'job_id': flushed['job_id']})})
+                    assert refused.status_code == 400
+                    http('release', job_id=stream_id, confirmation=stream_id)
+                    wait_resource(stream_id, lambda value: value.get('worker_io_closed'))
+                    streamed = open_resource(); stream_id = streamed['job_id']
+                    run(stream_id, 'logical_create', {'slot': 'sr_stream_bounds', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
+                    observer.execute('INSERT INTO snapshot_rows VALUES(5)')
+                    selected['slot'] = 'sr_stream_bounds'
+                    bounded = run(stream_id, 'logical_stream', {**selected, 'max_capture_bytes': 1})
+                    assert bounded['protocol_stream_artifact']['messages'] == '0'
+                    assert bounded['protocol_stream_artifact']['stop_reason'] == 'byte_bound_before_frame'
+                    assert captured(bounded) == []
+                    http('stream_remove', resource_id=stream_id, job_id=bounded['job_id'], confirmation='not-this-capture', refused=True)
+                    removed = http('stream_remove', resource_id=stream_id, job_id=bounded['job_id'], confirmation=bounded['job_id'])
+                    assert removed['artifact_removed']
+                    assert http('stream_remove', resource_id=stream_id, job_id=bounded['job_id'], confirmation=bounded['job_id'])['artifact_removed']
+                    http('stream_preview', resource_id=stream_id, job_id=bounded['job_id'], offset='0', limit=1, refused=True)
+                    http('release', job_id=stream_id, confirmation=stream_id)
+                    wait_resource(stream_id, lambda value: value.get('worker_io_closed'))
+                    proof['checks'].append('fsynced-only-flush-feedback-native-checkpoint-observation-byte-bound-exact-download-and-paged-preview')
+                    publication = open_resource(); publication_id = publication['job_id']
+                    run(publication_id, 'logical_create', {'slot': 'sr_stream_publication', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
+                    observer.execute('INSERT INTO snapshot_rows VALUES(6)')
+                    with patch('pgadmin.cdeadmin.workspace.postgresql_replication_stream.durable_replace', side_effect=OSError('owned publication failure')):
+                        interrupted = run(publication_id, 'logical_stream', {'slot': 'sr_stream_publication', 'max_messages': 3})
+                    assert interrupted['state'] == 'unknown' and interrupted['native_command_acknowledged']
+                    wait_resource(publication_id, lambda value: value.get('worker_io_closed'))
+                    connections_before = len(connections)
+                    inspected = http('stream_reconcile', resource_id=publication_id, job_id=interrupted['job_id'])
+                    assert inspected['state'] == 'unknown' and inspected['protocol_stream_artifact']['state'] == 'verified'
+                    assert len(connections) == connections_before
+                    proof['checks'].append('stream-native-ack-survives-publication-failure-and-offline-inspection-never-promotes-outcome-or-replays')
+                    cancelled = open_resource(); cancelled_id = cancelled['job_id']
+                    run(cancelled_id, 'logical_create', {'slot': 'sr_stream_cancel', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
+                    queued = http('command_review', resource_id=cancelled_id, operation='logical_stream', options={
+                        'slot': 'sr_stream_cancel', 'max_messages': None, 'max_duration_seconds': None, 'max_capture_bytes': None})
+                    reviewed = wait_child(cancelled_id, queued['job_id'], {'reviewed'})
+                    http('command_start', resource_id=cancelled_id, job_id=reviewed['job_id'], review_digest=reviewed['review_digest'], confirmed=True)
+                    deadline = time.monotonic() + 10
+                    while True:
+                        running = http('command_status', resource_id=cancelled_id, job_id=reviewed['job_id'])
+                        if running['state'] == 'active' and running.get('native_dispatch_admitted'):
+                            break
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    http('command_cancel', resource_id=cancelled_id, job_id=reviewed['job_id'])
+                    stopped = wait_child(cancelled_id, reviewed['job_id'], {'failed', 'unknown'})
+                    assert not stopped.get('native_command_acknowledged')
+                    wait_resource(cancelled_id, lambda value: value.get('worker_io_closed'))
+                    inspected = http('stream_reconcile', resource_id=cancelled_id, job_id=stopped['job_id'])
+                    assert inspected['protocol_stream_artifact']['state'] == 'partial'
+                    assert not inspected.get('native_command_acknowledged')
+                    deadline = time.monotonic() + 10
+                    while int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_stream_cancel'").fetchone()[0]):
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    proof['checks'].append('native-stream-cancellation-closes-original-owner-and-partial-bytes-never-establish-command-completion')
                     if browser_binary:
+                        observer.execute('TRUNCATE snapshot_rows')
+                        observer.execute('INSERT INTO snapshot_rows VALUES(1),(2)')
                         proof['browser'] = qualify_browser(app, output, browser_binary, driver_binary, sid,
                             secret, database, lambda identity: http('status', job_id=identity),
-                            lambda snapshot: import_snapshot(snapshot, [(1,), (2,)]))
+                            lambda snapshot: import_snapshot(snapshot, [(1,), (2,)]),
+                            lambda: observer.execute('INSERT INTO snapshot_rows VALUES(4)'))
                     proof['application_connections'] = connections
                     proof['native_protocol_command_kinds'] = protocol_commands
         proof['owned_server_stopped'] = owned['owned_server_stopped']
@@ -238,7 +346,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
         closed = [manager.close(timeout=10) for manager in managers.values()]
         proof['owned_workers_closed'] = all(closed)
         proof['complete'] = bool(flow_finished and proof.get('owned_server_stopped') and
-                                 proof.get('owned_workers_closed') and len(proof['checks']) == 7)
+                                 proof.get('owned_workers_closed') and len(proof['checks']) == 11)
         (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
     proof['owned_server_stopped'] = owned['owned_server_stopped']
     proof['complete'] &= proof['owned_server_stopped']
@@ -247,7 +355,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
     return proof
 
 
-def qualify_browser(app, output, binary, driver_binary, sid, password, database, resource_status, import_snapshot):
+def qualify_browser(app, output, binary, driver_binary, sid, password, database, resource_status, import_snapshot, produce_changes):
     import re
     import threading
     from selenium import webdriver
@@ -335,6 +443,20 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         time.sleep(6)
         assert resource_status(resource)['ready']
         import_snapshot(exported)
+        produce_changes()
+        control('Retained replication command').click()
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="option"]')
+            if node.is_displayed() and node.text.strip() == 'Capture original temporary logical stream'), None)).click()
+        control('Exact retained replication slot').send_keys('sr_ui_export')
+        count = control('Retained stream maximum messages'); count.clear(); count.send_keys('3')
+        control('Allow invalidation of the current exported snapshot').click()
+        button('Review retained replication command')
+        wait.until(lambda browser: 'Confirm retained replication command' in browser.find_element(By.TAG_NAME, 'body').text)
+        control('Confirm retained replication command').click(); button('Run reviewed replication command')
+        button('Preview original replication frames')
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR,
+            '[aria-label="Original replication frame preview"]') if node.is_displayed() and 'payload_base64' in node.text), None))
+        driver.save_screenshot(str(output / 'replication-stream-preview.png'))
         control('Release this replication backend and snapshot').click(); button('Release retained replication resource')
         wait.until(lambda browser: 'Local replication connection close returned.' in browser.find_element(By.TAG_NAME, 'body').text)
         deadline = time.monotonic() + 15
@@ -345,6 +467,7 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         result.update(complete=True, browser_version=driver.capabilities['browserVersion'],
             driver_version=driver.capabilities.get('chrome', {}).get('chromedriverVersion'),
             original_backend_preserved_after_reload=True, native_snapshot_import_verified=True,
+            original_backend_stream_captured_and_previewed=True,
             explicit_release_completed=True, sql_bootstrap_performed=False)
     finally:
         if driver is not None:

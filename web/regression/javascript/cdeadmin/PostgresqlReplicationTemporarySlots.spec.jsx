@@ -1,6 +1,8 @@
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import PostgresqlReplicationTemporarySlots from 'sources/Dialogs/PostgresqlReplicationTemporarySlots';
 import {withTheme} from '../fake_theme';
+import {startBrowserFileDownload} from 'sources/Dialogs/browserFileDownload';
+jest.mock('sources/Dialogs/browserFileDownload',() => ({startBrowserFileDownload:jest.fn(() => jest.fn())}));
 
 const Component=withTheme(PostgresqlReplicationTemporarySlots);
 const database='Native DB ü \'',target='postgresql-replication-database:4e617469766520444220c3bc2027';
@@ -24,8 +26,8 @@ function api() {
   });
 }
 
-async function open(post) {
-  render(<Component post={post} />);
+async function open(post,extra={}) {
+  render(<Component post={post} {...extra} />);
   fireEvent.click(screen.getByText('Temporary replication slots and exported snapshots'));
   fireEvent.click(screen.getByText('Registered replication credentials'));
   fireEvent.change(screen.getByLabelText('Temporary replication password'),{target:{value:'private-native-password'}});
@@ -76,4 +78,30 @@ it('selects only the native replication database scope and lists retained receip
   expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_scope',request:{replication_access:{}}});
   expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_list',request:{database_target_id:target,offset:0,limit:25}});
   expect(post.mock.calls.some(([request]) => request.action.endsWith('_start'))).toBe(false);
+});
+
+it('reviews native stream feedback explicitly and keeps capture preview and delivery on the original resource',async () => {
+  const base=api();let selected=command;
+  const post=jest.fn(payload => {
+    if(payload.action.endsWith('_command_review')){selected={...command,options:{operation:payload.request.operation,native_options:payload.request.options}};return Promise.resolve(selected);}
+    if(payload.action.endsWith('_command_start')){selected={...selected,state:'completed',worker_io_closed:true,native_command_acknowledged:true,protocol_stream_artifact:{state:'verified'}};return Promise.resolve(selected);}
+    if(payload.action.endsWith('_stream_preview'))return Promise.resolve({rows:[{start_lsn:'0/1234',payload_base64:'bmF0aXZl'}],next_offset:null});
+    return base(payload);
+  });
+  await open(post,{endpointUrl:'/owned-server/workspace'});
+  fireEvent.change(screen.getByLabelText('Retained replication command').parentElement.querySelector('input'),{target:{value:'logical_stream'}});
+  fireEvent.change(screen.getByLabelText('Exact retained replication slot'),{target:{value:'sr_stream'}});
+  expect(screen.getByLabelText('Acknowledge fsynced output to the native slot')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Acknowledge fsynced output to the native slot'));
+  fireEvent.change(screen.getByLabelText('Native logical stream plugin options (JSON)'),{target:{value:'[{"name":"include-xids","value":"0"}]'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review retained replication command'}));
+  await screen.findByRole('button',{name:'Run reviewed replication command'});
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'logical_stream',options:{slot:'sr_stream',timeout_seconds:30,invalidate_snapshot:false,start_lsn:'0/0',max_messages:100,max_capture_bytes:16777216,max_duration_seconds:5,acknowledge_flush:true,plugin_options:[{name:'include-xids',value:'0'}]}}});
+  fireEvent.click(screen.getByLabelText('Confirm retained replication command'));
+  fireEvent.click(screen.getByRole('button',{name:'Run reviewed replication command'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Preview original replication frames'}));
+  await screen.findByLabelText('Original replication frame preview');
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_stream_preview',request:{database_target_id:target,resource_id:'resource',job_id:'command',offset:'0',limit:25}});
+  fireEvent.click(screen.getByRole('button',{name:'Download original replication frames'}));
+  expect(startBrowserFileDownload).toHaveBeenCalledWith('/owned-server/workspace',{database_target_id:target,resource_id:'resource',job_id:'command'},expect.objectContaining({action:'postgresql_replication_temporary_stream_download'}));
 });

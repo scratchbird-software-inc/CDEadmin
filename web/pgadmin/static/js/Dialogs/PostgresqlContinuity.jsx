@@ -126,7 +126,7 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
     <FormReference formKey="postgresql-continuity" />
     <PostgresqlTemporarySlots post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} />
     <PostgresqlLogicalStream post={post} databaseTargetId={databaseTargetId} endpointUrl={endpointUrl} />
-    {!databaseTargetId && <PostgresqlReplicationTemporarySlots post={post} />}
+    {!databaseTargetId && <PostgresqlReplicationTemporarySlots post={post} endpointUrl={endpointUrl} />}
     <Alert severity="info">Physical backups include the whole PostgreSQL cluster. Files and native tools run on the application host. Verification checks the recorded scope; a recovery drill is required to demonstrate recovery.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

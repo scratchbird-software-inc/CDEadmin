@@ -14,13 +14,16 @@ from .temporary_slots import TemporarySlotError, name
 
 
 def options(operation, value):
-    if not isinstance(value, dict) or not isinstance(operation, str) or operation not in {'physical_create', 'logical_create', 'drop'}:
+    if not isinstance(value, dict) or not isinstance(operation, str) or operation not in {'physical_create', 'logical_create', 'drop', 'logical_stream'}:
         raise TemporarySlotError('Select a native temporary replication command')
     allowed = {'slot', 'timeout_seconds', 'invalidate_snapshot'}
     if operation == 'physical_create':
         allowed.add('reserve_wal')
     if operation == 'logical_create':
         allowed.update(('plugin', 'two_phase', 'failover', 'snapshot'))
+    if operation == 'logical_stream':
+        allowed.update(('start_lsn', 'plugin_options', 'max_messages', 'max_capture_bytes',
+                        'max_duration_seconds', 'acknowledge_flush'))
     if set(value) - allowed:
         raise TemporarySlotError('Select exact native temporary replication options')
     result = {'slot': name(value.get('slot')), 'timeout_seconds': value.get('timeout_seconds', 30),
@@ -39,11 +42,15 @@ def options(operation, value):
         except UnicodeError:
             valid = False
         if not valid:
-            raise TemporarySlotError('Select an exact UTF8 native output plugin of at most63 bytes')
+            raise TemporarySlotError('Select an exact UTF8 native output plugin of at most 63 bytes')
         if '"' in plugin:
-            raise TemporarySlotError('The pinned18.3 replication parser cannot represent an embedded plugin quote; use the native SQL slot workflow')
+            raise TemporarySlotError('The pinned 18.3 replication parser cannot represent an embedded plugin quote; use the native SQL slot workflow')
         if not isinstance(result['snapshot'], str) or result['snapshot'] not in {'export', 'nothing'}:
             raise TemporarySlotError('Select native snapshot export or no snapshot; use requires a separate owned transaction workflow')
+    if operation == 'logical_stream':
+        from .replication_stream_options import options as stream_options
+        result.update(stream_options({key: item for key, item in value.items()
+                                      if key not in {'slot', 'timeout_seconds', 'invalidate_snapshot'}}))
     for key in ('invalidate_snapshot', 'reserve_wal', 'two_phase', 'failover'):
         if key in result and type(result[key]) is not bool:
             raise TemporarySlotError('Native temporary replication switches require booleans')
@@ -78,6 +85,7 @@ class ReplicationTemporarySlots:
         self.acknowledgements = deque(maxlen=100)
         self.acknowledgement_count = 0
         self.owned_slots = set()
+        self.owned_slot_kinds = {}
         self.snapshot = None
         self.require_idle()
         if connection.info.server_version != 180003:
@@ -129,6 +137,8 @@ class ReplicationTemporarySlots:
             raise TemporarySlotError('Confirm invalidation of the current exported snapshot before another native command')
         if operation == 'drop' and selected['slot'] not in self.owned_slots:
             raise TemporarySlotError('Only a temporary slot acknowledged on this original backend can be dropped')
+        if operation == 'logical_stream' and self.owned_slot_kinds.get(selected['slot']) != 'logical':
+            raise TemporarySlotError('Select a logical temporary slot acknowledged on this original backend')
         return {'operation': operation, 'options': selected, 'resource_id': self.resource_id,
                 'backend_pid': self.backend_pid, 'source': deepcopy(self.source),
                 'snapshot_before': deepcopy(self.snapshot), 'acknowledgement_count': self.acknowledgement_count,
@@ -142,7 +152,34 @@ class ReplicationTemporarySlots:
         selected, operation = reviewed['options'], reviewed['operation']
         native_attempted = False
         close_required = False
+        def record(result):
+            self.acknowledgements.append(deepcopy(result))
+            self.acknowledgement_count += 1
+            if operation == 'drop':
+                self.owned_slots.remove(selected['slot'])
+                self.owned_slot_kinds.pop(selected['slot'], None)
+            elif operation.endswith('_create'):
+                self.owned_slots.add(selected['slot'])
+                self.owned_slot_kinds[selected['slot']] = operation.removesuffix('_create')
+            acknowledge(result)
         try:
+            if operation == 'logical_stream':
+                def stream_starting():
+                    nonlocal native_attempted
+                    if dispatching is not None:
+                        dispatching()
+                    self.snapshot = None
+                    native_attempted = True
+                def stream_acknowledged(capture):
+                    nonlocal result
+                    result = {'resource_id': self.resource_id, 'backend_pid': self.backend_pid,
+                              'slot': selected['slot'], 'operation': operation, 'temporary': True,
+                              'native_command_returned': True, 'capture': capture,
+                              'snapshot': None, 'slot_catalog_observed': False}
+                    record(result)
+                artifact = self.stream_capture(self.connection, selected, stream_acknowledged, stream_starting)
+                return {'acknowledgement': result, 'protocol_stream_artifact': artifact,
+                        'owned_temporary_slots': self.inventory()}
             with ClientCursor(self.connection, row_factory=tuple_row) as cursor:
                 if dispatching is not None:
                     dispatching()
@@ -169,13 +206,7 @@ class ReplicationTemporarySlots:
                           'slot': selected['slot'], 'operation': operation, 'temporary': True,
                           'native_command_returned': True, 'native_result': row,
                           'snapshot': deepcopy(self.snapshot), 'slot_catalog_observed': False}
-                self.acknowledgements.append(deepcopy(result))
-                self.acknowledgement_count += 1
-                if operation == 'drop':
-                    self.owned_slots.remove(selected['slot'])
-                else:
-                    self.owned_slots.add(selected['slot'])
-                acknowledge(result)
+                record(result)
         except NativeError as error:
             close_required = native_attempted
             primary = error.diag.message_primary

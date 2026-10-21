@@ -12,14 +12,16 @@ from .postgresql_temporary_slot_jobs import TemporarySlotCommands, TemporarySlot
 
 
 def program():
-    from ..providers.postgresql import replication_admission, replication_temporary_slots
-    from . import postgresql_temporary_slot_jobs
+    from ..providers.postgresql import replication_admission, replication_temporary_slots, replication_stream_options
+    from . import postgresql_temporary_slot_jobs, postgresql_replication_stream
     return {'kind': 'native-postgresql-replication-temporary-slot-resource',
             'adapter_sha256': hashlib.sha256(Path(replication_temporary_slots.__file__).read_bytes()).hexdigest(),
             'channel_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'service_sha256': hashlib.sha256(Path(__file__).with_name('postgresql_replication_temporary_service.py').read_bytes()).hexdigest(),
             'request_owner_sha256': hashlib.sha256(Path(postgresql_temporary_slot_jobs.__file__).read_bytes()).hexdigest(),
             'admission_sha256': hashlib.sha256(Path(replication_admission.__file__).read_bytes()).hexdigest(),
+            'stream_options_sha256': hashlib.sha256(Path(replication_stream_options.__file__).read_bytes()).hexdigest(),
+            'stream_capture_sha256': hashlib.sha256(Path(postgresql_replication_stream.__file__).read_bytes()).hexdigest(),
             'execution_host': {'kind': 'application-host', 'hostname': socket.gethostname(), 'platform': sys.platform}}
 
 
@@ -29,6 +31,7 @@ class ReplicationTemporaryCommands(TemporarySlotCommands):
         'Dispatch one command on this original native replication backend. A native error can remove all its temporary slots.',
         'A new command invalidates its earlier exported snapshot. Review and status do not send native commands.',
         'Native acknowledgement is distinct from current slot/snapshot liveness. Unknown commands never replay.',
+        'Logical streaming captures native frames on this backend. Optional flush feedback advances only to fsynced data-start positions; it can consume slot output. No application apply position is reported.',
     )
 
 
@@ -50,6 +53,28 @@ class ReplicationTemporaryResources(TemporarySlotResources):
         commands.resource_jobs = self
         commands.resource_id = record['job_id']
         return commands
+
+    def process(self, record, native, cancel, expired=lambda: False):
+        current = self.load(record['job_id'], record['owner'], record['endpoint_id'])
+        pending = current.get('pending_command')
+        if not pending:
+            return False
+        commands = self.commands(current)
+        child = commands.load(pending['job_id'], record['owner'], record['endpoint_id'])
+        if pending['kind'] != 'execute' or child['options']['operation'] != 'logical_stream':
+            return super().process(record, native, cancel, expired)
+        from . import postgresql_replication_stream
+        def capture(connection, selected, acknowledge, dispatching):
+            artifact = postgresql_replication_stream.capture(connection, commands.directory(child), selected,
+                acknowledge=acknowledge, progress=lambda value: commands.update(child, progress=value),
+                dispatching=dispatching)
+            commands.update(child, protocol_stream_artifact=artifact)
+            return artifact
+        native.stream_capture = capture
+        try:
+            return super().process(record, native, cancel, expired)
+        finally:
+            del native.stream_capture
 
 
 class ReplicationTemporaryTransport:

@@ -2,25 +2,29 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {startBrowserFileDownload} from './browserFileDownload';
 
 const active=state => ['dispatching','active','cancel_requested'].includes(state);
 const pending=state => ['queued_review','reviewing','queued_catalog','querying','queued_execute','active'].includes(state);
 const credentials={password:'',ssh_host_key:'',ssh_password:'',ssh_private_key_password:''};
-const initialOptions={slot:'',plugin:'test_decoding',snapshot:'export',two_phase:false,reserve_wal:false,invalidate_snapshot:false,timeout_seconds:30};
+const initialOptions={slot:'',plugin:'test_decoding',snapshot:'export',two_phase:false,reserve_wal:false,invalidate_snapshot:false,timeout_seconds:30,
+  start_lsn:'0/0',max_messages:100,max_capture_bytes:16777216,max_duration_seconds:5,acknowledge_flush:false};
 const databaseTarget=name => 'postgresql-replication-database:'+Array.from(new TextEncoder().encode(name),byte => byte.toString(16).padStart(2,'0')).join('');
 
-export default function PostgresqlReplicationTemporarySlots({post}) {
+export default function PostgresqlReplicationTemporarySlots({post,endpointUrl}) {
   const [database,setDatabase]=useState(''),[access,setAccess]=useState(credentials),[lifetime,setLifetime]=useState(3600);
   const [resource,setResource]=useState(null),[resources,setResources]=useState(null),[resourceOffset,setResourceOffset]=useState(0);
   const [command,setCommand]=useState(null),[commands,setCommands]=useState(null),[commandOffset,setCommandOffset]=useState(0);
   const [operation,setOperation]=useState('logical_create'),[options,setOptions]=useState(initialOptions);
+  const [pluginOptions,setPluginOptions]=useState('[]'),[preview,setPreview]=useState(null),[previewOffsets,setPreviewOffsets]=useState(['0']),[remove,setRemove]=useState(false);
   const [confirmed,setConfirmed]=useState(false),[release,setRelease]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const serial=useRef(0),target=database ? databaseTarget(database) : '';
+  const serial=useRef(0),downloads=useRef([]),target=database ? databaseTarget(database) : '';
   useEffect(() => {
     serial.current++;setDatabase('');setAccess(credentials);setResource(null);setResources(null);setCommand(null);setCommands(null);
     setResourceOffset(0);setCommandOffset(0);setConfirmed(false);setRelease(false);setBusy(false);setError('');
-    return () => {serial.current++;};
+    return () => {serial.current++;downloads.current.splice(0).forEach(close => close());};
   },[post]);
+  useEffect(() => {setPreview(null);setPreviewOffsets(['0']);setRemove(false);},[target,resource?.job_id,command?.job_id]);
   const clear=() => {setResource(null);setResources(null);setCommand(null);setCommands(null);setResourceOffset(0);setCommandOffset(0);setConfirmed(false);setRelease(false);};
   const call=(action,fields={}) => post({action:'postgresql_replication_temporary_'+action,request:{
     ...(action!=='scope' && target ? {database_target_id:target} : {}),
@@ -32,6 +36,8 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
       if(action==='scope'){if(value.source.database!==database)clear();setDatabase(value.source.database);}
       else if(action==='list')setResources(value);
       else if(action==='command_list')setCommands(value);
+      else if(action==='stream_preview')setPreview(value);
+      else if(['stream_reconcile','stream_remove'].includes(action)){setCommand(value);setPreview(null);setPreviewOffsets(['0']);setRemove(false);}
       else if(action.startsWith('command_') || action==='inventory'){setCommand(value);setConfirmed(false);}
       else {
         if(value.source?.database && value.source.database!==database){clear();setDatabase(value.source.database);}
@@ -70,8 +76,19 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
     const fields=['slot','timeout_seconds','invalidate_snapshot'];
     if(operation==='physical_create')fields.push('reserve_wal');
     if(operation==='logical_create')fields.push('plugin','snapshot','two_phase');
-    perform('command_review',{resource_id:resource.job_id,operation,options:Object.fromEntries(fields.map(key => [key,options[key]]))});
+    if(operation==='logical_stream')fields.push('start_lsn','max_messages','max_capture_bytes','max_duration_seconds','acknowledge_flush');
+    try {
+      const selected=Object.fromEntries(fields.map(key => [key,options[key]]));
+      if(operation==='logical_stream')selected.plugin_options=JSON.parse(pluginOptions);
+      perform('command_review',{resource_id:resource.job_id,operation,options:selected});
+    } catch(failure) {setError(failure.message);}
   };
+  const download=() => {
+    try {downloads.current.push(startBrowserFileDownload(endpointUrl,{database_target_id:target,resource_id:resource.job_id,job_id:command.job_id},
+      {action:'postgresql_replication_temporary_stream_download',prefix:'postgresql-replication-frames',title:'Original PostgreSQL replication capture'}));}
+    catch(failure) {setError(failure.message);}
+  };
+  const stream=command?.options?.operation==='logical_stream';
   return <Box component="details" sx={{my:1}}><summary>Temporary replication slots and exported snapshots</summary>
     <FormReference formKey="postgresql-replication-temporary" />
     <Alert severity="info">Uses the saved registration&apos;s database and a retained native replication connection. No SQL bootstrap or catalog connection is required. Status and review preserve the last exported snapshot; another native command or backend termination invalidates it. Closing this viewer does not release the resource.</Alert>
@@ -101,7 +118,7 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
       {resource.state==='reviewed' && <><FormControlLabel label="Confirm original replication resource" control={<Checkbox checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />} /><Button disabled={busy || !confirmed} onClick={() => perform('start',{job_id:resource.job_id,review_digest:resource.review_digest,confirmed:true})}>Open reviewed replication resource</Button></>}
       {open && <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
         <TextField select size="small" label="Retained replication command" value={operation} disabled={blocked} onChange={event => {setOperation(event.target.value);setCommand(current => current?.state==='reviewed' ? null : current);setConfirmed(false);}}>
-          {[['logical_create','Create temporary logical slot'],['physical_create','Create temporary physical slot'],['drop','Drop acknowledged temporary slot']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+          {[['logical_create','Create temporary logical slot'],['physical_create','Create temporary physical slot'],['logical_stream','Capture original temporary logical stream'],['drop','Drop acknowledged temporary slot']].map(([value,label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
         </TextField>
         <TextField size="small" label="Exact retained replication slot" value={options.slot} disabled={blocked} onChange={event => edit('slot',event.target.value)} />
         {operation==='logical_create' && <>
@@ -110,6 +127,13 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
           <FormControlLabel label="Temporary replication two-phase decoding" control={<Checkbox checked={options.two_phase} disabled={blocked} onChange={event => edit('two_phase',event.target.checked)} />} />
         </>}
         {operation==='physical_create' && <FormControlLabel label="Reserve temporary replication WAL" control={<Checkbox checked={options.reserve_wal} disabled={blocked} onChange={event => edit('reserve_wal',event.target.checked)} />} />}
+        {operation==='logical_stream' && <>
+          <Alert severity="warning">Captures exact native XLogData frames on this original backend. A capture bound can split transactions. Optional flush feedback can advance the slot only to fsynced data-start positions; server WAL-end hints and application apply positions are not acknowledged. Cancellation or a native error ends this backend. Unknown streams never replay.</Alert>
+          <TextField size="small" label="Retained stream starting LSN" value={options.start_lsn} disabled={blocked} onChange={event => edit('start_lsn',event.target.value)} />
+          {Object.entries({max_messages:'Retained stream maximum messages',max_capture_bytes:'Retained stream maximum artifact bytes',max_duration_seconds:'Retained stream capture seconds'}).map(([key,label]) => <TextField key={key} size="small" type="number" label={label} value={options[key] ?? ''} disabled={blocked} onChange={event => edit(key,event.target.value==='' ? null : Number(event.target.value))} />)}
+          <TextField size="small" multiline label="Native logical stream plugin options (JSON)" value={pluginOptions} disabled={blocked} onChange={event => {setPluginOptions(event.target.value);setCommand(current => current?.state==='reviewed' ? null : current);setConfirmed(false);}} />
+          <FormControlLabel label="Acknowledge fsynced output to the native slot" control={<Checkbox checked={options.acknowledge_flush} disabled={blocked} onChange={event => edit('acknowledge_flush',event.target.checked)} />} />
+        </>}
         <FormControlLabel label="Allow invalidation of the current exported snapshot" control={<Checkbox checked={options.invalidate_snapshot} disabled={blocked} onChange={event => edit('invalidate_snapshot',event.target.checked)} />} />
         <TextField size="small" type="number" label="Retained replication command maximum seconds" value={options.timeout_seconds ?? ''} disabled={blocked} onChange={event => edit('timeout_seconds',event.target.value==='' ? null : Number(event.target.value))} />
         <Button disabled={blocked || !options.slot} onClick={reviewCommand}>Review retained replication command</Button>
@@ -124,6 +148,18 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
         {command.native_error_sqlstate && <Alert severity="warning">Native SQLSTATE: {command.native_error_sqlstate}.</Alert>}
         {command.state==='reviewed' && <><FormControlLabel label="Confirm retained replication command" control={<Checkbox checked={confirmed} disabled={busy || !open} onChange={event => setConfirmed(event.target.checked)} />} /><Button disabled={busy || !open || !confirmed} onClick={() => perform('command_start',{resource_id:resource.job_id,job_id:command.job_id,review_digest:command.review_digest,confirmed:true})}>Run reviewed replication command</Button></>}
         {pending(command.state) && <Button disabled={busy} onClick={() => perform('command_cancel',{resource_id:resource.job_id,job_id:command.job_id})}>Cancel retained replication command</Button>}
+        {stream && command.worker_io_closed && !command.artifact_removed && <Box>
+          <Button disabled={busy} onClick={() => perform('stream_reconcile',{resource_id:resource.job_id,job_id:command.job_id})}>Inspect original replication capture</Button>
+          {command.protocol_stream_artifact && <>
+            <Button disabled={busy} onClick={() => {setPreviewOffsets(['0']);perform('stream_preview',{resource_id:resource.job_id,job_id:command.job_id,offset:'0',limit:25});}}>Preview original replication frames</Button>
+            <Button disabled={busy || !endpointUrl} onClick={download}>Download original replication frames</Button>
+            <FormControlLabel label="Remove this owned replication capture" control={<Checkbox checked={remove} disabled={busy} onChange={event => setRemove(event.target.checked)} />} /><Button disabled={busy || !remove} onClick={() => perform('stream_remove',{resource_id:resource.job_id,job_id:command.job_id,confirmation:command.job_id})}>Remove original replication capture</Button>
+          </>}
+          {preview && <Box><Box component="pre" aria-label="Original replication frame preview" sx={{whiteSpace:'pre-wrap',maxHeight:250,overflow:'auto'}}>{JSON.stringify(preview,null,2)}</Box>
+            <Button disabled={busy || previewOffsets.length<2} onClick={() => {const next=previewOffsets.slice(0,-1);setPreviewOffsets(next);perform('stream_preview',{resource_id:resource.job_id,job_id:command.job_id,offset:next[next.length-1],limit:25});}}>Previous replication frames</Button>
+            <Button disabled={busy || !preview.next_offset} onClick={() => {setPreviewOffsets([...previewOffsets,preview.next_offset]);perform('stream_preview',{resource_id:resource.job_id,job_id:command.job_id,offset:preview.next_offset,limit:25});}}>Next replication frames</Button>
+          </Box>}
+        </Box>}
         <Box component="pre" aria-label="Retained replication command observation" sx={{whiteSpace:'pre-wrap',maxHeight:250,overflow:'auto'}}>{JSON.stringify(command,null,2)}</Box>
       </Box>}
       {resource.latest_native_inventory && <Box component="pre" aria-label="Retained replication snapshot acknowledgement" sx={{whiteSpace:'pre-wrap',maxHeight:250,overflow:'auto'}}>{JSON.stringify(resource.latest_native_inventory,null,2)}</Box>}
@@ -133,4 +169,4 @@ export default function PostgresqlReplicationTemporarySlots({post}) {
     </Box>}
   </Box>;
 }
-PostgresqlReplicationTemporarySlots.propTypes={post:PropTypes.func.isRequired};
+PostgresqlReplicationTemporarySlots.propTypes={post:PropTypes.func.isRequired,endpointUrl:PropTypes.string};

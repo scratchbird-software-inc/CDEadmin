@@ -110,7 +110,8 @@ from pgadmin.utils.server_access import get_server, \
 POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS = frozenset(
     'postgresql_replication_temporary_' + suffix for suffix in (
         'scope', 'review', 'start', 'status', 'list', 'release', 'inventory',
-        'command_review', 'command_start', 'command_status', 'command_list', 'command_cancel'))
+        'command_review', 'command_start', 'command_status', 'command_list', 'command_cancel',
+        'stream_preview', 'stream_reconcile', 'stream_remove'))
 
 
 # File-path keys in connection_params that are per-user and must
@@ -2732,6 +2733,17 @@ class ServerNode(PGChildNodeView):
                     try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw'}.get(request.form['action'],'mysql'))
                     except (ValueError,TypeError,KeyError,OSError) as error:
                         return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
+                if request.form.get('action') == 'postgresql_replication_temporary_stream_download':
+                    from pgadmin.cdeadmin.workspace.postgresql_replication_temporary_service import stream_download
+                    body = request.form.get('payload', '')
+                    if len(body) > 4096:
+                        return bad_request('File delivery request is too large')
+                    try:
+                        if request.args.get('database_target_id'):
+                            raise ValueError('Use the server replication workspace')
+                        return stream_download(service, server, json.loads(body))
+                    except (ValueError, TypeError, KeyError, OSError):
+                        return bad_request('Invalid original replication capture delivery request')
                 if request.form.get('action') == 'postgresql_temporary_slots_change_download':
                     from pgadmin.cdeadmin.workspace.postgresql_temporary_slot_service import change_download
                     body=request.form.get('payload','')

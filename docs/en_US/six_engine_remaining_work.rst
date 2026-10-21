@@ -134,9 +134,9 @@ PostgreSQL
   implemented independent native recovery drills and recovery targets.
 * PG-ARCHIVES: Complete retention, interrupted-stream restart and log/archive
   management beyond the qualified physical WAL and logical receiver captures.
-* PG-TEMP-PROTOCOL: Complete native logical streaming on its original retained
-  replication backend, SNAPSHOT USE and application snapshot-consumption /
-  initial-copy workflows. Retained temporary physical/logical creation,
+* PG-TEMP-PROTOCOL: Complete SNAPSHOT USE and application snapshot-consumption /
+  initial-copy workflows, plus installed output-plugin qualification. Retained
+  original-backend logical streaming and temporary physical/logical creation,
   export/no-export snapshot ownership and safe owned-slot removal now have a
   separate reviewed replication-only resource. Existing SQL temporary-slot
   controls and text/binary peek/get remain separate. A permanent-slot receiver
@@ -189,9 +189,13 @@ invalidation confirmation. The original native database, backend and complete
 provider isolation scope bind command admission. Historical creation cannot
 authorize a drop after the name was released and reused elsewhere. Native error
 ends this owner; acknowledgements and later local close remain separate from
-unobserved catalog/health facts and no command automatically replays. These
-receipts do not close retained streaming, native SNAPSHOT USE, application
-snapshot consumption or the independent PostgreSQL inventory.
+unobserved catalog/health facts and no command automatically replays. This
+resource also supports native logical COPY BOTH capture on its original backend,
+reviewed bounds and optional fsynced-only flush feedback, exact frame delivery,
+inspection and removal. Native completion, artifact publication and unknown
+outcomes remain separate, with no automatic replay. These receipts do not close
+native SNAPSHOT USE, application snapshot consumption, installed plugin
+qualification or the independent PostgreSQL inventory.
 
 DuckDB
 ------
