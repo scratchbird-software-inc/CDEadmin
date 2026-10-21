@@ -25,7 +25,8 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     for directory in ('web/pgadmin/cdeadmin/providers/mysql_family','web/pgadmin/cdeadmin/workspace'):
         for path in (ROOT/directory).glob('*binlog*.py'):
             proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
-    for path in (Path(__file__),ROOT/'tools/mysql_qualification_support.py',ROOT/'web/pgadmin/static/js/Dialogs/ContinuousBinlog.jsx'):
+    for path in (Path(__file__),ROOT/'tools/mysql_qualification_support.py',ROOT/'web/pgadmin/static/js/Dialogs/ContinuousBinlog.jsx',
+                 ROOT/'web/pgadmin/static/js/Dialogs/ReceiverFileCleanup.jsx'):
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
     if family=='mysql':
         for name in ('web/pgadmin/cdeadmin/providers/mysql_family/mysql_archive_checkpoint.py',
@@ -447,16 +448,68 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
         from pgadmin.cdeadmin.workspace.continuous_binlog_tails import file_claim
         with file_claim(jobs.directory(tail_record)):
             assert 'Another operation' in http('cleanup_start',cleanup_request,refused=True)['errormsg']
+        cleanup_jobs=getattr(service,family+'_receiver_cleanup_jobs')
+        normal_update=cleanup_jobs.update
+        if family=='mysql':
+            # Remove the real first private input but fail its durable ACK.
+            # The preceding intent remains on disk for explicit reconciliation.
+            def lose_cleanup_ack(record,**values):
+                if values.get('progress',{}).get('removal_acknowledged'):
+                    raise OSError('Owned qualification: lose private unlink acknowledgement')
+                return normal_update(record,**values)
+            cleanup_jobs.update=lose_cleanup_ack
         http('cleanup_start',cleanup_request)
         deadline=time.monotonic()+30
         while True:
             cleaned=http('cleanup_status',{'job_id':cleanup_review['job_id']})
-            if cleaned['state']=='completed':break
+            if cleaned['state']==('unknown' if family=='mysql' else 'completed'):break
             assert cleaned['state'] in {'active','dispatching'},cleaned.get('error_message')
             if time.monotonic()>deadline:raise TimeoutError('Private receiver cleanup deadline')
             time.sleep(.05)
-        assert cleaned['result']['removed_files']==names and cleaned['result']['archives_removed'] is False
-        assert http('cleanup_start',cleanup_request)['state']=='completed'
+        cleanup_jobs.update=normal_update
+        if family=='mysql':
+            deadline=time.monotonic()+5
+            while cleanup_review['job_id'] in cleanup_jobs.workers:
+                if time.monotonic()>deadline:raise TimeoutError('Private cleanup worker shutdown deadline')
+                time.sleep(.01)
+            assert cleaned['progress']['removal_acknowledged'] is False
+            assert http('cleanup_start',cleanup_request)['state']=='unknown'
+            remaining=[row['name'] for row in http('cleanup_catalog',{'job_id':tail_parent['job_id']})['files']]
+            assert remaining==names[1:]
+            reconcile_request={'job_id':cleanup_review['job_id'],'confirmed':True}
+            http('cleanup_reconcile',{**reconcile_request,'confirmed':False},refused=True)
+            if browser_binary:
+                proof['cleanup_browser']=browser(app,output,registered_id,family,None,browser_binary,driver_binary,None,
+                    private_cleanup={'receiver_job_id':tail_parent['job_id'],'job_id':cleanup_review['job_id']})
+            reconciled=http('cleanup_reconcile',reconcile_request)
+            assert reconciled['state']=='reconciled' and reconciled['progress']==cleaned['progress']
+            assert reconciled['result']['pending_file_absence_observed']
+            assert reconciled['result']['pending_file_removed_during_reconciliation'] is False
+            assert reconciled['result']['original_pending_unlink_acknowledged'] is False
+            assert reconciled['result']['unattempted_files']==remaining
+            assert http('cleanup_start',cleanup_request)['state']=='reconciled'
+            assert [row['name'] for row in http('cleanup_catalog',{'job_id':tail_parent['job_id']})['files']]==remaining
+            proof['private_cleanup_reconciliation']={'complete':True,'source_offline':True,
+                'job_id':cleanup_review['job_id'],'original_pending_unlink_acknowledged':False,
+                'unattempted_files':remaining,'unattempted_files_preserved':True}
+            proof['checks'].extend(['native-offline-lost-private-unlink-acknowledgement-reconciles-without-rewriting-original-progress',
+                'native-private-cleanup-reconciliation-preserves-unattempted-files-and-requires-a-new-removal-review'])
+            if browser_binary:proof['checks'].append('native-offline-browser-explicitly-reconciles-the-recorded-private-removal')
+            if remaining:
+                cleanup_review=http('cleanup_review',{'job_id':tail_parent['job_id'],'file_names':remaining})
+                cleanup_request={'job_id':cleanup_review['job_id'],'review_digest':cleanup_review['review_digest'],'confirmed':True}
+                http('cleanup_start',cleanup_request);deadline=time.monotonic()+30
+                while True:
+                    completed=http('cleanup_status',{'job_id':cleanup_review['job_id']})
+                    if completed['state']=='completed':break
+                    assert completed['state'] in {'active','dispatching'},completed.get('error_message')
+                    if time.monotonic()>deadline:raise TimeoutError('Remaining private input cleanup deadline')
+                    time.sleep(.05)
+                assert completed['result']['removed_files']==remaining
+                assert http('cleanup_start',cleanup_request)['state']=='completed'
+        else:
+            assert cleaned['result']['removed_files']==names and cleaned['result']['archives_removed'] is False
+            assert http('cleanup_start',cleanup_request)['state']=='completed'
         assert not http('cleanup_catalog',{'job_id':tail_parent['job_id']})['files']
         assert http('status',{'job_id':tail_parent['job_id']})['state']=='failed'
         response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':adopt_review['job_id'],'path':tail_name})})
@@ -465,7 +518,8 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
             'native-private-file-cleanup-refuses-adoption-file-claim-contention-and-never-repeats-dispatch',
             'native-private-file-cleanup-retains-parent-outcome-and-independent-sealed-archive-byte-download'])
         proof['private_cleanup']={'complete':True,'source_offline':True,'job_id':cleanup_review['job_id'],
-            'removed_files':names,'removed_bytes':cleaned['result']['removed_bytes'],'sealed_archive_retained':True}
+            'removed_files':names,'sealed_archive_retained':True,
+            'original_acknowledgement_preserved':family=='mysql'}
         proof['complete']=True
     finally:
         if jobs is not None:jobs.close()
@@ -473,7 +527,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     return proof
 
 
-def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None,unknown_recollection=None,archive_checkpoint=None):
+def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None,unknown_recollection=None,archive_checkpoint=None,private_cleanup=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -524,6 +578,21 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
                     return False
                 except (ElementClickInterceptedException,ElementNotInteractableException,StaleElementReferenceException,NoSuchElementException):return False
             wait.until(attempt)
+        if private_cleanup:
+            click('Load binary-log receivers');click('Inspect receiver '+private_cleanup['receiver_job_id'])
+            click('Load private cleanup receipts');click('Inspect cleanup '+private_cleanup['job_id'])
+            wait.until(lambda browser:any('Private cleanup '+private_cleanup['job_id']+': unknown.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            click('Reconcile recorded private removal')
+            wait.until(lambda browser:any('Private cleanup '+private_cleanup['job_id']+': reconciled.' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            result=json.loads(driver.find_element(By.CSS_SELECTOR,'pre[aria-label="Private cleanup receipt"]').get_attribute('textContent'))
+            assert result['progress']['removal_acknowledged'] is False
+            assert result['result']['pending_file_absence_observed'] and result['result']['original_pending_unlink_acknowledged'] is False
+            driver.save_screenshot(str(output/'native-mysql-private-cleanup-reconciliation.png'))
+            errors=[node for node in driver.get_log('browser') if node.get('level')=='SEVERE']
+            (output/'cleanup-browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
+            return {'complete':True,'source_offline':True,'job_id':private_cleanup['job_id'],
+                'explicit_reconciliation':True,'original_pending_unlink_acknowledged':False,'console_errors':0,
+                'screenshot':'native-mysql-private-cleanup-reconciliation.png'}
         click('Inspect receiver source')
         def field(label):
             node=driver.find_element(By.XPATH,'//label[normalize-space()="'+label+'"]')

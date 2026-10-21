@@ -192,7 +192,7 @@ def action(service, server, operation, request, family):
         from .mysql_receiver_checkpoints import parent,catalog
         original=parent(jobs,archives,request.get('job_id'),owner,endpoint.id)
         return catalog(jobs,archives,original,request)
-    if operation in {'cleanup_catalog','cleanup_review','cleanup_start','cleanup_status','cleanup_cancel','cleanup_list'}:
+    if operation in {'cleanup_catalog','cleanup_review','cleanup_start','cleanup_status','cleanup_cancel','cleanup_list','cleanup_reconcile'}:
         from .continuous_binlog_cleanup import action as cleanup_action
         return cleanup_action(service,server,operation,request,family,(jobs,archives,owner,endpoint,_context))
     if operation in {'tail_catalog','tail_review','tail_start'}:

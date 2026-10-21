@@ -34,3 +34,21 @@ it('uses the returned filename cursor and clears selection on an endpoint change
   rerender(<Component post={post} engine="mysql" receiverJobId="two" />);
   await waitFor(() => expect(screen.queryByRole('table',{name:'Private receiver files'})).not.toBeInTheDocument());
 });
+
+it('explicitly reconciles an interrupted MySQL receipt without repeating its removal review',async () => {
+  const post=jest.fn().mockResolvedValue({jobs:[{job_id:'interrupted'}],more:false});
+  render(<Component post={post} engine="mysql" receiverJobId="owned-receiver" />);
+  fireEvent.click(screen.getByText('Private receiver file cleanup'));
+  fireEvent.click(screen.getByRole('button',{name:'Load private cleanup receipts'}));
+  await screen.findByRole('button',{name:'Inspect cleanup interrupted'});
+  post.mockResolvedValue({job_id:'interrupted',state:'unknown',progress:{removal_acknowledged:false}});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect cleanup interrupted'}));
+  await screen.findByRole('button',{name:'Reconcile recorded private removal'});
+  post.mockResolvedValue({job_id:'interrupted',state:'reconciled',result:{unattempted_files:['native.000002'],reconciliation_removed_bytes:'9'}});
+  fireEvent.click(screen.getByRole('button',{name:'Reconcile recorded private removal'}));
+  await screen.findByText(/Bytes removed during reconciliation: 9/);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_cleanup_reconcile',request:{job_id:'interrupted',confirmed:true}});
+  expect(screen.queryByRole('button',{name:'Reconcile recorded private removal'})).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Private cleanup receipt')).toHaveTextContent('native.000002');
+  expect(post.mock.calls.some(([value]) => value.action.endsWith('_start'))).toBe(false);
+});

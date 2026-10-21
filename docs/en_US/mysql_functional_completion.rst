@@ -291,6 +291,23 @@ explicit and are never automatically repeated. Published archives and receipts
 are retained. This is separate from scheduled or recovery-chain-aware archive
 retention and native server log purging.
 
+Interrupted MySQL private-input cleanup now has explicit offline reconciliation.
+It rechecks the owner, endpoint, original native source, recorded application
+host/filesystem grants, stopped writers and the shared file claim. Only the
+single file covered by the persisted pending removal intent is eligible: an
+unchanged reviewed file may be removed, or its existing absence observed.
+Replaced files, links, changed review scope and live workers refuse
+reconciliation. Files whose removal was never attempted remain for a new review.
+The original progress and missing unlink acknowledgement remain unchanged;
+newly acknowledged removal bytes and observed absence are separate results.
+Repeating reconciliation only reads the completed receipt and cannot remove a
+file that later reappears. Neither the parent receiver outcome nor any published
+archive is rewritten. Process-restart and lost-reconciliation-acknowledgement
+tests cover the same boundaries. Native API qualification injects a lost ACK
+after removing a real receiver input, reconciles with the source stopped, checks
+unattempted files and downloads the independently sealed archive unchanged. The
+production browser also performs that explicit reconciliation offline.
+
 MySQL Shell and raw archive workspaces now provide reviewed retention and
 explicit protection of individual archives. Set an age threshold and a minimum
 retained count for each exact native source/principal/role, inspect the oldest
@@ -355,8 +372,8 @@ checksum NONE, native shutdown/STOP and same-instance restart, independent
 comparison with server file bytes, and once-only dispatch. The production
 browser inspects and selects the retained checkpoint, reviews and starts its
 new reader, observes a sealed batch and cancels it. Complete backup/log recovery
-and production cutover remain separate acceptance work; wider interrupted
-private-file cleanup reconciliation and retention automation remain open.
+and production cutover remain separate acceptance work; scheduled,
+recovery-chain-aware retention remains open.
 
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an

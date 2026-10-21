@@ -3179,6 +3179,7 @@ class ServerNode(PGChildNodeView):
                                 'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start',
                                 'mysql_binlog_capture_cleanup_catalog','mysql_binlog_capture_cleanup_review','mysql_binlog_capture_cleanup_start',
                                 'mysql_binlog_capture_cleanup_status','mysql_binlog_capture_cleanup_cancel','mysql_binlog_capture_cleanup_list',
+                                'mysql_binlog_capture_cleanup_reconcile',
                                 'mariadb_binlog_capture_cleanup_catalog','mariadb_binlog_capture_cleanup_review','mariadb_binlog_capture_cleanup_start',
                                 'mariadb_binlog_capture_cleanup_status','mariadb_binlog_capture_cleanup_cancel','mariadb_binlog_capture_cleanup_list'}:
                     family='mariadb' if action.startswith('mariadb_') else 'mysql'

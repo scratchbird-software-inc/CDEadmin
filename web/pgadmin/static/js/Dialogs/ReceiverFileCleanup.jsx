@@ -56,9 +56,12 @@ export default function ReceiverFileCleanup({post,engine,receiverJobId}) {
       <Button disabled={busy || !jobs.more} onClick={() => load(offset+25)}>Next cleanup receipts</Button>
     </Box>}
     {receipt && <Box>
-      <Alert severity={receipt.state==='completed' ? 'success' : 'warning'}>Private cleanup {receipt.job_id}: {receipt.state}. Acknowledged bytes removed: {receipt.result?.removed_bytes ?? receipt.progress?.removed_bytes ?? '0'}. No automatic repeat.</Alert>
+      <Alert severity={receipt.state==='completed' ? 'success' : 'warning'}>Private cleanup {receipt.job_id}: {receipt.state}. Acknowledged bytes removed: {receipt.result?.removed_bytes ?? receipt.result?.acknowledged_removed_bytes ?? receipt.progress?.removed_bytes ?? '0'}. No automatic repeat.</Alert>
       <Button disabled={busy} onClick={() => run('status',{job_id:receipt.job_id},setReceipt)}>Refresh private cleanup</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state)} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel private cleanup</Button>
+      {engine==='mysql' && ['unknown','failed','cancelled'].includes(receipt.state) && <Button disabled={busy}
+        onClick={() => run('reconcile',{job_id:receipt.job_id,confirmed:true},value => {setReceipt(value);setCatalog(null);setFiles([]);})}>Reconcile recorded private removal</Button>}
+      {receipt.state==='reconciled' && <Alert severity="info">The recorded intent was reconciled. Bytes removed during reconciliation: {receipt.result?.reconciliation_removed_bytes ?? '0'}. The original pending unlink acknowledgement remains separate. Unattempted files require a new removal review.</Alert>}
       <Box component="pre" aria-label="Private cleanup receipt" sx={{whiteSpace:'pre-wrap',maxHeight:280,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box>
     </Box>}
   </Box>;
