@@ -86,6 +86,21 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Group Replication recovery credentials retain MySQL's native distinction
+between account characters and password bytes. Recovery usernames accept up
+to 32 characters within the native 96-byte buffer; passwords retain their
+32-byte bound. The native no-LF grammar permits carriage returns, quotes,
+backslashes and BMP Unicode in these bound credential arguments. No account or
+password is truncated. This does not qualify human form input of those values.
+
+The three-member Group Replication qualifier independently selects pure and C
+connectors, uses the full native Unicode account/password bounds, and exercises
+primary election after pausing an owned primary. A new acknowledged write is
+observed on both survivors; explicit native stop/start repairs the resumed
+member and all three independently reread the original and failover data.
+This qualifies the native compiler and member behavior, with separate broader
+workspace, topology, server-host lifecycle and upgrade acceptance still required.
+
 Managed graphical MySQL Shell backups now record durable protection intents
 before native dump dispatch. A native completion preserves the exact source
 UUID, database, manifest digest and native file/position/GTID boundary without

@@ -17,6 +17,17 @@ def test_native_group_functions_and_start_credentials_are_bound():
     assert compile_operation('stop',{},TARGET)['source']=='STOP GROUP_REPLICATION'
 
 
+def test_recovery_accounts_preserve_native_character_limits_and_password_carriage_returns():
+    user='雪'*32
+    password='native\rquote"slash\\雪'
+    result=compile_operation('start',{'user':user,'password':password},TARGET)
+    assert result['parameters']==(user,password) and len(user.encode('utf8'))==96
+    assert password not in result['preview_source']
+    for value in ('a'*33,'雪'*33,'native\nuser','native\x00user'):
+        with pytest.raises(RelationalClientError):compile_operation('start',{'user':value},TARGET)
+    with pytest.raises(RelationalClientError):compile_operation('start',{'password':'native\npassword'},TARGET)
+
+
 @pytest.mark.parametrize('operation,draft',[
     ('set_primary',{'member_uuid':'wrong'}),('set_primary',{'member_uuid':UUID,'timeout':True}),
     ('set_primary',{'member_uuid':UUID,'timeout':3601}),('set_protocol',{'version':'9.7.0; DROP'}),

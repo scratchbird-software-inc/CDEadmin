@@ -19,6 +19,16 @@ def text(value,label,limit):
     return value
 
 
+def credential(value,label,limit):
+    # START GROUP_REPLICATION uses the native no-LF string grammar. CR is
+    # ordinary password text; the native credential buffers are byte bounded.
+    if not isinstance(value,str) or not value or len(value.encode('utf8'))>limit or any(char in value for char in '\x00\n'):
+        raise RelationalClientError(label+' requires bounded exact native credential text')
+    if label=='USER' and len(value)>32:
+        raise RelationalClientError('Native recovery account names contain at most 32 characters')
+    return value
+
+
 def compile_operation(operation,draft,target):
     native=(target or {}).get('native') or (target or {}).get('extensions',{}).get('mysql',{}).get('native',{})
     if operation not in OPERATIONS or not isinstance(draft,dict) or native.get('group_replication_plugin_status')!='ACTIVE':
@@ -29,11 +39,11 @@ def compile_operation(operation,draft,target):
     def bind(value):parameters.append(value);return '%s'
     if operation=='start':
         options=[]
-        for field,keyword,limit in [('user','USER',32),('password','PASSWORD',32),('default_auth','DEFAULT_AUTH',64)]:
+        for field,keyword,limit in [('user','USER',96),('password','PASSWORD',32),('default_auth','DEFAULT_AUTH',64)]:
             if field in draft and draft[field] is not None:
                 value=draft[field]
                 if field=='password' and value=='':value=''
-                else:value=text(value,keyword,limit)
+                else:value=credential(value,keyword,limit)
                 options.append(keyword+'='+bind(value))
         source='START GROUP_REPLICATION'+(' '+','.join(options) if options else '')
     elif operation=='stop':source='STOP GROUP_REPLICATION'
