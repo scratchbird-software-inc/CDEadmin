@@ -104,7 +104,9 @@ def qualify(route, evidence, *, password=None, reply_loss=True):
         failed = sql('CALL late_failure()')
         assert rows(failed) == [(1,)]
         assert failed[-1]['payload']['error']['errno'] == 1146
-        assert client.describe_transaction(handle)['in_transaction'] is True
+        observation = client.describe_transaction(handle)
+        assert observation['state'] == 'unknown' and observation['connection_usable'] is True
+        assert observation['status_current'] is False and 'in_transaction' not in observation
         client.control_transaction(handle, 'rollback')
         assert rows(sql('SELECT COUNT(*) FROM pending')) == [(0,)]
         proof['checks'].append('later_error_preserves_results_and_native_work')

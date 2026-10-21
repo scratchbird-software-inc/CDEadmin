@@ -115,6 +115,41 @@ path-restricted import setting is not advertised for this connector. Native
 administrative executables remain separately installed MariaDB tools and keep
 their existing grants/workspace restrictions. These driver receipts do not claim
 blanket console, management workflow or platform UX acceptance.
+
+Original-session diagnostics and passive status
+-----------------------------------------------
+
+Session opening captures the native server UID and connection ID once. Query
+execution checks the connector's local connection ID without an identity query
+on the user's session. Cancellation retains its separate authenticated control
+connection and instance check. A decoded native ERR ends its command without a
+recovery PING; transport/local protocol failures continue to block reuse.
+
+Automatic transaction observations use native protocol status without PING or
+SQL getters. They do not check present server availability. ERR packets lack
+fresh policy flags, including when a routine changes autocommit before failing.
+The editor keeps that policy unknown and disables its toggle, but permits native
+diagnostic SQL on the usable original session. A later acknowledged command
+supplies fresh status. Explicit transaction changes remain serialized with query
+execution; uncertain finality is never replayed.
+
+The pinned MariaDB 1.1.14 connector patch checks native text and binary fetch
+return codes. Native error packets are raised with their real errno/SQLSTATE
+by fetchone, fetchmany and fetchall; they are not successful end-of-rows. The
+driver advertises the read-only ``cdeadmin_checked_fetch_errors`` cursor
+capability. Provider admission and native environment verification require it.
+Existing development environments must rebuild/install the connector with
+``tools/cdeadmin_build_mariadb_driver.py`` or rerun the native environment setup;
+an older wheel with only exact-temporal support is insufficient. The shared
+build path applies the source patch on each native platform. Linux qualification
+does not establish Windows/macOS acceptance.
+
+``tools/cdeadmin_mysql_family_session_diagnostics_qualification.py --engine mariadb``
+checks original-session unbound and bound ROW_COUNT, GET DIAGNOSTICS, error and
+warning areas, failed-routine policy, explicit rollback, cancellation and unread
+disconnects through the authenticated API. This scope does not establish that
+every other catalog/editor/session operation preserves native diagnostic state.
+
 Native backup stages and table backup locks
 -------------------------------------------
 

@@ -337,6 +337,11 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             if self._executions.closing:
                 raise RelationalClientError('MariaDB client is closing')
             connection = super().open_session(request)
+            try:
+                self._executions.sessions.register(connection)
+            except BaseException:
+                self._discard_failed_session(connection)
+                raise
             self._session_requests[id(connection)] = copy.deepcopy(dict(request))
             return connection
 
@@ -373,28 +378,9 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             return self._describe_idle_transaction(handle)
 
     def _describe_idle_transaction(self, handle):
-        if id(handle) not in self._uncertain_sessions:
-            try:
-                handle.ping()
-                autocommit = handle.autocommit
-                status = handle.server_status
-                if type(status) is not int:
-                    raise RelationalClientError(
-                        'MariaDB server transaction status is unavailable')
-                active = bool(status & 1)
-                if type(autocommit) is not bool or type(active) is not bool:
-                    raise RelationalClientError(
-                        'MariaDB transaction flags are unavailable')
-            except Exception:
-                self._uncertain_sessions.add(id(handle))
-        if id(handle) in self._uncertain_sessions:
-            return {'state': 'unknown', 'connection_usable': False,
-                    'driver_observation_only': True,
-                    'finality_interpreted_by_common_code': False}
-        return {'state': 'active' if active else 'idle',
-                'autocommit': autocommit, 'in_transaction': active,
-                'connection_usable': True, 'driver_observation_only': True,
-                'finality_interpreted_by_common_code': False}
+        from .session_state import transaction_observation
+        return transaction_observation(handle, 'MariaDB',
+            self._executions.sessions, self._uncertain_sessions)
 
     def control_transaction(self, handle, action):
         with self._executions.lock:
@@ -407,7 +393,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             return super().control_transaction(handle, action)
         if action in {'autocommit_on', 'autocommit_off'}:
             observation = self._describe_idle_transaction(handle)
-            if not observation.get('connection_usable'):
+            if not observation.get('connection_usable') or not observation.get('status_current'):
                 raise RelationalClientError('MariaDB session outcome is unknown')
             enabled = action == 'autocommit_on'
             if observation['autocommit'] == enabled:
@@ -418,6 +404,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
                     'changing autocommit')
             try:
                 handle.autocommit = enabled
+                self._executions.sessions.status_unknown.discard(id(handle))
                 observed = self._describe_idle_transaction(handle)
                 if (not observed.get('connection_usable') or
                         observed.get('autocommit') != enabled):
@@ -428,7 +415,9 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
                 self._uncertain_sessions.add(id(handle))
                 raise
         try:
-            return super().control_transaction(handle, action)
+            result = super().control_transaction(handle, action)
+            self._executions.sessions.status_unknown.discard(id(handle))
+            return result
         except BaseException:
             self._uncertain_sessions.add(id(handle))
             raise
@@ -437,6 +426,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         with self._executions.lock:
             self._executions.require_idle(handle)
             self._session_requests.pop(id(handle), None)
+            self._executions.sessions.forget(handle)
             return self._close_idle_session(handle)
 
     def _close_idle_session(self, handle):
@@ -477,6 +467,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             self._mariadb_connector.close()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
+            self._executions.sessions.entries.clear()
+            self._executions.sessions.status_unknown.clear()
             self._backup_stage_handles.clear()
 
     @staticmethod
@@ -1063,9 +1055,17 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         })
 
     def open_session(self, request):
-        handle = super().open_session(request)
-        self._session_requests[id(handle)] = copy.deepcopy(dict(request))
-        return handle
+        with self._executions.lock:
+            if self._executions.closing:
+                raise RelationalClientError('MySQL client is closing')
+            handle = super().open_session(request)
+            try:
+                self._executions.sessions.register(handle)
+            except BaseException:
+                self._discard_failed_session(handle)
+                raise
+            self._session_requests[id(handle)] = copy.deepcopy(dict(request))
+            return handle
 
     def execute(self, handle, request):
         session_request = self._session_requests.get(id(handle))
@@ -1099,24 +1099,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             return self._describe_idle_transaction(handle)
 
     def _describe_idle_transaction(self, handle):
-        if id(handle) not in self._uncertain_sessions:
-            try:
-                handle.ping(reconnect=False)
-                autocommit = handle.autocommit
-                active = handle.in_transaction
-                if type(autocommit) is not bool or type(active) is not bool:
-                    raise RelationalClientError(
-                        'MySQL transaction flags are unavailable')
-            except Exception:
-                self._uncertain_sessions.add(id(handle))
-        if id(handle) in self._uncertain_sessions:
-            return {'state': 'unknown', 'connection_usable': False,
-                    'driver_observation_only': True,
-                    'finality_interpreted_by_common_code': False}
-        return {'state': 'active' if active else 'idle',
-                'autocommit': autocommit, 'in_transaction': active,
-                'connection_usable': True, 'driver_observation_only': True,
-                'finality_interpreted_by_common_code': False}
+        from .session_state import transaction_observation
+        return transaction_observation(handle, 'MySQL',
+            self._executions.sessions, self._uncertain_sessions)
 
     def control_transaction(self, handle, action):
         with self._executions.lock:
@@ -1129,7 +1114,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             return super().control_transaction(handle, action)
         if action in {'autocommit_on', 'autocommit_off'}:
             observation = self._describe_idle_transaction(handle)
-            if not observation.get('connection_usable'):
+            if not observation.get('connection_usable') or not observation.get('status_current'):
                 raise RelationalClientError('MySQL session outcome is unknown')
             enabled = action == 'autocommit_on'
             if observation['autocommit'] == enabled:
@@ -1140,6 +1125,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                     'changing autocommit')
             try:
                 handle.autocommit = enabled
+                self._executions.sessions.status_unknown.discard(id(handle))
                 observed = self._describe_idle_transaction(handle)
                 if (not observed.get('connection_usable') or
                         observed.get('autocommit') != enabled):
@@ -1150,7 +1136,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 self._uncertain_sessions.add(id(handle))
                 raise
         try:
-            return super().control_transaction(handle, action)
+            result = super().control_transaction(handle, action)
+            self._executions.sessions.status_unknown.discard(id(handle))
+            return result
         except BaseException:
             self._uncertain_sessions.add(id(handle))
             raise
@@ -1159,6 +1147,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         with self._executions.lock:
             self._executions.require_idle(handle)
             self._session_requests.pop(id(handle), None)
+            self._executions.sessions.forget(handle)
             return self._close_idle_session(handle)
 
     def _close_idle_session(self, handle):
@@ -1188,6 +1177,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             self._mysql_connector.close()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
+            self._executions.sessions.entries.clear()
+            self._executions.sessions.status_unknown.clear()
 
     @staticmethod
     def _workspace_path(workspace, value, label):

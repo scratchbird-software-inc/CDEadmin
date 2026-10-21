@@ -24,9 +24,12 @@ def test_exact_values(native, expected):
     assert value(native) == expected
 
 
-def test_old_connector_refused_before_query_execute():
+@pytest.mark.parametrize('has_temporals', [False, True])
+def test_old_connector_refused_before_query_execute(has_temporals):
     native = SimpleNamespace(close=Mock(), execute=Mock())
-    with pytest.raises(RelationalClientError, match='exact-temporal'):
+    if has_temporals:
+        native.cdeadmin_exact_temporals = False
+    with pytest.raises(RelationalClientError, match='exact temporals and native fetch errors'):
         Cursor(SimpleNamespace(cursor=lambda **kw: native))
     native.close.assert_called_once()
     native.execute.assert_not_called()

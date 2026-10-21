@@ -18,6 +18,7 @@ def connection(rows, *, engine='InnoDB'):
     stream=Mock()
     stream.metadata={'flags': [32], 'charset': [63]}
     stream.cdeadmin_exact_temporals = False
+    stream.cdeadmin_checked_fetch_errors = True
     stream.description=[('value',FieldType.LONGLONG,None,None,None,None,False,32,63)]
     stream.fetchmany.side_effect=[[(value,) for value in rows],[]]
     native=Mock(server_status=0)

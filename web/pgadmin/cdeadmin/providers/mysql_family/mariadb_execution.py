@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from pgadmin.cdeadmin.sdk import RelationalClientError
+from .session_state import SessionIdentities
 from .mariadb_values import (
     Cursor, ExactTemporalConnectorRequired, columns, parameters,
 )
@@ -41,6 +42,7 @@ class Executions:
         self.tokens = []
         self.lock = threading.RLock()
         self.closing = False
+        self.sessions = SessionIdentities('MariaDB')
 
     def active(self, handle):
         return next((t for t in self.tokens if t.connection is handle
@@ -61,7 +63,12 @@ class Executions:
                     'MariaDB execution owner is closing')
             self.require_idle(handle)
             self.client._require_usable_session(handle)
-            token = Execution(handle, copy.deepcopy(session_request))
+            try:
+                identity = self.sessions.get(handle)
+            except RelationalClientError:
+                self.client._uncertain_sessions.add(id(handle))
+                raise
+            token = Execution(handle, copy.deepcopy(session_request), identity=identity)
             token.worker = threading.Thread(
                 target=self._run, args=(token, source, bound), daemon=True,
                 name='cdeadmin-mariadb-' + token.reference[:8])
@@ -96,14 +103,6 @@ class Executions:
     def _run(self, token, source, bound):
         cursor = None
         try:
-            identity_cursor = token.connection.cursor()
-            try:
-                identity_cursor.execute(
-                    'SELECT @@server_uid, CONNECTION_ID()')
-                server, connection_id = identity_cursor.fetchone()
-                token.identity = (str(server), int(connection_id))
-            finally:
-                identity_cursor.close()
             if token.cancelled:
                 return  # Shutdown before dispatch has no native SQL outcome.
             cursor = Cursor(token.connection)
@@ -150,6 +149,7 @@ class Executions:
                 if not cursor.nextset():
                     break
                 index += 1
+            self.sessions.status_unknown.discard(id(token.connection))
         except Exception as exc:
             token.error = self._error(exc)
             # Only a decoded server error establishes a command boundary.
@@ -165,10 +165,11 @@ class Executions:
             elif not server_error:
                 token.cleanup_failed = True
             else:
-                try:
-                    token.connection.ping()
-                except Exception:
-                    token.cleanup_failed = True
+                # A decoded ERR already establishes the command boundary.
+                # PING would replace the user's diagnostic state. ERR carries
+                # no current status flags, so policy remains unknown until a
+                # later acknowledged command supplies fresh native status.
+                self.sessions.status_unknown.add(id(token.connection))
         finally:
             if cursor is not None and not token.cleanup_failed:
                 try:

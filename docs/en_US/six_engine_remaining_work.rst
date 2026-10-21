@@ -81,6 +81,14 @@ MySQL
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
+* MY-DIAGNOSTICS: Remove intrusive language/charset observations from retained
+  parameter binding, context/script framing (including unbound commands routed
+  through it) and the C charset adapter
+  without guessing current SQL mode or weakening exact charset handling. Audit
+  other retained editor/session consumers. Identity discovery, cursor creation,
+  decoded-error cleanup, empty script tails and automatic transaction observation
+  now preserve diagnostic state on the qualified pure/unbound path. This scope
+  does not qualify the remaining paths or close INV-MYSQL.
 
 Native spatial-reference catalog, typed management and bounded selected-SRID
 server DDN exchange/migration are implemented. Captured SRID scope is explicit;

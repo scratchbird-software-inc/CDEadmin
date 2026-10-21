@@ -5,6 +5,7 @@ the C client exposes its current native character set without another query.
 Never send SET NAMES or overwrite the operator's session settings here.
 """
 import codecs
+from contextvars import ContextVar
 import weakref
 
 from ...sdk import RelationalClientError
@@ -60,6 +61,7 @@ def parameter_values(values, charset):
 def install(native):
     if not type(native).__module__.startswith('mysql.connector.'):return
     reference=weakref.ref(native);factory=type(native).cursor
+    creating_cursor=ContextVar('cdeadmin_mysql_creating_cursor',default=False)
     c_api=getattr(native,'_cmysql',None)
     initial=factory(native)
     try:
@@ -180,7 +182,10 @@ def install(native):
     def owned_cursor(*args,**kwargs):
         owner=reference()
         if owner is None:raise RelationalClientError('MySQL character-set connection is unavailable')
-        sync();cursor=factory(owner,*args,**kwargs)
+        sync()
+        construction=creating_cursor.set(True)
+        try:cursor=factory(owner,*args,**kwargs)
+        finally:creating_cursor.reset(construction)
         if any('Prepared' in cls.__name__ for cls in type(cursor).__mro__):return cursor
         cursor_reference=weakref.ref(cursor)
         def adapted(method,many=False):
@@ -206,6 +211,14 @@ def install(native):
     class CharsetConnection(base):
         @property
         def python_charset(self):return codec(self._character_set.get_info(self._charset_id)[0])
+        def is_connected(self):
+            if creating_cursor.get():
+                # The native cursor factory sends PING through is_connected().
+                # Constructing a cursor must preserve the user's ROW_COUNT and
+                # diagnostic area. Check local closure here; actual execution
+                # owns transport failure handling and never reconnects.
+                return bool(c_api.connected()) if c_api is not None else self._socket is not None
+            return super().is_connected()
     CharsetConnection.__name__='Charset'+base.__name__
     native.__class__=CharsetConnection
     native.cursor=owned_cursor

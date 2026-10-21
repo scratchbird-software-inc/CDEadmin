@@ -308,8 +308,21 @@ class Cursor:
             if self.cancel_requested is not None and self.cancel_requested():
                 raise MySQLParameterAdmissionError('MySQL query cancelled before command dispatch')
             from ...data_studio.mysql_quoting import available, parameter_spans
-            version, mode = observed_language(self.connection)
-            source = self._script.next(version, mode)
+            # Finishing a script must not send a metadata command after its
+            # last native response: that would replace ROW_COUNT/diagnostics.
+            # Empty tails have no next command in any supported quote mode.
+            # A meaningful or ambiguous tail still gets its own current-mode
+            # admission below; do not guess its language from an earlier SET.
+            finished = self._commands_dispatched and all(
+                not self._script.has_next(self._framing_version, candidate)
+                for candidate in ('', 'ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES',
+                                  'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'))
+            if finished:
+                source = None
+            else:
+                version, mode = observed_language(self.connection)
+                self._framing_version = version
+                source = self._script.next(version, mode)
             if source is None:
                 if self._parameters is not None and not isinstance(self._parameters, Mapping) and self._parameter_position != len(self._parameters):
                     raise MySQLParameterAdmissionError('Unused MySQL query parameters remain after the dispatched commands')

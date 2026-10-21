@@ -7124,8 +7124,11 @@ export default function ProviderWorkspaceContent({
   const managedAutocommit = languageProfile === 'postgresql-sql' ||
     (['mysql-sql', 'mariadb-sql'].includes(languageProfile) && workspace?.languages?.find(
       item => item.language_profile === languageProfile)?.transaction_actions?.includes('autocommit_on'));
+  const diagnosticPolicyUnknown = ['mysql-sql', 'mariadb-sql'].includes(languageProfile) &&
+    transaction?.provider_payload?.connection_usable === true &&
+    transaction?.provider_payload?.status_current === false;
   const sessionPolicyUnknown = managedAutocommit &&
-    Boolean(sessionId) && sessionAutocommit === null;
+    Boolean(sessionId) && sessionAutocommit === null && !diagnosticPolicyUnknown;
   const observeTransaction = (observation) => {
     setTransaction(observation);
     const policy = observation.provider_payload?.autocommit;
@@ -8033,7 +8036,7 @@ export default function ProviderWorkspaceContent({
           {managedAutocommit && <FormControlLabel
             control={<Checkbox checked={sessionAutocommit === true}
               indeterminate={sessionAutocommit === null}
-              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId}
+              disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || diagnosticPolicyUnknown || !!occurrenceId}
               onChange={(_event, checked) => controlTransaction(checked ? 'autocommit_on' : 'autocommit_off')} />}
             label={gettext('Autocommit')} />}
           {(activeLanguage?.transaction_actions || []).filter(action => !action.startsWith('autocommit_')).map((action) =>

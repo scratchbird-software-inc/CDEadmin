@@ -11,8 +11,25 @@ from pgadmin.cdeadmin.providers.mysql_family.provider import MariaDBDBAPIClient
 from pgadmin.cdeadmin.sdk import RelationalClientConfig, RelationalClientError
 
 
+class Native(Mock):
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if name in {'autocommit', 'in_transaction'} and type(value) is bool:
+            status = self.__dict__.get('server_status', 0)
+            if type(status) is int:
+                bit = 2 if name == 'autocommit' else 1
+                status = (status | bit) if value else (status & ~bit)
+                super().__setattr__('server_status', None if self.__dict__.get('lose_status_on_policy') else status)
+                super().__setattr__('_cdeadmin_server_status',
+                    None if self.__dict__.get('lose_status_on_policy') else status)
+
+
 def factory():
-    return SimpleNamespace(connect=Mock(side_effect=lambda **kw: Mock()))
+    def connection(**options):
+        native = Native(connection_id=7, server_status=0, _cmysql=None)
+        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
+        return native
+    return SimpleNamespace(connect=Mock(side_effect=connection))
 
 
 def test_reset_preference_does_not_enable_global_pool():
@@ -23,6 +40,15 @@ def test_reset_preference_does_not_enable_global_pool():
     assert a is not b
     assert module.connect.call_args_list[0].kwargs == {'host': 'one'}
     assert module.connect.call_args_list[1].kwargs == {'host': 'two'}
+
+
+def test_old_native_connector_cannot_silently_treat_fetch_error_as_end_of_rows():
+    module = SimpleNamespace(__name__='mariadb',
+        _mariadb=SimpleNamespace(cursor=type('OldNativeCursor', (), {})),
+        connect=Mock())
+    with pytest.raises(RelationalClientError, match='fetch error handling'):
+        Connector(module)
+    module.connect.assert_not_called()
 
 
 def test_private_generation_rotation_and_outstanding_old_lease():
@@ -171,11 +197,11 @@ def test_failed_finality_is_unknown_even_when_cached_flags_are_idle(action):
     client.close()
 
 
-def test_dead_native_session_does_not_publish_cached_transaction_flags():
+def test_locally_closed_native_session_does_not_publish_cached_transaction_flags():
     client = make_client()
     handle = client.open_session({'route': {'host': 'one'}})
     handle.autocommit, handle.server_status = False, 0
-    handle.ping.side_effect = RuntimeError('dead')
+    handle.connection_id = None
     result = client.describe_transaction(handle)
     assert result['state'] == 'unknown'
     assert result['connection_usable'] is False
@@ -221,11 +247,11 @@ def test_lost_autocommit_acknowledgement_quarantines_without_reconnect():
     client = make_client()
     handle = client.open_session({'route': {'host': 'one'}})
     handle.autocommit, handle.server_status = False, 0
-    handle.ping.side_effect = [None, OSError('lost acknowledgement')]
+    handle.lose_status_on_policy = True
     with pytest.raises(RelationalClientError, match='acknowledgement'):
         client.control_transaction(handle, 'autocommit_on')
     assert client.describe_transaction(handle)['state'] == 'unknown'
     with pytest.raises(RelationalClientError, match='unknown'):
         client.control_transaction(handle, 'autocommit_on')
-    assert all(call.kwargs == {} for call in handle.ping.call_args_list)
+    handle.ping.assert_not_called()
     client.close()

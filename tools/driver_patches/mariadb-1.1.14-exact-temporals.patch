@@ -10,7 +10,24 @@
      uint8_t reprepare;
 --- a/mariadb/mariadb_cursor.c
 +++ b/mariadb/mariadb_cursor.c
-@@ -241,6 +241,11 @@
+@@ -112,8 +112,16 @@
+ static PyObject *MrdbCursor_metadata(MrdbCursor *self);
+
+
++static PyObject *
++MrdbCursor_checked_fetch_errors(MrdbCursor *self, void *closure)
++{
++    Py_RETURN_TRUE;
++}
++
+ static PyGetSetDef MrdbCursor_sets[]=
+ {
++    {"cdeadmin_checked_fetch_errors", (getter)MrdbCursor_checked_fetch_errors, NULL,
++        "Native text/binary fetch errors are raised instead of end-of-rows.", NULL},
+     {"description", (getter)MrdbCursor_description, NULL,
+         cursor_description__doc__, NULL},
+     {"metadata", (getter)MrdbCursor_metadata, NULL,
+@@ -241,6 +249,11 @@
          offsetof(MrdbCursor, cursor_type),
          0,
          MISSING_DOC},
@@ -22,10 +39,48 @@
      {"buffered",
          T_BOOL,
          offsetof(MrdbCursor, is_buffered),
-@@ -978,7 +983,15 @@
+@@ -859,11 +872,21 @@
+         rc= mysql_stmt_fetch(self->stmt);
+         if (rc == MYSQL_NO_DATA)
+             return 1;
++        if (rc && rc != MYSQL_DATA_TRUNCATED)
++        {
++            mariadb_throw_exception(self->stmt, NULL, 1, NULL);
++            return -1;
++        }
+         return 0;
+     }
+
+     if (!(row= mysql_fetch_row(self->result)))
+     {
++        if (mysql_errno(self->connection->mysql))
++        {
++            mariadb_throw_exception(self->connection->mysql, NULL, 0, NULL);
++            return -1;
++        }
+         return 1;
+     }
+
+@@ -894,9 +917,12 @@
+                 "Cursor doesn't have a result set");
+         return NULL;
+     }
+-    if (MrdbCursor_fetchinternal(self))
+-    {
+-        Py_RETURN_NONE;
++    {
++        int fetched= MrdbCursor_fetchinternal(self);
++        if (fetched < 0)
++            return NULL;
++        if (fetched > 0)
++            Py_RETURN_NONE;
+     }
+
+     self->row_number++;
+@@ -978,7 +1004,15 @@
          Py_END_ALLOW_THREADS;
      }
- 
+
 -    if (rc)
 +    if (rc > 0)
 +    {
@@ -39,12 +94,32 @@
      {
          Py_RETURN_NONE;
      }
+@@ -1315,10 +1349,18 @@
+         return NULL;
+     }
+
+-    for (uint64_t i=0; i < row_count && !MrdbCursor_fetchinternal(self); i++)
++    for (uint64_t i=0; i < row_count; i++)
+     {
+         uint32_t j;
+         PyObject *Row;
++        int fetched= MrdbCursor_fetchinternal(self);
++        if (fetched < 0)
++        {
++            Py_DECREF(List);
++            return NULL;
++        }
++        if (fetched > 0)
++            break;
+
+         self->row_number++;
+
 --- a/mariadb/mariadb_codecs.c
 +++ b/mariadb/mariadb_codecs.c
 @@ -502,6 +502,69 @@
      return new_value;
  }
- 
+
 +
 +/* ScratchRobin opt-in: preserve SQL temporal values outside Python's calendar.
 +   This affects only query cursors explicitly opting in, not catalog consumers. */
@@ -113,14 +188,14 @@
  {
 @@ -516,6 +579,11 @@
        type= MYSQL_TYPE_NULL;
- 
+
      length= mysql_fetch_lengths(self->result);
 +    if (data && self->cdeadmin_exact_temporals && cdeadmin_temporal_type(type))
 +    {
 +        self->values[column]= PyUnicode_FromStringAndSize(data, length[column]);
 +        return;
 +    }
- 
+
      switch (type)
      {
 @@ -690,6 +758,12 @@

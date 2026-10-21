@@ -294,12 +294,42 @@ replay. MySQL DDL implicit commits and nontransactional table behavior are not
 changed. These actions are not added to MariaDB or MySQL-wire engines by analogy.
 
 Completed MySQL statements refresh the checkbox's observation on the same idle
-connection, so explicit SET autocommit SQL is reflected. Failed observation
-blocks further execution until refresh succeeds. Query messages expose bounded
+connection using the last native protocol status, so explicit SET autocommit SQL
+is reflected without a PING or SQL getter. This observation does not check the
+server's present availability. A decoded ERR has no fresh policy flags: the
+checkbox becomes unknown and cannot change policy, while the original usable
+session remains available for diagnostic SQL. A later complete native response
+supplies fresh flags. A failed policy request or uncertain transport outcome
+still blocks execution. Query messages expose bounded
 native server error text with errno/SQLSTATE, but not local connector exception
 text. Client dispatch timing covers cursor.execute only: it includes transport
 and the first native response, not subsequent result fetching, browser waits,
 or isolated server execution/preparation time.
+
+Original-session diagnostic state
+---------------------------------
+
+Retained session opening captures the native instance and connection identity
+once. Subsequent query dispatch checks the connector's local connection ID;
+it does not send an identity query on the user's connection. Cancellation still
+verifies the instance on its separate control connection. Constructing a MySQL
+cursor checks local closure without the connector factory's implicit PING.
+Explicit health probes outside cursor construction retain their native behavior.
+Decoded server errors establish a command boundary without a recovery PING.
+Finishing a framed script does not send an extra language observation for an
+empty or comment-only tail, including after a statement terminator.
+
+``tools/cdeadmin_mysql_family_session_diagnostics_qualification.py --engine mysql``
+exercises native ROW_COUNT, GET DIAGNOSTICS, error/warning areas, a routine that
+changes autocommit before failing, cancellation and unread disconnects through
+the authenticated original-session API. Its MySQL scope is the pure connector's
+unbound diagnostic cases and passive transaction observation. Parameter binding
+and context/script framing still read current native language before dispatch,
+including unbound SET/CALL and DML routed through framing because it contains
+SET. This can affect diagnostic expressions inside those commands. The C charset
+adapter still reads session charset variables. Those commands can
+replace diagnostic state; ``MY-DIAGNOSTICS`` remains open for those paths and
+other editor/session consumers. No diagnostic function is emulated or rewritten.
 
 DDN to native metadata export
 -----------------------------

@@ -975,6 +975,38 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls.some(([, payload]) => payload.action === 'execute')).toBe(false);
   });
 
+  it.each(['mysql', 'mariadb'])('allows %s native diagnostics after ERR without assuming transaction policy', async (engine) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT missing_column',
+      transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
+    }]}}});
+    let executed = false;
+    api.post.mockImplementation((_url, payload) => {
+      if (payload.action === 'execute') executed = true;
+      const data = {
+        open_session: {session_id: 'diagnostic-session'},
+        execute: {occurrence_id: 'native-error'},
+        poll: {occurrence: {operation: {terminal: true}}, rendered_result: null},
+        transaction: {provider_payload: executed ? {
+          state: 'unknown', connection_usable: true, status_current: false,
+        } : {state: 'idle', autocommit: true, connection_usable: true, status_current: true}},
+      }[payload.action];
+      return Promise.resolve({data: {data}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: '42'}} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/workspace/1', expect.objectContaining({action: 'poll'})));
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Run', exact: true})).toBeEnabled());
+    expect(screen.getByRole('checkbox', {name: 'Autocommit'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'commit', exact: true})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'rollback', exact: true})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Run', exact: true}));
+    await waitFor(() => expect(api.post.mock.calls.filter(([, p]) => p.action === 'execute')).toHaveLength(2));
+    expect(api.post.mock.calls.filter(([, p]) => p.action === 'open_session')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([, p]) => p.action === 'transaction_action')).toBe(false);
+  });
+
   it.each([
     ['MySQL JSON query plan', 'EXPLAIN FORMAT=JSON {source}'],
     ['MySQL execution plan', 'EXPLAIN ANALYZE {source}'],

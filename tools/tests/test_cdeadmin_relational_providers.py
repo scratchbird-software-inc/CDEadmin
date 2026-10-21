@@ -1584,7 +1584,8 @@ class RelationalInventoryTests(unittest.TestCase):
         module.ConnectionPool.assert_not_called()
 
     def test_mariadb_client_retires_private_pool_after_checked_out_handle(self):
-        native = mock.Mock()
+        native = mock.Mock(connection_id=7)
+        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
         module = SimpleNamespace(connect=mock.Mock(return_value=native),
                                  ConnectionPool=mock.Mock())
         client = MariaDBDBAPIClient(RelationalClientConfig(

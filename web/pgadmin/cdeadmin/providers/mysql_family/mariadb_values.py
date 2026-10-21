@@ -129,11 +129,12 @@ def parameters(items):
 class Cursor:
     def __init__(self, connection):
         self.native = connection.cursor(buffered=False)
-        if not hasattr(self.native, 'cdeadmin_exact_temporals'):
+        if (not hasattr(self.native, 'cdeadmin_exact_temporals') or
+                getattr(self.native, 'cdeadmin_checked_fetch_errors', False) is not True):
             self.native.close()
             raise ExactTemporalConnectorRequired(
                 'MariaDB requires the ScratchRobin '
-                'exact-temporal connector build')
+                'connector build with exact temporals and native fetch errors')
         self.native.cdeadmin_exact_temporals = True
 
     def __getattr__(self, name):

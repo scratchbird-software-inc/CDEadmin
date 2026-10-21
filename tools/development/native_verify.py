@@ -52,6 +52,7 @@ def child(name, evidence, port):
         from pglast import parser
         assert getattr(parser, 'CDEADMIN_PARSE_OPTIONS_REVISION', None) == 2, 'Build the native PostgreSQL parser options patch'
         assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_exact_temporals'), 'Stock MariaDB connector is insufficient'
+        assert hasattr(mariadb._mariadb.cursor, 'cdeadmin_checked_fetch_errors'), 'Rebuild MariaDB connector native fetch error handling'
         from pgadmin.cdeadmin.providers.firebird.provider import (
             _configure_client_library, _client_library_identity)
         _configure_client_library(firebird)
