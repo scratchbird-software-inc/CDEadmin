@@ -125,6 +125,11 @@ MySQL
   exact reviewed files and receipts; they do not infer backup/log recovery
   coverage or purge native server logs. Backup/log-chain-aware retention remains
   separate from the qualified age/count policies and operator-reviewed workflow.
+* Native SQL server control now exposes reviewed SHUTDOWN/RESTART requests with
+  all-client disconnection consent and request-only acknowledgement. Native
+  supervision and privileges remain engine requirements. Separate owned fixture
+  process/data observations qualify those requests; they do not close host start,
+  service installation, upgrades or complete lifecycle acceptance.
 * MY-HA-LIFECYCLE: Complete independently observed topology/bootstrap/failover/
   repair and authorized server-host configuration, lifecycle and upgrades.
   Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID

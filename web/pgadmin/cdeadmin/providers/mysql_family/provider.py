@@ -190,6 +190,8 @@ def _administration(profile):
         common['column'] = common['column'] | column_masking_operations
         from .mysql_key_cache import OPERATIONS as key_cache_operations
         common['table'] = common['table'] | key_cache_operations
+        from .mysql_server_control import OPERATIONS as server_control_operations
+        common['server'] = common['server'] | frozenset(server_control_operations)
         from .mysql_xa import OPERATIONS as xa_operations
         common['server'] = common['server'] | frozenset(xa_operations)
         common['prepared-transaction'] = frozenset({'inspect'})
@@ -972,6 +974,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if 'mysql_server_control' in compiled:
+            from .mysql_server_control import bind_review
+            return bind_review(self,planned)
         if 'mysql_xa' in compiled:
             from .mysql_xa import bind_review
             return bind_review(self,planned)

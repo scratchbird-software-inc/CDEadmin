@@ -10,12 +10,13 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import (
 
 
 @contextmanager
-def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False,binary_logging=True):
+def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False,binary_logging=True,supervised_restart=False):
+    if supervised_restart and not restartable:raise ValueError('Native restart supervision requires a retained owned fixture')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     name = 'sr-mysql-' + secrets.token_hex(8)
     if gtid_mode not in {'ON','OFF'}:raise ValueError('Select a native fixture GTID mode')
-    proof = {'image': _image_identity('mysql:9.7.0'), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'binary_logging':binary_logging,'keyring_component':bool(keyring),'restartable':bool(restartable)}
+    proof = {'image': _image_identity('mysql:9.7.0'), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'binary_logging':binary_logging,'keyring_component':bool(keyring),'restartable':bool(restartable),'supervised_restart':bool(supervised_restart)}
     started = False
     try:
         args = ['docker', 'run', '-d', '--rm', '--name', name, '--cap-add=SYS_NICE',
@@ -25,6 +26,10 @@ def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,r
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1',0));host_port=reservation.getsockname()[1]
             args[args.index('127.0.0.1::3306')]='127.0.0.1:'+str(host_port)+':3306'
+        if supervised_restart:
+            # The final native server is PID1 with namespace parent0. Docker
+            # supervises its native restart exit code through on-failure.
+            args += ['--restart=on-failure','-e','MYSQLD_PARENT_PID=0']
         if network:
             args += ['--network', network]
         args += ['mysql:9.7.0', '--server-id=' + str(server_id), '--gtid-mode='+gtid_mode,
@@ -78,7 +83,7 @@ def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,r
             (output / 'server.log').write_text(log.stdout + log.stderr)
             proof['owned_server_stopped'] = _run(['docker', 'stop', name], check=False).returncode == 0
             if (keyring or restartable) and proof['owned_server_stopped']:
-                proof['owned_container_removed']=_run(['docker','rm',name],check=False).returncode==0
+                proof['owned_container_removed']=_run(['docker','rm','-v',name],check=False).returncode==0
         (output / 'fixture.json').write_text(json.dumps(proof, indent=2) + '\n')
         if started and not proof['owned_server_stopped']:
             raise RuntimeError('Owned MySQL fixture cleanup failed')

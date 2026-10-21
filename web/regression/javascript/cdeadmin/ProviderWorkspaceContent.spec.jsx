@@ -2003,10 +2003,11 @@ describe('ProviderWorkspaceContent', () => {
       body.action === 'visual_admin_apply')).toHaveLength(1);
   });
 
-  it.each(['ok', 'reload', 'execute'])('does not replay an edit after %s outcome', async (outcome) => {
+  it.each(['ok', 'reload', 'execute', 'deferred'])('does not replay an edit after %s outcome', async (outcome) => {
     const object = {resource_id: 'sequence:one', resource_kind: 'sequence',
       display_name: 'Sequence one'};
-    const applied = {provider_result: {accepted: true}};
+    const applied = {provider_result: {accepted: true,
+      ...(outcome === 'deferred' ? {catalog_refresh_deferred: true} : {})}};
     const post = jest.fn(async ({action}) => {
       if (action === 'resource_inspect') return object;
       if (action === 'visual_admin_validate') return {valid: true};
@@ -2036,7 +2037,11 @@ describe('ProviderWorkspaceContent', () => {
     await waitFor(() => expect(screen.getByRole('button', {name: 'Apply provider plan'}))
       .toBeEnabled());
     fireEvent.click(screen.getByRole('button', {name: 'Apply provider plan'}));
-    if (outcome === 'execute') {
+    if (outcome === 'deferred') {
+      expect(await screen.findByText(/Automatic metadata refresh is deferred/))
+        .toHaveTextContent('Reconnect and refresh after the server is available. Do not repeat the request.');
+      expect(reload).not.toHaveBeenCalled();
+    } else if (outcome === 'execute') {
       await waitFor(() => expect(setError).toHaveBeenCalledWith('Response lost'));
       expect(reload).not.toHaveBeenCalled();
     } else {

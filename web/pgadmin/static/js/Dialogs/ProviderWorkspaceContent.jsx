@@ -1481,7 +1481,9 @@ export function VisualAdministration({catalog, resources, selectedResource, post
       });
       setResult(applied);
       setPlan(null);
-      if (onMutationApplied) {
+      if (applied?.provider_result?.catalog_refresh_deferred === true) {
+        setRefreshWarning(gettext('Automatic metadata refresh is deferred for this server control request. Reconnect and refresh after the server is available. Do not repeat the request.'));
+      } else if (onMutationApplied) {
         try {
           await onMutationApplied({targetResource: selectedTarget,
             operationId, result: applied});

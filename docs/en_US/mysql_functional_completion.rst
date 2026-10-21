@@ -245,6 +245,20 @@ Run the owned qualifier independently with and without ``--use-c``:
 ``tools/cdeadmin_mysql_query_attributes_qualification.py --output <outside-repo>
 --application``. Optional browser and driver paths qualify the built editor.
 
+Native server Maintenance also exposes reviewed ``SHUTDOWN`` and ``RESTART``
+requests, requiring exact server confirmation and consent to disconnect clients.
+They use independently owned connections and recheck native instance, principal
+and role identity. Native SHUTDOWN privilege and RESTART supervisor refusals are
+preserved. RESTART's native implicit commit applies to its private attachment;
+server-wide disconnection and rollback remain engine-owned effects. A returned
+acknowledgement reports request acceptance only, with no automatic retry or
+inferred termination, process generation or readiness. Full host initialization,
+start/service control and upgrade workflows remain separate outstanding work.
+The native qualifier uses unmanaged and supervised owned fixtures to observe
+actual refusals, process changes, preserved committed data and native rollback of
+pending transactions. Disposable retained fixtures remove their anonymous data
+volumes on cleanup.
+
 Native instance maintenance exposes all six Community ``ALTER INSTANCE``
 actions through server Maintenance context commands and reviewed native plans:
 InnoDB/binlog master-key rotation, TLS context reload, keyring reload and InnoDB
