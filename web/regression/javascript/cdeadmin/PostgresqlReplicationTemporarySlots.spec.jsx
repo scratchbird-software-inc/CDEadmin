@@ -158,3 +158,35 @@ it('uses the original snapshot catalog, native COPY options and an explicit tran
   expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'snapshot_end',options:{timeout_seconds:30,invalidate_snapshot:false,decision:'commit'}}});
   await waitFor(() => expect(screen.queryByText(/The original backend owns a read-only repeatable-read SNAPSHOT USE/)).not.toBeInTheDocument());
 });
+
+it('reviews an independent consumer by exporter resource identity and exposes its own snapshot workflow',async () => {
+  const base=api();let current={...opened,latest_native_inventory:{snapshot:{snapshot_name:'0000007E-00000002-1'}}};
+  const consumer={...reviewed,job_id:'consumer',options:{snapshot_import:{exporter_job_id:'resource'}}};
+  const post=jest.fn(payload => {
+    const action=payload.action.replace('postgresql_replication_temporary_','');
+    if(action==='status')return Promise.resolve(current);
+    if(action==='start' && payload.request.job_id==='resource')return Promise.resolve(current);
+    if(action==='review' && payload.request.options.import_from_resource_id)return Promise.resolve(consumer);
+    if(action==='start' && payload.request.job_id==='consumer'){
+      current={...consumer,state:'active',ready:true,snapshot_import_acknowledged:true,snapshot_import_verified:true,
+        latest_native_inventory:{owns_snapshot_transaction:true,used_snapshot:{origin:'imported-exported-snapshot',source_slot:'source_slot'}}};
+      return Promise.resolve(current);
+    }
+    return base(payload);
+  });
+  await open(post);
+  fireEvent.change(screen.getByLabelText('Temporary replication password'),{target:{value:'consumer-secret'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review independent snapshot consumer'}));
+  await screen.findByText(/Independent snapshot consumer of resource resource/);
+  expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_review',request:{database_target_id:target,
+    replication_access:{password:'consumer-secret'},options:{max_lifetime_seconds:3600,import_from_resource_id:'resource'}}});
+  expect(screen.getByRole('button',{name:'Open reviewed replication resource'})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Confirm original replication resource'));
+  fireEvent.click(screen.getByRole('button',{name:'Open reviewed replication resource'}));
+  await screen.findByText(/This independent backend owns an imported/);
+  await waitFor(() => expect(screen.getByLabelText('Retained replication command').parentElement.querySelector('input')).toHaveValue('snapshot_tables'));
+  expect(screen.getByText(/Import acknowledged: true. Import verified: true/)).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Review independent snapshot consumer'})).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Temporary replication password')).toHaveValue('');
+  expect(post.mock.calls.some(([payload]) => payload.action.endsWith('_command_start'))).toBe(false);
+});

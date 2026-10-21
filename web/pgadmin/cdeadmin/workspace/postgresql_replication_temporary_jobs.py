@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import socket
 import sys
+import threading
 import time
 
 from ..providers.postgresql.replication_temporary_slots import (
@@ -12,7 +13,7 @@ from .postgresql_temporary_slot_jobs import TemporarySlotCommands, TemporarySlot
 
 
 def program():
-    from ..providers.postgresql import replication_admission, replication_temporary_slots, replication_stream_options, replication_snapshot_copy
+    from ..providers.postgresql import replication_admission, replication_temporary_slots, replication_stream_options, replication_snapshot_copy, replication_snapshot_import
     from . import postgresql_temporary_slot_jobs, postgresql_replication_stream, postgresql_snapshot_copy
     return {'kind': 'native-postgresql-replication-temporary-slot-resource',
             'adapter_sha256': hashlib.sha256(Path(replication_temporary_slots.__file__).read_bytes()).hexdigest(),
@@ -24,6 +25,7 @@ def program():
             'stream_capture_sha256': hashlib.sha256(Path(postgresql_replication_stream.__file__).read_bytes()).hexdigest(),
             'snapshot_options_sha256': hashlib.sha256(Path(replication_snapshot_copy.__file__).read_bytes()).hexdigest(),
             'snapshot_copy_sha256': hashlib.sha256(Path(postgresql_snapshot_copy.__file__).read_bytes()).hexdigest(),
+            'snapshot_import_sha256': hashlib.sha256(Path(replication_snapshot_import.__file__).read_bytes()).hexdigest(),
             'execution_host': {'kind': 'application-host', 'hostname': socket.gethostname(), 'platform': sys.platform}}
 
 
@@ -46,7 +48,23 @@ class ReplicationTemporaryResources(TemporarySlotResources):
         'An exported snapshot requires this original connection and expires on its next native command. Local status, review and acknowledgement pages send no native command. Explicit snapshot relation inspection reads the owned USE transaction catalog.',
         'Acknowledgements are not a SQL slot catalog or a current health check. Closing the viewer does not release this resource. WAL retention can consume server storage.',
         'Native command acknowledgement, local connection close and independently observed backend cleanup remain separate facts. Lost commands never replay.',
+        'An independent snapshot consumer imports the original acknowledged export using its own connection and transport. Native BEGIN, import and exporter verification have separate receipts. After verified import it can keep copying after exporter release; it does not own or stream the source slot.',
     )
+
+    def snapshot_reference(self, job_id, owner, endpoint, source, expected_program):
+        from ..providers.postgresql.replication_snapshot_import import reference
+        current = self.load(job_id, owner, endpoint)
+        self.require_open(current)
+        if current['program'] != expected_program or current['source'] != source:
+            raise TemporarySlotError('The snapshot exporter belongs to another native source, provider scope or adapter')
+        snapshot = (current.get('latest_native_inventory') or {}).get('snapshot')
+        if not snapshot:
+            raise TemporarySlotError('The original backend has no acknowledged current exported snapshot')
+        return reference({'exporter_job_id': current['job_id'],
+                          'exporter_resource_id': current.get('native_resource_id'),
+                          'exporter_backend_pid': current.get('backend_pid'),
+                          'source': current['source'],
+                          'snapshot': {key: snapshot.get(key) for key in ('snapshot_name', 'consistent_point', 'slot')}})
 
     def queue_review(self, job_id, owner, endpoint, operation, value):
         return self.queue_request(job_id, owner, endpoint, 'review', operation, options(operation, value))
@@ -128,9 +146,49 @@ class ReplicationTemporaryTransport:
                 native = ReplicationTemporarySlots(connection, record['source'])
                 jobs.update(record, native_resource_open_returned=True, native_resource_id=native.resource_id,
                     backend_pid=native.backend_pid, backend_started_epoch=None, source_role_identity=native.source,
-                    native_adapter_sha256=native.adapter_sha256, ready=True, owner_heartbeat_at=time.time(),
+                    native_adapter_sha256=native.adapter_sha256, ready=False, owner_heartbeat_at=time.time(),
                     sql_admission_performed=False, slot_catalog_observed=False)
                 try:
+                    selected = record['options'].get('snapshot_import')
+                    if selected is not None:
+                        # Recheck local ownership after the new connection is
+                        # open, without touching the original native socket.
+                        if jobs.snapshot_reference(selected['exporter_job_id'], record['owner'], record['endpoint_id'],
+                                                   record['source'], record['program']) != selected:
+                            raise TemporarySlotError('The original exported snapshot changed before consumer import')
+                        done = threading.Event()
+                        observer_failed = threading.Event()
+                        def stopped():
+                            return cancel.is_set() or lifetime is not None and time.monotonic() - opened >= lifetime
+                        def dispatching():
+                            if stopped() or observer_failed.is_set():
+                                raise TemporarySlotError('Snapshot consumer opening stopped before native dispatch')
+                        def observe():
+                            while not done.wait(.1):
+                                try:
+                                    if stopped():
+                                        connection.cancel_safe(timeout=1)
+                                        return
+                                except BaseException:
+                                    observer_failed.set()
+                                    try:
+                                        connection.cancel_safe(timeout=1)
+                                    except BaseException:
+                                        pass
+                                    return
+                        watcher = threading.Thread(target=observe, daemon=True, name='postgresql-snapshot-import-cancel')
+                        watcher.start()
+                        try:
+                            from ..providers.postgresql.replication_snapshot_import import install
+                            install(native, selected, lambda values: jobs.update(record, **values), dispatching)
+                            dispatching()
+                        finally:
+                            done.set()
+                            watcher.join(timeout=2)
+                        if watcher.is_alive() or observer_failed.is_set():
+                            raise TemporarySlotError('Snapshot import cancellation observer cleanup is unconfirmed; do not replay')
+                    jobs.update(record, ready=True, latest_native_inventory=native.inventory(),
+                                latest_inventory_observed_at=time.time(), owner_heartbeat_at=time.time())
                     while not cancel.is_set():
                         if lifetime is not None and time.monotonic() - opened >= lifetime:
                             jobs.update(record, lifetime_expired=True)

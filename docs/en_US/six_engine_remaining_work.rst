@@ -134,9 +134,9 @@ PostgreSQL
   implemented independent native recovery drills and recovery targets.
 * PG-ARCHIVES: Complete retention, interrupted-stream restart and log/archive
   management beyond the qualified physical WAL and logical receiver captures.
-* PG-TEMP-PROTOCOL: Complete independent application consumers of exported
-  snapshots, destination orchestration/cutover beyond selected native initial
-  relation copies, and installed output-plugin qualification. Retained
+* PG-TEMP-PROTOCOL: Complete cross-registration and ordinary-SQL-principal
+  exported-snapshot consumers, destination orchestration/cutover beyond selected
+  native initial relation copies, and installed output-plugin qualification. Retained
   original-backend logical streaming and temporary physical/logical creation,
   export/no-export snapshot ownership and safe owned-slot removal now have a
   separate reviewed replication-only resource. Existing SQL temporary-slot
@@ -163,8 +163,8 @@ acknowledgement, TAR/flat-file verification and recovery remain separate facts.
 SQL role substitution is refused. Replication-only SSH now uses inspected or
 operator-supplied public host keys, independent pinned worker tunnels and native
 password/private-key authentication, including saved credentials. Remaining
-retained streams and transaction snapshot-consumer workflows still require
-separate admission/workflow closure.
+cross-registration and ordinary-SQL-principal snapshot-consumer workflows still
+require separate admission/workflow closure.
 Permanent physical-slot creation and known-name physical/logical-slot removal
 use the native utility without opening the SQL slot catalog. Prior existence,
 type and current identity remain unobserved. Native utility acknowledgement is
@@ -205,9 +205,14 @@ slot creation, COPY return, byte publication and transaction end have separate
 outcomes. Explicit commit/rollback retains session slots under native rules for
 later streaming; failed/uncertain commands end this owner. Exact private delivery,
 offline inspection and confirmed removal never replay a capture or promote an
-unknown operation. Independent exported-snapshot consumers, destination
-orchestration/cutover, installed plugin acceptance and the independent PostgreSQL
-inventory remain open.
+unknown operation. Independent application consumers now import a server-derived
+export on a separate same-registration native replication connection and
+transport. Native exporter identity is checked before and after import; BEGIN,
+import and verification retain separate acknowledgements. The imported read-only
+transaction can discover, inspect and copy selected relations after exporter
+release without acquiring its slot. Cross-registration and ordinary-SQL-principal
+consumers, destination orchestration/cutover, installed plugin acceptance and the
+independent PostgreSQL inventory remain open.
 
 DuckDB
 ------

@@ -107,6 +107,10 @@ export default function PostgresqlReplicationTemporarySlots({post,endpointUrl}) 
   const captureKind=snapshotCopy ? 'copy' : 'stream';
   const artifact=command?.[snapshotCopy ? 'snapshot_copy_artifact' : 'protocol_stream_artifact'];
   const ownsSnapshot=Boolean(active(resource?.state) && resource?.ready && resource?.latest_native_inventory?.owns_snapshot_transaction);
+  const importedSnapshot=resource?.latest_native_inventory?.used_snapshot?.origin==='imported-exported-snapshot';
+  useEffect(() => {
+    if(importedSnapshot && ownsSnapshot)setOperation(current => current.startsWith('snapshot_') ? current : 'snapshot_tables');
+  },[resource?.job_id,importedSnapshot,ownsSnapshot]);
   const previewPage=offset => perform(captureKind+'_preview',{resource_id:resource.job_id,job_id:command.job_id,offset,...(snapshotCopy ? {length:4096} : {limit:25})});
   return <Box component="details" sx={{my:1}}><summary>Temporary replication slots and exported snapshots</summary>
     <FormReference formKey="postgresql-replication-temporary" />
@@ -134,7 +138,9 @@ export default function PostgresqlReplicationTemporarySlots({post,endpointUrl}) 
       {resource.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
       {resource.error_message && <Alert severity="warning">{resource.error_message}</Alert>}
       <Button disabled={busy} onClick={() => perform('status',{job_id:resource.job_id})}>Refresh retained replication resource</Button>
-      {ownsSnapshot && <Alert severity="info">The original backend owns a read-only repeatable-read SNAPSHOT USE transaction. Read its relation catalog, inspect a selected relation and copy its native data, then explicitly commit or roll back this transaction before replication streaming. Native temporary slots remain owned by the backend after the transaction ends.</Alert>}
+      {resource.options?.snapshot_import && <Alert severity="info">Independent snapshot consumer of resource {resource.options.snapshot_import.exporter_job_id}. Import acknowledged: {String(Boolean(resource.snapshot_import_acknowledged))}. Import verified: {String(Boolean(resource.snapshot_import_verified))}. After verified import, releasing the exporter does not end this consumer&apos;s snapshot transaction. The source slot still belongs to the exporter.</Alert>}
+      {ownsSnapshot && <Alert severity="info">{importedSnapshot ? 'This independent backend owns an imported read-only repeatable-read snapshot transaction. Read its relation catalog, inspect and copy selected relations, then explicitly commit or roll back. The exporter is no longer required for this transaction; this consumer does not own its source slot.' : 'The original backend owns a read-only repeatable-read SNAPSHOT USE transaction. Read its relation catalog, inspect a selected relation and copy its native data, then explicitly commit or roll back this transaction before replication streaming. Native temporary slots remain owned by the backend after the transaction ends.'}</Alert>}
+      {open && resource.latest_native_inventory?.snapshot && <Button disabled={blocked} onClick={() => perform('review',{options:{max_lifetime_seconds:lifetime,import_from_resource_id:resource.job_id}})}>Review independent snapshot consumer</Button>}
       {resource.state==='reviewed' && <><FormControlLabel label="Confirm original replication resource" control={<Checkbox checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />} /><Button disabled={busy || !confirmed} onClick={() => perform('start',{job_id:resource.job_id,review_digest:resource.review_digest,confirmed:true})}>Open reviewed replication resource</Button></>}
       {open && <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
         <TextField select size="small" label="Retained replication command" value={operation} disabled={blocked} onChange={event => {setOperation(event.target.value);setCommand(current => current?.state==='reviewed' ? null : current);setConfirmed(false);}}>
@@ -202,7 +208,7 @@ export default function PostgresqlReplicationTemporarySlots({post,endpointUrl}) 
       </Box>}
       {resource.latest_native_inventory && <Box component="pre" aria-label="Retained replication snapshot acknowledgement" sx={{whiteSpace:'pre-wrap',maxHeight:250,overflow:'auto'}}>{JSON.stringify(resource.latest_native_inventory,null,2)}</Box>}
       {active(resource.state) && <><FormControlLabel label="Release this replication backend and snapshot" control={<Checkbox checked={release} disabled={busy} onChange={event => setRelease(event.target.checked)} />} /><Button disabled={busy || !release} onClick={() => perform('release',{job_id:resource.job_id,confirmation:resource.job_id})}>Release retained replication resource</Button></>}
-      {resource.native_owner_connection_close_returned && <Alert severity="info">Local replication connection close returned. Remote cleanup is not independently observed. An earlier exported snapshot cannot be used after its owner closes.</Alert>}
+      {resource.native_owner_connection_close_returned && <Alert severity="info">Local replication connection close returned. Remote cleanup is not independently observed. New imports require a live exporter; already verified independent consumers retain their own snapshot transactions.</Alert>}
       <Box component="details"><summary>Retained replication resource receipt</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:250,overflow:'auto'}}>{JSON.stringify(resource,null,2)}</Box></Box>
     </Box>}
   </Box>;

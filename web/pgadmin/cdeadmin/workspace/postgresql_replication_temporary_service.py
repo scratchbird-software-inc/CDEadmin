@@ -88,8 +88,10 @@ def action(service, server, operation, request):
                 selected = reviewed['options']
             elif operation == 'review':
                 selected = fields.get('options')
-                if not isinstance(selected, dict) or set(selected) != {'max_lifetime_seconds'}:
-                    raise TemporarySlotError('Review the exact replication resource lifetime')
+                if (not isinstance(selected, dict) or 'max_lifetime_seconds' not in selected or
+                        set(selected) - {'max_lifetime_seconds', 'import_from_resource_id'}):
+                    raise TemporarySlotError('Review the exact resource lifetime and optional original snapshot exporter')
+                selected = dict(selected)
             else:
                 selected = None
             if selected is not None:
@@ -114,7 +116,14 @@ def action(service, server, operation, request):
             configuration = digest({'registration': PostgreSQLMonitoringHost._configuration(server),
                 'database_target_id': source['database_target_id'], 'root': str(jobs.root), 'lifetime_limit': limit})
             if operation == 'review':
+                if 'import_from_resource_id' in selected:
+                    selected['snapshot_import'] = jobs.snapshot_reference(
+                        selected.pop('import_from_resource_id'), owner, endpoint, source, program())
                 return jobs.review(owner, endpoint, selected, {'identity': source, 'state': {}}, configuration, program())
+            if selected.get('snapshot_import') is not None:
+                exported = selected['snapshot_import']
+                if jobs.snapshot_reference(exported['exporter_job_id'], owner, endpoint, source, program()) != exported:
+                    raise TemporarySlotError('The original exported snapshot changed after consumer review')
             admitted = transport
             transport = None
             return jobs.start({key: value for key, value in fields.items() if key != 'replication_access'}, owner, endpoint,

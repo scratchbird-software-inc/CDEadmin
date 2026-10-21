@@ -125,10 +125,9 @@ exercises authenticated original-backend creation, snapshot import by an
 independent observer after idle/status reads, provider/database isolation,
 foreign-name protection, native errors, release and offline receipts. Optional
 ``--browser-binary`` and ``--driver-binary`` exercise the production controls and
-retention across viewer reload. Evidence belongs outside source. The owning
-remaining-work matrix retains independent consumers of exported snapshots,
-destination orchestration and installed-plugin acceptance. The snapshot consumer
-in the qualification tool is independent test evidence.
+retention across viewer reload. Evidence belongs outside source. Independent
+application consumers are described below. Destination orchestration and
+installed-plugin acceptance retain their own acceptance requirements.
 
 The same retained resource can capture an acknowledged logical temporary slot
 through native START_REPLICATION / COPY BOTH. Native plugin options and the
@@ -222,5 +221,43 @@ inspection/removal and independently observed native COPY cancellation. Its
 browser path creates the owned snapshot, inspects/copies a relation, verifies
 the delivered bytes through an independent native import, ends the transaction
 and streams on the original backend. Evidence qualifies the recorded installation
-and selected scopes; independent exported-snapshot consumers, destination
-orchestration/cutover and wider installed-plugin acceptance remain open.
+and selected scopes; destination orchestration/cutover and wider installed-plugin
+acceptance remain open.
+
+Independent exported-snapshot consumers
+---------------------------------------
+
+An active export offers a separate reviewed consumer resource. Its snapshot
+reference is derived from the current original-owner receipt, bound to the
+registration, exact database/principal, complete provider isolation scope and
+adapter. Callers cannot submit arbitrary snapshot names or source metadata.
+Review and start refuse an expired, changed or unavailable original export;
+the worker rechecks it after opening its own connection and transport. It never
+borrows the exporter's socket or SSH tunnel, and sends no command on that socket.
+
+The new native database replication connection verifies the cluster and peer,
+then observes the exporter's PID, database, principal, application identity,
+backend type and start time. It begins a read-only repeatable-read transaction
+and imports the acknowledged snapshot as the first command after BEGIN. Native
+BEGIN, snapshot import, exporter verification and readiness are recorded
+separately. The exporter identity and start time must still match after import.
+Cancellation, native refusal or uncertain publication closes only this consumer;
+its durable acknowledgements survive and an uncertain import never replays.
+
+After verified import, this independent transaction retains its snapshot under
+PostgreSQL's native rules even after the exporter ends or invalidates its export.
+It offers the existing explicit relation catalog, inspection, locked native COPY,
+private delivery and transaction-end controls. Its source slot remains owned by
+the exporter: the consumer cannot stream or drop that slot. Relation privileges,
+RLS, concurrent DDL and foreign-source snapshot limitations remain native.
+
+The qualification command tests independent application import, concurrent
+commits, exporter termination, exact binary delivery through a native COPY
+import, explicit transaction end, source-slot refusal, expired review, native
+42704 between BEGIN and import, and publication failure after native import.
+Its browser path imports an independent consumer, returns to the exporter for
+streaming/release, then copies and independently verifies the original rows from
+the surviving consumer. This scope uses the same registration and authenticated
+REPLICATION principal. Cross-registration consumers and consumers admitted as
+ordinary SQL users without REPLICATION remain implementation gaps. Destination
+loading/application/cutover and other installed plugins remain separately open.

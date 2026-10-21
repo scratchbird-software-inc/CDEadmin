@@ -35,7 +35,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
     from pgadmin import create_app
     from pgadmin.model import db, User, ServerGroup, Server
     from pgadmin.cdeadmin.workspace import service_for_app
-    from pgadmin.cdeadmin.workspace.postgresql_replication_temporary_jobs import ReplicationTemporaryCommands
+    from pgadmin.cdeadmin.workspace.postgresql_replication_temporary_jobs import ReplicationTemporaryCommands, ReplicationTemporaryResources
     from flask import url_for
     paths = [str(Path(__file__).relative_to(ROOT)),
              'web/pgadmin/cdeadmin/providers/postgresql/replication_temporary_slots.py',
@@ -44,6 +44,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
              'web/pgadmin/cdeadmin/workspace/postgresql_replication_stream.py',
              'web/pgadmin/cdeadmin/providers/postgresql/replication_stream_options.py',
              'web/pgadmin/cdeadmin/providers/postgresql/replication_snapshot_copy.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/replication_snapshot_import.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_snapshot_copy.py',
              'web/pgadmin/cdeadmin/workspace/postgresql_temporary_slot_jobs.py',
              'web/pgadmin/cdeadmin/workspace/service.py',
@@ -79,7 +80,7 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                     url = url_for('NODE-server.cde_workspace_id', gid=group.id, sid=sid)
                 with client.session_transaction() as login:
                     login['_user_id'] = str(uid); login['_fresh'] = True
-                connections = []; protocol_commands = []
+                connections = []; protocol_commands = []; blocked_imports = set()
                 def replication_only(*args, **kwargs):
                     assert kwargs.get('replication') == 'database', 'Application attempted ordinary SQL admission'
                     connections.append({'replication': kwargs['replication'], 'database': kwargs.get('dbname'),
@@ -99,13 +100,24 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                         text = command.as_string(cursor.connection) if isinstance(command, sql.Composable) else str(command)
                         kind = text.lstrip().split(None, 1)[0]
                         assert kind in {'IDENTIFY_SYSTEM', 'SHOW', 'CREATE_REPLICATION_SLOT', 'DROP_REPLICATION_SLOT',
-                                        'BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT', 'LOCK', 'WITH'}, text
+                                        'BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT', 'LOCK', 'WITH', 'SET'}, text
                         if kind in {'SELECT', 'LOCK', 'COMMIT', 'ROLLBACK', 'WITH'}:
+                            exporter_observation = text.startswith('SELECT datname, usename, application_name,')
+                            assert cursor.connection.info.transaction_status.name == 'INTRANS' or exporter_observation
+                        if kind == 'SET':
+                            assert text == 'SET TRANSACTION SNAPSHOT %s'
                             assert cursor.connection.info.transaction_status.name == 'INTRANS'
                         if kind == 'BEGIN':
                             assert cursor.connection.info.transaction_status.name == 'IDLE'
                         assert secret not in text
                         protocol_commands.append(kind)
+                        if (kind == 'SELECT' and text.startswith('SELECT datname, usename, application_name,') and
+                                cursor.connection.info.get_parameters().get('application_name') in blocked_imports):
+                            # Deliberately block this native metadata query to
+                            # exercise cancellation while consumer opening is
+                            # still in progress, before BEGIN or import.
+                            command = text.replace('FROM pg_catalog.pg_stat_activity',
+                                                   'FROM pg_catalog.pg_stat_activity, pg_catalog.pg_sleep(30)')
                     return native_execute(cursor, command, *args, **kwargs)
                 target = 'postgresql-replication-database:' + database.encode('utf8').hex()
                 def http(action, *, refused=False, selected_target=target, **fields):
@@ -136,8 +148,11 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                             return result
                         assert time.monotonic() < deadline, result
                         time.sleep(.03)
-                def open_resource():
-                    reviewed = http('review', options={'max_lifetime_seconds': 300})
+                def open_resource(import_from=None):
+                    selected = {'max_lifetime_seconds': 300}
+                    if import_from is not None:
+                        selected['import_from_resource_id'] = import_from
+                    reviewed = http('review', options=selected)
                     identity = reviewed['job_id']; resources.append(identity)
                     http('start', job_id=identity, review_digest=reviewed['review_digest'], confirmed=True)
                     return wait_resource(identity, lambda result: result.get('ready'))
@@ -249,6 +264,125 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
                     assert len(connections) == before
                     proof['checks'].append('explicit-release-invalidates-native-export-and-offline-receipts-do-not-reconnect')
                     observer.execute("SELECT pg_drop_replication_slot('sr_reused')")
+                    observer.execute('CREATE TABLE native_independent_snapshot_rows(id integer PRIMARY KEY)')
+                    observer.execute('INSERT INTO native_independent_snapshot_rows VALUES(1)')
+                    observer.execute(sql.SQL('GRANT SELECT ON native_independent_snapshot_rows TO {}').format(sql.Identifier(principal)))
+                    independent_oid = observer.execute("SELECT 'native_independent_snapshot_rows'::regclass::oid::text").fetchone()[0]
+                    exporter = open_resource(); exporter_id = exporter['job_id']
+                    run(exporter_id, 'logical_create', {'slot': 'sr_independent', 'plugin': 'test_decoding', 'snapshot': 'export'})
+                    consumer = open_resource(exporter_id); consumer_id = consumer['job_id']
+                    assert consumer['backend_pid'] != exporter['backend_pid']
+                    assert consumer['native_resource_id'] != exporter['native_resource_id']
+                    assert consumer['snapshot_transaction_begin_acknowledged'] and consumer['snapshot_import_acknowledged']
+                    assert consumer['snapshot_exporter_preverified'] and consumer['snapshot_exporter_postverified'] and consumer['snapshot_import_verified']
+                    assert consumer['latest_native_inventory']['used_snapshot']['source_slot'] == 'sr_independent'
+                    assert consumer['latest_native_inventory']['acknowledged_owned_slot_count'] == 0
+                    observer.execute('INSERT INTO native_independent_snapshot_rows VALUES(2)')
+                    http('release', job_id=exporter_id, confirmation=exporter_id)
+                    wait_resource(exporter_id, lambda value: value.get('worker_io_closed'))
+                    deadline = time.monotonic() + 10
+                    while int(observer.execute("SELECT count(*) FROM pg_replication_slots WHERE slot_name='sr_independent'").fetchone()[0]):
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    page = run(consumer_id, 'snapshot_tables', {'schema': 'public', 'limit': 100})
+                    assert any(row['relation_oid'] == independent_oid for row in page['native_acknowledgement']['native_result']['relations'])
+                    copied = run(consumer_id, 'snapshot_copy', {'relation_oid': independent_oid})
+                    response = client.post(url, data={'action': 'postgresql_replication_temporary_copy_download',
+                        'payload': json.dumps({'database_target_id': target, 'resource_id': consumer_id, 'job_id': copied['job_id']})})
+                    assert response.status_code == 200
+                    raw = response.data; response.close()
+                    assert hashlib.sha256(raw).hexdigest() == copied['snapshot_copy_artifact']['sha256']
+                    observer.execute('CREATE TEMP TABLE independent_snapshot_delivered(id integer)')
+                    with observer.cursor().copy('COPY independent_snapshot_delivered FROM STDIN (FORMAT binary)') as loading:
+                        loading.write(raw)
+                    assert observer.execute('SELECT id FROM independent_snapshot_delivered').fetchall() == [(1,)]
+                    assert observer.execute('SELECT id FROM native_independent_snapshot_rows ORDER BY id').fetchall() == [(1,), (2,)]
+                    assert http('status', job_id=consumer_id)['ready']
+                    proof['checks'].append('independent-native-consumer-retains-import-and-exact-binary-copy-after-exporter-release-and-concurrent-commit')
+                    run(consumer_id, 'snapshot_end', {'decision': 'commit'})
+                    refused = http('command_review', resource_id=consumer_id, operation='drop', options={'slot': 'sr_independent'})
+                    refused = wait_child(consumer_id, refused['job_id'], {'failed'})
+                    assert not refused.get('native_dispatch_admitted')
+                    http('release', job_id=consumer_id, confirmation=consumer_id)
+                    wait_resource(consumer_id, lambda value: value.get('worker_io_closed'))
+                    proof['checks'].append('independent-consumer-transaction-end-never-acquires-or-drops-the-exporters-source-slot')
+                    exporter = open_resource(); exporter_id = exporter['job_id']
+                    run(exporter_id, 'logical_create', {'slot': 'sr_import_expired', 'plugin': 'test_decoding', 'snapshot': 'export'})
+                    reviewed_consumer = http('review', options={'max_lifetime_seconds': 300, 'import_from_resource_id': exporter_id})
+                    http('review', options={'max_lifetime_seconds': 300, 'snapshot_import': reviewed_consumer['options']['snapshot_import']}, refused=True)
+                    http('review', options={'max_lifetime_seconds': 300, 'import_from_resource_id': str(uuid.uuid4())}, refused=True)
+                    http('release', job_id=exporter_id, confirmation=exporter_id)
+                    wait_resource(exporter_id, lambda value: value.get('worker_io_closed'))
+                    http('start', job_id=reviewed_consumer['job_id'], review_digest=reviewed_consumer['review_digest'], confirmed=True, refused=True)
+                    assert http('status', job_id=reviewed_consumer['job_id'])['state'] == 'reviewed'
+                    proof['checks'].append('consumer-start-rechecks-live-original-export-and-rejects-arbitrary-snapshot-metadata-and-foreign-resource-identities')
+                    exporter = open_resource(); exporter_id = exporter['job_id']
+                    run(exporter_id, 'logical_create', {'slot': 'sr_import_race', 'plugin': 'test_decoding', 'snapshot': 'export'})
+                    reviewed_consumer = http('review', options={'max_lifetime_seconds': 300, 'import_from_resource_id': exporter_id})
+                    from pgadmin.cdeadmin.providers.postgresql.replication_snapshot_import import install as native_install
+                    def expire_after_begin(native, selected, acknowledge, dispatching):
+                        def record_phase(values):
+                            acknowledge(values)
+                            if values.get('snapshot_transaction_begin_acknowledged'):
+                                with original_connect(**{**parameters, 'dbname': database}) as control:
+                                    control.execute('SELECT pg_terminate_backend(%s)', (int(selected['exporter_backend_pid']),))
+                                    deadline = time.monotonic() + 10
+                                    while int(control.execute('SELECT count(*) FROM pg_stat_activity WHERE pid=%s', (int(selected['exporter_backend_pid']),)).fetchone()[0]):
+                                        assert time.monotonic() < deadline; time.sleep(.03)
+                        return native_install(native, selected, record_phase, dispatching)
+                    with patch('pgadmin.cdeadmin.providers.postgresql.replication_snapshot_import.install', expire_after_begin):
+                        http('start', job_id=reviewed_consumer['job_id'], review_digest=reviewed_consumer['review_digest'], confirmed=True)
+                        refused = wait_resource(reviewed_consumer['job_id'], lambda value: value.get('worker_io_closed'))
+                    assert refused['snapshot_transaction_begin_acknowledged'] and refused['native_error_sqlstate'] == '42704'
+                    assert not refused.get('snapshot_import_acknowledged') and not refused['ready']
+                    http('release', job_id=exporter_id, confirmation=exporter_id)
+                    wait_resource(exporter_id, lambda value: value.get('worker_io_closed'))
+                    proof['checks'].append('native-expiration-after-BEGIN-preserves-42704-and-separate-BEGIN-ack-without-import-or-replay')
+                    exporter = open_resource(); exporter_id = exporter['job_id']
+                    exported = run(exporter_id, 'logical_create', {'slot': 'sr_import_publish', 'plugin': 'test_decoding', 'snapshot': 'export'})
+                    reviewed_consumer = http('review', options={'max_lifetime_seconds': 300, 'import_from_resource_id': exporter_id})
+                    resource_update = ReplicationTemporaryResources.update
+                    def fail_import_publication(jobs, record, **values):
+                        if record['job_id'] == reviewed_consumer['job_id'] and values.get('snapshot_import_verified'):
+                            raise OSError('owned post-import publication failure')
+                        return resource_update(jobs, record, **values)
+                    with patch.object(ReplicationTemporaryResources, 'update', fail_import_publication):
+                        http('start', job_id=reviewed_consumer['job_id'], review_digest=reviewed_consumer['review_digest'], confirmed=True)
+                        uncertain = wait_resource(reviewed_consumer['job_id'], lambda value: value.get('worker_io_closed'))
+                    assert uncertain['state'] == 'unknown' and uncertain['snapshot_import_acknowledged']
+                    assert not uncertain.get('snapshot_import_verified') and not uncertain['ready']
+                    assert http('status', job_id=exporter_id)['ready']
+                    import_snapshot(exported['native_acknowledgement']['snapshot']['snapshot_name'], [(1,), (2,)])
+                    before = len(connections)
+                    repeated = http('start', job_id=uncertain['job_id'], review_digest=uncertain['review_digest'], confirmed=True)
+                    assert repeated['state'] == 'unknown' and len(connections) == before
+                    http('release', job_id=exporter_id, confirmation=exporter_id)
+                    wait_resource(exporter_id, lambda value: value.get('worker_io_closed'))
+                    proof['checks'].append('native-import-ack-survives-postverification-publication-failure-with-original-export-preserved-and-no-automatic-retry')
+                    exporter = open_resource(); exporter_id = exporter['job_id']
+                    exported = run(exporter_id, 'logical_create', {'slot': 'sr_import_cancel', 'plugin': 'test_decoding', 'snapshot': 'export'})
+                    reviewed_consumer = http('review', options={'max_lifetime_seconds': 300, 'import_from_resource_id': exporter_id})
+                    opening_id = reviewed_consumer['job_id']
+                    blocked_imports.add('ScratchRobin repl temp ' + opening_id)
+                    http('start', job_id=opening_id, review_digest=reviewed_consumer['review_digest'], confirmed=True)
+                    deadline = time.monotonic() + 10
+                    while True:
+                        opening = http('status', job_id=opening_id)
+                        if opening.get('backend_pid') and observer.execute('SELECT wait_event FROM pg_stat_activity WHERE pid=%s',
+                                (int(opening['backend_pid']),)).fetchone() == ('PgSleep',):
+                            break
+                        assert time.monotonic() < deadline; time.sleep(.03)
+                    http('release', job_id=opening_id, confirmation=opening_id)
+                    cancelled_import = wait_resource(opening_id, lambda value: value.get('worker_io_closed'))
+                    blocked_imports.clear()
+                    assert cancelled_import['native_error_sqlstate'] == '57014'
+                    assert not cancelled_import.get('snapshot_transaction_begin_acknowledged')
+                    assert not cancelled_import.get('snapshot_import_acknowledged') and not cancelled_import['ready']
+                    assert cancelled_import['native_owner_connection_close_returned']
+                    assert http('status', job_id=exporter_id)['ready']
+                    import_snapshot(exported['native_acknowledgement']['snapshot']['snapshot_name'], [(1,), (2,)])
+                    http('release', job_id=exporter_id, confirmation=exporter_id)
+                    wait_resource(exporter_id, lambda value: value.get('worker_io_closed'))
+                    proof['checks'].append('independently-observed-native-metadata-block-during-consumer-opening-is-cancelled-with-57014-without-ending-the-exporter')
                     streamed = open_resource(); stream_id = streamed['job_id']
                     run(stream_id, 'logical_create', {'slot': 'sr_stream', 'plugin': 'test_decoding', 'snapshot': 'nothing'})
                     observer.execute('INSERT INTO snapshot_rows VALUES(3)')
@@ -575,9 +709,11 @@ def qualify(output, *, browser_binary=None, driver_binary=None):
     finally:
         managers = getattr(service, 'postgresql_replication_temporary_resources', {})
         closed = [manager.close(timeout=10) for manager in managers.values()]
+        if 'owned' in locals():
+            proof['owned_server_stopped'] = owned.get('owned_server_stopped', False)
         proof['owned_workers_closed'] = all(closed)
         proof['complete'] = bool(flow_finished and proof.get('owned_server_stopped') and
-                                 proof.get('owned_workers_closed') and len(proof['checks']) == 18)
+                                 proof.get('owned_workers_closed') and len(proof['checks']) == 24)
         (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
     proof['owned_server_stopped'] = owned['owned_server_stopped']
     proof['complete'] &= proof['owned_server_stopped']
@@ -593,6 +729,7 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.common.exceptions import StaleElementReferenceException, ElementClickInterceptedException
     from werkzeug.serving import make_server
@@ -636,6 +773,13 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
             control(label).click()
             wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="option"]')
                 if node.is_displayed() and (node.text.strip().startswith(text) if prefix else node.text.strip() == text)), None)).click()
+        def replace(label, value):
+            node = control(label)
+            modifier = Keys.COMMAND if driver.capabilities.get('platformName', '').lower() == 'mac' else Keys.CONTROL
+            # Native keystrokes update React's controlled state. WebDriver's
+            # clear() can leave the old state restored on a later render.
+            node.send_keys(modifier, 'a'); node.send_keys(Keys.BACKSPACE)
+            node.send_keys(str(value))
         def run_command():
             button('Review retained replication command')
             wait.until(lambda browser: 'Confirm retained replication command' in browser.find_element(By.TAG_NAME, 'body').text)
@@ -656,12 +800,12 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
             details('Temporary replication slots and exported snapshots')
         driver.get('http://127.0.0.1:' + str(http.server_port) + '/browser/')
         workspace(); details('Registered replication credentials')
-        control('Temporary replication password').send_keys(password)
-        limit = control('Replication resource maximum seconds'); limit.clear(); limit.send_keys('300')
+        replace('Temporary replication password', password)
+        replace('Replication resource maximum seconds', '300')
         button('Review temporary replication resource')
         wait.until(lambda browser: 'Confirm original replication resource' in browser.find_element(By.TAG_NAME, 'body').text)
         control('Confirm original replication resource').click(); button('Open reviewed replication resource')
-        control('Exact retained replication slot').send_keys('sr_ui_export')
+        replace('Exact retained replication slot', 'sr_ui_export')
         button('Review retained replication command')
         wait.until(lambda browser: 'Confirm retained replication command' in browser.find_element(By.TAG_NAME, 'body').text)
         control('Confirm retained replication command').click(); button('Run reviewed replication command')
@@ -682,7 +826,7 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         resource = wait.until(identity)
         driver.save_screenshot(str(output / 'replication-snapshot-active.png'))
         driver.refresh(); workspace()
-        control('Retained replication database name').send_keys(database)
+        replace('Retained replication database name', database)
         button('Load retained replication resources'); control('Retained replication resource').click()
         wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="option"]')
             if node.is_displayed() and resource in node.text), None)).click()
@@ -690,12 +834,24 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         time.sleep(6)
         assert resource_status(resource)['ready']
         import_snapshot(exported)
+        details('Registered replication credentials')
+        replace('Temporary replication password', password)
+        button('Review independent snapshot consumer')
+        wait.until(lambda browser: 'Confirm original replication resource' in browser.find_element(By.TAG_NAME, 'body').text)
+        control('Confirm original replication resource').click(); button('Open reviewed replication resource')
+        wait.until(lambda browser: 'This independent backend owns an imported read-only repeatable-read snapshot transaction' in browser.find_element(By.TAG_NAME, 'body').text)
+        independent_resource = wait.until(identity)
+        assert independent_resource != resource
+        assert resource_status(independent_resource)['snapshot_import_verified']
+        button('Load retained replication resources')
+        choose('Retained replication resource', resource, prefix=True)
+        wait.until(lambda browser: identity(browser) == resource)
         produce_changes()
         control('Retained replication command').click()
         wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="option"]')
             if node.is_displayed() and node.text.strip() == 'Capture original temporary logical stream'), None)).click()
-        control('Exact retained replication slot').send_keys('sr_ui_export')
-        count = control('Retained stream maximum messages'); count.clear(); count.send_keys('3')
+        replace('Exact retained replication slot', 'sr_ui_export')
+        replace('Retained stream maximum messages', '3')
         control('Allow invalidation of the current exported snapshot').click()
         button('Review retained replication command')
         wait.until(lambda browser: 'Confirm retained replication command' in browser.find_element(By.TAG_NAME, 'body').text)
@@ -710,22 +866,44 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
         while not resource_status(resource).get('worker_io_closed'):
             assert time.monotonic() < deadline; time.sleep(.05)
         driver.save_screenshot(str(output / 'replication-snapshot-released.png'))
+        button('Load retained replication resources')
+        choose('Retained replication resource', independent_resource, prefix=True)
+        wait.until(lambda browser: identity(browser) == independent_resource)
+        choose('Retained replication command', 'Read original snapshot relation catalog')
+        replace('Original snapshot schema name (empty for all)', 'public')
+        run_command()
+        choose('Retained replication command', 'Inspect original snapshot relation')
+        choose('Original snapshot relation', 'public.snapshot_rows — OID ', prefix=True)
+        run_command()
+        choose('Retained replication command', 'Copy relation from original snapshot')
+        independent_copy = run_command()
+        verify_copy(independent_resource, independent_copy, [(1,), (2,)])
+        button('Preview original snapshot COPY bytes')
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR,
+            '[aria-label="Original snapshot COPY byte preview"]') if node.is_displayed() and 'data_base64' in node.text), None))
+        driver.save_screenshot(str(output / 'independent-import-copy-after-exporter-release.png'))
+        choose('Retained replication command', 'End owned snapshot transaction')
+        run_command()
+        control('Release this replication backend and snapshot').click(); button('Release retained replication resource')
+        deadline = time.monotonic() + 15
+        while not resource_status(independent_resource).get('worker_io_closed'):
+            assert time.monotonic() < deadline; time.sleep(.05)
         details('Registered replication credentials')
-        control('Temporary replication password').send_keys(password)
-        limit = control('Replication resource maximum seconds'); limit.clear(); limit.send_keys('300')
+        replace('Temporary replication password', password)
+        replace('Replication resource maximum seconds', '300')
         button('Review temporary replication resource')
         wait.until(lambda browser: 'Confirm original replication resource' in browser.find_element(By.TAG_NAME, 'body').text)
         control('Confirm original replication resource').click(); button('Open reviewed replication resource')
         use_resource = wait.until(identity)
         choose('Retained replication command', 'Create temporary logical slot')
-        slot = control('Exact retained replication slot'); slot.clear(); slot.send_keys('sr_ui_use')
+        replace('Exact retained replication slot', 'sr_ui_use')
         choose('Native replication snapshot', 'Use snapshot in an owned read-only transaction')
         run_command()
         wait.until(lambda browser: 'The original backend owns a read-only repeatable-read SNAPSHOT USE' in browser.find_element(By.TAG_NAME, 'body').text)
         expected = expected_rows()
         produce_changes()
         choose('Retained replication command', 'Read original snapshot relation catalog')
-        control('Original snapshot schema name (empty for all)').send_keys('public')
+        replace('Original snapshot schema name (empty for all)', 'public')
         run_command()
         wait.until(lambda browser: 'Native snapshot relation page:' in browser.find_element(By.TAG_NAME, 'body').text)
         choose('Retained replication command', 'Inspect original snapshot relation')
@@ -754,6 +932,8 @@ def qualify_browser(app, output, binary, driver_binary, sid, password, database,
             driver_version=driver.capabilities.get('chrome', {}).get('chromedriverVersion'),
             original_backend_preserved_after_reload=True, native_snapshot_import_verified=True,
             original_backend_stream_captured_and_previewed=True,
+            independent_application_consumer_import_verified=True,
+            independent_consumer_copy_after_exporter_release_verified=True,
             owned_snapshot_use_native_copy_import_verified=True, explicit_snapshot_transaction_end=True,
             original_backend_stream_after_initial_copy=True,
             explicit_release_completed=True, sql_bootstrap_performed=False)
