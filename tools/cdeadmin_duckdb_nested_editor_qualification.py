@@ -74,6 +74,14 @@ def qualify(output):
                 'WITH q AS (SELECT max(n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
                 'WITH q(part) AS (SELECT list(n.items[1]) FROM one n) SELECT q.part[1].| FROM q',
                 'SELECT q.part.| FROM (SELECT first(n.items[1]) AS part FROM one n) q',
+                'SELECT (max(n.items[1]) FILTER (WHERE n.items IS NOT NULL)).| FROM one n',
+                'SELECT (max(n.items[1]) OVER ()).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT (list(n.items[1]) FILTER (WHERE true) OVER (PARTITION BY n.items))[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT (max(n.items[1],2) OVER w)[1].| FROM one n WHERE n.items IS NOT NULL WINDOW w AS ()',
+                'SELECT (first(n.items[1]) OVER "window ü").| FROM one n WHERE n.items IS NOT NULL WINDOW "window ü" AS ()',
+                'SELECT max(DISTINCT n.items[1]).| FROM one n',
+                'SELECT (list(ALL n.items[1]) OVER (ORDER BY n.items ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[1].| FROM one n WHERE n.items IS NOT NULL',
+                'WITH q AS (SELECT (max(n.items[1]) FILTER (WHERE true) OVER ()) AS part FROM one n WHERE n.items IS NOT NULL) SELECT q.part.| FROM q',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

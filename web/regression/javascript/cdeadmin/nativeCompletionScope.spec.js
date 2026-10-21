@@ -111,6 +111,14 @@ test.each([
   'SELECT max(n.items[1],2)[1].| FROM one n', 'SELECT min(n.items,3)[1][1].| FROM one n',
   'WITH q AS (SELECT max(n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
   'WITH q(part) AS (SELECT list(n.items[1]) FROM one n) SELECT q.part[1].| FROM q',
+  'SELECT (max(n.items[1]) FILTER (WHERE true)).| FROM one n',
+  'SELECT (max(n.items[1]) OVER ()).| FROM one n',
+  'SELECT (list(n.items[1]) FILTER (WHERE true) OVER (PARTITION BY n.first))[1].| FROM one n',
+  'SELECT (max(n.items[1],2) OVER w)[1].| FROM one n WINDOW w AS ()',
+  'SELECT (first(n.items[1]) OVER "window ü").| FROM one n WINDOW "window ü" AS ()',
+  'SELECT max(DISTINCT n.items[1]).| FROM one n',
+  'SELECT (list(ALL n.items[1]) OVER (ORDER BY n.first ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[1].| FROM one n',
+  'WITH q AS (SELECT (max(n.items[1]) FILTER (WHERE true) OVER ()) AS part FROM one n) SELECT q.part.| FROM q',
 ])('DuckDB admitted aggregate result shapes retain exact members in %s',marked=> {
   const data=aggregateMetadata();
   expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))?.options).toEqual([
@@ -122,6 +130,11 @@ test.each([
   'SELECT max(n.items[1],9007199254740992)[1].| FROM one n',
   'SELECT list(n.items[1],2)[1].| FROM one n', 'SELECT foreign_schema.max(n.items[1]).| FROM one n',
   'SELECT max(n.items[1],2,3)[1].| FROM one n', 'SELECT max(missing.items[1]).| FROM one n',
+  'SELECT (max(n.items[1]) FILTER (true)).| FROM one n',
+  'SELECT (max(n.items[1]) FILTER (WHERE)).| FROM one n',
+  'SELECT (max(n.items[1]) OVER () FILTER (WHERE true)).| FROM one n',
+  'SELECT (max(n.items[1]) FILTER (WHERE true) FILTER (WHERE true)).| FROM one n',
+  'SELECT (max(n.items[1]) OVER).| FROM one n',
 ])('DuckDB unknown aggregate overloads or receivers stay unresolved in %s',marked=> {
   const data=aggregateMetadata();
   expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();

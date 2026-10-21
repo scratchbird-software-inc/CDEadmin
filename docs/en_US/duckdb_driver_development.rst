@@ -504,13 +504,16 @@ type. ``list`` and ``array_agg`` wrap that type in a native list. Positive safe
 integer literals select the counted min/max list overload. Completion preserves
 member names, nested element access and explicit CTE/derived projection aliases
 through these expressions, including qualified core names and grouping.
+Grouped aggregate results also retain their shape through native FILTER and
+OVER clauses, named windows and DISTINCT/ALL arguments. Predicate, frame and
+window binding remain separate native validation responsibilities.
 
 These are completion shape rules, separate from syntax or catalog-binding
 acceptance. No argument, index or user query is evaluated to obtain suggestions.
 The native version, core origin, aggregate kind and signature must match.
 An incomplete function inventory or any visible non-core homonym disables the
-affected rule. Unsupported overloads, computed arguments, window/filter
-contexts and other function families retain their separate binding gaps.
+affected rule. Unsupported overloads, computed arguments, ordered aggregate
+arguments and other function families retain their separate binding gaps.
 
 ``tools/cdeadmin_duckdb_nested_editor_qualification.py`` captures retained native
 metadata and independently executes completed expressions on its owned fixture.

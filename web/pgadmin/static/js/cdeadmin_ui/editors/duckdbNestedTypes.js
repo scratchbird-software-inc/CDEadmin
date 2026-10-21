@@ -24,6 +24,19 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
   const tokens=nativeTokenSpans(source,language,{incomplete:true}).filter(token=>!/Comment/.test(token.name));
   if(tokens.length>2048)return undefined;
   let at=0;
+  const word=value=>tokens[at]?.name!=='QuotedIdentifier' && tokens[at] &&
+    source.slice(tokens[at].from,tokens[at].to).toUpperCase()===value;
+  const balanced=()=> {
+    if(tokens[at]?.name!=='(')return false;
+    let nesting=0;
+    do {
+      const token=tokens[at++];
+      if(token.name==='(')nesting++;
+      if(token.name===')')nesting--;
+      if(nesting>32)return false;
+    } while(nesting && at<tokens.length);
+    return nesting===0;
+  };
   const access=depth=> {
     if(depth>32)return undefined;
     let entry;
@@ -47,6 +60,7 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
           parts.length===3 && lower(parts[0])==='system' && lower(parts[1])==='main';
         if(!rule || !corePath)return undefined;
         at++;
+        if(word('DISTINCT') || word('ALL'))at++;
         const argument=access(depth+1);
         if(!argument?.nativeType)return undefined;
         let list=rule.argument==='list';
@@ -58,6 +72,20 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
         }
         if(tokens[at]?.name!==')')return undefined;
         at++;
+        // Modifiers retain the admitted aggregate's result shape. Their SQL
+        // syntax, predicate types and window binding need native validation.
+        if(word('FILTER')) {
+          at++;
+          if(tokens[at]?.name!=='(' || tokens[at+1]?.name==='QuotedIdentifier' ||
+              source.slice(tokens[at+1]?.from,tokens[at+1]?.to).toUpperCase()!=='WHERE' ||
+              !tokens[at+2] || tokens[at+2].name===')' || !balanced())return undefined;
+        }
+        if(word('OVER')) {
+          at++;
+          if(tokens[at]?.name==='(') {if(!balanced())return undefined;}
+          else if(isName(tokens[at]))at++;
+          else return undefined;
+        }
         const child=argument.nativeType;
         entry=duckdbTypedEntry(list ? {kind:'list',sql:child.sql+'[]',child} : child,quote);
       } else entry=resolve(parts);
