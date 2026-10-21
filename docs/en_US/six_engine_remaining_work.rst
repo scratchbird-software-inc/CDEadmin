@@ -83,6 +83,10 @@ MySQL
   and BEFORE purges, independent observations, durable acknowledgement and
   explicit unknown-outcome reconciliation; it does not discover backup or
   offline-replica dependencies or attest log-generation epochs.
+  A separate reviewed native binary-log/GTID reset now retains strict observed
+  state binding, independent connections, native refusals and durable unknown
+  outcomes. It requires an exclusive maintenance window and does not rebind old
+  archive chains to reused native filenames or establish recovery coverage.
   Scheduled age/count policies for exact native source/principal/role
   are implemented with independent occurrence receipts, expiry, revocation,
   restart and unresolved-outcome suspension. They preserve explicit pins and

@@ -31,3 +31,27 @@ it('loads uncertain durable receipts and reconciles without issuing another purg
   await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_source_purge_reconcile',request:{job_id:'purge'}}));
   expect(post.mock.calls.some(([value]) => value.action==='mysql_binlog_source_purge_start')).toBe(false);
 });
+
+it('separately confirms native GTID reset and invalidates authority when its sequence changes',async () => {
+  const resetReview={...review,options:{to_sequence:null},reset_selection:{before_names:['log.1']}};
+  const post=jest.fn().mockResolvedValue(resetReview);render(<Component post={post} reset />);
+  expect(screen.queryByLabelText('Native purge condition')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Review native server log and GTID reset'}));
+  await screen.findByLabelText('Native source log and GTID reset review');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_source_reset_review',request:{options:{to_sequence:null,timeout_seconds:60}}});
+  const confirm=screen.getByRole('button',{name:'Confirm native server log and GTID reset'});
+  expect(confirm).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I checked backups, replicas and receivers and authorize removal of ALL server logs and GTID history'));
+  expect(confirm).toBeEnabled();
+  fireEvent.change(screen.getByLabelText('Reset initial log sequence (blank: native default)'),{target:{value:'17'}});
+  expect(screen.queryByLabelText('Native source log and GTID reset review')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Review native server log and GTID reset'}));
+  await screen.findByLabelText('Native source log and GTID reset review');
+  fireEvent.click(screen.getByLabelText('I checked backups, replicas and receivers and authorize removal of ALL server logs and GTID history'));
+  post.mockResolvedValue({...resetReview,state:'unknown'});fireEvent.click(screen.getByRole('button',{name:'Confirm native server log and GTID reset'}));
+  await screen.findByText(/original SQL reply is unconfirmed/);
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_source_reset_start',request:{job_id:'purge',review_digest:'exact',confirmed:true}});
+  fireEvent.click(screen.getByRole('button',{name:'Reconcile source log and GTID reset'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_source_reset_reconcile',request:{job_id:'purge'}}));
+  expect(post.mock.calls.filter(([value]) => value.action==='mysql_binlog_source_reset_start')).toHaveLength(1);
+});

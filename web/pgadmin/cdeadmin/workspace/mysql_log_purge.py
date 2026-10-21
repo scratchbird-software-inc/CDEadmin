@@ -13,6 +13,12 @@ from .mysql_monitoring_host import MySQLMonitoringHost
 
 
 class PurgeJobs(MySQLBinlogJobs):
+    native_module = native
+    selection_key = 'purge_selection'
+    service_attribute = 'mysql_source_log_purge_jobs'
+    root_setting = 'CDEADMIN_MYSQL_LOG_PURGE_ROOT'
+    root_name = 'mysql-source-log-purge-receipts'
+    store_suffix = '.source-log-purge'
     operation = 'mysql_native_binary_log_purge'
     remote_database_mutation = True
     review_warnings = (
@@ -29,7 +35,7 @@ class PurgeJobs(MySQLBinlogJobs):
             result['result']['after'] = _public_capture(result['result']['after'])
         if result.get('reconciliation', {}).get('source') is not None:
             result['reconciliation']['source'] = _public_capture(result['reconciliation']['source'])
-        result['purge_selection'] = deepcopy(record['source_state']['purge_selection'])
+        result[self.selection_key] = deepcopy(record['source_state'][self.selection_key])
         result['execution_host'] = deepcopy(record['program']['execution_host'])
         result['backup_dependencies_discovered'] = False
         result['native_log_generation_attested'] = False
@@ -42,7 +48,7 @@ class PurgeJobs(MySQLBinlogJobs):
             def boundary():
                 nonlocal dispatched
                 if DurableCancellation(self, record, signal).is_set():
-                    raise InterruptedError('Native log purge cancelled before dispatch')
+                    raise InterruptedError('Native log administration cancelled before dispatch')
                 self.update(record, phase='native_dispatch', native_may_have_dispatched=True)
                 dispatched = True
             result = transport.execute(record, DurableCancellation(self, record, signal), boundary,
@@ -84,15 +90,17 @@ class PurgeJobs(MySQLBinlogJobs):
         return self.get(record['job_id'], record['owner'], record['endpoint_id'])
 
 
-def action(service, server, archives, owner, endpoint, context, operation, request):
+def action(service, server, archives, owner, endpoint, context, operation, request, *, jobs_type=PurgeJobs):
     from flask import current_app
+    native = jobs_type.native_module
     if not isinstance(request, dict):
         raise BinlogArchiveError('Select a native source log administration request')
     with service._semantic_lock:
-        jobs = getattr(service, 'mysql_source_log_purge_jobs', None)
+        jobs = getattr(service, jobs_type.service_attribute, None)
         if jobs is None:
-            root = current_app.config.get('CDEADMIN_MYSQL_LOG_PURGE_ROOT') or str(Path(service.operation_bus.store.path).parent / 'mysql-source-log-purge-receipts')
-            jobs = service.mysql_source_log_purge_jobs = PurgeJobs(str(archives.path) + '.source-log-purge', root)
+            root = current_app.config.get(jobs_type.root_setting) or str(Path(service.operation_bus.store.path).parent / jobs_type.root_name)
+            jobs = jobs_type(str(archives.path) + jobs_type.store_suffix, root)
+            setattr(service, jobs_type.service_attribute, jobs)
             import atexit
             atexit.register(jobs.close)
     if operation == 'list':
@@ -140,12 +148,12 @@ def action(service, server, archives, owner, endpoint, context, operation, reque
             return jobs.reconcile_source(record, observed)
         chosen = native.selection(monitor, observed, selected)
         captured = deepcopy(observed)
-        captured['state']['purge_selection'] = chosen
+        captured['state'][jobs.selection_key] = chosen
         program = native.program(observed)
         configuration = digest({'registration': MySQLMonitoringHost._configuration(server), 'root': str(jobs.root)})
         if operation == 'review':
             return jobs.review(owner, endpoint.id, selected, captured, configuration, program)
-        if chosen != record['source_state']['purge_selection']:
+        if chosen != record['source_state'][jobs.selection_key]:
             raise BinlogArchiveError('The native log index or boundary changed; prepare a new review')
         worker = native.private_connection(client, {**route, 'read_timeout': selected['timeout_seconds'], 'write_timeout': 5})
         transport = native.Transport(client, worker, monitor, observed, selected)

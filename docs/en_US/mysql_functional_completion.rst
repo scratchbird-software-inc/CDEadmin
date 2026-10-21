@@ -86,6 +86,26 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Native binary-log reset has a separate reviewed workflow for ``RESET BINARY
+LOGS AND GTIDS`` and its optional native ``TO`` sequence. It deletes all native
+binary logs, including the active file, and clears executed/purged GTID history;
+it is not an archive retention action. The server default and native sequence
+range are preserved. Reset is also available with native binary logging
+disabled, where GTID history can still be cleared. Native privilege and Group
+Replication refusals remain server decisions; read-only flags are not a guard
+against this native operation.
+
+Confirmation binds the exact registration, principal, source UUID, adapter,
+log index/positions and GTID observation. A changed observation requires a new
+review in an exclusive maintenance window. Purge and reset serialize through
+the same application advisory lock and revalidate inside it. They do not lock
+out external native administration. The private worker owns its connections;
+guarded cancellation, durable acknowledgement and explicit unknown-outcome
+reconciliation retain the same non-replay rules. Reused filenames and empty
+GTID observations cannot establish the original acknowledgement or a native
+generation epoch. Application archives are retained, with no automatic rebinding
+to the new source generation or discovery of backup/offline-replica dependencies.
+
 Native editor preparation also checks the qualified MySQL9.7 post-parse refusal
 paths for resource groups, tablespaces (including undo/logfile groups), roles,
 spatial reference systems, components, transaction/savepoint/XA control, table

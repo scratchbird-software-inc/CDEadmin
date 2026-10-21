@@ -84,6 +84,9 @@ def private_connection(client, route):
 
 
 class Transport:
+    selection_key = 'purge_selection'
+    command_prefix = 'PURGE BINARY LOGS '
+
     def __init__(self, client, worker, monitor, observed, selected):
         self.client, self.worker, self.monitor = client, worker, monitor
         self.observed, self.selected = observed, selected
@@ -119,10 +122,10 @@ class Transport:
             if active:
                 current = rows(self.monitor, 'SELECT PROCESSLIST_INFO FROM performance_schema.threads '
                     'WHERE THREAD_ID=%s AND PROCESSLIST_ID=%s', (identity['thread_id'], identity['connection_id']))
-                return len(current) == 1 and isinstance(current[0]['PROCESSLIST_INFO'], str) and current[0]['PROCESSLIST_INFO'].lstrip().startswith('PURGE BINARY LOGS ')
+                return len(current) == 1 and isinstance(current[0]['PROCESSLIST_INFO'], str) and current[0]['PROCESSLIST_INFO'].lstrip().startswith(self.command_prefix)
             return True
 
-    def execute(self, record, cancel, boundary, progress):
+    def validate(self, record):
         current = capture(self.worker)
         if current['identity'] != record['source'] or selection(self.worker, current, record['options']) != record['source_state']['purge_selection']:
             raise BinlogArchiveError('The native log index, boundary or execution identity changed; prepare a new review')
@@ -130,6 +133,23 @@ class Transport:
                 'SELECT GTID_SUBSET(%s,@@global.gtid_executed) AS valid',
                 (record['source_state']['gtid_executed'],))[0]['valid'] != 1:
             raise BinlogArchiveError('Native log mode or observed GTID lineage changed; prepare a new review')
+
+    def statement(self, record):
+        return ('PURGE BINARY LOGS TO %s', (record['options']['to_file'],)) if record['options']['mode'] == 'TO' else (
+            'PURGE BINARY LOGS BEFORE %s', (record['options']['before_utc'],))
+
+    def postconditions(self, record, after):
+        before_names = record['source_state']['purge_selection']['before_names']
+        after_names = names(after)
+        result = {'after': after,
+                  'removed_names_observed': [name for name in before_names if name not in after_names],
+                  'retained_names_observed': [name for name in before_names if name in after_names]}
+        if record['options']['mode'] == 'TO':
+            candidates = record['source_state']['purge_selection']['candidate_names']
+            result['requested_prefix_absent'] = all(name not in after_names for name in candidates)
+        return result
+
+    def execute(self, record, cancel, boundary, progress):
         identity = thread_identity(self.worker)
         attribute = deepcopy(getattr(self.worker, '_cdeadmin_observer_attribute', None))
         try:
@@ -140,13 +160,14 @@ class Transport:
                   'native_thread': identity})
         lock = 'sr:log-purge:' + record['source']['server_uuid']
         if rows(self.worker, 'SELECT GET_LOCK(%s,0) AS acquired', (lock,))[0]['acquired'] != 1:
-            raise BinlogArchiveError('Another application log purge holds the native server lock')
+            raise BinlogArchiveError('Another application log administration job holds the native server lock')
         done, started = threading.Event(), threading.Event()
         cancellation = {'requested': False, 'kill_query_sent': False}
         watcher = None
         try:
+            self.validate(record)
             if cancel.is_set():
-                raise InterruptedError('Native log purge cancelled before dispatch')
+                raise InterruptedError('Native log administration cancelled before dispatch')
             def watch():
                 while not done.wait(.1):
                     if not started.is_set() or not cancel.is_set():
@@ -164,7 +185,7 @@ class Transport:
                             return
                     else:
                         return
-            watcher = threading.Thread(target=watch, daemon=True, name='mysql-log-purge-cancel')
+            watcher = threading.Thread(target=watch, daemon=True, name='mysql-log-administration-cancel')
             watcher.start()
             self.worker.get_warnings = False
             self.worker.raise_on_warnings = False
@@ -178,9 +199,8 @@ class Transport:
                 cursor.close()
                 raise
             try:
-                source, value = ('PURGE BINARY LOGS TO %s', record['options']['to_file']) if record['options']['mode'] == 'TO' else (
-                    'PURGE BINARY LOGS BEFORE %s', record['options']['before_utc'])
-                cursor.execute(source, (value,))
+                source, parameters = self.statement(record)
+                cursor.execute(source, parameters)
                 done.set()
                 result = {'native_acknowledged': True, 'native_error': None}
             except Exception as error:
@@ -197,7 +217,7 @@ class Transport:
             progress({key: result[key] for key in ('native_acknowledged', 'native_error_returned', 'native_error') if key in result})
             watcher.join(timeout=6)
             if watcher.is_alive():
-                raise BinlogArchiveError('Native cancellation observation is still active; do not replay this purge')
+                raise BinlogArchiveError('Native cancellation observation is still active; do not replay this operation')
             result['cancellation'] = cancellation
             if result['native_acknowledged']:
                 try:
@@ -205,15 +225,7 @@ class Transport:
                 except Exception as error:
                     result['warning_observation_error'] = error_observation(error)
             try:
-                after = self.observe()
-                before_names = record['source_state']['purge_selection']['before_names']
-                after_names = names(after)
-                result['after'] = after
-                result['removed_names_observed'] = [name for name in before_names if name not in after_names]
-                result['retained_names_observed'] = [name for name in before_names if name in after_names]
-                if record['options']['mode'] == 'TO':
-                    candidates = record['source_state']['purge_selection']['candidate_names']
-                    result['requested_prefix_absent'] = all(name not in after_names for name in candidates)
+                result.update(self.postconditions(record, self.observe()))
             except Exception as error:
                 result['postcondition_error'] = error_observation(error)
             return result

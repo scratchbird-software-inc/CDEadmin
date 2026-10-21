@@ -10,12 +10,12 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import (
 
 
 @contextmanager
-def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False):
+def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False,binary_logging=True):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     name = 'sr-mysql-' + secrets.token_hex(8)
     if gtid_mode not in {'ON','OFF'}:raise ValueError('Select a native fixture GTID mode')
-    proof = {'image': _image_identity('mysql:9.7.0'), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'keyring_component':bool(keyring),'restartable':bool(restartable)}
+    proof = {'image': _image_identity('mysql:9.7.0'), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'binary_logging':binary_logging,'keyring_component':bool(keyring),'restartable':bool(restartable)}
     started = False
     try:
         args = ['docker', 'run', '-d', '--rm', '--name', name, '--cap-add=SYS_NICE',
@@ -28,7 +28,7 @@ def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,r
         if network:
             args += ['--network', network]
         args += ['mysql:9.7.0', '--server-id=' + str(server_id), '--gtid-mode='+gtid_mode,
-                 '--enforce-gtid-consistency='+gtid_mode, '--log-bin=sr-owned', '--log-replica-updates=ON']
+                 '--enforce-gtid-consistency='+gtid_mode, '--log-bin=sr-owned' if binary_logging else '--skip-log-bin', '--log-replica-updates=ON']
         if keyring:
             # Load the native keyring before server initialization. A dynamic
             # INSTALL COMPONENT does not activate the startup keyring service.

@@ -83,6 +83,10 @@ def action(service,server,operation,request):
     from mysql.connector import Error as NativeError
     if not isinstance(request,dict):raise BinlogArchiveError('A native binary-log archive request is required')
     jobs,owner,endpoint,context=manager(service,server)
+    if operation.startswith('source_reset_'):
+        from .mysql_log_reset import action as source_action
+        return source_action(service, server, jobs, owner, endpoint, context,
+                             operation.removeprefix('source_reset_'), request)
     if operation.startswith('source_purge_'):
         from .mysql_log_purge import action as source_action
         return source_action(service, server, jobs, owner, endpoint, context,
