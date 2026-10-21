@@ -146,6 +146,35 @@ marked incomplete. The peer's role is labelled separately and never presented
 as the source's active role. Unadmitted legacy profiles remain separately
 unqualified for diagnostic preservation.
 
+The MySQL editor's Engine options accepts a JSON object of native per-query
+attributes. Ordinary Run and retained scripts bind them separately from SQL
+parameters; a retained script freezes its private attribute policy at preview
+and requires another preview after edits. Public plans and execution summaries
+exclude attribute values. Each command observes its current client charset,
+including charset transitions within a script. Original client attributes are
+restored after protocol drain, decoded error or cancellation; unconfirmed
+restoration blocks session reuse without replaying SQL.
+
+Connector/Python 26.7's pure COM_QUERY encoder omits NULL attribute metadata.
+The adapter uses its ordinary binary value encoder and supplies correctly framed
+names, types and NULL bitmap without preparing or changing the submitted SQL.
+Negative TIME values use the native positive magnitude and the protocol sign
+byte. Attribute names and string values follow the native source charset.
+Explicit integer, decimal, base64, date, datetime and time envelopes preserve
+typed inputs; ordinary strings remain strings. The native Community
+``component_query_attributes`` supplies qualification of actual delivery, and
+installed runtime UDFs appear in predictive metadata. The component's own string
+UDF uses a bounded C string, so its NUL/truncation behavior is not a binary
+roundtrip guarantee.
+
+The pinned C connector cannot safely bind TIME durations, unsigned integers above
+signed 64-bit range, or attribute names whose source-charset bytes differ from
+UTF-8. These cases are explicitly refused before dispatch and remain beta driver
+gaps; the pure connector supports them. They are not Enterprise deferrals.
+Run the owned qualifier independently with and without ``--use-c``:
+``tools/cdeadmin_mysql_query_attributes_qualification.py --output <outside-repo>
+--application``. Optional browser and driver paths qualify the built editor.
+
 Database-host diagnostics now have an explicit SSH execution path. The
 authenticated peer's hostname and native ``auto.cnf`` UUID must match the
 independently observed MySQL host and data directory. An SSH bastion and the

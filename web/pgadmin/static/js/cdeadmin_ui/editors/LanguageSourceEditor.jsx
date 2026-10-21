@@ -16,8 +16,9 @@ import {nativeSQLConfig, registerNativeCompletion} from './nativeCompletion';
 import {formatNative} from './nativeFormatting';
 import {diagnosticRanges} from './nativeDiagnostics';
 import SessionCatalog from './SessionCatalog';
+import {mysqlQueryAttributes} from './mysqlQueryAttributes';
 
-export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}'}) {
+export default function LanguageSourceEditor({language, source, onChange, post, ensureSession, databaseTargetId, disabled=false, onScriptLock, historySensitive=false, clientSqlDialect=3, resources, onExecute, parameterSource='{}', mysqlAttributeSource='{}'}) {
   const [syntax, setSyntax] = useState(true);
   const [completion, setCompletion] = useState(null);
   const [prepared, setPrepared] = useState(null);
@@ -45,6 +46,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
   const lastAutomaticCheck = useRef(null);
   const [plan, setPlan] = useState(null);
   const [preparedSource, setPreparedSource] = useState(null);
+  const [preparedAttributeSource, setPreparedAttributeSource] = useState(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(false);
@@ -179,6 +181,7 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
     const current=++generation.current;setChecking(true);setError('');
     try {
       if (script && !scriptParameters) throw new Error('Retained scripts require an empty parameter object or array. Clear the query bindings first.');
+      const attributes=script && nativeProfile==='mysql-sql' ? mysqlQueryAttributes(mysqlAttributeSource) : undefined;
       if (script && plan?.plan_id) {
         await send({action:'native_script_discard',plan_id:plan.plan_id});
       }
@@ -186,11 +189,12 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
         session_id:await ensureSession(), source:executionSource,
         ...(validateScript ? {script: true} : {}),
         ...(script ? {parameters: scriptParameters} : {}),
+        ...(attributes && Object.keys(attributes).length ? {mysql_query_attributes:attributes} : {}),
         ...(script && ['firebird-sql', 'postgresql-sql', 'mysql-sql', 'mariadb-sql', 'duckdb-sql'].includes(nativeProfile) ? {history_sensitive: historySensitive} : {}),
         ...(nativeProfile === 'firebird-sql' ? {client_sql_dialect: clientSqlDialect} : {})});
       if (!mounted.current || current!==generation.current) return;
       if(result.sql_history?.warning) setError(result.sql_history.warning);
-      if(script){setPlan(result);setPreparedSource(source);setValidation(result.validation ? {...result.validation, checked_source: executionSource} : null);}
+      if(script){setPlan(result);setPreparedSource(source);setPreparedAttributeSource(mysqlAttributeSource);setValidation(result.validation ? {...result.validation, checked_source: executionSource} : null);}
       else setValidation({...result, checked_source: executionSource});
     } catch(e){if(mounted.current && current===generation.current)setError(e.message);}
     finally {if(mounted.current)setChecking(false);}
@@ -258,9 +262,12 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
           label={probing ? 'Checking native grammar…' : 'Check while typing'} />}
       {language?.tooling?.script_framing && <FormReference formKey="script">
         {!scriptParameters && <Alert severity="info">Clear query bindings to prepare or run a retained script.</Alert>}
+        {plan?.plan_id && nativeProfile==='mysql-sql' && preparedAttributeSource!==mysqlAttributeSource &&
+          <Alert severity="info">Query attributes changed. Preview the script again before running it.</Alert>}
         <Button disabled={disabled || checking || running || Boolean(plan?.occurrence_id)} onClick={() => inspect(true)}>Preview script</Button>
-        <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled || !scriptParameters}
-          onClick={() => {setRunning(true);onScriptLock(true);}}>Run / resume retained script</Button>
+        <Button disabled={!plan?.plan_id || !['ready','waiting'].includes(plan.state) || preparedSource!==source || running || disabled || !scriptParameters ||
+        nativeProfile==='mysql-sql' && preparedAttributeSource!==mysqlAttributeSource}
+        onClick={() => {setRunning(true);onScriptLock(true);}}>Run / resume retained script</Button>
         <Button disabled={!plan?.plan_id || ['stopped','complete'].includes(plan.state)} onClick={stop}>Stop after current statement</Button>
         {plan && <Box component="pre" aria-label="Script progress" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({plan_id:plan.plan_id,state:plan.state,next_statement:plan.next_statement,statements:plan.statements?.map(s=>({ordinal:s.ordinal,source:s.source})),history:plan.history,stop_reason:plan.stop_reason},null,2)}</Box>}
       </FormReference>}
@@ -293,4 +300,4 @@ export default function LanguageSourceEditor({language, source, onChange, post, 
       helperText={'Validation: '+(language?.tooling?.validation_authority || 'unavailable')+'. Native execution remains the grammar/semantic authority.'} />}
   </FormReference>;
 }
-LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};
+LanguageSourceEditor.propTypes={parameterSource:PropTypes.string,mysqlAttributeSource:PropTypes.string,onExecute:PropTypes.func,resources:PropTypes.array,historySensitive:PropTypes.bool,clientSqlDialect:PropTypes.number,language:PropTypes.object,source:PropTypes.string.isRequired,onChange:PropTypes.func.isRequired,post:PropTypes.func.isRequired,ensureSession:PropTypes.func.isRequired,databaseTargetId:PropTypes.string,disabled:PropTypes.bool,onScriptLock:PropTypes.func.isRequired};

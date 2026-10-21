@@ -3130,6 +3130,7 @@ class ProviderWorkspaceService:
         self, server, session_id, source, parameters=None,
         database_target_id=Ellipsis, *, max_rows=None, client_sql_dialect=None,
         script_mode=False, plan_mode=False, history_sensitive=False, profile_mode=False, statistics_mode=False,
+        mysql_query_attributes=None,
     ):
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
@@ -3142,6 +3143,12 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(
                 'query parameters must be an object or array')
         policy = {'redact_keys': []}
+        if mysql_query_attributes is not None:
+            if context.provider_id!='org.cdeadmin.mysql':
+                raise ProviderWorkspaceError('Query attributes are only admitted for native MySQL')
+            from ..providers.mysql_family.mysql_query_attributes import request_value
+            try:policy['mysql_query_attributes']=request_value(mysql_query_attributes)
+            except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
         if context.provider_id in {'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded'} and not script_mode and not plan_mode:
             policy['firebird_statement_metrics'] = True
         if type(profile_mode) is not bool or profile_mode and (script_mode or plan_mode or context.provider_id not in {
@@ -3297,7 +3304,8 @@ class ProviderWorkspaceService:
                     raise ProviderWorkspaceError('Retained scripts require empty parameter bindings')
                 return self._record_query_request(server, data.get('database_target_id'), data.get('client_sql_dialect'),
                     data.get('source'), data.get('history_sensitive', False), 'script-prepared',
-                    lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source')))
+                    lambda: self.studio_service.scripts.prepare(context, data.get('session_id'), data.get('source'),
+                        **({'mysql_query_attributes':data['mysql_query_attributes']} if 'mysql_query_attributes' in data else {})))
             if action == 'native_script_advance':
                 return self.studio_service.scripts.advance(context, data.get('plan_id'), data.get('revision'))
             if action == 'native_script_stop':

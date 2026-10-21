@@ -53,6 +53,8 @@ class Executions:
         if not isinstance(source, str) or not source.strip():
             raise RelationalClientError('MySQL query source is required')
         bound = parameters(request.get('parameters', ()))
+        from .mysql_query_attributes import decoded
+        attributes=decoded((request.get('output_policy') or {}).get('mysql_query_attributes',{}))
         with self.lock:
             if self.closing:
                 raise RelationalClientError('MySQL execution owner is closing')
@@ -71,7 +73,7 @@ class Executions:
                 raise
             token = Execution(handle, copy.deepcopy(session_request), identity=identity)
             token.worker = threading.Thread(
-                target=self._run, args=(token, source, bound), daemon=True,
+                target=self._run, args=(token, source, bound, attributes), daemon=True,
                 name='cdeadmin-mysql-' + token.reference[:8])
             self.tokens.append(token)
             token.worker.start()
@@ -96,6 +98,9 @@ class Executions:
             commands = exc.commands_dispatched
             result['query_dispatch'] = 'partially_started' if commands else 'not_started'
             result['commands_dispatched'] = commands
+            if getattr(exc,'query_attributes_admission',False):
+                result['query_attributes_admission_failed']=True
+                result['message_primary']=str(exc)
             if getattr(exc, 'original_diagnostics_preserved', False):
                 result['original_diagnostics_preserved'] = True
                 result['native_observer_error_type'] = exc.native_observer_error_type
@@ -116,12 +121,16 @@ class Executions:
             result['message_primary'] = exc.msg[:16384]
         return result
 
-    def _run(self, token, source, bound):
-        cursor = None
+    def _run(self, token, source, bound, attributes=None):
+        cursor = scope = None
         try:
             if token.cancelled:
                 return  # Shutdown before dispatch is not a native SQL outcome.
-            cursor = Cursor(token.connection, cancel_requested=lambda: token.cancelled)
+            from .mysql_query_attributes import Scope
+            scope=Scope(token.connection,attributes or {});scope.install()
+            options={'cancel_requested':lambda: token.cancelled}
+            if attributes:options['before_command']=scope.bind
+            cursor = Cursor(token.connection, **options)
             started = time.perf_counter()
             try:
                 if bound:
@@ -194,6 +203,12 @@ class Executions:
                     cursor.close()
                 except Exception:
                     token.cleanup_failed = True
+            if scope is not None:
+                try:scope.restore()
+                except Exception:
+                    token.cleanup_failed=True
+                    token.error=token.error or {'message_primary':'Native MySQL query returned, but query-attribute cleanup is unconfirmed; close this session. No command was replayed.'}
+                    token.error['query_attribute_state_restore_unconfirmed']=True
             with self.lock:
                 if token.cleanup_failed:
                     self.client._uncertain_sessions.add(id(token.connection))

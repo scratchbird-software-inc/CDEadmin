@@ -10,6 +10,20 @@ jest.mock('../../../pgadmin/static/js/cdeadmin_ui/editors/CodeEditor', () => ({
 const Editor = withTheme(LanguageSourceEditor);
 afterEach(() => {cleanup(); jest.useRealTimers();});
 
+test('retained MySQL scripts send attributes during preview and require a new preview after edits', async () => {
+  const props={language:{language_profile:'mysql-sql',tooling:{script_framing:true}},source:'SELECT 1',onChange:jest.fn(),
+    mysqlAttributeSource:'{"tag":null}',post:jest.fn().mockResolvedValue({plan_id:'owned',state:'ready',statements:[]}),
+    ensureSession:jest.fn().mockResolvedValue('native'),databaseTargetId:'database',onScriptLock:jest.fn()};
+  const {rerender}=render(<Editor {...props} />);
+  fireEvent.click(screen.getByText('Source tools'));
+  await act(async()=>{fireEvent.click(screen.getByText('Preview script'));});
+  expect(props.post).toHaveBeenCalledWith(expect.objectContaining({action:'native_script_prepare',mysql_query_attributes:{tag:null}}));
+  expect(screen.getByText('Run / resume retained script').closest('button')).not.toBeDisabled();
+  rerender(<Editor {...props} mysqlAttributeSource='{"tag":"changed"}' />);
+  expect(screen.getByText('Run / resume retained script').closest('button')).toBeDisabled();
+  expect(screen.getByText(/Query attributes changed/)).toBeInTheDocument();
+});
+
 test('incremental native checking is opt-in and discards replies for earlier source', async () => {
   jest.useFakeTimers();
   let reply;

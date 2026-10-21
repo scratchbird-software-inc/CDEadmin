@@ -2,6 +2,7 @@
 import base64
 import binascii
 import codecs
+import datetime
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
@@ -164,6 +165,19 @@ def parameter(item):
             return raw
         if set(item) != {'encoding', 'data'}:
             raise RelationalClientError('MySQL numeric parameter is invalid')
+        try:
+            if encoding=='date' and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',data):
+                return datetime.date.fromisoformat(data)
+            if encoding=='datetime' and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?',data):
+                return datetime.datetime.fromisoformat(data)
+            if encoding=='time':
+                value=re.fullmatch(r'(-?)([0-9]{1,12}):([0-5][0-9]):([0-5][0-9])(?:\.([0-9]{1,6}))?',data)
+                if value:
+                    duration=datetime.timedelta(hours=int(value[2]),minutes=int(value[3]),seconds=int(value[4]),
+                        microseconds=int((value[5] or '').ljust(6,'0') or '0'))
+                    return -duration if value[1] else duration
+        except (ValueError,OverflowError):
+            raise RelationalClientError('MySQL temporal parameter is invalid') from None
         if encoding == 'integer' and re.fullmatch(r'-?[0-9]{1,65}', data):
             return int(data)
         if encoding == 'decimal' and len(data) <= 1024:
@@ -306,9 +320,10 @@ def bound_source(connection, cursor, source, params):
 class Cursor:
     """Convert raw query rows independently from catalog reads."""
 
-    def __init__(self, connection, *, cancel_requested=None):
+    def __init__(self, connection, *, cancel_requested=None, before_command=None):
         self.connection = connection
         self.cancel_requested = cancel_requested
+        self.before_command = before_command
         self.native = connection.cursor(raw=True)
         self.encoding = connection.python_charset
         self._native_c_api = getattr(connection, '_cmysql', None)
@@ -417,6 +432,7 @@ class Cursor:
             operation = unbound_source(self.connection, operation)
         if self.cancel_requested is not None and self.cancel_requested():
             raise MySQLParameterAdmissionError('MySQL query cancelled before dispatch')
+        if self.before_command is not None:self.before_command()
         if self._native_c_api is not None:
             # Connector/Python 26.7's C query path returns early for an OK
             # response before applying raw=True. A following SELECT in that

@@ -90,6 +90,7 @@ import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
+import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
@@ -7097,6 +7098,7 @@ export default function ProviderWorkspaceContent({
   const [source, setSource] = useState('');
   const [languageProfile, setLanguageProfile] = useState('');
   const [parameterSource, setParameterSource] = useState('{}');
+  const [mysqlAttributeSource, setMySQLAttributeSource] = useState('{}');
   const [maximumRows, setMaximumRows] = useState('1000');
   const [bufferRows, setBufferRows] = useState(500);
   const [queryStreamActive, setQueryStreamActive] = useState(false);
@@ -7648,12 +7650,14 @@ export default function ProviderWorkspaceContent({
           gettext('This provider requires a JSON parameter object.'));
       }
       if (scriptMode && parameters.length) throw new Error(gettext('Scripts do not accept parameter bindings. Clear the parameter array first.'));
+      const attributes=languageProfile==='mysql-sql' && !sessionCommand ? mysqlQueryAttributes(mysqlAttributeSource) : {};
       const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
       const occurrence = await post({
         action: 'execute', session_id: activeSession, source: executionSource,
         parameters,
+        ...(Object.keys(attributes).length ? {mysql_query_attributes:attributes} : {}),
         ...(scriptMode ? {script_mode: true} : {}),
         ...(planMode ? {plan_mode: true} : {}),
         ...(profileMode ? {profile_mode: true} : {}),
@@ -8069,7 +8073,7 @@ export default function ProviderWorkspaceContent({
           language={activeLanguage} source={source} onChange={setSource}
           resources={resourcePage?.items}
           onExecute={(preparedSource, scriptMode) => execute(preparedSource, 'native', false, scriptMode)}
-          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource}
+          post={post} ensureSession={ensureSession} databaseTargetId={queryDatabaseTargetId} parameterSource={parameterSource} mysqlAttributeSource={mysqlAttributeSource}
           disabled={busy || Boolean(occurrenceId) || querySessionBlocked || sessionPolicyUnknown}
           onScriptLock={setScriptLocked} historySensitive={historySensitive} clientSqlDialect={clientSqlDialect} />
         <Box aria-label="SQL results and diagnostics" sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
@@ -8120,6 +8124,11 @@ export default function ProviderWorkspaceContent({
             helperText={activeLanguage?.parameter_hint ||
             gettext('Use a JSON object of parameter names and values.')}
             onChange={(event) => setParameterSource(event.target.value)} />
+          {languageProfile==='mysql-sql' && <TextField multiline minRows={2} maxRows={6}
+            value={mysqlAttributeSource} disabled={busy || scriptLocked || Boolean(occurrenceId)} sx={{mt:1}}
+            label={gettext('MySQL query attributes (JSON object)')}
+            helperText={gettext('Sent with each submitted query. Uses the exact-value encodings shown for query parameters.')}
+            onChange={event=>setMySQLAttributeSource(event.target.value)} />}
           {languageProfile === 'firebird-sql' && <TextField select
             size="small" sx={{mt: 1}} label={gettext('Statement SQL dialect')}
             value={clientSqlDialect} disabled={busy || querySessionBlocked || !!occurrenceId}

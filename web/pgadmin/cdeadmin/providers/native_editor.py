@@ -181,6 +181,12 @@ def metadata(handle, engine, transaction=None, dialect=None):
                     hidden_from_star='INVISIBLE' in str(extra).upper().split())
             for database, routine, kind, native_type in query('routines', 'SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,DTD_IDENTIFIER FROM information_schema.ROUTINES ORDER BY (ROUTINE_SCHEMA=DATABASE()) DESC,ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE LIMIT 25001'):
                 add(kind.lower(), [database, routine], native_type or kind)
+            if engine=='mysql':
+                runtime=query('runtime-functions','SELECT UDF_NAME,UDF_RETURN_TYPE FROM performance_schema.user_defined_functions UNION ALL SELECT NULL,NULL WHERE NOT @@performance_schema ORDER BY UDF_NAME LIMIT 25001')
+                for name,native_type in runtime:
+                    if name is None:
+                        observations[-1].update(available=False,reason='native-runtime-function-instrumentation-disabled')
+                    else:add('function',[name],'native runtime '+str(native_type))
         elif engine == 'sqlite':
             import sqlite3
             context.update(version=sqlite3.sqlite_version, default_schema='main')

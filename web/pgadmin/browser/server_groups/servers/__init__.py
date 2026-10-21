@@ -2928,6 +2928,7 @@ class ServerNode(PGChildNodeView):
                         history_sensitive=data.get('history_sensitive', False),
                         profile_mode=data.get('profile_mode', False),
                         statistics_mode=data.get('statistics_mode', False),
+                        **({'mysql_query_attributes':data['mysql_query_attributes']} if 'mysql_query_attributes' in data else {}),
                     )
                 elif action in {'query_history_read', 'query_history_configure', 'query_history_clear'}:
                     payload = service.query_history_action(server, action, data.get('request'))

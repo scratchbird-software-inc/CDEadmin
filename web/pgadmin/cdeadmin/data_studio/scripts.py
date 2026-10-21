@@ -44,6 +44,7 @@ class ScriptCoordinator:
     def __init__(self, studio):
         self.studio = studio
         self.plans = {}
+        self.execution_policies = {}
         self.lock = threading.RLock()
 
     def check_execution(self, session_id, plan_id=None):
@@ -58,10 +59,18 @@ class ScriptCoordinator:
         with self.lock:
             self.plans = {key: plan for key, plan in self.plans.items()
                           if plan['session_id'] != session_id}
+            self.execution_policies = {key:value for key,value in self.execution_policies.items() if key in self.plans}
 
-    def prepare(self, context, session_id, source):
+    def prepare(self, context, session_id, source, *, mysql_query_attributes=None):
         session, binding = self.studio._operational_session(
             context, session_id)
+        execution_policy={}
+        if mysql_query_attributes is not None:
+            if session.language_profile!='mysql-sql':
+                raise DataStudioAccessError('Query attributes are only admitted for native MySQL')
+            from ..providers.mysql_family.mysql_query_attributes import request_value
+            try:execution_policy['mysql_query_attributes']=request_value(mysql_query_attributes)
+            except ValueError as error:raise DataStudioAccessError(str(error)) from None
         if session.language_profile == 'firebird-sql':
             raise DataStudioAccessError('Use the Firebird native script workflow for its dialect and client settings')
         if not callable(
@@ -86,6 +95,7 @@ class ScriptCoordinator:
                     'syntax_context': {key: checked[key] for key in ('syntax_settings', 'sql_mode', 'client_sql_dialect') if key in checked},
                     'state': 'ready', 'revision': 0, 'next_statement': 0, 'occurrence_id': None, 'history': []}
             self.plans[plan['plan_id']] = plan
+            self.execution_policies[plan['plan_id']]=execution_policy
             return copy.deepcopy(plan)
 
     def _owned(self, context, plan_id):
@@ -166,10 +176,11 @@ class ScriptCoordinator:
             plan['state'] = 'submitting'
             plan['revision'] += 1
             try:
+                options={'output_policy':copy.deepcopy(self.execution_policies[plan_id])} if self.execution_policies.get(plan_id) else {}
                 occurrence = self.studio.execute(context, plan['session_id'],
                                                  plan['statements'][plan['next_statement']
                                                                     ]['source'],
-                                                 _script_plan_id=plan_id)
+                                                 _script_plan_id=plan_id, **options)
             except Exception:
                 plan['unresolved'] = True
                 plan['state'] = 'stopped'
@@ -200,6 +211,7 @@ class ScriptCoordinator:
                 raise DataStudioAccessError(
                     'Retain the plan while a statement outcome is unresolved')
             del self.plans[plan_id]
+            self.execution_policies.pop(plan_id,None)
             return {'discarded': True}
 
 

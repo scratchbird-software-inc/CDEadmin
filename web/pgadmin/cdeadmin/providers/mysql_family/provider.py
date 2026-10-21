@@ -71,6 +71,8 @@ MYSQL_PROFILE = PilotProfile(
         '{"encoding":"integer","data":"9007199254740993"} or '
         '{"encoding":"decimal","data":"1.2300"}; binary values use '
         '{"encoding":"base64","data":"/wA="}.'
+        ' Native temporal envelopes use encoding date (YYYY-MM-DD), '
+        'datetime (YYYY-MM-DD HH:MM:SS.ffffff), or time (signed HHH:MM:SS.ffffff).'
     ),
     query_plan_templates=(
         ('MySQL JSON query plan', 'EXPLAIN FORMAT=JSON {source}'),

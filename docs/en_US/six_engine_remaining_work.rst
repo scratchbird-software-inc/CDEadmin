@@ -137,6 +137,13 @@ MySQL
   Native MyISAM index-cache assignment and preloading now have typed reviewed
   workflows, exact source/table/index rechecks and explicit native result-row
   outcomes. These additions do not close the wider installed feature inventory.
+  Native per-query attributes now have editor inputs, scoped native execution,
+  retained private script policies and installed runtime-UDF completion. The
+  pure connector corrects NULL metadata and negative TIME framing. Connector26.7
+  C still needs native fixes for TIME durations, unsigned attributes above
+  signed 64-bit range and names whose current source bytes differ from UTF-8;
+  these cases refuse dispatch rather than silently changing values or names.
+  These are beta driver gaps, separate from closed-source Enterprise scope.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
   editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately
