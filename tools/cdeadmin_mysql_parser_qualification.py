@@ -29,6 +29,10 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
     paths=['tools/cdeadmin_mysql_parser_qualification.py','web/pgadmin/cdeadmin/providers/mysql_family/mysql_parser.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_parser_worker.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_native_validation.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_script_modes.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_script.py',
+        'web/pgadmin/cdeadmin/data_studio/scripts.py',
+        'tools/cdeadmin_mysql_family_editor_workspace_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_session_variables.py',
         'web/pgadmin/cdeadmin/providers/native_editor.py','web/pgadmin/cdeadmin/data_studio/language_tools.py']
     proof={'complete':False,'history_testing':'not run','checks':[],'mysql_interface':'c' if use_c else 'pure',
@@ -127,9 +131,52 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                 proof['checks'].append('actual-original-ROW_COUNT-warning-and-error-areas-survive-valid-invalid-and-procedural-native-checks')
                 proof['checks'].append('exact-native-ANSI-backslash-and-expanded-mode-behavior-with-separate-native-optimizer-hint-warnings')
                 sql("SET SESSION sql_mode=''")
-                unknown=check("SET sql_mode='ANSI_QUOTES'; SELECT 1",None,script=True)
-                assert not unknown['script_ready'] and any(row['code']=='SESSION_FRAMING_CHANGE' for row in unknown['diagnostics'])
-                proof['checks'].append('script-language-mode-transition-remains-explicitly-unconfirmed-without-using-the-wrong-grammar-mode')
+                global_mode=sql('SELECT @@GLOBAL.sql_mode')[0][0]
+                for text in (
+                    "SET sql_mode='ANSI_QUOTES'; CREATE TABLE future_mode(\"id\" INT); SELECT 1",
+                    "SET sql_mode='NO_BACKSLASH_ESCAPES'; SELECT 'tail\\'; SELECT 2",
+                    "SET @saved=@@sql_mode; SET sql_mode='ANSI'; CREATE TABLE future_mode(\"id\" INT); SET sql_mode=@saved; SELECT 1",
+                    "SET sql_mode=4; SET sql_mode=CONCAT(@@sql_mode,',NO_BACKSLASH_ESCAPES'); SELECT 'tail\\';",
+                    'SET sql_mode=DEFAULT; SELECT 1',
+                    "SET GLOBAL sql_mode='ANSI_QUOTES'; SET SESSION sql_mode=DEFAULT; CREATE TABLE future_mode(\"id\" INT)",
+                    "/*!90700 SET sql_mode='ANSI_QUOTES' */; CREATE TABLE future_mode(\"id\" INT)",
+                    "/*!99999 SET sql_mode='ANSI_QUOTES' */; SELECT 'default'"):
+                    value=check(text,True,script=True)
+                    assert value['script_ready'] and all(row.get('syntax_context_statement') for row in value['statements'])
+                    assert sql('SELECT @@SESSION.sql_mode,@@GLOBAL.sql_mode')==[['',global_mode]]
+                for text in ('SET sql_mode=@runtime_mode; SELECT 1','SET sql_mode=@@sql_mode+1; SELECT 1',
+                             "SET sql_mode='not_a_mode'; SELECT 1",'SET GLOBAL sql_mode=DEFAULT; SET sql_mode=DEFAULT; SELECT 1'):
+                    unknown=check(text,None,script=True)
+                    assert not unknown['script_ready'] and any(row['code']=='NATIVE_FUTURE_MODE' for row in unknown['diagnostics'])
+                proof['checks'].append('deterministic-script-quote-transitions-saved-modes-aliases-numeric-masks-concat-default-and-version-comments-with-native-private-canonicalization')
+                proof['checks'].append('runtime-dependent-or-invalid-mode-values-leave-remaining-framing-unconfirmed-with-no-original-session-or-global-setting-changes')
+                plan=post('native_script_prepare',session_id=session_id,history_sensitive=True,source=
+                    'SET @sr_saved=@@sql_mode; SET sql_mode=\'ANSI_QUOTES\'; CREATE TEMPORARY TABLE "sr_script"("id" INT); '
+                    'SET sql_mode=@sr_saved; INSERT INTO sr_script VALUES(7); SELECT id FROM sr_script; SELECT COUNT(*) FROM sr_script')
+                assert plan['state']=='ready' and len(plan['statements'])==7
+                deadline=time.monotonic()+45
+                while plan['state'] not in {'complete','stopped'}:
+                    if time.monotonic()>deadline:raise TimeoutError('Retained native mode script deadline')
+                    previous=plan
+                    plan=post('native_script_advance',plan_id=plan['plan_id'],revision=plan['revision'])
+                    if previous['state']=='ready':
+                        stale=post('native_script_advance',plan_id=previous['plan_id'],revision=previous['revision'])
+                        assert stale['revision']==plan['revision'] and stale['occurrence_id']==plan['occurrence_id']
+                    time.sleep(.01)
+                assert plan['state']=='complete' and len(plan['history'])==7,plan
+                assert sql('SELECT id FROM sr_script')==[[7]]
+                sql('DROP TEMPORARY TABLE sr_script')
+                assert sql('SELECT @@SESSION.sql_mode')==[['']]
+                post('native_script_discard',plan_id=plan['plan_id'])
+                drift=post('native_script_prepare',session_id=session_id,history_sensitive=True,source="SET sql_mode='ANSI_QUOTES'; SELECT 1")
+                sql("SET sql_mode='NO_BACKSLASH_ESCAPES'")
+                before=traffic_count()
+                drift=post('native_script_advance',plan_id=drift['plan_id'],revision=drift['revision'])
+                assert drift['state']=='stopped' and drift['stop_reason']=='source-validation-changed' and not drift['history']
+                assert traffic_count()==before
+                post('native_script_discard',plan_id=drift['plan_id'])
+                sql("SET sql_mode=''")
+                proof['checks'].append('retained-seven-statement-native-script-rechecks-intentional-contexts-restores-saved-mode-and-does-not-replay-stale-revisions-or-dispatch-on-unexpected-drift')
                 sql('SET autocommit=0');sql('INSERT INTO t VALUES(3,1)');sql('SAVEPOINT sr_parser')
                 check('COMMIT',True);check('ROLLBACK',True);check('ALTER TABLE t ADD COLUMN not_added INT',True)
                 query.execute('SELECT COUNT(*) FROM sr_workspace.t');assert query.fetchone()[0]==2
@@ -140,7 +187,7 @@ def qualify(output, library, *, use_c=False, browser_binary=None, driver_binary=
                 query.execute('SET GLOBAL general_log=OFF')
                 if browser_binary:
                     from cdeadmin_mysql_family_editor_workspace_qualification import browser
-                    proof['browser']=browser(app,output,'mysql',sid,browser_binary,driver_binary,password)
+                    proof['browser']=browser(app,output,'mysql',sid,browser_binary,driver_binary,password,script_modes=True)
                     proof['checks'].append('built-native-editor-source-tools-valid-invalid-procedural-and-library-checks-with-zero-browser-errors')
                 post('close_session',session_id=session_id);session_id=None
                 proof.update(complete=True,modes=decisions,independent_observer=admitted)

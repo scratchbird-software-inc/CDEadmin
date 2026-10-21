@@ -50,13 +50,16 @@ def native(path, statements):
     return result
 
 
-def validate(path, source, observation, script):
+def validate(path, source, observation, script, canonicalize=None):
     if observation['version'].split('-')[0] != '9.7.0':
         raise RelationalClientError('The observed MySQL version differs from the native grammar profile')
     mode = observation['variables']['sql_mode']; modes = set(mode.split(','))
     result = analyze(source, 'mysql-sql', script=script, settings={
         'no_backslash_escapes': 'NO_BACKSLASH_ESCAPES' in modes,
         'ansi_quotes': 'ANSI_QUOTES' in modes, 'mysql_dollar_quotes': True})
+    if script:
+        from .mysql_script_modes import frame
+        result=frame(source,mode,canonicalize)
     if not script:
         result['diagnostics'] = []
         if not source.strip():
@@ -71,9 +74,10 @@ def validate(path, source, observation, script):
         original_diagnostics_preserved=True, original_session_catalog_binding_validated=False,
         external_language_bodies_parsed=False, sql_executed=False,
         parser_observation={**observation, 'thread_id': str(observation['thread_id']), 'connection_id': str(observation['connection_id'])})
-    if result['diagnostics']: return result
+    incomplete=bool(result['diagnostics'])
+    if not result['statements'] and script or not script and result['diagnostics']: return result
     statements = result['statements'] if script else [{'source': source, 'start': 0, 'end': len(source), 'ordinal': 1}]
-    checked = native(path, [{'source': item['source'], 'sql_mode': mode} for item in statements])
+    checked = native(path, [{'source': item['source'], 'sql_mode': item.get('sql_mode',mode)} for item in statements])
     valid = True
     for item, parsed in zip(statements, checked['statements']):
         valid = valid and parsed['sql_syntax_valid']
@@ -91,9 +95,12 @@ def validate(path, source, observation, script):
                 'severity': 'warning' if hint else 'error', 'offset': offset,
                 'line': source.count('\n', 0, offset) + 1, 'column': offset - source.rfind('\n', 0, offset),
                 'native_byte_offset': diagnostic['byte_offset'], 'native_byte_length': diagnostic['byte_length']})
+    valid=None if valid and incomplete else valid
     result.update(grammar_valid=valid, syntax_valid=valid, statements=statements, script_ready=bool(script and valid and statements),
         native_statements=[{'ordinal': item['ordinal'], 'grammar_valid': value['sql_syntax_valid'],
             'native_preparation': 'not_attempted', 'native_stage': 'versioned_server_grammar', 'catalog_binding_validated': False}
             for item, value in zip(statements, checked['statements'])],
         native_parser={key: value for key, value in checked.items() if key != 'statements'})
+    if script:
+        result['scope']+=' Script modes use deterministic declarations and native canonicalization on the private observer. Runtime-dependent remaining context is reported separately; retained execution rechecks each statement context.'
     return result

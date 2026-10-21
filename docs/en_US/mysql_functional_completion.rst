@@ -101,9 +101,17 @@ locates that directory from the configured Shell executable. It verifies the
 native library's reported 9.7.0 version and retains process/library fingerprints.
 The separate Shell AST API is not substituted because it forces ANSI quoting.
 Missing libraries retain the existing native PREPARE path; an explicitly selected
-unavailable or mismatched library is not silently replaced. Existing unsupported
-script language-mode transitions and unavailable observer profiles remain
-explicitly unqualified. Windows/macOS execution requires the platform teams'
+unavailable or mismatched library is not silently replaced. Script previews track
+deterministic SQL-mode declarations, saved mode variables, numeric masks, aliases,
+CONCAT and SESSION DEFAULT. Fixed bound settings on the private observer let the
+native server canonicalize mode values; submitted statements are never executed
+by validation and the private mode is restored afterward. Each retained statement
+records its expected mode and is checked again before dispatch, allowing intended
+transitions while stopping on unexpected context drift. Runtime-dependent values
+leave subsequent framing unconfirmed; the ordinary native Run path still observes
+the actual mode between commands. Saved variables are invalidated after opaque
+calls or expressions that may change them. Catalog/privilege binding and
+unavailable observer profiles remain separate. Windows/macOS requires the teams'
 evidence. The owned native qualifier is
 ``tools/cdeadmin_mysql_parser_qualification.py --output <outside-repo>
 --library <native-library>``, with ``--use-c`` run independently and optional

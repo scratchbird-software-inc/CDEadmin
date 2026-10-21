@@ -168,7 +168,7 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
     return proof
 
 
-def browser(app, output, engine, sid, binary, driver_binary, password):
+def browser(app, output, engine, sid, binary, driver_binary, password, *, script_modes=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -255,6 +255,18 @@ def browser(app, output, engine, sid, binary, driver_binary, password):
                 value=wait.until(formatted)
                 assert literal in value
                 checks.append({'name':'dollar-library-format','native_literal_bytes_preserved':True})
+        if engine == 'mysql' and script_modes:
+            _set_query(driver,wait,"SET sql_mode='ANSI_QUOTES'; SELECT 7301 AS \"native_mode_result\"; SET sql_mode=''")
+            wait.until(lambda browser:click(browser,'Preview script'))
+            def progress(browser):
+                return next((json.loads(node.text) for node in browser.find_elements(By.CSS_SELECTOR,'[aria-label="Script progress"]')
+                             if node.is_displayed() and node.text.startswith('{')),None)
+            wait.until(lambda browser:(progress(browser) or {}).get('state')=='ready')
+            wait.until(lambda browser:click(browser,'Run / resume retained script'))
+            wait.until(lambda browser:(progress(browser) or {}).get('state')=='complete')
+            final=progress(driver)
+            assert len(final['history'])==3 and all(row['outcome']=='success' for row in final['history'])
+            checks.append({'name':'native-browser-mode-transition-preview-and-retained-execution','statements':3,'state':'complete'})
         if engine == 'mysql':
             options = wait.until(lambda browser: browser.find_element(By.XPATH,'//*[@role="tab" and normalize-space()="Engine options"]'))
             driver.execute_script('arguments[0].scrollIntoView({block:"nearest"});',options); options.click()

@@ -145,17 +145,20 @@ class ScriptCoordinator:
             validator = getattr(binding.instance, 'validate_source_without_execution', None)
             if callable(validator):
                 session, _ = self.studio._operational_session(context, plan['session_id'])
+                statement=plan['statements'][plan['next_statement']]
+                native_statement_context=session.language_profile=='mysql-sql' and statement.get('syntax_context_statement') is True
                 checked = validator({
                     'session_id': session.provider_session['session_id'],
-                    'language_profile': session.language_profile, 'script': True,
-                    'source': plan['statements'][plan['next_statement']]['source'],
+                    'language_profile': session.language_profile, 'script': not native_statement_context,
+                    'source': statement['source'],
                 })
                 context_changed = any(
                     any(observed is not None and observed != value.get(name)
                         for name, observed in checked.get(key, {}).items())
                     if key == 'syntax_settings' else checked.get(key) != value
-                    for key, value in plan.get('syntax_context', {}).items())
-                if not checked['script_ready'] or context_changed:
+                    for key, value in (statement.get('syntax_context',{}) if native_statement_context else plan.get('syntax_context', {})).items())
+                ready=checked.get('grammar_valid') is True if native_statement_context else checked['script_ready']
+                if not ready or context_changed:
                     plan.update(state='stopped', stop_reason='source-validation-changed',
                                 validation=checked, revision=plan['revision'] + 1)
                     return copy.deepcopy(plan)

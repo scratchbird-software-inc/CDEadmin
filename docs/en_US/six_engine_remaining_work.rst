@@ -129,8 +129,11 @@ MySQL
   an isolated process using the source-observed SQL mode, including compound
   procedures and names that do not yet exist. It performs no SQL execution or
   catalog/privilege binding, and separates optimizer-hint warnings from syntax
-  errors. Script language-mode transitions and remaining installed capability
-  reconciliation still require their own work.
+  errors. Script previews now follow deterministic mode declarations using native
+  canonicalization on the private observer; retained execution rechecks each
+  statement's expected mode and stops on drift. Runtime-dependent future context
+  remains unconfirmed without executing submitted SQL. Remaining installed
+  capability reconciliation and catalog/privilege semantics require their work.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
   editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately

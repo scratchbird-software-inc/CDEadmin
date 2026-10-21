@@ -84,10 +84,11 @@ def test_single_procedural_statement_bypasses_client_script_splitting_but_execut
 
 
 def test_script_syntax_mode_transitions_remain_explicitly_unconfirmed_instead_of_using_a_wrong_mode(monkeypatch):
-    run=Mock();monkeypatch.setattr(parser,'native',run)
-    result=parser.validate(Path('/owned'),"SET sql_mode='ANSI_QUOTES'; SELECT 1",observation(),True)
+    run=Mock(return_value=native_result());monkeypatch.setattr(parser,'native',run)
+    result=parser.validate(Path('/owned'),"SET sql_mode=@runtime_value; SELECT 1",observation(),True)
     assert result['grammar_valid'] is None and not result['script_ready']
-    assert any(row['code']=='SESSION_FRAMING_CHANGE' for row in result['diagnostics']);run.assert_not_called()
+    assert any(row['code']=='NATIVE_FUTURE_MODE' for row in result['diagnostics'])
+    assert run.call_args.args[1]==[{'source':'SET sql_mode=@runtime_value','sql_mode':''}]
 
 
 def test_explicit_unavailable_native_library_does_not_silently_substitute_another_version(tmp_path,monkeypatch):
