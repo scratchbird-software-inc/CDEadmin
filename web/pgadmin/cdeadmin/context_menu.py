@@ -1375,6 +1375,8 @@ def database_target_context_actions(
              'action.backup', 'admin', 'backup'),
             ('restore_logical', 'Logical restore (MySQL Shell)...',
              'action.restore', 'destructive', 'restore'),
+            ('verify_logical', 'Verify restored dump data (MySQL Shell)...',
+             'action.restore', 'admin', 'restore'),
             ('analyze_tables', 'Analyze tables and histograms...',
              'tool.dashboard', 'admin', 'maintenance'),
             ('check_tables', 'Check tables...', 'action.check', 'read',

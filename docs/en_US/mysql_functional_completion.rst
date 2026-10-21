@@ -266,6 +266,36 @@ allowlist and privilege admission. Native completion, file verification and
 independent recovery remain separate outcomes. Active-directory replacement,
 production cutover and the wider physical continuity surface remain open.
 
+Database Restore includes a separate **Verify restored dump data** operation.
+It compares the selected database with a completed checksummed MySQL Shell dump,
+including a renamed target schema. The native utility runs with definition,
+data, index and user loading disabled, no progress resume, no ANALYZE and no
+GTID update. Its independent session must match the captured server UUID,
+version, authenticated principal and active roles before checksum dispatch.
+The provider review binds that native identity, utility identity, execution
+host and complete artifact hashes. Changes before application require a new
+review before any verification lock or setting change.
+Native dump common preamble/postamble scripts still execute in private sessions;
+the operation requires a trusted dump and restore administration authority.
+
+The exact database confirmation also authorizes a native server read lock,
+which pauses writes across all databases during acceptance. Independently read
+base-table inventories and full row counts supplement native chunk checksums:
+an extra row outside a checksum boundary cannot pass acceptance. Empty tables,
+duplicate/NULL rows, Unicode and binary values retain native checksum semantics;
+the application does not implement a replacement checksum algorithm. Complete
+metadata and checksum coverage, stable artifact hashes, exact native identity,
+and the checksum utility's successful return are all required. An explicitly
+authorized temporary local_infile enablement is restored afterward. Lock and
+connection cleanup also run after utility failure.
+
+Verification creates its own provider operation result and never reruns a
+restore or rewrites its outcome. Native checksum failure, row-count mismatch,
+extra target tables and unavailable evidence are unsuccessful acceptance.
+This verifies dumped table data during the recorded write pause; object
+definition equality, physical recovery, later log replay and production cutover
+have separate acceptance requirements.
+
 The binary-log archive workspace integrates native MySQL Shell9.7
 ``util.dumpBinlogs`` on the explicitly recorded application host. It inspects
 available logs and GTID lineage, reviews a native file/position or verified

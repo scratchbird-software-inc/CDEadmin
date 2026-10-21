@@ -123,7 +123,7 @@ _MARIADB_TOOL_SERVER_OPERATIONS = frozenset({
     'check_upgrade_required',
 })
 _MYSQL_SHELL_DATABASE_OPERATIONS = frozenset({
-    'backup_logical', 'restore_logical',
+    'backup_logical', 'restore_logical', 'verify_logical',
 })
 
 
@@ -1924,6 +1924,8 @@ class RelationalAdministration:
         fields = backup_fields if operation == 'backup_logical' else (
             restore_fields
         )
+        if operation == 'verify_logical':
+            fields = {'path', 'confirmation', 'source_schema', 'threads', 'enable_local_infile'}
         errors = []
         unknown = set(draft).difference(fields)
         if unknown:
@@ -2053,7 +2055,7 @@ class RelationalAdministration:
                 'message': 'Drop-existing and ignore-existing are mutually '
                            'exclusive.',
             })
-        if operation == 'restore_logical':
+        if operation in {'restore_logical', 'verify_logical'}:
             expected = route.get('database')
             if draft.get('confirmation') != expected:
                 errors.append({

@@ -72,7 +72,12 @@ MySQL
 -----
 
 * MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
-  targets, independent restore verification and reviewed production cutover.
+  targets, physical/log recovery acceptance and reviewed production cutover.
+  Separate logical-dump data acceptance now integrates native Shell checksums,
+  independent full row counts and table inventories under an explicitly
+  confirmed server read lock. It requires complete checksum coverage and stable
+  artifact/native identities. It does not establish physical recovery, object
+  definition equality, later log replay or production cutover.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Scheduled age/count policies for exact native source/principal/role
   are implemented with independent occurrence receipts, expiry, revocation,

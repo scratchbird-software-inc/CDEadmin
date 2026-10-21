@@ -235,6 +235,16 @@
         {"field_id": "dry_run", "label": "Validate without writing the dump", "control": "boolean", "required": false, "default": false}
       ]
     },
+    "mysql_verify_logical": {
+      "title": "Verify restored MySQL dump data with MySQL Shell 9.7",
+      "fields": [
+        {"field_id": "path", "label": "Completed checksummed dump below the endpoint tool workspace", "control": "text", "required": true, "max_length": 4096},
+        {"field_id": "confirmation", "label": "Confirm target database and server-wide write pause", "control": "text", "required": true, "max_length": 64, "help": "Type the exact database name. Verification holds a native server read lock, blocking writes on every database until it finishes. Native Shell common dump preamble/postamble scripts execute in private sessions; table definitions and data loaders are disabled. Select a trusted dump."},
+        {"field_id": "source_schema", "label": "Original schema in dump (blank: target database)", "control": "text", "required": false, "max_length": 64},
+        {"field_id": "threads", "label": "Native checksum threads", "control": "number", "required": false, "default": 4, "minimum": 1, "maximum": 1024},
+        {"field_id": "enable_local_infile", "label": "Temporarily enable trusted server local_infile if required", "control": "boolean", "required": false, "default": false, "help": "Shell requires this setting even in checksum-only mode. Its prior value is restored after verification. Requires native system-variable administration permission."}
+      ]
+    },
     "mysql_restore_logical": {
       "title": "Restore MySQL database with MySQL Shell 9.7",
       "fields": [
@@ -704,6 +714,7 @@
       {"operation_id": "repair_tables", "title": "Repair tables", "mutation_class": "admin", "form_id": "mysql_repair_tables", "target_required": true, "required_permissions": ["maintenance_admin"]},
       {"operation_id": "checksum_tables", "title": "Checksum tables", "mutation_class": "read", "form_id": "mysql_checksum_tables", "target_required": true, "required_permissions": ["data_read"]},
       {"operation_id": "backup_logical", "title": "Logical backup (MySQL Shell)", "mutation_class": "admin", "form_id": "mysql_backup_logical", "target_required": true, "required_permissions": ["backup_admin"]},
+      {"operation_id": "verify_logical", "title": "Verify restored dump data (MySQL Shell)", "mutation_class": "admin", "form_id": "mysql_verify_logical", "target_required": true, "required_permissions": ["restore_admin", "data_read"]},
       {"operation_id": "restore_logical", "title": "Logical restore (MySQL Shell)", "mutation_class": "destructive", "form_id": "mysql_restore_logical", "target_required": true, "confirmation_required": true, "required_permissions": ["restore_admin"]}
     ],
     "mariadb_database": [
@@ -1196,7 +1207,7 @@
       "engine_id": "mysql", "engine_name": "MySQL", "reference_profile": "9.7.0", "model_family": "relational",
       "objects": [
         {"resource_kind": "server", "title": "Server", "operation_profile": "topology"},
-        {"resource_kind": "database", "title": "Database", "operation_profile": "mysql_database", "operation_forms": {"analyze_tables": "mysql_analyze_tables", "check_tables": "mysql_check_tables", "optimize_tables": "mysql_optimize_tables", "repair_tables": "mysql_repair_tables", "checksum_tables": "mysql_checksum_tables", "backup_logical": "mysql_backup_logical", "restore_logical": "mysql_restore_logical"}},
+        {"resource_kind": "database", "title": "Database", "operation_profile": "mysql_database", "operation_forms": {"analyze_tables": "mysql_analyze_tables", "check_tables": "mysql_check_tables", "optimize_tables": "mysql_optimize_tables", "repair_tables": "mysql_repair_tables", "checksum_tables": "mysql_checksum_tables", "backup_logical": "mysql_backup_logical", "restore_logical": "mysql_restore_logical", "verify_logical": "mysql_verify_logical"}},
         {"resource_kind": "table", "title": "Table", "operation_profile": "data_container"},
         {"resource_kind": "column", "title": "Column", "operation_profile": "definition"},
         {"resource_kind": "index", "title": "Index", "operation_profile": "definition"},

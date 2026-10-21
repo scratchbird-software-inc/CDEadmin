@@ -217,7 +217,7 @@ def _administration(profile):
         common['database'] = common['database'] | frozenset({
             'analyze_tables', 'check_tables', 'optimize_tables',
             'repair_tables', 'checksum_tables', 'backup_logical',
-            'restore_logical',
+            'restore_logical', 'verify_logical',
         })
     else:
         common.pop('materialized-view')
@@ -960,6 +960,10 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
+        compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':
+            from .mysql_dump_verification import bind_review
+            return bind_review(self, planned)
         if 'mysql_column_masking' in planned.get('provider_payload', {}).get('compiled', {}):
             from .column_masking import bind_review
             return bind_review(self, planned)
@@ -1395,6 +1399,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def run_database_operation(
             self, connection, route, operation_id, options):
+        if operation_id == 'verify_logical':
+            from .mysql_dump_verification import verify
+            return verify(self, route, options)
         if operation_id not in {'backup_logical', 'restore_logical'}:
             return super().run_database_operation(
                 connection, route, operation_id, options
