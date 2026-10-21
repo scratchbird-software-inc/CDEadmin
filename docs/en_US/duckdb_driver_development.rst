@@ -493,3 +493,28 @@ compiled credential bindings and private schema/data baselines are excluded;
 common credential forms in native observations are redacted. These receipts are
 application operation evidence, separate from owner-deferred ScratchBird SQL
 and monitoring-history qualification.
+
+Native aggregate member completion
+----------------------------------
+
+The retained editor observes exact nested column/container types and complete
+native function facts. On DuckDB 1.5.2, unshadowed core ``min``, ``max``,
+``first``, ``last``, ``any_value`` and ``arbitrary`` retain an observed argument's
+type. ``list`` and ``array_agg`` wrap that type in a native list. Positive safe
+integer literals select the counted min/max list overload. Completion preserves
+member names, nested element access and explicit CTE/derived projection aliases
+through these expressions, including qualified core names and grouping.
+
+These are completion shape rules, separate from syntax or catalog-binding
+acceptance. No argument, index or user query is evaluated to obtain suggestions.
+The native version, core origin, aggregate kind and signature must match.
+An incomplete function inventory or any visible non-core homonym disables the
+affected rule. Unsupported overloads, computed arguments, window/filter
+contexts and other function families retain their separate binding gaps.
+
+``tools/cdeadmin_duckdb_nested_editor_qualification.py`` captures retained native
+metadata and independently executes completed expressions on its owned fixture.
+Pair its ``native-editor-fixture.json`` with the ``nativeCompletionScope`` Jest
+gate via ``CDEADMIN_DUCKDB_NATIVE_EDITOR_FIXTURE`` to check the exact suggestions
+and inserted SQL. Pending original work remains uncommitted. These scoped
+receipts do not close ``DU-EDITOR`` or the independent DuckDB inventory.

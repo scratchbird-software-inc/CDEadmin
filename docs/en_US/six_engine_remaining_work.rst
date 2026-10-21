@@ -225,6 +225,10 @@ DuckDB
   complete DDN generation, reviewed application and postcondition workflows.
 * DU-EDITOR: Close computed/contextual member and projection binding cases,
   preserving exact nested types, names and native positioned diagnostics.
+  Observed unshadowed core aggregate result shapes now preserve exact members,
+  container access and explicit CTE/derived aliases. Wider computed arguments,
+  function families, overloads and window/filter scopes remain open; the native
+  qualification scope is recorded in :doc:`duckdb_driver_development`.
 * DU-CAPABILITIES: Close native installed-extension, file-format, storage,
   configuration and lifecycle findings from INV-DUCKDB.
 

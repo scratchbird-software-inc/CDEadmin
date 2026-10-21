@@ -17,7 +17,9 @@ def qualify(output):
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence belongs outside the source checkout')
     output.mkdir(parents=True,exist_ok=False,mode=0o700)
     proof={'complete':False,'native_version':duckdb.__version__,'history_testing':'not run'}
-    paths=['web/pgadmin/cdeadmin/providers/native_editor.py']+['web/pgadmin/static/js/cdeadmin_ui/editors/'+name for name in (
+    paths=['tools/cdeadmin_duckdb_nested_editor_qualification.py',
+        'web/pgadmin/cdeadmin/providers/native_editor.py',
+        'web/pgadmin/cdeadmin/providers/duckdb/editor_type_rules.py']+['web/pgadmin/static/js/cdeadmin_ui/editors/'+name for name in (
         'nativeCompletion.js','nativeScopes.js','nativeLexing.js','duckdbNestedTypes.js')]
     proof['source_sha256']={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths}
     try:
@@ -60,6 +62,18 @@ def qualify(output):
                 'SELECT (n."positional")[2].| FROM tuple_values n',
                 'SELECT ((n."positional")[3])[1].| FROM tuple_values n',
                 'WITH q(part) AS (SELECT (n."positional")[2] FROM tuple_values n) SELECT q.part.| FROM q',
+            ] + [f'SELECT {name}(n.items[1]).| FROM one n WHERE n.items IS NOT NULL'
+                 for name in ('min','max','first','last','any_value','arbitrary')] + [
+                f'SELECT {name}(n.items[1])[1].| FROM one n WHERE n.items IS NOT NULL'
+                for name in ('list','array_agg')] + [
+                'SELECT max(n.items[1],2)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT min(n.items[1],2)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT main.max(n.items[1]).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT system.main.max(n.items[1]).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT (MAX(n.items[1])).| FROM one n WHERE n.items IS NOT NULL',
+                'WITH q AS (SELECT max(n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
+                'WITH q(part) AS (SELECT list(n.items[1]) FROM one n) SELECT q.part[1].| FROM q',
+                'SELECT q.part.| FROM (SELECT first(n.items[1]) AS part FROM one n) q',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

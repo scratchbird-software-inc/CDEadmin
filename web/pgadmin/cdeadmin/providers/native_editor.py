@@ -332,7 +332,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 for owner in sorted(rowid_owners):
                     add('column', [*owner, 'rowid'], 'BIGINT; native row identifier, not a durable application key',
                         hidden_from_star=True)
-            for database, schema, name, kind, parameters, types, returns in query('functions', 'SELECT database_name,schema_name,function_name,function_type,parameters,parameter_types,return_type FROM duckdb_functions() ORDER BY database_name,schema_name,function_name LIMIT 25001'):
+            functions = query('functions', 'SELECT database_name,schema_name,function_name,function_type,parameters,parameter_types,return_type,internal FROM duckdb_functions() ORDER BY database_name,schema_name,function_name LIMIT 25001')
+            from .duckdb.editor_type_rules import aggregate_type_rules
+            context['aggregate_type_rules'] = aggregate_type_rules(version, functions, observations[-1]['truncated'])
+            for database, schema, name, kind, parameters, types, returns, _internal in functions:
                 add('function', [database, schema, name], f'{kind} {parameters} {types} -> {returns}')
             for database, schema, name in query('types', 'SELECT database_name,schema_name,type_name FROM duckdb_types() ORDER BY database_name,schema_name,type_name LIMIT 25001'):
                 add('type', [database, schema, name])

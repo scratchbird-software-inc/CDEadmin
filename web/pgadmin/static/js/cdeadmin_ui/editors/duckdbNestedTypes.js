@@ -18,8 +18,8 @@ export function duckdbTypedEntry(shape,quote,self={}) {
       duckdbTypedEntry(item.type,quote,{label:item.name,apply:quote(item.name),type:'property'})]))};
 }
 
-// Resolve only observed column/member access. This is completion typing, not
-// grammar acceptance, and never evaluates an index expression or user SQL.
+// Resolve observed access and admitted core aggregate shapes. This is
+// completion typing, not grammar acceptance; no user expression is evaluated.
 export function duckdbAccessEntry(source,language,resolve,quote) {
   const tokens=nativeTokenSpans(source,language,{incomplete:true}).filter(token=>!/Comment/.test(token.name));
   if(tokens.length>2048)return undefined;
@@ -33,14 +33,36 @@ export function duckdbAccessEntry(source,language,resolve,quote) {
       at++;
     } else {
       const parts=[];
-      if(!isName(tokens[at]))return undefined;
+      const first=tokens[at],label=first && name(first,source);
+      if(!isName(first) && !(first?.name==='Keyword' && tokens[at+1]?.name==='(' &&
+          Object.hasOwn(language.aggregate_type_rules || {},lower(label))))return undefined;
       parts.push(name(tokens[at++],source));
       while(tokens[at] && source.slice(tokens[at].from,tokens[at].to)==='.' && isFieldName(tokens[at+1])) {
         at++;parts.push(name(tokens[at++],source));
       }
-      entry=resolve(parts);
+      if(tokens[at]?.name==='(') {
+        const functionName=lower(parts.at(-1));
+        const rule=Object.hasOwn(language.aggregate_type_rules || {},functionName) && language.aggregate_type_rules[functionName];
+        const corePath=parts.length===1 || parts.length===2 && lower(parts[0])==='main' ||
+          parts.length===3 && lower(parts[0])==='system' && lower(parts[1])==='main';
+        if(!rule || !corePath)return undefined;
+        at++;
+        const argument=access(depth+1);
+        if(!argument?.nativeType)return undefined;
+        let list=rule.argument==='list';
+        if(tokens[at]?.name===',') {
+          if(!rule.positive_literal_count || tokens[at+1]?.name!=='Number')return undefined;
+          const literal=source.slice(tokens[at+1].from,tokens[at+1].to),count=Number(literal);
+          if(!/^\d+$/.test(literal) || !Number.isSafeInteger(count) || count<=0)return undefined;
+          at+=2;list=true;
+        }
+        if(tokens[at]?.name!==')')return undefined;
+        at++;
+        const child=argument.nativeType;
+        entry=duckdbTypedEntry(list ? {kind:'list',sql:child.sql+'[]',child} : child,quote);
+      } else entry=resolve(parts);
     }
-    while(entry && at<tokens.length && source.slice(tokens[at].from,tokens[at].to)!==')') {
+    while(entry && at<tokens.length && ![')',','].includes(source.slice(tokens[at].from,tokens[at].to))) {
       const token=tokens[at++],text=source.slice(token.from,token.to);
       if(text==='.' && isFieldName(tokens[at])) {entry=field(entry,name(tokens[at++],source));continue;}
       if(text!=='[')return undefined;
@@ -87,8 +109,7 @@ export function duckdbCompletionTarget(config,state,dot) {
   const before=config.nativeStructure.before;
   let token=before(dot),start;
   // The receiver is a chain of observed identifiers and balanced subscripts.
-  // Parentheses retain the observed type. Calls/computed expressions still
-  // require separate native result-type authority.
+  // Parentheses retain types. Calls require an admitted native shape rule.
   let count=0;
   while(token && ++count<512) {
     const text=state.sliceDoc(token.from,token.to);
@@ -109,8 +130,14 @@ export function duckdbCompletionTarget(config,state,dot) {
         // boundary keywords cannot be unquoted scalar function names here.
         const boundary=new Set(['SELECT','DISTINCT','ALL','WHERE','HAVING','QUALIFY','ON','AND','OR','NOT',
           'WHEN','THEN','ELSE','RETURNING','BY']);
-        if(isName(token) || token?.name==='Keyword' && !boundary.has(state.sliceDoc(token.from,token.to).toUpperCase()))
-          return undefined;
+        if(isName(token) || token?.name==='Keyword' && !boundary.has(state.sliceDoc(token.from,token.to).toUpperCase())) {
+          start=token.from;token=before(token);
+          while(token?.name==='.') {
+            token=before(token);
+            if(!isName(token))return undefined;
+            start=token.from;token=before(token);
+          }
+        }
         break;
       }
     } else if(isName(token) || token.name==='Keyword' && before(token)?.name==='.') {

@@ -96,6 +96,41 @@ const containerMetadata=()=> {
   return data;
 };
 
+const aggregateMetadata=()=> {
+  const data=containerMetadata();
+  data.context.aggregate_type_rules=Object.fromEntries(
+    ['min','max','first','last','any_value','arbitrary','list','array_agg'].map(name=>[name,
+      {argument:['list','array_agg'].includes(name)?'list':'same',positive_literal_count:['min','max'].includes(name)}]));
+  return data;
+};
+test.each([
+  'SELECT max(n.items[1]).| FROM one n', 'SELECT min(n.items)[1].| FROM one n',
+  'SELECT main.first(n.items[1]).| FROM one n', 'SELECT system.main.last(n.items[1]).| FROM one n',
+  'SELECT (any_value(n.items[1])).| FROM one n', 'SELECT arbitrary(n.items[1]).| FROM one n',
+  'SELECT list(n.items[1])[1].| FROM one n', 'SELECT array_agg(n.items)[1][1].| FROM one n',
+  'SELECT max(n.items[1],2)[1].| FROM one n', 'SELECT min(n.items,3)[1][1].| FROM one n',
+  'WITH q AS (SELECT max(n.items[1]) AS part FROM one n) SELECT q.part.| FROM q',
+  'WITH q(part) AS (SELECT list(n.items[1]) FROM one n) SELECT q.part[1].| FROM q',
+])('DuckDB admitted aggregate result shapes retain exact members in %s',marked=> {
+  const data=aggregateMetadata();
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))?.options).toEqual([
+    expect.objectContaining({label:'Field ü',apply:'"Field ü"',detail:'BIGINT'})]);
+});
+test.each([
+  'SELECT max(n.items[1],0)[1].| FROM one n', 'SELECT max(n.items[1],-1)[1].| FROM one n',
+  'SELECT max(n.items[1],count)[1].| FROM one n', 'SELECT max(n.items[1],2.0)[1].| FROM one n',
+  'SELECT max(n.items[1],9007199254740992)[1].| FROM one n',
+  'SELECT list(n.items[1],2)[1].| FROM one n', 'SELECT foreign_schema.max(n.items[1]).| FROM one n',
+  'SELECT max(n.items[1],2,3)[1].| FROM one n', 'SELECT max(missing.items[1]).| FROM one n',
+])('DuckDB unknown aggregate overloads or receivers stay unresolved in %s',marked=> {
+  const data=aggregateMetadata();
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
+test('DuckDB vanished native aggregate admission cannot be borrowed from prior completion metadata',()=> {
+  const previous=aggregateMetadata(),current=containerMetadata();
+  expect(suggestions('SELECT max(n.items[1]). FROM one n',current,previous,23)).toBeNull();
+});
+
 test.each([
   'SELECT n.items[1].| FROM one n', 'SELECT n.fixed[1].| FROM one n',
   'SELECT n.lookup[\'key\'].| FROM one n', 'SELECT n.matrix[1][2].| FROM one n',
@@ -120,7 +155,7 @@ test.each(['SELECT n.items.| FROM one n','SELECT n.fixed.| FROM one n','SELECT n
 test.each([
   'SELECT (n.items[1]).| FROM one n', 'SELECT ((n.items)[1]).| FROM one n',
   'SELECT (((n.items)))[1].| FROM one n', 'SELECT (n.fixed)[1].| FROM one n',
-  "SELECT (n.lookup)['key'].| FROM one n", 'SELECT ((n.matrix)[1])[1].| FROM one n',
+  'SELECT (n.lookup)[\'key\'].| FROM one n', 'SELECT ((n.matrix)[1])[1].| FROM one n',
   'SELECT (n.items[:])[1].| FROM one n', 'SELECT (items[1]).| FROM one',
   'SELECT (/* receiver */ n.items[1]).| FROM one n',
   'SELECT (n.items[1])."F|" FROM one n',
