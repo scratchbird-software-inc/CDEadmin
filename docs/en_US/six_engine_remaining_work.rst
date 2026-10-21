@@ -92,6 +92,12 @@ MySQL
   reviewed retirement. Missing replies retain protection. These scoped holds do
   not calculate native recovery-chain edges or discover external/other-registration
   backups, offline replicas or native log-generation epochs.
+  Managed physical clones now acquire durable holds before dispatch, including
+  conservative donor and recipient registration holds for remote clones whose
+  native protocol does not attest a source UUID. Returned SQL acknowledgements
+  remain separate from later observer/bookkeeping failures. These holds support
+  explicit inspection/retirement and leave physical clone files intact; they do
+  not close the remaining recovery-chain dependency calculation.
   Scheduled age/count policies for exact native source/principal/role
   are implemented with independent occurrence receipts, expiry, revocation,
   restart and unresolved-outcome suspension. They preserve explicit pins and

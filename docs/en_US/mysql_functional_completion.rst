@@ -360,6 +360,26 @@ runs these portable consumers after the driver proof, retaining their separate
 receipts. Native resource-group availability comes from the serving engine,
 not the client operating system.
 
+Managed physical clone admission now persists archive protection before native
+SQL dispatch. Local clones protect their observed native source. Remote clone
+holds cover both the reviewed donor registration and recipient registration;
+their holds retain all registration archives because the clone protocol does
+not attest its source UUID. Lost replies and interrupted observers retain
+protection. Original SQL acknowledgement is persisted before later observation
+or protection bookkeeping, and remains distinct from those outcomes. Clone
+worker, observer and donor connections are owned independently of interactive
+client shutdown. Current native roles are part of their reviewed identity.
+
+The existing managed backup protection viewer inspects these physical clone
+holds and supports explicit reviewed retirement without deleting clone files.
+These conservative holds neither calculate recovery-chain dependencies nor
+discover other registrations/external backups, attest native log epochs or
+establish physical recovery acceptance. The native qualifier is
+``tools/cdeadmin_mysql_clone_qualification.py --evidence <outside-repo>
+--mysql-binlog <native-binary>``; run local/``--remote`` and default pure/
+``--use-c`` interfaces separately. Optional browser/driver paths exercise clone
+and protection review/retirement through the built desktop.
+
 The physical clone workspace supports local and registered remote donors into a
 new recipient-server directory. Remote reviews bind both native identities and
 registrations, require explicit credential delegation, and preserve native TLS,

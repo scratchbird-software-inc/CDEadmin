@@ -25,7 +25,7 @@ def configure(connection):
 
 def capture(connection):
     import mysql.connector
-    identity=rows(connection,"SELECT VERSION() AS `version`,@@server_uuid AS `server_uuid`,@@version_comment AS `edition`,@@version_compile_os AS `operating_system`,@@datadir AS `data_directory`,CURRENT_USER() AS `authenticated_principal`,@@character_set_filesystem AS `filesystem_charset`,@@character_set_system AS `system_charset`,@@sql_mode AS `sql_mode`")[0]
+    identity=rows(connection,"SELECT VERSION() AS `version`,@@server_uuid AS `server_uuid`,@@version_comment AS `edition`,@@version_compile_os AS `operating_system`,@@datadir AS `data_directory`,CURRENT_USER() AS `authenticated_principal`,CURRENT_ROLE() AS `active_role`,@@character_set_filesystem AS `filesystem_charset`,@@character_set_system AS `system_charset`,@@sql_mode AS `sql_mode`")[0]
     if identity['version'].split('-')[0]!='9.7.0':raise CloneError('Cloning requires the selected native MySQL 9.7.0 profile')
     try:uuid.UUID(identity['server_uuid'])
     except (TypeError,ValueError):raise CloneError('Native MySQL server identity is unavailable') from None
@@ -192,10 +192,11 @@ def connect(provider,route,timeout):
     from .mysql_connections import POOL_ARGUMENTS
     route={key:value for key,value in route.items() if key not in POOL_ARGUMENTS}
     client=provider.client;worker=monitor=None
+    from .mysql_log_purge import private_connection
     try:
         # The native C interface accepts I/O deadlines only at connect time.
-        worker=client._connect({'route':{**route,'read_timeout':timeout,'write_timeout':15}});configure(worker)
-        monitor=client._connect({'route':{**route,'read_timeout':5,'write_timeout':15}});configure(monitor)
+        worker=private_connection(client,{**route,'read_timeout':timeout,'write_timeout':15});configure(worker)
+        monitor=private_connection(client,{**route,'read_timeout':5,'write_timeout':15});configure(monitor)
         source=capture(worker)
         if capture(monitor)!=source:raise CloneError('Native clone connections reached different identities or policies')
         return source,CloneTransport(client,worker,monitor)

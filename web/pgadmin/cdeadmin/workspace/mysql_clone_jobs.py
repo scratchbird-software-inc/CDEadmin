@@ -128,6 +128,7 @@ class MySQLCloneJobs:
                 'The destination is on the database-server host, must not exist, and must be outside its active data directory. Native BACKUP_ADMIN and operating-system access govern execution.',
                 'Clone creates nontransactional files. Failure, cancellation or a lost reply can leave partial files; SQL rollback cannot remove them.',
                 'Native completion and a successful independent recovery drill have separate receipts. External administration is not fenced by the application lock.',
+                'Managed clone admission protects application archives before native dispatch. Pending and uncertain outcomes retain all registration archives; remote clone donor and recipient holds remain conservative because its protocol does not attest a source UUID. Explicit protection retirement keeps clone files and can allow required archives to be removed.',
                 'Cancellation requires a live native performance-schema thread identity. A client timeout or disconnect does not establish that the server stopped copying.']}
         if donor is not None:
             record['warnings'].extend([
@@ -209,6 +210,7 @@ class MySQLCloneJobs:
 
     def run(self,record,transport,signal):
         sql_worker=None;done=threading.Event();outcome={};lock='sr:clone:'+record['source']['server_uuid'];locked=False
+        protections=[];protection_finished=False
         try:
             directory=self.directory(record);directory.mkdir(parents=True,exist_ok=False,mode=0o700);private_directory(directory)
             if capture(transport.worker)!=record['source'] or capture(transport.monitor)!=record['source']:
@@ -241,6 +243,11 @@ class MySQLCloneJobs:
                 return correlated(observed,record)
             if self.load(record['job_id'],record['owner'],record['endpoint_id'])['cancel_requested']:signal.set()
             if signal.is_set():self.update(record,state='cancelled',statement_dispatched=False);return
+            registry=getattr(self,'backup_protection',None)
+            if registry is not None:
+                protections=registry.begin_clone(record['owner'],record['endpoint_id'],record)
+                self.update(record,archive_backup_protections=[{'endpoint_id':ticket.sink.endpoint,'backup_id':ticket.backup_id}
+                            for ticket in protections])
             self.update(record,state='active',statement_dispatched=True)
             def execute():
                 try:
@@ -252,7 +259,14 @@ class MySQLCloneJobs:
                     number=getattr(error,'errno',None);sqlstate=getattr(error,'sqlstate',None)
                     outcome.update(acknowledged=False,error_type=type(error).__name__,error_number=number,sqlstate=sqlstate,
                         native_refusal=type(number) is int and number>=1000 and not 2000<=number<3000 and isinstance(sqlstate,str))
-                finally:done.set()
+                finally:
+                    try:
+                        # Keep the SQL reply before later PFS observation or
+                        # backup bookkeeping can fail. They are separate facts.
+                        self.update(record,sql_observation=deepcopy(outcome))
+                    except Exception as error:
+                        outcome['acknowledgement_receipt_error_type']=type(error).__name__
+                    finally:done.set()
             sql_worker=threading.Thread(target=execute,daemon=True,name='mysql-clone-sql-'+record['job_id']);sql_worker.start()
             started=time.monotonic();cancel_sent=False
             while not done.wait(.25):
@@ -278,13 +292,23 @@ class MySQLCloneJobs:
             native_complete=matched and observed['status']['state']=='Completed' and observed['status']['error_number']==0
             native_failed=matched and observed['status']['state']=='Failed'
             state='native_completed' if native_complete else 'cancelled' if native_failed and signal.is_set() else 'native_failed' if native_failed else 'acknowledged' if outcome.get('acknowledged') else 'refused' if outcome.get('native_refusal') else 'unknown'
+            from .mysql_backup_protection import finish_clone
+            registered=finish_clone(protections,outcome,observed);protection_finished=True
             self.update(record,state=state,sql_observation=outcome,native_observation=observed,
+                        archive_backup_protections=registered,
                         native_completion_observed=native_complete or native_failed,files_verified=False,recovery_drill_complete=False,
                         target_files_may_exist=True,filesystem_rolled_back_by_sql=False,finished_at=time.time())
         except Exception as error:
             self.update(record,state='unknown' if sql_worker is not None else 'not_dispatched',error_type=type(error).__name__,
                         **({'error_reason':str(error)} if isinstance(error,CloneError) else {}))
         finally:
+            if protections and not protection_finished:
+                from .mysql_backup_protection import finish_clone
+                # An observer failure can leave SQL active. Keep those holds
+                # uncertain; closing this worker does not stop native copying.
+                registered=finish_clone(protections,outcome if done.is_set() else {},None)
+                try:self.update(record,archive_backup_protections=registered)
+                except Exception:pass
             # Do not race a native DBAPI call with connection disposal. If this
             # observer failed while SQL is active, the SQL thread owns release.
             def release():

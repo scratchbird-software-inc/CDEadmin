@@ -33,15 +33,18 @@ def fixture_pair(output,remote):
             if result.returncode:raise RuntimeError('Owned clone qualification network cleanup failed')
 
 
-def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser_only=False):
+def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser_only=False,use_c=False,mysql_binlog=None):
     import mysql.connector
     output=Path(output).resolve()
     if output==ROOT or ROOT in output.parents:raise ValueError('Evidence must be outside the source checkout')
     output.mkdir(parents=True,exist_ok=False)
-    proof={'complete':False,'checks':[],'history_testing':'not run','source_sha256':{}}
+    proof={'complete':False,'checks':[],'history_testing':'not run','source_sha256':{},'mysql_interface':'c' if use_c else 'pure'}
+    if mysql_binlog:os.environ['CDEADMIN_MYSQL_BINLOG_BINARY']=str(Path(mysql_binlog).resolve(strict=True))
     for directory in ('web/pgadmin/cdeadmin/workspace','web/pgadmin/cdeadmin/providers/mysql_family'):
         for path in (ROOT/directory).glob('*.py'):
             proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for name in ('tools/cdeadmin_mysql_clone_qualification.py','web/pgadmin/static/js/Dialogs/MySQLBackupProtection.jsx'):
+        proof['source_sha256'][name]=hashlib.sha256((ROOT/name).read_bytes()).hexdigest()
     builtins.SERVER_MODE=None
     import config
     config.SERVER_MODE=False;config.TESTING=True;config.WTF_CSRF_ENABLED=False
@@ -65,6 +68,7 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
     try:
         with fixture_pair(output,remote) as (recipient,donor_fixture):
             route,name,fixture=recipient
+            route['use_pure']=not use_c
             native=mysql.connector.connect(**route,autocommit=True)
             cursor=native.cursor()
             try:
@@ -98,6 +102,7 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                 donor_options=None
                 if remote:
                     donor_route,donor_name,donor_proof=donor_fixture
+                    donor_route['use_pure']=not use_c
                     donor_native=mysql.connector.connect(**donor_route,autocommit=True)
                     try:
                         with donor_native.cursor() as donor_cursor:
@@ -115,7 +120,9 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                             item._cde_endpoint_registration=registration_profile('mysql-native')
                             item._cde_endpoint_route_configuration={**donor_route,'user':'sr_clone_donor','credential_kinds':['database_password']}
                             db.session.add(item);db.session.commit()
-                            donor_sid=item.id;verify=url_for('NODE-server.verify_endpoint_id',gid=gid,sid=donor_sid)
+                            donor_sid=item.id;donor_endpoint=item.endpoint_profile.id
+                            donor_url=url_for('NODE-server.cde_workspace_id',gid=gid,sid=donor_sid)
+                            verify=url_for('NODE-server.verify_endpoint_id',gid=gid,sid=donor_sid)
                         response=client.post(verify,json={'password':donor_password}).get_json()
                         if not response.get('success'):raise RuntimeError('Owned donor verification failed')
                         donor_options={'server_id':donor_sid,'host':donor_name,'port':3306,'require_ssl':True,'delegate_credentials':True}
@@ -127,10 +134,33 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                         (output/'http-failure.json').write_text(json.dumps(value,indent=2).replace(password,'<redacted>').replace(donor_password,'<redacted>')+'\n')
                         raise RuntimeError('Native clone HTTP '+operation+' failed')
                     return value['data']
+                def backup_http(action,request,*,target=None,refused=False):
+                    response=client.post(target or workspace_url,json={'action':action,'request':request});value=response.get_json()
+                    if refused:
+                        assert response.status_code==400,value
+                        return value
+                    assert response.status_code==200 and value.get('success'),value
+                    return value['data']
+                archive=None;archive_bytes=None
+                if mysql_binlog and not browser_only:
+                    cursor.execute('FLUSH BINARY LOGS')
+                    catalog=backup_http('mysql_raw_binlog_catalog',{})
+                    selected=backup_http('mysql_raw_binlog_review',{'options':{'log_names':[catalog['logs'][0]['Log_name']]}})
+                    archive=backup_http('mysql_raw_binlog_start',{key:selected[key] for key in ('job_id','review_digest')}|{'confirmed':True})
+                    deadline=time.monotonic()+60
+                    while archive['state'] in {'dispatching','active','cancel_requested'}:
+                        if time.monotonic()>deadline:raise TimeoutError('Owned clone dependency archive deadline')
+                        time.sleep(.05);archive=backup_http('mysql_raw_binlog_status',{'job_id':archive['job_id']})
+                    assert archive['state']=='completed',archive
+                    archives=service_for_app(app).mysql_raw_binlog_jobs
+                    archive_record=archives.load(archive['job_id'],uid,endpoint)
+                    archive_bytes=archives.native_verify(archives.directory(archive_record)/'archive',archive_record['source'])
+                last_review=[]
                 def start(path):
                     selected={'destination':path,'confirmation':path,'timeout_seconds':120}
                     if donor_options is not None:selected['donor']=donor_options
                     review=http('review',{'options':selected})
+                    last_review[:]=[review]
                     assert review['source']['version'].split('-')[0]=='9.7.0'
                     if remote:
                         assert review['operation']=='remote_clone' and review['donor']['native_identity']['server_uuid']==donor_proof['server_uuid']
@@ -153,12 +183,48 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                     if not browser_binary:raise ValueError('Browser-only qualification requires a browser binary')
                     proof['browser']=browser(app,output,parent,sid,browser_binary,driver_binary,donor_options=donor_options)
                     jobs=service_for_app(app).mysql_clone_jobs
+                    managed=jobs.list(uid,endpoint)['jobs']
+                    completed_job=next(row for row in managed if row['state']=='native_completed')
+                    assert completed_job['source']['client_interface']==('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')
+                    from cdeadmin_mysql_backup_protection_qualification import browser as protection_browser
+                    ui_output=output/'protection-browser';ui_output.mkdir()
+                    proof['protection_browser']=protection_browser(app,ui_output,sid,password,browser_binary,driver_binary,completed_job['job_id'])
                     proof.update(complete=True,mode='remote' if remote else 'local',qualification_scope='native-browser-clone-only')
-                    proof['checks'].append('native-browser-reviewed-clone-with-correlated-completion')
+                    proof['checks'].append('native-browser-reviewed-clone-with-correlated-completion-and-explicit-physical-protection-retirement')
                 else:
+                    import pgadmin.cdeadmin.workspace.mysql_clone_jobs as clone_module
+                    import pgadmin.cdeadmin.providers.mysql_family.mysql_clone as native_clone_module
+                    from pgadmin.cdeadmin.workspace.mysql_backup_protection import Registry
+                    registry=service_for_app(app).mysql_backup_protection
+                    original_rows=clone_module.rows;native_original_rows=native_clone_module.rows;intents=[]
+                    def before_native(connection,statement,parameters=()):
+                        if statement.startswith('CLONE '):
+                            scopes=[endpoint,donor_endpoint] if remote else [endpoint]
+                            for scope in scopes:
+                                rows=registry.list(uid,scope)['backups']
+                                assert any(row['backup_id']==last_review[0]['job_id'] and row['state']=='pending_native_reply' for row in rows)
+                            intents.append('durable-intent-before-native-clone')
+                        return original_rows(connection,statement,parameters)
+                    clone_module.rows=before_native
+                    if remote:native_clone_module.rows=before_native
                     path=parent+'/Clone "ü" '+secrets.token_hex(8)
-                    completed,request=start(path);completed=finish(completed,'native_completed')
+                    try:completed,request=start(path);completed=finish(completed,'native_completed')
+                    finally:clone_module.rows=original_rows;native_clone_module.rows=native_original_rows
+                    assert len(intents)==1
+                    assert completed['source']['client_interface']==('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')
                     assert completed['sql_observation']['acknowledged'] and completed['native_observation']['job_correlated']
+                    holds=completed['archive_backup_protections']
+                    assert len(holds)==(2 if remote else 1)
+                    assert all(row['native_clone_completion_acknowledged'] for row in holds)
+                    assert all(row['state']==('native_clone_returned_unattested_source' if remote else 'native_clone_returned') for row in holds)
+                    assert Registry(registry.root).list(uid,endpoint)['backups'][0]['backup_id']==completed['job_id']
+                    if remote:
+                        donated=backup_http('mysql_binlog_backup_protection_list',{},target=donor_url)['backups']
+                        assert donated[0]['clone_role']=='registered_donor' and donated[0]['source']['server_uuid']==donor_proof['server_uuid']
+                    if archive:
+                        backup_http('mysql_raw_binlog_remove_artifact',{'job_id':archive['job_id'],'confirmation':archive['job_id']},refused=True)
+                        assert archives.native_verify(archives.directory(archive_record)/'archive',archive_record['source'])==archive_bytes
+                    proof['checks'].append('durable-clone-holds-before-native-SQL-with-exact-registered-source-and-conservative-remote-donor-recipient-scope')
                     assert completed['files_verified'] is False and completed['recovery_drill_complete'] is False
                     proof['checks'].append('authenticated-http-native-innodb-'+('remote' if remote else 'local')+'-clone-to-exact-quoted-unicode-server-directory-and-correlated-pfs-completion')
                     if remote:
@@ -223,8 +289,25 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                         lost=finish(lost,'native_completed')
                         assert lost['sql_observation']['acknowledged'] is False and lost['native_completion_observed']
                         assert http('start',lost_request)['state']=='native_completed'
+                        assert all(row['state']=='unconfirmed_native_reply' and not row['native_clone_completion_acknowledged'] for row in lost['archive_backup_protections'])
                     finally:clone_module.rows=original_rows;native_clone_module.rows=native_original_rows
                     proof['checks'].append('lost-success-reply-reconciles-only-from-frozen-native-operation-identity-without-replay')
+                    original_observation=clone_module.observation;observations=[]
+                    def broken_after_reply(connection):
+                        observations.append(1)
+                        item=service_for_app(app).mysql_clone_jobs.load(last_review[0]['job_id'],uid,endpoint)
+                        if len(observations)>1 and item.get('sql_observation',{}).get('acknowledged'):
+                            raise OSError('Owned native clone post-ack observer failure')
+                        return original_observation(connection)
+                    clone_module.observation=broken_after_reply
+                    try:
+                        uncertain,uncertain_request=start(parent+'/observer-fault-'+secrets.token_hex(8))
+                        uncertain=finish(uncertain,'unknown')
+                    finally:clone_module.observation=original_observation
+                    assert uncertain['sql_observation']['acknowledged'] and not uncertain.get('recovery_drill_complete')
+                    assert all(row['native_clone_completion_acknowledged'] for row in uncertain['archive_backup_protections'])
+                    assert http('start',uncertain_request)['state']=='unknown'
+                    proof['checks'].append('actual-native-clone-ACK-survives-later-observer-failure-with-protection-and-no-replay')
                     refused,_request=start(path);refused=finish(refused,'refused')
                     assert refused['sql_observation']['native_refusal'] and refused['native_completion_observed'] is False
                     proof['checks'].append('native-existing-directory-refusal-does-not-reuse-a-prior-completed-status')
@@ -252,7 +335,7 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                         workspace_url=register('Owned MySQL C clone','root',False,'NO_BACKSLASH_ESCAPES,ANSI_QUOTES')
                         alternate,_request=start(parent+'/C exact \\ quoted "ü" '+secrets.token_hex(8))
                         alternate=finish(alternate,'native_completed')
-                        assert alternate['source']['client_interface']=='CMySQLConnection'
+                        assert alternate['source']['client_interface']=='CharsetCMySQLConnection'
                         proof['checks'].append('native-c-extension-worker-and-observer-under-ansi-quotes-no-backslash-escapes-preserve-exact-server-path')
                     finally:workspace_url=original_workspace
                     jobs=service_for_app(app).mysql_clone_jobs
@@ -261,13 +344,27 @@ def qualify(output,*,browser_binary=None,driver_binary=None,remote=False,browser
                     if browser_binary:
                         proof['browser']=browser(app,output,parent,sid,browser_binary,driver_binary,donor_options=donor_options)
                         proof['checks'].append('native-browser-server-menu-reviews-confirms-and-observes-'+('remote' if remote else 'local')+'-physical-clone')
+                        from cdeadmin_mysql_backup_protection_qualification import browser as protection_browser
+                        ui_output=output/'protection-browser';ui_output.mkdir()
+                        proof['protection_browser']=protection_browser(app,ui_output,sid,password,browser_binary,driver_binary,lost['job_id'])
+                    if archive:
+                        for target in ([workspace_url,donor_url] if remote else [workspace_url]):
+                            for hold in backup_http('mysql_binlog_backup_protection_list',{},target=target)['backups']:
+                                if hold['state']=='retired':continue
+                                retirement=backup_http('mysql_binlog_backup_protection_review_retire',{'backup_id':hold['backup_id']},target=target)
+                                backup_http('mysql_binlog_backup_protection_retire',{key:retirement[key] for key in ('review_id','review_digest')}|{'confirmed':True},target=target)
+                        removed=backup_http('mysql_raw_binlog_remove_artifact',{'job_id':archive['job_id'],'confirmation':archive['job_id']})
+                        assert removed['artifact_removed']
+                        subprocess.run(['docker','exec',name,'test','-d',path],check=True,timeout=15)
+                        proof['checks'].append('actual-archive-bytes-retained-until-reviewed-clone-hold-retirement-with-native-clone-files-preserved')
                     proof.update(complete=True,mode='remote' if remote else 'local',source=completed['source'],job_ids=[completed['job_id'],cancelled['job_id']])
             finally:cursor.close();native.close()
         assert fixture['owned_server_stopped']
         assert http('list',{})['total']>=(1 if browser_only else 2)
         proof['checks'].append('offline-authenticated-http-owner-bound-clone-receipts-after-source-stopped')
     finally:
-        if jobs is not None:jobs.close()
+        if jobs is not None:
+            jobs.close();proof['owned_workers_stopped']=not jobs.workers
         if restored_started:
             with (output/'restore-server.log').open('wb') as stream:
                 subprocess.run(['docker','logs',restored_name],stdout=stream,stderr=subprocess.STDOUT,timeout=15)
@@ -369,5 +466,6 @@ def browser(app,output,parent,server_id,binary,driver_binary,*,donor_options=Non
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--evidence',type=Path,required=True)
-    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--remote',action='store_true');parser.add_argument('--browser-only',action='store_true');args=parser.parse_args()
-    qualify(args.evidence,browser_binary=args.browser_binary,driver_binary=args.driver_binary,remote=args.remote,browser_only=args.browser_only)
+    parser.add_argument('--browser-binary');parser.add_argument('--driver-binary');parser.add_argument('--remote',action='store_true');parser.add_argument('--browser-only',action='store_true')
+    parser.add_argument('--use-c',action='store_true');parser.add_argument('--mysql-binlog');args=parser.parse_args()
+    qualify(args.evidence,browser_binary=args.browser_binary,driver_binary=args.driver_binary,remote=args.remote,browser_only=args.browser_only,use_c=args.use_c,mysql_binlog=args.mysql_binlog)

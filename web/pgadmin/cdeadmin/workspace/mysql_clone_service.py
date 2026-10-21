@@ -35,7 +35,8 @@ def attach_donor(service,owner,selected,source,transport,*,delegate):
     route={key:value for key,value in payload['route'].items() if key not in POOL_ARGUMENTS}
     username=donor_policy(route,selected,source)
     transport.donor_client=provider.client
-    transport.donor=provider.client._connect({'route':{**route,'read_timeout':5,'write_timeout':15}})
+    from ..providers.mysql_family.mysql_log_purge import private_connection
+    transport.donor=private_connection(provider.client,{**route,'read_timeout':5,'write_timeout':15})
     configure(transport.donor)
     native=capture(transport.donor)
     if native['server_uuid']==source['server_uuid']:
@@ -74,6 +75,8 @@ def action(service,server,operation,request):
             jobs=service.mysql_clone_jobs=MySQLCloneJobs(str(store.path)+'.mysql-clone',root)
             import atexit
             atexit.register(jobs.close)
+    from .mysql_backup_protection import manager as backup_protection
+    jobs.backup_protection=backup_protection(service)
     if operation=='list':
         if set(request)-{'offset','limit'}:raise CloneError('Invalid native clone receipt page')
         return jobs.list(owner,endpoint.id,**request)

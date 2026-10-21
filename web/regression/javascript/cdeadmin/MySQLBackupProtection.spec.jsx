@@ -3,6 +3,15 @@ import MySQLBackupProtection from 'sources/Dialogs/MySQLBackupProtection';
 import {withTheme} from '../fake_theme';
 
 const Component=withTheme(MySQLBackupProtection);
+it('shows physical clone role and retained uncertainty without claiming verified recovery',async () => {
+  const post=jest.fn().mockResolvedValue({backups:[{backup_id:'clone',backup_kind:'mysql_native_physical_clone',clone_role:'registered_donor',
+    source:{server_uuid:'observed-donor'},state:'native_clone_returned_unattested_source'}],total:1,offset:0});
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load managed backup protection'}));
+  await screen.findByText('Physical clone / registered_donor');
+  expect(screen.getByText('native_clone_returned_unattested_source')).toBeInTheDocument();
+  expect(screen.getByText(/Remote clone source UUIDs are not attested/)).toBeInTheDocument();
+});
 it('retires an exact managed backup hold only after review and explicit authority, without repeating a backup',async () => {
   const backup={backup_id:'owned',database:'native',source:{server_uuid:'native-source'},state:'native_dump_returned'};
   const post=jest.fn().mockResolvedValue({backups:[backup],total:1,offset:0});render(<Component post={post} />);

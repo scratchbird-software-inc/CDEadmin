@@ -1,4 +1,4 @@
-"""Durable holds for managed native dumps; holds do not prove recoverability."""
+"""Durable holds for managed native backups; holds do not prove recoverability."""
 from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
@@ -45,7 +45,7 @@ class Registry:
         with self.store(owner, endpoint) as store:
             rows = sorted(self.records(store).values(), key=lambda row: (row['created_at'], row['backup_id']), reverse=True)
         return {'backups': rows[offset:offset + limit], 'total': len(rows), 'offset': offset, 'limit': limit,
-                'scope': 'managed_graphical_dumps_for_this_owner_and_registration',
+                'scope': 'managed_native_dumps_and_clones_for_this_owner_and_registration',
                 'dependency_resolution': 'conservative_source_hold; not a verified recovery chain',
                 'external_backups_discovered': False, 'native_log_generation_attested': False}
 
@@ -55,8 +55,44 @@ class Registry:
 
     @staticmethod
     def protected(record, references):
-        return any(row['state'] != 'native_dump_returned' or
+        return any(row['state'] not in {'native_dump_returned', 'native_clone_returned'} or
                    row['source']['server_uuid'] == record['source']['server_uuid'] for row in references)
+
+    def begin_clone(self, owner, endpoint, clone):
+        """Persist known-registration holds before admitting native SQL.
+
+        Remote CLONE does not attest its protocol source UUID. Both the reviewed
+        donor and recipient registrations retain all their archives, including
+        after a returned native statement. A partial write leaves a conservative
+        hold and never authorizes native dispatch.
+        """
+        donor = clone.get('donor')
+        scopes = [(endpoint, clone['source'], 'recipient' if donor else 'local')]
+        if donor:
+            scopes.append((donor['endpoint_id'], donor['native_identity'], 'registered_donor'))
+        tickets = []
+        for scope, source, role in scopes:
+            backup_id = identity(clone['job_id'])
+            expected = {'backup_id': backup_id, 'backup_kind': 'mysql_native_physical_clone',
+                'native_clone_job_id': backup_id, 'clone_role': role,
+                'source': {name: deepcopy(source[name]) for name in ('server_uuid', 'version', 'authenticated_principal', 'active_role') if name in source},
+                'database': 'InnoDB instance clone', 'artifact_path': clone['options']['destination'],
+                'native_protocol_source_uuid_attested': donor is None,
+                'execution_host': deepcopy(clone['execution_host'])}
+            with self.store(owner, scope) as store:
+                previous = self.records(store).get(backup_id)
+                if previous is not None:
+                    if any(previous.get(key) != value for key, value in expected.items()):
+                        raise BinlogArchiveError('Native clone protection differs from its admitted job')
+                    if previous['state'] == 'retired':
+                        raise BinlogArchiveError('This native clone protection was retired; prepare a new clone')
+                else:
+                    value = {**expected, 'created_at': time.time(), 'state': 'pending_native_reply',
+                        'native_log_generation_attested': False, 'database_recovery_verified': False,
+                        'native_clone_completion_acknowledged': False, 'automatic_native_retry': False}
+                    store.change(lambda state: state.setdefault('mysql_backup_protection', {}).update({backup_id: value}))
+            tickets.append(Ticket(self.scoped(owner, scope), backup_id))
+        return tickets
 
     @contextmanager
     def guard(self, owner, endpoint, record):
@@ -134,6 +170,22 @@ class Ticket:
     def unconfirmed(self):
         return self.update(state='unconfirmed_native_reply')
 
+    def clone_returned(self, outcome, observed):
+        with self.sink.registry.store(self.sink.owner, self.sink.endpoint) as store:
+            record = Registry.records(store)[self.backup_id]
+        if record['state'] == 'retired':
+            return {**record, 'native_clone_acknowledged_after_retirement': outcome.get('acknowledged') is True}
+        acknowledged = outcome.get('acknowledged') is True
+        known_source = record['native_protocol_source_uuid_attested']
+        status = (observed or {}).get('status') if (observed or {}).get('job_correlated') else None
+        boundary = {name: status[name] for name in ('binlog_file', 'binlog_position', 'gtid_executed_prefix',
+            'gtid_executed_length', 'gtid_executed_sha256', 'gtid_executed_truncated') if name in (status or {})}
+        return self.update(state=('native_clone_returned' if known_source else 'native_clone_returned_unattested_source')
+            if acknowledged else 'unconfirmed_native_reply', native_completed_at=time.time(),
+            native_clone_completion_acknowledged=acknowledged, native_boundary=boundary,
+            native_boundary_observed=status is not None, native_clone_observation_correlated=status is not None,
+            native_backup_acknowledgement_unchanged=True)
+
     def completed(self, top, done, result):
         with self.sink.registry.store(self.sink.owner, self.sink.endpoint) as store:
             record = Registry.records(store)[self.backup_id]
@@ -153,6 +205,19 @@ class Ticket:
             native_gtid_snapshot_inconsistent=top.get('gtidExecutedInconsistent') is True,
             artifact_manifest_digest=digest(files), artifact_file_count=len(files),
             artifact_total_bytes=str(result['artifact_total_bytes']))
+
+
+def finish_clone(tickets, outcome, observed):
+    """Bookkeeping cannot replace a native acknowledgement or cause replay."""
+    results = []
+    for ticket in tickets:
+        try:
+            result = ticket.clone_returned(outcome, observed)
+        except Exception as error:
+            result = {'backup_id': ticket.backup_id, 'state': 'pending_or_unconfirmed',
+                      'error_type': type(error).__name__, 'native_backup_acknowledgement_unchanged': True}
+        results.append({'endpoint_id': ticket.sink.endpoint, **result})
+    return results
 
 
 def manager(service):
