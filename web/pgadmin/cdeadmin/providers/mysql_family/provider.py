@@ -1445,7 +1445,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 *operands, shell_options,
             )),
         )
-        def invoke(passwords):
+        def invoke_native(passwords):
             try:
                 from .mysql_shell_tools import run
                 observation = run(self, route, source, passwords)
@@ -1485,6 +1485,14 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 'driver_observation_only': True,
                 'transaction_finality_interpreted_by_common_code': False,
             }
+
+        if operation_id == 'backup_logical':
+            def invoke(passwords):
+                from .mysql_backup_events import track, completed
+                with track(self, route, path, effective_options) as ticket:
+                    return completed(ticket, invoke_native(passwords))
+        else:
+            invoke = invoke_native
 
         enable_local_infile = (
             operation_id == 'restore_logical' and

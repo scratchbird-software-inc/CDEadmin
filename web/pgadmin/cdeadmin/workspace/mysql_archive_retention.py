@@ -139,6 +139,15 @@ def _finish_removal(jobs, store, record):
 
 
 def remove(jobs, job_id, owner, endpoint, confirmation, *, expected=None, reconcile=False, retention_id=None):
+    from contextlib import nullcontext
+    registry = getattr(jobs, 'backup_protection', None)
+    guard = registry.guard(owner, endpoint, jobs.load(job_id, owner, endpoint)) if registry is not None else nullcontext()
+    with guard:
+        return _remove(jobs, job_id, owner, endpoint, confirmation, expected=expected,
+                       reconcile=reconcile, retention_id=retention_id)
+
+
+def _remove(jobs, job_id, owner, endpoint, confirmation, *, expected=None, reconcile=False, retention_id=None):
     if confirmation != job_id:
         raise BinlogArchiveError('Confirm the exact archive job identity before removing its files')
     jobs.scope(owner, endpoint)
@@ -205,6 +214,10 @@ def candidates(jobs, owner, endpoint, selected, *, native_source=None):
     by_source, oldest = {}, []
     counts = {'pinned': 0, 'unavailable_or_unverified': 0, 'already_removed': 0,
               'minimum_count': 0, 'within_retention_age': 0, 'pending_removal': 0, 'outside_source': 0}
+    registry = getattr(jobs, 'backup_protection', None)
+    protections = registry.protections(owner, endpoint) if registry is not None else []
+    if registry is not None:
+        counts['managed_backup_protected'] = 0
     cutoff = time.time() - selected['retention_days'] * 86400
     eligible_count = 0
     if directory.exists():
@@ -222,6 +235,8 @@ def candidates(jobs, owner, endpoint, selected, *, native_source=None):
                     counts['outside_source'] += 1; continue
                 if record.get('artifact_removed'):
                     counts['already_removed'] += 1; continue
+                if registry is not None and registry.protected(record, protections):
+                    counts['managed_backup_protected'] += 1; continue
                 if record.get('artifact_removal'):
                     counts['pending_removal'] += 1; continue
                 if record.get('retention_pinned'):

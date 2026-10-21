@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import MySQLRetentionSchedule from './MySQLRetentionSchedule';
+import MySQLBackupProtection from './MySQLBackupProtection';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLArchiveRetention({post,prefix,sourceArchive}) {
@@ -32,7 +33,8 @@ export default function MySQLArchiveRetention({post,prefix,sourceArchive}) {
   },[post,prefix,receipt?.job_id,receipt?.state]);
   const load=offset => run('retention_list',{offset,limit:25},setJobs);
   return <Box sx={{p:1}}>
-    <Alert severity="info">Retention removes application archive files and keeps operation receipts. Protect every archive needed by a base backup or recovery target with the archive’s protection control. Age and minimum-count rules do not verify recovery coverage. Native server logs are unchanged.</Alert>
+    <Alert severity="info">Retention removes application archive files and keeps operation receipts. Managed graphical backups add automatic archive holds. Protect archives needed by external backups or recovery targets with the archive’s protection control. Age and minimum-count rules do not verify recovery coverage. Native server logs are unchanged.</Alert>
+    <Box component="details"><summary>Managed backup protection</summary><MySQLBackupProtection post={post} /></Box>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       <TextField size="small" type="number" label="Remove archives older than days" value={days} onChange={event => {setDays(Number(event.target.value));setReview(null);}} />

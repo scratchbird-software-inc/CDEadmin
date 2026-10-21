@@ -75,6 +75,9 @@ def manager(service,server,family='mysql'):
             jobs=cls(str(store.path)+'.'+family+'-binlogs',root);setattr(service,attribute,jobs)
             import atexit
             atexit.register(jobs.close)
+        if family == 'mysql':
+            from .mysql_backup_protection import manager as backup_protection
+            jobs.backup_protection = backup_protection(service)
     return jobs,owner,endpoint,context
 
 
@@ -83,6 +86,9 @@ def action(service,server,operation,request):
     from mysql.connector import Error as NativeError
     if not isinstance(request,dict):raise BinlogArchiveError('A native binary-log archive request is required')
     jobs,owner,endpoint,context=manager(service,server)
+    if operation.startswith('backup_protection_'):
+        from .mysql_backup_protection import action as backup_action
+        return backup_action(service, owner, endpoint.id, operation.removeprefix('backup_protection_'), request)
     if operation.startswith('source_reset_'):
         from .mysql_log_reset import action as source_action
         return source_action(service, server, jobs, owner, endpoint, context,

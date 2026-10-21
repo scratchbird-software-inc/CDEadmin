@@ -24,6 +24,7 @@ def manager(service,server):
             jobs=service.mysql_raw_binlog_jobs=MySQLRawBinlogJobs(str(store.path)+'.mysql-raw-binlogs',root)
             import atexit
             atexit.register(jobs.close)
+        jobs.backup_protection = _archives.backup_protection
     return jobs,owner,endpoint,context
 
 

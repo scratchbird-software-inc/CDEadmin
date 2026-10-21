@@ -86,6 +86,33 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Managed graphical MySQL Shell backups now record durable protection intents
+before native dump dispatch. A native completion preserves the exact source
+UUID, database, manifest digest and native file/position/GTID boundary without
+copying the manifest's system-variable or credential material into protection
+receipts. Missing replies, changed metadata and local bookkeeping failures keep
+the hold; they never cause another native dump or replace an acknowledged dump
+with a restore/retry request.
+
+Application archive retention, individual removal and interrupted-removal
+reconciliation check these holds. Admission of a new backup intent and archive
+file removal share one application lock. An intent added after a retention
+review can stop its next removal; it never expands the accepted removal list.
+Pending/unconfirmed records retain this owner's registration archives, and
+confirmed source records retain its matching source archives. This is a
+conservative source hold, not calculated recovery-chain coverage. External
+backups, other registrations, offline replicas and native server log purging
+retain separate requirements. Direct SDK backup calls outside the managed
+workspace do not acquire a workspace protection scope.
+
+The archive retention form lists managed backup protection and provides a
+separate, expiring, exact-record retirement review. Retirement keeps backup
+files and abandons the backup's archive protection and recovery-planning role;
+it can explicitly abandon an unresolved dump. A late native completion never
+reactivates a retired hold. A changed backup record invalidates retirement
+authority. These receipts do not establish successful recovery, physical backup
+acceptance or a native log generation epoch.
+
 Native binary-log reset has a separate reviewed workflow for ``RESET BINARY
 LOGS AND GTIDS`` and its optional native ``TO`` sequence. It deletes all native
 binary logs, including the active file, and clears executed/purged GTID history;

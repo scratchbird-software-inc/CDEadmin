@@ -2606,7 +2606,9 @@ class ProviderWorkspaceService:
             server, 'apply_visual_admin', request
         )
         try:
-            result = callback(payload)
+            from .mysql_backup_protection import capture_scope
+            with capture_scope(self, context, self._principal_id(server)):
+                result = callback(payload)
         except VisualAdminExecutionError as exc:
             self._record_visual_admin_audit(
                 server, context, exc.operation

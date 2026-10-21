@@ -87,6 +87,11 @@ MySQL
   state binding, independent connections, native refusals and durable unknown
   outcomes. It requires an exclusive maintenance window and does not rebind old
   archive chains to reused native filenames or establish recovery coverage.
+  Managed graphical dump intents now acquire durable application archive holds
+  before dispatch, with conservative source protection, offline inspection and
+  reviewed retirement. Missing replies retain protection. These scoped holds do
+  not calculate native recovery-chain edges or discover external/other-registration
+  backups, offline replicas or native log-generation epochs.
   Scheduled age/count policies for exact native source/principal/role
   are implemented with independent occurrence receipts, expiry, revocation,
   restart and unresolved-outcome suspension. They preserve explicit pins and

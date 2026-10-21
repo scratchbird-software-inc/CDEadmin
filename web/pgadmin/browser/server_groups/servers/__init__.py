@@ -3164,7 +3164,8 @@ class ServerNode(PGChildNodeView):
                         payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
-                elif action in {'mysql_binlog_source_reset_catalog','mysql_binlog_source_reset_review','mysql_binlog_source_reset_start',
+                elif action in {'mysql_binlog_backup_protection_list','mysql_binlog_backup_protection_review_retire','mysql_binlog_backup_protection_retire',
+                                'mysql_binlog_source_reset_catalog','mysql_binlog_source_reset_review','mysql_binlog_source_reset_start',
                                 'mysql_binlog_source_reset_status','mysql_binlog_source_reset_cancel','mysql_binlog_source_reset_list','mysql_binlog_source_reset_reconcile',
                                 'mysql_binlog_source_purge_catalog','mysql_binlog_source_purge_review','mysql_binlog_source_purge_start',
                                 'mysql_binlog_source_purge_status','mysql_binlog_source_purge_cancel','mysql_binlog_source_purge_list','mysql_binlog_source_purge_reconcile',
