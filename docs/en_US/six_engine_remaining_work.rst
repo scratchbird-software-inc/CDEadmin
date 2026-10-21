@@ -125,6 +125,12 @@ MySQL
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
+  The versioned native server grammar library now checks UTF-8 editor text in
+  an isolated process using the source-observed SQL mode, including compound
+  procedures and names that do not yet exist. It performs no SQL execution or
+  catalog/privilege binding, and separates optimizer-hint warnings from syntax
+  errors. Script language-mode transitions and remaining installed capability
+  reconciliation still require their own work.
 * MY-DIAGNOSTICS: Audit and complete diagnostic preservation for other retained
   editor/completion/catalog consumers and denied/disabled observer
   profiles. Admitted Performance Schema profiles now use a separately

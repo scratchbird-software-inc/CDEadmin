@@ -86,6 +86,29 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+SQL source checking can use MySQL Shell's versioned server grammar library
+(``mysql_9.7.so`` or native Windows ``mysql_9.7.dll``). Its C ABI applies the
+observed native SQL mode, independently of the original connection, and runs in
+an isolated, bounded process. The original session supplies no metadata commands
+when its independent observer is admitted. Syntax checks cover compound
+procedures and references to future objects without executing them; catalog
+binding, privileges and quoted external-language bodies remain separate.
+Optimizer-hint diagnostics remain warnings when the SQL grammar is valid.
+
+Set ``CDEADMIN_MYSQL_PARSER_LIBRARY`` to the exact native library, or install
+MySQL Shell with its sibling ``lib/mysqlsh/yparser`` directory. The adapter also
+locates that directory from the configured Shell executable. It verifies the
+native library's reported 9.7.0 version and retains process/library fingerprints.
+The separate Shell AST API is not substituted because it forces ANSI quoting.
+Missing libraries retain the existing native PREPARE path; an explicitly selected
+unavailable or mismatched library is not silently replaced. Existing unsupported
+script language-mode transitions and unavailable observer profiles remain
+explicitly unqualified. Windows/macOS execution requires the platform teams'
+evidence. The owned native qualifier is
+``tools/cdeadmin_mysql_parser_qualification.py --output <outside-repo>
+--library <native-library>``, with ``--use-c`` run independently and optional
+browser/driver paths for the built editor.
+
 Database-host diagnostics now have an explicit SSH execution path. The
 authenticated peer's hostname and native ``auto.cnf`` UUID must match the
 independently observed MySQL host and data directory. An SSH bastion and the

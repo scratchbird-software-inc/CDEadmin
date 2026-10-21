@@ -15,6 +15,19 @@ def validate(client, handle, source, script=False):
     peer = None
     try:
         prepare(handle)  # Authenticated request path, including credential renewal.
+        from . import mysql_parser
+        grammar = mysql_parser.library(client)
+        if grammar is not None:
+            try:
+                with observer.lock:
+                    observer.cached = None
+                    observation = observer.observe()
+            except BaseException:
+                observer.needs_connection_refresh = True
+                try: observer.close()
+                except Exception: pass
+                raise
+            return mysql_parser.validate(grammar, source, observation, script)
         with observer.parser_session() as (peer, observation):
             result = validate_mysql(client, peer, source, 'mysql', script)
             if result['parser_version'] != observation['version'] or result['sql_mode'] != observation['variables']['sql_mode']:
