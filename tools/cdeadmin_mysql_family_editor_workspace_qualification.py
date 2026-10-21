@@ -168,7 +168,7 @@ def qualify(engine, output, browser_binary=None, driver_binary=None):
     return proof
 
 
-def browser(app, output, engine, sid, binary, driver_binary, password, *, script_modes=False, private_completion=False):
+def browser(app, output, engine, sid, binary, driver_binary, password, *, script_modes=False, private_completion=False, native_types=False):
     from werkzeug.serving import make_server
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -270,6 +270,28 @@ def browser(app, output, engine, sid, binary, driver_binary, password, *, script
                 for node in browser.find_elements(By.CSS_SELECTOR,'.cm-tooltip-autocomplete .cm-completionLabel')))
             editor.send_keys(Keys.ESCAPE)
             checks.append({'name':'native-browser-private-committed-catalog-column-prediction','column':'id','source-overlays':'explicitly-unconfirmed'})
+        if engine=='mysql' and native_types:
+            from selenium.webdriver.common.keys import Keys
+            for prefix,native_name,suffix in [('DOU','DOUBLE PRECISION',')'),('NAT','NATIONAL CHARACTER VARYING','(16))')]:
+                source='CREATE TABLE future_native_type(c '+prefix+suffix
+                _set_query(driver,wait,source)
+                editor=wait.until(_query_editor);editor.click();editor.send_keys(Keys.CONTROL,Keys.HOME)
+                editor.send_keys(Keys.ARROW_RIGHT*len('CREATE TABLE future_native_type(c '+prefix));editor.send_keys(Keys.CONTROL,' ')
+                def choices(browser):
+                    rows=[node for node in browser.find_elements(By.CSS_SELECTOR,'.cm-tooltip-autocomplete li') if node.is_displayed()]
+                    return rows if any(node.find_element(By.CSS_SELECTOR,'.cm-completionLabel').text==native_name for node in rows) else None
+                rows=wait.until(choices)
+                wanted=next(index for index,node in enumerate(rows) if node.find_element(By.CSS_SELECTOR,'.cm-completionLabel').text==native_name)
+                selected=next((index for index,node in enumerate(rows) if node.get_attribute('aria-selected')=='true'),-1)
+                steps=wanted+1 if selected<0 else (wanted-selected)%len(rows)
+                if steps:editor.send_keys(Keys.ARROW_DOWN*steps)
+                editor.send_keys(Keys.ENTER)
+                expected='CREATE TABLE future_native_type(c '+native_name+suffix
+                actual=driver.execute_script('return [...arguments[0].querySelectorAll(".cm-line")].map(n=>n.textContent).join("\\n");',editor)
+                assert actual==expected,(actual,expected)
+                wait.until(lambda browser:click(browser,'Check source'))
+                wait.until(lambda browser:any('SQL grammar: accepted by the reported parser.' in node.text for node in browser.find_elements(By.CSS_SELECTOR,'[role="status"]')))
+                checks.append({'name':'native-browser-type-keywords-'+prefix,'inserted_source':actual,'native_grammar_accepted':True})
         if engine == 'mysql' and script_modes:
             _set_query(driver,wait,"SET sql_mode='ANSI_QUOTES'; SELECT 7301 AS \"native_mode_result\"; SET sql_mode=''")
             wait.until(lambda browser:click(browser,'Preview script'))

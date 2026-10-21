@@ -146,7 +146,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
@@ -154,6 +154,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             row['hidden_from_star'] = True
         if native_identifier_token:
             row['native_identifier_token'] = True
+        if native_type_keyword:row['native_type_keyword']=True
         if native_type is not None:
             row['native_type']=native_type
         if table_valued:
@@ -380,8 +381,10 @@ def metadata(handle, engine, transaction=None, dialect=None):
         if engine in {'mysql', 'mariadb'}:
             for group, kind in (('functions', 'function'), ('data_types', 'type')):
                 for row in inv[group]:
-                    if re.fullmatch(r'[A-Za-z][A-Za-z0-9_$]*', row['native_name']):
-                        add(kind, [row['native_name']], 'native ' + kind)
+                    native_type_keyword=(engine=='mysql' and kind=='type' and row.get('inventory_kind')=='native-type-keywords')
+                    pattern=r'[A-Z][A-Z0-9_]*(?: [A-Z][A-Z0-9_]*)*' if native_type_keyword else r'[A-Za-z][A-Za-z0-9_$]*'
+                    if re.fullmatch(pattern, row['native_name']):
+                        add(kind, [row['native_name']], 'native ' + kind,native_type_keyword=native_type_keyword)
         context['keywords'] = ' '.join(words)
         context['reserved_words'] = [row['native_name'] for row in inv['lexical_rules']
                                      if row.get('reserved') or row.get('non_reserved') is False or row.get('category')=='reserved']

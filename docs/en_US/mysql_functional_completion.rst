@@ -158,6 +158,26 @@ evidence. The owned native qualifier is
 --library <native-library>``, with ``--use-c`` run independently and optional
 browser/driver paths for the built editor.
 
+The source inventory separates native dispatch IDs, top-level grammar entries
+and SQL type keyword spellings. It excludes C++ actions and comments and retains
+the first alternative of each grammar rule. The current source has 168 dispatch
+IDs (excluding the enum sentinel), 144 top-level grammar alternatives and 79 type
+spellings/aliases. These source facts do not establish complete native feature
+support. The original grammar-rule labels are not SQL commands or data types.
+
+All 79 type spellings have native parser acceptance and actual generated table
+declarations through both connectors, with native COLUMN_TYPE observations.
+Private completion exposes their SQL tokens, including multiword aliases such
+as DOUBLE PRECISION and NATIONAL CHARACTER VARYING. Builtin type choices do not
+replace colliding catalog names or their quoted member paths. The qualifier is
+``tools/cdeadmin_mysql_type_inventory_qualification.py --output <outside-repo>
+--library <native-9.7-parser-library>``; optional browser/driver paths check real
+completion insertion and nonexecuting source validation in the built editor.
+The source-only refresh tool is
+``tools/reference_engine_demos/reconcile_mysql_source_inventory.py --source
+<native-9.7-source>``. It retains existing runtime facts and qualified task
+receipts, records source hashes and avoids relabelling the original artifact.
+
 For admitted independent-observer profiles, predictive editor metadata now reads
 the committed native catalog on that same-instance authenticated peer. The
 source's current database, SQL mode and client charset are observed privately;

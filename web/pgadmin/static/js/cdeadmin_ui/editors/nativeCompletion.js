@@ -20,7 +20,7 @@ export function nativeSQLConfig(metadata) {
   const base = engine === 'mysql' ? MySQL : engine === 'mariadb' ? MariaSQL : engine === 'postgresql' ? PostgreSQL : engine === 'sqlite' ? SQLite : StandardSQL;
   const quote = mysql && !modes.has('ANSI_QUOTES') ? '`' : '"';
   const quoted = name => quote + name.replaceAll(quote, quote + quote) + quote;
-  const schema = Object.create(null);
+  const schema = Object.create(null), nativeTypeKeywords=[];
   const ensure = (path, kind, detail='') => {
     let branch = schema, entry;
     for (const [index, name] of path.entries()) {
@@ -38,6 +38,10 @@ export function nativeSQLConfig(metadata) {
     const path = item.display_path;
     if (!Array.isArray(path) || !path.length || path.some(name => typeof name !== 'string' || !name)) continue;
     const kind = item.resource_kind;
+    if (engine==='mysql' && kind==='type' && item.native_type_keyword && path.length===1 && /^[A-Z][A-Z0-9_]*(?: [A-Z][A-Z0-9_]*)*$/.test(path[0])) {
+      nativeTypeKeywords.push({label:path[0],apply:path[0],type:'type',detail:item.detail});
+      continue;
+    }
     const entry = ensure(path, ['column','field'].includes(kind) ? 'property' :
       ['function', 'procedure', 'package', 'package body'].includes(kind) ? 'function' :
         ['table', 'view', 'type', 'domain', 'collation'].includes(kind) ? 'type' : 'namespace', item.detail);
@@ -69,7 +73,7 @@ export function nativeSQLConfig(metadata) {
       identifierQuotes: modes.has('ANSI_QUOTES') ? '`"' : '`', plsqlQuotingMechanism: false} : {}),
     ...(engine === 'postgresql' ? {backslashEscapes: context.standard_conforming_strings === 'off'} : {}),
     ...(engine === 'duckdb' ? {identifierQuotes: '"', doubleDollarQuotedStrings: true, backslashEscapes: false} : {})}),
-  schema, nativeEngine: engine, nativeIdentifierQuote: quote, nativeRelationBindings,
+  schema, nativeTypeKeywords, nativeEngine: engine, nativeIdentifierQuote: quote, nativeRelationBindings,
   nativeLanguageContext: context,
   nativeRelationCaseSensitive: mysql && context.lower_case_table_names === 0,
   defaultSchema: (engine === 'duckdb' ? context.schema : context.default_schema) || undefined, upperCaseKeywords: true};

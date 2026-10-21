@@ -45,6 +45,11 @@ Independent inventory
 
 * INV-MYSQL: Reconcile MySQL 9.7.0 core, installed plugins/components/storage
   engines and native/Shell interfaces against the full product contract.
+  Source categories now distinguish 168 dispatch IDs, 144 grammar entries and
+  79 real SQL type spellings/aliases; comments and helper production names are
+  excluded. Native type parsing, declaration and completion receipts qualify
+  that scope. Installed capabilities and complete management workflows still
+  need their independent reconciliation; these counts are not a denominator.
 * INV-MARIADB: Reconcile MariaDB 12.2.2 core, storage engines/plugins, normal and
   Oracle modes, native utilities and optional physical-continuity components.
 * INV-POSTGRESQL: Reconcile PostgreSQL 18.3 core, server/database/session scopes,

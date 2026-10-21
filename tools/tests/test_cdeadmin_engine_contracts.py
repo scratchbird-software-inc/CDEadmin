@@ -385,9 +385,9 @@ def test_mysql_exact_dialect_inventory_activates_generated_tasks():
     assert {'visual_admin.table.assign_index_cache', 'visual_admin.table.preload_index_cache'} <= expected
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 760,
-        'statements': 143,
-        'commands': 987,
-        'data_types': 37,
+        'statements': 144,
+        'commands': 168,
+        'data_types': 79,
         'functions': 353,
         'operators': 65,
         'session_settings': 655,

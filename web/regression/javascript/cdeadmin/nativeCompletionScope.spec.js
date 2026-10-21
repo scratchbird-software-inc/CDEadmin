@@ -15,6 +15,46 @@ function suggestions(source, data, previous=data, position=source.length) {
   return nativeSchemaCompletion(observed.config,observed.context);
 }
 
+test('native MySQL type keyword phrases insert SQL tokens and catalog names keep identifier quoting',()=> {
+  const data=metadata('mysql');
+  data.resources.push({resource_kind:'type',display_path:['DOUBLE PRECISION'],native_type_keyword:true},
+    {resource_kind:'type',display_path:['NATIONAL CHARACTER VARYING'],native_type_keyword:true},
+    {resource_kind:'type',display_path:['catalog type']},
+    {resource_kind:'type',display_path:['INT); DROP TABLE t'],native_type_keyword:true});
+  const config=nativeSQLConfig(data);
+  expect(config.nativeTypeKeywords.find(row=>row.label==='DOUBLE PRECISION').apply).toBe('DOUBLE PRECISION');
+  expect(config.nativeTypeKeywords.find(row=>row.label==='NATIONAL CHARACTER VARYING').apply).toBe('NATIONAL CHARACTER VARYING');
+  expect(config.schema['catalog type'].self.apply).toBe('`catalog type`');
+  expect(config.schema['INT); DROP TABLE t'].self.apply).toBe('`INT); DROP TABLE t`');
+  const completed=suggestions('CREATE TABLE future_type(c DOU',data);
+  expect(completed.options.find(row=>row.label==='DOUBLE PRECISION').apply).toBe('DOUBLE PRECISION');
+});
+
+test('native MySQL types do not replace colliding catalog namespaces or their quoted member paths',()=> {
+  const data=metadata('mysql');
+  data.resources.push({resource_kind:'schema',display_path:['DOUBLE PRECISION']},
+    {resource_kind:'table',display_path:['DOUBLE PRECISION','owned']},
+    {resource_kind:'column',display_path:['DOUBLE PRECISION','owned','id']},
+    {resource_kind:'type',display_path:['DOUBLE PRECISION'],native_type_keyword:true});
+  expect(nativeSQLConfig(data).schema['DOUBLE PRECISION'].self.apply).toBe('`DOUBLE PRECISION`');
+  const root=suggestions('DOU',data).options.filter(row=>row.label==='DOUBLE PRECISION');
+  expect(root.map(row=>row.apply)).toEqual(['`DOUBLE PRECISION`','DOUBLE PRECISION']);
+  expect(suggestions('SELECT t. FROM `DOUBLE PRECISION`.owned t',data,data,'SELECT t.'.length).options.map(row=>row.label)).toEqual(['id']);
+});
+
+(process.env.CDEADMIN_MYSQL_TYPE_FIXTURE ? describe : describe.skip)('actual MySQL native type declaration fixture',()=> {
+  test('all declared native aliases remain SQL keyword insertions in column definitions',()=> {
+    const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_MYSQL_TYPE_FIXTURE,'utf8'));
+    const config=nativeSQLConfig(fixture.metadata);
+    expect(config.nativeTypeKeywords.map(row=>row.label).sort()).toEqual(fixture.cases.map(row=>row.native_name).sort());
+    for(const example of fixture.cases) {
+      const result=suggestions('CREATE TABLE future_inventory(c '+example.native_name.slice(0,3),fixture.metadata);
+      expect(result.options.some(row=>row.label===example.native_name && row.apply===example.native_name)).toBe(true);
+      expect(example.native_column_type).toBeTruthy();
+    }
+  });
+});
+
 (process.env.CDEADMIN_SQLITE_TABLE_FUNCTION_FIXTURE ? describe : describe.skip)('native SQLite table-function result columns', () => {
   test('binds native function aliases, hidden arguments, CTE projections and real schema masking', () => {
     const fixture = JSON.parse(fs.readFileSync(process.env.CDEADMIN_SQLITE_TABLE_FUNCTION_FIXTURE, 'utf8'));

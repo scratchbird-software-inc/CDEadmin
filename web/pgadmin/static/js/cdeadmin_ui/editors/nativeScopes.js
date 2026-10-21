@@ -247,6 +247,13 @@ export function nativeSchemaCompletion(config, context) {
       add({label: alias, apply: config.nativeQuote(alias), type: 'constant', detail: 'Source alias'});
       addBranch(entry.children);
     }
+    if (!quoted) for (const option of config.nativeTypeKeywords || []) {
+      // A native SQL type and a real catalog name can have the same text.
+      // Preserve the catalog's identifier quoting and its member lookup.
+      if (seen.has(option.label)) {
+        if (!options.some(existing=>existing.label===option.label && existing.apply===option.apply)) options.push(option);
+      } else add(option);
+    }
   }
   if (quoted) {
     const end = quoted === '[' ? ']' : quoted;
