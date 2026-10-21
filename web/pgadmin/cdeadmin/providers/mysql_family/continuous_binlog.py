@@ -124,6 +124,9 @@ def seal_received(native,client,family,record,workspace,source_directory,chosen,
         'native_parser_verification': {'tool_version': record['program']['tool_version'],
             'executable_sha256': record['program']['executable_sha256'],
             'scope': 'original_native_parser_postimages_bound_to_sealed_archive_bytes'}}
+    if family=='mysql':
+        from .mysql_archive_checkpoint import catalog_successor
+        metadata['source_successor']=catalog_successor(after,chosen[-1]['Log_name'])
     with (incoming/'archive.json').open('x', encoding='utf8') as output:
         private_file(incoming/'archive.json'); json.dump(metadata, output, sort_keys=True, ensure_ascii=True)
         output.flush(); os.fsync(output.fileno())

@@ -114,3 +114,33 @@ it('selects complete stopped files and dispatches a separate reviewed archive wi
   expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_tail_start',request:{job_id:'separate-archive',review_digest:'native-review',confirmed:true}});
   expect(screen.getByText(/Receiver owned-receiver: failed/)).toBeInTheDocument();
 });
+
+it('reviews the native successor of a selected retained archive and keeps byte verification explicit',async () => {
+  const unknown={...reviewed,state:'unknown',writer_reconciliation:{process_scope_stopped:true}};
+  const post=jest.fn().mockResolvedValue({jobs:[unknown],total:1});
+  render(<Component post={post} engine="mysql" onInspectArchive={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load binary-log receivers'}));
+  await screen.findByRole('button',{name:'Inspect receiver owned-receiver'});
+  post.mockResolvedValue(unknown);fireEvent.click(screen.getByRole('button',{name:'Inspect receiver owned-receiver'}));
+  await screen.findByText(/Receiver owned-receiver: unknown/);
+  post.mockResolvedValue({archives:[{job_id:'sealed-checkpoint',available:true,end_at:{file:'native.000004'},bytes:'9007199254740993'},
+    {job_id:'removed-checkpoint',available:false}],more:false});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect retained checkpoint archives'}));
+  await screen.findByLabelText('Retained receiver checkpoint archive');
+  fireEvent.mouseDown(screen.getByLabelText('Retained receiver checkpoint archive'));
+  expect(await screen.findByRole('option',{name:'removed-checkpoint (unavailable)'})).toHaveAttribute('aria-disabled','true');
+  fireEvent.click(screen.getByRole('option',{name:'sealed-checkpoint → native.000004 (9007199254740993 bytes)'}));
+  post.mockResolvedValue({checkpoint:{next_file:'native.000005',archive_job_id:'sealed-checkpoint'},native_archive_bytes_verified:false});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect native archive successor'}));
+  await screen.findByLabelText('Native receiver archive checkpoint');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_checkpoint_inspect',request:{job_id:'owned-receiver',archive_job_id:'sealed-checkpoint'}});
+  expect(screen.getByRole('button',{name:'Review receiver from retained checkpoint'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Unique receiver server ID'),{target:{value:'45'}});
+  fireEvent.click(screen.getByLabelText('Acknowledge the retained archive checkpoint'));
+  post.mockResolvedValue({...reviewed,job_id:'recovered-receiver',options:{...reviewed.options,start_file:'native.000005'},continuation:{archive_checkpoint:{archive_job_id:'sealed-checkpoint'}}});
+  fireEvent.click(screen.getByRole('button',{name:'Review receiver from retained checkpoint'}));
+  await screen.findByLabelText('Native continuous receiver review');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_capture_review',request:{recover_job_id:'owned-receiver',archive_job_id:'sealed-checkpoint',acknowledge_archive_checkpoint:true,
+    options:{start_file:'native.000005',receiver_server_id:45,timeout_seconds:null}}});
+  expect(screen.getByText(/Receiver owned-receiver: unknown/)).toBeInTheDocument();
+});

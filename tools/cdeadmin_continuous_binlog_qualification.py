@@ -25,8 +25,13 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     for directory in ('web/pgadmin/cdeadmin/providers/mysql_family','web/pgadmin/cdeadmin/workspace'):
         for path in (ROOT/directory).glob('*binlog*.py'):
             proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
-    for path in (Path(__file__),ROOT/'web/pgadmin/static/js/Dialogs/ContinuousBinlog.jsx'):
+    for path in (Path(__file__),ROOT/'tools/mysql_qualification_support.py',ROOT/'web/pgadmin/static/js/Dialogs/ContinuousBinlog.jsx'):
         proof['source_sha256'][str(path.relative_to(ROOT))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    if family=='mysql':
+        for name in ('web/pgadmin/cdeadmin/providers/mysql_family/mysql_archive_checkpoint.py',
+                     'web/pgadmin/cdeadmin/workspace/mysql_receiver_checkpoints.py',
+                     'web/pgadmin/browser/server_groups/servers/__init__.py'):
+            proof['source_sha256'][name]=hashlib.sha256((ROOT/name).read_bytes()).hexdigest()
     decoder=Path(decoder).resolve(strict=True)
     os.environ['CDEADMIN_'+('MYSQL_BINLOG_BINARY' if family=='mysql' else 'MARIADB_BINLOG_BINARY')]=str(decoder)
     builtins.SERVER_MODE=None
@@ -46,7 +51,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     from mysql_qualification_support import _root_connection
     if family=='mysql':
         from mysql_qualification_support import server
-        fixture_options={'gtid_mode':gtid_mode}
+        fixture_options={'gtid_mode':gtid_mode,'restartable':True}
     else:
         from mariadb_qualification_support import server
         fixture_options={}
@@ -185,6 +190,113 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                 proof['checks'].extend(['native-clean-stop-reconciliation-preserves-artifact-and-remote-finality-separation',
                     'native-new-reviewed-restart-rereads-exact-checkpoint-with-new-receiver-identity-and-seals-next-batch',
                     'native-purged-restart-checkpoint-is-refused-without-guessing-a-successor'])
+                if family=='mysql':
+                    # Lose only the application acknowledgement after a real,
+                    # sealed publication and confirmed native process cleanup.
+                    lost_parent=jobs.load(resumed['job_id'],uid,endpoint)
+                    jobs.update(lost_parent,state='unknown',result={**lost_parent['result'],'next_file':'unconfirmed.999999'},
+                        progress={**(lost_parent.get('progress') or {}),'next_file':'unconfirmed.999999'})
+                    checkpoint_request={'job_id':resumed['job_id'],'archive_job_id':checkpoint_archive['job_id']}
+                    page=http('checkpoint_catalog',{'job_id':resumed['job_id'],'limit':1})
+                    assert any(row['job_id']==checkpoint_archive['job_id'] and row['available'] for row in page['archives'])
+                    preview=http('checkpoint_inspect',checkpoint_request)
+                    assert preview['native_archive_bytes_verified'] is False and preview['checkpoint']['next_file']==latest
+                    assert preview['checkpoint']['last_file']==resume['options']['start_file']
+                    assert preview['checkpoint']['unresolved_cursor_used'] is False
+                    http('checkpoint_inspect',{**checkpoint_request,'job_id':original['job_id']},refused=True)
+                    recover={'recover_job_id':resumed['job_id'],'archive_job_id':checkpoint_archive['job_id'],'acknowledge_archive_checkpoint':True,
+                        'options':{'start_file':latest,'receiver_server_id':4000000109,'timeout_seconds':None}}
+                    assert 'Acknowledge' in http('review',{**recover,'acknowledge_archive_checkpoint':False},refused=True)['errormsg']
+                    recovered_review=http('review',recover)
+                    recovery_request={'job_id':recovered_review['job_id'],'review_digest':recovered_review['review_digest'],'confirmed':True}
+                    raw_jobs=getattr(service,'mysql_raw_binlog_jobs')
+                    original_record=raw_jobs.load(checkpoint_archive['job_id'],uid,endpoint)
+                    checkpoint_file=raw_jobs.directory(original_record)/'archive'/preview['checkpoint']['last_file']
+                    unmodified=checkpoint_file.read_bytes();damaged=bytearray(unmodified);damaged[60]^=1;checkpoint_file.write_bytes(damaged)
+                    try:
+                        started=http('start',recovery_request)
+                        refused=wait(lambda r:r['state']=='failed')
+                        assert refused['native_process_termination_confirmed'] is True
+                        assert not (jobs.directory(jobs.load(started['job_id'],uid,endpoint))/'receiving').exists()
+                    finally:checkpoint_file.write_bytes(unmodified)
+                    assert http('status',{'job_id':resumed['job_id']})['state']=='unknown'
+                    recovered_review=http('review',recover)
+                    recovery_request={'job_id':recovered_review['job_id'],'review_digest':recovered_review['review_digest'],'confirmed':True}
+                    with patch.object(native_adapter,'capture',different_source):
+                        assert 'different native source' in http('start',recovery_request,refused=True)['errormsg']
+                    started=http('start',recovery_request)
+                    receiving=jobs.directory(jobs.load(started['job_id'],uid,endpoint))/'receiving'
+                    wait(lambda r:r['state']=='active' and (receiving/latest).is_file())
+                    query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254740999,'Archive checkpoint 😀',b'\x00\xfb'))
+                    query.execute('FLUSH BINARY LOGS')
+                    wait(lambda r:r.get('progress',{}).get('published_batches',0)>=1)
+                    http('cancel',{'job_id':started['job_id']});recovered=wait(lambda r:r['state']=='cancelled')
+                    assert recovered['result']['archive_checkpoint_verified_before_dispatch'] is True
+                    assert recovered['result']['recovered_archive_checkpoint']==preview['checkpoint']
+                    assert http('status',{'job_id':resumed['job_id']})['state']=='unknown'
+                    assert http('start',recovery_request)['state']=='cancelled'
+                    new_archive=http('status',{'job_id':recovered['result']['last_archive_job_ids'][0]},archive=True)
+                    files=http('files',{'job_id':new_archive['job_id']},archive=True)['files']
+                    row=next(row for row in files if row['path']==latest)
+                    response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':new_archive['job_id'],'path':latest})})
+                    native_bytes=subprocess.run(['docker','exec',container,'cat',native_directory+'/'+latest],check=True,capture_output=True,timeout=15).stdout
+                    assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==row['sha256']
+                    left,right=bytearray(response.data),bytearray(native_bytes);left[21]&=254;right[21]&=254;assert left==right;response.close()
+                    proof['archive_checkpoint']={'receiver_job_id':resumed['job_id'],'archive_job_id':checkpoint_archive['job_id'],
+                        'next_file':latest,'new_receiver_job_id':recovered['job_id'],'original_native_file_purged':True,
+                        'changed_archive_refused_before_utility':True,'new_native_bytes_independently_matched':True}
+                    proof['checks'].extend(['native-retained-archive-successor-recovers-after-original-file-purge-without-using-unknown-cursor',
+                        'native-full-checkpoint-byte-verification-refuses-body-corruption-before-reader-dispatch',
+                        'native-archive-recovered-reader-seals-independent-source-bytes-and-preserves-old-unknown'])
+                    proof['rotation_archive_checkpoint']=proof['archive_checkpoint']
+                    # Preserve an actual native STOP-terminated closed log;
+                    # no synthetic rotation can be invented after a restart.
+                    query.execute("SET GLOBAL binlog_checksum='NONE'");query.execute('FLUSH BINARY LOGS')
+                    query.execute('SHOW BINARY LOG STATUS');stop_file=query.fetchone()[0];query.fetchall()
+                    query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254741000,'Native shutdown checkpoint 😀',b'\x00\xfa'))
+                    query.close();native.close()
+                    subprocess.run(['docker','stop',container],check=True,stdout=subprocess.DEVNULL,timeout=45)
+                    subprocess.run(['docker','start',container],check=True,stdout=subprocess.DEVNULL,timeout=30)
+                    from mysql_qualification_support import _wait_until_ready
+                    assert _wait_until_ready('mysql',container,300)==route['port']
+                    native=_root_connection(family,route['port']);native.autocommit=True;query=native.cursor()
+                    query.execute('SHOW BINARY LOG STATUS');after_restart=query.fetchone()[0];query.fetchall()
+                    stop_review=http('review',{'options':{'start_file':stop_file,'receiver_server_id':4000000111,'timeout_seconds':None}})
+                    started=http('start',{'job_id':stop_review['job_id'],'review_digest':stop_review['review_digest'],'confirmed':True})
+                    receiving=jobs.directory(jobs.load(started['job_id'],uid,endpoint))/'receiving'
+                    wait(lambda r:r.get('progress',{}).get('published_batches',0)>=1)
+                    http('cancel',{'job_id':started['job_id']});stop_parent=wait(lambda r:r['state']=='cancelled')
+                    stop_archive=http('status',{'job_id':stop_parent['result']['last_archive_job_ids'][0]},archive=True)
+                    assert stop_archive['result']['artifact']['source_successor']['successor_authority']=='sealed-native-closed-catalog-successor'
+                    stop_private=raw_jobs.load(stop_archive['job_id'],uid,endpoint)
+                    assert stop_private['result']['artifact']['event_integrity'][0]['checksum_algorithm']=='native_none'
+                    query.execute('PURGE BINARY LOGS TO %s',(after_restart,))
+                    lost=jobs.load(stop_parent['job_id'],uid,endpoint);jobs.update(lost,state='unknown')
+                    inspected=http('checkpoint_inspect',{'job_id':stop_parent['job_id'],'archive_job_id':stop_archive['job_id']})
+                    assert inspected['checkpoint']['next_file']==after_restart
+                    assert inspected['checkpoint']['successor_authority']=='sealed-native-closed-catalog-successor'
+                    recover_stop={'recover_job_id':stop_parent['job_id'],'archive_job_id':stop_archive['job_id'],'acknowledge_archive_checkpoint':True,
+                        'options':{'start_file':after_restart,'receiver_server_id':4000000112,'timeout_seconds':None}}
+                    stop_review=http('review',recover_stop)
+                    stop_request={'job_id':stop_review['job_id'],'review_digest':stop_review['review_digest'],'confirmed':True}
+                    started=http('start',stop_request);receiving=jobs.directory(jobs.load(started['job_id'],uid,endpoint))/'receiving'
+                    wait(lambda r:r['state']=='active' and (receiving/after_restart).is_file())
+                    query.execute('INSERT INTO sr_receiver_data.t VALUES(%s,%s,%s)',(9007199254741001,'Native catalog successor 😀',b'\x00\xf9'))
+                    query.execute('FLUSH BINARY LOGS');wait(lambda r:r.get('progress',{}).get('published_batches',0)>=1)
+                    http('cancel',{'job_id':started['job_id']});stop_recovered=wait(lambda r:r['state']=='cancelled')
+                    assert stop_recovered['result']['archive_checkpoint_verified_before_dispatch']
+                    assert http('status',{'job_id':stop_parent['job_id']})['state']=='unknown'
+                    new_archive=http('status',{'job_id':stop_recovered['result']['last_archive_job_ids'][0]},archive=True)
+                    files=http('files',{'job_id':new_archive['job_id']},archive=True)['files'];row=next(row for row in files if row['path']==after_restart)
+                    response=client.post(workspace_url,data={'action':archive_prefix+'download','payload':json.dumps({'job_id':new_archive['job_id'],'path':after_restart})})
+                    native_bytes=subprocess.run(['docker','exec',container,'cat',native_directory+'/'+after_restart],check=True,capture_output=True,timeout=15).stdout
+                    assert response.status_code==200 and hashlib.sha256(response.data).hexdigest()==row['sha256']
+                    left,right=bytearray(response.data),bytearray(native_bytes);left[21]&=254;right[21]&=254;assert left==right;response.close()
+                    proof['archive_checkpoint']={'receiver_job_id':stop_parent['job_id'],'archive_job_id':stop_archive['job_id'],
+                        'next_file':after_restart,'new_receiver_job_id':stop_recovered['job_id'],'original_native_file_purged':True,
+                        'successor_authority':'sealed-native-closed-catalog-successor','new_native_bytes_independently_matched':True}
+                    proof['checks'].append('native-shutdown-stop-event-checksum-none-and-restart-catalog-successor-recover-after-purge-without-inventing-rotation')
+                    query.execute('SHOW BINARY LOG STATUS');latest=query.fetchone()[0];query.fetchall()
                 from native_binlog_qualification_support import waiting_binlog
                 interrupted=http('review',{'options':{'start_file':latest,'receiver_server_id':4000000104}})
                 interrupted_record=jobs.load(interrupted['job_id'],uid,endpoint)
@@ -314,7 +426,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
                         query.execute('FLUSH BINARY LOGS')
                         return selected['job_id']
                     proof['browser']=browser(app,output,registered_id,family,browser_start,browser_binary,driver_binary,browser_started,
-                        stopped_tail=proof['stopped_tail'],unknown_recollection=proof.get('unknown_recollection'))
+                        stopped_tail=proof['stopped_tail'],unknown_recollection=proof.get('unknown_recollection'),archive_checkpoint=proof.get('archive_checkpoint'))
                     if proof.get('unknown_recollection'):
                         assert http('status',{'job_id':proof['unknown_recollection']['receiver_job_id']})['state']=='unknown'
                     proof['checks'].append('native-browser-reviews-starts-observes-cancels-receiver-and-opens-its-produced-archive')
@@ -361,7 +473,7 @@ def qualify(output,family,decoder,*,use_c=False,gtid_mode='ON',browser_binary=No
     return proof
 
 
-def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None,unknown_recollection=None):
+def browser(app,output,server_id,family,start_file,binary,driver_binary,on_started,*,stopped_tail=None,unknown_recollection=None,archive_checkpoint=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -416,6 +528,18 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         def field(label):
             node=driver.find_element(By.XPATH,'//label[normalize-space()="'+label+'"]')
             return driver.find_element(By.ID,node.get_attribute('for'))
+        def fill(label,text):
+            def attempt(browser):
+                from selenium.common.exceptions import ElementNotInteractableException,StaleElementReferenceException
+                try:
+                    selected=field(label)
+                    if not selected.is_enabled():return False
+                    browser.execute_script('arguments[0].scrollIntoView({block:"center"});',selected)
+                    if not selected.is_displayed():return False
+                    selected.send_keys(Keys.CONTROL,'a');selected.send_keys(Keys.BACKSPACE);selected.send_keys(text)
+                    return True
+                except (ElementNotInteractableException,StaleElementReferenceException):return False
+            wait.until(attempt)
         def select_start(browser):
             from selenium.common.exceptions import ElementClickInterceptedException,StaleElementReferenceException
             try:
@@ -449,9 +573,7 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         recollected_browser_job=None
         if unknown_recollection:
             click('Load binary-log receivers');click('Inspect receiver '+unknown_recollection['receiver_job_id'])
-            selected=field('Unique receiver server ID')
-            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',selected)
-            selected.send_keys(Keys.CONTROL,'a');selected.send_keys(Keys.BACKSPACE);selected.send_keys('4000000108')
+            fill('Unique receiver server ID','4000000108')
             checkbox=wait.until(lambda browser:browser.find_element(By.XPATH,'//label[contains(normalize-space(),"Acknowledge full recollection")]/span/input'))
             driver.execute_script('arguments[0].click();',checkbox)
             click('Review full recollection from original log')
@@ -467,6 +589,29 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
             click('Cancel continuous receiver')
             wait.until(lambda browser:any(('Receiver '+recollected_browser_job+': cancelled.') in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
             driver.save_screenshot(str(output/'native-mysql-recollection.png'))
+        checkpoint_browser_job=None
+        if archive_checkpoint:
+            click('Load binary-log receivers');click('Inspect receiver '+archive_checkpoint['receiver_job_id'])
+            fill('Unique receiver server ID','4000000110')
+            click('Inspect retained checkpoint archives')
+            selected=wait.until(lambda browser:node if (node:=field('Retained receiver checkpoint archive')).get_attribute('aria-disabled')!='true' else False)
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',selected);selected.click()
+            wait.until(lambda browser:next((node for node in browser.find_elements(By.CSS_SELECTOR,'[role="option"]') if archive_checkpoint['archive_job_id'] in node.text),None)).click()
+            click('Inspect native archive successor')
+            wait.until(lambda browser:browser.find_element(By.CSS_SELECTOR,'pre[aria-label="Native receiver archive checkpoint"]'))
+            checkbox=wait.until(lambda browser:node if (node:=browser.find_element(By.XPATH,'//label[contains(normalize-space(),"Acknowledge the retained archive checkpoint")]/span/input')).is_enabled() else False)
+            driver.execute_script('arguments[0].click();',checkbox);click('Review receiver from retained checkpoint')
+            wait.until(lambda browser:any('archive_checkpoint' in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'pre[aria-label="Native continuous receiver review"]')))
+            click('Confirm and start continuous receiver')
+            def checkpoint_started(browser):
+                node=browser.find_element(By.XPATH,'//summary[normalize-space()="Native continuous receiver observations"]/../pre')
+                value=json.loads(node.get_attribute('textContent'))
+                if value['job_id']!=archive_checkpoint['receiver_job_id'] and value['state']=='active':return value['job_id']
+                return False
+            checkpoint_browser_job=wait.until(checkpoint_started)
+            wait.until(published);click('Cancel continuous receiver')
+            wait.until(lambda browser:any(('Receiver '+checkpoint_browser_job+': cancelled.') in node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            driver.save_screenshot(str(output/'native-mysql-archive-checkpoint.png'))
         if stopped_tail:
             click('Load binary-log receivers');click('Inspect receiver '+stopped_tail['receiver_job_id'])
             click('Inspect stopped receiver files')
@@ -487,6 +632,7 @@ def browser(app,output,server_id,family,start_file,binary,driver_binary,on_start
         (output/'browser-console.json').write_text(json.dumps(errors,indent=2)+'\n');assert not errors
         return {'complete':True,'job_id':job_id,'produced_archive_job_id':archive_button.removeprefix('Inspect produced archive '),
             'unknown_recollection_reviewed_and_dispatched':bool(unknown_recollection),'recollected_receiver_job_id':recollected_browser_job,
+            'archive_checkpoint_reviewed_and_dispatched':bool(archive_checkpoint),'archive_checkpoint_receiver_job_id':checkpoint_browser_job,
             'reviewed_start':True,'native_closed_snapshot_visible':True,'cancelled':True,'writer_reconciled':True,'restart_reviewed_without_dispatch':True,'stopped_tail_adopted':bool(stopped_tail),'private_file_cleanup':bool(stopped_tail),'console_errors':0,'screenshot':'native-continuous-binlogs.png'}
     except Exception:
         if driver is not None:

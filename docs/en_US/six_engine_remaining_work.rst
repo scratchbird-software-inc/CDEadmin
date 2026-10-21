@@ -73,9 +73,11 @@ MySQL
 
 * MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
   targets, independent restore verification and reviewed production cutover.
-* MY-ARCHIVES: Complete recovery from independently sealed-archive checkpoints
-  when the original native starting file is purged, and wider cleanup/restart
-  reconciliation. Explicit full recollection from an unresolved receiver's
+* MY-ARCHIVES: Complete wider interrupted private-file cleanup reconciliation
+  and retention automation. Recovery from independently sealed receiver archive
+  checkpoints after the original native file is purged is implemented and
+  native/API/browser qualified, including native shutdown boundaries without
+  rotation events and checksum NONE. Explicit full recollection from an unresolved receiver's
   available original log is implemented, with stopped-writer admission, native
   source/GTID checks, a new receipt and no use of the uncertain cursor. Reviewed
   Shell/raw archive retention,

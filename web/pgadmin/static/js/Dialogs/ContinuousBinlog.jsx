@@ -12,6 +12,7 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [confirmStop,setConfirmStop]=useState(false);
   const [confirmRecollect,setConfirmRecollect]=useState(false);
+  const [checkpoints,setCheckpoints]=useState(null),[checkpointArchive,setCheckpointArchive]=useState(''),[checkpoint,setCheckpoint]=useState(null),[confirmCheckpoint,setConfirmCheckpoint]=useState(false);
   const [tails,setTails]=useState(null),[tailFiles,setTailFiles]=useState([]),[tailReview,setTailReview]=useState(null);
   const generation=useRef(0);
   useEffect(() => {
@@ -20,6 +21,7 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
   },[post,engine]);
   useEffect(() => {setConfirmStop(false);setConfirmRecollect(false);},[receipt?.job_id,receipt?.state]);
   useEffect(() => {setTails(null);setTailFiles([]);setTailReview(null);},[post,engine,receipt?.job_id]);
+  useEffect(() => {setCheckpoints(null);setCheckpointArchive('');setCheckpoint(null);setConfirmCheckpoint(false);},[post,engine,receipt?.job_id]);
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     try {const value=await post({action:prefix+action,request});if(token===generation.current)accept(value);}
@@ -80,6 +82,24 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <FormControlLabel label="Acknowledge full recollection and possible duplicate archives" control={<Checkbox disabled={busy} checked={confirmRecollect} onChange={event => {setConfirmRecollect(event.target.checked);setReview(null);}} />} />
         <Button disabled={busy || !confirmRecollect} onClick={() => run('review',{recollect_job_id:receipt.job_id,acknowledge_recollection:true,
           options:{start_file:receipt.options.start_file,receiver_server_id:Number(serverId),timeout_seconds:timeout}},value => {setStartFile(value.options.start_file);setReview(value);})}>Review full recollection from original log</Button>
+      </Box>}
+      {engine==='mysql' && ['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>
+        <Button disabled={busy} onClick={() => run('checkpoint_catalog',{job_id:receipt.job_id},value => {setCheckpoints(value);setCheckpointArchive('');setCheckpoint(null);setConfirmCheckpoint(false);})}>Inspect retained checkpoint archives</Button>
+        {checkpoints && <>
+          <Alert severity="info">Select a verified archive published by this receiver. Its native successor can provide a new collection boundary even if the original starting log was purged. Complete backup/log-chain and database recovery acceptance remain separate.</Alert>
+          <TextField disabled={busy} size="small" select label="Retained receiver checkpoint archive" value={checkpointArchive} onChange={event => {setCheckpointArchive(event.target.value);setCheckpoint(null);setConfirmCheckpoint(false);setReview(null);}} sx={{minWidth:320}}>
+            <MenuItem value="">Select retained archive</MenuItem>{checkpoints.archives.map(row => <MenuItem key={row.job_id} disabled={!row.available} value={row.job_id}>{row.job_id}{row.available ? ' → '+row.end_at.file+' ('+row.bytes+' bytes)' : ' (unavailable)'}</MenuItem>)}
+          </TextField>
+          <Button disabled={busy || !checkpoints.more} onClick={() => run('checkpoint_catalog',{job_id:receipt.job_id,after:checkpoints.next_after},value => {setCheckpoints(value);setCheckpointArchive('');setCheckpoint(null);setConfirmCheckpoint(false);})}>Next checkpoint archive page</Button>
+          <Button disabled={busy || !checkpointArchive} onClick={() => run('checkpoint_inspect',{job_id:receipt.job_id,archive_job_id:checkpointArchive},value => {setCheckpoint(value);setConfirmCheckpoint(false);setReview(null);})}>Inspect native archive successor</Button>
+          {checkpoint && <Box>
+            <Alert severity="info">Native successor: {checkpoint.checkpoint.next_file}. Complete archive bytes will be verified in the worker before the native receiver starts. The prior receiver outcome stays unchanged.</Alert>
+            <Box component="pre" aria-label="Native receiver archive checkpoint" sx={{whiteSpace:'pre-wrap',maxHeight:220,overflow:'auto'}}>{JSON.stringify(checkpoint,null,2)}</Box>
+            <FormControlLabel label="Acknowledge the retained archive checkpoint" control={<Checkbox disabled={busy} checked={confirmCheckpoint} onChange={event => {setConfirmCheckpoint(event.target.checked);setReview(null);}} />} />
+            <Button disabled={busy || !confirmCheckpoint} onClick={() => run('review',{recover_job_id:receipt.job_id,archive_job_id:checkpointArchive,acknowledge_archive_checkpoint:true,
+              options:{start_file:checkpoint.checkpoint.next_file,receiver_server_id:Number(serverId),timeout_seconds:timeout}},value => {setStartFile(value.options.start_file);setReview(value);})}>Review receiver from retained checkpoint</Button>
+          </Box>}
+        </>}
       </Box>}
       {['unknown','failed','cancelled','captured'].includes(receipt.state) && <ReceiverFileCleanup post={post} engine={engine} receiverJobId={receipt.job_id} />}
       {['unknown','failed','cancelled','captured'].includes(receipt.state) && <Box>

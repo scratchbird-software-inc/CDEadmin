@@ -280,8 +280,7 @@ source/mode, or lost GTID lineage refuses admission. It never uses an uncertain
 next-file cursor, modifies the old receiver outcome, or replays SQL. Previously
 published changes can be collected again into independent archives. Native GTID
 admission is distinct from binary-log epoch proof and database recovery; neither
-is inferred, including on GTID-disabled profiles. Recovery using sealed-archive
-checkpoints after the original native file is purged remains open. MariaDB's
+is inferred, including on GTID-disabled profiles. MariaDB's
 distinct native archive workflow is documented in
 :doc:`mariadb_functional_completion`.
 
@@ -327,9 +326,37 @@ These receipts qualify archive retention. Native receiver qualification also
 covers explicit full recollection through both client interfaces and GTID ON/OFF
 profiles, including independent source-file comparison and preservation of the
 unknown parent. The production browser reviews and dispatches a new collection,
-observes its verified archive and cancels it independently. Recovery using
-sealed-archive checkpoints after source purging, complete backup/log chains and
-production cutover remain open.
+observes its verified archive and cancels it independently.
+
+Retained receiver archives now also provide a separately reviewed native
+successor checkpoint after the original source file has been purged. Inspect the
+receiver's paged archive index, select a retained verified publication, inspect
+its native successor, acknowledge the boundary, and review a new receiver. The
+successor comes from its terminal native rotation or from the native closed-log
+catalog observation sealed with newly published archives. The latter preserves
+shutdown/restart boundaries that have no rotation event. Older archives without
+either observation cannot authorize a guessed successor. Source UUID/principal,
+GTID mode and applicable native GTID baseline must still match, and the exact
+successor must remain on the server.
+
+Successor inspection is bounded and explicitly does not claim fresh full-file
+verification. The new receiver worker verifies every sealed file hash, complete
+native framing/CRC and the reviewed archive digest before dispatching the native
+reader. Corrupted/removed archives, changed metadata, foreign producer receipts,
+unconfirmed writers, changed source and purged successors are refused. Raw
+retrieval/parser utilities must acknowledge process cleanup before publication;
+a zero exit code alone is insufficient. The old receiver remains unchanged;
+archive boundaries do not establish a binary-log generation ID, transaction
+finality or complete backup/log recovery coverage.
+
+Native API qualification covers both client interfaces and GTID ON/OFF profiles,
+including actual source purging, body-corruption refusal before reader dispatch,
+checksum NONE, native shutdown/STOP and same-instance restart, independent
+comparison with server file bytes, and once-only dispatch. The production
+browser inspects and selects the retained checkpoint, reviews and starts its
+new reader, observes a sealed batch and cancels it. Complete backup/log recovery
+and production cutover remain separate acceptance work; wider interrupted
+private-file cleanup reconciliation and retention automation remain open.
 
 Raw archives also have a native replay adapter in the restore workspace. It
 uses mysqlbinlog9.7.0 to decode sealed logs and mysql9.7.0 to apply them to an

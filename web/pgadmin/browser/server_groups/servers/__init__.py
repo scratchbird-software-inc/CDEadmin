@@ -3174,6 +3174,7 @@ class ServerNode(PGChildNodeView):
                                 'mysql_binlog_capture_list','mysql_binlog_capture_cancel','mariadb_binlog_capture_catalog','mariadb_binlog_capture_review',
                                 'mariadb_binlog_capture_start','mariadb_binlog_capture_status','mariadb_binlog_capture_list','mariadb_binlog_capture_cancel',
                                 'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer',
+                                'mysql_binlog_capture_checkpoint_catalog','mysql_binlog_capture_checkpoint_inspect',
                                 'mysql_binlog_capture_tail_catalog','mysql_binlog_capture_tail_review','mysql_binlog_capture_tail_start',
                                 'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start',
                                 'mysql_binlog_capture_cleanup_catalog','mysql_binlog_capture_cleanup_review','mysql_binlog_capture_cleanup_start',

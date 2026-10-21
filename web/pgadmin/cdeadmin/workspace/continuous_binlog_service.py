@@ -187,6 +187,11 @@ def action(service, server, operation, request, family):
     from flask import current_app
     if not isinstance(request, dict): raise BinlogArchiveError('Select a native continuous receiver request')
     jobs, archives, owner, endpoint, _context = manager(service, server, family)
+    if operation=='checkpoint_catalog':
+        if family!='mysql':raise BinlogArchiveError('Select a native MySQL receiver checkpoint')
+        from .mysql_receiver_checkpoints import parent,catalog
+        original=parent(jobs,archives,request.get('job_id'),owner,endpoint.id)
+        return catalog(jobs,archives,original,request)
     if operation in {'cleanup_catalog','cleanup_review','cleanup_start','cleanup_status','cleanup_cancel','cleanup_list'}:
         from .continuous_binlog_cleanup import action as cleanup_action
         return cleanup_action(service,server,operation,request,family,(jobs,archives,owner,endpoint,_context))
@@ -201,10 +206,11 @@ def action(service, server, operation, request, family):
         return (jobs.get if operation == 'status' else jobs.cancel)(request['job_id'], owner, endpoint.id)
     if operation=='reconcile_writer':return jobs.reconcile_writer(request,owner,endpoint.id,archives)
     adapter = native.adapter(family)
-    previous=None;recollect=False
+    previous=None;recollect=False;archive_recover=False;checkpoint_archive_id=None
     if operation == 'review':
         accepted=({'options'},{'options','resume_job_id'})
-        if family=='mysql':accepted+=({'options','recollect_job_id','acknowledge_recollection'},)
+        if family=='mysql':accepted+=({'options','recollect_job_id','acknowledge_recollection'},
+            {'options','recover_job_id','archive_job_id','acknowledge_archive_checkpoint'})
         if set(request) not in accepted: raise BinlogArchiveError('Review exact native receiver options')
         selected = native.options(family, request['options'])
         if 'resume_job_id' in request:
@@ -215,6 +221,12 @@ def action(service, server, operation, request, family):
                 raise BinlogArchiveError('Acknowledge full recollection and possible duplicate archives; the old outcome remains unresolved')
             previous=jobs.recollection_parent(request['recollect_job_id'],owner,endpoint.id,archives,selected)
             recollect=True
+        if 'recover_job_id' in request:
+            if request['acknowledge_archive_checkpoint'] is not True:
+                raise BinlogArchiveError('Acknowledge the retained archive boundary; full archive verification must precede receiver dispatch')
+            from .mysql_receiver_checkpoints import parent
+            previous=parent(jobs,archives,request['recover_job_id'],owner,endpoint.id)
+            checkpoint_archive_id=request['archive_job_id'];archive_recover=True
     elif operation == 'start':
         reviewed = jobs.load(request.get('job_id'), owner, endpoint.id)
         if reviewed['state'] != 'reviewed': return jobs.start(request, owner, endpoint.id, {}, None)
@@ -228,6 +240,18 @@ def action(service, server, operation, request, family):
             if family!='mysql' or previous_id:raise BinlogArchiveError('Native receiver recollection scope is invalid')
             previous=jobs.recollection_parent(recovered_id,owner,endpoint.id,archives,selected)
             recollect=True
+        archive_recovery_id=(reviewed.get('continuation') or {}).get('recovered_receiver_job_id')
+        if archive_recovery_id:
+            if family!='mysql' or previous_id or recovered_id:raise BinlogArchiveError('Native archive checkpoint recovery scope is invalid')
+            from .mysql_receiver_checkpoints import parent
+            previous=parent(jobs,archives,archive_recovery_id,owner,endpoint.id)
+            checkpoint_archive_id=reviewed['continuation']['archive_checkpoint']['archive_job_id'];archive_recover=True
+    elif operation=='checkpoint_inspect':
+        if family!='mysql' or set(request)!={'job_id','archive_job_id'}:
+            raise BinlogArchiveError('Inspect one native MySQL receiver archive checkpoint')
+        from .mysql_receiver_checkpoints import parent
+        previous=parent(jobs,archives,request['job_id'],owner,endpoint.id)
+        checkpoint_archive_id=request['archive_job_id'];selected=None
     elif operation == 'catalog':
         if request: raise BinlogArchiveError('Native receiver catalog takes no browser route')
         selected = None
@@ -251,12 +275,24 @@ def action(service, server, operation, request, family):
             connection = client._connect({'route': {**route, 'read_timeout': 5, 'write_timeout': 15}})
             captured = adapter.capture(connection)
             if operation == 'catalog': return captured
+            if operation=='checkpoint_inspect':
+                from .mysql_receiver_checkpoints import checkpoint
+                return {'source':captured['identity'],'checkpoint':checkpoint(archives,previous,checkpoint_archive_id,captured,connection),
+                    'native_archive_bytes_verified':False,'scope':'Bounded successor inspection; complete sealed archive verification is required in the receiver worker before native dispatch.'}
             native.admit(captured, selected)
             if previous is not None and previous['source']!=captured['identity']:
                 raise BinlogArchiveError('The stopped receiver belongs to a different native source identity')
             recollected=recollection_checkpoint(previous,captured,connection) if recollect else None
             if operation=='start' and recollect and recollected!=reviewed['continuation'].get('recollection_checkpoint'):
                 raise BinlogArchiveError('The reviewed recollection admission changed; prepare a new review')
+            archive_checkpoint=None
+            if archive_recover:
+                from .mysql_receiver_checkpoints import checkpoint
+                archive_checkpoint=checkpoint(archives,previous,checkpoint_archive_id,captured,connection)
+                if archive_checkpoint['next_file']!=selected['start_file']:
+                    raise BinlogArchiveError('Use the exact native successor of the reviewed receiver archive')
+                if operation=='start' and archive_checkpoint!=reviewed['continuation'].get('archive_checkpoint'):
+                    raise BinlogArchiveError('The reviewed native archive checkpoint changed; prepare a new review')
             program = program_identity(adapter, client, route, jobs.prepare_scope(owner, endpoint.id))
             runtime_limit = current_app.config.get('CDEADMIN_' + family.upper() + '_CONTINUOUS_BINLOG_MAX_RUNTIME_SECONDS')
             if runtime_limit is not None and (type(runtime_limit) is not int or not 1 <= runtime_limit <= 2147483647 or
@@ -267,14 +303,25 @@ def action(service, server, operation, request, family):
             if operation == 'review':
                 continuation={'writer_scope_index':1,**({'recollected_receiver_job_id':previous['job_id'],
                     'recollection_checkpoint':recollected} if recollect else {'previous_receiver_job_id':previous['job_id']} if previous else {})}
+                if archive_recover:continuation={'writer_scope_index':1,'recovered_receiver_job_id':previous['job_id'],
+                    'archive_checkpoint':archive_checkpoint}
                 result=jobs.review(owner,endpoint.id,selected,captured,configuration,program,continuation=continuation)
                 if recollect:
                     record=jobs.load(result['job_id'],owner,endpoint.id)
                     jobs.update(record,warnings=[*record['warnings'],
                         'This is a new full collection from the original native file. Previously archived events may be collected again. The old receiver and cursor remain unresolved; no archive is automatically replayed and no database recovery or binary-log epoch is inferred.'])
                     return jobs.get(result['job_id'],owner,endpoint.id)
+                if archive_recover:
+                    record=jobs.load(result['job_id'],owner,endpoint.id)
+                    jobs.update(record,warnings=[*record['warnings'],
+                        'Resume a new collection at the selected archive\'s native successor. Complete archive bytes are verified before the native receiver starts. The old receiver outcome stays unchanged; a complete backup/log chain, binary-log epoch and database recovery are not inferred.'])
+                    return jobs.get(result['job_id'],owner,endpoint.id)
                 return result
-            transport = native.ReceiverTransport(family, client, route, adapter.delegate_credentials(client, route), connection, archives)
+            if archive_recover:
+                from .mysql_receiver_checkpoints import ArchiveCheckpointTransport
+                transport=ArchiveCheckpointTransport(family,client,route,adapter.delegate_credentials(client,route),connection,archives,
+                    receiver_jobs=jobs,checkpoint_parent=previous)
+            else:transport = native.ReceiverTransport(family, client, route, adapter.delegate_credentials(client, route), connection, archives)
             connection = None
             admitted = transport; transport = None
             return jobs.start(request, owner, endpoint.id, {'source': captured['identity'], 'configuration': configuration, 'program': program}, admitted)

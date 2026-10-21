@@ -137,11 +137,15 @@ def verify(directory,expected_source,*,cancel=None):
             raise BinlogArchiveError('Native archive event/byte postimage differs')
         integrity.append({'binlog':row['name'],**verify_frames(path,'none',size,count,cancel=cancel)})
     if manifest(directory,cancel=cancel)!=files:raise BinlogArchiveError('Native archive changed during verification')
-    return {'format':metadata['format'],'source_uuid':expected_source['server_uuid'],'files':files,'file_count':len(files),
+    result={'format':metadata['format'],'source_uuid':expected_source['server_uuid'],'files':files,'file_count':len(files),
         'total_bytes':sum(row['size'] for row in files),'event_integrity':integrity,
         'start_from':{'file':names[0],'position':'4'},'end_at':{'file':names[-1],'position':native[-1]['decoded_bytes']},
         'native_event_checksums_verified_where_present':True,'native_closed_file_length_verified':True,'native_parser_verification':metadata['native_parser_verification'],
         'verification_scope':'sealed_file_hashes_native_closed_log_framing_crc32_and_native_parser_postimage'}
+    if metadata.get('source_successor') is not None:
+        from .mysql_archive_checkpoint import successor
+        result['source_successor']=successor(directory,result,expected_source)
+    return result
 
 
 class ArchiveTransport:
@@ -170,6 +174,8 @@ class ArchiveTransport:
                     secret_config=bytes(view),secret_argument='--defaults-file={path}',secret_argument_position=0,
                     cancel_signal=cancel,progress=progress))
                 last={key:value for key,value in result.items() if key not in {'stdout','stderr'}};tools.append(last)
+                if result['process_observation'].get('cleanup_confirmed') is not True:
+                    raise BinlogArchiveError('Native MySQL raw retrieval process cleanup is unconfirmed')
                 if result['return_code']!=0:raise BinlogArchiveError('Native MySQL raw retrieval did not return successfully')
                 path=archive/selected['Log_name'];private_file(path);size,count,last_kind=framing(path,cancel=cancel)
                 if size!=decoded_length(selected):raise BinlogArchiveError('Native raw log length differs from the complete closed server file')
@@ -184,6 +190,8 @@ class ArchiveTransport:
                 '--local-load='+str(temporary),'--',*[str(Path('archive.incoming')/row['name']) for row in native]],
                 cancel_signal=cancel,progress=progress)
             last={key:value for key,value in checked.items() if key not in {'stdout','stderr'}};tools.append(last)
+            if checked['process_observation'].get('cleanup_confirmed') is not True:
+                raise BinlogArchiveError('Native MySQL archive parser cleanup is unconfirmed')
             if checked['return_code']!=0:raise BinlogArchiveError('The native MySQL parser refused the archived log range')
             if last['executable_sha256']!=program['executable_sha256']:raise BinlogArchiveError('Native archive verifier changed during execution')
             shutil.rmtree(temporary)
@@ -194,6 +202,8 @@ class ArchiveTransport:
                 'source_observation_scope':'native_server_uuid_before_and_after_utility_retrieval_with_registered_transport_policy',
                 'native_parser_verification':{'tool_version':program['tool_version'],'executable_sha256':program['executable_sha256'],
                     'scope':'original_native_parser_postimages_bound_to_sealed_archive_bytes'}}
+            from .mysql_archive_checkpoint import catalog_successor
+            metadata['source_successor']=catalog_successor(after,record['options']['log_names'][-1])
             path=archive/'archive.json'
             with path.open('x',encoding='utf8') as stream:
                 private_file(path);json.dump(metadata,stream,ensure_ascii=True,sort_keys=True);stream.flush();os.fsync(stream.fileno())

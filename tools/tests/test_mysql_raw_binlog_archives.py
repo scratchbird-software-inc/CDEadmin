@@ -80,3 +80,32 @@ def test_native_encrypted_header_length_is_distinct_from_plaintext_event_bytes()
     assert raw.decoded_length({'File_size':'1536','Encrypted':'No'})==1536
     for value in ({'File_size':'1536'}, {'File_size':'512','Encrypted':'Yes'}, {'File_size':True,'Encrypted':'No'}):
         with pytest.raises(BinlogArchiveError):raw.decoded_length(value)
+
+
+@pytest.mark.parametrize('uncertain_stage',['retrieval','parser'])
+def test_unconfirmed_native_writers_never_publish_a_checkpoint(tmp_path,monkeypatch,uncertain_stage):
+    import threading
+    from pathlib import Path
+    from pgadmin.cdeadmin.security import SecretLease
+    source={'server_uuid':'owned'}
+    program={'executable_sha256':'trusted','tool_version':'9.7.0','execution_host':{'kind':'application-host'}}
+    monkeypatch.setattr(raw,'capture',lambda _connection:{'identity':source})
+    monkeypatch.setattr(raw,'program_identity',lambda *_args,**_kwargs:program)
+    monkeypatch.setattr(raw,'connection_arguments',lambda *_args:['--host=localhost'])
+    monkeypatch.setattr(raw,'framing',lambda *_args,**_kwargs:(4,1,4))
+    monkeypatch.setattr(raw,'verify_frames',lambda *_args,**_kwargs:{})
+    class Runner:
+        def run(self,grant,arguments,**_kwargs):
+            stage='retrieval' if '--raw' in arguments else 'parser'
+            if stage=='retrieval':(Path(grant.workspace)/'archive.incoming/native.1').write_bytes(b'\xfebin')
+            return {'return_code':0,'executable_sha256':'trusted','process_observation':{'cleanup_confirmed':stage!=uncertain_stage}}
+    client=SimpleNamespace(_tool_runner=Runner(),_discard_failed_session=lambda _connection:None)
+    transport=raw.ArchiveTransport(client,{},SecretLease(b'[client]\n'),object())
+    record={'source':source,'program':program,'options':{'log_names':['native.1'],'timeout_seconds':30},
+        'source_state':{'selected_logs':[{'Log_name':'native.1','File_size':'4','Encrypted':'No'}]}}
+    try:
+        with pytest.raises(BinlogArchiveError,match='cleanup is unconfirmed') as observed:
+            transport.execute(record,tmp_path,threading.Event(),lambda _event:None)
+        assert observed.value.observation['process_observation']['cleanup_confirmed'] is False
+        assert (tmp_path/'archive.incoming/native.1').is_file() and not (tmp_path/'archive').exists()
+    finally:transport.close()
