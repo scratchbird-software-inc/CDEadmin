@@ -259,6 +259,26 @@ application requests, native methods, independent connector/data checks and the
 built desktop. Its receipts qualify that recorded scope, not full host lifecycle
 or full MySQL product completion.
 
+Instance bootstrap administrators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Native ``configure_instance`` and ``configure_replica_set_instance`` accept
+``clusterAdmin`` in their native option object. Their dedicated password mode
+supplies ``clusterAdminPassword`` privately at dispatch; inline passwords remain
+refused. Native Shell parses the exact account name. Reviews bind account-row
+fingerprints and visible grants on the selected instance. An omitted account
+host uses the native ``%`` lookup and target identity. Bootstrap
+administrators are configured on standalone instances; native MySQL rejects
+``clusterAdmin`` on existing Cluster or ReplicaSet members.
+
+The native method creates new accounts and validates existing ones. A supplied
+bootstrap password is rejected for an existing account; preserving its password
+does not add missing grants. Certificate issuer/subject and password expiration
+options retain native behavior. Configuration/account changes can commit in
+stages. Native errors, unknown replies, later account observations and independent
+login/privilege checks remain separate. Host option-file deployment and broader
+installation/upgrade/recovery acceptance remain open.
+
 MyISAM table maintenance includes reviewed native ``CACHE INDEX`` and
 ``LOAD INDEX INTO CACHE`` operations, with all or selected exact index names,
 default or configured named caches, and ``IGNORE LEAVES``. Native instance,

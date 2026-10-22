@@ -73,7 +73,7 @@ export default function MySQLTopologies({post}) {
   const selected=()=>({operation:operationId,arguments_json:argumentsText,context_name:contextName,
     context_options_json:contextOptions,use_advertised_endpoint:advertised,
     ...(operation?.guideline ? {guideline_name:guidelineName} : {}),
-    ...(operation?.account ? {account_password_mode:accountPasswordEnabled ? 'set' : 'preserve'} : {}),
+    ...(operation?.account || operation?.bootstrap ? {account_password_mode:accountPasswordEnabled ? 'set' : 'preserve'} : {}),
     witness_server_ids:witnessIds,
     timeout_seconds:timeout.trim()==='null' ? null : Number(timeout),
     target_confirmation:operation?.read_only ? seed?.identity.server_uuid : confirmation});
@@ -102,9 +102,9 @@ export default function MySQLTopologies({post}) {
     <Alert severity="info">For native SQL fanout or clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
     <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
       helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
-      onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account){setAccountPassword('');setAccountSecretReady(false);}}} />
-    {operation?.account && <>
-      <Alert severity="info">Select the current writable native primary registration. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>
+      onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account || operation?.bootstrap){setAccountPassword('');setAccountSecretReady(false);}}} />
+    {(operation?.account || operation?.bootstrap) && <>
+      {operation?.bootstrap ? <Alert severity="info">For a standalone instance, supply clusterAdmin in the native configuration options to create or validate a bootstrap administrator. Native MySQL rejects this option on an existing Cluster or ReplicaSet member. Native clusterAdminPassword is supplied separately at dispatch when creating an account. An existing account retains its password and must already have the required native privileges. Certificate and expiration options retain native behavior.</Alert> : <Alert severity="info">Select the current writable native primary registration. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>}
       <FormControlLabel control={<Checkbox disabled={busy} checked={accountPasswordEnabled} onChange={event=> {
         setAccountPasswordEnabled(event.target.checked);setAccountSecretReady(event.target.checked);setAccountPassword('');invalidate();
       }} />} label="Set account password at dispatch" />

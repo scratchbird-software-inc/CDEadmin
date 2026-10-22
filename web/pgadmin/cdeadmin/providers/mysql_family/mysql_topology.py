@@ -24,8 +24,8 @@ def call(context, method, arguments, *, read=False, seed=False, guideline=False,
 
 CALLS = {
     'instance.check_configuration': call('instance', 'check_instance_configuration', ['options?'], read=True, seed=True),
-    'instance.configure_cluster': call('instance', 'configure_instance', ['options?'], seed=True),
-    'instance.configure_replica_set': call('instance', 'configure_replica_set_instance', ['options?'], seed=True),
+    'instance.configure_cluster': {**call('instance', 'configure_instance', ['options?'], seed=True), 'bootstrap': True},
+    'instance.configure_replica_set': {**call('instance', 'configure_replica_set_instance', ['options?'], seed=True), 'bootstrap': True},
     'instance.create_cluster': call('instance', 'create_cluster', ['name', 'options?']),
     'instance.create_replica_set': call('instance', 'create_replica_set', ['name', 'options?']),
     'instance.reboot_cluster': call('instance', 'reboot_cluster_from_complete_outage', ['name?', 'options?']),
@@ -178,6 +178,8 @@ def options(value):
         if kind == 'options':
             if not isinstance(argument, dict): raise BinlogArchiveError('Native options require a JSON object')
             if specification.get('fanout') and 'exclude' in argument: fanout.selector(argument['exclude'])
+            if specification.get('bootstrap') and 'clusterAdmin' in argument and not isinstance(argument['clusterAdmin'], str):
+                raise BinlogArchiveError('Supply the native bootstrap administrator account name as text')
             # Account creation and host-file deployment keep separate authority;
             # their credentials/paths must never enter a retained argument JSON.
             if {key.casefold() for key in argument} & {'password', 'password1', 'password2', 'password3', 'clusteradminpassword', 'mycnfpath', 'outputmycnfpath'}:
@@ -200,8 +202,10 @@ def options(value):
     if not isinstance(guideline_name, str) or len(guideline_name.encode('utf8')) > 1024:
         raise BinlogArchiveError('Select a bounded native routing guideline name')
     password_mode = value.get('account_password_mode', 'preserve')
-    if not isinstance(password_mode, str) or password_mode not in {'preserve', 'set'} or 'account_password_mode' in value and not specification.get('account'):
+    if not isinstance(password_mode, str) or password_mode not in {'preserve', 'set'} or 'account_password_mode' in value and not (specification.get('account') or specification.get('bootstrap')):
         raise BinlogArchiveError('Select whether the native account password is preserved or supplied at dispatch')
+    if specification.get('bootstrap') and password_mode == 'set' and not accounts.bootstrap_name({'arguments_json': canonical(arguments)}):
+        raise BinlogArchiveError('Select the native clusterAdmin account before supplying its bootstrap password')
     advertised, timeout = value.get('use_advertised_endpoint', False), value.get('timeout_seconds', 3600)
     if type(advertised) is not bool or timeout is not None and (type(timeout) is not int or not 1 <= timeout <= 2147483647):
         raise BinlogArchiveError('Select the native execution address and positive client runtime or null')
@@ -212,7 +216,7 @@ def options(value):
             'context_options_json': canonical(context_options), 'target_confirmation': target,
             'use_advertised_endpoint': advertised, 'timeout_seconds': timeout, 'witness_server_ids': sorted(set(witnesses)),
             **({'guideline_name': guideline_name} if guideline_name or specification.get('guideline') else {})}
-    if specification.get('account'): result['account_password_mode'] = password_mode
+    if specification.get('account') or specification.get('bootstrap'): result['account_password_mode'] = password_mode
     return result
 
 
@@ -409,6 +413,10 @@ try:
         account_options=dict(arguments[1]) if len(arguments)>1 else {}
         if selected["account_password_mode"]=="set":account_options["password"]=authentication["account"]["password"]
         arguments=[arguments[0],account_options]
+    if specification.get("bootstrap") and selected["account_password_mode"]=="set":
+        bootstrap_options=dict(arguments[1]) if len(arguments)>1 and arguments[1] is not None else {}
+        bootstrap_options["clusterAdminPassword"]=authentication["account"]["password"]
+        arguments=[arguments[0],bootstrap_options]
     stage="native_operation";invoked=True
     result=getattr(target,specification["method"])(*arguments)
     returned=True;stage="returned"

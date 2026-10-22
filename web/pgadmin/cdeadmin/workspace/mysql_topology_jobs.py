@@ -69,6 +69,11 @@ class TopologyJobs(InstanceRestoreJobs):
                 'Native account setup creates or updates the selected account on the current primary and adds its required native grants. Existing extra grants remain.',
                 'Native account and grant changes can commit in stages. Review a native error or uncertain outcome before repeating the operation.',
                 'The account state and visible grants were observed for this review. Concurrent administrators can still change them. Client login and replication catch-up require separate observations.'])
+        elif record['source_state']['seed'].get('bootstrap_account') is not None:
+            self.update(record, warnings=[
+                'Native instance configuration can create the selected clusterAdmin account and change server settings. A supplied clusterAdminPassword is allowed only when the native method creates the account; existing-account validation retains native rules.',
+                'Account and configuration changes can commit in stages. Cancellation and process exit do not undo completed changes. Uncertain operations are never repeated automatically.',
+                'The native account parser, target account fingerprint and visible grants are bound to this review. Concurrent administrators are not frozen. Native replies, later account/configuration observations and client login remain separate results.'])
         return self.get(record['job_id'], record['owner'], record['endpoint_id'])
 
     def start(self, request, owner, endpoint, current, transport):
@@ -135,5 +140,9 @@ class TopologyTransport:
             try:
                 result['account_observation'] = native.accounts.capture(self.connection,
                     native.parse(record['options']['arguments_json'])[0], native.CALLS[record['options']['operation']]['context'])
+            except Exception as error: result['account_observation'] = {'available': False, 'error_type': type(error).__name__}
+        if record['source_state']['seed'].get('bootstrap_account') is not None:
+            try: result['account_observation'] = native.accounts.capture_bootstrap(self.connection,
+                record['source_state']['seed']['bootstrap_account'])
             except Exception as error: result['account_observation'] = {'available': False, 'error_type': type(error).__name__}
         return result

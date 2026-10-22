@@ -22,7 +22,7 @@ UI_ACCOUNT_USER = 'sr_gui_雪'
 UI_ACCOUNT_PASSWORD = 'Native-UI-private:\'\\雪'
 
 
-def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False, accounts_only=False, account_contexts=None, fanout_only=False):
+def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False, accounts_only=False, account_contexts=None, fanout_only=False, bootstrap_only=False):
     from flask import url_for
     from pgadmin.model import db, User, ServerGroup, Server
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
@@ -40,6 +40,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
         'tools/mysql_routing_qualification.py',
         'tools/mysql_accounts_qualification.py',
         'tools/mysql_fanout_qualification.py',
+        'tools/mysql_bootstrap_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_accounts.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_fanout.py',
@@ -123,7 +124,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                     if seeds[index]['identity']['server_uuid'] in allowed]
             return {'operation': operation, 'arguments_json': json.dumps(arguments),
                 **({'guideline_name': guideline} if '.guideline.' in operation else {}),
-                **({'account_password_mode':'set' if setting_password else 'preserve'} if '.setup_' in operation else {}),
+                **({'account_password_mode':'set' if setting_password else 'preserve'} if '.setup_' in operation or operation in {'instance.configure_cluster','instance.configure_replica_set'} else {}),
                 'context_name': '', 'context_options_json': '{}', 'use_advertised_endpoint': True,
                 'witness_server_ids': witnesses,
                 'target_confirmation': seeds[peer]['identity']['server_uuid'], 'timeout_seconds': 240}
@@ -183,8 +184,9 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
             http_server=make_server('0.0.0.0',5000,app,threaded=True)
             threading.Thread(target=http_server.serve_forever,daemon=True).start()
             request={'server_id':registrations[0]['server_id'],'target_uuid':seeds[0]['identity']['server_uuid'],
-                'recovery_member_indexes':[0] if desktop_only or accounts_only else [0,1,2]}
+                'recovery_member_indexes':[0] if desktop_only or accounts_only or bootstrap_only else [0,1,2]}
             if accounts_only:request['account_setup']=True
+            if bootstrap_only:request['bootstrap_setup']=True
             if fanout_only:
                 request['fanout_setup']=True
                 request['recovery_member_indexes']=[0,1]
@@ -197,7 +199,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                 time.sleep(.25)
             proof['browser']=json.loads((output/'browser-response.json').read_text())
             assert proof['browser']['complete'],proof['browser']
-        if accounts_only:
+        if accounts_only or bootstrap_only:
             from mysql_accounts_qualification import qualify as qualify_accounts
             def login(peer,user,secret):
                 with app.test_request_context('/'):
@@ -210,6 +212,17 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                         assert isinstance(connection,CMySQLConnection if use_c else MySQLConnection)
                         return rows(connection,'SELECT CURRENT_USER() AS identity,VERSION() AS version')[0]
                     finally:native_client._discard_failed_session(connection)
+            if bootstrap_only:
+                from mysql_bootstrap_qualification import qualify as qualify_bootstrap
+                if not desktop_only:proof['bootstrap']=qualify_bootstrap(execute,http,options,sql,login,output)
+                if browser_exchange:
+                    execute('instance.configure_cluster',[{'restart':True}],peer=0)
+                    desktop()
+                    proof['bootstrap_desktop_login']=login(0,UI_ACCOUNT_USER,UI_ACCOUNT_PASSWORD)
+                    assert proof['bootstrap_desktop_login']['identity']==UI_ACCOUNT_USER+'@%'
+                    assert sql(0,'SELECT password_lifetime AS days FROM mysql.user WHERE User=%s AND Host=%s',(UI_ACCOUNT_USER,'%'))==[{'days':14}]
+                proof['complete']=True
+                return proof
             if desktop_only:
                 if not browser_exchange:raise ValueError('Account desktop qualification requires a browser exchange')
                 execute('instance.configure_cluster',[{'restart':True}],peer=0)
@@ -510,22 +523,23 @@ XMLHttpRequest.prototype.send=function(body){
             checkbox = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Observe recovery member Owned MySQL topology '+str(index)+'"]'))
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});', checkbox)
             checkbox.click()
-        # The native selector is a MUI listbox; choose its actual operation label.
-        selector = driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
-        selector.click()
-        wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="option"]') if node.text == 'cluster.set_option'), None)).click()
-        field('Native topology arguments', '["tag:browserWide",9223372036854775808]', True)
-        field('Confirm topology seed UUID', request['target_uuid'])
-        click('Review native topology change')
-        review = wait.until(reviewed)
-        assert '9223372036854775808' in review.get_attribute('textContent')
-        click('Confirm and start native topology change')
-        wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
-        tags = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Native topology stored tag JSON"]'))
-        assert '9223372036854775808' in tags.get_attribute('textContent')
-        assert any('options decoding can clamp' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR, '[role="alert"]'))
-        click('Observe current topology target')
-        wait.until(lambda b: any('native_lock_free' in node.get_attribute('textContent') for node in b.find_elements(By.TAG_NAME, 'pre')))
+        if not request.get('bootstrap_setup'):
+            # The native selector is a MUI listbox; choose its actual operation label.
+            selector = driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
+            selector.click()
+            wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="option"]') if node.text == 'cluster.set_option'), None)).click()
+            field('Native topology arguments', '["tag:browserWide",9223372036854775808]', True)
+            field('Confirm topology seed UUID', request['target_uuid'])
+            click('Review native topology change')
+            review = wait.until(reviewed)
+            assert '9223372036854775808' in review.get_attribute('textContent')
+            click('Confirm and start native topology change')
+            wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+            tags = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Native topology stored tag JSON"]'))
+            assert '9223372036854775808' in tags.get_attribute('textContent')
+            assert any('options decoding can clamp' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR, '[role="alert"]'))
+            click('Observe current topology target')
+            wait.until(lambda b: any('native_lock_free' in node.get_attribute('textContent') for node in b.find_elements(By.TAG_NAME, 'pre')))
         def select_method(identifier):
             selector=driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});',selector)
@@ -570,9 +584,13 @@ XMLHttpRequest.prototype.send=function(body){
                 'unchanged-native-fanout-template-two-member-results','per-instance-SQL-errors-separate-from-returned-method',
                 'native-dry-run-results','registered-member-observations','native-output-retains-string-rows',
                 'unchanged-native-clusterset-supported-option-template'],'severe_errors':0}
-        if request.get('account_setup'):
-            select_method('cluster.setup_admin_account')
-            field('Native topology arguments',json.dumps([{'user':UI_ACCOUNT_USER,'host':'%'},{'passwordExpiration':30}]),True)
+        if request.get('account_setup') or request.get('bootstrap_setup'):
+            bootstrap=bool(request.get('bootstrap_setup'))
+            account_method='instance.configure_cluster' if bootstrap else 'cluster.setup_admin_account'
+            account_arguments=[{'clusterAdmin':'`'+UI_ACCOUNT_USER+'`@`%`','clusterAdminPasswordExpiration':14}] if bootstrap else [{'user':UI_ACCOUNT_USER,'host':'%'},{'passwordExpiration':30}]
+            select_method(account_method)
+            if bootstrap:field('Confirm topology seed UUID',request['target_uuid'])
+            field('Native topology arguments',json.dumps(account_arguments),True)
             checkbox=driver.find_element(By.XPATH,'//label[contains(.,"Set account password at dispatch")]//input[@type="checkbox"]')
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});',checkbox);checkbox.click()
             field('Native account password',UI_ACCOUNT_PASSWORD)
@@ -585,13 +603,13 @@ XMLHttpRequest.prototype.send=function(body){
             checkbox=driver.find_element(By.XPATH,'//label[contains(.,"Set account password at dispatch")]//input[@type="checkbox"]')
             if checkbox.is_selected():
                 driver.execute_script('arguments[0].scrollIntoView({block:"center"});',checkbox);checkbox.click()
-            change('cluster.setup_admin_account',[{'user':UI_ACCOUNT_USER,'host':'%'},{'update':True,'passwordExpiration':14}])
+            change(account_method,account_arguments if bootstrap else [{'user':UI_ACCOUNT_USER,'host':'%'},{'update':True,'passwordExpiration':14}])
             severe=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE']
             (output/'browser-console.json').write_text(json.dumps(severe,indent=2)+'\n')
             driver.save_screenshot(str(output/'native-account-setup.png'));assert not severe,severe
             return {'complete':True,'checks':['native-context-menu','native-read-only-inspection',
-                'exact-uint64-review','native-account-review-excludes-password','explicit-private-password-dispatch',
-                'password-field-cleared-after-dispatch','native-account-update-preserves-password'], 'severe_errors':0}
+                'native-standalone-bootstrap-context' if bootstrap else 'exact-uint64-review','native-account-review-excludes-password','explicit-private-password-dispatch',
+                'password-field-cleared-after-dispatch','native-bootstrap-validation-preserves-password' if bootstrap else 'native-account-update-preserves-password'], 'severe_errors':0}
         guideline='sr_desktop_routes'
         change('cluster.create_routing_guideline',[guideline])
         change('cluster.guideline.add_destination',['desktop_primary','$.server.memberRole = PRIMARY'],guideline)
@@ -654,6 +672,7 @@ if __name__ == '__main__':
     parser.add_argument('--accounts-only', action='store_true')
     parser.add_argument('--account-contexts', nargs='+', choices=['cluster','cluster_set','replica_set'])
     parser.add_argument('--fanout-only', action='store_true')
+    parser.add_argument('--bootstrap-only', action='store_true')
     args = parser.parse_args()
     output = Path(args.output).resolve()
     if output == ROOT or ROOT in output.parents: raise ValueError('Keep native evidence outside source')
@@ -663,4 +682,4 @@ if __name__ == '__main__':
     if not isinstance(selected, list) or len(selected) != 3: raise ValueError('Select three disposable native peers')
     qualify(output, selected, os.environ[args.password_env], use_c=args.use_c,
         browser_exchange=args.browser_exchange, routing_only=args.routing_only, desktop_only=args.desktop_only, accounts_only=args.accounts_only,
-        account_contexts=args.account_contexts,fanout_only=args.fanout_only)
+        account_contexts=args.account_contexts,fanout_only=args.fanout_only,bootstrap_only=args.bootstrap_only)

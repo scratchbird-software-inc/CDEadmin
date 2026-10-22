@@ -4,6 +4,10 @@ Account methods write the native primary. Admission uses that registration and
 binds native role metadata, the account row fingerprint and visible grants.
 """
 import re
+import json
+import uuid
+
+from ...sdk.tooling import ProviderToolGrant
 
 from .mysql_binlog_archives import BinlogArchiveError, rows
 
@@ -19,6 +23,14 @@ def capture(connection, account, context):
         results.append(values)
         return values
 
+    if context == 'instance':
+        read('SELECT CAST(@@global.read_only AS CHAR),CAST(@@global.super_read_only AS CHAR)')
+    else:
+        primary(connection, context, read)
+    return account_state(connection, account, queries, results, read, context)
+
+
+def primary(connection, context, read):
     instance = read('SELECT CAST(cluster_id AS CHAR),cluster_type FROM mysql_innodb_cluster_metadata.v2_this_instance')
     if len(instance) != 1 or instance[0][1] != ('ar' if context == 'replica_set' else 'gr'):
         raise BinlogArchiveError('Select the native account setup topology and its current primary registration')
@@ -37,6 +49,9 @@ def capture(connection, account, context):
             'SELECT member_role,CAST(invalidated AS CHAR) FROM mysql_innodb_cluster_metadata.v2_cs_members WHERE cluster_id=%s', (instance[0][0],))
         if (cluster_set and cluster_set != [['PRIMARY', '0']]) or (context == 'cluster_set' and not cluster_set):
             raise BinlogArchiveError('Select the native ClusterSet primary cluster for account setup')
+
+
+def account_state(connection, account, queries, results, read, context):
     columns = read("SELECT COLUMN_NAME,DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='mysql' AND TABLE_NAME='user' ORDER BY ORDINAL_POSITION")
     if not columns: raise BinlogArchiveError('Native account column metadata is unavailable')
     encoded = []
@@ -54,4 +69,35 @@ def capture(connection, account, context):
     grants = read('SHOW GRANTS FOR ?@?', 'SHOW GRANTS FOR %s@%s', (account['user'], account['host']), ordered=True) if values else []
     return {'account': dict(account), 'exists': bool(values), 'native_grants': grants,
         'queries': queries, 'results': results,
-        'scope': 'Current writable native primary and visible account state; concurrent native administrators are not frozen'}
+        'scope': ('Current selected native instance and visible bootstrap account state; native configuration owns its privilege and creation rules'
+                  if context == 'instance' else 'Current writable native primary and visible account state; concurrent native administrators are not frozen')}
+
+
+def bootstrap_name(selected):
+    arguments = json.loads(selected['arguments_json'])
+    return (arguments[0] or {}).get('clusterAdmin') if arguments else None
+
+
+def parse_bootstrap(client, route, workspace, selected):
+    name = bootstrap_name(selected)
+    if not name: return None
+    marker = 'CDEADMIN_BOOTSTRAP_ACCOUNT_' + uuid.uuid4().hex + ':'
+    source = 'import json;print(' + repr(marker) + '+json.dumps(mysql.split_account(' + repr(name) + ')))'
+    grant = ProviderToolGrant('mysql-shell', str(workspace), route.get('host') or 'localhost', int(route.get('port', 3306)), timeout_seconds=30)
+    observed = client._tool_runner.run(grant, ['--no-defaults', '--py', '--quiet-start=2', '--log-level=none', '--execute=' + source])
+    values = []
+    for line in observed['stdout'].splitlines():
+        if line.startswith(marker):
+            try: values.append(json.loads(line[len(marker):]))
+            except ValueError: pass
+    if (observed['return_code'] != 0 or len(values) != 1 or not isinstance(values[0], dict) or
+            set(values[0]) != {'user', 'host'} or any(not isinstance(value, str) for value in values[0].values())):
+        raise BinlogArchiveError('The native SDK could not parse the selected bootstrap administrator account')
+    return values[0]
+
+
+def capture_bootstrap(connection, account):
+    # IInstance::user_exists maps an omitted host to % before SHOW GRANTS;
+    # configure_instance also uses % for the eventual account identity.
+    effective = {**account, 'host': account['host'] or '%'}
+    return capture(connection, effective, 'instance')

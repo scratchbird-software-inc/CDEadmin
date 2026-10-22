@@ -193,6 +193,14 @@ MySQL
   registration and bind native primary roles, account state and visible grants
   to the review. Passwords are supplied privately at dispatch; native update,
   dry-run, certificate and expiration options retain their native meaning.
+  Native instance configuration now also accepts private bootstrap administrator
+  passwords through its two configuration methods. Native account parsing,
+  selected-instance row/grant fingerprints, creation and existing-account
+  validation remain distinct from topology-primary account setup. Supplying a
+  password for an existing bootstrap account preserves the native error and
+  uncertain-outcome fence; explicit observation/acknowledgement is required
+  before another mutation. Host option-file deployment and broader production
+  installation, upgrade and recovery acceptance remain open.
   Existing extra grants remain. Automatic secondary-seed routing, certificate
   login acceptance and replication catch-up are separate qualification work.
   Native SQL fanout now exposes each topology's ``execute`` method with native

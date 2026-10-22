@@ -113,7 +113,8 @@ def action(service, server, operation, request):
     elif operation in {'reconcile', 'acknowledge'} and set(request) == ({'job_id'} if operation == 'reconcile' else {'job_id', 'target_confirmation', 'observation_digest'}):
         record = jobs.load(request['job_id'], owner, endpoint.id); selected = record['options']
     else: raise native.BinlogArchiveError('Select a native topology action')
-    setting_password = bool(selected is not None and native.CALLS[selected['operation']].get('account') and selected['account_password_mode'] == 'set')
+    setting_password = bool(selected is not None and (native.CALLS[selected['operation']].get('account') or
+        native.CALLS[selected['operation']].get('bootstrap')) and selected.get('account_password_mode', 'preserve') == 'set')
     if operation == 'start' and setting_password != (account_secret is not None):
         raise native.BinlogArchiveError('The reviewed account password mode and separately supplied password must agree')
     client, route = context(service, server)
@@ -141,6 +142,10 @@ def action(service, server, operation, request):
         if native.CALLS[selected['operation']].get('account'):
             seed['account_state'] = native.accounts.capture(connection, native.parse(selected['arguments_json'])[0],
                 native.CALLS[selected['operation']]['context'])
+        if native.CALLS[selected['operation']].get('bootstrap'):
+            seed['bootstrap_account'] = native.accounts.parse_bootstrap(client, route, jobs.prepare_scope(owner, endpoint.id), selected)
+            if seed['bootstrap_account'] is not None:
+                seed['account_state'] = native.accounts.capture_bootstrap(connection, seed['bootstrap_account'])
         members = {}; configurations = {'seed': MySQLMonitoringHost._configuration(server)}
         credentials = {}
         def acquire(key, member_client, member_route):
@@ -169,7 +174,7 @@ def action(service, server, operation, request):
         configuration = digest({'registrations': configurations, 'root': str(jobs.root),
             'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
             **({'account_adapter_sha256': hashlib.sha256(Path(native.accounts.__file__).read_bytes()).hexdigest()}
-               if native.CALLS[selected['operation']].get('account') else {}),
+               if native.CALLS[selected['operation']].get('account') or native.CALLS[selected['operation']].get('bootstrap') else {}),
             **({'fanout_adapter_sha256': hashlib.sha256(Path(native.fanout.__file__).read_bytes()).hexdigest()}
                if native.CALLS[selected['operation']].get('fanout') else {})})
         if operation == 'review':
