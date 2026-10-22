@@ -800,8 +800,8 @@ def endpoint_context_actions(
                     confirmation=True,macro=False,arguments={'tab':'administration','resource_kind':'server',
                         'operation_id':operation,'database_target_id':None},enabled=ready and can_manage,
                     disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can maintain this native instance.'))
-        actions.append(_action('endpoint.mysql.host', 'MySQL database-host diagnostics...', 'open_mysql_host',
-            icon='command.default', group='diagnostics', mutation='admin', enabled=can_manage,
+        actions.append(_action('endpoint.mysql.host', 'MySQL database-host administration...', 'open_mysql_host',
+            icon='command.default', group='maintenance', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer its database SSH host.'))
         actions.append(_action('endpoint.mysql.raw_binlogs', 'MySQL raw binary-log archives...', 'open_mysql_raw_binlogs',
             icon='action.backup', group='backup', mutation='admin', enabled=can_manage,

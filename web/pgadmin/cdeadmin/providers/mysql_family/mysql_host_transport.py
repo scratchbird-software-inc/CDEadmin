@@ -10,7 +10,7 @@ import socket
 import time
 
 from ...operations import fileio
-from . import mysql_host_worker
+from . import mysql_host_worker, mysql_host_services
 
 
 class HostError(ValueError):
@@ -21,6 +21,8 @@ LOADER = '''import base64,json,sys,types
 p=json.loads(sys.stdin.buffer.read(1048577))
 m=types.ModuleType('_cdeadmin_native_fileio')
 exec(p['fileio'],m.__dict__);sys.modules[m.__name__]=m
+s=types.ModuleType('_cdeadmin_native_services')
+exec(p['services'],s.__dict__);sys.modules[s.__name__]=s
 n={'__name__':'_cdeadmin_native_worker'}
 exec(p['worker'],n)
 try:r=n['dispatch'](p['request'])
@@ -69,13 +71,14 @@ def command(platform, executable):
 def sources():
     worker = Path(mysql_host_worker.__file__).read_text(encoding='utf8')
     helper = Path(fileio.__file__).read_text(encoding='utf8')
-    return worker, helper
+    return worker, helper, Path(mysql_host_services.__file__).read_text(encoding='utf8')
 
 
 def program():
-    worker, helper = sources()
+    worker, helper, services = sources()
     return {'worker_sha256': hashlib.sha256(worker.encode('utf8')).hexdigest(),
             'fileio_sha256': hashlib.sha256(helper.encode('utf8')).hexdigest(),
+            'services_sha256': hashlib.sha256(services.encode('utf8')).hexdigest(),
             'transport_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
@@ -162,8 +165,8 @@ class Transport:
     def request(self, request, timeout=90):
         if self.transport is None or not self.transport.is_authenticated():
             raise HostError('Authenticate the independently owned database-host SSH transport first')
-        worker, helper = sources(); marker = 'CDEADMIN_NATIVE_HOST_' + secrets.token_hex(16) + ':'
-        envelope = {'request': request, 'worker': worker, 'fileio': helper, 'marker': marker}
+        worker, helper, services = sources(); marker = 'CDEADMIN_NATIVE_HOST_' + secrets.token_hex(16) + ':'
+        envelope = {'request': request, 'worker': worker, 'fileio': helper, 'services': services, 'marker': marker}
         payload = json.dumps(envelope, ensure_ascii=True).encode('utf8')
         if len(payload) > 1024 * 1024:
             raise HostError('Native host request exceeds its admitted bound')

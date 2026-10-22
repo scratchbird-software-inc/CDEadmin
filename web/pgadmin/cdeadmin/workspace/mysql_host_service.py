@@ -10,12 +10,16 @@ from ..providers.mysql_family import mysql_host_transport as native
 from ..providers.mysql_family.mysql_clone import configure, rows
 from ..providers.mysql_family.mysql_log_purge import private_connection
 from ..providers.mysql_family.provider import MySQLPilotProvider
-from .mysql_binlog_jobs import DurableCancellation, MySQLBinlogJobs, digest
+from .mysql_binlog_jobs import DurableCancellation, MySQLBinlogJobs, digest, identity
 from .mysql_monitoring_host import MySQLMonitoringHost
 
 
+SERVICE_ACTIONS = {'service_start', 'service_stop', 'service_restart'}
+
+
 def options(value):
-    if not isinstance(value, dict) or set(value) != {'connection', 'executable', 'configuration_file', 'workspace', 'timeout_seconds'}:
+    required = {'connection', 'executable', 'configuration_file', 'workspace', 'timeout_seconds'}
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'operation', 'service', 'binding_job_id', 'disconnect_all_clients'}:
         raise native.HostError('Select the exact native host, executable, configuration and private workspace')
     selected = deepcopy(value); selected['connection'] = native.public_route(selected['connection'])
     for key in ('executable', 'workspace'):
@@ -26,6 +30,20 @@ def options(value):
         raise native.HostError('Select a native configuration filename or no defaults')
     if type(selected['timeout_seconds']) is not int or not 1 <= selected['timeout_seconds'] <= 3600:
         raise native.HostError('Select native diagnostic runtime from 1 through 3600 seconds')
+    operation = selected.get('operation', 'validate_config')
+    if operation not in SERVICE_ACTIONS | {'validate_config'}:
+        raise native.HostError('Select a native MySQL host operation')
+    if operation in SERVICE_ACTIONS:
+        service = selected.get('service')
+        if (not isinstance(service, dict) or set(service) != {'manager', 'name'} or
+                service['manager'] != 'systemd' or not isinstance(service['name'], str) or not service['name']):
+            raise native.HostError('Select the exact native systemd MySQL unit')
+        if operation in {'service_stop', 'service_restart'} and selected.get('disconnect_all_clients') is not True:
+            raise native.HostError('Confirm disconnection of all clients on the native MySQL service')
+        if selected.get('binding_job_id') is not None:
+            selected['binding_job_id'] = identity(selected['binding_job_id'])
+    elif set(selected) & {'service', 'binding_job_id', 'disconnect_all_clients'}:
+        raise native.HostError('Service bindings apply only to native service actions')
     return selected
 
 
@@ -40,15 +58,19 @@ def credentials(value):
 
 def native_request(record, action):
     selected = record['options']
-    return {'schema': 'cdeadmin.mysql-native-host.v1', 'action': action,
+    value = {'schema': 'cdeadmin.mysql-native-host.v1', 'action': action,
             'binding': record['source_state']['host_binding'], 'executable': selected['executable'],
             'configuration_file': selected['configuration_file'], 'workspace': selected['workspace'],
             'timeout_seconds': selected['timeout_seconds'], 'reviewed': record['source_state']['remote_review'],
             'job_id': record['job_id'], 'input_digest': record['review_digest']}
+    if selected.get('operation') in SERVICE_ACTIONS:
+        value.update(service=selected['service'], native_pid_file=record['source_state']['native_pid_file'],
+                     previous_service_binding=record['source_state']['remote_review'].get('service'))
+    return value
 
 
 class HostJobs(MySQLBinlogJobs):
-    operation = 'mysql_database_host_configuration_validation'
+    operation = 'mysql_database_host_operation'
     review_warnings = (
         'Runs the selected native mysqld configuration check on the authenticated database-server SSH host. The application host is not the execution host.',
         'The native source UUID, host and data-directory identity, SSH public key, executable bytes and selected configuration graph bind this review. Includes, eligible directory members, permissions and resolved paths are rechecked before dispatch.',
@@ -62,6 +84,20 @@ class HostJobs(MySQLBinlogJobs):
         result['execution_host'] = deepcopy(record['program']['execution_host'])
         result['remote_observation'] = deepcopy(record['source_state']['remote_review'])
         result['cancellation_scope'] = 'before_native_dispatch_only'
+        result['source_identity_scope'] = record['source_state'].get('source_identity_scope', 'current_online_native_source')
+        result['source_connection_class'] = record['source_state'].get('source_connection_class')
+        return result
+
+    def review(self, owner, endpoint, selected, captured, configuration, program, continuation=None):
+        result = super().review(owner, endpoint, selected, captured, configuration, program, continuation)
+        if selected.get('operation') in SERVICE_ACTIONS:
+            record = self.load(result['job_id'], owner, endpoint)
+            self.update(record, remote_database_mutation=True, warnings=list(self.review_warnings) + [
+                'This request controls the exact selected native service. Stop/restart disconnect every client; native MySQL owns unfinished-transaction rollback and later recovery.',
+                'The unit fragment/drop-in bytes and command identities are observed. External scripts, environment files and credentials remain native service-manager inputs; this review does not freeze a complete startup-input snapshot.',
+                'The service-manager client outcome and subsequent unit/process facts do not prove SQL readiness. A timeout or lost SSH reply never causes automatic replay.',
+                'An offline review uses the explicitly selected prior owner/registration service association. Its SQL principal facts are previous observations; current SSH host authority authorizes this service request.'])
+            result = self.get(record['job_id'], owner, endpoint)
         return result
 
     def run(self, record, transport, signal):
@@ -72,7 +108,8 @@ class HostJobs(MySQLBinlogJobs):
                 raise InterruptedError('Native host diagnostic cancelled before dispatch')
             self.update(record, phase='native_dispatch', native_may_have_dispatched=True)
             sent = True
-            remote = transport.request(native_request(record, 'validate_config'), timeout=record['options']['timeout_seconds'] + 30)
+            remote = transport.request(native_request(record, record['options'].get('operation', 'validate_config')),
+                                       timeout=record['options']['timeout_seconds'] + 30)
             # Keep the original transport acknowledgement independently from
             # native process outcome and later observation/cleanup failures.
             self.update(record, ssh_reply_observed=True, remote_receipt=remote)
@@ -137,11 +174,13 @@ def source(service, server):
     try:
         configure(connection)
         value = rows(connection, 'SELECT VERSION() AS version,@@server_uuid AS server_uuid,'
-            '@@hostname AS hostname,@@datadir AS datadir,CURRENT_USER() AS authenticated_principal,CURRENT_ROLE() AS active_role')[0]
+            '@@hostname AS hostname,@@datadir AS datadir,@@pid_file AS native_pid_file,CURRENT_USER() AS authenticated_principal,CURRENT_ROLE() AS active_role')[0]
         if value['version'].split('-')[0] != '9.7.0':
             raise native.HostError('Native host diagnostics require MySQL9.7.0')
         return {'identity': {key: value[key] for key in ('version', 'server_uuid', 'authenticated_principal', 'active_role')},
-                'state': {'host_binding': {key: value[key] for key in ('server_uuid', 'hostname', 'datadir')}}}
+                'state': {'host_binding': {key: value[key] for key in ('server_uuid', 'hostname', 'datadir')},
+                          'native_pid_file': value['native_pid_file'],
+                          'source_connection_class': type(connection).__name__}}
     finally:
         provider.client._discard_failed_session(connection)
 
@@ -150,6 +189,26 @@ def program(peer, observed):
     return {**native.program(), 'native_executable': observed['program'],
             'execution_host': {**peer, 'kind': 'database-server-ssh-host',
                                'platform': observed['host']['platform'], 'hostname': observed['host']['hostname']}}
+
+
+def capture(service, server, jobs, owner, endpoint, selected, configuration):
+    reference = selected.get('binding_job_id')
+    if reference is None:
+        return source(service, server)
+    known = jobs.load(reference, owner, endpoint)
+    old_connection = known['options']['connection']; connection = selected['connection']
+    association = known['source_state'].get('remote_review', {}).get('service')
+    if (known['configuration'] != configuration or not association or
+            association.get('service_binding_verified') is not True or
+            association.get('selected_service') != selected['service'] or
+            any(old_connection.get(key) != connection.get(key) for key in ('host', 'port', 'host_key', 'platform'))):
+        raise native.HostError('Select a verified service association for this registration and pinned database host')
+    return {'identity': deepcopy(known['source']), 'state': {
+        'host_binding': deepcopy(known['source_state']['host_binding']),
+        'native_pid_file': known['source_state']['native_pid_file'],
+        'source_connection_class': known['source_state'].get('source_connection_class'),
+        'source_identity_scope': 'previous_online_service_association',
+        'binding_job_id': reference, 'previous_service_binding': deepcopy(association)}}
 
 
 def action(service, server, operation, request):
@@ -197,10 +256,14 @@ def action(service, server, operation, request):
             jobs.update(record, reconciliation={'remote_receipt': remote, 'observed_at': time.time(),
                         'original_ssh_acknowledgement_unchanged': True})
             return jobs.get(record['job_id'], owner, endpoint.id)
-        captured = source(service, server)
-        observed = transport.request({'schema': 'cdeadmin.mysql-native-host.v1', 'action': 'inspect',
+        captured = capture(service, server, jobs, owner, endpoint.id, selected, configuration)
+        inspection = {'schema': 'cdeadmin.mysql-native-host.v1', 'action': 'inspect',
             'binding': captured['state']['host_binding'], 'executable': selected['executable'],
-            'configuration_file': selected['configuration_file']})
+            'configuration_file': selected['configuration_file']}
+        if selected.get('operation') in SERVICE_ACTIONS:
+            inspection.update(service=selected['service'], native_pid_file=captured['state']['native_pid_file'],
+                              previous_service_binding=captured['state'].get('previous_service_binding'))
+        observed = transport.request(inspection)
         captured['state']['remote_review'] = observed
         executable = program(peer, observed)
         if operation == 'review':

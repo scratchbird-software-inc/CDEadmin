@@ -3,6 +3,9 @@ import MySQLHost from 'sources/Dialogs/MySQLHost';
 import {withTheme} from '../fake_theme';
 
 const Component=withTheme(MySQLHost);
+let originalHeight;
+beforeEach(() => {originalHeight=window.innerHeight;window.innerHeight=1200;});
+afterEach(() => {window.innerHeight=originalHeight;});
 const review={job_id:'host-job',review_digest:'exact',state:'reviewed',warnings:['Native database host only'],source:{server_uuid:'native'},
   execution_host:{kind:'database-server-ssh-host',hostname:'database'},remote_observation:{},
   options:{connection:{host:'database',port:22,username:'operator',host_key:'expected',authentication:'password',platform:'posix',python:'python3'}}};
@@ -46,4 +49,31 @@ it.each(['changed','unreadable'])('keeps the native result and warns about %s co
   expect(screen.getByText(outcome==='changed' ? /Configuration files changed after review/ : /Configuration files could not be observed/)).toBeVisible();
   expect(screen.getByText(/Native diagnostic output: exit 0/)).toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_host_start')).toBe(false);
+});
+
+it('reviews exact service controls and reuses a prior association for offline startup',async () => {
+  const serviceOptions={...review.options,operation:'service_stop',service:{manager:'systemd',name:'mysql@owned.service'},
+    executable:'/usr/sbin/mysqld',configuration_file:'/etc/owned.cnf',workspace:'/private/jobs',timeout_seconds:90};
+  const post=jest.fn().mockResolvedValue({...review,options:serviceOptions});render(<Component post={post} />);
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'stop MySQL service (Linux systemd)'}));
+  fireEvent.change(screen.getByLabelText('Exact systemd MySQL unit'),{target:{value:'mysql@owned.service'}});
+  fireEvent.click(screen.getByLabelText('Disconnect all native service clients'));
+  fireEvent.click(screen.getByRole('button',{name:'Review native host service action'}));
+  await screen.findByLabelText('Native host diagnostic review');
+  expect(post.mock.calls[0][0].request.options).toMatchObject({operation:'service_stop',service:{manager:'systemd',name:'mysql@owned.service'},disconnect_all_clients:true});
+  fireEvent.click(screen.getByLabelText('Authorize the reviewed native MySQL service action on this database SSH host'));
+  const finished={...review,options:serviceOptions,state:'native_process_returned',remote_receipt:{result:{return_code:0},service_request:{manager_client_completed:true}}};
+  post.mockResolvedValue(finished);fireEvent.click(screen.getByRole('button',{name:'Confirm native host service action'}));
+  await screen.findByText(/SQL readiness is unconfirmed/);
+  expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
+  post.mockResolvedValue({jobs:[finished],total:1,offset:0});fireEvent.click(screen.getByRole('button',{name:'Load native host receipts'}));
+  await screen.findByRole('table',{name:'Native host diagnostic receipts'});
+  post.mockResolvedValue(finished);fireEvent.click(screen.getByRole('button',{name:'Inspect native host job host-job'}));
+  await waitFor(() => expect(screen.getByLabelText('Prior verified service job (for offline SQL)')).toHaveValue('host-job'));
+  fireEvent.mouseDown(screen.getByLabelText('Native host operation'));
+  fireEvent.click(await screen.findByRole('option',{name:'start MySQL service (Linux systemd)'}));
+  fireEvent.click(screen.getByRole('button',{name:'Review native host service action'}));
+  await waitFor(() => expect(post).toHaveBeenLastCalledWith(expect.objectContaining({action:'mysql_host_review',request:expect.objectContaining({options:expect.objectContaining({operation:'service_start',binding_job_id:'host-job',service:{manager:'systemd',name:'mysql@owned.service'}})})})));
+  expect(post.mock.calls.filter(([value])=>value.action==='mysql_host_start')).toHaveLength(1);
 });

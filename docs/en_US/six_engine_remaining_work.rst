@@ -138,8 +138,12 @@ MySQL
   membership, resolved paths and native permission/depth rules, with review and
   dispatch rechecks and a separate post-process observation. This does not freeze
   concurrent configuration writers. Persisted settings/service arguments,
-  configuration deployment, server initialize/start/stop/service control,
-  upgrades and physical recovery remain separate work.
+  configuration deployment, initialization, service installation, upgrades and
+  physical recovery remain separate work. Native Linux systemd start/stop/restart
+  now have exact unit/process association, prior owner/registration binding for
+  offline startup, durable manager-client outcomes and read-only reconciliation.
+  This does not establish SQL readiness, freeze external unit inputs or qualify
+  the separate Windows/macOS manager implementations and acceptance.
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.

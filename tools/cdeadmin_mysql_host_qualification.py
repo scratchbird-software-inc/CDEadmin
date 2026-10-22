@@ -62,6 +62,7 @@ def qualify(output, *, fixture_image, private_key=None, prepare=False, use_c=Fal
     for name in ('tools/cdeadmin_mysql_host_qualification.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_transport.py',
                  'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_worker.py',
+                 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_host_services.py',
                  'web/pgadmin/cdeadmin/workspace/mysql_host_service.py',
                  'web/pgadmin/cdeadmin/workspace/service.py',
                  'web/pgadmin/cdeadmin/context_menu.py',
@@ -342,8 +343,8 @@ def browser(app, output, sid, selected, key, binary, driver_binary):
             return next((node for node in browser.find_elements(By.CSS_SELECTOR, '.file-name') if node.is_displayed() and browser.execute_script(
                 'const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);', node, sid)), None)
         ActionChains(driver).context_click(wait.until(target)).perform()
-        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if node.is_displayed() and node.text.strip() == 'Diagnostics and verification'), None)).click()
-        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if node.is_displayed() and 'MySQL database-host diagnostics' in node.text), None)).click()
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if node.is_displayed() and node.text.strip() == 'Maintenance'), None)).click()
+        wait.until(lambda browser: next((node for node in browser.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if node.is_displayed() and 'MySQL database-host administration' in node.text), None)).click()
         def click(label):
             def attempt(browser):
                 for node in browser.find_elements(By.TAG_NAME, 'button'):

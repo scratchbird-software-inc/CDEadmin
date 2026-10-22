@@ -331,6 +331,45 @@ the platform teams. Native configuration acceptance is separate from server read
 stop/service management, upgrades and physical backup/recovery; these broader
 host workflows remain required.
 
+The server Maintenance menu also opens database-host administration for native
+Linux systemd start, stop and restart. Review binds the exact unit/aliases,
+fragment/drop-in bytes, command digests and manager executables. Command values
+are withheld from public facts. The observed MySQL PID file, executable hash,
+process start/boot identity and native control-group membership establish that
+the running instance belongs to the selected unit, including a manager wrapper
+whose MainPID differs from mysqld. Another service is refused before dispatch.
+Stop/restart require explicit all-client disconnect consent.
+
+Offline SQL startup uses an explicitly selected prior verified service job for
+the same owner, registration and pinned SSH host. Inspecting its receipt fills
+the prior-job field; choose start and supply fresh SSH credentials. Its SQL actor
+facts remain labelled previous observations. Native UUID/data-directory binding,
+current executable and unit facts are independently read on the host. This is
+host administration authority and does not substitute a live SQL privilege
+check. Initial association requires observing the running MySQL instance.
+
+The native service-manager client outcome is persisted before later unit/process
+observations. A returned client, an active unit and SQL readiness remain distinct.
+Timeouts do not revoke an already admitted manager job. Lost SSH replies stay
+unknown; reconciliation reads the durable result and new unit/process facts
+without resubmitting a service action or changing the original acknowledgement.
+Changed reviewed inputs and native manager policy refusals are preserved.
+Unit fragments/drop-ins and command identities do not freeze external scripts,
+environment/credential files or a complete startup-input snapshot. Initialization,
+service installation/configuration deployment, upgrades, physical recovery and
+the separate Windows/macOS manager implementations/acceptance remain open.
+
+``tools/cdeadmin_mysql_service_qualification.py --fixture <owned-fixture.json>
+--output <outside-repo>`` qualifies the actual pure and C application routes.
+Its optional browser flags qualify the root menu, service controls and reopening
+the host workspace for offline startup. ``tools/cdeadmin_mysql_service_fixture.py
+prepare --directory <new-outside-directory>`` builds a private disposable
+QEMU/KVM Ubuntu/MySQL9.7.0 host. Its pinned archive hashes are checked; it does
+not install host OS packages or use existing databases. Supplied image/server
+archives can avoid downloads. Use its ``stop`` action on the exact directory
+before removing guest disks, keys, credentials and logs. These are scoped native
+service receipts, not full host lifecycle or full product completion.
+
 The owned qualification runs through authenticated workspace HTTP routes and
 real SSH/native MySQL9.7 processes. It checks wrong-host/key refusal, changed
 configuration admission, native error exits, separate lost-reply reconciliation,

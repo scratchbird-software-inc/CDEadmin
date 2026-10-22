@@ -8,12 +8,14 @@ export default function MySQLHost({post}) {
   const [hostKey,setHostKey]=useState(''),[authentication,setAuthentication]=useState('password'),[platform,setPlatform]=useState('posix'),[python,setPython]=useState('python3');
   const [password,setPassword]=useState(''),[key,setKey]=useState(''),[phrase,setPhrase]=useState('');
   const [executable,setExecutable]=useState('mysqld'),[configuration,setConfiguration]=useState(''),[workspace,setWorkspace]=useState('/tmp/scratchrobin-native-host'),[timeout,setTimeoutValue]=useState(60);
+  const [operation,setOperation]=useState('validate_config'),[serviceName,setServiceName]=useState('mysql.service'),[bindingJob,setBindingJob]=useState(''),[disconnect,setDisconnect]=useState(false);
   const [catalog,setCatalog]=useState(null),[peer,setPeer]=useState(null),[review,setReview]=useState(null),[confirmed,setConfirmed]=useState(false),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0);
   useEffect(() => {generation.current++;setCatalog(null);setPeer(null);setReview(null);setReceipt(null);setJobs(null);setConfirmed(false);setError('');setBusy(false);setPassword('');setKey('');setPhrase('');return () => {generation.current++;};},[post]);
   const change=setter => event => {setter(event.target.value);setReview(null);setConfirmed(false);};
   const credentials=() => authentication==='password' ? {password} : {private_key:key,private_key_password:phrase};
-  const selected=() => ({connection:{host,port,username:user,host_key:hostKey,authentication,platform,python},executable,configuration_file:configuration || null,workspace,timeout_seconds:timeout});
+  const selected=() => ({connection:{host,port,username:user,host_key:hostKey,authentication,platform,python},executable,configuration_file:configuration || null,workspace,timeout_seconds:timeout,
+    ...(operation==='validate_config' ? {} : {operation,service:{manager:'systemd',name:serviceName},binding_job_id:bindingJob || null,disconnect_all_clients:disconnect})});
   const run=async (action,request,accept) => {
     const token=generation.current;setBusy(true);setError('');
     try {const value=await post({action:'mysql_host_'+action,request});if(token===generation.current)accept(value);}
@@ -37,12 +39,16 @@ export default function MySQLHost({post}) {
     const connection=value.options.connection;
     setHost(connection.host);setPort(connection.port);setUser(connection.username);setHostKey(connection.host_key);
     setAuthentication(connection.authentication);setPlatform(connection.platform);setPython(connection.python);
+    setExecutable(value.options.executable || 'mysqld');setConfiguration(value.options.configuration_file || '');
+    setWorkspace(value.options.workspace || '');setTimeoutValue(value.options.timeout_seconds || 60);
+    setOperation(value.options.operation || 'validate_config');setServiceName(value.options.service?.name || 'mysql.service');
+    setBindingJob(value.options.service ? value.job_id : '');setDisconnect(false);
   };
   const observed=receipt?.reconciliation?.remote_receipt || receipt?.remote_receipt;
   const configurationAfter=observed?.configuration_after_process;
   const decode=value => {try{return new TextDecoder().decode(Uint8Array.from(atob(value || ''),char => char.charCodeAt(0)));}catch{return 'Inspect the original encoded native output in the receipt.';}};
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
-    <Alert severity="info">Run native MySQL configuration diagnostics on the database server through an explicitly selected SSH host. The native UUID, hostname and data directory must match; an SSH bastion is not assumed to be the database host. Python 3.9 or later is required on that host. This action checks configuration and does not start, stop or upgrade the server.</Alert>
+    <Alert severity="info">Run native MySQL configuration checks or Linux systemd service controls on the explicitly selected database SSH host. The native UUID, hostname and data directory bind the instance. Python 3.9 or later is required on that host. Service control uses host authority and does not establish SQL readiness or qualify an upgrade.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
       <Button disabled={busy} onClick={() => run('catalog',{},setCatalog)}>Inspect native database-host binding</Button>
@@ -65,7 +71,7 @@ export default function MySQLHost({post}) {
         <Button component="label">Load SSH private key<input hidden type="file" onChange={event => {const file=event.target.files?.[0];if(file)file.text().then(setKey).catch(failure => setError(failure.message));}} /></Button>
         <TextField size="small" type="password" label="SSH private-key password" value={phrase} onChange={event => setPhrase(event.target.value)} />
       </>}
-      <TextField select size="small" label="Native SSH platform" value={platform} onChange={event => {const value=event.target.value;setPlatform(value);setPython(value==='windows' ? 'python.exe' : 'python3');setWorkspace(value==='windows' ? 'C:\\ScratchRobin\\mysql-host' : '/tmp/scratchrobin-native-host');setReview(null);setConfirmed(false);}}>
+      <TextField select size="small" label="Native SSH platform" value={platform} onChange={event => {const value=event.target.value;setPlatform(value);setPython(value==='windows' ? 'python.exe' : 'python3');setWorkspace(value==='windows' ? 'C:\\ScratchRobin\\mysql-host' : '/tmp/scratchrobin-native-host');setOperation('validate_config');setReview(null);setConfirmed(false);}}>
         <MenuItem value="posix">POSIX</MenuItem><MenuItem value="windows">Native Windows PowerShell</MenuItem>
       </TextField>
       <TextField size="small" label="Python on database SSH host" value={python} onChange={change(setPython)} />
@@ -73,19 +79,30 @@ export default function MySQLHost({post}) {
       <TextField size="small" label="Native configuration file (blank: no defaults)" value={configuration} onChange={change(setConfiguration)} />
       <TextField size="small" label="Private workspace on SSH host" value={workspace} onChange={change(setWorkspace)} />
       <TextField size="small" type="number" label="Native diagnostic timeout seconds" value={timeout} onChange={event => {setTimeoutValue(Number(event.target.value));setReview(null);setConfirmed(false);}} />
-      <Button disabled={busy} onClick={() => run('review',{options:selected(),credentials:credentials()},value => {setReview(value);setConfirmed(false);})}>Review native host configuration check</Button>
+      <TextField select size="small" label="Native host operation" value={operation} onChange={change(setOperation)}>
+        <MenuItem value="validate_config">Check configuration</MenuItem>
+        {platform==='posix' && ['start','stop','restart'].map(action => <MenuItem key={action} value={'service_'+action}>{action} MySQL service (Linux systemd)</MenuItem>)}
+      </TextField>
+      {operation!=='validate_config' && <>
+        <TextField size="small" label="Exact systemd MySQL unit" value={serviceName} onChange={change(setServiceName)} />
+        <TextField size="small" label="Prior verified service job (for offline SQL)" value={bindingJob} onChange={change(setBindingJob)} />
+        <FormControlLabel label="Disconnect all native service clients" control={<Checkbox checked={disconnect} onChange={event => {setDisconnect(event.target.checked);setReview(null);setConfirmed(false);}} />} />
+      </>}
+      <Button disabled={busy} onClick={() => run('review',{options:selected(),credentials:credentials()},value => {setReview(value);setConfirmed(false);})}>{operation==='validate_config' ? 'Review native host configuration check' : 'Review native host service action'}</Button>
     </Box>
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
-      <Box component="pre" aria-label="Native host diagnostic review" sx={{whiteSpace:'pre-wrap',maxHeight:260,overflow:'auto'}}>{JSON.stringify({source:review.source,execution_host:review.execution_host,observation:review.remote_observation},null,2)}</Box>
-      <FormControlLabel label="Authorize the reviewed native mysqld configuration check on this database SSH host" control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
-      <Button disabled={busy || !confirmed || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials()},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>Confirm native host configuration check</Button>
+      <Box component="pre" aria-label="Native host diagnostic review" sx={{whiteSpace:'pre-wrap',maxHeight:260,overflow:'auto'}}>{JSON.stringify({source:review.source,source_identity_scope:review.source_identity_scope,execution_host:review.execution_host,observation:review.remote_observation},null,2)}</Box>
+      <FormControlLabel label={operation==='validate_config' ? 'Authorize the reviewed native mysqld configuration check on this database SSH host' : 'Authorize the reviewed native MySQL service action on this database SSH host'} control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
+      <Button disabled={busy || !confirmed || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials()},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{operation==='validate_config' ? 'Confirm native host configuration check' : 'Confirm native host service action'}</Button>
     </Box>}
     {jobs && <><Table size="small" aria-label="Native host diagnostic receipts"><TableHead><TableRow>{['Job','Host','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
       {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.execution_host.hostname}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect native host job '+job.job_id} onClick={() => run('status',{job_id:job.job_id},inspect)}>Inspect</Button></TableCell></TableRow>)}
     </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next) => load(next*25)} /></>}
     {receipt && <Box>
       <Alert severity={receipt.state==='native_process_returned' && observed?.result?.return_code===0 ? 'success' : 'warning'}>Native host job {receipt.job_id}: {receipt.state}. {receipt.state==='unknown' && 'The original SSH reply is unconfirmed. Reconciliation never repeats the native command.'}</Alert>
+      {observed?.service_request && <Alert severity="info">Service-manager completion applies to the selected unit. SQL readiness is unconfirmed; reconnect and verify the MySQL endpoint when the service is available. Do not repeat an uncertain request.</Alert>}
+      {observed?.service_after_process?.observed===false && <Alert severity="warning">The service-manager result is retained. The later native unit/process observation is unavailable.</Alert>}
       {configurationAfter && (configurationAfter.observed!==true || configurationAfter.matches_review!==true) &&
         <Alert severity="warning">{configurationAfter.observed===true ?
           'Configuration files changed after review. The native process result is retained; review the current configuration before relying on that result.' :

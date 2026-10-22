@@ -25,6 +25,11 @@ try:
 except ModuleNotFoundError:
     from ...operations.fileio import durable_replace, private_directory, private_file
 
+try:
+    import _cdeadmin_native_services as native_services
+except ModuleNotFoundError:
+    from . import mysql_host_services as native_services
+
 MAX_OUTPUT = 512 * 1024
 MAX_CONFIGURATION_BYTES = 4 * 1024 * 1024
 MAX_CONFIGURATION_ENTRIES = 512
@@ -338,8 +343,13 @@ def inspect(request, expected=None):
         raise Refused('Select the native MySQL9.7.0 mysqld on this database host')
     if configuration and configuration_graph(configuration['path'], configuration['context']) != configuration['graph']:
         raise Refused('The native configuration graph changed during inspection')
-    return {'host': host, 'program': {'path': str(executable), 'sha256': checksum, 'version_output': output.strip()},
-            'configuration': configuration, 'included_configuration_files_attested': True}
+    result = {'host': host, 'program': {'path': str(executable), 'sha256': checksum, 'version_output': output.strip()},
+              'configuration': configuration, 'included_configuration_files_attested': True}
+    if request.get('service') is not None:
+        result['service'] = native_services.inspect(request, result, process, file_hash, regular_stream, Refused)
+        if expected is not None and result['service'] != expected.get('service'):
+            raise Refused('The native service definition, state or process changed after review')
+    return result
 
 
 def save(path, value):
@@ -355,7 +365,7 @@ def dispatch(request):
     action = request.get('action')
     if action == 'inspect':
         return inspect(request)
-    if action not in {'validate_config', 'status'}:
+    if action not in {'validate_config', 'service_start', 'service_stop', 'service_restart', 'status'}:
         raise Refused('The native MySQL host action is unavailable')
     host = binding(request['binding'])
     root = Path(text(request['workspace']))
@@ -377,6 +387,17 @@ def dispatch(request):
         value = json.loads(receipt.read_text(encoding='utf8'))
         if value.get('input_digest') != expected:
             raise Refused('The remote host receipt belongs to another reviewed input')
+        if action == 'status' and request.get('service') is not None and value.get('observation', {}).get('service'):
+            # A later unit observation never rewrites the original manager
+            # client outcome, and never submits a service action again.
+            try:
+                followup = {**request, 'previous_service_binding': value['observation']['service']}
+                service = native_services.inspect(followup, value['observation'], process, file_hash, regular_stream, Refused)
+                value['service_reconciliation'] = {'observed': True, 'service': service,
+                    'observed_at': time.time(), 'original_native_result_unchanged': True}
+            except Exception as error:
+                value['service_reconciliation'] = {'observed': False, 'error_type': type(error).__name__,
+                    'original_native_result_unchanged': True}
         return value
     observed = inspect(request, request.get('reviewed', {}))
     if observed != request.get('reviewed'):
@@ -391,16 +412,32 @@ def dispatch(request):
         return unavailable
     private_directory(directory)
     value = {'state': 'native_dispatch', 'job_id': job_id, 'input_digest': expected,
-             'observation': observed, 'automatic_retry': False, 'remote_database_mutation': False,
-             'validation_scope': 'native mysqld configuration check; not server readiness or upgrade acceptance'}
+             'observation': observed, 'automatic_retry': False, 'remote_database_mutation': action != 'validate_config',
+             'validation_scope': ('native mysqld configuration check; not server readiness or upgrade acceptance'
+                 if action == 'validate_config' else 'native service manager request; not SQL readiness or transaction finality'),
+             'transaction_finality_interpreted_by_common_code': False}
     save(receipt, value)
     configuration = observed['configuration']
     arguments = ['--defaults-file=' + configuration['path']] if configuration else ['--no-defaults']
-    result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
-                     configuration_context=configuration['context'] if configuration else None)
+    if action == 'validate_config':
+        result = process(Path(observed['program']['path']), [*arguments, '--validate-config'], directory, timeout,
+                         configuration_context=configuration['context'] if configuration else None)
+    else:
+        result = native_services.execute(action, observed['service'], directory, timeout, process, Refused)
+        value['service_request'] = {'operation': action, 'manager_client_completed': result['return_code'] == 0,
+            'native_process_outcome_scope': 'service_manager_client_only', 'database_readiness_observed': False,
+            'automatic_retry': False}
     value.update(state='native_process_returned', result=result)
     # Persist native completion before making any later filesystem observation.
     save(receipt, value)
+    if action != 'validate_config':
+        try:
+            after = {**request, 'previous_service_binding': observed['service']}
+            value['service_after_process'] = {'observed': True,
+                'service': native_services.inspect(after, observed, process, file_hash, regular_stream, Refused)}
+        except Exception as error:
+            value['service_after_process'] = {'observed': False, 'error_type': type(error).__name__}
+        save(receipt, value)
     if configuration:
         try:
             graph = configuration_graph(configuration['path'], configuration['context'])
