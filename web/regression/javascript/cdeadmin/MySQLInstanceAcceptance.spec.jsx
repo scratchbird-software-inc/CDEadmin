@@ -28,3 +28,14 @@ it('keeps failed or cancelled checks unconfirmed instead of reporting a differen
   expect(screen.getByText('Unconfirmed')).toBeInTheDocument();expect(screen.queryByText('Different')).not.toBeInTheDocument();
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
 });
+it('shows later native session cleanup without rewriting the original check receipt',async()=> {
+  const receipt={job_id:'lost-unlock',state:'verification_observed',acceptance_outcome:'matched',target:{server_uuid:'target'},result:{data:{requested:true,matched:true},server_locks_released:false},recovery_fence_release_confirmed:false};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_instance_acceptance_list' ? {jobs:[receipt],total:1,offset:0} : action==='mysql_instance_acceptance_reconcile' ? {...receipt,recovery_fence_release_confirmed:true,observation_digest:'observed'} : receipt));
+  render(<Component post={post} />);fireEvent.click(screen.getByText('Independent dump acceptance'));
+  fireEvent.click(screen.getByRole('button',{name:'Load independent acceptance jobs'}));fireEvent.click(await screen.findByRole('button',{name:'Inspect acceptance lost-unlock'}));
+  await screen.findByText(/Private server-lock cleanup is unconfirmed/);
+  fireEvent.click(screen.getByRole('button',{name:'Observe acceptance target'}));
+  await screen.findByText(/A later native observation confirmed/);
+  expect(screen.getByText(/Recorded outcome: matched/)).toBeInTheDocument();
+  expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
+});

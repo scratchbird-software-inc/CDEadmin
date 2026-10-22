@@ -364,13 +364,29 @@ Comparison facts, utility completion and server-lock cleanup are recorded
 separately. Unconfirmed private server-lock cleanup retains target protection.
 New target observations do not rerun checks or rewrite an earlier result.
 
+Before taking either acceptance lock, new jobs durably record their private
+native thread, connection and a job-specific user-lock ownership marker. Native
+instrumentation and handshake visibility must be positively observed for this
+reconciliation path. A later ``Observe acceptance target`` checks both that the
+original native thread is absent and that the ownership marker is free. A free
+user lock alone cannot establish backup-lock teardown. These observations use
+the pinned native connection cleanup lifecycle; surviving or reused thread IDs,
+denied/disabled instrumentation and older jobs without admitted ownership remain
+unconfirmed. The original unlock replies and comparison results are preserved.
+Observed private-session cleanup can release a completed check's target fence.
+An unknown job still requires separately confirmed utility termination, a free
+native utility lock and explicit target acknowledgement. This observation does
+not terminate an orphan utility or reissue any check, restore or SQL lock.
+
 Add ``--acceptance`` to the instance restore qualification command to exercise
 actual same-count value changes, extra rows, routine definition changes and role
 grant changes, followed by new independent acceptance after reverting the owned
 fixture. Both connector implementations and the optional built browser workflow
 retain their own receipts. These results cover the exported logical base
 snapshot; physical recovery, changed post-replay data, production cutover and
-unobserved process/lock cleanup after interruption remain separate work.
+unobserved utility termination after interruption remain separate work. The
+qualification also exercises lost unlock replies, a live private native lock
+owner, subsequent session teardown and independent utility-termination gates.
 
 InnoDB page tracking
 ====================

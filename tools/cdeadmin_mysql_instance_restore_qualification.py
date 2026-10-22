@@ -31,12 +31,13 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
         'web/pgadmin/static/js/Dialogs/MySQLInstanceRestores.jsx','tools/cdeadmin_mysql_instance_restore_qualification.py']
     if acceptance:
         paths+=['web/pgadmin/cdeadmin/providers/mysql_family/mysql_instance_acceptance.py',
+            'web/pgadmin/cdeadmin/providers/mysql_family/mysql_acceptance_lock_owner.py',
             'web/pgadmin/cdeadmin/workspace/mysql_instance_acceptance_jobs.py','web/pgadmin/cdeadmin/workspace/mysql_instance_acceptance_service.py',
             'web/pgadmin/static/js/Dialogs/MySQLInstanceAcceptance.jsx']
     proof={'complete':False,'full_mysql_product_complete':False,'history_testing':'not run','use_c':use_c,'checks':[],
         'independent_acceptance':acceptance,
         'source_sha256':{path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths}}
-    password='true'
+    password='true';recovered_acceptance_id=None
     try:
         with server(output/'source-fixture') as (source,_source_name,sfixture),server(output/'target-fixture',server_id=102) as (target,_target_name,tfixture):
             fixtures.extend([sfixture,tfixture]);handles=[];cursors=[]
@@ -112,14 +113,17 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                 assert start({'job_id':restored['job_id'],'review_digest':restored['review_digest']})['native_load_outcome']=='returned'
                 proof['checks'].append('native-instance-load-restores-two-schemas-wide-unicode-blob-cross-schema-view-procedure-accounts-and-roles-with-reviewed-native-GTID-base-installation')
                 if acceptance:
-                    def accept():
-                        planned=http('review',{'source_server_id':sid,'backup_job_id':backup['job_id'],
+                    def acceptance_review():
+                        return http('review',{'source_server_id':sid,'backup_job_id':backup['job_id'],
                             'options':{'target_confirmation':target_uuid,'server_wide_write_pause_confirmed':True,'threads':1,'timeout_seconds':120}},prefix='mysql_instance_acceptance_')
+                    def accept(expect_unlock=True):
+                        planned=acceptance_review()
                         value=wait(start(planned,prefix='mysql_instance_acceptance_'),prefix='mysql_instance_acceptance_')
                         if value['state']!='verification_observed':
                             (output/'acceptance-failure.json').write_text(json.dumps(value,indent=2)+'\n')
                             raise AssertionError('Native independent acceptance did not finish its observations')
-                        assert value['result']['server_locks_released'] and not value['restore_issued']
+                        assert value['result']['server_locks_released'] is expect_unlock and not value['restore_issued']
+                        assert value['server_lock_owner']['admitted'],value['server_lock_owner']
                         return value
                     http('review',{'source_server_id':sid,'backup_job_id':backup['job_id'],
                         'options':{'target_confirmation':target_uuid,'server_wide_write_pause_confirmed':False}},prefix='mysql_instance_acceptance_',refused=True)
@@ -154,6 +158,63 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                     assert accept()['acceptance_outcome']=='matched'
                     original=http('status',{'job_id':restored['job_id']});assert original['native_load_outcome']=='returned' and not original['data_recovery_verified']
                     proof['checks'].append('new-acceptance-after-fixture-reversion-is-separate-from-the-original-restore-acknowledgement-and-prior-failed-observations')
+                    from pgadmin.cdeadmin.workspace.mysql_instance_acceptance_jobs import InstanceAcceptanceTransport
+                    from pgadmin.cdeadmin.providers.mysql_family import mysql_acceptance_lock_owner as lock_owner
+                    execute_acceptance=InstanceAcceptanceTransport.execute
+                    def lost_unlock(self,*args,**kwargs):
+                        connection=self.connection;cursor=connection.cursor
+                        class Cursor:
+                            def __init__(self,wrapped):self.wrapped=wrapped
+                            def __getattr__(self,name):return getattr(self.wrapped,name)
+                            def execute(self,source,*args,**kwargs):
+                                if source in {'UNLOCK TABLES','UNLOCK INSTANCE'}:raise OSError('Owned missing unlock reply')
+                                return self.wrapped.execute(source,*args,**kwargs)
+                        connection.cursor=lambda *args,**kwargs:Cursor(cursor(*args,**kwargs))
+                        try:return execute_acceptance(self,*args,**kwargs)
+                        finally:connection.cursor=cursor
+                    InstanceAcceptanceTransport.execute=lost_unlock
+                    try:lost=accept(expect_unlock=False)
+                    finally:InstanceAcceptanceTransport.execute=execute_acceptance
+                    assert lost['acceptance_outcome']=='matched' and not lost['recovery_fence_release_confirmed']
+                    jobs=service.mysql_instance_acceptance_jobs
+                    deadline=time.monotonic()+10
+                    while jobs.workers.get(lost['job_id']):
+                        if time.monotonic()>deadline:raise TimeoutError('Owned native acceptance cleanup worker')
+                        time.sleep(.05)
+                    observed=http('reconcile',{'job_id':lost['job_id']},prefix='mysql_instance_acceptance_')
+                    assert observed['recovery_fence_release_confirmed'] and observed['result']==lost['result']
+                    assert observed['acceptance_outcome']=='matched' and observed['reconciliation']['private_server_lock_cleanup']['released']
+                    recovered_acceptance_id=lost['job_id']
+                    proof['checks'].append('lost-native-unlock-replies-retain-matched-check-facts-and-protection-until-independent-original-session-cleanup-observation')
+                    planned=acceptance_review();record=jobs.load(planned['job_id'],uid,planned['endpoint_id']);jobs.claim_fence(record)
+                    private=db_client._connector(host=target['host'],port=target['port'],user='root',
+                        password=password,use_pure=not use_c,autocommit=True)
+                    classes.append(type(private).__name__)
+                    try:
+                        witness=lock_owner.acquire(private,record['job_id'],target_uuid);assert witness['admitted'],witness
+                        cursor=private.cursor();cursor.execute('LOCK INSTANCE FOR BACKUP');cursor.execute('FLUSH TABLES WITH READ LOCK');cursor.close()
+                        # This fixture has no launched utility. It models only an
+                        # abandoned private SQL owner, with utility absence known.
+                        jobs.update(record,state='unknown',server_lock_owner=witness,native_load_outcome='not_dispatched',
+                            native_process_termination_confirmed=True,recovery_fence_release_confirmed=False)
+                        observed=http('reconcile',{'job_id':record['job_id']},prefix='mysql_instance_acceptance_')
+                        assert not observed['reconciliation']['private_server_lock_cleanup']['released']
+                        http('acknowledge',{'job_id':record['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']},prefix='mysql_instance_acceptance_',refused=True)
+                    finally:db_client._discard_failed_session(private)
+                    deadline=time.monotonic()+10
+                    while True:
+                        observed=http('reconcile',{'job_id':record['job_id']},prefix='mysql_instance_acceptance_')
+                        if observed.get('recovery_fence_release_confirmed'):break
+                        if time.monotonic()>deadline:raise TimeoutError('Native private-session teardown not observed')
+                        time.sleep(.05)
+                    # Even observed SQL cleanup cannot replace unknown utility
+                    # termination or rewrite the original outcome.
+                    jobs.update(record,native_process_termination_confirmed=False)
+                    http('acknowledge',{'job_id':record['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']},prefix='mysql_instance_acceptance_',refused=True)
+                    jobs.update(record,native_process_termination_confirmed=True)
+                    acknowledged=http('acknowledge',{'job_id':record['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']},prefix='mysql_instance_acceptance_')
+                    assert acknowledged['state']=='unknown' and acknowledged['native_load_outcome']=='not_dispatched'
+                    proof['checks'].append('live-native-private-lock-owner-blocks-release-and-observed-session-teardown-still-requires-separate-known-utility-termination-and-explicit-unknown-target-acknowledgement')
                 qs.execute('INSERT INTO sr_restored_b.t VALUES(2,"after backup",NULL)');qs.execute('FLUSH BINARY LOGS')
                 archived=wait(start(http('review',{'options':{'start_file':boundary['file'],'start_position':boundary['position'],'threads':1,'timeout_seconds':120}},url=surl,prefix='mysql_binlog_'),url=surl,prefix='mysql_binlog_'),url=surl,prefix='mysql_binlog_')
                 assert archived['state']=='completed'
@@ -210,7 +271,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
                 accepted=http('acknowledge',{'job_id':cancelled['job_id'],'target_confirmation':target_uuid,'observation_digest':observed['observation_digest']})
                 assert accepted['native_load_outcome']=='unknown'
                 proof['checks'].append('active-native-load-cancellation-confirms-local-process-cleanup-and-requires-released-native-lock-and-explicit-target-acknowledgement-without-inferred-rollback')
-                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance)
+                if binary:proof['browser']=browser(app,output,tid,backup['job_id'],target_uuid,binary,driver_binary,acceptance,recovered_acceptance_id)
                 proof['native_connection_classes']=sorted(set(classes));assert proof['native_connection_classes']==[('CharsetCMySQLConnection' if use_c else 'CharsetMySQLConnection')]
                 proof['complete']=True
             finally:
@@ -222,7 +283,7 @@ def qualify(output,shell,use_c=False,binary=None,driver_binary=None,acceptance=F
     return proof
 
 
-def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False):
+def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance=False,recovered_acceptance_id=None):
     import threading
     from werkzeug.serving import make_server
     from selenium import webdriver
@@ -276,6 +337,11 @@ def browser(app,output,tid,backup_id,target_uuid,binary,driver_binary,acceptance
             table=driver.find_element(By.CSS_SELECTOR,'[aria-label="Recorded dump acceptance surfaces"]')
             assert table.get_attribute('textContent').count('Matched')==3
             checks+=['independent-read-lock-confirmation-and-reviewed-acceptance','separate-exported-data-definition-account-results']
+            if recovered_acceptance_id:
+                click('Load independent acceptance jobs');click('Inspect acceptance '+recovered_acceptance_id)
+                wait.until(lambda b:any('A later native observation confirmed' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+                assert any('Recorded outcome: matched.' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]'))
+                checks+=['retained-unlock-reply-loss-receipt-reachable-after-later-native-session-cleanup','native-session-cleanup-keeps-original-comparison-outcome-visible']
         driver.save_screenshot(str(output/'native-instance-restore.png'))
         errors=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE'];assert not errors,errors
         return {'complete':True,'version':driver.capabilities['browserVersion'],'console_errors':errors,

@@ -59,7 +59,9 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
         <Table size="small" aria-label="Recorded dump acceptance surfaces"><TableHead><TableRow><TableCell>Exported surface</TableCell><TableCell>Recorded result</TableCell></TableRow></TableHead><TableBody>
           {['data','definitions','accounts'].map(key=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{!receipt.result[key]?.requested ? 'Not exported / not checked' : receipt.result[key]?.matched===true ? 'Matched' : receipt.result[key]?.matched===false ? 'Different' : 'Unconfirmed'}</TableCell></TableRow>)}
         </TableBody></Table>
-        {receipt.result.server_locks_released===false && <Alert severity="warning">Private server-lock cleanup is unconfirmed. Target protection remains active.</Alert>}
+        {receipt.result.server_locks_released===false && (receipt.recovery_fence_release_confirmed===true ?
+          <Alert severity="info">The original unlock replies were unconfirmed. A later native observation confirmed that the private SQL session and its server locks are gone. Original check results are unchanged.</Alert> :
+          <Alert severity="warning">Private server-lock cleanup is unconfirmed. Target protection remains active. Observe the acceptance target to check the original private SQL session.</Alert>)}
       </>}
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh acceptance receipt</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed'} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel independent acceptance</Button>

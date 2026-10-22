@@ -5,6 +5,7 @@ from pathlib import Path
 from ..providers.mysql_family import mysql_instance_acceptance as native
 from ..providers.mysql_family import mysql_instance_dumps as dumps
 from ..providers.mysql_family import mysql_instance_restores as target_native
+from ..providers.mysql_family import mysql_acceptance_lock_owner as lock_owner
 from ..providers.mysql_family.mysql_binlog_archives import delegate_credentials, program_identity, rows
 from ..providers.mysql_family.mysql_connections import POOL_ARGUMENTS
 from ..providers.mysql_family.provider import MySQLPilotProvider
@@ -64,6 +65,7 @@ def action(service, server, operation, request):
             if target['identity'] != record['source']: raise native.BinlogArchiveError('Acceptance reconciliation reached another target or principal')
             observation = {**target, 'native_lock_free': rows(connection, 'SELECT IS_FREE_LOCK(%s) AS free',
                 ('cdeadmin:binlog-load:' + target['identity']['server_uuid'],))[0]['free'] == 1,
+                'private_server_lock_cleanup': lock_owner.observe(connection, record),
                 'scope': 'Current native target state only; independent acceptance is not rerun and earlier results remain unchanged'}
             if operation == 'acknowledge':
                 if record.get('recovery_fence_release_confirmed') is not True:

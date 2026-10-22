@@ -101,7 +101,10 @@ MySQL
   preserves original restore outcomes and records unexported or unconfirmed
   checks separately. Physical recovery, independent acceptance after later log
   replay and cutover remain open, along with unobserved process/server-lock
-  cleanup after application interruption.
+  cleanup after application interruption. New acceptance jobs can reconcile
+  their private SQL-lock teardown through admitted native thread/handshake and
+  unique ownership-marker evidence. Original unlock replies stay unchanged;
+  denied/disabled observations and unknown utility termination retain protection.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Separate native source-log administration now exposes reviewed TO
   and BEFORE purges, independent observations, durable acknowledgement and

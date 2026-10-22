@@ -5,6 +5,7 @@ import time
 from ..providers.mysql_family import mysql_instance_acceptance as native
 from ..providers.mysql_family import mysql_instance_dumps as dumps
 from ..providers.mysql_family import mysql_instance_restores as targets
+from ..providers.mysql_family import mysql_acceptance_lock_owner as lock_owner
 from ..providers.mysql_family.mysql_binlog_archives import stage_continuation
 from .mysql_binlog_jobs import MySQLBinlogJobs, DurableCancellation, digest
 from .mysql_binlog_replay_jobs import MySQLBinlogReplayJobs
@@ -31,6 +32,19 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
     def fence_store(self, target_uuid):
         return self.replay_jobs.fence_store(target_uuid)
 
+    def reconcile(self, record, observation):
+        result = super().reconcile(record, observation)
+        cleanup = observation.get('private_server_lock_cleanup') or {}
+        if cleanup.get('qualified') is True and cleanup.get('released') is True:
+            self.update(record, recovery_fence_release_confirmed=True,
+                private_server_lock_cleanup_observed=cleanup)
+            current = self.load(record['job_id'], record['owner'], record['endpoint_id'])
+            if (self.public(current)['state'] not in {'unknown', 'dispatching', 'active', 'cancel_requested'} and
+                    current.get('native_process_termination_confirmed') is True and observation.get('native_lock_free') is True):
+                self.release_fence(current)
+            result = self.get(record['job_id'], record['owner'], record['endpoint_id'])
+        return result
+
     def run(self, record, transport, signal):
         cancel = DurableCancellation(self, record, signal); dispatched = False; result = None
         try:
@@ -40,8 +54,10 @@ class InstanceAcceptanceJobs(MySQLBinlogReplayJobs):
                 if cancel.is_set(): raise InterruptedError('Acceptance cancelled before native checks')
                 self.update(record, phase='native_checks', native_checks_may_have_started=True)
                 dispatched = True
-            result = transport.execute(record, self.directory(record), cancel,
-                lambda value: self.update(record, progress=value), boundary)
+            def progress(value):
+                owner = value.get('server_lock_owner')
+                self.update(record, progress=value, **({'server_lock_owner': owner} if owner is not None else {}))
+            result = transport.execute(record, self.directory(record), cancel, progress, boundary)
             stopped = result['tool']['process_observation'].get('cleanup_confirmed') is True
             accepted = result['selected_dump_surfaces_verified']
             different = any(result.get(key, {}).get('matched') is False for key in ('data', 'definitions', 'accounts'))
@@ -101,6 +117,9 @@ class InstanceAcceptanceTransport:
             'scope': 'Exported table data with full row counts, exact selected-schema object SQL and exported account/role/grant SQL; not physical recovery, later log replay or production cutover'}
         cursor = self.connection.cursor()
         try:
+            # No acceptance lock is acquired until this identity is durable.
+            owner = lock_owner.acquire(self.connection, record['job_id'], record['source']['server_uuid'])
+            progress({'server_lock_owner': owner})
             cursor.execute('SET SESSION lock_wait_timeout=5')
             cursor.execute('LOCK INSTANCE FOR BACKUP'); result['instance_backup_lock_acquired'] = True
             cursor.execute('FLUSH TABLES WITH READ LOCK'); result['server_read_lock_acquired'] = True
