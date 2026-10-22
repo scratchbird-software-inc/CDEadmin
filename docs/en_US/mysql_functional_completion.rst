@@ -98,6 +98,21 @@ and authenticated separately; credential values never enter the saved argument
 JSON, review, generated script or command line. Host option-file deployment and
 account-password configuration retain their separate workflows.
 
+Native ``setup_admin_account`` and ``setup_router_account`` workflows use the
+current writable primary registration for Cluster, ReplicaSet and ClusterSet.
+User and host identifiers are separate strings; native Shell identifier quoting
+and account splitting preserve their identity. Reviews bind native primary
+roles, a server-side SHA256 fingerprint of the account row and visible native
+grants. Authentication values are excluded from the captured row. Changing
+account state requires a fresh review. Password preservation and password
+setting are distinct selections; a supplied password travels only in the
+dispatch credential lease and is excluded from reviews and generated scripts.
+Native options retain update, dry-run, certificate and expiration behavior.
+The original method outcome and subsequent account state observations remain
+separate. Native setup grants its required privileges and does not remove
+unrelated existing privileges. These workflows do not freeze external account
+administrators or attest client login, replication catch-up or workload readiness.
+
 The same workspace also exposes native Router metadata inspection, global and
 selected-Router option changes, and routing guideline creation, selection,
 inspection, editing, copying, renaming, removal and JSON import/export for

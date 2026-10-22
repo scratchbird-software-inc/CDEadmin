@@ -59,6 +59,11 @@ class TopologyJobs(InstanceRestoreJobs):
         if native.CALLS[record['options']['operation']]['read_only']:
             self.update(record, remote_database_mutation=False, warnings=[
                 'Native inspection uses private utility connections. It does not execute the selected topology changes or verify workload readiness.'])
+        elif native.CALLS[record['options']['operation']].get('account'):
+            self.update(record, warnings=[
+                'Native account setup creates or updates the selected account on the current primary and adds its required native grants. Existing extra grants remain.',
+                'Native account and grant changes can commit in stages. Review a native error or uncertain outcome before repeating the operation.',
+                'The account state and visible grants were observed for this review. Concurrent administrators can still change them. Client login and replication catch-up require separate observations.'])
         return self.get(record['job_id'], record['owner'], record['endpoint_id'])
 
     def start(self, request, owner, endpoint, current, transport):
@@ -121,4 +126,9 @@ class TopologyTransport:
             result['target_observation'] = native.capture(self.connection)
             result['native_json_observation'] = native.tag_observation(result['target_observation']['metadata'])
         except Exception as error: result['target_observation'] = {'available': False, 'error_type': type(error).__name__}
+        if native.CALLS[record['options']['operation']].get('account'):
+            try:
+                result['account_observation'] = native.accounts.capture(self.connection,
+                    native.parse(record['options']['arguments_json'])[0], native.CALLS[record['options']['operation']]['context'])
+            except Exception as error: result['account_observation'] = {'available': False, 'error_type': type(error).__name__}
         return result

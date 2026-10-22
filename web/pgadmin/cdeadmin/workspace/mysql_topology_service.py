@@ -69,6 +69,16 @@ def action(service, server, operation, request):
     from mysql.connector import Error as NativeError
     from pgadmin.model import Server
     if not isinstance(request, dict): raise native.BinlogArchiveError('Select a native topology request')
+    account_secret = None
+    if operation == 'start' and 'account_secret' in request:
+        request = dict(request)
+        account_secret = request.pop('account_secret')
+        if (not isinstance(account_secret, dict) or set(account_secret) != {'password'} or
+                not isinstance(account_secret['password'], str)):
+            raise native.BinlogArchiveError('Supply the native account password separately from the retained review')
+        try: valid_secret = len(account_secret['password'].encode('utf8')) <= 1024*1024
+        except UnicodeError: valid_secret = False
+        if not valid_secret: raise native.BinlogArchiveError('Supply bounded valid UTF-8 account password text')
     jobs, owner, endpoint = manager(service, server)
     if operation == 'catalog' and not request:
         return {'version': '9.7.0', 'operations': [{'id': key, **value} for key, value in native.CALLS.items()]}
@@ -103,6 +113,9 @@ def action(service, server, operation, request):
     elif operation in {'reconcile', 'acknowledge'} and set(request) == ({'job_id'} if operation == 'reconcile' else {'job_id', 'target_confirmation', 'observation_digest'}):
         record = jobs.load(request['job_id'], owner, endpoint.id); selected = record['options']
     else: raise native.BinlogArchiveError('Select a native topology action')
+    setting_password = bool(selected is not None and native.CALLS[selected['operation']].get('account') and selected['account_password_mode'] == 'set')
+    if operation == 'start' and setting_password != (account_secret is not None):
+        raise native.BinlogArchiveError('The reviewed account password mode and separately supplied password must agree')
     client, route = context(service, server)
     connection = None; leases = []; transport = None
     try:
@@ -125,12 +138,16 @@ def action(service, server, operation, request):
             raise native.BinlogArchiveError('Confirm the exact native topology seed UUID')
         seed = {'identity': observed['identity'], 'metadata': observed['metadata'], 'observation': observed,
                 'connection': native.connection(client, route, observed, selected)}
+        if native.CALLS[selected['operation']].get('account'):
+            seed['account_state'] = native.accounts.capture(connection, native.parse(selected['arguments_json'])[0],
+                native.CALLS[selected['operation']]['context'])
         members = {}; configurations = {'seed': MySQLMonitoringHost._configuration(server)}
         credentials = {}
         def acquire(key, member_client, member_route):
             lease = delegate_credentials(member_client, member_route); leases.append(lease)
             credentials[key] = lease.use(lambda view: json.loads(bytes(view)))
         if operation == 'start': acquire('seed', client, route)
+        if operation == 'start' and setting_password: credentials['account'] = dict(account_secret)
         for server_id in native.member_ids(selected):
             member_server = source_server(owner, server_id)
             member_client, member_route = context(service, member_server)
@@ -150,7 +167,9 @@ def action(service, server, operation, request):
         workspace = jobs.prepare_scope(owner, endpoint.id)
         program = program_identity(client, route, workspace)
         configuration = digest({'registrations': configurations, 'root': str(jobs.root),
-            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest()})
+            'adapter_sha256': hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+            **({'account_adapter_sha256': hashlib.sha256(Path(native.accounts.__file__).read_bytes()).hexdigest()}
+               if native.CALLS[selected['operation']].get('account') else {})})
         if operation == 'review':
             return jobs.review(owner, endpoint.id, selected, {'identity': observed['identity'],
                 'state': {'seed': seed, 'members': members}}, configuration, program)

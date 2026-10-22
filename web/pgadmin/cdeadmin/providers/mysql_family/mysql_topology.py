@@ -10,6 +10,7 @@ from ...operations.fileio import private_file
 from ...sdk.tooling import ProviderToolGrant
 from .mysql_binlog_archives import BinlogArchiveError, connection_options, rows, program_identity
 from . import mysql_topology_quiescence as quiescence
+from . import mysql_topology_accounts as accounts
 
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_TOPOLOGY_CREDENTIAL_FILE'
 
@@ -78,6 +79,8 @@ CALLS = {
 
 # These are native methods on each topology, not generic SQL approximations.
 for _context in ('cluster', 'replica_set', 'cluster_set'):
+    for _method in ('setup_admin_account', 'setup_router_account'):
+        CALLS[_context + '.' + _method] = {**call(_context, _method, ['account', 'options?']), 'account': True}
     for _name, _arguments, _read in (
         ('list_routers', ['router?'] if _context == 'cluster_set' else ['options?'], True),
         ('router_options', ['options?'], True),
@@ -138,7 +141,7 @@ def canonical(value):
 
 def options(value):
     allowed = {'operation', 'arguments_json', 'context_name', 'context_options_json',
-               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds', 'witness_server_ids', 'guideline_name'}
+               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds', 'witness_server_ids', 'guideline_name', 'account_password_mode'}
     if (not isinstance(value, dict) or set(value) - allowed or
             not isinstance(value.get('operation'), str) or value['operation'] not in CALLS):
         raise BinlogArchiveError('Select a native topology operation')
@@ -157,6 +160,9 @@ def options(value):
         if argument is None and definition.endswith('?'): continue
         if kind in {'name', 'option', 'router', 'match'} and not isinstance(argument, str):
             raise BinlogArchiveError('Native names and option names require strings')
+        if kind == 'account' and (not isinstance(argument, dict) or set(argument) != {'user', 'host'} or
+                any(not isinstance(argument[key], str) for key in ('user', 'host'))):
+            raise BinlogArchiveError('Select exact native account user and host strings; supply passwords separately at dispatch')
         if kind == 'document' and not isinstance(argument, dict):
             raise BinlogArchiveError('Supply the native routing guideline JSON object')
         if kind == 'destinations' and (not isinstance(argument, list) or any(not isinstance(item, str) for item in argument)):
@@ -182,16 +188,21 @@ def options(value):
     guideline_name = value.get('guideline_name', '')
     if not isinstance(guideline_name, str) or len(guideline_name.encode('utf8')) > 1024:
         raise BinlogArchiveError('Select a bounded native routing guideline name')
+    password_mode = value.get('account_password_mode', 'preserve')
+    if not isinstance(password_mode, str) or password_mode not in {'preserve', 'set'} or 'account_password_mode' in value and not specification.get('account'):
+        raise BinlogArchiveError('Select whether the native account password is preserved or supplied at dispatch')
     advertised, timeout = value.get('use_advertised_endpoint', False), value.get('timeout_seconds', 3600)
     if type(advertised) is not bool or timeout is not None and (type(timeout) is not int or not 1 <= timeout <= 2147483647):
         raise BinlogArchiveError('Select the native execution address and positive client runtime or null')
     witnesses = value.get('witness_server_ids', [])
     if not isinstance(witnesses, list) or len(witnesses) > 128 or any(type(item) is not int or item <= 0 for item in witnesses):
         raise BinlogArchiveError('Select bounded owned registrations for server-side recovery observations')
-    return {'operation': value['operation'], 'arguments_json': canonical(arguments), 'context_name': context_name,
+    result = {'operation': value['operation'], 'arguments_json': canonical(arguments), 'context_name': context_name,
             'context_options_json': canonical(context_options), 'target_confirmation': target,
             'use_advertised_endpoint': advertised, 'timeout_seconds': timeout, 'witness_server_ids': sorted(set(witnesses)),
             **({'guideline_name': guideline_name} if guideline_name or specification.get('guideline') else {})}
+    if specification.get('account'): result['account_password_mode'] = password_mode
+    return result
 
 
 def member_ids(selected):
@@ -336,6 +347,13 @@ try:
         prepared[int(key)]=definition
     save_owner(owners)
     selected=settings["selected"];specification=settings["call"];context=specification["context"]
+    if settings["seed"].get("account_state"):
+        account_state=settings["seed"]["account_state"]
+        for query,expected in zip(account_state["queries"],account_state["results"]):
+            result=shell.get_session().run_sql(query["sql"],query["parameters"]) if query["parameters"] else shell.get_session().run_sql(query["sql"])
+            actual=[list(row) for row in result.fetch_all()]
+            if query["ordered"]:actual.sort()
+            if actual!=expected:raise RuntimeError("Native primary or account state changed after review")
     stage="context"
     if context=="instance":target=dba
     elif context=="cluster":
@@ -360,6 +378,12 @@ try:
         os.umask(0o077)
         arguments=[export_path]
     for index,(kind,value) in enumerate(zip(specification["arguments"],arguments)):
+        if kind.rstrip("?")=="account":
+            account=mysql.quote_identifier(value["user"])+"@"+mysql.quote_identifier(value["host"])
+            parsed=mysql.split_account(account)
+            if parsed["user"]!=value["user"] or parsed["host"]!=value["host"]:raise RuntimeError("Native account identity did not round trip")
+            arguments[index]=account
+            continue
         if kind.rstrip("?")!="instance" or value is None:continue
         definition=prepared[value["server_id"]]
         # Preserve each method's declared native connection argument type.
@@ -367,6 +391,10 @@ try:
         # retained review/script. The native formatter preserves its encoding.
         arguments[index]=shell.unparse_uri(definition) if specification["instance_format"]=="uri" else definition
     if specification["seed_argument"]:arguments.insert(0,authenticated("seed",settings["seed"]["connection"]))
+    if specification.get("account"):
+        account_options=dict(arguments[1]) if len(arguments)>1 else {}
+        if selected["account_password_mode"]=="set":account_options["password"]=authentication["account"]["password"]
+        arguments=[arguments[0],account_options]
     stage="native_operation";invoked=True
     result=getattr(target,specification["method"])(*arguments)
     returned=True;stage="returned"

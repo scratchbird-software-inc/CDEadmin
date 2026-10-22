@@ -4,7 +4,7 @@
   "intake_tool_sha256": "f10b043bec4b39698b23812803e38c2195baec2dd3bacd2fcf557d360035befb",
   "source": {
     "revision": "92daf7541d5f4447f4935b1c0f3cdc84b3cb4ff3",
-    "status": "",
+    "status": "?? AGENTS.md\n",
     "files": {
       ".github/ISSUE_TEMPLATE/bug_report.md": "df71d35d5e63480378cd347e1bf0a4af6c9ab4d59c33f59defb48320c5ba52e7",
       ".github/ISSUE_TEMPLATE/feature_request.md": "03b28bdd261d988f51cd264423de25a83fda603410418363621b257d09d31db0",
@@ -13,6 +13,7 @@
       ".github/workflows/pages.yml": "6949eee6462471c946926dbfeae52454b54bd337fa3439bb6d44c95b9b294a9a",
       ".github/workflows/publish.yml": "acc1a286223a9a78b839ca9a82354fc5deb13f689830966cbf43c3f1567199a9",
       ".gitignore": "48a43e62d1a37333f3fdecd72da3c16d6b17ac0097740ef1fada27e2acbfdfea",
+      "AGENTS.md": "1348abe2f85c11cc4fcb537aaf22c93a3500d80d6f2201a3f07c618b50f33017",
       "CHANGELOG.md": "2cda95c951646f5a1a5b451b0128b44c3de307cf446e192503d0dee091eec864",
       "CODE_OF_CONDUCT.md": "50bf860dd020e8e83edd4d27e1a210bc494b5a21b6a762c8aebb54831d28be01",
       "CONTRIBUTING.md": "5be6944e749bf94ceeb54141fdeea4530fd56ba63e7822fd766ef61722d69e68",

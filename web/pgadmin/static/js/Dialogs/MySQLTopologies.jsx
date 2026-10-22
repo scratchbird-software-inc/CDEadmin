@@ -8,6 +8,7 @@ function example(operation,member) {
     const kind=value.replace(/\?$/,'');
     if(kind==='options')return {};
     if(kind==='document')return {};
+    if(kind==='account')return {user:'account_name',host:'%'};
     if(kind==='destinations')return ['round-robin(Primary)'];
     if(kind==='match')return operation.method==='add_route' ? '$.session.targetPort = $.router.port.ro' : '$.server.memberRole = SECONDARY';
     if(kind==='instance')return member ? {server_id:member.server_id} : null;
@@ -23,6 +24,7 @@ export default function MySQLTopologies({post}) {
   const [advertised,setAdvertised]=useState(false),[timeout,setTimeout]=useState('3600');
   const [witnessIds,setWitnessIds]=useState([]);
   const [guidelineName,setGuidelineName]=useState('');
+  const [accountPasswordEnabled,setAccountPasswordEnabled]=useState(false),[accountPassword,setAccountPassword]=useState(''),[accountSecretReady,setAccountSecretReady]=useState(false);
   const [seed,setSeed]=useState(null),[confirmation,setConfirmation]=useState(''),[members,setMembers]=useState(null),[member,setMember]=useState(null);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[observation,setObservation]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0),inputVersion=useRef(0);
@@ -38,6 +40,7 @@ export default function MySQLTopologies({post}) {
     setOperationId('instance.check_configuration');setArgumentsText('[{}]');setContextName('');setContextOptions('{}');setAdvertised(false);setTimeout('3600');setConfirmation('');
     setWitnessIds([]);
     setGuidelineName('');
+    setAccountPasswordEnabled(false);setAccountPassword('');setAccountSecretReady(false);
     return ()=>{generation.current++;};
   },[post]);
   const run=async(action,request,accept)=> {
@@ -60,6 +63,7 @@ export default function MySQLTopologies({post}) {
   const selected=()=>({operation:operationId,arguments_json:argumentsText,context_name:contextName,
     context_options_json:contextOptions,use_advertised_endpoint:advertised,
     ...(operation?.guideline ? {guideline_name:guidelineName} : {}),
+    ...(operation?.account ? {account_password_mode:accountPasswordEnabled ? 'set' : 'preserve'} : {}),
     witness_server_ids:witnessIds,
     timeout_seconds:timeout.trim()==='null' ? null : Number(timeout),
     target_confirmation:operation?.read_only ? seed?.identity.server_uuid : confirmation});
@@ -74,6 +78,7 @@ export default function MySQLTopologies({post}) {
     {seed && <Box component="pre" aria-label="Native topology seed" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(seed,null,2)}</Box>}
     {catalog && <TextField select fullWidth label="Native topology method" value={operationId} disabled={busy} onChange={event=> {
       const value=catalog.operations.find(item=>item.id===event.target.value);setOperationId(value.id);setArgumentsText(example(value,member));setContextOptions('{}');invalidate();
+      setAccountPasswordEnabled(false);setAccountPassword('');setAccountSecretReady(false);
     }}>{catalog.operations.map(value=><MenuItem key={value.id} value={value.id}>{value.id}</MenuItem>)}</TextField>}
     {operation && <Alert severity="info">Native arguments: {operation.arguments.join(', ') || 'none'}. Instance arguments use registered references such as {'{"server_id":4}'}. Optional arguments have a ? suffix.</Alert>}
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
@@ -86,7 +91,16 @@ export default function MySQLTopologies({post}) {
     <Alert severity="info">For interrupted clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
     <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
       helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
-      onChange={event=>{setArgumentsText(event.target.value);invalidate();}} />
+      onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account){setAccountPassword('');setAccountSecretReady(false);}}} />
+    {operation?.account && <>
+      <Alert severity="info">Select the current writable native primary registration. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>
+      <FormControlLabel control={<Checkbox disabled={busy} checked={accountPasswordEnabled} onChange={event=> {
+        setAccountPasswordEnabled(event.target.checked);setAccountSecretReady(event.target.checked);setAccountPassword('');invalidate();
+      }} />} label="Set account password at dispatch" />
+      {accountPasswordEnabled && <TextField fullWidth type="password" autoComplete="new-password" label="Native account password" value={accountPassword} disabled={busy}
+        helperText="An empty value sets an empty native password. The password is cleared after dispatch and is excluded from saved reviews."
+        onChange={event=>{setAccountPassword(event.target.value);setAccountSecretReady(true);}} />}
+    </>}
     <TextField fullWidth label="Native cluster context name (optional)" value={contextName} disabled={busy} onChange={event=>{setContextName(event.target.value);invalidate();}} />
     <TextField fullWidth label="Native Cluster context options (JSON object)" value={contextOptions} disabled={busy || operation?.context!=='cluster'} onChange={event=>{setContextOptions(event.target.value);invalidate();}} />
     {operation?.guideline && <TextField fullWidth label="Native routing guideline name (empty selects active guideline)" value={guidelineName} disabled={busy} onChange={event=>{setGuidelineName(event.target.value);invalidate();}} />}
@@ -110,8 +124,12 @@ export default function MySQLTopologies({post}) {
     </>}
     {review && <Box>
       {review.warnings.map(warning=><Alert severity="warning" key={warning}>{warning}</Alert>)}
-      <Box component="pre" aria-label="Native topology review" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify({target:review.target,selected_instances:review.selected_instances,options:review.options,execution_host:review.execution_host},null,2)}</Box>
-      <Button disabled={busy || review.state!=='reviewed'} onClick={()=>run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value=>{setReceipt(value);setReview(current=>({...current,state:value.state}));})}>Confirm and start native topology change</Button>
+      <Box component="pre" aria-label="Native topology review" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify({target:review.target,selected_instances:review.selected_instances,options:review.options,execution_host:review.execution_host,
+        ...(review.reviewed_seed?.account_state ? {account:{identity:review.reviewed_seed.account_state.account,exists:review.reviewed_seed.account_state.exists,native_grants:review.reviewed_seed.account_state.native_grants,scope:review.reviewed_seed.account_state.scope}} : {})},null,2)}</Box>
+      <Button disabled={busy || review.state!=='reviewed' || review.options?.account_password_mode==='set' && !accountSecretReady} onClick={()=>run('start',{
+        job_id:review.job_id,review_digest:review.review_digest,confirmed:true,
+        ...(review.options?.account_password_mode==='set' ? {account_secret:{password:accountPassword}} : {}),
+      },value=>{setReceipt(value);setReview(current=>({...current,state:value.state}));setAccountPassword('');setAccountSecretReady(false);})}>Confirm and start native topology change</Button>
     </Box>}
     <Button disabled={busy} onClick={()=>loadJobs(0)}>Load native topology jobs</Button>
     {jobs && <>
@@ -132,6 +150,7 @@ export default function MySQLTopologies({post}) {
       {receipt.result?.native_json_observation?.native_shell_json_signed_limit && <Alert severity="warning">Stored tags contain unsigned64 integers. MySQL Shell 9.7 options decoding can clamp these to its signed integer limit. The separate SQL tag observation preserves the stored values; the original Shell reply above is unchanged.</Alert>}
       {receipt.result?.native_json_observation && <Box component="pre" aria-label="Native topology stored tag JSON" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(receipt.result.native_json_observation.tags,null,2)}</Box>}
       {receipt.result?.control?.observation_error && <Alert severity="warning">The native operation returned, but its later result observation failed: {receipt.result.control.observation_error.message}</Alert>}
+      {receipt.result?.account_observation && <Box component="pre" aria-label="Native account state observation" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify({account:receipt.result.account_observation.account,exists:receipt.result.account_observation.exists,native_grants:receipt.result.account_observation.native_grants,available:receipt.result.account_observation.available,scope:receipt.result.account_observation.scope},null,2)}</Box>}
       {receipt.result?.output_text && <Box component="details"><summary>Native utility messages</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{receipt.result.output_text}</Box></Box>}
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh topology receipt</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel native topology operation</Button>

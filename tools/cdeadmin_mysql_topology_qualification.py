@@ -18,8 +18,11 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 
 from cdeadmin_mysql_dump_verification_qualification import setup_application
 
+UI_ACCOUNT_USER = 'sr_gui_雪'
+UI_ACCOUNT_PASSWORD = 'Native-UI-private:\'\\雪'
 
-def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False):
+
+def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False, accounts_only=False, account_contexts=None):
     from flask import url_for
     from pgadmin.model import db, User, ServerGroup, Server
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
@@ -35,7 +38,9 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
     paths = ['tools/cdeadmin_mysql_topology_qualification.py',
         'tools/mysql_topology_lingering_qualification.py',
         'tools/mysql_routing_qualification.py',
+        'tools/mysql_accounts_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_accounts.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_jobs.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_service.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology_quiescence.py',
@@ -100,7 +105,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
         assert http('members', {'offset': 0, 'limit': 2})['total'] == 3
         proof['checks'].append('authenticated-native-9.7-seed-catalog-and-owned-paged-member-inspection-with-actual-selected-driver')
 
-        def options(operation, arguments, peer=0, *, guideline=''):
+        def options(operation, arguments, peer=0, *, guideline='', setting_password=False):
             witnesses = []
             if operation in {'cluster.add_instance','replica_set.add_instance'}:
                 current = http('inspect', peer=peer)
@@ -111,6 +116,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                     if seeds[index]['identity']['server_uuid'] in allowed]
             return {'operation': operation, 'arguments_json': json.dumps(arguments),
                 **({'guideline_name': guideline} if '.guideline.' in operation else {}),
+                **({'account_password_mode':'set' if setting_password else 'preserve'} if '.setup_' in operation else {}),
                 'context_name': '', 'context_options_json': '{}', 'use_advertised_endpoint': True,
                 'witness_server_ids': witnesses,
                 'target_confirmation': seeds[peer]['identity']['server_uuid'], 'timeout_seconds': 240}
@@ -123,13 +129,16 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
             (output/'last-job.json').write_text(json.dumps(value, indent=2)+'\n')
             return value
 
-        def execute(operation, arguments, peer=0, *, inspection=False, expect_returned=True, guideline=''):
-            selected = options(operation, arguments, peer, guideline=guideline)
+        def execute(operation, arguments, peer=0, *, inspection=False, expect_returned=True, guideline='', account_password=None):
+            selected = options(operation, arguments, peer, guideline=guideline, setting_password=account_password is not None)
             if inspection:
                 value = wait(http('inspect_native', {'options': selected}, peer=peer), peer)
             else:
                 review = http('review', {'options': selected}, peer=peer)
                 request = {key: review[key] for key in ('job_id', 'review_digest')} | {'confirmed': True}
+                if account_password is not None:
+                    assert account_password not in json.dumps(review), 'A private account password entered a review'
+                    request['account_secret']={'password':account_password}
                 value = wait(http('start', request, peer=peer), peer)
                 assert http('start', request, peer=peer)['native_operation_outcome'] == value['native_operation_outcome']
             proof['operations'].append({'method': operation, 'peer': peer, 'job_id': value['job_id'],
@@ -167,7 +176,8 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
             http_server=make_server('0.0.0.0',5000,app,threaded=True)
             threading.Thread(target=http_server.serve_forever,daemon=True).start()
             request={'server_id':registrations[0]['server_id'],'target_uuid':seeds[0]['identity']['server_uuid'],
-                'recovery_member_indexes':[0] if desktop_only else [0,1,2]}
+                'recovery_member_indexes':[0] if desktop_only or accounts_only else [0,1,2]}
+            if accounts_only:request['account_setup']=True
             if uncertain_job_id:request['uncertain_job_id']=uncertain_job_id
             (output/'browser-request.json').write_text(json.dumps(request)+'\n')
             deadline=time.monotonic()+300
@@ -176,6 +186,55 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False, ro
                 time.sleep(.25)
             proof['browser']=json.loads((output/'browser-response.json').read_text())
             assert proof['browser']['complete'],proof['browser']
+        if accounts_only:
+            from mysql_accounts_qualification import qualify as qualify_accounts
+            def login(peer,user,secret):
+                with app.test_request_context('/'):
+                    native_client,route=context(service,db.session.get(Server,registrations[peer]['server_id']))
+                    connection=native_client._connector(host=routes[peer]['host'],port=routes[peer]['port'],user=user,
+                        password=secret,use_pure=not use_c,autocommit=True)
+                    try:
+                        from mysql.connector.connection import MySQLConnection
+                        from mysql.connector.connection_cext import CMySQLConnection
+                        assert isinstance(connection,CMySQLConnection if use_c else MySQLConnection)
+                        return rows(connection,'SELECT CURRENT_USER() AS identity,VERSION() AS version')[0]
+                    finally:native_client._discard_failed_session(connection)
+            if desktop_only:
+                if not browser_exchange:raise ValueError('Account desktop qualification requires a browser exchange')
+                execute('instance.configure_cluster',[{'restart':True}],peer=0)
+                execute('instance.create_cluster',['sr_account_desktop'],peer=0)
+                desktop()
+                proof['account_desktop_login']=login(0,UI_ACCOUNT_USER,UI_ACCOUNT_PASSWORD)
+                assert proof['account_desktop_login']['identity']==UI_ACCOUNT_USER+'@%'
+                assert sql(0,'SELECT password_lifetime AS days FROM mysql.user WHERE User=%s AND Host=%s',
+                    (UI_ACCOUNT_USER,'%'))==[{'days':14}]
+                proof['complete']=True
+                return proof
+            contexts=set(account_contexts or ('cluster','cluster_set','replica_set'))
+            if not contexts <= {'cluster','cluster_set','replica_set'}:raise ValueError('Select native account qualification contexts')
+            if browser_exchange and 'cluster' not in contexts:raise ValueError('The account desktop requires its Cluster fixture')
+            for peer,name in ((0,'cluster'),(1,'cluster_set')):
+                if name in contexts:execute('instance.configure_cluster',[{'restart':True}],peer)
+            proof['accounts']={}
+            if 'cluster' in contexts:
+                execute('instance.create_cluster',['sr_account_cluster'],peer=0)
+                proof['accounts']['cluster']=qualify_accounts('cluster',0,execute,http,options,sql,login,output)
+            if 'cluster_set' in contexts:
+                execute('instance.create_cluster',['sr_account_domain_cluster'],peer=1)
+                execute('cluster.create_cluster_set',['sr_account_domain'],peer=1)
+                proof['accounts']['cluster_set']=qualify_accounts('cluster_set',1,execute,http,options,sql,login,output)
+            if 'replica_set' in contexts:
+                execute('instance.configure_replica_set',[{'restart':True}],peer=2)
+                execute('instance.create_replica_set',['sr_account_replicas'],peer=2)
+                proof['accounts']['replica_set']=qualify_accounts('replica_set',2,execute,http,options,sql,login,output)
+            if browser_exchange:
+                desktop()
+                proof['account_desktop_login']=login(0,UI_ACCOUNT_USER,UI_ACCOUNT_PASSWORD)
+                assert proof['account_desktop_login']['identity']==UI_ACCOUNT_USER+'@%'
+                assert sql(0,'SELECT password_lifetime AS days FROM mysql.user WHERE User=%s AND Host=%s',
+                    (UI_ACCOUNT_USER,'%'))==[{'days':14}]
+            proof['complete']=True
+            return proof
         if desktop_only:
             if not browser_exchange:raise ValueError('Desktop-only qualification requires a browser exchange')
             execute('instance.configure_cluster',[{'restart':True}])
@@ -438,6 +497,28 @@ XMLHttpRequest.prototype.send=function(body){
             wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native topology review"]'))
             click('Confirm and start native topology change')
             wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        if request.get('account_setup'):
+            select_method('cluster.setup_admin_account')
+            field('Native topology arguments',json.dumps([{'user':UI_ACCOUNT_USER,'host':'%'},{'passwordExpiration':30}]),True)
+            checkbox=driver.find_element(By.XPATH,'//label[contains(.,"Set account password at dispatch")]//input[@type="checkbox"]')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',checkbox);checkbox.click()
+            field('Native account password',UI_ACCOUNT_PASSWORD)
+            click('Review native topology change');review=wait.until(reviewed)
+            assert UI_ACCOUNT_PASSWORD not in review.get_attribute('textContent')
+            click('Confirm and start native topology change')
+            wait.until(lambda b:any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+            assert control('Native account password').get_attribute('value')==''
+            wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native account state observation"]'))
+            checkbox=driver.find_element(By.XPATH,'//label[contains(.,"Set account password at dispatch")]//input[@type="checkbox"]')
+            if checkbox.is_selected():
+                driver.execute_script('arguments[0].scrollIntoView({block:"center"});',checkbox);checkbox.click()
+            change('cluster.setup_admin_account',[{'user':UI_ACCOUNT_USER,'host':'%'},{'update':True,'passwordExpiration':14}])
+            severe=[entry for entry in driver.get_log('browser') if entry['level']=='SEVERE']
+            (output/'browser-console.json').write_text(json.dumps(severe,indent=2)+'\n')
+            driver.save_screenshot(str(output/'native-account-setup.png'));assert not severe,severe
+            return {'complete':True,'checks':['native-context-menu','native-read-only-inspection',
+                'exact-uint64-review','native-account-review-excludes-password','explicit-private-password-dispatch',
+                'password-field-cleared-after-dispatch','native-account-update-preserves-password'], 'severe_errors':0}
         guideline='sr_desktop_routes'
         change('cluster.create_routing_guideline',[guideline])
         change('cluster.guideline.add_destination',['desktop_primary','$.server.memberRole = PRIMARY'],guideline)
@@ -497,6 +578,8 @@ if __name__ == '__main__':
     parser.add_argument('--use-c', action='store_true'); parser.add_argument('--browser-exchange', action='store_true')
     parser.add_argument('--routing-only', action='store_true')
     parser.add_argument('--desktop-only', action='store_true')
+    parser.add_argument('--accounts-only', action='store_true')
+    parser.add_argument('--account-contexts', nargs='+', choices=['cluster','cluster_set','replica_set'])
     args = parser.parse_args()
     output = Path(args.output).resolve()
     if output == ROOT or ROOT in output.parents: raise ValueError('Keep native evidence outside source')
@@ -505,4 +588,5 @@ if __name__ == '__main__':
     selected = json.loads(Path(args.routes).read_text())
     if not isinstance(selected, list) or len(selected) != 3: raise ValueError('Select three disposable native peers')
     qualify(output, selected, os.environ[args.password_env], use_c=args.use_c,
-        browser_exchange=args.browser_exchange, routing_only=args.routing_only, desktop_only=args.desktop_only)
+        browser_exchange=args.browser_exchange, routing_only=args.routing_only, desktop_only=args.desktop_only, accounts_only=args.accounts_only,
+        account_contexts=args.account_contexts)

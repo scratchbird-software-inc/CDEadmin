@@ -126,3 +126,28 @@ it('downloads native exported JSON text with its original whitespace and exact i
     expect(screen.queryByText(/downloaded JSON is a redacted copy/)).not.toBeInTheDocument();
   } finally {click.mockRestore();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;}
 });
+it('keeps account passwords out of reviews and supplies them once at explicit dispatch',async()=> {
+  const methods={operations:[...catalog.operations,{id:'cluster.setup_admin_account',context:'cluster',method:'setup_admin_account',
+    arguments:['account','options?'],account:true,read_only:false}]};
+  const target={identity:{server_uuid:'seed'}};
+  const review={job_id:'account-job',review_digest:'bound',state:'reviewed',warnings:[],target:target.identity,
+    options:{operation:'cluster.setup_admin_account',account_password_mode:'set'}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_topology_catalog' ? methods : action==='mysql_topology_inspect' ? target :
+    action==='mysql_topology_review' ? review : {...review,state:'operation_returned',native_operation_outcome:'returned'}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.setup_admin_account'}));
+  fireEvent.click(screen.getByRole('button',{name:'Inspect topology seed'}));await screen.findByLabelText('Native topology seed');
+  fireEvent.change(screen.getByLabelText('Native topology arguments (JSON array)'),{target:{value:'[{"user":"admin","host":"%"}]'}});
+  fireEvent.click(screen.getByRole('checkbox',{name:'Set account password at dispatch'}));
+  fireEvent.change(screen.getByLabelText('Native account password'),{target:{value:'private-native-雪'}});
+  fireEvent.change(screen.getByLabelText('Confirm topology seed UUID'),{target:{value:'seed'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native topology change'}));await screen.findByLabelText('Native topology review');
+  expect(post.mock.calls.at(-1)[0].request.options.account_password_mode).toBe('set');
+  expect(JSON.stringify(post.mock.calls.at(-1)[0])).not.toContain('private-native-雪');
+  expect(screen.getByLabelText('Native topology review').textContent).not.toContain('private-native-雪');
+  fireEvent.click(screen.getByRole('button',{name:'Confirm and start native topology change'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_topology_start',request:{job_id:'account-job',review_digest:'bound',confirmed:true,
+    account_secret:{password:'private-native-雪'}}}));
+  await waitFor(()=>expect(screen.getByLabelText('Native account password').value).toBe(''));
+});
