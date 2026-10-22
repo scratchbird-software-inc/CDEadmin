@@ -195,6 +195,59 @@ the platform teams.
 Linux pure/C native and built-desktop receipts close ``CMP-MY-03`` in its
 accepted implementation scope. The broader MySQL product matrix remains open.
 
+Native database content search
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The endpoint **Diagnostics and verification** menu opens **MySQL database
+content search**. Explicit discovery lists native permission-filtered databases,
+base tables and columns. A private search admits up to 64 selected tables and
+256 columns, 500 matches and 60 seconds. Catalog pages disclose their scope;
+invisible objects remain unknown. Views and session temporary tables are outside
+this workflow.
+
+Text equality, literal prefix/contains, exact numeric equality, binary
+hex equality/contains and NULL comparisons have separate native rules. Text
+preserves column collation and padding behavior; JSON and temporal text use
+native conversion. Exact integer/decimal values remain exact native parameters;
+FLOAT/DOUBLE use native approximate comparison. Inapplicable types or native
+conversion warnings produce explicit unsearched scope. Indexed-only mode checks
+the native EXPLAIN plan and skips table and full-index scans. It does not promise
+that every admitted index lookup is inexpensive.
+
+Each search owns independent authenticated worker and cancellation connections.
+Each selected table is read under its own read-only transaction and metadata
+lock after structural identity revalidation. The report distinguishes searched,
+denied, skipped, timed-out and bounded scope; no database-wide snapshot is
+claimed. Nontransactional engines retain their native visibility limitations.
+Cancellation confirms the owned server/thread identity before KILL QUERY;
+unconfirmed threads wait for bounded native/cooperative completion. Interactive
+transactions, savepoints and diagnostics remain independent.
+
+Matches contain bounded previews and exact source names/fingerprints. Opening a
+row requires a fully readable, nonnullable native unique key, retains native key
+types and revalidates the server/account/role and structure. It reads current
+values; it is not a historical row version or immutable physical object ID.
+Keyless or unreadable-key matches explicitly disable navigation. Row previews
+admit 100 readable columns and always include the matched column.
+
+Private criteria, previews and locators remain in process memory for at most
+five minutes, with explicit clear and periodic expiry. They are not written to
+SQL history, operation receipts or the persistent collector. Responses disable
+caching. Native server logging still applies. Changing the registered target or
+closing the workspace cancels active work and discards late browser responses.
+
+``tools/cdeadmin_mysql_content_search_qualification.py`` exercises real MySQL
+9.7.0 through authenticated workspace requests with the actual pure and C
+connector classes. It checks Unicode/literal text, exact unsigned/decimal/binary
+values, zero dates and extended times, native index plans, column grants, stale
+DDL identities, bounds, cancellation and independent interactive diagnostics.
+Its optional built-browser path opens the provider menu, searches, navigates,
+checks escaped previews and clears private results. Evidence belongs outside
+the repository; Windows/macOS acceptance remains with the platform teams.
+
+Linux pure/C native and built-desktop receipts close ``CMP-MY-07`` in its
+accepted implementation scope. The broader MySQL product matrix remains open.
+
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

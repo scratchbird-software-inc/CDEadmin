@@ -6,8 +6,8 @@ Comparison baseline: source ``0c14f90a21c80c32074c574e7914e56dc487661d``;
 MySQL 9.7.0 and Connector/Python 26.7.0.
 
 This is the accepted implementation queue arising from the MySQL management-tool
-comparison. ``CMP-MY-04`` is implemented and Linux-qualified; the other ten
-comparison items remain open. They supplement
+comparison. ``CMP-MY-03``, ``CMP-MY-04`` and ``CMP-MY-07`` are implemented and
+Linux-qualified; the other eight comparison items remain open. They supplement
 :doc:`mysql_functional_completion` and :doc:`six_engine_remaining_work`; their
 acceptance must follow :doc:`six_engine_completion`.
 
@@ -170,7 +170,11 @@ Comparison evidence: `Current Workbench generation and shipped features <https:/
 CMP-MY-07: Database-wide content search
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Status: **open**. Priority: **P1**.
+Status: **implemented and Linux-qualified**. Priority: **P1**.
+
+Native pure/C workspace and built desktop acceptance is recorded under
+``Native database content search`` in :doc:`mysql_functional_completion`.
+Windows/macOS acceptance remains with platform teams.
 
 Search values across selected authorized tables/columns with bounded results,
 indexed-only option, explicit text/numeric/binary rules, cancellation and row

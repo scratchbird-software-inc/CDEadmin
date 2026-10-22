@@ -1616,6 +1616,21 @@ class ProviderWorkspaceService:
         except OSError:
             raise ProviderWorkspaceError('The owned replication resource store is unavailable') from None
 
+    def mysql_content_search(self, server, operation, request):
+        from .mysql_content_search_service import action
+        from ..providers.mysql_family.mysql_content_search import SearchError
+        from ..sdk.relational import RelationalClientError
+        from mysql.connector import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except SearchError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError('Native MySQL content search failed ('+
+                str(error.errno)+', '+str(error.sqlstate)+')') from None
+        except (RelationalClientError, ValueError, TypeError, KeyError):
+            raise ProviderWorkspaceError('Native content-search input or observer admission is unavailable') from None
+
     def mysql_workload(self, server, operation, request):
         from .mysql_workload_service import action
         from ..providers.mysql_family.mysql_workload import WorkloadError

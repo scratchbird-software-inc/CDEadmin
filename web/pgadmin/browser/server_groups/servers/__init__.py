@@ -3160,6 +3160,13 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'mysql_content_search_databases', 'mysql_content_search_tables', 'mysql_content_search_columns',
+                                'mysql_content_search_start', 'mysql_content_search_status', 'mysql_content_search_cancel',
+                                'mysql_content_search_forget', 'mysql_content_search_row'}:
+                    try:
+                        payload = service.mysql_content_search(server, action.removeprefix('mysql_content_search_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'mysql_workload_snapshot', 'mysql_workload_waits', 'mysql_workload_sample',
                                 'mysql_workload_plan', 'mysql_workload_slow_table', 'mysql_workload_slow_file'}:
                     try:
