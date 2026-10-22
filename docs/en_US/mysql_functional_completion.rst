@@ -290,8 +290,8 @@ base. The active chain retains both its exact managed backup files and selected
 Shell archive files, even after the broad backup hold is separately retired.
 Chain retirement and file removal remain separate actions. File verification
 does not establish restored row values, definition equality, physical recovery
-or production cutover. Full-instance restore and independent recovery acceptance
-remain open under ``MY-CONTINUITY``.
+or production cutover. Independent recovery acceptance remains open under
+``MY-CONTINUITY``.
 
 ``tools/cdeadmin_mysql_instance_backup_qualification.py --output <outside-repo>
 --mysql-shell <native-9.7-mysqlsh>`` exercises actual instance dumps, schemas,
@@ -299,6 +299,43 @@ cross-schema views, procedures, accounts/roles, native refusal, cancellation,
 lost replies, post-return publication failure, cleanup retry and chain/file
 protection. ``--use-c`` selects the C connector. Optional browser/driver paths
 exercise the built server context action, review, dispatch and file inspection.
+
+Full-instance logical restore
+=============================
+
+The server Restore menu includes ``MySQL full-instance restores``. Select an
+owned registration and retained verified instance backup, inspect a separate
+native recovery target, confirm its UUID and review the native load options.
+Explicit start stages and rechecks the exact input, source/target identity,
+target GTID state and utility before native ``util.loadDump``. Private input and
+progress paths are assigned on the application execution host. Trusted
+``local_infile`` must already be configured on the recovery target. Account
+loading, schema/object filters, DDL/data/index loading, existing-object handling,
+native checksum and GTID installation options remain native decisions.
+
+Restore and binary-log replay share durable target fencing and a native
+connection lock. Known native replies survive later observer or receipt
+failures. Native errors after invocation, cancellation and lost replies can
+leave partial effects; they retain uncertainty and the target fence. Separate
+observation never repeats the load. Releasing an uncertain target for another
+recovery requires confirmed utility termination, a free native lock, the exact
+current observation digest and explicit target UUID acknowledgement. The
+original unknown outcome remains unknown. Restarted/interrupted utility process
+termination that has not been observed still requires separate reconciliation.
+
+``tools/cdeadmin_mysql_instance_restore_qualification.py --output <outside-repo>
+--mysql-shell <native-9.7-mysqlsh>`` exercises two actual MySQL instances through
+authenticated application routes. It covers schemas, cross-schema views,
+procedures, accounts/roles, wide integers/Unicode/BLOBs, native GTID base
+installation followed by application log replay, explicit cancellation,
+privilege refusal and injected reply/bookkeeping failures. ``--use-c`` selects
+the C connector; optional browser/driver paths exercise the built restore UI.
+These receipts prove their selected restore and continuation cases. Whole-dump
+data/definition equivalence, physical recovery, external dependencies and
+production cutover retain their own acceptance.
+
+InnoDB page tracking
+====================
 
 Community InnoDB page tracking now has seven dedicated server maintenance
 actions: inspect the active window, start/reset, stop, count page IDs, set the

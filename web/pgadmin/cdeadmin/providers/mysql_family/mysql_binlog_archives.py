@@ -68,7 +68,7 @@ def program_identity(client,route,workspace,*,progress=None,cancel=None):
         'execution_host':{key:result['execution_host'][key] for key in ('kind','platform')}}
 
 
-def stage_continuation(source,destination,expected,identity,*,cancel=None):
+def stage_continuation(source,destination,expected,identity,*,cancel=None,verify_artifact=None):
     """Own a stable input before running; retained archive deletion is safe."""
     source,destination=Path(source),Path(destination)
     if destination.exists():raise BinlogArchiveError('Native continuation staging must be new')
@@ -98,7 +98,7 @@ def stage_continuation(source,destination,expected,identity,*,cancel=None):
                 if cancel is not None and cancel.is_set():raise InterruptedError('Archive continuation staging cancelled')
                 outgoing.write(data)
             outgoing.flush();os.fsync(outgoing.fileno())
-    if verify(destination,identity,cancel=cancel)!=expected:raise BinlogArchiveError('Native continuation staging postimage differs')
+    if (verify_artifact or verify)(destination,identity,cancel=cancel)!=expected:raise BinlogArchiveError('Native continuation staging postimage differs')
     return destination
 
 

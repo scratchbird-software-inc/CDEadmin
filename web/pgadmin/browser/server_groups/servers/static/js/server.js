@@ -504,6 +504,12 @@ define('pgadmin.node.server', [
           showProviderWorkspace(gettext('MySQL full-instance backups'),this,data,item,'mysql-instance-backups');
           return false;
         },
+        open_mysql_instance_restores: function(args) {
+          const item=args?.item || pgBrowser.tree.selected();
+          const data=pgBrowser.tree.itemData(item);
+          showProviderWorkspace(gettext('MySQL full-instance restores'),this,data,item,'mysql-instance-restores');
+          return false;
+        },
         open_mysql_raw_binlogs: function(args) {
           const item=args?.item || pgBrowser.tree.selected();
           const data=pgBrowser.tree.itemData(item);

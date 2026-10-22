@@ -90,8 +90,13 @@ MySQL
   Server-scoped native Shell instance dumps now have a dedicated reviewed job
   workflow with selected schemas, native objects/data and optional accounts,
   roles and grants. Durable outcomes, cancellation, explicit file adoption after
-  reply loss, downloads and protection are separate from full-instance restore
-  and independently verified data/definition recovery, which remain open.
+  reply loss, downloads and protection are implemented. Separately reviewed
+  native instance loading now supports a confirmed recovery target, selected
+  native account/schema/data/GTID options, shared restore/replay fencing and
+  explicit uncertain-target observation/acknowledgement. Native qualification
+  includes GTID base installation followed by application log replay. Whole-dump
+  data/definition equivalence, physical recovery and cutover remain open, along
+  with unknown process-termination reconciliation after application interruption.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Separate native source-log administration now exposes reviewed TO
   and BEFORE purges, independent observations, durable acknowledgement and
