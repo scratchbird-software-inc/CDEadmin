@@ -88,6 +88,7 @@ upstream attribution.
    monitoring_history
    ddn_database_roundtrip
    mysql_functional_completion
+   mysql_implementation_priorities
    mariadb_functional_completion
    duckdb_functional_completion
    sqlite_functional_completion

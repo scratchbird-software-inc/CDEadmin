@@ -12,6 +12,12 @@ This checklist governs completion alongside ``mysql_driver_development.rst``,
 Existing experimental provider receipts establish only their recorded scope.
 Completion requires current source and live UI evidence for every item below.
 
+Owner direction, 2026-10-22: the eleven comparison-derived workflows in
+:doc:`mysql_implementation_priorities` are accepted implementation work alongside
+the current MySQL beta backlog. That document defines their ordering, native
+acceptance and the completion checkpoint for switching development to MariaDB.
+Recording these requirements does not qualify or complete their implementation.
+
 Acceptance requirements
 -----------------------
 

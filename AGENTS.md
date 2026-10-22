@@ -132,3 +132,18 @@ MySQL dynamic masking policy administration/execution is post beta: the pinned
 community source contains core SQL hooks and column-reference handling, but no
 implementation of the required Enterprise object_policy component. Existing
 column-reference tests do not establish working masking.
+
+## MySQL priorities and MariaDB handoff
+
+Owner direction, 2026-10-22: adopt the eleven comparison-derived MySQL work
+items in `docs/en_US/mysql_implementation_priorities.rst`, including the
+lower-priority spatial, deployment-automation and notebook workflows. Complete
+them alongside the current MySQL beta backlog and native inventory, preserving
+their native acceptance requirements. Priority determines sequencing, not
+deferral of an accepted item. Once this implementation scope is complete,
+stop MySQL feature development and move the active implementation focus to
+MariaDB. Keep externally owned forms/platform acceptance, owner-deferred
+ScratchBird history testing and post-beta Enterprise functionality separately
+recorded; they do not hold up that implementation handoff or establish full
+cross-platform product acceptance. Further comparison research must not
+automatically expand the agreed MySQL feature queue.

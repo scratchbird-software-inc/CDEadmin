@@ -19,6 +19,13 @@ available native implementations remain beta gaps.
 Work order and closure rules
 ============================
 
+Owner direction, 2026-10-22: finish the current MySQL beta backlog and the
+eleven accepted comparison-derived items in :doc:`mysql_implementation_priorities`,
+then stop MySQL feature development and switch the implementation focus to
+MariaDB. These items extend the implementation scope; their lower priorities
+are sequencing choices, not deferrals. The handoff preserves the separately
+owned forms/platform evidence, deferred history testing and post-beta scope.
+
 1. Reconcile the native feature denominator for all six pinned profiles before
    selecting further implementation work. Include native source/documentation,
    actual build/edition, interfaces and installed components. Map each applicable
@@ -79,6 +86,11 @@ Known implementation and qualification gaps
 
 MySQL
 -----
+
+The accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11`` are all
+open. :doc:`mysql_implementation_priorities` records their acceptance and maps
+them to the existing items below; overlapping recovery/lifecycle entries are
+one implementation scope and must not be counted as independent completion.
 
 * MY-CONTINUITY: Complete base-backup/log-chain recovery, selected recovery
   targets, physical/log recovery acceptance and reviewed production cutover.
