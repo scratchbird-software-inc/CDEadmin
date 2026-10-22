@@ -76,7 +76,9 @@ MYSQL_PROFILE = PilotProfile(
     ),
     query_plan_templates=(
         ('MySQL JSON query plan', 'EXPLAIN FORMAT=JSON {source}'),
-        ('MySQL execution plan', 'EXPLAIN ANALYZE {source}'),
+        ('MySQL TREE query plan', 'EXPLAIN FORMAT=TREE {source}'),
+        ('MySQL execution plan (executes query)', 'EXPLAIN ANALYZE FORMAT=TREE {source}'),
+        ('MySQL JSON execution plan (executes query)', 'EXPLAIN ANALYZE FORMAT=JSON {source}'),
     ),
 )
 MARIADB_PROFILE = PilotProfile(

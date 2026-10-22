@@ -92,6 +92,49 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Graphical native query plans
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MySQL SQL toolbar provides JSON and TREE optimizer estimates, and separate
+TREE and JSON execution-plan actions labelled **executes query**. Analysis runs
+on the selected SQL session with its existing bindings and transaction policy.
+The application does not switch native session settings to make a format work.
+In particular, JSON analysis requires the native JSON version 2 setting; native
+format or privilege refusals remain errors, not successful plan observations.
+
+The Explain tab presents connected, selectable native plan nodes. JSON version
+1 keeps its query-block hierarchy; version 2 keeps its access-path inputs. TREE
+uses the native indentation and operator descriptions, including never-executed
+branches. Selected facts retain native field names, exact numeric tokens, NULL
+and zero distinctions. Costs are not converted to milliseconds or summed across
+operators. The original EXPLAIN text remains available unchanged. Selecting or
+collapsing nodes sends no SQL. Graph availability does not establish successful
+execution, commit, rollback or cancellation; incomplete/error observations stay
+separate from returned plan text.
+
+Graphical admission requires one native EXPLAIN text cell and bounds the plan
+to 4 MiB, 500 nodes and 64 nesting levels. Unsupported/malformed plans and
+larger graphs retain the original result instead of inventing an operator tree.
+Other engines keep their owning native plan presentations.
+
+``tools/cdeadmin_mysql_query_plans_qualification.py`` qualifies MySQL 9.7.0 on
+both pure and C connector paths through authenticated workspace requests and
+the production graph parser. It covers JSON v1/v2, JSON/TREE analysis, native
+join inputs, estimate versus explicit-analysis session effects, native errors,
+subsequent explicit session use and a pending transaction/savepoint. Its built
+desktop path checks all four toolbar actions and native operator inspection.
+The recorded acceptance is Linux only; platform-team acceptance remains
+separate. Refresh paired DDN before builds/tests and keep the output outside
+the repository, for example::
+
+   python tools/cdeadmin_mysql_query_plans_qualification.py \
+     --output /absolute/work-area/mysql-query-plans \
+     --browser-binary /absolute/path/to/chrome \
+     --driver-binary /absolute/path/to/chromedriver
+
+These receipts close ``CMP-MY-04`` in its accepted implementation scope. They
+do not close the broader editor/capability inventory or the MySQL product matrix.
+
 Native topology administration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

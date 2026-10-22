@@ -29,6 +29,7 @@ import FirebirdServerCatalog from './FirebirdServerCatalog';
 import FirebirdExport from './FirebirdExport';
 import PostgresqlCatalog from './PostgresqlCatalog';
 import MySQLCatalog from './MySQLCatalog';
+import MySQLQueryPlan from './MySQLQueryPlan';
 import MariaDBCatalog from './MariaDBCatalog';
 import DuckDBCatalog from './DuckDBCatalog';
 import SQLiteCatalog from './SQLiteCatalog';
@@ -7116,6 +7117,7 @@ export default function ProviderWorkspaceContent({
   const [firebirdPlan, setFirebirdPlan] = useState(null);
   const [nativePage, setNativePage] = useState(null);
   const [requestedPlan, setRequestedPlan] = useState(false);
+  const [mysqlAnalyzeRequested, setMySQLAnalyzeRequested] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [occurrenceId, setOccurrenceId] = useState(null);
   const [rendered, setRendered] = useState(null);
@@ -7621,7 +7623,7 @@ export default function ProviderWorkspaceContent({
     return () => clearTimeout(timer);
   }, [languageProfile, occurrenceId, busy, queryPollingPaused, poll, workspace]);
 
-  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false) => {
+  const execute = async (executionSource=source, presentation='native', sessionCommand=false, scriptMode=false, planMode=false, profileMode=false, analyzeRequested=false) => {
     if (querySessionBlocked || scriptLocked || queryStreamActive) return;
     if (!Number.isInteger(bufferRows) || bufferRows < 1 || bufferRows > 500) {
       setError(gettext('Result buffer rows must be an integer from 1 to 500.')); return;
@@ -7637,6 +7639,7 @@ export default function ProviderWorkspaceContent({
     setRequestedPlan(false);
     setResultPresentation(presentation);
     setRequestedPlan(presentation === 'plan');
+    setMySQLAnalyzeRequested(languageProfile === 'mysql-sql' && presentation === 'plan' && analyzeRequested);
     setProfileReport(null);
     setQueryStatistics(null);
     try {
@@ -8040,7 +8043,8 @@ export default function ProviderWorkspaceContent({
           {activePlanTemplates.map((template, index) =>
             <QueryToolAction action={index === 0 ? 'explain' : 'analyze'} title={languageProfile === 'mysql-sql' ? template.label : index === 0 ? gettext('Explain / query plan') : template.label} key={template.label} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
               onClick={() => execute(
-                template.source_template.replace('{source}', source), 'plan', false, false, languageProfile === 'postgresql-sql'
+                template.source_template.replace('{source}', source), 'plan', false, false, languageProfile === 'postgresql-sql', false,
+                /^EXPLAIN\s+ANALYZE\b/i.test(template.source_template)
               )} />)}
           <QueryToolAction action="refresh" title={gettext('Poll')} disabled={busy || !occurrenceId || Boolean(rendered?.page?.next_cursor)} onClick={() => poll(occurrenceId)} />
           <QueryToolAction action="cancel" title={gettext('Cancel request')} disabled={busy || !occurrenceId} onClick={cancel} />
@@ -8273,7 +8277,11 @@ export default function ProviderWorkspaceContent({
           </Box>
           <Box role="tabpanel" aria-label="Explain" hidden={resultPresentation !== 'plan'}>
             {languageProfile === 'firebird-sql' && <FirebirdQueryPlan result={firebirdPlan} />}
-            {rendered && requestedPlan && activePlanTemplates.length > 0 && <QueryPlanView rendered={rendered} />}
+            {rendered && requestedPlan && languageProfile === 'mysql-sql' && <MySQLQueryPlan
+              key={rendered.result_id || rendered.descriptor?.result_id || source}
+              rendered={rendered} analyzeRequested={mysqlAnalyzeRequested}
+              pending={Boolean(occurrenceId)} failed={Boolean(nativePage?.error || querySessionBlocked)} />}
+            {rendered && requestedPlan && languageProfile !== 'mysql-sql' && activePlanTemplates.length > 0 && <QueryPlanView rendered={rendered} />}
             {!requestedPlan && languageProfile !== 'firebird-sql' && <Alert severity="info">
               {gettext('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')}
             </Alert>}

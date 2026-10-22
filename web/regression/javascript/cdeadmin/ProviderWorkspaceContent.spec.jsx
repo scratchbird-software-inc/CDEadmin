@@ -1066,6 +1066,33 @@ describe('ProviderWorkspaceContent', () => {
     expect(api.post.mock.calls.some(([, value]) => value.action === 'transaction_action')).toBe(false);
   });
 
+  it('presents native MySQL operators from the plan response without another SQL dispatch', async () => {
+    const text = '{"query_plan":{"operation":"Table scan on native_plan_t","estimated_rows":9007199254740993}}';
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT * FROM native_plan_t',
+      parameter_shape: 'object-or-array', query_plan_templates: [
+        {label: 'MySQL JSON query plan', source_template: 'EXPLAIN FORMAT=JSON {source}'},
+      ],
+    }]}}});
+    api.post.mockImplementation((_url, payload) => Promise.resolve({data: {data: {
+      open_session: {session_id: 'mysql-graph'}, execute: {occurrence_id: 'mysql-plan-graph'},
+      poll: {occurrence: {operation: {terminal: true}, result: {extensions: {mysql: {payload: {
+        has_page: true, rows: [[text]], result_set_end: true,
+      }}}}}, rendered_result: {result_id: 'native-graph-result', view_model: {
+        columns: [{name: 'EXPLAIN'}], rows: [{EXPLAIN: text}],
+      }}},
+    }[payload.action]}}));
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id: 'mysql-target'}} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'MySQL JSON query plan'}));
+    expect(await screen.findByRole('tree', {name: 'Native MySQL operator graph'})).toBeVisible();
+    expect(screen.getByLabelText('Original MySQL plan text').textContent).toBe(text);
+    expect(screen.getByLabelText('Selected native operator')).toHaveTextContent('9007199254740993');
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect operator 1'}));
+    expect(api.post.mock.calls.filter(([, value]) => value.action === 'execute')).toHaveLength(1);
+    expect(api.post.mock.calls.some(([, value]) => value.action === 'transaction_action')).toBe(false);
+  });
+
   it('retains MySQL dispatch timing and native diagnostics without inventing engine timing or a row result', async () => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: 'mysql-sql', title: 'MySQL SQL', starter_source: 'SELECT missing',

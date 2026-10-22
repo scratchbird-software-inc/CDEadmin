@@ -87,8 +87,9 @@ Known implementation and qualification gaps
 MySQL
 -----
 
-The accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11`` are all
-open. :doc:`mysql_implementation_priorities` records their acceptance and maps
+Of the accepted comparison priorities ``CMP-MY-01`` through ``CMP-MY-11``,
+``CMP-MY-04`` is implemented and Linux-qualified; the other ten remain open.
+:doc:`mysql_implementation_priorities` records their acceptance and maps
 them to the existing items below; overlapping recovery/lifecycle entries are
 one implementation scope and must not be counted as independent completion.
 
@@ -243,6 +244,10 @@ one implementation scope and must not be counted as independent completion.
 * MY-LANGUAGE-CAPABILITIES: Close remaining procedural/future-state editor
   checks and native operations for installed plugins/components/storage engines,
   security and maintenance features identified by INV-MYSQL.
+  Graphical native MySQL JSON v1/v2 and TREE plans, including separate JSON/TREE
+  analysis actions and unchanged original text, are now implemented. Native
+  pure/C workspace/parser and built Linux desktop receipts qualify this
+  ``CMP-MY-04`` scope. They do not close the wider language/capability inventory.
   The versioned native server grammar library now checks UTF-8 editor text in
   an isolated process using the source-observed SQL mode, including compound
   procedures and names that do not yet exist. It performs no SQL execution or
