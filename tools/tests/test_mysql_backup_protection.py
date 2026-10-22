@@ -115,3 +115,59 @@ def test_native_dump_acknowledgement_survives_changed_metadata_and_still_protect
     record = registry.list(1, endpoint)['backups'][0]
     assert record['state'] == 'protection_unconfirmed' and record['native_dump_completion_acknowledged']
     assert registry.protected({'source': source}, registry.protections(1, endpoint))
+
+
+def test_a_backup_on_an_alias_registration_protects_the_same_native_source_only(tmp_path):
+    registry = Registry(tmp_path); endpoint, alias = str(uuid.uuid4()), str(uuid.uuid4())
+    source = {'server_uuid': str(uuid.uuid4()), 'version': '9.7.0'}
+    ticket = registry.scoped(1, alias).begin(source, 'native', '/owned/dump', {})
+    same = {'source': source, 'endpoint_id': endpoint}
+    unrelated = {'source': {'server_uuid': str(uuid.uuid4())}, 'endpoint_id': endpoint}
+    assert registry.protected(same, registry.protections(1, endpoint))
+    assert not registry.protected(unrelated, registry.protections(1, endpoint))
+    assert not registry.protected(same, registry.protections(2, endpoint))
+    with pytest.raises(retention.BinlogArchiveError, match='Managed backup protection'):
+        with registry.guard(1, endpoint, same): pass
+    completed(ticket, source)
+    assert registry.protected(same, registry.protections(1, endpoint))
+    review = registry.review_retire(1, alias, ticket.backup_id)
+    registry.retire(1, alias, {key: review[key] for key in ('review_id', 'review_digest')} | {'confirmed': True})
+    assert not registry.protected(same, registry.protections(1, endpoint))
+
+
+def test_alias_backup_admission_is_serialized_with_archive_deletion(tmp_path):
+    registry = Registry(tmp_path); other = Registry(tmp_path)
+    endpoint, alias = str(uuid.uuid4()), str(uuid.uuid4()); source = {'server_uuid': str(uuid.uuid4())}
+    requested, admitted = threading.Event(), threading.Event(); failures = []
+    def begin():
+        requested.set()
+        try: other.scoped(1, alias).begin(source, 'native', '/owned/dump', {}); admitted.set()
+        except BaseException as error: failures.append(error)
+    with registry.guard(1, endpoint, {'source': source}):
+        worker = threading.Thread(target=begin); worker.start()
+        assert requested.wait(5) and not admitted.wait(.05)
+    worker.join(5)
+    assert admitted.is_set() and not failures and not worker.is_alive()
+
+
+def test_an_unreadable_alias_hold_store_refuses_removal_instead_of_ignoring_it(tmp_path):
+    registry=Registry(tmp_path);endpoint,alias=str(uuid.uuid4()),str(uuid.uuid4())
+    registry.scoped(1,alias).begin({'server_uuid':str(uuid.uuid4())},'native','/owned/dump',{})
+    (registry.root/'1'/(alias+'.json')).write_text('{broken')
+    with pytest.raises(retention.BinlogArchiveError,match='protection store is unavailable'):
+        with registry.guard(1,endpoint,{'source':{'server_uuid':str(uuid.uuid4())}}):pass
+
+
+def test_removed_registration_holds_can_be_inspected_and_retired_only_by_their_owner(tmp_path):
+    from pgadmin.cdeadmin.workspace import mysql_backup_protection as protection
+    registry=Registry(tmp_path);endpoint,removed=str(uuid.uuid4()),str(uuid.uuid4())
+    ticket=registry.scoped(1,removed).begin({'server_uuid':str(uuid.uuid4())},'native','/owned/dump',{})
+    registry.scoped(2,removed).begin({'server_uuid':str(uuid.uuid4())},'private','/other-owner/dump',{})
+    service=SimpleNamespace(_semantic_lock=threading.RLock(),mysql_backup_protection=registry)
+    rows=registry.list(1,endpoint,all_registrations=True)['backups']
+    assert len(rows)==1 and rows[0]['backup_id']==ticket.backup_id and rows[0]['protection_endpoint_id']==removed
+    review=protection.action(service,1,endpoint,'review_retire',{'backup_id':ticket.backup_id,'protection_endpoint_id':removed})
+    request={key:review[key] for key in ('review_id','review_digest','protection_endpoint_id')}|{'confirmed':True}
+    with pytest.raises(retention.BinlogArchiveError):protection.action(service,2,endpoint,'retire',request)
+    assert protection.action(service,1,endpoint,'retire',request)['state']=='retired'
+    assert registry.list(2,endpoint,all_registrations=True)['backups'][0]['state']=='pending_native_reply'

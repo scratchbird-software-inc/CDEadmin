@@ -125,6 +125,15 @@ MySQL
   exact reviewed files and receipts; they do not infer backup/log recovery
   coverage or purge native server logs. Backup/log-chain-aware retention remains
   separate from the qualified age/count policies and operator-reviewed workflow.
+  Managed logical backups and ordered Shell archives now have reviewed recovery
+  dependency records. Native GTID subtraction/subset checks retain tagged GTIDs,
+  refuse prerequisite gaps and absent source GTIDs, and bind every selected
+  archive to its verified byte manifest. Active dependencies survive restart and
+  block manual, reviewed and scheduled removal. Retiring a broad backup hold is
+  separate from chain retirement, so selected archive edges stay protected.
+  Native source holds now also protect the same owner's registration aliases
+  under one admission/removal lock. This does not attest log-generation epochs,
+  discover external backups or offline replicas, or verify a recovered database.
 * Native SQL server control now exposes reviewed SHUTDOWN/RESTART requests with
   all-client disconnection consent and request-only acknowledgement. Native
   supervision and privileges remain engine requirements. Separate owned fixture

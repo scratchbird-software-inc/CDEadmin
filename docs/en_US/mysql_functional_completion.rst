@@ -218,6 +218,44 @@ is consumed by ``nativeCompletionScope.spec.js`` through
 checks in the built desktop. This does not close the wider procedural/editor,
 privacy/diagnostic or independent product-inventory work.
 
+Recovery dependency protection
+==============================
+
+The managed backup protection panel includes a recovery dependency workflow.
+Choose a completed consistent managed logical dump and an ordered selection of
+completed MySQL Shell binary-log archives. Review computes prerequisites using
+native ``GTID_SUBSET`` and ``GTID_SUBTRACT`` and verifies the retained input
+manifests. Tagged GTIDs remain native identities. A missing prerequisite,
+changed input, different source or no-longer-executed source GTID refuses the
+review/application. Before/after targets retain the entire final archive;
+native replay remains responsible for event order and stop semantics.
+
+An explicitly confirmed active chain protects its exact archive jobs across
+application restarts. New protection is serialized with removal, including
+already-reviewed retention and scheduled policies. Backup holds also cover the
+same owner's other registrations of the same source UUID. Pending/uncertain
+holds continue retaining their entire original registration. An unreadable
+owner protection store refuses removal. Cross-owner records are not disclosed.
+The owner-wide hold list includes removed registrations; explicit retirement
+binds the selected original registration and review, without needing that
+registration to remain online or present in the connection tree.
+
+Creating a chain never retires a broad backup hold. Its separate reviewed
+retirement can release unselected archives while the active chain retains its
+edges. Chain retirement has another review and confirmation; it leaves files
+and receipts intact and does not dispatch SQL. Neither operation repeats a
+backup or restore. All existing archive pins and other holds still apply.
+
+GTID sets cannot attest that a reset/replacement has never reused identities.
+Activation therefore records explicit operator source-lineage confirmation,
+separately from native observations. It does not claim generation attestation,
+data/definition equivalence, physical recovery or production cutover. Raw
+archives, physical clone bases, external backups and offline replica references
+remain separate work. ``tools/cdeadmin_mysql_recovery_chain_qualification.py
+--output <outside-repo> --mysql-shell <native-9.7-mysqlsh>`` exercises the actual
+managed dump, archive and protection APIs. ``--use-c`` selects the C connector;
+optional browser/driver paths qualify the built graphical workflow.
+
 Community InnoDB page tracking now has seven dedicated server maintenance
 actions: inspect the active window, start/reset, stop, count page IDs, set the
 native backup ID, export a native index and purge tracking archives. These call

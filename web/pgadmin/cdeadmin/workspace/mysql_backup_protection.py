@@ -9,6 +9,7 @@ import uuid
 
 from ..operations.fileio import exclusive_file_lock, private_directory, private_file
 from ..operations.store import JsonOperationStore
+from ..operations.models import OperationBusError
 from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
 from .mysql_binlog_jobs import digest, identity
 
@@ -27,7 +28,9 @@ class Registry:
         for path in (self.root, directory):
             path.mkdir(parents=True, exist_ok=True, mode=0o700); private_directory(path)
         path = directory / (endpoint + '.json')
-        with self.lock, (directory / (endpoint + '.lock')).open('a+b') as lock:
+        # Registrations can name the same native instance. One owner-wide lock
+        # makes new holds and archive deletion atomic across those aliases.
+        with self.lock, (directory / '.protection.lock').open('a+b') as lock:
             private_file(Path(lock.name))
             with exclusive_file_lock(lock.fileno()):
                 yield JsonOperationStore(path)
@@ -39,24 +42,63 @@ class Registry:
     def scoped(self, owner, endpoint):
         return Sink(self, owner, identity(endpoint))
 
-    def list(self, owner, endpoint, offset=0, limit=25):
-        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+    def list(self, owner, endpoint, offset=0, limit=25, all_registrations=False):
+        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100 or type(all_registrations) is not bool:
             raise BinlogArchiveError('Select a native backup protection page')
         with self.store(owner, endpoint) as store:
-            rows = sorted(self.records(store).values(), key=lambda row: (row['created_at'], row['backup_id']), reverse=True)
+            records = ([{**deepcopy(row), 'protection_endpoint_id': scope}
+                        for scope, state in self._scoped_states(owner)
+                        for row in state.get('mysql_backup_protection', {}).values()]
+                       if all_registrations else self.records(store).values())
+            rows = sorted(records, key=lambda row: (row['created_at'], row['backup_id']), reverse=True)
         return {'backups': rows[offset:offset + limit], 'total': len(rows), 'offset': offset, 'limit': limit,
-                'scope': 'managed_native_dumps_and_clones_for_this_owner_and_registration',
+                'scope': 'managed_native_dumps_and_clones_for_this_owner' + ('_all_registrations' if all_registrations else '_and_registration'),
                 'dependency_resolution': 'conservative_source_hold; not a verified recovery chain',
                 'external_backups_discovered': False, 'native_log_generation_attested': False}
 
     def protections(self, owner, endpoint):
-        with self.store(owner, endpoint) as store:
-            return [deepcopy(row) for row in self.records(store).values() if row['state'] != 'retired']
+        with self.store(owner, endpoint):
+            return self._protections(owner, endpoint)
+
+    def _scoped_states(self, owner):
+        """Read while holding the owner lock; never skip an unreadable scope."""
+        for path in sorted((self.root / str(owner)).glob('*.json')):
+            scope = identity(path.stem)
+            if path.is_symlink() or not path.is_file():
+                raise BinlogArchiveError('Native backup protection storage identity changed')
+            try:
+                state = JsonOperationStore(path).read()
+            except OperationBusError:
+                raise BinlogArchiveError('An owner registration backup protection store is unavailable; archive removal is refused') from None
+            yield scope, state
+
+    def _protections(self, owner, endpoint):
+        references = []
+        for scope, state in self._scoped_states(owner):
+            for row in state.get('mysql_backup_protection', {}).values():
+                if row['state'] != 'retired':
+                    references.append({**deepcopy(row), 'same_registration': scope == endpoint,
+                                       'protection_endpoint_id': scope})
+            for row in state.get('mysql_recovery_chains', {}).values():
+                if row['state'] == 'active':
+                    references.append({**deepcopy(row), 'protection_kind': 'recovery_chain',
+                                       'protection_endpoint_id': scope})
+        return references
 
     @staticmethod
     def protected(record, references):
-        return any(row['state'] not in {'native_dump_returned', 'native_clone_returned'} or
-                   row['source']['server_uuid'] == record['source']['server_uuid'] for row in references)
+        for row in references:
+            if row.get('protection_kind') == 'recovery_chain':
+                if any(item['job_id'] == record.get('job_id') and
+                       item['operation'] == record.get('operation') and
+                       item['endpoint_id'] == record.get('endpoint_id')
+                       for item in row['archives']):
+                    return True
+            elif row['source']['server_uuid'] == record['source']['server_uuid'] or (
+                    row.get('same_registration', True) and
+                    row['state'] not in {'native_dump_returned', 'native_clone_returned'}):
+                return True
+        return False
 
     def begin_clone(self, owner, endpoint, clone):
         """Persist known-registration holds before admitting native SQL.
@@ -99,9 +141,9 @@ class Registry:
         # The same lock admits a new backup intent and archive removal. A new
         # intent cannot appear between this check and its file deletion.
         with self.store(owner, endpoint) as store:
-            refs = [row for row in self.records(store).values() if row['state'] != 'retired']
+            refs = self._protections(owner, endpoint)
             if not record.get('artifact_removed') and self.protected(record, refs):
-                raise BinlogArchiveError('Managed backup protection retains this archive; inspect and explicitly retire its backup holds before removal')
+                raise BinlogArchiveError('Managed backup protection retains this archive; inspect and explicitly retire its backup or recovery-chain holds before removal')
             yield
 
     def review_retire(self, owner, endpoint, backup_id):
@@ -248,10 +290,12 @@ def capture_scope(service, context, owner):
 
 def action(service, owner, endpoint, operation, request):
     registry = manager(service)
-    if operation == 'list' and isinstance(request, dict) and not set(request) - {'offset', 'limit'}:
+    if operation == 'list' and isinstance(request, dict) and not set(request) - {'offset', 'limit', 'all_registrations'}:
         return registry.list(owner, endpoint, **request)
-    if operation == 'review_retire' and isinstance(request, dict) and set(request) == {'backup_id'}:
-        return registry.review_retire(owner, endpoint, request['backup_id'])
-    if operation == 'retire':
-        return registry.retire(owner, endpoint, request)
+    if operation == 'review_retire' and isinstance(request, dict) and set(request) in ({'backup_id'}, {'backup_id', 'protection_endpoint_id'}):
+        scope = identity(request.get('protection_endpoint_id', endpoint))
+        return {**registry.review_retire(owner, scope, request['backup_id']), 'protection_endpoint_id': scope}
+    if operation == 'retire' and isinstance(request, dict):
+        selected = dict(request); scope = identity(selected.pop('protection_endpoint_id', endpoint))
+        return registry.retire(owner, scope, selected)
     raise BinlogArchiveError('Select a managed native backup protection action')

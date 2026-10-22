@@ -28,3 +28,20 @@ it('retires an exact managed backup hold only after review and explicit authorit
   expect(screen.getByRole('button',{name:'Confirm backup protection retirement'})).toBeDisabled();
   expect(post.mock.calls.every(([value]) => value.action.startsWith('mysql_binlog_backup_protection_'))).toBe(true);
 });
+it('inspects owner-wide holds and binds retirement to the selected registration scope',async()=> {
+  const backup={backup_id:'orphan',database:'native',source:{server_uuid:'native-source'},state:'native_dump_returned',protection_endpoint_id:'removed-registration'};
+  const post=jest.fn().mockImplementation(({action})=>Promise.resolve(action.endsWith('review_retire') ?
+    {backup,review_id:'review',review_digest:'exact',protection_endpoint_id:'removed-registration'} :
+    action.endsWith('retire') ? {...backup,state:'retired'} : {backups:[backup],total:1,offset:0}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByLabelText('Show backup holds from all my registrations, including removed registrations'));
+  fireEvent.click(screen.getByRole('button',{name:'Load managed backup protection'}));
+  await screen.findByText('Registration: removed-registration');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_backup_protection_list',request:{offset:0,limit:25,all_registrations:true}});
+  fireEvent.click(screen.getByRole('button',{name:'Review retirement of backup orphan'}));
+  await screen.findByLabelText('Managed backup retirement review');
+  expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_backup_protection_review_retire',request:{backup_id:'orphan',protection_endpoint_id:'removed-registration'}});
+  fireEvent.click(screen.getByLabelText('Retire this backup from archive protection and recovery planning; keep its files'));
+  fireEvent.click(screen.getByRole('button',{name:'Confirm backup protection retirement'}));
+  await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'mysql_binlog_backup_protection_retire',request:{review_id:'review',review_digest:'exact',confirmed:true,protection_endpoint_id:'removed-registration'}}));
+});

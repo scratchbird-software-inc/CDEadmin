@@ -3169,6 +3169,8 @@ class ServerNode(PGChildNodeView):
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
                 elif action in {'mysql_binlog_backup_protection_list','mysql_binlog_backup_protection_review_retire','mysql_binlog_backup_protection_retire',
+                                'mysql_binlog_recovery_chain_list','mysql_binlog_recovery_chain_review','mysql_binlog_recovery_chain_activate',
+                                'mysql_binlog_recovery_chain_review_retire','mysql_binlog_recovery_chain_retire',
                                 'mysql_binlog_source_reset_catalog','mysql_binlog_source_reset_review','mysql_binlog_source_reset_start',
                                 'mysql_binlog_source_reset_status','mysql_binlog_source_reset_cancel','mysql_binlog_source_reset_list','mysql_binlog_source_reset_reconcile',
                                 'mysql_binlog_source_purge_catalog','mysql_binlog_source_purge_review','mysql_binlog_source_purge_start',

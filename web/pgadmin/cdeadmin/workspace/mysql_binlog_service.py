@@ -86,6 +86,9 @@ def action(service,server,operation,request):
     from mysql.connector import Error as NativeError
     if not isinstance(request,dict):raise BinlogArchiveError('A native binary-log archive request is required')
     jobs,owner,endpoint,context=manager(service,server)
+    if operation.startswith('recovery_chain_'):
+        from .mysql_recovery_chains import action as chain_action
+        return chain_action(service, server, jobs, owner, endpoint, operation.removeprefix('recovery_chain_'), request)
     if operation.startswith('backup_protection_'):
         from .mysql_backup_protection import action as backup_action
         return backup_action(service, owner, endpoint.id, operation.removeprefix('backup_protection_'), request)
