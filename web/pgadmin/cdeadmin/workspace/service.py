@@ -1666,6 +1666,15 @@ class ProviderWorkspaceService:
         except (BinlogArchiveError, CloneError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
         except OSError: raise ProviderWorkspaceError('Native instance acceptance storage is unavailable') from None
 
+    def mysql_topology(self, server, operation, request):
+        from .mysql_topology_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native topology receipt storage is unavailable') from None
+
     def mysql_binlog(self,server,operation,request):
         from .mysql_binlog_service import action
         from ..sdk.tooling import ProviderToolError

@@ -168,6 +168,14 @@ MySQL
   service installation, upgrades or complete lifecycle acceptance.
 * MY-HA-LIFECYCLE: Complete independently observed topology/bootstrap/failover/
   repair and authorized server-host configuration, lifecycle and upgrades.
+  The native AdminAPI adapter now exposes reviewed instance configuration and
+  core Cluster/ReplicaSet/ClusterSet operations through a dedicated workspace.
+  Native method-specific instance arguments, exact JSON integers, shared
+  known-member target fences and conservative clone-recovery archive holds are
+  implemented. Native/API/browser receipts qualify their recorded operations;
+  they do not close the remaining AdminAPI account/router/routing-guideline
+  interfaces, unreachable-member recovery or full topology failure/repair
+  acceptance.
   Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID
   and expose reviewed native configuration validation with durable remote
   receipts. Selected option-file graphs now capture nested includes, directory

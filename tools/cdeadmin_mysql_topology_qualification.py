@@ -1,0 +1,308 @@
+"""Native topology qualification against three explicitly disposable MySQL peers.
+
+The application and mysqlsh must reach the peers' advertised addresses. Docker
+Desktop fixtures therefore run this controller inside their private network;
+the production runner still launches native mysqlsh directly on its own host.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import threading
+import time
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
+
+from cdeadmin_mysql_dump_verification_qualification import setup_application
+
+
+def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
+    from flask import url_for
+    from pgadmin.model import db, User, ServerGroup, Server
+    from pgadmin.cdeadmin.endpoints.profiles import registration_profile
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import rows
+    from pgadmin.cdeadmin.workspace.mysql_topology_service import context
+    from pgadmin.cdeadmin.workspace import service_for_app
+    app = setup_application(output)
+    service = service_for_app(app)
+    client = app.test_client()
+    proof = {'complete': False, 'full_mysql_product_complete': False, 'use_c': use_c,
+             'execution_host': 'native application host on isolated fixture network',
+             'checks': [], 'connector_classes': [], 'operations': []}
+    paths = ['tools/cdeadmin_mysql_topology_qualification.py',
+        'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
+        'web/pgadmin/cdeadmin/workspace/mysql_topology_jobs.py',
+        'web/pgadmin/cdeadmin/workspace/mysql_topology_service.py',
+        'web/pgadmin/cdeadmin/sdk/durable_tool.py',
+        'web/pgadmin/cdeadmin/sdk/tool_guardian.py',
+        'web/pgadmin/cdeadmin/sdk/tool_process.py',
+        'web/pgadmin/static/js/Dialogs/MySQLTopologies.jsx']
+    proof['source_sha256'] = {path: hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths}
+    http_server = None
+    try:
+        registrations = []
+        with app.test_request_context('/'):
+            uid = User.query.first().id
+            group = ServerGroup.query.filter_by(user_id=uid).first()
+            app.blueprints['NODE-engine_type'].connector_visibility['mysql'].set(True, user_id=uid)
+            for index, route in enumerate(routes):
+                item = Server(user_id=uid, servergroup_id=group.id, name='Owned MySQL topology '+str(index),
+                    host=route['host'], port=route['port'], username='root', maintenance_db=None, save_password=0)
+                item._cde_endpoint_registration = registration_profile('mysql-native')
+                item._cde_endpoint_route_configuration = {**route, 'user': 'root', 'use_pure': not use_c,
+                    'credential_kinds': ['database_password']}
+                db.session.add(item); db.session.commit()
+                registrations.append({'server_id': item.id,
+                    'verify': url_for('NODE-server.verify_endpoint_id', gid=group.id, sid=item.id),
+                    'url': url_for('NODE-server.cde_workspace_id', gid=group.id, sid=item.id)})
+        with client.session_transaction() as session:
+            session['_user_id'] = str(uid); session['_fresh'] = True
+        for item in registrations:
+            assert client.post(item['verify'], json={'password': password}).get_json()['success']
+
+        def http(action, request=None, *, peer=0, refused=False):
+            response = client.post(registrations[peer]['url'], json={
+                'action': 'mysql_topology_'+action, 'request': request or {}})
+            value = response.get_json()
+            if refused:
+                assert response.status_code == 400, value
+                return value
+            if response.status_code != 200 or not value.get('success'):
+                (output/'http-failure.json').write_text(json.dumps(value, indent=2)+'\n')
+                raise AssertionError('Native topology application request failed: '+action)
+            return value['data']
+
+        with app.test_request_context('/'):
+            instrumented = set()
+            for item in registrations:
+                native_client, route = context(service, db.session.get(Server, item['server_id']))
+                if id(native_client) in instrumented: continue
+                instrumented.add(id(native_client)); connect = native_client._connect
+                def recorded(*args, _connect=connect, **kwargs):
+                    connection = _connect(*args, **kwargs)
+                    from mysql.connector.connection import MySQLConnection
+                    from mysql.connector.connection_cext import CMySQLConnection
+                    assert isinstance(connection, CMySQLConnection if use_c else MySQLConnection)
+                    proof['connector_classes'].append(type(connection).__name__)
+                    return connection
+                native_client._connect = recorded
+        seeds = [http('inspect', peer=index) for index in range(3)]
+        assert len({value['identity']['server_uuid'] for value in seeds}) == 3
+        assert len(proof['connector_classes']) >= 3
+        catalog = http('catalog')
+        assert len(catalog['operations']) > 40
+        assert http('members', {'offset': 0, 'limit': 2})['total'] == 3
+        proof['checks'].append('authenticated-native-9.7-seed-catalog-and-owned-paged-member-inspection-with-actual-selected-driver')
+
+        def options(operation, arguments, peer=0):
+            return {'operation': operation, 'arguments_json': json.dumps(arguments),
+                'context_name': '', 'context_options_json': '{}', 'use_advertised_endpoint': True,
+                'target_confirmation': seeds[peer]['identity']['server_uuid'], 'timeout_seconds': 240}
+
+        def wait(value, peer=0):
+            deadline = time.monotonic()+260
+            while value['state'] in {'dispatching', 'active', 'cancel_requested'}:
+                if time.monotonic() > deadline: raise TimeoutError('Native topology job deadline')
+                time.sleep(.1); value = http('status', {'job_id': value['job_id']}, peer=peer)
+            (output/'last-job.json').write_text(json.dumps(value, indent=2)+'\n')
+            return value
+
+        def execute(operation, arguments, peer=0, *, inspection=False, expect_returned=True):
+            selected = options(operation, arguments, peer)
+            if inspection:
+                value = wait(http('inspect_native', {'options': selected}, peer=peer), peer)
+            else:
+                review = http('review', {'options': selected}, peer=peer)
+                request = {key: review[key] for key in ('job_id', 'review_digest')} | {'confirmed': True}
+                value = wait(http('start', request, peer=peer), peer)
+                assert http('start', request, peer=peer)['native_operation_outcome'] == value['native_operation_outcome']
+            proof['operations'].append({'method': operation, 'peer': peer, 'job_id': value['job_id'],
+                'state': value['state'], 'outcome': value['native_operation_outcome']})
+            (output/'progress.json').write_text(json.dumps(proof, indent=2)+'\n')
+            if expect_returned:
+                assert value['native_operation_outcome'] == 'returned', value
+                assert value['native_process_termination_confirmed'] is True, value
+            assert value['workload_readiness_verified'] is False
+            return value
+
+        def sql(peer, source, parameters=()):
+            with app.test_request_context('/'):
+                native_client, route = context(service, db.session.get(Server, registrations[peer]['server_id']))
+                connection = native_client._connector(host=routes[peer]['host'], port=routes[peer]['port'],
+                    user='root', password=password, use_pure=not use_c, autocommit=True)
+                try: return rows(connection, source, parameters)
+                finally: native_client._discard_failed_session(connection)
+
+        def wait_data(peers):
+            deadline = time.monotonic()+30
+            for peer in peers:
+                while True:
+                    try:
+                        result = sql(peer, 'SELECT CAST(id AS CHAR) AS id,body,HEX(payload) AS payload FROM sr_topology.t')
+                        if result == [{'id': '9007199254740993', 'body': 'native topology 雪', 'payload': '00FF'}]: break
+                    except Exception:
+                        if time.monotonic() > deadline: raise
+                    if time.monotonic() > deadline: raise TimeoutError('Independent replicated data deadline')
+                    time.sleep(.1)
+
+        execute('instance.check_configuration', [{}], inspection=True)
+        for peer in range(3): execute('instance.configure_cluster', [{'restart': True}], peer)
+        execute('instance.create_cluster', ['sr_application_cluster', {'gtidSetIsComplete': True}])
+        for peer in (1, 2): execute('cluster.add_instance', [
+            {'server_id': registrations[peer]['server_id']}, {'recoveryMethod': 'clone', 'recoveryProgress': 0}])
+        sql(0, 'CREATE DATABASE sr_topology CHARACTER SET utf8mb4')
+        sql(0, 'CREATE TABLE sr_topology.t(id BIGINT PRIMARY KEY,body TEXT,payload LONGBLOB)')
+        sql(0, 'INSERT INTO sr_topology.t VALUES(%s,%s,%s)', (9007199254740993, 'native topology 雪', b'\x00\xff'))
+        wait_data((0, 1, 2))
+        proof['checks'].append('reviewed-native-cluster-create-two-actual-clone-joins-and-independent-wide-unicode-binary-data-on-three-peers')
+        response=client.post(registrations[0]['url'],json={'action':'mysql_binlog_backup_protection_list',
+            'request':{'all_registrations':True,'limit':100}})
+        holds=response.get_json();assert response.status_code==200 and holds['success'],holds
+        holds=[row for row in holds['data']['backups'] if row.get('backup_kind')=='mysql_native_topology_recovery']
+        assert {row['source']['server_uuid'] for row in holds}=={row['identity']['server_uuid'] for row in seeds}
+        assert all(row['state']=='native_topology_reply_observed' and row['native_topology_returned'] is True and
+            row['native_protocol_source_uuid_attested'] is False for row in holds)
+        proof['checks'].append('actual-native-clone-joins-retain-conservative-archive-holds-reachable-through-authenticated-cross-registration-inspection')
+        execute('cluster.set_primary', [{'server_id': registrations[1]['server_id']}])
+        assert sql(1, 'SELECT @@super_read_only AS read_only') == [{'read_only': 0}]
+        execute('cluster.set_option', ['tag:wide', 2**63], peer=1)
+        proof['independent_native_tag'] = sql(1, "SELECT CAST(JSON_EXTRACT(attributes,'$.tags.wide') AS CHAR) AS value FROM mysql_innodb_cluster_metadata.clusters")
+        (output/'wide-tag-observation.json').write_text(json.dumps(proof['independent_native_tag'], indent=2)+'\n')
+        status = execute('cluster.options', [{}], peer=1, inspection=True)
+        assert proof['independent_native_tag'] == [{'value': str(2**63)}], proof['independent_native_tag']
+        assert status['result']['native_json_observation']['native_shell_json_signed_limit'] is True
+        assert str(2**63) in json.dumps(status['result']['native_json_observation']['tags'])
+        # Preserve the source-confirmed native Shell JSON decoder limitation.
+        assert str(2**63-1) in status['result']['control']['result_json']
+        observed = http('reconcile', {'job_id': status['job_id']}, peer=1)
+        assert observed['native_operation_outcome'] == 'returned' and not observed['workload_readiness_verified']
+        proof['checks'].append('native-primary-switch-exact-uint64-tag-storage-and-separate-native-Shell-signed-decoder-limitation-observation')
+        stale = http('review', {'options': options('cluster.set_option', ['tag:stale', True], 1)}, peer=1)
+        execute('cluster.set_option', ['clusterName', 'sr_application_cluster_renamed'], peer=1)
+        http('start', {key: stale[key] for key in ('job_id', 'review_digest')} | {'confirmed': True}, peer=1, refused=True)
+        proof['checks'].append('native-metadata-identity-change-refuses-stale-reviewed-mutation-before-dispatch')
+
+        if browser_exchange:
+            from werkzeug.serving import make_server
+            http_server = make_server('0.0.0.0', 5000, app, threaded=True)
+            threading.Thread(target=http_server.serve_forever, daemon=True).start()
+            (output/'browser-request.json').write_text(json.dumps({'server_id': registrations[1]['server_id'],
+                'target_uuid': seeds[1]['identity']['server_uuid']})+'\n')
+            deadline = time.monotonic()+300
+            while not (output/'browser-response.json').exists():
+                if time.monotonic() > deadline: raise TimeoutError('External native desktop qualification deadline')
+                time.sleep(.25)
+            proof['browser'] = json.loads((output/'browser-response.json').read_text())
+            assert proof['browser']['complete'], proof['browser']
+        execute('cluster.dissolve', [{'force': True}], peer=1)
+        # Dissolution leaves the data in place and stops native replication.
+        for peer in range(3):
+            sql(peer, 'SET GLOBAL super_read_only=OFF')
+            execute('instance.configure_replica_set', [{'restart': True}], peer)
+        execute('instance.create_replica_set', ['sr_application_replicas', {'gtidSetIsComplete': True}], peer=1)
+        execute('replica_set.add_instance', [{'server_id': registrations[2]['server_id']},
+            {'recoveryMethod': 'clone', 'recoveryProgress': 0}], peer=1)
+        execute('replica_set.set_primary', [{'server_id': registrations[2]['server_id']}], peer=1)
+        assert sql(2, 'SELECT @@super_read_only AS read_only') == [{'read_only': 0}]
+        wait_data((1, 2))
+        execute('replica_set.status', [{'extended': 1}], peer=2, inspection=True)
+        execute('replica_set.dissolve', [{'force': True}], peer=2)
+        proof['checks'].append('native-replicaset-create-uri-typed-clone-join-primary-switch-data-observation-and-dissolution')
+        proof['complete'] = True
+    finally:
+        if http_server: http_server.shutdown(); http_server.server_close()
+        for name in ('mysql_topology_jobs', 'mysql_binlog_replay_jobs'):
+            jobs = getattr(service, name, None)
+            if jobs: jobs.close()
+        (output/'summary.json').write_text(json.dumps(proof, indent=2)+'\n')
+    return proof
+
+
+def browser(base_url, output, request, binary, driver_binary):
+    from selenium import webdriver
+    from selenium.webdriver import ActionChains
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import WebDriverWait
+    from cdeadmin_ui_evidence import ensure_data_explorer, expand
+    driver = None
+    try:
+        options = webdriver.ChromeOptions(); options.binary_location = binary
+        for flag in ('--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1800,1200'):
+            options.add_argument(flag)
+        options.add_argument('--user-data-dir='+str(output/'browser-profile'))
+        options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+        driver = webdriver.Chrome(options=options, service=Service(driver_binary))
+        driver.get(base_url+'/browser/'); wait = WebDriverWait(driver, 120)
+        ensure_data_explorer(wait); expand(wait, 'Connectors'); expand(wait, 'MySQL')
+        def target(browser):
+            return next((node for node in browser.find_elements(By.CSS_SELECTOR, '.file-name') if node.is_displayed() and
+                browser.execute_script('const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);', node, request['server_id'])), None)
+        ActionChains(driver).context_click(wait.until(target)).perform()
+        for label in ('Availability', 'MySQL native topologies...'):
+            wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if
+                node.is_displayed() and node.text.strip() == label), None)).click()
+        def click(label):
+            def attempt(browser):
+                for node in browser.find_elements(By.TAG_NAME, 'button'):
+                    if node.is_enabled() and node.get_attribute('textContent').strip() == label:
+                        browser.execute_script('arguments[0].scrollIntoView({block:"center"});', node)
+                        if node.is_displayed(): node.click(); return True
+                return False
+            wait.until(attempt)
+        def field(label, value, textarea=False):
+            tag = 'textarea' if textarea else 'input'
+            node = driver.find_element(By.XPATH, '//label[contains(text(),'+json.dumps(label)+')]/following::'+tag+'[1]')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});', node)
+            node.send_keys(Keys.CONTROL, 'a'); node.send_keys(Keys.BACKSPACE); node.send_keys(value)
+            wait.until(lambda _browser: node.get_attribute('value') == value)
+        click('Load native topology methods'); click('Inspect topology seed')
+        wait.until(lambda b: b.find_elements(By.CSS_SELECTOR, '[aria-label="Native topology seed"]'))
+        click('Run native topology inspection')
+        wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        # The native selector is a MUI listbox; choose its actual operation label.
+        selector = driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
+        selector.click()
+        wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="option"]') if node.text == 'cluster.set_option'), None)).click()
+        field('Native topology arguments', '["tag:browserWide",9223372036854775808]', True)
+        field('Confirm topology seed UUID', request['target_uuid'])
+        click('Review native topology change')
+        review = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Native topology review"]'))
+        assert '9223372036854775808' in review.get_attribute('textContent')
+        click('Confirm and start native topology change')
+        wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        tags = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Native topology stored tag JSON"]'))
+        assert '9223372036854775808' in tags.get_attribute('textContent')
+        assert any('options decoding can clamp' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR, '[role="alert"]'))
+        click('Observe current topology target')
+        wait.until(lambda b: any('native_lock_free' in node.get_attribute('textContent') for node in b.find_elements(By.TAG_NAME, 'pre')))
+        severe = [entry for entry in driver.get_log('browser') if entry['level'] == 'SEVERE']
+        (output/'browser-console.json').write_text(json.dumps(severe, indent=2)+'\n')
+        driver.save_screenshot(str(output/'native-topology.png'))
+        assert not severe, severe
+        return {'complete': True, 'checks': ['native-context-menu', 'read-only-native-inspection',
+            'exact-uint64-argument-review', 'explicit-native-mutation', 'separate-target-observation'], 'severe_errors': 0}
+    except Exception:
+        if driver: driver.save_screenshot(str(output/'native-topology-failure.png'))
+        raise
+    finally:
+        if driver: driver.quit()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', required=True); parser.add_argument('--routes', required=True)
+    parser.add_argument('--password-env', required=True); parser.add_argument('--mysql-shell', required=True)
+    parser.add_argument('--use-c', action='store_true'); parser.add_argument('--browser-exchange', action='store_true')
+    args = parser.parse_args()
+    output = Path(args.output).resolve()
+    if output == ROOT or ROOT in output.parents: raise ValueError('Keep native evidence outside source')
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    os.environ['CDEADMIN_MYSQLSH_BINARY'] = args.mysql_shell
+    selected = json.loads(Path(args.routes).read_text())
+    if not isinstance(selected, list) or len(selected) != 3: raise ValueError('Select three disposable native peers')
+    qualify(output, selected, os.environ[args.password_env], use_c=args.use_c, browser_exchange=args.browser_exchange)

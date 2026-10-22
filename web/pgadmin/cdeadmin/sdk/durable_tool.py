@@ -124,6 +124,10 @@ def run(command, *, workspace, environment, timeout, capture_limit, name,
                 except subprocess.TimeoutExpired: pass
                 return native
         if process.poll() is not None:
+            # The guardian publishes before exiting. Its final rename can land
+            # between our first existence check and poll observing that exit.
+            if result_path.exists():
+                continue
             # A guardian without its durable final receipt is unknown. PID
             # absence is deliberately not converted into utility cleanup.
             error = RuntimeError('Durable native utility guardian exited without a final receipt')

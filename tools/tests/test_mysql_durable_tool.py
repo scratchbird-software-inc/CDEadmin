@@ -1,5 +1,6 @@
 """Native process supervision survives an abruptly lost application owner."""
 import json
+import base64
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,31 @@ import pytest
 
 from pgadmin.cdeadmin.sdk import durable_tool
 from pgadmin.cdeadmin.sdk.tooling import ProviderToolGrant, ProviderToolRunner
+
+
+@pytest.mark.parametrize('publishes_receipt',[True,False])
+def test_guardian_exit_rechecks_a_receipt_published_between_existence_check_and_poll(tmp_path,monkeypatch,publishes_receipt):
+    class Guardian:
+        def poll(self):
+            root=durable_tool.directory(tmp_path,'owned-race')
+            intent=json.loads((root/'request.json').read_text())
+            if publishes_receipt:
+                durable_tool.write(root/'result.json',{'nonce':intent['nonce'],
+                    'request_sha256':durable_tool.sha(root/'request.json'),'credential_file_cleanup_confirmed':True,
+                    'observation':{'cleanup_confirmed':True,'return_code':0,
+                        'stdout':base64.b64encode(b'native returned\n').decode(),
+                        'stderr':base64.b64encode(b'').decode()}})
+            return 0
+        def wait(self,timeout=None):return 0
+    monkeypatch.setattr(durable_tool.subprocess,'Popen',lambda *_args,**_kwargs:Guardian())
+    def run():
+        return durable_tool.run([sys.executable,'-c','pass'],workspace=tmp_path,environment={},
+            timeout=10,capture_limit=1024,name='owned-race')
+    if publishes_receipt:
+        result=run()
+        assert result['return_code']==0 and result['stdout']==b'native returned\n' and result['cleanup_confirmed']
+    else:
+        with pytest.raises(RuntimeError,match='without a final receipt'):run()
 
 
 def wait_until(callback, seconds=15):

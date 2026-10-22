@@ -33,7 +33,7 @@ _HANDLERS = frozenset({
     'forget_endpoint',
     'open_workspace',
     'open_mysql_fleet', 'open_mysql_dashboard_editor',
-    'open_mysql_host', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
+    'open_mysql_host', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
     'open_mariadb_fleet', 'open_mariadb_dashboard_editor',
     'open_duckdb_fleet', 'open_duckdb_dashboard_editor',
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
@@ -834,6 +834,9 @@ def endpoint_context_actions(
         actions.append(_action('endpoint.mysql.instance_restores', 'MySQL full-instance restores...', 'open_mysql_instance_restores',
             icon='action.restore', group='restore', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native instance restores.'))
+        actions.append(_action('endpoint.mysql.topologies', 'MySQL native topologies...', 'open_mysql_topologies',
+            icon='action.settings', group='availability', mutation='admin', enabled=can_manage,
+            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native topologies.'))
         actions.append(_action('endpoint.mysql.local_clone', 'MySQL physical clone...', 'open_mysql_local_clone',
             icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
             disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native clone jobs.'))

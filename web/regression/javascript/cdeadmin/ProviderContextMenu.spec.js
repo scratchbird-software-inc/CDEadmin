@@ -29,6 +29,14 @@ const action = (overrides={}) => ({
 });
 
 describe('provider-owned Object Explorer menus', () => {
+  it('admits the MySQL native topology workspace through its declared handler', () => {
+    const menus=providerContextMenuItems({cde_context_actions:[action({
+      command_id:'endpoint.mysql.topologies',handler:'open_mysql_topologies',
+      label:'MySQL native topologies...',menu_group:'availability',mutation_class:'admin',
+    })]});
+    expect(menus).toHaveLength(1);
+    expect(menus[0].commandId).toBe('endpoint.mysql.topologies');
+  });
   it('puts common object actions directly on the popup, not in a submenu', () => {
     const menus = providerTreeContextActions({cde_context_actions: [action({
       command_id: 'resource.sqlite.table.create', label: 'New Table',

@@ -52,7 +52,7 @@ class Registry:
                        if all_registrations else self.records(store).values())
             rows = sorted(records, key=lambda row: (row['created_at'], row['backup_id']), reverse=True)
         return {'backups': rows[offset:offset + limit], 'total': len(rows), 'offset': offset, 'limit': limit,
-                'scope': 'managed_native_dumps_and_clones_for_this_owner' + ('_all_registrations' if all_registrations else '_and_registration'),
+                'scope': 'managed_native_dumps_clones_and_topology_recovery_for_this_owner' + ('_all_registrations' if all_registrations else '_and_registration'),
                 'dependency_resolution': 'conservative_source_hold; not a verified recovery chain',
                 'external_backups_discovered': False, 'native_log_generation_attested': False}
 
@@ -139,6 +139,39 @@ class Registry:
                         'native_clone_completion_acknowledged': False, 'automatic_native_retry': False}
                     store.change(lambda state: state.setdefault('mysql_backup_protection', {}).update({backup_id: value}))
             tickets.append(Ticket(self.scoped(owner, scope), backup_id))
+        return tickets
+
+    def begin_topology(self, record):
+        """Hold known sources before AdminAPI can choose native clone recovery.
+
+        Native protocol donor attribution and recovery boundaries remain
+        unconfirmed. These conservative holds require explicit retirement.
+        """
+        owner, seed_endpoint = record['owner'], record['endpoint_id']
+        scopes = {(seed_endpoint, record['source']['server_uuid']): record['source']}
+        for member in record['source_state']['members'].values():
+            scopes[(member['endpoint_id'], member['identity']['server_uuid'])] = member['identity']
+        for native_uuid in record['source_state']['seed']['metadata'].get('instance_uuids', []):
+            scopes.setdefault((seed_endpoint, native_uuid), {'server_uuid': native_uuid, 'version': record['source']['version']})
+        tickets = []
+        for (endpoint, native_uuid), source in sorted(scopes.items()):
+            backup_id = str(uuid.uuid5(uuid.UUID(record['job_id']), endpoint+':'+native_uuid))
+            expected = {'backup_id': backup_id, 'backup_kind': 'mysql_native_topology_recovery',
+                'native_topology_job_id': record['job_id'], 'native_topology_operation': record['options']['operation'],
+                'source': {key: source[key] for key in ('server_uuid', 'version', 'authenticated_principal', 'active_role') if key in source},
+                'database': 'Native topology recovery / '+record['options']['operation'],
+                'execution_host': deepcopy(record['execution_host'])}
+            with self.store(owner, endpoint) as store:
+                previous = self.records(store).get(backup_id)
+                if previous is not None:
+                    if previous['state'] == 'retired' or any(previous.get(key) != value for key, value in expected.items()):
+                        raise BinlogArchiveError('Native topology recovery protection changed; prepare a new operation')
+                else:
+                    value = {**expected, 'created_at': time.time(), 'state': 'pending_native_reply',
+                        'native_protocol_source_uuid_attested': False, 'native_log_generation_attested': False,
+                        'database_recovery_verified': False, 'automatic_native_retry': False}
+                    store.change(lambda state: state.setdefault('mysql_backup_protection', {}).update({backup_id: value}))
+            tickets.append(Ticket(self.scoped(owner, endpoint), backup_id))
         return tickets
 
     @contextmanager

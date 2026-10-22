@@ -86,6 +86,69 @@ MYSQL-COMP-08: Qualification
 Implementation and qualification
 --------------------------------
 
+Native topology administration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server Availability menu opens ``MySQL native topologies``. Its native
+MySQL Shell9.7 Python AdminAPI adapter exposes instance configuration and core
+Cluster, ReplicaSet and ClusterSet inspections and operations. A method catalog
+retains each native argument order and distinguishes connection dictionaries
+from URI-only instance arguments. Registered instance references are resolved
+and authenticated separately; credential values never enter the saved argument
+JSON, review, generated script or command line. Host option-file deployment and
+account-password configuration retain their separate workflows.
+
+Read-only native inspections have their own durable receipts. Mutations require
+an exact seed UUID, a reviewed native method and explicit dispatch confirmation.
+Review and dispatch bind native instance/principal identities, registered route
+configuration, visible metadata identities, utility identity and execution host.
+Selected members and visible metadata members share native-UUID target fences
+with restore/replay operations. Partial claim failure releases only the job's
+own claims; unresolved operations retain protection. Native AdminAPI can change
+members that the principal cannot discover; the recorded scope does not attest
+an unseen member or exclude external administration.
+
+Arguments and returned JSON remain text at the browser boundary, preserving
+native integer digits. Integer arguments outside native signed/unsigned64 bounds
+are refused before review instead of accepting Shell's implicit string coercion.
+Shell9.7's native metadata JSON decoder uses a signed integer conversion and can
+clamp stored unsigned64 tags on options reads. Separate SQL text observations
+retain exact stored tag JSON and the view displays that limitation without
+rewriting the original Shell reply. The native method reply is saved independently from
+later object/status serialization and SQL observations. Native failure after
+invocation can have partial effects. Cancellation and utility exit never imply
+rollback, and uncertain mutations are never automatically repeated. Private
+native utility supervision supports explicit cleanup observation after worker
+loss. Current seed/metadata observations and an explicit uncertain-target
+acknowledgement do not establish workload readiness or physical recovery.
+Uncertain methods that can perform clone recovery cannot clear their target
+fences using utility termination alone: copying can continue on the server.
+Independent server-side completion reconciliation remains required for those
+interrupted recovery methods. Their protected unknown receipts remain visible.
+
+Operations that can select native clone recovery acquire conservative archive
+holds for registered and visible native sources before dispatch, including
+automatic recovery selection. Those holds survive missing replies and later
+observer failures. Inspect and explicitly retire them in managed backup
+protection. They do not attest the protocol donor, calculate a physical recovery
+chain or remove native clone files.
+
+Advertised member addresses must be reachable from the native utility's
+execution host. ``tools/cdeadmin_mysql_topology_qualification.py`` accepts three
+explicitly disposable peer routes and runs actual authenticated application
+requests, native configuration, Cluster/ReplicaSet creation, clone membership,
+primary switching, exact wide-integer options and independent replicated-data
+observations. Docker Desktop qualification places the actual application and
+native utility inside the owned fixture network; Docker is test infrastructure,
+not a substituted production tool runner. Both connector implementations and
+the built desktop require their own receipts.
+
+These adapters and scoped receipts do not complete the independently enumerated
+AdminAPI surface. Remaining account/router/routing-guideline interfaces,
+unreachable-member recovery, complete ClusterSet/failover/repair qualification,
+host deployment and broader lifecycle acceptance remain under
+``MY-HA-LIFECYCLE`` and ``INV-MYSQL``.
+
 MyISAM table maintenance includes reviewed native ``CACHE INDEX`` and
 ``LOAD INDEX INTO CACHE`` operations, with all or selected exact index names,
 default or configured named caches, and ``IGNORE LEAVES``. Native instance,
