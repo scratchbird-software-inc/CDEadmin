@@ -256,6 +256,50 @@ remain separate work. ``tools/cdeadmin_mysql_recovery_chain_qualification.py
 managed dump, archive and protection APIs. ``--use-c`` selects the C connector;
 optional browser/driver paths qualify the built graphical workflow.
 
+Full-instance logical backups
+=============================
+
+The server Backup menu includes ``MySQL full-instance backups``. This runs the
+pinned native MySQL Shell ``util.dumpInstance`` on the application execution
+host. A reviewed, explicitly started job can include selected schemas, native
+objects and data, and account/role/grant definitions. Native system-schema
+exclusions remain in force. Schema/user inclusion and exclusion, consistency,
+checksums, compression and the supported native dump options are exposed. The
+application assigns a private output directory. Closed Enterprise data masking
+is disabled; a client-side Shell option does not supply its server component.
+
+Jobs have durable owner/registration-bound receipts, progress, cancellation,
+offline inspection, paginated verified-file inventories and streamed downloads.
+Account SQL can contain authentication material. Review binds source UUID,
+authenticated principal/role, registration, utility and adapter identities.
+Execution rechecks the native source before invoking the utility. Creating a
+backup acquires an archive hold before native dispatch. Pins, explicit removal
+and interrupted-removal reconciliation retain the receipt after file removal.
+
+Native utility acknowledgement, file acceptance and restored-data acceptance
+are separate facts. An acknowledged utility return survives later file
+publication or bookkeeping failure. A stopped utility whose original reply was
+lost can have its exact native output explicitly verified and adopted without
+running the dump again or inventing an acknowledgement. Adoption checks native
+completion metadata, source identity and byte manifests. Incomplete output is
+refused. Private-script cleanup failure preserves the native outcome and offers
+an explicit, identity-checked retry on the original execution host.
+
+A verified consistent full-instance dump can be selected as a recovery-chain
+base. The active chain retains both its exact managed backup files and selected
+Shell archive files, even after the broad backup hold is separately retired.
+Chain retirement and file removal remain separate actions. File verification
+does not establish restored row values, definition equality, physical recovery
+or production cutover. Full-instance restore and independent recovery acceptance
+remain open under ``MY-CONTINUITY``.
+
+``tools/cdeadmin_mysql_instance_backup_qualification.py --output <outside-repo>
+--mysql-shell <native-9.7-mysqlsh>`` exercises actual instance dumps, schemas,
+cross-schema views, procedures, accounts/roles, native refusal, cancellation,
+lost replies, post-return publication failure, cleanup retry and chain/file
+protection. ``--use-c`` selects the C connector. Optional browser/driver paths
+exercise the built server context action, review, dispatch and file inspection.
+
 Community InnoDB page tracking now has seven dedicated server maintenance
 actions: inspect the active window, start/reset, stop, count page IDs, set the
 native backup ID, export a native index and purge tracking archives. These call

@@ -1890,7 +1890,7 @@ class RelationalAdministration:
         return errors
 
     @staticmethod
-    def _validate_mysql_shell_operation(operation, draft, route):
+    def _validate_mysql_shell_operation(operation, draft, route, *, require_database=True):
         backup_fields = {
             'path', 'consistent', 'skip_consistency_checks', 'ddl_only',
             'data_only', 'checksum', 'chunking', 'bytes_per_chunk',
@@ -1941,7 +1941,7 @@ class RelationalAdministration:
                     'message': f'MySQL Shell {field.replace("_", " ")} '
                                'is required.',
                 })
-        if not isinstance(route.get('database'), str) or not route['database']:
+        if require_database and (not isinstance(route.get('database'), str) or not route['database']):
             errors.append({
                 'field_id': None, 'code': 'mysql_shell_database_required',
                 'message': 'MySQL Shell requires a database target.',

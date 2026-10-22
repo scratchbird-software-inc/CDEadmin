@@ -178,7 +178,10 @@ def action(service,server,operation,request):
 def download(service,server,request,*,family='mysql'):
     from flask import send_file
     if not isinstance(request,dict) or set(request)!={'job_id','path'}:raise BinlogArchiveError('Select one native archive file')
-    if family=='mysql-raw':
+    if family == 'mysql-instance':
+        from .mysql_instance_backup_service import manager as instance_manager
+        jobs, owner, endpoint, _context = instance_manager(service, server)
+    elif family=='mysql-raw':
         from .mysql_raw_binlog_service import manager as raw_manager
         jobs,owner,endpoint,_context=raw_manager(service,server)
     else:jobs,owner,endpoint,_context=manager(service,server,family)

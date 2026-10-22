@@ -34,7 +34,7 @@ export default function MySQLRecoveryChains({post}) {
     <Button disabled={busy} onClick={()=>loadChains(0)}>Load recovery chains</Button>
     {backups && <>
       <Table size="small" aria-label="Recovery base backups"><TableHead><TableRow>{['Backup','Database','State','Select'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {backups.backups.map(row=><TableRow key={row.backup_id}><TableCell>{row.backup_id}</TableCell><TableCell>{row.database}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy || !row.native_dump_completion_acknowledged || !row.native_consistent || row.native_gtid_snapshot_inconsistent!==false} onClick={()=>{clear();setBase(row.backup_id);}}>Use backup {row.backup_id}</Button></TableCell></TableRow>)}
+        {backups.backups.map(row=><TableRow key={row.backup_id}><TableCell>{row.backup_id}</TableCell><TableCell>{row.database}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy || !(row.native_dump_completion_acknowledged || row.native_artifact_completion_observed) || !row.native_consistent || row.native_gtid_snapshot_inconsistent!==false} onClick={()=>{clear();setBase(row.backup_id);}}>Use backup {row.backup_id}</Button></TableCell></TableRow>)}
       </TableBody></Table><TablePagination component="div" count={backups.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={backups.offset/25} onPageChange={(_event,page)=>loadBackups(page*25)} />
     </>}
     {archives && <>

@@ -2725,12 +2725,12 @@ class ServerNode(PGChildNodeView):
                         return download(service, server, selected)
                     except (ValueError, TypeError, KeyError, OSError):
                         return bad_request('Invalid native capture file delivery request')
-                if request.form.get('action') in {'mysql_binlog_download','mariadb_binlog_download','mysql_raw_binlog_download'}:
+                if request.form.get('action') in {'mysql_binlog_download','mariadb_binlog_download','mysql_raw_binlog_download','mysql_instance_backup_download'}:
                     from pgadmin.cdeadmin.workspace.mysql_binlog_service import download
                     from pgadmin.cdeadmin.providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
                     body=request.form.get('payload','')
                     if len(body)>4096:return bad_request('File delivery request is too large')
-                    try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw'}.get(request.form['action'],'mysql'))
+                    try:return download(service,server,json.loads(body),family={'mariadb_binlog_download':'mariadb','mysql_raw_binlog_download':'mysql-raw','mysql_instance_backup_download':'mysql-instance'}.get(request.form['action'],'mysql'))
                     except (ValueError,TypeError,KeyError,OSError) as error:
                         return bad_request(str(error) if isinstance(error,BinlogArchiveError) else 'Invalid archive file delivery request')
                 if request.form.get('action') in {'postgresql_replication_temporary_stream_download', 'postgresql_replication_temporary_copy_download'}:
@@ -3163,6 +3163,11 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_instance_backup_review','mysql_instance_backup_start','mysql_instance_backup_status',
+                                'mysql_instance_backup_list','mysql_instance_backup_cancel','mysql_instance_backup_reconcile','mysql_instance_backup_cleanup_script',
+                                'mysql_instance_backup_files','mysql_instance_backup_remove_artifact','mysql_instance_backup_removal_reconcile','mysql_instance_backup_pin'}:
+                    try: payload = service.mysql_instance_backup(server, action.removeprefix('mysql_instance_backup_'), data.get('request'))
+                    except ProviderWorkspaceError as error: return bad_request(errormsg=str(error))
                 elif action in {'mysql_clone_review','mysql_clone_start','mysql_clone_status','mysql_clone_list','mysql_clone_cancel','mysql_clone_reconcile','mysql_clone_donors'}:
                     try:
                         payload=service.mysql_clone(server,action.removeprefix('mysql_clone_'),data.get('request'))

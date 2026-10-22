@@ -1637,6 +1637,15 @@ class ProviderWorkspaceService:
         except (CloneError,BinlogArchiveError) as error:raise ProviderWorkspaceError(str(error)) from None
         except OSError:raise ProviderWorkspaceError('Native clone receipt or backup protection storage is unavailable') from None
 
+    def mysql_instance_backup(self, server, operation, request):
+        from .mysql_instance_backup_service import action
+        from ..sdk.tooling import ProviderToolError
+        from ..sdk.relational import RelationalClientError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        try: return action(self, server, operation, request)
+        except (BinlogArchiveError, ProviderToolError, RelationalClientError) as error: raise ProviderWorkspaceError(str(error)) from None
+        except OSError: raise ProviderWorkspaceError('Native instance backup storage is unavailable') from None
+
     def mysql_binlog(self,server,operation,request):
         from .mysql_binlog_service import action
         from ..sdk.tooling import ProviderToolError

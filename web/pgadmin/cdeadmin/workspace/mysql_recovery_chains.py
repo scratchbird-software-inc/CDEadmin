@@ -63,13 +63,21 @@ def selection(request):
             'stop_mode': selected['stop_mode'], 'stop_gtid': selected['stop_gtid']}
 
 
-def inputs(registry, store, jobs, owner, endpoint, selected, client, route, connection):
+def inputs(registry, store, jobs, owner, endpoint, selected, client, route, connection, instance_backups=None):
     backup = registry.records(store).get(selected['backup_id'])
-    if (backup is None or backup.get('native_dump_completion_acknowledged') is not True or
+    if (backup is None or not (backup.get('native_dump_completion_acknowledged') is True or backup.get('native_artifact_completion_observed') is True) or
             backup.get('native_consistent') is not True or
             backup.get('native_gtid_snapshot_inconsistent') is not False):
         raise BinlogArchiveError('Select an acknowledged consistent managed logical dump with complete native GTID metadata')
-    _root, path = client._workspace_path(route.get('tool_workspace'), backup['artifact_path'], 'Recovery base dump')
+    if backup.get('backup_kind') == 'mysql_native_logical_instance':
+        if instance_backups is None:
+            raise BinlogArchiveError('Managed instance backup storage is unavailable')
+        original = instance_backups.load(backup['native_instance_job_id'], owner, endpoint)
+        path = instance_backups.directory(original) / 'archive'
+        if str(path) != backup['artifact_path'] or original.get('artifact_removed') or original.get('artifact_removal') or original.get('native_process_termination_confirmed') is not True:
+            raise BinlogArchiveError('Managed instance backup is unavailable or its native writer is unconfirmed')
+    else:
+        _root, path = client._workspace_path(route.get('tool_workspace'), backup['artifact_path'], 'Recovery base dump')
     files = manifest(path)
     if digest(files) != backup.get('artifact_manifest_digest'):
         raise BinlogArchiveError('Recovery base bytes changed since the native dump acknowledgement')
@@ -103,7 +111,7 @@ def inputs(registry, store, jobs, owner, endpoint, selected, client, route, conn
     calculation['selected_gtids_still_executed_on_source'] = True
     if manifest(path) != files:
         raise BinlogArchiveError('Recovery base changed during dependency review')
-    return {'backup_id': backup['backup_id'], 'backup_snapshot': digest(backup),
+    return {'backup_id': backup['backup_id'], 'backup_instance_job_id': backup.get('native_instance_job_id'), 'backup_snapshot': digest(backup),
             'backup_artifact_digest': digest(files), 'database': backup['database'],
             'archives': archive_inputs, 'native_identity': native, 'source': deepcopy(backup['source']),
             'selection': selected, 'coverage': calculation,
@@ -172,6 +180,8 @@ def action(service, server, jobs, owner, endpoint, operation, request):
         raise BinlogArchiveError('Native MySQL recovery dependency client is unavailable')
     client = provider.client; route = {key: value for key, value in payload['route'].items() if key not in POOL_ARGUMENTS}
     connection = None
+    from .mysql_instance_backup_service import manager as instance_manager
+    instance_backups, _, _, _ = instance_manager(service, server)
     try:
         connection = client._connect({'route': {**route, 'database': None, 'autocommit': True, 'read_timeout': 15}})
         with registry.store(owner, endpoint.id) as store:
@@ -185,7 +195,7 @@ def action(service, server, jobs, owner, endpoint, operation, request):
                 if review['expires_at'] < time.time():
                     raise BinlogArchiveError('Recovery dependency review expired')
                 selected = review['inputs']['selection']
-            observed = inputs(registry, store, jobs, owner, endpoint.id, selected, client, route, connection)
+            observed = inputs(registry, store, jobs, owner, endpoint.id, selected, client, route, connection, instance_backups)
             if operation == 'review':
                 review = {'review_id': str(uuid.uuid4()), 'created_at': time.time(), 'expires_at': time.time() + 300, 'inputs': observed}
                 review['review_digest'] = digest(review)

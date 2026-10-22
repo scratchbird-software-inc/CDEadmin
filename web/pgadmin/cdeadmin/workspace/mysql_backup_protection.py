@@ -88,6 +88,11 @@ class Registry:
     @staticmethod
     def protected(record, references):
         for row in references:
+            if record.get('operation') == 'mysql_full_instance_logical_backup':
+                if (row.get('protection_kind') == 'recovery_chain' and row.get('backup_instance_job_id') == record.get('job_id') or
+                        row.get('protection_kind') != 'recovery_chain' and row.get('native_instance_job_id') == record.get('job_id')):
+                    return True
+                continue
             if row.get('protection_kind') == 'recovery_chain':
                 if any(item['job_id'] == record.get('job_id') and
                        item['operation'] == record.get('operation') and
@@ -190,6 +195,10 @@ class Sink:
                   'artifact_path': path, 'created_at': time.time(), 'state': 'pending_native_reply',
                   'execution_host': socket.gethostname(), 'native_log_generation_attested': False,
                   'database_recovery_verified': False, 'automatic_native_retry': False}
+        if options.get('_instance_scope') is True:
+            record.update(backup_kind='mysql_native_logical_instance',
+                          native_instance_options=deepcopy(options['native_options']),
+                          native_instance_job_id=identity(options['_instance_job_id']))
         with self.registry.store(self.owner, self.endpoint) as store:
             store.change(lambda state: state.setdefault('mysql_backup_protection', {}).update({backup_id: record}))
         return Ticket(self, backup_id)
@@ -228,25 +237,31 @@ class Ticket:
             native_boundary_observed=status is not None, native_clone_observation_correlated=status is not None,
             native_backup_acknowledgement_unchanged=True)
 
-    def completed(self, top, done, result):
+    def completed(self, top, done, result, *, acknowledged=True):
         with self.sink.registry.store(self.sink.owner, self.sink.endpoint) as store:
             record = Registry.records(store)[self.backup_id]
         if record['state'] == 'retired':
-            return {**record, 'native_dump_acknowledged_after_retirement': True}
+            return {**record, 'native_dump_acknowledged_after_retirement': acknowledged}
         source = top.get('source', {})
+        instance = record.get('backup_kind') == 'mysql_native_logical_instance'
+        scope_matches = (top.get('origin') == 'dumpInstance' and isinstance(top.get('schemas'), list)
+                         if instance else top.get('origin') == 'dumpSchemas' and top.get('schemas') == [record['database']])
+        version_matches = (str(top.get('serverVersion')).split('-')[0] == str(record['source'].get('version')).split('-')[0]
+                           if instance else top.get('serverVersion') == record['source']['version'])
         if (source.get('sysvars', {}).get('server_uuid') != record['source']['server_uuid'] or
-                top.get('serverVersion') != record['source']['version'] or top.get('origin') != 'dumpSchemas' or
-                top.get('schemas') != [record['database']] or not isinstance(done.get('end'), str)):
+                not version_matches or not scope_matches or not isinstance(done.get('end'), str)):
             raise BinlogArchiveError('Native dump source metadata differs from its protection intent')
         boundary = source.get('binlog', {})
         boundary = {key: str(boundary[key]) for key in ('file', 'position', 'gtidExecuted') if key in boundary}
         files = result['artifact_manifest']
-        return self.update(state='native_dump_returned', native_completed_at=time.time(),
-            native_dump_completion_acknowledged=True,
+        known_ack = record.get('native_dump_completion_acknowledged') is True or acknowledged is True
+        return self.update(state='native_dump_returned' if known_ack else 'native_dump_artifact_verified', native_completed_at=time.time(),
+            native_dump_completion_acknowledged=known_ack, native_artifact_completion_observed=True,
             native_boundary=boundary, native_consistent=top.get('consistent') is True,
             native_gtid_snapshot_inconsistent=top.get('gtidExecutedInconsistent') is True,
             artifact_manifest_digest=digest(files), artifact_file_count=len(files),
-            artifact_total_bytes=str(result['artifact_total_bytes']))
+            artifact_total_bytes=str(result['artifact_total_bytes']),
+            **({'native_schemas': deepcopy(top['schemas']), 'native_users': deepcopy(top.get('users'))} if instance else {}))
 
 
 def finish_clone(tickets, outcome, observed):

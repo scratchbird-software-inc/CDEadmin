@@ -33,6 +33,7 @@ import DuckDBOperationReceipts from './DuckDBOperationReceipts';
 import MySQLClone from './MySQLClone';
 import MySQLHost from './MySQLHost';
 import MySQLBinlogArchives from './MySQLBinlogArchives';
+import MySQLInstanceBackups from './MySQLInstanceBackups';
 import MySQLBinlogReplay from './MySQLBinlogReplay';
 import SQLiteRecovery from './SQLiteRecovery';
 import MySQLMonitoring from './MySQLMonitoring';
@@ -295,7 +296,7 @@ export function showProviderWorkspace(
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const closeGuards = createCloseGuardRegistry();
   const onClose = () => workspace.close(panelId);
-  const serverTool=initialTab==='mysql-host' ? <MySQLHost post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='duckdb-session-receipts' ? <DuckDBOperationReceipts databaseTargetId={databaseTargetId}
+  const serverTool=initialTab==='mysql-instance-backups' ? <MySQLInstanceBackups endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-host' ? <MySQLHost post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='duckdb-session-receipts' ? <DuckDBOperationReceipts databaseTargetId={databaseTargetId}
     post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
     onTargetCatalogChanged={() => nodeObj.callbacks.refresh.call(nodeObj,null,itemNodeData)}
     post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?

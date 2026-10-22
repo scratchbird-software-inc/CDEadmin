@@ -87,6 +87,11 @@ MySQL
   confirmed server read lock. It requires complete checksum coverage and stable
   artifact/native identities. It does not establish physical recovery, object
   definition equality, later log replay or production cutover.
+  Server-scoped native Shell instance dumps now have a dedicated reviewed job
+  workflow with selected schemas, native objects/data and optional accounts,
+  roles and grants. Durable outcomes, cancellation, explicit file adoption after
+  reply loss, downloads and protection are separate from full-instance restore
+  and independently verified data/definition recovery, which remain open.
 * MY-ARCHIVES: Complete backup/log-dependency-aware archive protection and
   retention. Separate native source-log administration now exposes reviewed TO
   and BEFORE purges, independent observations, durable acknowledgement and
@@ -134,6 +139,9 @@ MySQL
   Native source holds now also protect the same owner's registration aliases
   under one admission/removal lock. This does not attest log-generation epochs,
   discover external backups or offline replicas, or verify a recovered database.
+  Managed full-instance dump bases also retain their exact private backup files
+  while an active chain depends on them; broad-hold retirement does not release
+  those files or the chain's selected archives.
 * Native SQL server control now exposes reviewed SHUTDOWN/RESTART requests with
   all-client disconnection consent and request-only acknowledgement. Native
   supervision and privileges remain engine requirements. Separate owned fixture
