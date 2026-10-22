@@ -19,7 +19,7 @@ sys.path[:0] = [str(ROOT), str(ROOT/'web'), str(ROOT/'tools')]
 from cdeadmin_mysql_dump_verification_qualification import setup_application
 
 
-def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
+def qualify(output, routes, password, *, use_c=False, browser_exchange=False, routing_only=False, desktop_only=False):
     from flask import url_for
     from pgadmin.model import db, User, ServerGroup, Server
     from pgadmin.cdeadmin.endpoints.profiles import registration_profile
@@ -34,6 +34,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
              'checks': [], 'connector_classes': [], 'operations': []}
     paths = ['tools/cdeadmin_mysql_topology_qualification.py',
         'tools/mysql_topology_lingering_qualification.py',
+        'tools/mysql_routing_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mysql_topology.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_jobs.py',
         'web/pgadmin/cdeadmin/workspace/mysql_topology_service.py',
@@ -99,7 +100,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         assert http('members', {'offset': 0, 'limit': 2})['total'] == 3
         proof['checks'].append('authenticated-native-9.7-seed-catalog-and-owned-paged-member-inspection-with-actual-selected-driver')
 
-        def options(operation, arguments, peer=0):
+        def options(operation, arguments, peer=0, *, guideline=''):
             witnesses = []
             if operation in {'cluster.add_instance','replica_set.add_instance'}:
                 current = http('inspect', peer=peer)
@@ -109,6 +110,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
                 witnesses = [item['server_id'] for index,item in enumerate(registrations)
                     if seeds[index]['identity']['server_uuid'] in allowed]
             return {'operation': operation, 'arguments_json': json.dumps(arguments),
+                **({'guideline_name': guideline} if '.guideline.' in operation else {}),
                 'context_name': '', 'context_options_json': '{}', 'use_advertised_endpoint': True,
                 'witness_server_ids': witnesses,
                 'target_confirmation': seeds[peer]['identity']['server_uuid'], 'timeout_seconds': 240}
@@ -121,8 +123,8 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
             (output/'last-job.json').write_text(json.dumps(value, indent=2)+'\n')
             return value
 
-        def execute(operation, arguments, peer=0, *, inspection=False, expect_returned=True):
-            selected = options(operation, arguments, peer)
+        def execute(operation, arguments, peer=0, *, inspection=False, expect_returned=True, guideline=''):
+            selected = options(operation, arguments, peer, guideline=guideline)
             if inspection:
                 value = wait(http('inspect_native', {'options': selected}, peer=peer), peer)
             else:
@@ -159,6 +161,42 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
                     if time.monotonic() > deadline: raise TimeoutError('Independent replicated data deadline')
                     time.sleep(.1)
 
+        def desktop(uncertain_job_id=None):
+            nonlocal http_server
+            from werkzeug.serving import make_server
+            http_server=make_server('0.0.0.0',5000,app,threaded=True)
+            threading.Thread(target=http_server.serve_forever,daemon=True).start()
+            request={'server_id':registrations[0]['server_id'],'target_uuid':seeds[0]['identity']['server_uuid'],
+                'recovery_member_indexes':[0] if desktop_only else [0,1,2]}
+            if uncertain_job_id:request['uncertain_job_id']=uncertain_job_id
+            (output/'browser-request.json').write_text(json.dumps(request)+'\n')
+            deadline=time.monotonic()+300
+            while not (output/'browser-response.json').exists():
+                if time.monotonic()>deadline:raise TimeoutError('External native desktop qualification deadline')
+                time.sleep(.25)
+            proof['browser']=json.loads((output/'browser-response.json').read_text())
+            assert proof['browser']['complete'],proof['browser']
+        if desktop_only:
+            if not browser_exchange:raise ValueError('Desktop-only qualification requires a browser exchange')
+            execute('instance.configure_cluster',[{'restart':True}])
+            execute('instance.create_cluster',['sr_desktop_cluster'])
+            execute('cluster.set_option',['tag:wide',2**63])
+            desktop()
+            proof['complete']=True
+            return proof
+        if routing_only:
+            from mysql_routing_qualification import qualify as qualify_routing
+            for peer in (0,1):execute('instance.configure_cluster', [{'restart': True}], peer)
+            execute('instance.create_cluster',['sr_routing_cluster'],peer=0)
+            proof['routing']={'cluster':qualify_routing('cluster',0,execute,http,options,sql)}
+            execute('instance.create_cluster',['sr_routing_domain_cluster'],peer=1)
+            execute('cluster.create_cluster_set',['sr_routing_domain'],peer=1)
+            proof['routing']['cluster_set']=qualify_routing('cluster_set',1,execute,http,options,sql)
+            execute('instance.configure_replica_set',[{'restart':True}],peer=2)
+            execute('instance.create_replica_set',['sr_routing_replicas'],peer=2)
+            proof['routing']['replica_set']=qualify_routing('replica_set',2,execute,http,options,sql)
+            proof['complete']=True
+            return proof
         execute('instance.check_configuration', [{}], inspection=True)
         for peer in range(3): execute('instance.configure_cluster', [{'restart': True}], peer)
         execute('instance.create_cluster', ['sr_application_cluster', {'gtidSetIsComplete': True}])
@@ -222,7 +260,6 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         proof['checks'].append('native-metadata-identity-change-refuses-stale-reviewed-mutation-before-dispatch')
 
         if browser_exchange:
-            from werkzeug.serving import make_server
             execute('cluster.remove_instance', [{'server_id': registrations[2]['server_id']}], peer=1)
             TopologyTransport.execute = missing_reply
             try:
@@ -231,19 +268,14 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
             finally: TopologyTransport.execute = original_execute
             assert browser_unknown['native_operation_outcome']=='unknown'
             wait_data((0,1,2))
-            http_server = make_server('0.0.0.0', 5000, app, threaded=True)
-            threading.Thread(target=http_server.serve_forever, daemon=True).start()
-            (output/'browser-request.json').write_text(json.dumps({'server_id': registrations[0]['server_id'],
-                'target_uuid': seeds[0]['identity']['server_uuid'],'uncertain_job_id':browser_unknown['job_id']})+'\n')
-            deadline = time.monotonic()+300
-            while not (output/'browser-response.json').exists():
-                if time.monotonic() > deadline: raise TimeoutError('External native desktop qualification deadline')
-                time.sleep(.25)
-            proof['browser'] = json.loads((output/'browser-response.json').read_text())
-            assert proof['browser']['complete'], proof['browser']
+            desktop(browser_unknown['job_id'])
             browser_acknowledged=http('status',{'job_id':browser_unknown['job_id']})
             assert browser_acknowledged['native_operation_outcome']=='unknown' and browser_acknowledged['target_state_acknowledged_at']
-        execute('cluster.dissolve', [{'force': True}], peer=1)
+        from mysql_routing_qualification import qualify as qualify_routing
+        proof['routing'] = {'cluster': qualify_routing('cluster', 1, execute, http, options, sql)}
+        execute('cluster.create_cluster_set', ['sr_application_domain'])
+        proof['routing']['cluster_set'] = qualify_routing('cluster_set', 1, execute, http, options, sql)
+        execute('cluster_set.dissolve', [{'force': True}], peer=1)
         # Dissolution leaves the data in place and stops native replication.
         for peer in range(3):
             sql(peer, 'SET GLOBAL super_read_only=OFF')
@@ -255,6 +287,7 @@ def qualify(output, routes, password, *, use_c=False, browser_exchange=False):
         assert sql(2, 'SELECT @@super_read_only AS read_only') == [{'read_only': 0}]
         wait_data((1, 2))
         execute('replica_set.status', [{'extended': 1}], peer=2, inspection=True)
+        proof['routing']['replica_set'] = qualify_routing('replica_set', 2, execute, http, options, sql)
         execute('replica_set.dissolve', [{'force': True}], peer=2)
         proof['checks'].append('native-replicaset-create-uri-typed-clone-join-primary-switch-data-observation-and-dissolution')
         from mysql_topology_lingering_qualification import qualify as lingering, qualify_privileges
@@ -283,7 +316,7 @@ def browser(base_url, output, request, binary, driver_binary):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.common.exceptions import StaleElementReferenceException
+    from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
     from cdeadmin_ui_evidence import ensure_data_explorer, expand
     driver = None
     try:
@@ -291,15 +324,38 @@ def browser(base_url, output, request, binary, driver_binary):
         for flag in ('--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1800,1200'):
             options.add_argument(flag)
         options.add_argument('--user-data-dir='+str(output/'browser-profile'))
+        options.add_experimental_option('prefs', {'download.default_directory': str(output/'browser-downloads'),
+            'download.prompt_for_download': False})
         options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
         driver = webdriver.Chrome(options=options, service=Service(driver_binary))
         driver.get(base_url+'/browser/'); wait = WebDriverWait(driver, 120,
             ignored_exceptions=(StaleElementReferenceException,))
-        ensure_data_explorer(wait); expand(wait, 'Connectors'); expand(wait, 'MySQL')
+        diagnostics='''window.srTopologyApi=[];
+const send=XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send=function(body){
+  let request;try{request=JSON.parse(body);}catch(e){}
+  if(request?.action?.startsWith('mysql_topology_'))this.addEventListener('load',()=>{
+    let response;try{response=JSON.parse(this.responseText);}catch(e){}
+    window.srTopologyApi.push({action:request.action,status:this.status,error:response?.errormsg || null});
+    if(window.srTopologyApi.length>20)window.srTopologyApi.shift();
+  });
+  return send.apply(this,arguments);
+};'''
         def target(browser):
             return next((node for node in browser.find_elements(By.CSS_SELECTOR, '.file-name') if node.is_displayed() and
                 browser.execute_script('const t=window.pgAdmin.Browser.tree;const d=t.itemData(t.itemFrom(arguments[0].closest(".file-entry")));return d?._type==="server" && String(d._id ?? d.id)===String(arguments[1]);', node, request['server_id'])), None)
-        ActionChains(driver).context_click(wait.until(target)).perform()
+        for attempt in range(2):
+            if attempt:driver.get(base_url+'/browser/')
+            ensure_data_explorer(wait);expand(wait,'Connectors');expand(wait,'MySQL')
+            try:
+                selected=WebDriverWait(driver,30,ignored_exceptions=(StaleElementReferenceException,)).until(target)
+                break
+            except TimeoutException:
+                driver.save_screenshot(str(output/('native-tree-navigation-'+str(attempt)+'.png')))
+                if attempt:raise
+        # No provider action has occurred before the optional navigation retry.
+        driver.execute_script(diagnostics)
+        ActionChains(driver).context_click(selected).perform()
         for label in ('Availability', 'MySQL native topologies...'):
             wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="menuitem"]') if
                 node.is_displayed() and node.text.strip() == label), None)).click()
@@ -311,12 +367,29 @@ def browser(base_url, output, request, binary, driver_binary):
                         if node.is_displayed(): node.click(); return True
                 return False
             wait.until(attempt)
+        def reviewed(browser):
+            errors=[node.get_attribute('textContent') for node in browser.find_elements(By.CSS_SELECTOR,'[role="alert"]')
+                if node.get_attribute('class') and 'MuiAlert-colorError' in node.get_attribute('class')]
+            if errors:raise AssertionError('Desktop review refused: '+'; '.join(errors))
+            return next(iter(browser.find_elements(By.CSS_SELECTOR,'[aria-label="Native topology review"]')),None)
+        def control(label,textarea=False):
+            tag='textarea' if textarea else 'input'
+            def find(browser):
+                for item in browser.find_elements(By.TAG_NAME,'label'):
+                    if not item.get_attribute('textContent').startswith(label):continue
+                    identifier=item.get_attribute('for')
+                    if not identifier:continue
+                    for node in browser.find_elements(By.ID,identifier):
+                        if node.tag_name!=tag or node.get_property('readOnly') or node.get_attribute('aria-hidden')=='true':continue
+                        browser.execute_script('arguments[0].scrollIntoView({block:"center"});',node)
+                        if node.is_displayed() and node.is_enabled():return node
+                return None
+            return wait.until(find)
         def field(label, value, textarea=False):
-            tag = 'textarea' if textarea else 'input'
-            node = driver.find_element(By.XPATH, '//label[contains(text(),'+json.dumps(label)+')]/following::'+tag+'[1]')
+            node=control(label,textarea)
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});', node)
             node.send_keys(Keys.CONTROL, 'a'); node.send_keys(Keys.BACKSPACE); node.send_keys(value)
-            wait.until(lambda _browser: node.get_attribute('value') == value)
+            wait.until(lambda _browser: control(label,textarea).get_attribute('value') == value)
         click('Load native topology methods')
         if request.get('uncertain_job_id'):
             click('Load native topology jobs');click('Inspect topology job '+request['uncertain_job_id'])
@@ -330,7 +403,7 @@ def browser(base_url, output, request, binary, driver_binary):
         click('Run native topology inspection')
         wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         click('Load registered topology instances')
-        for index in range(3):
+        for index in request.get('recovery_member_indexes',[0,1,2]):
             checkbox = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Observe recovery member Owned MySQL topology '+str(index)+'"]'))
             driver.execute_script('arguments[0].scrollIntoView({block:"center"});', checkbox)
             checkbox.click()
@@ -341,7 +414,7 @@ def browser(base_url, output, request, binary, driver_binary):
         field('Native topology arguments', '["tag:browserWide",9223372036854775808]', True)
         field('Confirm topology seed UUID', request['target_uuid'])
         click('Review native topology change')
-        review = wait.until(lambda b: b.find_element(By.CSS_SELECTOR, '[aria-label="Native topology review"]'))
+        review = wait.until(reviewed)
         assert '9223372036854775808' in review.get_attribute('textContent')
         click('Confirm and start native topology change')
         wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
@@ -350,15 +423,68 @@ def browser(base_url, output, request, binary, driver_binary):
         assert any('options decoding can clamp' in node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR, '[role="alert"]'))
         click('Observe current topology target')
         wait.until(lambda b: any('native_lock_free' in node.get_attribute('textContent') for node in b.find_elements(By.TAG_NAME, 'pre')))
+        def select_method(identifier):
+            selector=driver.find_element(By.XPATH, '//label[contains(text(),"Native topology method")]/following::*[@role="combobox"][1]')
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',selector)
+            selector.click()
+            option=wait.until(lambda b: next((node for node in b.find_elements(By.CSS_SELECTOR, '[role="option"]') if node.text == identifier), None))
+            driver.execute_script('arguments[0].scrollIntoView({block:"center"});',option)
+            option.click()
+        def change(identifier, arguments, guideline=None):
+            select_method(identifier)
+            if guideline is not None:field('Native routing guideline name', guideline)
+            if arguments is not None:field('Native topology arguments', json.dumps(arguments), True)
+            click('Review native topology change')
+            wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native topology review"]'))
+            click('Confirm and start native topology change')
+            wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
+        guideline='sr_desktop_routes'
+        change('cluster.create_routing_guideline',[guideline])
+        change('cluster.guideline.add_destination',['desktop_primary','$.server.memberRole = PRIMARY'],guideline)
+        change('cluster.guideline.add_route',['desktop_route','$.session.targetPort = $.router.port.ro',
+            ['round-robin(desktop_primary)'],{'enabled':False}],guideline)
+        # Execute the displayed native templates unchanged, including optional
+        # dictionary omission, ROLE/session expressions and real class names.
+        change('cluster.create_routing_guideline',None)
+        change('cluster.guideline.add_destination',None,guideline)
+        change('cluster.guideline.add_route',None,guideline)
+        change('cluster.guideline.set_destination_option',None,guideline)
+        change('cluster.guideline.set_route_option',None,guideline)
+        select_method('cluster.guideline.export');click('Run native topology inspection')
+        click('Download native routing guideline JSON')
+        downloaded=output/'browser-downloads/mysql-routing-guideline.json'
+        wait.until(lambda _b: downloaded.is_file())
+        document=json.loads(downloaded.read_text())
+        assert document['name']==guideline
+        assert any(row['name']=='desktop_route' and row['enabled'] is False for row in document['routes']),document
+        select_method('cluster.import_routing_guideline')
+        invalid=output/'invalid-utf8-guideline.json';invalid.write_bytes(b'{"name":"\xff"}')
+        before=control('Native topology arguments',True).get_attribute('value')
+        driver.find_element(By.CSS_SELECTOR,'input[aria-label="Routing guideline JSON file"]').send_keys(str(invalid))
+        wait.until(lambda b:any('must contain valid UTF-8' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR,'[role="alert"]')))
+        assert control('Native topology arguments',True).get_attribute('value')==before
+        driver.find_element(By.CSS_SELECTOR,'input[aria-label="Routing guideline JSON file"]').send_keys(str(downloaded))
+        wait.until(lambda _b: guideline in control('Native topology arguments',True).get_attribute('value'))
+        # Explicit replacement is reviewed with the native force option.
+        field('Native topology arguments', '['+downloaded.read_text()+',{"force":true}]',True)
+        click('Review native topology change');wait.until(lambda b:b.find_elements(By.CSS_SELECTOR,'[aria-label="Native topology review"]'))
+        click('Confirm and start native topology change')
+        wait.until(lambda b: any('outcome: returned.' in node.get_attribute('textContent') for node in b.find_elements(By.CSS_SELECTOR, '[role="alert"]')))
         severe = [entry for entry in driver.get_log('browser') if entry['level'] == 'SEVERE']
         (output/'browser-console.json').write_text(json.dumps(severe, indent=2)+'\n')
         driver.save_screenshot(str(output/'native-topology.png'))
         assert not severe, severe
         return {'complete': True, 'checks': ['native-context-menu', 'read-only-native-inspection',
             'exact-uint64-argument-review', 'explicit-native-mutation', 'separate-target-observation',
-            'native-uncertain-clone-recovery-observation-and-explicit-target-acknowledgement'], 'severe_errors': 0}
+            *(['native-uncertain-clone-recovery-observation-and-explicit-target-acknowledgement'] if request.get('uncertain_job_id') else []),
+            'native-guideline-create-destination-route-edit-download-and-upload-reviewed-force-import',
+            'invalid-UTF8-file-is-refused-without-replacement-or-import'], 'severe_errors': 0}
     except Exception:
-        if driver: driver.save_screenshot(str(output/'native-topology-failure.png'))
+        if driver:
+            driver.save_screenshot(str(output/'native-topology-failure.png'))
+            (output/'browser-failure-alerts.json').write_text(json.dumps([node.get_attribute('textContent') for node in driver.find_elements(By.CSS_SELECTOR,'[role="alert"]')],indent=2)+'\n')
+            (output/'browser-failure-console.json').write_text(json.dumps(driver.get_log('browser'),indent=2)+'\n')
+            (output/'browser-failure-api.json').write_text(json.dumps(driver.execute_script('return window.srTopologyApi || []'),indent=2)+'\n')
         raise
     finally:
         if driver: driver.quit()
@@ -369,6 +495,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True); parser.add_argument('--routes', required=True)
     parser.add_argument('--password-env', required=True); parser.add_argument('--mysql-shell', required=True)
     parser.add_argument('--use-c', action='store_true'); parser.add_argument('--browser-exchange', action='store_true')
+    parser.add_argument('--routing-only', action='store_true')
+    parser.add_argument('--desktop-only', action='store_true')
     args = parser.parse_args()
     output = Path(args.output).resolve()
     if output == ROOT or ROOT in output.parents: raise ValueError('Keep native evidence outside source')
@@ -376,4 +504,5 @@ if __name__ == '__main__':
     os.environ['CDEADMIN_MYSQLSH_BINARY'] = args.mysql_shell
     selected = json.loads(Path(args.routes).read_text())
     if not isinstance(selected, list) or len(selected) != 3: raise ValueError('Select three disposable native peers')
-    qualify(output, selected, os.environ[args.password_env], use_c=args.use_c, browser_exchange=args.browser_exchange)
+    qualify(output, selected, os.environ[args.password_env], use_c=args.use_c,
+        browser_exchange=args.browser_exchange, routing_only=args.routing_only, desktop_only=args.desktop_only)

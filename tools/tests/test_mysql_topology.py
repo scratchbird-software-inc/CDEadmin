@@ -29,6 +29,40 @@ def test_native_json_integer_and_method_specific_instance_types_remain_exact():
     assert native.CALLS['cluster_set.create_replica_cluster']['instance_format']=='uri'
 
 
+@pytest.mark.parametrize('context',['cluster','replica_set','cluster_set'])
+def test_guidelines_accept_native_documents_without_accepting_execution_host_paths(context):
+    value=selected(context+'.import_routing_guideline','[{"name":"routes","native_number":9223372036854775808},{}]')
+    assert native.parse(value['arguments_json'])[0]['native_number']==2**63
+    with pytest.raises(native.BinlogArchiveError,match='JSON object'):
+        selected(context+'.import_routing_guideline','["/arbitrary/file.json"]')
+    assert native.CALLS[context+'.guideline.export']['read_only'] is True
+    with pytest.raises(native.BinlogArchiveError):selected(context+'.guideline.export','["/arbitrary/file.json"]')
+    assert native.options({'operation':context+'.guideline.rename','guideline_name':'old',
+        'arguments_json':'["new"]','target_confirmation':str(uuid.uuid4())})['guideline_name']=='old'
+    assert native.CALLS[context+'.guideline.rename']['arguments']==['name']
+
+
+def test_router_global_and_selected_overloads_do_not_lose_null_or_false():
+    assert native.parse(selected('cluster.set_router_option','["host::router","guideline",null]')['arguments_json'])==['host::router','guideline',None]
+    assert native.CALLS['cluster.set_router_option']['method']=='set_routing_option'
+    assert native.parse(selected('replica_set.guideline.set_route_option','["route","enabled",false]')['arguments_json'])==['route','enabled',False]
+    with pytest.raises(native.BinlogArchiveError):selected('cluster.guideline.add_route','["route","true",[{}]]')
+    assert native.CALLS['cluster_set.list_routers']['arguments']==['router?']
+
+
+def test_reviewed_routing_documents_and_router_options_are_native_text_not_float_values():
+    queries=[]
+    def execute(_connection,source,parameters=()):
+        queries.append(source)
+        if source.startswith('SELECT TABLE_NAME'):
+            return [{'TABLE_NAME':'routing_guidelines','COLUMN_NAME':name} for name in ('guideline_id','name','guideline')]
+        return [{'identity':'owned','name':'route','document':'{"native":9223372036854775808}'}]
+    from unittest.mock import patch
+    with patch.object(native,'rows',execute):value=native.metadata(object())
+    assert 'CAST(`guideline` AS CHAR)' in queries[-1]
+    assert value['results'][-1][0][-1]=='{"native":9223372036854775808}'
+
+
 @pytest.mark.parametrize('change',[{'operation':[]},{'operation':'unsupported'},
     {'arguments_json':'["tag:wide",NaN]'}, {'arguments_json':'["tag:wide",1e9999]'}, {'arguments_json':'["tag:wide"]'},
     {'arguments_json':'["tag:wide",18446744073709551616]'},
@@ -41,7 +75,8 @@ def test_unowned_instances_and_inline_native_credentials_never_enter_a_review(ch
         'arguments_json':'["tag:wide",1]','target_confirmation':str(uuid.uuid4()),**change})
 
 
-def test_native_control_redaction_preserves_booleans_and_uint64_result_json(tmp_path,monkeypatch):
+@pytest.mark.parametrize("exported",[None,'{ "enabled": true, "wide": 9223372036854775808 }','{"enabled":true,"label":"true"}'])
+def test_native_control_redaction_preserves_booleans_and_uint64_result_json(tmp_path,monkeypatch,exported):
     program={'executable_sha256':'owned','execution_host':{'kind':'application-host'}}
     monkeypatch.setattr(native,'program_identity',lambda *_args,**_kwargs:program)
     class Runner:
@@ -52,15 +87,27 @@ def test_native_control_redaction_preserves_booleans_and_uint64_result_json(tmp_
                 any(isinstance(item,ast.Name) and item.id=='settings' for item in node.targets))
             marker=json.loads(settings.value.args[0].value)['marker']
             control={'native_load_invoked':True,'native_load_returned':True,'stage':'returned','native_error':None,
-                'result_json':'{"enabled":true,"wide":9223372036854775808,"private":"true"}',
+                'result_json':'{"enabled":true,"wide":9223372036854775808,"private":"true","tags":{"guideline_export_json":"true"}}',
                 'observation_error':None}
+            if exported is not None:control['result_json']=json.dumps({'guideline_export_json':exported})
             return {'stdout':marker+json.dumps(control)+'\n','stderr':'native text true',
                 'return_code':0,'executable_sha256':'owned','process_observation':{'cleanup_confirmed':True}}
     client=SimpleNamespace(_tool_runner=Runner())
     with SecretLease(b'{"seed":{"password":"true"}}') as credentials:
-        result=native.run(client,{'host':'owned'},credentials,selected(),
+        result=native.run(client,{'host':'owned'},credentials,
+            selected() if exported is None else selected('cluster.guideline.export','[]'),
             {'connection':{'host':'owned','port':3306}}, {},tmp_path,program)
-    assert json.loads(result['control']['result_json'])=={'enabled':True,'wide':9223372036854775808,'private':'[redacted]'}
+    if exported is None:
+        assert json.loads(result['control']['result_json'])=={'enabled':True,'wide':9223372036854775808,'private':'[redacted]',
+            'tags':{'guideline_export_json':'[redacted]'}}
+    else:
+        value=json.loads(result['control']['result_json'])
+        if 'label' in exported:
+            assert value['guideline_export_redacted'] is True
+            assert json.loads(value['guideline_export_json'])=={'enabled':True,'label':'[redacted]'}
+        else:
+            assert value['guideline_export_json']==exported
+            assert value['guideline_export_redacted'] is False
     assert result['control']['native_load_returned'] is True and 'true' not in result['output_text']
 
 

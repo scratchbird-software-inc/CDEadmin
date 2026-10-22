@@ -173,9 +173,21 @@ MySQL
   Native method-specific instance arguments, exact JSON integers, shared
   known-member target fences and conservative clone-recovery archive holds are
   implemented. Native/API/browser receipts qualify their recorded operations;
-  they do not close the remaining AdminAPI account/router/routing-guideline
-  interfaces, unreachable-member recovery or full topology failure/repair
-  acceptance.
+  they do not close unreachable-member recovery or full topology failure/repair
+  acceptance. Native Router metadata/options and routing guideline creation,
+  active selection, editing, copying, renaming, removal and private-file JSON
+  import/export now have dedicated native method workflows for Cluster,
+  ReplicaSet and ClusterSet. Native document and Router configuration changes
+  invalidate stale reviews. Live selected-Router mutation/removal acceptance,
+  Router deployment/bootstrap and actual traffic/failure tests remain open,
+  alongside AdminAPI account setup, fanout SQL execution and host sandbox
+  lifecycle integration.
+  New topology jobs also retain admitted native utility/member ownership
+  evidence before dispatch. Uncertain clone recovery requires independent
+  original-client absence and idle server clone observations before explicit
+  target acknowledgement. Original unknown outcomes remain unknown; older
+  jobs, incomplete member witnesses, unavailable targets and denied/lost
+  instrumentation retain protection.
   Pinned SSH host diagnostics now bind the actual MySQL host/data-directory UUID
   and expose reviewed native configuration validation with durable remote
   receipts. Selected option-file graphs now capture nested includes, directory

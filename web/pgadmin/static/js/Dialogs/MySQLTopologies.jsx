@@ -4,12 +4,15 @@ import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,Tabl
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 function example(operation,member) {
-  return JSON.stringify(operation.arguments.map(value=> {
+  return JSON.stringify(operation.arguments.filter(value=>!value.endsWith('?')).map(value=> {
     const kind=value.replace(/\?$/,'');
     if(kind==='options')return {};
+    if(kind==='document')return {};
+    if(kind==='destinations')return ['round-robin(Primary)'];
+    if(kind==='match')return operation.method==='add_route' ? '$.session.targetPort = $.router.port.ro' : '$.server.memberRole = SECONDARY';
     if(kind==='instance')return member ? {server_id:member.server_id} : null;
-    if(kind==='value')return null;
-    if(kind==='option')return 'tag:label';
+    if(kind==='value')return operation.method==='set_route_option' ? true : operation.method==='set_destination_option' ? '$.server.memberRole = SECONDARY' : operation.method==='set_routing_option' ? 0 : null;
+    if(kind==='option')return operation.method==='set_route_option' ? 'enabled' : operation.method==='set_destination_option' ? 'match' : operation.method==='set_routing_option' ? 'stats_updates_frequency' : 'tag:label';
     return value.endsWith('?') ? null : 'name';
   }),null,2);
 }
@@ -19,15 +22,22 @@ export default function MySQLTopologies({post}) {
   const [argumentsText,setArgumentsText]=useState('[{}]'),[contextName,setContextName]=useState(''),[contextOptions,setContextOptions]=useState('{}');
   const [advertised,setAdvertised]=useState(false),[timeout,setTimeout]=useState('3600');
   const [witnessIds,setWitnessIds]=useState([]);
+  const [guidelineName,setGuidelineName]=useState('');
   const [seed,setSeed]=useState(null),[confirmation,setConfirmation]=useState(''),[members,setMembers]=useState(null),[member,setMember]=useState(null);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[jobs,setJobs]=useState(null),[observation,setObservation]=useState(null);
-  const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0);
+  const [busy,setBusy]=useState(false),[error,setError]=useState('');const generation=useRef(0),inputVersion=useRef(0);
   const operation=catalog?.operations.find(value=>value.id===operationId);
   const recovery=receipt?.reconciliation?.server_recovery_quiescence;
+  let exported,exportRedacted;
+  try {
+    const result=JSON.parse(receipt?.result?.control?.result_json || 'null');
+    exported=result?.guideline_export_json;exportRedacted=result?.guideline_export_redacted;
+  } catch { /* Keep the original native result visible. */ }
   useEffect(()=> {
     generation.current++;setCatalog(null);setSeed(null);setMembers(null);setMember(null);setReview(null);setReceipt(null);setJobs(null);setObservation(null);setBusy(false);setError('');
     setOperationId('instance.check_configuration');setArgumentsText('[{}]');setContextName('');setContextOptions('{}');setAdvertised(false);setTimeout('3600');setConfirmation('');
     setWitnessIds([]);
+    setGuidelineName('');
     return ()=>{generation.current++;};
   },[post]);
   const run=async(action,request,accept)=> {
@@ -49,21 +59,22 @@ export default function MySQLTopologies({post}) {
   },[receipt?.job_id,receipt?.state,post]);
   const selected=()=>({operation:operationId,arguments_json:argumentsText,context_name:contextName,
     context_options_json:contextOptions,use_advertised_endpoint:advertised,
+    ...(operation?.guideline ? {guideline_name:guidelineName} : {}),
     witness_server_ids:witnessIds,
     timeout_seconds:timeout.trim()==='null' ? null : Number(timeout),
     target_confirmation:operation?.read_only ? seed?.identity.server_uuid : confirmation});
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
   const loadMembers=offset=>run('members',{offset,limit:25},setMembers);
-  const invalidate=()=>setReview(null);
+  const invalidate=()=>{inputVersion.current++;setReview(null);};
   return <Box sx={{p:2}}>
-    <Alert severity="info">Manage native MySQL instance configuration, InnoDB Cluster, ReplicaSet and ClusterSet operations. Native utility replies and current topology observations are separate from workload readiness. Closing this view does not cancel a job.</Alert>
+    <Alert severity="info">Manage native MySQL instance configuration, InnoDB Cluster, ReplicaSet, ClusterSet, Router metadata and routing guidelines. Native utility replies and current topology observations are separate from workload readiness. Closing this view does not cancel a job.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={busy} onClick={()=>run('catalog',{},setCatalog)}>Load native topology methods</Button>
     <Button disabled={busy} onClick={()=>run('inspect',{},value=>{setSeed(value);setReview(null);})}>Inspect topology seed</Button>
     {seed && <Box component="pre" aria-label="Native topology seed" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(seed,null,2)}</Box>}
     {catalog && <TextField select fullWidth label="Native topology method" value={operationId} disabled={busy} onChange={event=> {
-      const value=catalog.operations.find(item=>item.id===event.target.value);setOperationId(value.id);setArgumentsText(example(value,member));setContextOptions('{}');setReview(null);
-    }}>{catalog.operations.map(value=><MenuItem key={value.id} value={value.id}>{value.context}.{value.method}</MenuItem>)}</TextField>}
+      const value=catalog.operations.find(item=>item.id===event.target.value);setOperationId(value.id);setArgumentsText(example(value,member));setContextOptions('{}');invalidate();
+    }}>{catalog.operations.map(value=><MenuItem key={value.id} value={value.id}>{value.id}</MenuItem>)}</TextField>}
     {operation && <Alert severity="info">Native arguments: {operation.arguments.join(', ') || 'none'}. Instance arguments use registered references such as {'{"server_id":4}'}. Optional arguments have a ? suffix.</Alert>}
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
     {members && <>
@@ -74,10 +85,23 @@ export default function MySQLTopologies({post}) {
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
     <Alert severity="info">For interrupted clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
     <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
-      helperText="Argument text is sent intact; integer digits are preserved. Configure account credentials and host option files through their dedicated workflows."
+      helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
       onChange={event=>{setArgumentsText(event.target.value);invalidate();}} />
     <TextField fullWidth label="Native cluster context name (optional)" value={contextName} disabled={busy} onChange={event=>{setContextName(event.target.value);invalidate();}} />
     <TextField fullWidth label="Native Cluster context options (JSON object)" value={contextOptions} disabled={busy || operation?.context!=='cluster'} onChange={event=>{setContextOptions(event.target.value);invalidate();}} />
+    {operation?.guideline && <TextField fullWidth label="Native routing guideline name (empty selects active guideline)" value={guidelineName} disabled={busy} onChange={event=>{setGuidelineName(event.target.value);invalidate();}} />}
+    {operationId.endsWith('.import_routing_guideline') && <Button component="label" disabled={busy}>Read routing guideline JSON file<input hidden type="file" accept="application/json,.json" aria-label="Routing guideline JSON file" onChange={async event=> {
+      const file=event.target.files?.[0],token=generation.current,version=++inputVersion.current;event.target.value='';
+      if(!file)return;
+      setReview(null);
+      try {
+        if(file.size>1024*1024)throw new Error('Select a routing guideline JSON file no larger than 1 MiB');
+        let text;
+        try {text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());}
+        catch {throw new Error('The routing guideline file must contain valid UTF-8; its bytes were not replaced or imported');}
+        if(token===generation.current && version===inputVersion.current){setArgumentsText('['+text+',{}]');setReview(null);setError('');}
+      } catch(failure) {if(token===generation.current && version===inputVersion.current)setError(failure.message);}
+    }} /></Button>}
     <FormControlLabel control={<Checkbox checked={advertised} disabled={busy} onChange={event=>{setAdvertised(event.target.checked);invalidate();}} />} label="Use server-advertised addresses for native utilities" />
     <TextField fullWidth label="Native topology runtime seconds or null" value={timeout} disabled={busy} onChange={event=>{setTimeout(event.target.value);invalidate();}} />
     {operation?.read_only ? <Button disabled={busy || !seed} onClick={()=>run('inspect_native',{options:selected()},value=>{setReceipt(value);setReview(null);setObservation(null);})}>Run native topology inspection</Button> : <>
@@ -100,6 +124,11 @@ export default function MySQLTopologies({post}) {
       {receipt.target_state_acknowledged_at && <Alert severity="info">Observed target state acknowledged. The original operation outcome remains {receipt.native_operation_outcome}.</Alert>}
       {receipt.native_error && <Alert severity="error">Native topology error {receipt.native_error.code ?? ''}: {receipt.native_error.message}</Alert>}
       {receipt.result?.control?.result_json && <Box component="pre" aria-label="Native topology result JSON" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{receipt.result.control.result_json}</Box>}
+      {exportRedacted && <Alert severity="warning">Sensitive string values were removed from this guideline export. The downloaded JSON is a redacted copy.</Alert>}
+      {typeof exported==='string' && <Button onClick={()=> {
+        const url=URL.createObjectURL(new Blob([exported],{type:'application/json;charset=utf-8'}));
+        const link=document.createElement('a');link.href=url;link.download='mysql-routing-guideline.json';link.click();URL.revokeObjectURL(url);
+      }}>Download native routing guideline JSON</Button>}
       {receipt.result?.native_json_observation?.native_shell_json_signed_limit && <Alert severity="warning">Stored tags contain unsigned64 integers. MySQL Shell 9.7 options decoding can clamp these to its signed integer limit. The separate SQL tag observation preserves the stored values; the original Shell reply above is unchanged.</Alert>}
       {receipt.result?.native_json_observation && <Box component="pre" aria-label="Native topology stored tag JSON" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(receipt.result.native_json_observation.tags,null,2)}</Box>}
       {receipt.result?.control?.observation_error && <Alert severity="warning">The native operation returned, but its later result observation failed: {receipt.result.control.observation_error.message}</Alert>}

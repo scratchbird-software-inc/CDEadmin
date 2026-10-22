@@ -14,9 +14,9 @@ from . import mysql_topology_quiescence as quiescence
 CREDENTIAL_FILE = 'CDEADMIN_MYSQL_TOPOLOGY_CREDENTIAL_FILE'
 
 
-def call(context, method, arguments, *, read=False, seed=False):
+def call(context, method, arguments, *, read=False, seed=False, guideline=False, export=False):
     return {'context': context, 'method': method, 'arguments': arguments,
-            'read_only': read, 'seed_argument': seed,
+            'read_only': read, 'seed_argument': seed, 'guideline': guideline, 'export': export,
             'instance_format': 'uri' if context in {'replica_set', 'cluster_set'} or method == 'add_replica_instance' else 'connection'}
 
 
@@ -76,6 +76,35 @@ CALLS = {
     'cluster_set.reset_replication_passwords': call('cluster_set', 'reset_replication_accounts_password', ['options?']),
 }
 
+# These are native methods on each topology, not generic SQL approximations.
+for _context in ('cluster', 'replica_set', 'cluster_set'):
+    for _name, _arguments, _read in (
+        ('list_routers', ['router?'] if _context == 'cluster_set' else ['options?'], True),
+        ('router_options', ['options?'], True),
+        ('set_routing_option', ['option', 'value'], False),
+        ('set_router_option', ['router', 'option', 'value'], False),
+        ('create_routing_guideline', ['name', 'document?', 'options?'], False),
+        ('get_routing_guideline', ['name?'], True),
+        ('routing_guidelines', [], True),
+        ('remove_routing_guideline', ['name'], False),
+        ('import_routing_guideline', ['document', 'options?'], False),
+    ):
+        CALLS[_context + '.' + _name] = call(_context,
+            'set_routing_option' if _name == 'set_router_option' else _name, _arguments, read=_read)
+    if _context != 'cluster_set':
+        CALLS[_context + '.remove_router_metadata'] = call(_context, 'remove_router_metadata', ['router'])
+    for _name, _arguments, _read in (
+        ('as_json', [], True), ('destinations', [], True), ('routes', [], True),
+        ('show', ['options?'], True), ('add_destination', ['name', 'match', 'options?'], False),
+        ('add_route', ['name', 'match', 'destinations', 'options?'], False),
+        ('remove_destination', ['name'], False), ('remove_route', ['name'], False),
+        ('rename', ['name'], False), ('copy', ['name'], False),
+        ('set_destination_option', ['name', 'option', 'value'], False),
+        ('set_route_option', ['name', 'option', 'value'], False), ('export', [], True),
+    ):
+        CALLS[_context + '.guideline.' + _name] = call(_context, _name, _arguments,
+            read=_read, guideline=True, export=_name == 'export')
+
 RECOVERY_CALLS = frozenset({'instance.reboot_cluster', 'cluster.add_instance',
     'cluster.add_replica_instance', 'cluster.rejoin_instance',
     'replica_set.add_instance', 'replica_set.rejoin_instance', 'cluster_set.create_replica_cluster'})
@@ -109,7 +138,7 @@ def canonical(value):
 
 def options(value):
     allowed = {'operation', 'arguments_json', 'context_name', 'context_options_json',
-               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds', 'witness_server_ids'}
+               'target_confirmation', 'use_advertised_endpoint', 'timeout_seconds', 'witness_server_ids', 'guideline_name'}
     if (not isinstance(value, dict) or set(value) - allowed or
             not isinstance(value.get('operation'), str) or value['operation'] not in CALLS):
         raise BinlogArchiveError('Select a native topology operation')
@@ -126,8 +155,12 @@ def options(value):
     for definition, argument in zip(definitions, arguments):
         kind = definition.rstrip('?')
         if argument is None and definition.endswith('?'): continue
-        if kind in {'name', 'option'} and not isinstance(argument, str):
+        if kind in {'name', 'option', 'router', 'match'} and not isinstance(argument, str):
             raise BinlogArchiveError('Native names and option names require strings')
+        if kind == 'document' and not isinstance(argument, dict):
+            raise BinlogArchiveError('Supply the native routing guideline JSON object')
+        if kind == 'destinations' and (not isinstance(argument, list) or any(not isinstance(item, str) for item in argument)):
+            raise BinlogArchiveError('Supply the ordered native destination expressions as a JSON string array')
         if kind == 'options':
             if not isinstance(argument, dict): raise BinlogArchiveError('Native options require a JSON object')
             # Account creation and host-file deployment keep separate authority;
@@ -146,6 +179,9 @@ def options(value):
         raise BinlogArchiveError('Native context credentials come from the registered endpoint')
     if specification['context'] != 'cluster' and context_options:
         raise BinlogArchiveError('Only the native Cluster getter accepts context options')
+    guideline_name = value.get('guideline_name', '')
+    if not isinstance(guideline_name, str) or len(guideline_name.encode('utf8')) > 1024:
+        raise BinlogArchiveError('Select a bounded native routing guideline name')
     advertised, timeout = value.get('use_advertised_endpoint', False), value.get('timeout_seconds', 3600)
     if type(advertised) is not bool or timeout is not None and (type(timeout) is not int or not 1 <= timeout <= 2147483647):
         raise BinlogArchiveError('Select the native execution address and positive client runtime or null')
@@ -154,7 +190,8 @@ def options(value):
         raise BinlogArchiveError('Select bounded owned registrations for server-side recovery observations')
     return {'operation': value['operation'], 'arguments_json': canonical(arguments), 'context_name': context_name,
             'context_options_json': canonical(context_options), 'target_confirmation': target,
-            'use_advertised_endpoint': advertised, 'timeout_seconds': timeout, 'witness_server_ids': sorted(set(witnesses))}
+            'use_advertised_endpoint': advertised, 'timeout_seconds': timeout, 'witness_server_ids': sorted(set(witnesses)),
+            **({'guideline_name': guideline_name} if guideline_name or specification.get('guideline') else {})}
 
 
 def member_ids(selected):
@@ -166,15 +203,17 @@ def member_ids(selected):
 def metadata(connection):
     inventory = ("SELECT TABLE_NAME,COLUMN_NAME FROM information_schema.COLUMNS "
         "WHERE TABLE_SCHEMA='mysql_innodb_cluster_metadata' AND TABLE_NAME IN "
-        "('schema_version','clusters','instances','clustersets') ORDER BY TABLE_NAME,COLUMN_NAME")
+        "('schema_version','clusters','instances','clustersets','routers','routing_guidelines') ORDER BY TABLE_NAME,COLUMN_NAME")
     columns = rows(connection, inventory)
     queries = [inventory]
     results = [[list(row.values()) for row in columns]]
     identities = {
         'schema_version': ('major','minor','patch'),
-        'clusters': ('cluster_id','cluster_name','cluster_type','clusterset_id'),
+        'clusters': ('cluster_id','cluster_name','cluster_type','clusterset_id','router_options'),
         'instances': ('instance_id','cluster_id','mysql_server_uuid','address','instance_name'),
-        'clustersets': ('clusterset_id','domain_name'),
+        'clustersets': ('clusterset_id','domain_name','router_options'),
+        'routers': ('router_id','router_name','address','version','cluster_id','clusterset_id','options','attributes'),
+        'routing_guidelines': ('guideline_id','name','cluster_id','clusterset_id','guideline','default_guideline'),
     }
     native_instances = []; native_tags = []
     for table, names in identities.items():
@@ -304,7 +343,22 @@ try:
         target=dba.get_cluster(name,options) if name or options else dba.get_cluster()
     elif context=="replica_set":target=dba.get_replica_set()
     else:target=dba.get_cluster_set()
+    if specification.get("guideline"):
+        name=selected.get("guideline_name","")
+        target=target.get_routing_guideline(name) if name else target.get_routing_guideline()
     arguments=json.loads(selected["arguments_json"])
+    export_path=None
+    if specification["method"]=="import_routing_guideline":
+        import_path=os.path.join(os.path.dirname(settings["owner"]["path"]),"native-routing-guideline-import.json")
+        descriptor=os.open(import_path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        with os.fdopen(descriptor,"w",encoding="utf8") as stream:
+            json.dump(arguments[0],stream,ensure_ascii=True,allow_nan=False)
+        arguments[0]=import_path
+    if specification.get("export"):
+        export_path=os.path.join(os.path.dirname(settings["owner"]["path"]),"native-routing-guideline-export.json")
+        if os.path.lexists(export_path):raise RuntimeError("Native guideline export already exists")
+        os.umask(0o077)
+        arguments=[export_path]
     for index,(kind,value) in enumerate(zip(specification["arguments"],arguments)):
         if kind.rstrip("?")!="instance" or value is None:continue
         definition=prepared[value["server_id"]]
@@ -317,7 +371,15 @@ try:
     result=getattr(target,specification["method"])(*arguments)
     returned=True;stage="returned"
     try:
-        if hasattr(result,"status"):result=result.status({"extended":1})
+        if callable(getattr(result,"status",None)):result=result.status({"extended":1})
+        elif callable(getattr(result,"as_json",None)):result=result.as_json()
+        elif callable(getattr(result,"fetch_all",None)):
+            result={"columns":list(result.column_names),"rows":[list(row) for row in result.fetch_all()]}
+        if export_path:
+            with open(export_path,encoding="utf8") as stream:
+                exported=stream.read(8*1024*1024+1)
+            if len(exported)>8*1024*1024:raise RuntimeError("Native guideline export exceeds the supported receipt size")
+            result={"native_return":result,"guideline_export_json":exported}
         result_json=json.dumps(result,ensure_ascii=True,allow_nan=False,separators=(",",":"))
     except Exception as error:observation_error=native_error(error)
 except Exception as error:
@@ -359,8 +421,16 @@ def run(client, route, credentials, selected, seed, members, workspace, program,
         sensitive = {variant for values in json.loads(bytes(view)).values() for value in values.values()
                      if isinstance(value, str) and value for variant in
                      (value, url_quote(value, safe=''), quote_plus(value, safe=''))}
-        def redact(value):
-            if isinstance(value, dict): return {key: redact(item) for key, item in value.items()}
+        def redact(value, *, exported=False):
+            if isinstance(value, dict):
+                if not exported: return {key: redact(item) for key, item in value.items()}
+                result = {key: redact(item) for key, item in value.items() if key != 'guideline_export_json'}
+                if 'guideline_export_json' in value:
+                    original = json.loads(value['guideline_export_json'])
+                    safe = redact(original)
+                    result['guideline_export_json'] = value['guideline_export_json'] if safe == original else canonical(safe)
+                    result['guideline_export_redacted'] = safe != original
+                return result
             if isinstance(value, list): return [redact(item) for item in value]
             if isinstance(value, str):
                 for secret in sorted(sensitive, key=len, reverse=True): value = value.replace(secret, '[redacted]')
@@ -374,7 +444,8 @@ def run(client, route, credentials, selected, seed, members, workspace, program,
                 control = redact(control)
                 control['result_json'] = None
                 if result_text is not None:
-                    try: control['result_json'] = canonical(redact(json.loads(result_text)))
+                    try: control['result_json'] = canonical(redact(json.loads(result_text),
+                        exported=CALLS[selected['operation']].get('export', False)))
                     except (ValueError, TypeError): control['result_json'] = None
         output = '\n'.join(line for line in (observed['stdout'] + '\n' + observed['stderr']).splitlines() if not line.startswith(marker))
         return {'tool': {key: value for key, value in observed.items() if key not in {'stdout', 'stderr'}},

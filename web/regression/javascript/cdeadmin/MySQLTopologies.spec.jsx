@@ -74,3 +74,55 @@ it('shows recovery clearance and acknowledges the observed target without rewrit
   await screen.findByText('Observed target state acknowledged. The original operation outcome remains unknown.');
   expect(post).toHaveBeenLastCalledWith({action:'mysql_topology_acknowledge',request:{job_id:'uncertain',target_confirmation:'seed',observation_digest:'observed'}});
 });
+it('imports file text without parsing native numbers in JavaScript and binds the selected guideline',async()=> {
+  const methods={operations:[{id:'cluster.import_routing_guideline',context:'cluster',method:'import_routing_guideline',arguments:['document','options?'],read_only:false},
+    {id:'cluster.guideline.rename',context:'cluster',method:'rename',arguments:['name'],guideline:true,read_only:false}]};
+  const target={identity:{server_uuid:'seed'}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_topology_catalog' ? methods : action==='mysql_topology_inspect' ? target :
+    {state:'reviewed',target:target.identity,warnings:[],options:{}}));
+  render(<Component post={post} />);
+  fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.import_routing_guideline'}));
+  const text='{ "name":"routes", "wide":9223372036854775808 }';
+  const bytes=new TextEncoder().encode(text);
+  fireEvent.change(screen.getByLabelText('Routing guideline JSON file'),{target:{files:[{size:bytes.length,arrayBuffer:()=>Promise.resolve(bytes.buffer)}]}});
+  await waitFor(()=>expect(screen.getByLabelText('Native topology arguments (JSON array)').value).toBe('['+text+',{}]'));
+  fireEvent.click(screen.getByRole('button',{name:'Inspect topology seed'}));await screen.findByLabelText('Native topology seed');
+  fireEvent.change(screen.getByLabelText('Confirm topology seed UUID'),{target:{value:'seed'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native topology change'}));await screen.findByLabelText('Native topology review');
+  expect(post.mock.calls.at(-1)[0].request.options.arguments_json).toBe('['+text+',{}]');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.guideline.rename'}));
+  fireEvent.change(screen.getByLabelText('Native routing guideline name (empty selects active guideline)'),{target:{value:'old_routes'}});
+  fireEvent.change(screen.getByLabelText('Native topology arguments (JSON array)'),{target:{value:'["new_routes"]'}});
+  fireEvent.click(screen.getByRole('button',{name:'Review native topology change'}));
+  await waitFor(()=>expect(post.mock.calls.at(-1)[0].request.options.guideline_name).toBe('old_routes'));
+});
+it('rejects invalid UTF-8 file bytes without replacing characters or dispatching a native import',async()=> {
+  const methods={operations:[...catalog.operations,{id:'cluster.import_routing_guideline',context:'cluster',method:'import_routing_guideline',arguments:['document','options?'],read_only:false}]};
+  const post=jest.fn(()=>Promise.resolve(methods));
+  render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load native topology methods'}));await screen.findByLabelText('Native topology method');
+  fireEvent.mouseDown(screen.getByLabelText('Native topology method'));fireEvent.click(await screen.findByRole('option',{name:'cluster.import_routing_guideline'}));
+  const original=screen.getByLabelText('Native topology arguments (JSON array)').value;
+  fireEvent.change(screen.getByLabelText('Routing guideline JSON file'),{target:{files:[{size:1,arrayBuffer:()=>Promise.resolve(new Uint8Array([255]).buffer)}]}});
+  await screen.findByText(/must contain valid UTF-8/);
+  expect(screen.getByLabelText('Native topology arguments (JSON array)').value).toBe(original);
+  expect(post.mock.calls.some(([value])=>value.action!=='mysql_topology_catalog')).toBe(false);
+});
+it('downloads native exported JSON text with its original whitespace and exact integer digits',async()=> {
+  const text='{ "name": "routes", "wide": 9223372036854775808, "enabled": true }\n';
+  const receipt={job_id:'export',state:'operation_returned',native_operation_outcome:'returned',
+    options:{operation:'cluster.guideline.export'},result:{control:{result_json:JSON.stringify({guideline_export_json:text,guideline_export_redacted:false})}}};
+  const post=jest.fn(({action})=>Promise.resolve(action==='mysql_topology_list' ? {jobs:[receipt],offset:0,limit:25,total:1} : receipt));
+  const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;
+  URL.createObjectURL=jest.fn(()=> 'blob:owned');URL.revokeObjectURL=jest.fn();
+  const click=jest.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+  try {
+    render(<Component post={post} />);fireEvent.click(screen.getByRole('button',{name:'Load native topology jobs'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Inspect topology job export'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Download native routing guideline JSON'}));
+    const blob=URL.createObjectURL.mock.calls[0][0];
+    const actual=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsText(blob);});
+    expect(actual).toBe(text);expect(click).toHaveBeenCalledTimes(1);expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:owned');
+    expect(screen.queryByText(/downloaded JSON is a redacted copy/)).not.toBeInTheDocument();
+  } finally {click.mockRestore();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;}
+});

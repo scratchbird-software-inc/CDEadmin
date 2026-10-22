@@ -98,6 +98,23 @@ and authenticated separately; credential values never enter the saved argument
 JSON, review, generated script or command line. Host option-file deployment and
 account-password configuration retain their separate workflows.
 
+The same workspace also exposes native Router metadata inspection, global and
+selected-Router option changes, and routing guideline creation, selection,
+inspection, editing, copying, renaming, removal and JSON import/export for
+Cluster, ReplicaSet and ClusterSet contexts. Native expression and document
+validation runs in MySQL Shell. The application supplies private job files to
+the native file APIs; users upload/download JSON without selecting arbitrary
+execution-host paths. Browser argument and file text retain exact integer
+digits. Export downloads preserve native file text unless sensitive string
+values require removal, in which case the view labels the redacted copy.
+Guideline selection is independent of topology selection. Native result tables
+retain column names and rows; returned native guideline objects receive a
+separate JSON observation. Later observation failure does not rewrite the
+original method outcome. Reviews bind visible guideline documents and Router
+configuration, excluding changing Router heartbeat timestamps. Stale reviews
+require a new review. This scope does not establish Router installation,
+bootstrap, actual traffic routing or failure/cutover acceptance.
+
 Read-only native inspections have their own durable receipts. Mutations require
 an exact seed UUID, a reviewed native method and explicit dispatch confirmation.
 Review and dispatch bind native instance/principal identities, registered route
