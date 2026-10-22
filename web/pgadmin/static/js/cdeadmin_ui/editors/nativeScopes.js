@@ -1,3 +1,4 @@
+import {mysqlVariableCompletion} from './mysqlVariables';
 import {nativeSourceStructure} from './nativeLexing';
 import {duckdbAccessEntry,duckdbCompletionTarget} from './duckdbNestedTypes';
 
@@ -202,6 +203,8 @@ export function scopedSQLConfig(config, state, position) {
 // identifiers without decoding doubled delimiters. Native identity rules must
 // resolve these paths before constructing suggestions.
 export function nativeSchemaCompletion(config, context) {
+  const variables=mysqlVariableCompletion(config,context);
+  if(variables!==undefined) return variables;
   const {state, pos} = context;
   let node = config.nativeStructure.at, from = pos, to = pos;
   const before = current => current && config.nativeStructure.before(current);

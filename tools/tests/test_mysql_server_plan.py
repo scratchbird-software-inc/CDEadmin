@@ -208,3 +208,12 @@ def test_hidden_persisted_value_cannot_prove_a_set_postcondition():
         'catalog_row':{},'mysql_change':{'draft':{'value_mode':'DEFAULT'}}}}
     live={'rows':{'setting':{'native':{'catalog_row':{'persisted_value_redacted':1}}}}}
     assert not effect(row,{'operation':'set_persist_only'},live)
+
+
+def test_null_assignment_is_not_inferred_from_pfs_string_values():
+    from pgadmin.cdeadmin.providers.mysql_server_application import effect
+    row={'resource_id':'setting','kind':'system-variable','native':{'mysql_change':{'draft':{'value_mode':'NULL'}}}}
+    for value in (None,''):
+        live={'rows':{'setting':{'native':{'catalog_row':{'global_value':value,'persisted_value':value}}}}}
+        assert effect(row,{'operation':'set_global'},live) is False
+        assert effect(row,{'operation':'set_persist'},live) is False

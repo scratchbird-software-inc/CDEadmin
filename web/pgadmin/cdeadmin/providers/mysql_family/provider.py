@@ -2560,9 +2560,11 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 record['processlist_id'] = str(record['processlist_id'])
                 record['thread_id'] = str(record['thread_id'])
                 add('session', ['Sessions'], record['processlist_id'], record)
-            from .system_variables import SELECT as variables_select
+            from .system_variables import SELECT as variables_select, administration as variable_administration
             for record in optional_records(variables_select):
-                add('system-variable', ['Configuration'], record['variable_name'], record)
+                allowed = variable_administration(record)
+                add('system-variable', ['Configuration'], record['variable_name'],
+                    {**record, **({'administration': allowed} if allowed is not None else {})})
         if profile is MYSQL_PROFILE:
             for name, resource_type, enabled in optional(
                 'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, '

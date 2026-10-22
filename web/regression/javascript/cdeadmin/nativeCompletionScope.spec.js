@@ -455,3 +455,67 @@ test('qualification continues across whitespace and comments after the dot', () 
 test.each(['-- comment', 'SELECT \'literal'])('completion stays out of native string/comment tokens: %s', source => {
   expect(suggestions(source,metadata('mysql'))).toBeNull();
 });
+
+describe('native MySQL system-variable completion',()=> {
+  const data=metadata('mysql',{version:'9.7.0',keywords:'SET SELECT GLOBAL SESSION LOCAL PERSIST PERSIST_ONLY'});
+  data.resources.push(...[
+    ['basedir','GLOBAL','String'],['sql_mode','SESSION','Set'],['gtid_next','SESSION_ONLY','String'],
+    ['validate_password.length','GLOBAL','Integer'],['mysqlbackup.backupid','GLOBAL','String'],
+  ].map(([name,scope,data_type])=>({resource_kind:'system-variable',display_path:[name],display_name:name,
+    native_variable:{scope,data_type},detail:scope+' '+data_type})));
+  test('keeps variable names out of catalog namespaces and obeys native global/session scopes',()=> {
+    const config=nativeSQLConfig(data);
+    expect(config.schema.basedir).toBeUndefined();
+    const global=suggestions('SELECT @@GLOBAL.',data).options;
+    expect(global.some(row=>row.label==='basedir')).toBe(true);
+    expect(global.some(row=>row.label==='sql_mode')).toBe(true);
+    expect(global.some(row=>row.label==='gtid_next')).toBe(false);
+    const session=suggestions('SELECT @@SESSION.',data).options;
+    expect(session.some(row=>row.label==='basedir')).toBe(false);
+    expect(session.some(row=>row.label==='gtid_next')).toBe(true);
+    expect(suggestions('SELECT @@LOCAL.',data).options).toEqual(session);
+  });
+  test.each(['SELECT @@validate_password.le','SELECT @@GLOBAL.validate_password.le','SET GLOBAL validate_password.le','SET PERSIST validate_password.le','SET PERSIST_ONLY validate_password.le','SET @@PERSIST.validate_password.le'])(
+    'inserts the exact native component name for %s',source=> {
+      const result=suggestions(source,data),option=result.options.find(row=>row.label==='validate_password.length');
+      expect(option.apply).toBe('`validate_password.length`');
+      expect(source.slice(0,result.from)+option.apply+source.slice(result.to)).toMatch(/`validate_password\.length`$/);
+    });
+  test('replaces an entire quoted name without confusing string contents with a variable position',()=> {
+    for(const source of ['SELECT @@GLOBAL.\'validate_password.le\'','SELECT @@GLOBAL.`validate_password.le`']) {
+      const result=suggestions(source,data,data,source.length-1);
+      const option=result.options.find(row=>row.apply==='`validate_password.length`');
+      expect(source.slice(0,result.from)+option.apply+source.slice(result.to)).toBe('SELECT @@GLOBAL.`validate_password.length`');
+    }
+    expect(suggestions('SELECT \'@@GLOBAL.sql_mode\'',data)).toBeNull();
+    expect(suggestions('SELECT 1 -- @@GLOBAL.sql_mode',data)).toBeNull();
+    expect(suggestions('SELECT /* @@GLOBAL.sql_mode',data)).toBeNull();
+    expect(suggestions('SELECT @@PERSIST.',data).options).toEqual([]);
+  });
+  test('unscoped assignments use session variables and preserve native scope choices',()=> {
+    const result=suggestions('SET ',data);
+    expect(result.options.some(row=>row.label==='gtid_next')).toBe(true);
+    expect(result.options.some(row=>row.label==='basedir')).toBe(false);
+    expect(result.options.find(row=>row.label==='GLOBAL').apply).toBe('GLOBAL ');
+    expect(suggestions('SELECT @@',data).options.find(row=>row.label==='GLOBAL').apply).toBe('GLOBAL.');
+    expect(suggestions('SET GLOBAL sql_mode = ',data)?.nativeVariableContext).toBeUndefined();
+  });
+});
+
+(process.env.CDEADMIN_MYSQL_VARIABLE_FIXTURE ? describe : describe.skip)('actual MySQL native variable metadata',()=> {
+  test('inserts native variable names from both drivers and observed SQL modes into server-accepted source',()=> {
+    const fixture=JSON.parse(fs.readFileSync(process.env.CDEADMIN_MYSQL_VARIABLE_FIXTURE,'utf8'));
+    expect(fixture.groups).toHaveLength(4);
+    for(const group of fixture.groups) {
+      expect(nativeSQLConfig(group.metadata).nativeSystemVariables.length).toBeGreaterThan(500);
+      for(const example of group.cases) {
+        const source=example.marked.replace('|',''),position=example.marked.indexOf('|');
+        const result=suggestions(source,group.metadata,group.metadata,position);
+        const option=result?.options.find(row=>row.apply===example.expected_apply);
+        expect(option).toBeTruthy();
+        expect(source.slice(0,result.from)+option.apply+source.slice(result.to)).toBe(example.native_sql);
+        expect(example.native_sql_accepted).toBe(true);
+      }
+    }
+  });
+});

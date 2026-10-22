@@ -24,10 +24,14 @@ def compile_operation(kind, operation, draft, target):
         raise RelationalClientError('Exact native variable name is required')
     quoted = '`' + name + '`'
     if operation == 'reset_persist': return {'source': 'RESET PERSIST ' + quoted, 'parameters': ()}
+    native = (target or {}).get('native') or (target or {}).get('extensions', {}).get('mysql', {}).get('native', {})
+    facts = native.get('catalog_row', native)
+    if facts.get('variable_scope') == 'SESSION_ONLY':
+        raise RelationalClientError('This native variable has session-only scope; use its retained SQL session')
     mode = draft.get('value_mode', 'VALUE')
-    if mode not in {'VALUE', 'DEFAULT'}: raise RelationalClientError('Select a bound value or native DEFAULT')
+    if mode not in {'VALUE', 'DEFAULT', 'NULL'}: raise RelationalClientError('Select a bound value, native DEFAULT or NULL')
     source = 'SET ' + {'set_global': 'GLOBAL ', 'set_persist': 'PERSIST ', 'set_persist_only': 'PERSIST_ONLY '}[operation] + quoted + ' = '
-    if mode == 'DEFAULT': return {'source': source + 'DEFAULT', 'parameters': ()}
+    if mode in {'DEFAULT', 'NULL'}: return {'source': source + mode, 'parameters': ()}
     value = draft.get('value')
     if not (isinstance(value, str) and '\x00' not in value and len(value.encode('utf8')) <= 65536 or
             type(value) is bool or type(value) is int and -(2**53-1) <= value <= 2**53-1):
@@ -46,18 +50,22 @@ def compile_operation(kind, operation, draft, target):
         if max(len(digits) + exponent, 0) > 35 or exponent < -30:
             raise RelationalClientError('Explicit decimal must fit native DECIMAL(65,30)')
         expression = 'CAST(%s AS DECIMAL(65,30))'
+    elif value_type == 'DOUBLE':
+        if not isinstance(value, str) or len(value) > 128 or not re.fullmatch(r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,4})?', value):
+            raise RelationalClientError('Explicit DOUBLE requires bounded decimal/scientific text; the native server owns floating conversion and overflow')
+        expression = 'CAST(%s AS DOUBLE)'
     elif value_type != 'AUTO':
-        raise RelationalClientError('Select automatic scalar, explicit integer or explicit decimal input')
+        raise RelationalClientError('Select automatic scalar, explicit integer, decimal or DOUBLE input')
     return {'source': source + expression, 'preview_source': source + '<redacted>', 'parameters': (value,)}
 
 
 def form(kind, operation, field):
     fields = []
     if kind == 'system-variable' and operation != 'reset_persist':
-        fields += [field('value_mode', 'Value source', 'select', default='VALUE', options=('VALUE', 'DEFAULT')),
-                   field('value_type', 'Native numeric representation', 'select', default='AUTO', options=('AUTO', 'INTEGER', 'DECIMAL')),
+        fields += [field('value_mode', 'Value source', 'select', default='VALUE', options=('VALUE', 'DEFAULT', 'NULL')),
+                   field('value_type', 'Native numeric representation', 'select', default='AUTO', options=('AUTO', 'INTEGER', 'DECIMAL', 'DOUBLE')),
                    {**field('value', 'Native variable value', 'json', default='',
-                      help_text='JSON scalar: text, boolean or safe integer. For exact large numbers enter JSON text and select INTEGER or DECIMAL.'),
+                      help_text='JSON scalar: text, boolean or safe integer. For exact large numbers enter JSON text and select INTEGER, DECIMAL or DOUBLE. Native metadata describes type and scope; it does not attest mutability or accepted enum/set members.'),
                     'visible_when': {'field_id': 'value_mode', 'equals': 'VALUE'}}]
     fields.append(field('confirmation', 'Confirmation', 'text', True))
     return {'form_id': 'mysql.' + kind + '.' + operation,

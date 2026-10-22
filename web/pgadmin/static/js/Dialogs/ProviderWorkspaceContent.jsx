@@ -7486,18 +7486,24 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId,
       });
       querySessionIdRef.current = opened.session_id;
-      setSessionId(opened.session_id);
-      if (language === 'postgresql-sql' || (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit)) {
-        const observed = await post({action: 'transaction', session_id: opened.session_id,
-          database_target_id: queryDatabaseTargetId});
-        setTransaction(observed);
-        const policy = observed.provider_payload?.autocommit;
-        setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
-        if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
-          throw new Error(gettext('Refresh the native transaction state before executing.'));
+      try {
+        if (language === 'postgresql-sql' || (['mysql-sql', 'mariadb-sql'].includes(language) && managedAutocommit)) {
+          const observed = await post({action: 'transaction', session_id: opened.session_id,
+            database_target_id: queryDatabaseTargetId});
+          setTransaction(observed);
+          const policy = observed.provider_payload?.autocommit;
+          setSessionAutocommit(typeof policy === 'boolean' ? policy : null);
+          if (typeof policy !== 'boolean' || observed.provider_payload?.session_reuse_blocked) {
+            throw new Error(gettext('Refresh the native transaction state before executing.'));
+          }
         }
+        return opened.session_id;
+      } finally {
+        // Publish the session with its initial policy observation. An interim
+        // unknown-policy render invalidates the completion that opened it.
+        // Failed observations still expose the session for explicit refresh.
+        setSessionId(opened.session_id);
       }
-      return opened.session_id;
     })();
     querySessionOpeningRef.current = opening;
     try { return await opening; }

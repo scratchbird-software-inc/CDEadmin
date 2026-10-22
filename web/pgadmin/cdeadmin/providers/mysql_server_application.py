@@ -75,6 +75,10 @@ def effect(row, operation, live):
     if kind == 'privilege':
         return facts.get('is_grantable') == ('YES' if draft.get('grant_option') else 'NO')
     if kind == 'system-variable':
+        if draft.get('value_mode') == 'NULL':
+            # PFS string values cannot distinguish native NULL from empty text.
+            # Runtime NULL has a separate explicit observation after dispatch.
+            return False
         if facts.get('persisted_value_redacted') and action in {'set_persist', 'set_persist_only'}:
             return False
         if draft.get('value_mode', 'VALUE') == 'DEFAULT':
@@ -163,6 +167,14 @@ def apply_operation(connection, record, operation):
         observed = current()
         result['rediscovery_verified'] = effect(row, operation, observed)
         result['native_observation'] = state(observed['rows'].get(key))
+        draft = row['native'].get('mysql_change', {}).get('draft', {})
+        if row['kind'] == 'system-variable' and draft.get('value_mode') == 'NULL':
+            result['persisted_null_identity_observed'] = False
+            if operation['operation'] in {'set_global', 'set_persist'}:
+                name = row['native']['catalog_row']['variable_name']
+                cursor.execute('SELECT @@GLOBAL.`' + name.replace('`', '``') + '` IS NULL')
+                result['native_runtime_null'] = cursor.fetchone() == (1,)
+                result['rediscovery_verified'] = operation['operation'] == 'set_global' and result['native_runtime_null']
         if row['kind'] == 'system-variable' and row['native']['catalog_row'].get('persisted_value_redacted'):
             result['reviewed_value_scope'] = 'identity-and-presence; persisted value redacted'
     except Exception as error:

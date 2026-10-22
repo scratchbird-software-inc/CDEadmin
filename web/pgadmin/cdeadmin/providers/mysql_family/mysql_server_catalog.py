@@ -5,7 +5,7 @@ import uuid
 
 from .mysql_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
-from .system_variables import SELECT as VARIABLES_SELECT
+from .system_variables import SELECT as VARIABLES_SELECT, administration as variable_administration
 from .mysql_xa import RECOVER as XA_RECOVER, decode_row as decode_xa, execute_recovery
 
 MAX_FACTS = 20000
@@ -98,6 +98,9 @@ def capture(connection, *, spatial_reference_ids=None):
         resource = {'resource_id':'mysql-server:'+token,'resource_kind':kind,'display_name':name,
             'display_path':[server_uuid,section,name], 'native':{'system_object':system,
                 'server_uuid':server_uuid,'section':section,'catalog_row':row}}
+        if kind == 'system-variable':
+            allowed = variable_administration(row)
+            if allowed is not None: resource['native']['administration'] = allowed
         account(resource);resources.append(resource)
     accounts = {}
     account_rows = None

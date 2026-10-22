@@ -941,6 +941,29 @@ describe('ProviderWorkspaceContent', () => {
     expect(screen.getByText('No plan requested for this execution. Use Explain or explicitly run Explain Analyze.')).toBeVisible();
   });
 
+  it.each(['postgresql', 'mysql'])('keeps %s source editing stable while its first session policy is loading', async (engine) => {
+    api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
+      language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',
+      transaction_actions: ['commit', 'rollback', 'autocommit_on', 'autocommit_off'],
+    }]}}});
+    let resolvePolicy;
+    const policy=new Promise(resolve=>{resolvePolicy=resolve;});
+    api.post.mockImplementation((_url,payload)=> {
+      if(payload.action==='open_session') return Promise.resolve({data:{data:{session_id:'opening-policy'}}});
+      if(payload.action==='transaction') return policy;
+      if(payload.action==='source_validate') return Promise.resolve({data:{data:{grammar_valid:true}}});
+      return Promise.resolve({data:{data:{}}});
+    });
+    render(<ProviderWorkspaceContent closeModal={jest.fn()} endpointUrl="/workspace/1" initialTab="studio"
+      initialContext={{database_target_id:'42'}} />);
+    fireEvent.click(await screen.findByRole('button',{name:'Check source'}));
+    await waitFor(()=>expect(api.post).toHaveBeenCalledWith('/workspace/1',expect.objectContaining({action:'transaction'})));
+    expect(screen.getByRole('textbox',{name:'Query source'})).toBeEnabled();
+    await act(async()=>resolvePolicy({data:{data:{provider_payload:{autocommit:true}}}}));
+    await waitFor(()=>expect(api.post).toHaveBeenCalledWith('/workspace/1',expect.objectContaining({action:'source_validate',session_id:'opening-policy'})));
+    expect(screen.getByRole('checkbox',{name:'Autocommit'})).toBeChecked();
+  });
+
   it.each(['postgresql', 'mysql'])('observes %s autocommit and changes only acknowledged policy', async (engine) => {
     api.get.mockResolvedValue({data: {data: {...bootstrap, languages: [{
       language_profile: `${engine}-sql`, title: `${engine} SQL`, starter_source: 'SELECT 1',

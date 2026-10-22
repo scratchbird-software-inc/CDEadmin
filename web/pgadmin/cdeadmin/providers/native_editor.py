@@ -146,7 +146,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False, native_variable=None):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
@@ -155,6 +155,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
         if native_identifier_token:
             row['native_identifier_token'] = True
         if native_type_keyword:row['native_type_keyword']=True
+        if native_variable is not None:row['native_variable']=native_variable
         if native_type is not None:
             row['native_type']=native_type
         if table_valued:
@@ -173,6 +174,11 @@ def metadata(handle, engine, transaction=None, dialect=None):
             identity=query('authentication','SELECT CURRENT_USER(),CURRENT_ROLE()')
             if len(identity)!=1:raise RelationalClientError('Native editor authentication context is unavailable')
             context.update(authenticated_principal=identity[0][0],active_role=identity[0][1])
+            if engine == 'mysql':
+                for name, scope, data_type, minimum, maximum, documentation in query('native-variable-metadata',
+                        'SELECT VARIABLE_NAME,VARIABLE_SCOPE,DATA_TYPE,MIN_VALUE,MAX_VALUE,DOCUMENTATION FROM performance_schema.variables_metadata ORDER BY VARIABLE_NAME LIMIT 25001'):
+                    add('system-variable', [name], str(scope) + ' ' + str(data_type) + ': ' + str(documentation),
+                        native_variable={'scope': scope, 'data_type': data_type, 'minimum': minimum, 'maximum': maximum})
             for (database,) in query('databases', 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 25001'):
                 add('schema', [database])
             for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):

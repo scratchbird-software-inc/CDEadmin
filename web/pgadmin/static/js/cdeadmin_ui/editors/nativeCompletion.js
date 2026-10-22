@@ -20,7 +20,7 @@ export function nativeSQLConfig(metadata) {
   const base = engine === 'mysql' ? MySQL : engine === 'mariadb' ? MariaSQL : engine === 'postgresql' ? PostgreSQL : engine === 'sqlite' ? SQLite : StandardSQL;
   const quote = mysql && !modes.has('ANSI_QUOTES') ? '`' : '"';
   const quoted = name => quote + name.replaceAll(quote, quote + quote) + quote;
-  const schema = Object.create(null), nativeTypeKeywords=[];
+  const schema = Object.create(null), nativeTypeKeywords=[], nativeSystemVariables=[];
   const ensure = (path, kind, detail='') => {
     let branch = schema, entry;
     for (const [index, name] of path.entries()) {
@@ -38,6 +38,11 @@ export function nativeSQLConfig(metadata) {
     const path = item.display_path;
     if (!Array.isArray(path) || !path.length || path.some(name => typeof name !== 'string' || !name)) continue;
     const kind = item.resource_kind;
+    if(engine==='mysql' && kind==='system-variable') {
+      if(path.length===1 && ['GLOBAL','SESSION','SESSION_ONLY'].includes(item.native_variable?.scope))
+        nativeSystemVariables.push({name:path[0],scope:item.native_variable.scope,detail:item.detail});
+      continue;
+    }
     if (engine==='mysql' && kind==='type' && item.native_type_keyword && path.length===1 && /^[A-Z][A-Z0-9_]*(?: [A-Z][A-Z0-9_]*)*$/.test(path[0])) {
       nativeTypeKeywords.push({label:path[0],apply:path[0],type:'type',detail:item.detail});
       continue;
@@ -73,7 +78,7 @@ export function nativeSQLConfig(metadata) {
       identifierQuotes: modes.has('ANSI_QUOTES') ? '`"' : '`', plsqlQuotingMechanism: false} : {}),
     ...(engine === 'postgresql' ? {backslashEscapes: context.standard_conforming_strings === 'off'} : {}),
     ...(engine === 'duckdb' ? {identifierQuotes: '"', doubleDollarQuotedStrings: true, backslashEscapes: false} : {})}),
-  schema, nativeTypeKeywords, nativeEngine: engine, nativeIdentifierQuote: quote, nativeRelationBindings,
+  schema, nativeTypeKeywords, nativeSystemVariables, nativeEngine: engine, nativeIdentifierQuote: quote, nativeRelationBindings,
   nativeLanguageContext: context,
   nativeRelationCaseSensitive: mysql && context.lower_case_table_names === 0,
   defaultSchema: (engine === 'duckdb' ? context.schema : context.default_schema) || undefined, upperCaseKeywords: true};
@@ -119,6 +124,7 @@ export function registerNativeCompletion(editor, current) {
       const words = keywordCompletionSource(observed.config.dialect, true)(observed.context);
       initial.onMetadata(metadata);
       if (!schema) return words;
+      if (schema.nativeVariableContext==='reference') return schema;
       if (!words || words.from !== schema.from) return schema;
       return {...schema, options: [...schema.options, ...words.options]};
     } catch (failure) {

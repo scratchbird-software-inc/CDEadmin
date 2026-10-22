@@ -178,6 +178,46 @@ The source-only refresh tool is
 <native-9.7-source>``. It retains existing runtime facts and qualified task
 receipts, records source hashes and avoids relabelling the original artifact.
 
+Native system-variable discovery now reconciles ``global_variables``,
+``persisted_variables`` and ``variables_metadata``. It retains native type,
+GLOBAL/SESSION/SESSION_ONLY scope, bounds and documentation, including installed
+component variables and definitions that have no global value. SESSION means
+that the native definition supports both global and session scope. SESSION_ONLY
+definitions offer inspection and any existing persisted-override cleanup at
+server scope; global/persist assignments are refused. Metadata presence does
+not imply a visible global value, mutability or a sensitivity classification.
+Unloaded persisted values remain withheld.
+
+Native editor metadata includes these definitions without fetching their
+values. MySQL completion separates variables from catalog namespaces and
+filters explicit GLOBAL/SESSION/LOCAL prefixes and SET GLOBAL/SESSION/PERSIST/
+PERSIST_ONLY positions by the observed native scope. Dotted component names
+are inserted as one quoted native identity. Quoted names, SQL modes, comments
+and string-literal positions use the native token-boundary rules. The private
+committed-catalog peer still marks source active-role/temporary-object overlays
+unconfirmed; variable definitions do not make those session overlays complete.
+
+Global/persistent variable forms now retain explicit NULL and DOUBLE inputs.
+DOUBLE casts bounded decimal/scientific text in MySQL, with native rounding,
+bounds and overflow handling. It does not pass through the application's
+DECIMAL(65,30) conversion. NULL is distinct from empty text and native DEFAULT.
+Runtime DDN NULL application uses an explicit native ``IS NULL`` observation;
+Performance Schema string values cannot establish that distinction. Persisted
+NULL identity is not inferred from those strings, and a native acknowledgement
+remains separate from unconfirmed persisted-value identity.
+
+``tools/cdeadmin_mysql_variable_metadata_qualification.py --output
+<outside-repo>`` reconciles actual metadata/navigation/server DDN, typed native
+assignments, persistence and runtime NULL rediscovery with both drivers. It
+checks private completion in default and ANSI_QUOTES/NO_BACKSLASH_ESCAPES modes
+using independently observed, nonzero native statement counters; source row
+counts, error areas and pending savepoints must survive. Its generated fixture
+is consumed by ``nativeCompletionScope.spec.js`` through
+``CDEADMIN_MYSQL_VARIABLE_FIXTURE``. Optional ``--library``,
+``--browser-binary`` and ``--driver-binary`` qualify insertion and native syntax
+checks in the built desktop. This does not close the wider procedural/editor,
+privacy/diagnostic or independent product-inventory work.
+
 Community InnoDB page tracking now has seven dedicated server maintenance
 actions: inspect the active window, start/reset, stop, count page IDs, set the
 native backup ID, export a native index and purge tracking archives. These call

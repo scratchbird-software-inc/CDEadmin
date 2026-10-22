@@ -27,7 +27,7 @@ INVENTORY = {
     'plugin': 'SELECT PLUGIN_NAME FROM information_schema.PLUGINS',
     'component': 'SELECT component_urn FROM mysql.component',
     'resource-group': 'SELECT RESOURCE_GROUP_NAME FROM information_schema.RESOURCE_GROUPS',
-    'system-variable': "SELECT 'Configuration',VARIABLE_NAME FROM performance_schema.global_variables",
+    'system-variable': "SELECT 'Configuration',VARIABLE_NAME FROM performance_schema.global_variables UNION SELECT 'Configuration',VARIABLE_NAME FROM performance_schema.persisted_variables UNION SELECT 'Configuration',VARIABLE_NAME FROM performance_schema.variables_metadata",
     'session': "SELECT 'Sessions',CAST(PROCESSLIST_ID AS CHAR) FROM performance_schema.threads WHERE PROCESSLIST_ID IS NOT NULL",
     'character-set': 'SELECT CHARACTER_SET_NAME FROM information_schema.CHARACTER_SETS',
     'collation': 'SELECT COLLATION_NAME FROM information_schema.COLLATIONS',

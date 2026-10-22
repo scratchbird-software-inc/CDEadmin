@@ -156,6 +156,14 @@ MySQL
   statement's expected mode and stops on drift. Runtime-dependent future context
   remains unconfirmed without executing submitted SQL. Remaining installed
   capability reconciliation and catalog/privilege semantics require their work.
+  Native variable metadata now adds types, scopes, bounds and documentation,
+  including SESSION_ONLY definitions and installed component variables. Native
+  editor completion uses those definitions without variable values, separates
+  global/session assignment/reference scopes and preserves quoted component
+  identities. Explicit DOUBLE/NULL assignments and native runtime NULL DDN
+  checks are implemented. Native metadata does not expose sensitivity or
+  mutability, and persisted NULL identity remains unconfirmed. These additions
+  do not close the wider installed-capability/editor inventory.
   Installed native Rewriter rules now have dedicated inspect/create/edit/delete
   and explicit reload actions, with native messages/digests/status, selected-row
   locking, own-connection commits, changed-state refusal and separate partial
